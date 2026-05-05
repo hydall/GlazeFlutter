@@ -1,6 +1,6 @@
 # Glaze Flutter Migration — Full Plan
 
-## Current Status (updated 2025-05-05)
+## Current Status (updated 2025-05-06)
 
 **Go/No-Go: PASSED.** Chat streams on all platforms. MVP core is production-quality.
 
@@ -9,9 +9,11 @@
 | Phase | Status | Notes |
 |-------|--------|-------|
 | Phase 0: Scaffold | Done | main, app, GoRouter, theme, shell |
-| Phase 1: Data Layer | Done | Drift (not Isar), 5 tables, 5 repos, Freezed models, providers, event_hub |
+| Phase 1: Data Layer | Done | Drift (not Isar), 6 tables, 6 repos, Freezed models, providers, event_hub |
 | Phase 2: Chat + Import | Done | PNG/JSON/ZIP import, prompt builder in isolate, SSE streaming, abort, edit, branch |
+| Phase 2.5: JS Migration | Done | .glz backup import (characters, chats, personas, presets, API configs, active selections), migration UI in menu |
 | Phase 3: Presets & Personas | Done | SillyTavern import, block/regex editor, persona CRUD, active selection |
+| Phase 4: Lorebooks | Done | Model, keyword scanner, prompt integration, UI — see below |
 | Phase 5: Regex Runtime | Done | Applied in chat_provider during generation (placement/ephemerality/depth) |
 | UI Refactoring | Done | All 800+ line screens split into widgets/ subdirectories (see below) |
 
@@ -59,12 +61,48 @@ features/
 
 Enums `SortType`/`SortDir` extracted from `_SortType`/`_SortDir` (private) to public in `character_grid.dart` — reused by the screen.
 
+### Phase 4: Lorebooks (2025-05-06)
+
+Full keyword-based lorebook system ported from Glaze JS.
+
+**Data layer:**
+- `LorebookEntry` (Freezed) — all JS fields: keys, secondaryKeys, selectiveLogic, position, order, scanDepth, caseSensitive, matchWholeWords, probability, preventRecursion, sticky/cooldown/delay, group, characterFilter, ignoreBudget, vectorSearch/useKeywordSearch
+- `Lorebook` (Freezed) — id, name, enabled, activationScope (global/character/chat), entries
+- `LorebookGlobalSettings` / `LorebookActivations` — Freezed state models
+- Drift `Lorebooks` table (schema v4), `LorebookRepo` with JSON entries column
+- `LorebookProvider` (Riverpod) with CRUD, settings/activations state
+
+**Keyword scanner (`lorebook_scanner.dart`):**
+- Direct port of JS `scanLorebooksPure` / `lorebookSearchService.scanLorebooks`
+- Recursive scan (up to 5 iterations)
+- Glaze boundary matching (`[\s.,!?;:"'\u201C\u201D\u2018\u2019\u00AB\u00BB(){}[\]—–*]`)
+- Sticky/cooldown temporal logic
+- Selective logic: ANY (0), ALL (1), NOT ANY (2), NOT ALL (3), no secondary (4/5)
+- Probability gate, character filter, vector-only entry skip
+
+**Prompt integration:**
+- `PromptPayload` extended with `lorebooks`, `lorebookSettings`, `lorebookActivations`
+- `loreBefore` injected before preset blocks, `loreAfter` after chat_history
+- `{{lorebooks}}` macro resolved for `lorebooksMacro` position entries
+- `chat_provider` passes all lorebook state to prompt builder
+
+**UI:**
+- `LorebookListScreen` — list with scope badges, enable toggle, delete
+- `LorebookEditorScreen` — name/scope editor + entry list
+- `EntryEditorDialog` — full entry editor (keys, content, position, selective logic, temporal, group, flags)
+- Route `/tools/lorebooks`, tools_screen tile navigates
+
+**Not yet ported:**
+- Vector/semantic search (embedding API, cosine similarity, top-K)
+- `{{lorebooks}}` macro content in PromptMessage metadata (no `isLorebook` / `blockName` tracking yet)
+- ST lorebook import format converter
+- Character book extraction from PNG cards
+
 ### Remaining phases (in priority order)
 
 | Phase | Priority | What's Missing |
 |-------|----------|----------------|
-| 2.5: JS Migration | High | Import .glz backup (keyvalue chats, characters, personas, presets, API configs) |
-| 4: Lorebooks | High | Model, scanner, UI, vector search |
+| 4b: Lorebook vector search | Medium | Embedding service, vector math, DB storage, late vector injection pipeline |
 | 6: Chat Import/Export | Medium | ST JSONL import/export, PNG export, backup import |
 | 7: Image Generation | Low | Service, config, gallery, UI |
 | 8: Cloud Sync | Low | Crypto, adapters, manifest, engine, UI |
