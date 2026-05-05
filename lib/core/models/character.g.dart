@@ -22,8 +22,9 @@ _$CharacterImpl _$$CharacterImplFromJson(Map<String, dynamic> json) =>
       creatorNotes: json['creatorNotes'] as String?,
       tags:
           (json['tags'] as List<dynamic>?)?.map((e) => e as String).toList() ??
-              const [],
-      alternateGreetings: (json['alternateGreetings'] as List<dynamic>?)
+          const [],
+      alternateGreetings:
+          (json['alternateGreetings'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
           const [],

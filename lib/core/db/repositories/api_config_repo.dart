@@ -1,35 +1,33 @@
-import 'package:isar/isar.dart';
-import '../collections.dart';
+import 'package:drift/drift.dart';
+
+import '../app_db.dart';
 import '../../models/api_config.dart';
 
 class ApiConfigRepo {
-  final Isar _db;
+  final AppDatabase _db;
   ApiConfigRepo(this._db);
 
   Future<List<ApiConfig>> getAll() async {
-    final items = await _db.apiConfigCollections.where().findAll();
-    return items.map(_toModel).toList();
+    final rows = await _db.select(_db.apiConfigs).get();
+    return rows.map(_toModel).toList();
   }
 
   Future<ApiConfig?> getById(String id) async {
-    final c =
-        await _db.apiConfigCollections.where().configIdEqualTo(id).findFirst();
-    return c != null ? _toModel(c) : null;
+    final row = await (_db.select(_db.apiConfigs)
+          ..where((t) => t.configId.equals(id)))
+        .getSingleOrNull();
+    return row != null ? _toModel(row) : null;
   }
 
   Future<void> put(ApiConfig config) async {
-    await _db.writeTxn(() async {
-      await _db.apiConfigCollections.put(_toCollection(config));
-    });
+    await _db.into(_db.apiConfigs).insertOnConflictUpdate(_toCompanion(config));
   }
 
   Future<void> delete(String id) async {
-    await _db.writeTxn(() async {
-      await _db.apiConfigCollections.where().configIdEqualTo(id).deleteAll();
-    });
+    await (_db.delete(_db.apiConfigs)..where((t) => t.configId.equals(id))).go();
   }
 
-  ApiConfig _toModel(ApiConfigCollection c) => ApiConfig(
+  ApiConfig _toModel(ApiConfigRow c) => ApiConfig(
         id: c.configId,
         name: c.name,
         providerId: c.providerId,
@@ -47,20 +45,21 @@ class ApiConfigRepo {
         reasoningTagEnd: c.reasoningTagEnd,
       );
 
-  ApiConfigCollection _toCollection(ApiConfig m) => ApiConfigCollection()
-    ..configId = m.id
-    ..name = m.name
-    ..providerId = m.providerId
-    ..endpoint = m.endpoint
-    ..apiKey = m.apiKey
-    ..model = m.model
-    ..maxTokens = m.maxTokens
-    ..contextSize = m.contextSize
-    ..temperature = m.temperature
-    ..topP = m.topP
-    ..stream = m.stream
-    ..reasoningEffort = m.reasoningEffort
-    ..requestReasoning = m.requestReasoning
-    ..reasoningTagStart = m.reasoningTagStart
-    ..reasoningTagEnd = m.reasoningTagEnd;
+  ApiConfigsCompanion _toCompanion(ApiConfig m) => ApiConfigsCompanion(
+        configId: Value(m.id),
+        name: Value(m.name),
+        providerId: Value(m.providerId),
+        endpoint: Value(m.endpoint),
+        apiKey: Value(m.apiKey),
+        model: Value(m.model),
+        maxTokens: Value(m.maxTokens),
+        contextSize: Value(m.contextSize),
+        temperature: Value(m.temperature),
+        topP: Value(m.topP),
+        stream: Value(m.stream),
+        reasoningEffort: Value(m.reasoningEffort),
+        requestReasoning: Value(m.requestReasoning),
+        reasoningTagStart: Value(m.reasoningTagStart),
+        reasoningTagEnd: Value(m.reasoningTagEnd),
+      );
 }

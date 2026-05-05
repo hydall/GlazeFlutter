@@ -9,18 +9,18 @@ final charactersProvider =
 class CharactersNotifier extends AsyncNotifier<List<Character>> {
   @override
   Future<List<Character>> build() async {
-    final repo = await ref.watch(characterRepoProvider.future);
+    final repo = ref.watch(characterRepoProvider);
     return repo.getAll();
   }
 
   Future<void> add(Character character) async {
-    final repo = await ref.read(characterRepoProvider.future);
+    final repo = ref.read(characterRepoProvider);
     await repo.put(character);
     ref.invalidateSelf();
   }
 
   Future<void> remove(String id) async {
-    final repo = await ref.read(characterRepoProvider.future);
+    final repo = ref.read(characterRepoProvider);
     await repo.delete(id);
     ref.invalidateSelf();
   }

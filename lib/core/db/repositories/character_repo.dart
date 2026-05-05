@@ -1,36 +1,35 @@
 import 'dart:convert';
-import 'package:isar/isar.dart';
-import '../collections.dart';
+
+import 'package:drift/drift.dart';
+
+import '../app_db.dart';
 import '../../models/character.dart';
 
 class CharacterRepo {
-  final Isar _db;
+  final AppDatabase _db;
   CharacterRepo(this._db);
 
   Future<List<Character>> getAll() async {
-    final items = await _db.characterCollections.where().findAll();
-    return items.map(_toModel).toList();
+    final rows = await _db.select(_db.characters).get();
+    return rows.map(_toModel).toList();
   }
 
   Future<Character?> getById(String id) async {
-    final c =
-        await _db.characterCollections.where().charIdEqualTo(id).findFirst();
-    return c != null ? _toModel(c) : null;
+    final row = await (_db.select(_db.characters)
+          ..where((t) => t.charId.equals(id)))
+        .getSingleOrNull();
+    return row != null ? _toModel(row) : null;
   }
 
   Future<void> put(Character character) async {
-    await _db.writeTxn(() async {
-      await _db.characterCollections.put(_toCollection(character));
-    });
+    await _db.into(_db.characters).insertOnConflictUpdate(_toCompanion(character));
   }
 
   Future<void> delete(String id) async {
-    await _db.writeTxn(() async {
-      await _db.characterCollections.where().charIdEqualTo(id).deleteAll();
-    });
+    await (_db.delete(_db.characters)..where((t) => t.charId.equals(id))).go();
   }
 
-  Character _toModel(CharacterCollection c) => Character(
+  Character _toModel(CharacterRow c) => Character(
         id: c.charId,
         name: c.name,
         avatarPath: c.avatarPath,
@@ -53,21 +52,22 @@ class CharacterRepo {
             : [],
       );
 
-  CharacterCollection _toCollection(Character m) => CharacterCollection()
-    ..charId = m.id
-    ..name = m.name
-    ..avatarPath = m.avatarPath
-    ..description = m.description
-    ..personality = m.personality
-    ..scenario = m.scenario
-    ..firstMes = m.firstMes
-    ..mesExample = m.mesExample
-    ..systemPrompt = m.systemPrompt
-    ..postHistoryInstructions = m.postHistoryInstructions
-    ..creator = m.creator
-    ..creatorNotes = m.creatorNotes
-    ..color = m.color
-    ..updatedAt = m.updatedAt
-    ..tagsJson = jsonEncode(m.tags)
-    ..alternateGreetingsJson = jsonEncode(m.alternateGreetings);
+  CharactersCompanion _toCompanion(Character m) => CharactersCompanion(
+        charId: Value(m.id),
+        name: Value(m.name),
+        avatarPath: Value(m.avatarPath),
+        description: Value(m.description),
+        personality: Value(m.personality),
+        scenario: Value(m.scenario),
+        firstMes: Value(m.firstMes),
+        mesExample: Value(m.mesExample),
+        systemPrompt: Value(m.systemPrompt),
+        postHistoryInstructions: Value(m.postHistoryInstructions),
+        creator: Value(m.creator),
+        creatorNotes: Value(m.creatorNotes),
+        color: Value(m.color),
+        updatedAt: Value(m.updatedAt),
+        tagsJson: Value(jsonEncode(m.tags)),
+        alternateGreetingsJson: Value(jsonEncode(m.alternateGreetings)),
+      );
 }

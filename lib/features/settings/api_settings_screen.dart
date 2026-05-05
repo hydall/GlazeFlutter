@@ -129,7 +129,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   }
 
   Future<void> _save() async {
-    final repo = await ref.read(apiConfigRepoProvider.future);
+    final repo = ref.read(apiConfigRepoProvider);
     final config = ApiConfig(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       endpoint: _endpointCtrl.text,

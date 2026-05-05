@@ -12,7 +12,8 @@ part of 'preset.dart';
 T _$identity<T>(T value) => value;
 
 final _privateConstructorUsedError = UnsupportedError(
-    'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
+  'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models',
+);
 
 PresetBlock _$PresetBlockFromJson(Map<String, dynamic> json) {
   return _PresetBlock.fromJson(json);
@@ -31,8 +32,12 @@ mixin _$PresetBlock {
   String? get prefix => throw _privateConstructorUsedError;
   bool get isStashed => throw _privateConstructorUsedError;
 
+  /// Serializes this PresetBlock to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-  @JsonKey(ignore: true)
+
+  /// Create a copy of PresetBlock
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   $PresetBlockCopyWith<PresetBlock> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -40,20 +45,22 @@ mixin _$PresetBlock {
 /// @nodoc
 abstract class $PresetBlockCopyWith<$Res> {
   factory $PresetBlockCopyWith(
-          PresetBlock value, $Res Function(PresetBlock) then) =
-      _$PresetBlockCopyWithImpl<$Res, PresetBlock>;
+    PresetBlock value,
+    $Res Function(PresetBlock) then,
+  ) = _$PresetBlockCopyWithImpl<$Res, PresetBlock>;
   @useResult
-  $Res call(
-      {String id,
-      String name,
-      String role,
-      String content,
-      bool enabled,
-      bool isStatic,
-      String insertionMode,
-      int? depth,
-      String? prefix,
-      bool isStashed});
+  $Res call({
+    String id,
+    String name,
+    String role,
+    String content,
+    bool enabled,
+    bool isStatic,
+    String insertionMode,
+    int? depth,
+    String? prefix,
+    bool isStashed,
+  });
 }
 
 /// @nodoc
@@ -66,6 +73,8 @@ class _$PresetBlockCopyWithImpl<$Res, $Val extends PresetBlock>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
+  /// Create a copy of PresetBlock
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -80,48 +89,51 @@ class _$PresetBlockCopyWithImpl<$Res, $Val extends PresetBlock>
     Object? prefix = freezed,
     Object? isStashed = null,
   }) {
-    return _then(_value.copyWith(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      name: null == name
-          ? _value.name
-          : name // ignore: cast_nullable_to_non_nullable
-              as String,
-      role: null == role
-          ? _value.role
-          : role // ignore: cast_nullable_to_non_nullable
-              as String,
-      content: null == content
-          ? _value.content
-          : content // ignore: cast_nullable_to_non_nullable
-              as String,
-      enabled: null == enabled
-          ? _value.enabled
-          : enabled // ignore: cast_nullable_to_non_nullable
-              as bool,
-      isStatic: null == isStatic
-          ? _value.isStatic
-          : isStatic // ignore: cast_nullable_to_non_nullable
-              as bool,
-      insertionMode: null == insertionMode
-          ? _value.insertionMode
-          : insertionMode // ignore: cast_nullable_to_non_nullable
-              as String,
-      depth: freezed == depth
-          ? _value.depth
-          : depth // ignore: cast_nullable_to_non_nullable
-              as int?,
-      prefix: freezed == prefix
-          ? _value.prefix
-          : prefix // ignore: cast_nullable_to_non_nullable
-              as String?,
-      isStashed: null == isStashed
-          ? _value.isStashed
-          : isStashed // ignore: cast_nullable_to_non_nullable
-              as bool,
-    ) as $Val);
+    return _then(
+      _value.copyWith(
+            id: null == id
+                ? _value.id
+                : id // ignore: cast_nullable_to_non_nullable
+                      as String,
+            name: null == name
+                ? _value.name
+                : name // ignore: cast_nullable_to_non_nullable
+                      as String,
+            role: null == role
+                ? _value.role
+                : role // ignore: cast_nullable_to_non_nullable
+                      as String,
+            content: null == content
+                ? _value.content
+                : content // ignore: cast_nullable_to_non_nullable
+                      as String,
+            enabled: null == enabled
+                ? _value.enabled
+                : enabled // ignore: cast_nullable_to_non_nullable
+                      as bool,
+            isStatic: null == isStatic
+                ? _value.isStatic
+                : isStatic // ignore: cast_nullable_to_non_nullable
+                      as bool,
+            insertionMode: null == insertionMode
+                ? _value.insertionMode
+                : insertionMode // ignore: cast_nullable_to_non_nullable
+                      as String,
+            depth: freezed == depth
+                ? _value.depth
+                : depth // ignore: cast_nullable_to_non_nullable
+                      as int?,
+            prefix: freezed == prefix
+                ? _value.prefix
+                : prefix // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            isStashed: null == isStashed
+                ? _value.isStashed
+                : isStashed // ignore: cast_nullable_to_non_nullable
+                      as bool,
+          )
+          as $Val,
+    );
   }
 }
 
@@ -129,21 +141,23 @@ class _$PresetBlockCopyWithImpl<$Res, $Val extends PresetBlock>
 abstract class _$$PresetBlockImplCopyWith<$Res>
     implements $PresetBlockCopyWith<$Res> {
   factory _$$PresetBlockImplCopyWith(
-          _$PresetBlockImpl value, $Res Function(_$PresetBlockImpl) then) =
-      __$$PresetBlockImplCopyWithImpl<$Res>;
+    _$PresetBlockImpl value,
+    $Res Function(_$PresetBlockImpl) then,
+  ) = __$$PresetBlockImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call(
-      {String id,
-      String name,
-      String role,
-      String content,
-      bool enabled,
-      bool isStatic,
-      String insertionMode,
-      int? depth,
-      String? prefix,
-      bool isStashed});
+  $Res call({
+    String id,
+    String name,
+    String role,
+    String content,
+    bool enabled,
+    bool isStatic,
+    String insertionMode,
+    int? depth,
+    String? prefix,
+    bool isStashed,
+  });
 }
 
 /// @nodoc
@@ -151,9 +165,12 @@ class __$$PresetBlockImplCopyWithImpl<$Res>
     extends _$PresetBlockCopyWithImpl<$Res, _$PresetBlockImpl>
     implements _$$PresetBlockImplCopyWith<$Res> {
   __$$PresetBlockImplCopyWithImpl(
-      _$PresetBlockImpl _value, $Res Function(_$PresetBlockImpl) _then)
-      : super(_value, _then);
+    _$PresetBlockImpl _value,
+    $Res Function(_$PresetBlockImpl) _then,
+  ) : super(_value, _then);
 
+  /// Create a copy of PresetBlock
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -168,65 +185,68 @@ class __$$PresetBlockImplCopyWithImpl<$Res>
     Object? prefix = freezed,
     Object? isStashed = null,
   }) {
-    return _then(_$PresetBlockImpl(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      name: null == name
-          ? _value.name
-          : name // ignore: cast_nullable_to_non_nullable
-              as String,
-      role: null == role
-          ? _value.role
-          : role // ignore: cast_nullable_to_non_nullable
-              as String,
-      content: null == content
-          ? _value.content
-          : content // ignore: cast_nullable_to_non_nullable
-              as String,
-      enabled: null == enabled
-          ? _value.enabled
-          : enabled // ignore: cast_nullable_to_non_nullable
-              as bool,
-      isStatic: null == isStatic
-          ? _value.isStatic
-          : isStatic // ignore: cast_nullable_to_non_nullable
-              as bool,
-      insertionMode: null == insertionMode
-          ? _value.insertionMode
-          : insertionMode // ignore: cast_nullable_to_non_nullable
-              as String,
-      depth: freezed == depth
-          ? _value.depth
-          : depth // ignore: cast_nullable_to_non_nullable
-              as int?,
-      prefix: freezed == prefix
-          ? _value.prefix
-          : prefix // ignore: cast_nullable_to_non_nullable
-              as String?,
-      isStashed: null == isStashed
-          ? _value.isStashed
-          : isStashed // ignore: cast_nullable_to_non_nullable
-              as bool,
-    ));
+    return _then(
+      _$PresetBlockImpl(
+        id: null == id
+            ? _value.id
+            : id // ignore: cast_nullable_to_non_nullable
+                  as String,
+        name: null == name
+            ? _value.name
+            : name // ignore: cast_nullable_to_non_nullable
+                  as String,
+        role: null == role
+            ? _value.role
+            : role // ignore: cast_nullable_to_non_nullable
+                  as String,
+        content: null == content
+            ? _value.content
+            : content // ignore: cast_nullable_to_non_nullable
+                  as String,
+        enabled: null == enabled
+            ? _value.enabled
+            : enabled // ignore: cast_nullable_to_non_nullable
+                  as bool,
+        isStatic: null == isStatic
+            ? _value.isStatic
+            : isStatic // ignore: cast_nullable_to_non_nullable
+                  as bool,
+        insertionMode: null == insertionMode
+            ? _value.insertionMode
+            : insertionMode // ignore: cast_nullable_to_non_nullable
+                  as String,
+        depth: freezed == depth
+            ? _value.depth
+            : depth // ignore: cast_nullable_to_non_nullable
+                  as int?,
+        prefix: freezed == prefix
+            ? _value.prefix
+            : prefix // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        isStashed: null == isStashed
+            ? _value.isStashed
+            : isStashed // ignore: cast_nullable_to_non_nullable
+                  as bool,
+      ),
+    );
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$PresetBlockImpl implements _PresetBlock {
-  const _$PresetBlockImpl(
-      {required this.id,
-      required this.name,
-      required this.role,
-      required this.content,
-      this.enabled = true,
-      this.isStatic = false,
-      this.insertionMode = 'relative',
-      this.depth,
-      this.prefix,
-      this.isStashed = false});
+  const _$PresetBlockImpl({
+    required this.id,
+    required this.name,
+    required this.role,
+    required this.content,
+    this.enabled = true,
+    this.isStatic = false,
+    this.insertionMode = 'relative',
+    this.depth,
+    this.prefix,
+    this.isStashed = false,
+  });
 
   factory _$PresetBlockImpl.fromJson(Map<String, dynamic> json) =>
       _$$PresetBlockImplFromJson(json);
@@ -281,12 +301,25 @@ class _$PresetBlockImpl implements _PresetBlock {
                 other.isStashed == isStashed));
   }
 
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(runtimeType, id, name, role, content, enabled,
-      isStatic, insertionMode, depth, prefix, isStashed);
+  int get hashCode => Object.hash(
+    runtimeType,
+    id,
+    name,
+    role,
+    content,
+    enabled,
+    isStatic,
+    insertionMode,
+    depth,
+    prefix,
+    isStashed,
+  );
 
-  @JsonKey(ignore: true)
+  /// Create a copy of PresetBlock
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
   _$$PresetBlockImplCopyWith<_$PresetBlockImpl> get copyWith =>
@@ -294,24 +327,23 @@ class _$PresetBlockImpl implements _PresetBlock {
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$PresetBlockImplToJson(
-      this,
-    );
+    return _$$PresetBlockImplToJson(this);
   }
 }
 
 abstract class _PresetBlock implements PresetBlock {
-  const factory _PresetBlock(
-      {required final String id,
-      required final String name,
-      required final String role,
-      required final String content,
-      final bool enabled,
-      final bool isStatic,
-      final String insertionMode,
-      final int? depth,
-      final String? prefix,
-      final bool isStashed}) = _$PresetBlockImpl;
+  const factory _PresetBlock({
+    required final String id,
+    required final String name,
+    required final String role,
+    required final String content,
+    final bool enabled,
+    final bool isStatic,
+    final String insertionMode,
+    final int? depth,
+    final String? prefix,
+    final bool isStashed,
+  }) = _$PresetBlockImpl;
 
   factory _PresetBlock.fromJson(Map<String, dynamic> json) =
       _$PresetBlockImpl.fromJson;
@@ -336,8 +368,11 @@ abstract class _PresetBlock implements PresetBlock {
   String? get prefix;
   @override
   bool get isStashed;
+
+  /// Create a copy of PresetBlock
+  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   _$$PresetBlockImplCopyWith<_$PresetBlockImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -360,8 +395,12 @@ mixin _$PresetRegex {
   int? get minDepth => throw _privateConstructorUsedError;
   int? get maxDepth => throw _privateConstructorUsedError;
 
+  /// Serializes this PresetRegex to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-  @JsonKey(ignore: true)
+
+  /// Create a copy of PresetRegex
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   $PresetRegexCopyWith<PresetRegex> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -369,21 +408,23 @@ mixin _$PresetRegex {
 /// @nodoc
 abstract class $PresetRegexCopyWith<$Res> {
   factory $PresetRegexCopyWith(
-          PresetRegex value, $Res Function(PresetRegex) then) =
-      _$PresetRegexCopyWithImpl<$Res, PresetRegex>;
+    PresetRegex value,
+    $Res Function(PresetRegex) then,
+  ) = _$PresetRegexCopyWithImpl<$Res, PresetRegex>;
   @useResult
-  $Res call(
-      {String id,
-      String name,
-      String regex,
-      String replacement,
-      String trimOut,
-      List<int> placement,
-      List<int> ephemerality,
-      bool disabled,
-      String macroRules,
-      int? minDepth,
-      int? maxDepth});
+  $Res call({
+    String id,
+    String name,
+    String regex,
+    String replacement,
+    String trimOut,
+    List<int> placement,
+    List<int> ephemerality,
+    bool disabled,
+    String macroRules,
+    int? minDepth,
+    int? maxDepth,
+  });
 }
 
 /// @nodoc
@@ -396,6 +437,8 @@ class _$PresetRegexCopyWithImpl<$Res, $Val extends PresetRegex>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
+  /// Create a copy of PresetRegex
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -411,52 +454,55 @@ class _$PresetRegexCopyWithImpl<$Res, $Val extends PresetRegex>
     Object? minDepth = freezed,
     Object? maxDepth = freezed,
   }) {
-    return _then(_value.copyWith(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      name: null == name
-          ? _value.name
-          : name // ignore: cast_nullable_to_non_nullable
-              as String,
-      regex: null == regex
-          ? _value.regex
-          : regex // ignore: cast_nullable_to_non_nullable
-              as String,
-      replacement: null == replacement
-          ? _value.replacement
-          : replacement // ignore: cast_nullable_to_non_nullable
-              as String,
-      trimOut: null == trimOut
-          ? _value.trimOut
-          : trimOut // ignore: cast_nullable_to_non_nullable
-              as String,
-      placement: null == placement
-          ? _value.placement
-          : placement // ignore: cast_nullable_to_non_nullable
-              as List<int>,
-      ephemerality: null == ephemerality
-          ? _value.ephemerality
-          : ephemerality // ignore: cast_nullable_to_non_nullable
-              as List<int>,
-      disabled: null == disabled
-          ? _value.disabled
-          : disabled // ignore: cast_nullable_to_non_nullable
-              as bool,
-      macroRules: null == macroRules
-          ? _value.macroRules
-          : macroRules // ignore: cast_nullable_to_non_nullable
-              as String,
-      minDepth: freezed == minDepth
-          ? _value.minDepth
-          : minDepth // ignore: cast_nullable_to_non_nullable
-              as int?,
-      maxDepth: freezed == maxDepth
-          ? _value.maxDepth
-          : maxDepth // ignore: cast_nullable_to_non_nullable
-              as int?,
-    ) as $Val);
+    return _then(
+      _value.copyWith(
+            id: null == id
+                ? _value.id
+                : id // ignore: cast_nullable_to_non_nullable
+                      as String,
+            name: null == name
+                ? _value.name
+                : name // ignore: cast_nullable_to_non_nullable
+                      as String,
+            regex: null == regex
+                ? _value.regex
+                : regex // ignore: cast_nullable_to_non_nullable
+                      as String,
+            replacement: null == replacement
+                ? _value.replacement
+                : replacement // ignore: cast_nullable_to_non_nullable
+                      as String,
+            trimOut: null == trimOut
+                ? _value.trimOut
+                : trimOut // ignore: cast_nullable_to_non_nullable
+                      as String,
+            placement: null == placement
+                ? _value.placement
+                : placement // ignore: cast_nullable_to_non_nullable
+                      as List<int>,
+            ephemerality: null == ephemerality
+                ? _value.ephemerality
+                : ephemerality // ignore: cast_nullable_to_non_nullable
+                      as List<int>,
+            disabled: null == disabled
+                ? _value.disabled
+                : disabled // ignore: cast_nullable_to_non_nullable
+                      as bool,
+            macroRules: null == macroRules
+                ? _value.macroRules
+                : macroRules // ignore: cast_nullable_to_non_nullable
+                      as String,
+            minDepth: freezed == minDepth
+                ? _value.minDepth
+                : minDepth // ignore: cast_nullable_to_non_nullable
+                      as int?,
+            maxDepth: freezed == maxDepth
+                ? _value.maxDepth
+                : maxDepth // ignore: cast_nullable_to_non_nullable
+                      as int?,
+          )
+          as $Val,
+    );
   }
 }
 
@@ -464,22 +510,24 @@ class _$PresetRegexCopyWithImpl<$Res, $Val extends PresetRegex>
 abstract class _$$PresetRegexImplCopyWith<$Res>
     implements $PresetRegexCopyWith<$Res> {
   factory _$$PresetRegexImplCopyWith(
-          _$PresetRegexImpl value, $Res Function(_$PresetRegexImpl) then) =
-      __$$PresetRegexImplCopyWithImpl<$Res>;
+    _$PresetRegexImpl value,
+    $Res Function(_$PresetRegexImpl) then,
+  ) = __$$PresetRegexImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call(
-      {String id,
-      String name,
-      String regex,
-      String replacement,
-      String trimOut,
-      List<int> placement,
-      List<int> ephemerality,
-      bool disabled,
-      String macroRules,
-      int? minDepth,
-      int? maxDepth});
+  $Res call({
+    String id,
+    String name,
+    String regex,
+    String replacement,
+    String trimOut,
+    List<int> placement,
+    List<int> ephemerality,
+    bool disabled,
+    String macroRules,
+    int? minDepth,
+    int? maxDepth,
+  });
 }
 
 /// @nodoc
@@ -487,9 +535,12 @@ class __$$PresetRegexImplCopyWithImpl<$Res>
     extends _$PresetRegexCopyWithImpl<$Res, _$PresetRegexImpl>
     implements _$$PresetRegexImplCopyWith<$Res> {
   __$$PresetRegexImplCopyWithImpl(
-      _$PresetRegexImpl _value, $Res Function(_$PresetRegexImpl) _then)
-      : super(_value, _then);
+    _$PresetRegexImpl _value,
+    $Res Function(_$PresetRegexImpl) _then,
+  ) : super(_value, _then);
 
+  /// Create a copy of PresetRegex
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -505,72 +556,74 @@ class __$$PresetRegexImplCopyWithImpl<$Res>
     Object? minDepth = freezed,
     Object? maxDepth = freezed,
   }) {
-    return _then(_$PresetRegexImpl(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      name: null == name
-          ? _value.name
-          : name // ignore: cast_nullable_to_non_nullable
-              as String,
-      regex: null == regex
-          ? _value.regex
-          : regex // ignore: cast_nullable_to_non_nullable
-              as String,
-      replacement: null == replacement
-          ? _value.replacement
-          : replacement // ignore: cast_nullable_to_non_nullable
-              as String,
-      trimOut: null == trimOut
-          ? _value.trimOut
-          : trimOut // ignore: cast_nullable_to_non_nullable
-              as String,
-      placement: null == placement
-          ? _value._placement
-          : placement // ignore: cast_nullable_to_non_nullable
-              as List<int>,
-      ephemerality: null == ephemerality
-          ? _value._ephemerality
-          : ephemerality // ignore: cast_nullable_to_non_nullable
-              as List<int>,
-      disabled: null == disabled
-          ? _value.disabled
-          : disabled // ignore: cast_nullable_to_non_nullable
-              as bool,
-      macroRules: null == macroRules
-          ? _value.macroRules
-          : macroRules // ignore: cast_nullable_to_non_nullable
-              as String,
-      minDepth: freezed == minDepth
-          ? _value.minDepth
-          : minDepth // ignore: cast_nullable_to_non_nullable
-              as int?,
-      maxDepth: freezed == maxDepth
-          ? _value.maxDepth
-          : maxDepth // ignore: cast_nullable_to_non_nullable
-              as int?,
-    ));
+    return _then(
+      _$PresetRegexImpl(
+        id: null == id
+            ? _value.id
+            : id // ignore: cast_nullable_to_non_nullable
+                  as String,
+        name: null == name
+            ? _value.name
+            : name // ignore: cast_nullable_to_non_nullable
+                  as String,
+        regex: null == regex
+            ? _value.regex
+            : regex // ignore: cast_nullable_to_non_nullable
+                  as String,
+        replacement: null == replacement
+            ? _value.replacement
+            : replacement // ignore: cast_nullable_to_non_nullable
+                  as String,
+        trimOut: null == trimOut
+            ? _value.trimOut
+            : trimOut // ignore: cast_nullable_to_non_nullable
+                  as String,
+        placement: null == placement
+            ? _value._placement
+            : placement // ignore: cast_nullable_to_non_nullable
+                  as List<int>,
+        ephemerality: null == ephemerality
+            ? _value._ephemerality
+            : ephemerality // ignore: cast_nullable_to_non_nullable
+                  as List<int>,
+        disabled: null == disabled
+            ? _value.disabled
+            : disabled // ignore: cast_nullable_to_non_nullable
+                  as bool,
+        macroRules: null == macroRules
+            ? _value.macroRules
+            : macroRules // ignore: cast_nullable_to_non_nullable
+                  as String,
+        minDepth: freezed == minDepth
+            ? _value.minDepth
+            : minDepth // ignore: cast_nullable_to_non_nullable
+                  as int?,
+        maxDepth: freezed == maxDepth
+            ? _value.maxDepth
+            : maxDepth // ignore: cast_nullable_to_non_nullable
+                  as int?,
+      ),
+    );
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$PresetRegexImpl implements _PresetRegex {
-  const _$PresetRegexImpl(
-      {required this.id,
-      required this.name,
-      required this.regex,
-      this.replacement = '',
-      this.trimOut = '',
-      final List<int> placement = const [1, 2],
-      final List<int> ephemerality = const [1, 2],
-      this.disabled = false,
-      this.macroRules = '0',
-      this.minDepth,
-      this.maxDepth})
-      : _placement = placement,
-        _ephemerality = ephemerality;
+  const _$PresetRegexImpl({
+    required this.id,
+    required this.name,
+    required this.regex,
+    this.replacement = '',
+    this.trimOut = '',
+    final List<int> placement = const [1, 2],
+    final List<int> ephemerality = const [1, 2],
+    this.disabled = false,
+    this.macroRules = '0',
+    this.minDepth,
+    this.maxDepth,
+  }) : _placement = placement,
+       _ephemerality = ephemerality;
 
   factory _$PresetRegexImpl.fromJson(Map<String, dynamic> json) =>
       _$$PresetRegexImplFromJson(json);
@@ -632,10 +685,14 @@ class _$PresetRegexImpl implements _PresetRegex {
             (identical(other.replacement, replacement) ||
                 other.replacement == replacement) &&
             (identical(other.trimOut, trimOut) || other.trimOut == trimOut) &&
-            const DeepCollectionEquality()
-                .equals(other._placement, _placement) &&
-            const DeepCollectionEquality()
-                .equals(other._ephemerality, _ephemerality) &&
+            const DeepCollectionEquality().equals(
+              other._placement,
+              _placement,
+            ) &&
+            const DeepCollectionEquality().equals(
+              other._ephemerality,
+              _ephemerality,
+            ) &&
             (identical(other.disabled, disabled) ||
                 other.disabled == disabled) &&
             (identical(other.macroRules, macroRules) ||
@@ -646,23 +703,26 @@ class _$PresetRegexImpl implements _PresetRegex {
                 other.maxDepth == maxDepth));
   }
 
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      name,
-      regex,
-      replacement,
-      trimOut,
-      const DeepCollectionEquality().hash(_placement),
-      const DeepCollectionEquality().hash(_ephemerality),
-      disabled,
-      macroRules,
-      minDepth,
-      maxDepth);
+    runtimeType,
+    id,
+    name,
+    regex,
+    replacement,
+    trimOut,
+    const DeepCollectionEquality().hash(_placement),
+    const DeepCollectionEquality().hash(_ephemerality),
+    disabled,
+    macroRules,
+    minDepth,
+    maxDepth,
+  );
 
-  @JsonKey(ignore: true)
+  /// Create a copy of PresetRegex
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
   _$$PresetRegexImplCopyWith<_$PresetRegexImpl> get copyWith =>
@@ -670,25 +730,24 @@ class _$PresetRegexImpl implements _PresetRegex {
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$PresetRegexImplToJson(
-      this,
-    );
+    return _$$PresetRegexImplToJson(this);
   }
 }
 
 abstract class _PresetRegex implements PresetRegex {
-  const factory _PresetRegex(
-      {required final String id,
-      required final String name,
-      required final String regex,
-      final String replacement,
-      final String trimOut,
-      final List<int> placement,
-      final List<int> ephemerality,
-      final bool disabled,
-      final String macroRules,
-      final int? minDepth,
-      final int? maxDepth}) = _$PresetRegexImpl;
+  const factory _PresetRegex({
+    required final String id,
+    required final String name,
+    required final String regex,
+    final String replacement,
+    final String trimOut,
+    final List<int> placement,
+    final List<int> ephemerality,
+    final bool disabled,
+    final String macroRules,
+    final int? minDepth,
+    final int? maxDepth,
+  }) = _$PresetRegexImpl;
 
   factory _PresetRegex.fromJson(Map<String, dynamic> json) =
       _$PresetRegexImpl.fromJson;
@@ -715,8 +774,11 @@ abstract class _PresetRegex implements PresetRegex {
   int? get minDepth;
   @override
   int? get maxDepth;
+
+  /// Create a copy of PresetRegex
+  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   _$$PresetRegexImplCopyWith<_$PresetRegexImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -742,8 +804,12 @@ mixin _$Preset {
   String get mergeRole => throw _privateConstructorUsedError;
   int get createdAt => throw _privateConstructorUsedError;
 
+  /// Serializes this Preset to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-  @JsonKey(ignore: true)
+
+  /// Create a copy of Preset
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   $PresetCopyWith<Preset> get copyWith => throw _privateConstructorUsedError;
 }
 
@@ -752,21 +818,22 @@ abstract class $PresetCopyWith<$Res> {
   factory $PresetCopyWith(Preset value, $Res Function(Preset) then) =
       _$PresetCopyWithImpl<$Res, Preset>;
   @useResult
-  $Res call(
-      {String id,
-      String name,
-      String? author,
-      List<PresetBlock> blocks,
-      List<PresetRegex> regexes,
-      bool reasoningEnabled,
-      String? reasoningStart,
-      String? reasoningEnd,
-      String? guidedGenerationPrompt,
-      String? guidedImpersonationPrompt,
-      String? summaryPrompt,
-      bool mergePrompts,
-      String mergeRole,
-      int createdAt});
+  $Res call({
+    String id,
+    String name,
+    String? author,
+    List<PresetBlock> blocks,
+    List<PresetRegex> regexes,
+    bool reasoningEnabled,
+    String? reasoningStart,
+    String? reasoningEnd,
+    String? guidedGenerationPrompt,
+    String? guidedImpersonationPrompt,
+    String? summaryPrompt,
+    bool mergePrompts,
+    String mergeRole,
+    int createdAt,
+  });
 }
 
 /// @nodoc
@@ -779,6 +846,8 @@ class _$PresetCopyWithImpl<$Res, $Val extends Preset>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
+  /// Create a copy of Preset
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -797,89 +866,94 @@ class _$PresetCopyWithImpl<$Res, $Val extends Preset>
     Object? mergeRole = null,
     Object? createdAt = null,
   }) {
-    return _then(_value.copyWith(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      name: null == name
-          ? _value.name
-          : name // ignore: cast_nullable_to_non_nullable
-              as String,
-      author: freezed == author
-          ? _value.author
-          : author // ignore: cast_nullable_to_non_nullable
-              as String?,
-      blocks: null == blocks
-          ? _value.blocks
-          : blocks // ignore: cast_nullable_to_non_nullable
-              as List<PresetBlock>,
-      regexes: null == regexes
-          ? _value.regexes
-          : regexes // ignore: cast_nullable_to_non_nullable
-              as List<PresetRegex>,
-      reasoningEnabled: null == reasoningEnabled
-          ? _value.reasoningEnabled
-          : reasoningEnabled // ignore: cast_nullable_to_non_nullable
-              as bool,
-      reasoningStart: freezed == reasoningStart
-          ? _value.reasoningStart
-          : reasoningStart // ignore: cast_nullable_to_non_nullable
-              as String?,
-      reasoningEnd: freezed == reasoningEnd
-          ? _value.reasoningEnd
-          : reasoningEnd // ignore: cast_nullable_to_non_nullable
-              as String?,
-      guidedGenerationPrompt: freezed == guidedGenerationPrompt
-          ? _value.guidedGenerationPrompt
-          : guidedGenerationPrompt // ignore: cast_nullable_to_non_nullable
-              as String?,
-      guidedImpersonationPrompt: freezed == guidedImpersonationPrompt
-          ? _value.guidedImpersonationPrompt
-          : guidedImpersonationPrompt // ignore: cast_nullable_to_non_nullable
-              as String?,
-      summaryPrompt: freezed == summaryPrompt
-          ? _value.summaryPrompt
-          : summaryPrompt // ignore: cast_nullable_to_non_nullable
-              as String?,
-      mergePrompts: null == mergePrompts
-          ? _value.mergePrompts
-          : mergePrompts // ignore: cast_nullable_to_non_nullable
-              as bool,
-      mergeRole: null == mergeRole
-          ? _value.mergeRole
-          : mergeRole // ignore: cast_nullable_to_non_nullable
-              as String,
-      createdAt: null == createdAt
-          ? _value.createdAt
-          : createdAt // ignore: cast_nullable_to_non_nullable
-              as int,
-    ) as $Val);
+    return _then(
+      _value.copyWith(
+            id: null == id
+                ? _value.id
+                : id // ignore: cast_nullable_to_non_nullable
+                      as String,
+            name: null == name
+                ? _value.name
+                : name // ignore: cast_nullable_to_non_nullable
+                      as String,
+            author: freezed == author
+                ? _value.author
+                : author // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            blocks: null == blocks
+                ? _value.blocks
+                : blocks // ignore: cast_nullable_to_non_nullable
+                      as List<PresetBlock>,
+            regexes: null == regexes
+                ? _value.regexes
+                : regexes // ignore: cast_nullable_to_non_nullable
+                      as List<PresetRegex>,
+            reasoningEnabled: null == reasoningEnabled
+                ? _value.reasoningEnabled
+                : reasoningEnabled // ignore: cast_nullable_to_non_nullable
+                      as bool,
+            reasoningStart: freezed == reasoningStart
+                ? _value.reasoningStart
+                : reasoningStart // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            reasoningEnd: freezed == reasoningEnd
+                ? _value.reasoningEnd
+                : reasoningEnd // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            guidedGenerationPrompt: freezed == guidedGenerationPrompt
+                ? _value.guidedGenerationPrompt
+                : guidedGenerationPrompt // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            guidedImpersonationPrompt: freezed == guidedImpersonationPrompt
+                ? _value.guidedImpersonationPrompt
+                : guidedImpersonationPrompt // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            summaryPrompt: freezed == summaryPrompt
+                ? _value.summaryPrompt
+                : summaryPrompt // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            mergePrompts: null == mergePrompts
+                ? _value.mergePrompts
+                : mergePrompts // ignore: cast_nullable_to_non_nullable
+                      as bool,
+            mergeRole: null == mergeRole
+                ? _value.mergeRole
+                : mergeRole // ignore: cast_nullable_to_non_nullable
+                      as String,
+            createdAt: null == createdAt
+                ? _value.createdAt
+                : createdAt // ignore: cast_nullable_to_non_nullable
+                      as int,
+          )
+          as $Val,
+    );
   }
 }
 
 /// @nodoc
 abstract class _$$PresetImplCopyWith<$Res> implements $PresetCopyWith<$Res> {
   factory _$$PresetImplCopyWith(
-          _$PresetImpl value, $Res Function(_$PresetImpl) then) =
-      __$$PresetImplCopyWithImpl<$Res>;
+    _$PresetImpl value,
+    $Res Function(_$PresetImpl) then,
+  ) = __$$PresetImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call(
-      {String id,
-      String name,
-      String? author,
-      List<PresetBlock> blocks,
-      List<PresetRegex> regexes,
-      bool reasoningEnabled,
-      String? reasoningStart,
-      String? reasoningEnd,
-      String? guidedGenerationPrompt,
-      String? guidedImpersonationPrompt,
-      String? summaryPrompt,
-      bool mergePrompts,
-      String mergeRole,
-      int createdAt});
+  $Res call({
+    String id,
+    String name,
+    String? author,
+    List<PresetBlock> blocks,
+    List<PresetRegex> regexes,
+    bool reasoningEnabled,
+    String? reasoningStart,
+    String? reasoningEnd,
+    String? guidedGenerationPrompt,
+    String? guidedImpersonationPrompt,
+    String? summaryPrompt,
+    bool mergePrompts,
+    String mergeRole,
+    int createdAt,
+  });
 }
 
 /// @nodoc
@@ -887,9 +961,12 @@ class __$$PresetImplCopyWithImpl<$Res>
     extends _$PresetCopyWithImpl<$Res, _$PresetImpl>
     implements _$$PresetImplCopyWith<$Res> {
   __$$PresetImplCopyWithImpl(
-      _$PresetImpl _value, $Res Function(_$PresetImpl) _then)
-      : super(_value, _then);
+    _$PresetImpl _value,
+    $Res Function(_$PresetImpl) _then,
+  ) : super(_value, _then);
 
+  /// Create a copy of Preset
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -908,87 +985,89 @@ class __$$PresetImplCopyWithImpl<$Res>
     Object? mergeRole = null,
     Object? createdAt = null,
   }) {
-    return _then(_$PresetImpl(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      name: null == name
-          ? _value.name
-          : name // ignore: cast_nullable_to_non_nullable
-              as String,
-      author: freezed == author
-          ? _value.author
-          : author // ignore: cast_nullable_to_non_nullable
-              as String?,
-      blocks: null == blocks
-          ? _value._blocks
-          : blocks // ignore: cast_nullable_to_non_nullable
-              as List<PresetBlock>,
-      regexes: null == regexes
-          ? _value._regexes
-          : regexes // ignore: cast_nullable_to_non_nullable
-              as List<PresetRegex>,
-      reasoningEnabled: null == reasoningEnabled
-          ? _value.reasoningEnabled
-          : reasoningEnabled // ignore: cast_nullable_to_non_nullable
-              as bool,
-      reasoningStart: freezed == reasoningStart
-          ? _value.reasoningStart
-          : reasoningStart // ignore: cast_nullable_to_non_nullable
-              as String?,
-      reasoningEnd: freezed == reasoningEnd
-          ? _value.reasoningEnd
-          : reasoningEnd // ignore: cast_nullable_to_non_nullable
-              as String?,
-      guidedGenerationPrompt: freezed == guidedGenerationPrompt
-          ? _value.guidedGenerationPrompt
-          : guidedGenerationPrompt // ignore: cast_nullable_to_non_nullable
-              as String?,
-      guidedImpersonationPrompt: freezed == guidedImpersonationPrompt
-          ? _value.guidedImpersonationPrompt
-          : guidedImpersonationPrompt // ignore: cast_nullable_to_non_nullable
-              as String?,
-      summaryPrompt: freezed == summaryPrompt
-          ? _value.summaryPrompt
-          : summaryPrompt // ignore: cast_nullable_to_non_nullable
-              as String?,
-      mergePrompts: null == mergePrompts
-          ? _value.mergePrompts
-          : mergePrompts // ignore: cast_nullable_to_non_nullable
-              as bool,
-      mergeRole: null == mergeRole
-          ? _value.mergeRole
-          : mergeRole // ignore: cast_nullable_to_non_nullable
-              as String,
-      createdAt: null == createdAt
-          ? _value.createdAt
-          : createdAt // ignore: cast_nullable_to_non_nullable
-              as int,
-    ));
+    return _then(
+      _$PresetImpl(
+        id: null == id
+            ? _value.id
+            : id // ignore: cast_nullable_to_non_nullable
+                  as String,
+        name: null == name
+            ? _value.name
+            : name // ignore: cast_nullable_to_non_nullable
+                  as String,
+        author: freezed == author
+            ? _value.author
+            : author // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        blocks: null == blocks
+            ? _value._blocks
+            : blocks // ignore: cast_nullable_to_non_nullable
+                  as List<PresetBlock>,
+        regexes: null == regexes
+            ? _value._regexes
+            : regexes // ignore: cast_nullable_to_non_nullable
+                  as List<PresetRegex>,
+        reasoningEnabled: null == reasoningEnabled
+            ? _value.reasoningEnabled
+            : reasoningEnabled // ignore: cast_nullable_to_non_nullable
+                  as bool,
+        reasoningStart: freezed == reasoningStart
+            ? _value.reasoningStart
+            : reasoningStart // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        reasoningEnd: freezed == reasoningEnd
+            ? _value.reasoningEnd
+            : reasoningEnd // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        guidedGenerationPrompt: freezed == guidedGenerationPrompt
+            ? _value.guidedGenerationPrompt
+            : guidedGenerationPrompt // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        guidedImpersonationPrompt: freezed == guidedImpersonationPrompt
+            ? _value.guidedImpersonationPrompt
+            : guidedImpersonationPrompt // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        summaryPrompt: freezed == summaryPrompt
+            ? _value.summaryPrompt
+            : summaryPrompt // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        mergePrompts: null == mergePrompts
+            ? _value.mergePrompts
+            : mergePrompts // ignore: cast_nullable_to_non_nullable
+                  as bool,
+        mergeRole: null == mergeRole
+            ? _value.mergeRole
+            : mergeRole // ignore: cast_nullable_to_non_nullable
+                  as String,
+        createdAt: null == createdAt
+            ? _value.createdAt
+            : createdAt // ignore: cast_nullable_to_non_nullable
+                  as int,
+      ),
+    );
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$PresetImpl implements _Preset {
-  const _$PresetImpl(
-      {required this.id,
-      required this.name,
-      this.author,
-      final List<PresetBlock> blocks = const [],
-      final List<PresetRegex> regexes = const [],
-      this.reasoningEnabled = false,
-      this.reasoningStart,
-      this.reasoningEnd,
-      this.guidedGenerationPrompt,
-      this.guidedImpersonationPrompt,
-      this.summaryPrompt,
-      this.mergePrompts = false,
-      this.mergeRole = 'system',
-      this.createdAt = 0})
-      : _blocks = blocks,
-        _regexes = regexes;
+  const _$PresetImpl({
+    required this.id,
+    required this.name,
+    this.author,
+    final List<PresetBlock> blocks = const [],
+    final List<PresetRegex> regexes = const [],
+    this.reasoningEnabled = false,
+    this.reasoningStart,
+    this.reasoningEnd,
+    this.guidedGenerationPrompt,
+    this.guidedImpersonationPrompt,
+    this.summaryPrompt,
+    this.mergePrompts = false,
+    this.mergeRole = 'system',
+    this.createdAt = 0,
+  }) : _blocks = blocks,
+       _regexes = regexes;
 
   factory _$PresetImpl.fromJson(Map<String, dynamic> json) =>
       _$$PresetImplFromJson(json);
@@ -1063,8 +1142,10 @@ class _$PresetImpl implements _Preset {
                 other.reasoningEnd == reasoningEnd) &&
             (identical(other.guidedGenerationPrompt, guidedGenerationPrompt) ||
                 other.guidedGenerationPrompt == guidedGenerationPrompt) &&
-            (identical(other.guidedImpersonationPrompt,
-                    guidedImpersonationPrompt) ||
+            (identical(
+                  other.guidedImpersonationPrompt,
+                  guidedImpersonationPrompt,
+                ) ||
                 other.guidedImpersonationPrompt == guidedImpersonationPrompt) &&
             (identical(other.summaryPrompt, summaryPrompt) ||
                 other.summaryPrompt == summaryPrompt) &&
@@ -1076,26 +1157,29 @@ class _$PresetImpl implements _Preset {
                 other.createdAt == createdAt));
   }
 
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      name,
-      author,
-      const DeepCollectionEquality().hash(_blocks),
-      const DeepCollectionEquality().hash(_regexes),
-      reasoningEnabled,
-      reasoningStart,
-      reasoningEnd,
-      guidedGenerationPrompt,
-      guidedImpersonationPrompt,
-      summaryPrompt,
-      mergePrompts,
-      mergeRole,
-      createdAt);
+    runtimeType,
+    id,
+    name,
+    author,
+    const DeepCollectionEquality().hash(_blocks),
+    const DeepCollectionEquality().hash(_regexes),
+    reasoningEnabled,
+    reasoningStart,
+    reasoningEnd,
+    guidedGenerationPrompt,
+    guidedImpersonationPrompt,
+    summaryPrompt,
+    mergePrompts,
+    mergeRole,
+    createdAt,
+  );
 
-  @JsonKey(ignore: true)
+  /// Create a copy of Preset
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
   _$$PresetImplCopyWith<_$PresetImpl> get copyWith =>
@@ -1103,28 +1187,27 @@ class _$PresetImpl implements _Preset {
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$PresetImplToJson(
-      this,
-    );
+    return _$$PresetImplToJson(this);
   }
 }
 
 abstract class _Preset implements Preset {
-  const factory _Preset(
-      {required final String id,
-      required final String name,
-      final String? author,
-      final List<PresetBlock> blocks,
-      final List<PresetRegex> regexes,
-      final bool reasoningEnabled,
-      final String? reasoningStart,
-      final String? reasoningEnd,
-      final String? guidedGenerationPrompt,
-      final String? guidedImpersonationPrompt,
-      final String? summaryPrompt,
-      final bool mergePrompts,
-      final String mergeRole,
-      final int createdAt}) = _$PresetImpl;
+  const factory _Preset({
+    required final String id,
+    required final String name,
+    final String? author,
+    final List<PresetBlock> blocks,
+    final List<PresetRegex> regexes,
+    final bool reasoningEnabled,
+    final String? reasoningStart,
+    final String? reasoningEnd,
+    final String? guidedGenerationPrompt,
+    final String? guidedImpersonationPrompt,
+    final String? summaryPrompt,
+    final bool mergePrompts,
+    final String mergeRole,
+    final int createdAt,
+  }) = _$PresetImpl;
 
   factory _Preset.fromJson(Map<String, dynamic> json) = _$PresetImpl.fromJson;
 
@@ -1156,8 +1239,11 @@ abstract class _Preset implements Preset {
   String get mergeRole;
   @override
   int get createdAt;
+
+  /// Create a copy of Preset
+  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   _$$PresetImplCopyWith<_$PresetImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

@@ -41,11 +41,13 @@ _$PresetRegexImpl _$$PresetRegexImplFromJson(Map<String, dynamic> json) =>
       regex: json['regex'] as String,
       replacement: json['replacement'] as String? ?? '',
       trimOut: json['trimOut'] as String? ?? '',
-      placement: (json['placement'] as List<dynamic>?)
+      placement:
+          (json['placement'] as List<dynamic>?)
               ?.map((e) => (e as num).toInt())
               .toList() ??
           const [1, 2],
-      ephemerality: (json['ephemerality'] as List<dynamic>?)
+      ephemerality:
+          (json['ephemerality'] as List<dynamic>?)
               ?.map((e) => (e as num).toInt())
               .toList() ??
           const [1, 2],
@@ -71,27 +73,29 @@ Map<String, dynamic> _$$PresetRegexImplToJson(_$PresetRegexImpl instance) =>
     };
 
 _$PresetImpl _$$PresetImplFromJson(Map<String, dynamic> json) => _$PresetImpl(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      author: json['author'] as String?,
-      blocks: (json['blocks'] as List<dynamic>?)
-              ?.map((e) => PresetBlock.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          const [],
-      regexes: (json['regexes'] as List<dynamic>?)
-              ?.map((e) => PresetRegex.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          const [],
-      reasoningEnabled: json['reasoningEnabled'] as bool? ?? false,
-      reasoningStart: json['reasoningStart'] as String?,
-      reasoningEnd: json['reasoningEnd'] as String?,
-      guidedGenerationPrompt: json['guidedGenerationPrompt'] as String?,
-      guidedImpersonationPrompt: json['guidedImpersonationPrompt'] as String?,
-      summaryPrompt: json['summaryPrompt'] as String?,
-      mergePrompts: json['mergePrompts'] as bool? ?? false,
-      mergeRole: json['mergeRole'] as String? ?? 'system',
-      createdAt: (json['createdAt'] as num?)?.toInt() ?? 0,
-    );
+  id: json['id'] as String,
+  name: json['name'] as String,
+  author: json['author'] as String?,
+  blocks:
+      (json['blocks'] as List<dynamic>?)
+          ?.map((e) => PresetBlock.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const [],
+  regexes:
+      (json['regexes'] as List<dynamic>?)
+          ?.map((e) => PresetRegex.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const [],
+  reasoningEnabled: json['reasoningEnabled'] as bool? ?? false,
+  reasoningStart: json['reasoningStart'] as String?,
+  reasoningEnd: json['reasoningEnd'] as String?,
+  guidedGenerationPrompt: json['guidedGenerationPrompt'] as String?,
+  guidedImpersonationPrompt: json['guidedImpersonationPrompt'] as String?,
+  summaryPrompt: json['summaryPrompt'] as String?,
+  mergePrompts: json['mergePrompts'] as bool? ?? false,
+  mergeRole: json['mergeRole'] as String? ?? 'system',
+  createdAt: (json['createdAt'] as num?)?.toInt() ?? 0,
+);
 
 Map<String, dynamic> _$$PresetImplToJson(_$PresetImpl instance) =>
     <String, dynamic>{

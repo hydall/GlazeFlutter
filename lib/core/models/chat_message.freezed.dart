@@ -12,7 +12,8 @@ part of 'chat_message.dart';
 T _$identity<T>(T value) => value;
 
 final _privateConstructorUsedError = UnsupportedError(
-    'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
+  'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models',
+);
 
 ChatMessage _$ChatMessageFromJson(Map<String, dynamic> json) {
   return _ChatMessage.fromJson(json);
@@ -31,8 +32,12 @@ mixin _$ChatMessage {
   int get swipeId => throw _privateConstructorUsedError;
   String? get reasoning => throw _privateConstructorUsedError;
 
+  /// Serializes this ChatMessage to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-  @JsonKey(ignore: true)
+
+  /// Create a copy of ChatMessage
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   $ChatMessageCopyWith<ChatMessage> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -40,20 +45,22 @@ mixin _$ChatMessage {
 /// @nodoc
 abstract class $ChatMessageCopyWith<$Res> {
   factory $ChatMessageCopyWith(
-          ChatMessage value, $Res Function(ChatMessage) then) =
-      _$ChatMessageCopyWithImpl<$Res, ChatMessage>;
+    ChatMessage value,
+    $Res Function(ChatMessage) then,
+  ) = _$ChatMessageCopyWithImpl<$Res, ChatMessage>;
   @useResult
-  $Res call(
-      {String id,
-      String role,
-      String content,
-      int? timestamp,
-      String? personaId,
-      String? personaName,
-      String? imagePath,
-      List<String> swipes,
-      int swipeId,
-      String? reasoning});
+  $Res call({
+    String id,
+    String role,
+    String content,
+    int? timestamp,
+    String? personaId,
+    String? personaName,
+    String? imagePath,
+    List<String> swipes,
+    int swipeId,
+    String? reasoning,
+  });
 }
 
 /// @nodoc
@@ -66,6 +73,8 @@ class _$ChatMessageCopyWithImpl<$Res, $Val extends ChatMessage>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
+  /// Create a copy of ChatMessage
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -80,48 +89,51 @@ class _$ChatMessageCopyWithImpl<$Res, $Val extends ChatMessage>
     Object? swipeId = null,
     Object? reasoning = freezed,
   }) {
-    return _then(_value.copyWith(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      role: null == role
-          ? _value.role
-          : role // ignore: cast_nullable_to_non_nullable
-              as String,
-      content: null == content
-          ? _value.content
-          : content // ignore: cast_nullable_to_non_nullable
-              as String,
-      timestamp: freezed == timestamp
-          ? _value.timestamp
-          : timestamp // ignore: cast_nullable_to_non_nullable
-              as int?,
-      personaId: freezed == personaId
-          ? _value.personaId
-          : personaId // ignore: cast_nullable_to_non_nullable
-              as String?,
-      personaName: freezed == personaName
-          ? _value.personaName
-          : personaName // ignore: cast_nullable_to_non_nullable
-              as String?,
-      imagePath: freezed == imagePath
-          ? _value.imagePath
-          : imagePath // ignore: cast_nullable_to_non_nullable
-              as String?,
-      swipes: null == swipes
-          ? _value.swipes
-          : swipes // ignore: cast_nullable_to_non_nullable
-              as List<String>,
-      swipeId: null == swipeId
-          ? _value.swipeId
-          : swipeId // ignore: cast_nullable_to_non_nullable
-              as int,
-      reasoning: freezed == reasoning
-          ? _value.reasoning
-          : reasoning // ignore: cast_nullable_to_non_nullable
-              as String?,
-    ) as $Val);
+    return _then(
+      _value.copyWith(
+            id: null == id
+                ? _value.id
+                : id // ignore: cast_nullable_to_non_nullable
+                      as String,
+            role: null == role
+                ? _value.role
+                : role // ignore: cast_nullable_to_non_nullable
+                      as String,
+            content: null == content
+                ? _value.content
+                : content // ignore: cast_nullable_to_non_nullable
+                      as String,
+            timestamp: freezed == timestamp
+                ? _value.timestamp
+                : timestamp // ignore: cast_nullable_to_non_nullable
+                      as int?,
+            personaId: freezed == personaId
+                ? _value.personaId
+                : personaId // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            personaName: freezed == personaName
+                ? _value.personaName
+                : personaName // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            imagePath: freezed == imagePath
+                ? _value.imagePath
+                : imagePath // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            swipes: null == swipes
+                ? _value.swipes
+                : swipes // ignore: cast_nullable_to_non_nullable
+                      as List<String>,
+            swipeId: null == swipeId
+                ? _value.swipeId
+                : swipeId // ignore: cast_nullable_to_non_nullable
+                      as int,
+            reasoning: freezed == reasoning
+                ? _value.reasoning
+                : reasoning // ignore: cast_nullable_to_non_nullable
+                      as String?,
+          )
+          as $Val,
+    );
   }
 }
 
@@ -129,21 +141,23 @@ class _$ChatMessageCopyWithImpl<$Res, $Val extends ChatMessage>
 abstract class _$$ChatMessageImplCopyWith<$Res>
     implements $ChatMessageCopyWith<$Res> {
   factory _$$ChatMessageImplCopyWith(
-          _$ChatMessageImpl value, $Res Function(_$ChatMessageImpl) then) =
-      __$$ChatMessageImplCopyWithImpl<$Res>;
+    _$ChatMessageImpl value,
+    $Res Function(_$ChatMessageImpl) then,
+  ) = __$$ChatMessageImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call(
-      {String id,
-      String role,
-      String content,
-      int? timestamp,
-      String? personaId,
-      String? personaName,
-      String? imagePath,
-      List<String> swipes,
-      int swipeId,
-      String? reasoning});
+  $Res call({
+    String id,
+    String role,
+    String content,
+    int? timestamp,
+    String? personaId,
+    String? personaName,
+    String? imagePath,
+    List<String> swipes,
+    int swipeId,
+    String? reasoning,
+  });
 }
 
 /// @nodoc
@@ -151,9 +165,12 @@ class __$$ChatMessageImplCopyWithImpl<$Res>
     extends _$ChatMessageCopyWithImpl<$Res, _$ChatMessageImpl>
     implements _$$ChatMessageImplCopyWith<$Res> {
   __$$ChatMessageImplCopyWithImpl(
-      _$ChatMessageImpl _value, $Res Function(_$ChatMessageImpl) _then)
-      : super(_value, _then);
+    _$ChatMessageImpl _value,
+    $Res Function(_$ChatMessageImpl) _then,
+  ) : super(_value, _then);
 
+  /// Create a copy of ChatMessage
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -168,66 +185,68 @@ class __$$ChatMessageImplCopyWithImpl<$Res>
     Object? swipeId = null,
     Object? reasoning = freezed,
   }) {
-    return _then(_$ChatMessageImpl(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      role: null == role
-          ? _value.role
-          : role // ignore: cast_nullable_to_non_nullable
-              as String,
-      content: null == content
-          ? _value.content
-          : content // ignore: cast_nullable_to_non_nullable
-              as String,
-      timestamp: freezed == timestamp
-          ? _value.timestamp
-          : timestamp // ignore: cast_nullable_to_non_nullable
-              as int?,
-      personaId: freezed == personaId
-          ? _value.personaId
-          : personaId // ignore: cast_nullable_to_non_nullable
-              as String?,
-      personaName: freezed == personaName
-          ? _value.personaName
-          : personaName // ignore: cast_nullable_to_non_nullable
-              as String?,
-      imagePath: freezed == imagePath
-          ? _value.imagePath
-          : imagePath // ignore: cast_nullable_to_non_nullable
-              as String?,
-      swipes: null == swipes
-          ? _value._swipes
-          : swipes // ignore: cast_nullable_to_non_nullable
-              as List<String>,
-      swipeId: null == swipeId
-          ? _value.swipeId
-          : swipeId // ignore: cast_nullable_to_non_nullable
-              as int,
-      reasoning: freezed == reasoning
-          ? _value.reasoning
-          : reasoning // ignore: cast_nullable_to_non_nullable
-              as String?,
-    ));
+    return _then(
+      _$ChatMessageImpl(
+        id: null == id
+            ? _value.id
+            : id // ignore: cast_nullable_to_non_nullable
+                  as String,
+        role: null == role
+            ? _value.role
+            : role // ignore: cast_nullable_to_non_nullable
+                  as String,
+        content: null == content
+            ? _value.content
+            : content // ignore: cast_nullable_to_non_nullable
+                  as String,
+        timestamp: freezed == timestamp
+            ? _value.timestamp
+            : timestamp // ignore: cast_nullable_to_non_nullable
+                  as int?,
+        personaId: freezed == personaId
+            ? _value.personaId
+            : personaId // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        personaName: freezed == personaName
+            ? _value.personaName
+            : personaName // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        imagePath: freezed == imagePath
+            ? _value.imagePath
+            : imagePath // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        swipes: null == swipes
+            ? _value._swipes
+            : swipes // ignore: cast_nullable_to_non_nullable
+                  as List<String>,
+        swipeId: null == swipeId
+            ? _value.swipeId
+            : swipeId // ignore: cast_nullable_to_non_nullable
+                  as int,
+        reasoning: freezed == reasoning
+            ? _value.reasoning
+            : reasoning // ignore: cast_nullable_to_non_nullable
+                  as String?,
+      ),
+    );
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$ChatMessageImpl implements _ChatMessage {
-  const _$ChatMessageImpl(
-      {required this.id,
-      required this.role,
-      required this.content,
-      this.timestamp,
-      this.personaId,
-      this.personaName,
-      this.imagePath,
-      final List<String> swipes = const [],
-      this.swipeId = 0,
-      this.reasoning})
-      : _swipes = swipes;
+  const _$ChatMessageImpl({
+    required this.id,
+    required this.role,
+    required this.content,
+    this.timestamp,
+    this.personaId,
+    this.personaName,
+    this.imagePath,
+    final List<String> swipes = const [],
+    this.swipeId = 0,
+    this.reasoning,
+  }) : _swipes = swipes;
 
   factory _$ChatMessageImpl.fromJson(Map<String, dynamic> json) =>
       _$$ChatMessageImplFromJson(json);
@@ -288,22 +307,25 @@ class _$ChatMessageImpl implements _ChatMessage {
                 other.reasoning == reasoning));
   }
 
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      role,
-      content,
-      timestamp,
-      personaId,
-      personaName,
-      imagePath,
-      const DeepCollectionEquality().hash(_swipes),
-      swipeId,
-      reasoning);
+    runtimeType,
+    id,
+    role,
+    content,
+    timestamp,
+    personaId,
+    personaName,
+    imagePath,
+    const DeepCollectionEquality().hash(_swipes),
+    swipeId,
+    reasoning,
+  );
 
-  @JsonKey(ignore: true)
+  /// Create a copy of ChatMessage
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
   _$$ChatMessageImplCopyWith<_$ChatMessageImpl> get copyWith =>
@@ -311,24 +333,23 @@ class _$ChatMessageImpl implements _ChatMessage {
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$ChatMessageImplToJson(
-      this,
-    );
+    return _$$ChatMessageImplToJson(this);
   }
 }
 
 abstract class _ChatMessage implements ChatMessage {
-  const factory _ChatMessage(
-      {required final String id,
-      required final String role,
-      required final String content,
-      final int? timestamp,
-      final String? personaId,
-      final String? personaName,
-      final String? imagePath,
-      final List<String> swipes,
-      final int swipeId,
-      final String? reasoning}) = _$ChatMessageImpl;
+  const factory _ChatMessage({
+    required final String id,
+    required final String role,
+    required final String content,
+    final int? timestamp,
+    final String? personaId,
+    final String? personaName,
+    final String? imagePath,
+    final List<String> swipes,
+    final int swipeId,
+    final String? reasoning,
+  }) = _$ChatMessageImpl;
 
   factory _ChatMessage.fromJson(Map<String, dynamic> json) =
       _$ChatMessageImpl.fromJson;
@@ -353,8 +374,11 @@ abstract class _ChatMessage implements ChatMessage {
   int get swipeId;
   @override
   String? get reasoning;
+
+  /// Create a copy of ChatMessage
+  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   _$$ChatMessageImplCopyWith<_$ChatMessageImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -371,8 +395,12 @@ mixin _$ChatSession {
   List<ChatMessage> get messages => throw _privateConstructorUsedError;
   int get updatedAt => throw _privateConstructorUsedError;
 
+  /// Serializes this ChatSession to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-  @JsonKey(ignore: true)
+
+  /// Create a copy of ChatSession
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   $ChatSessionCopyWith<ChatSession> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -380,15 +408,17 @@ mixin _$ChatSession {
 /// @nodoc
 abstract class $ChatSessionCopyWith<$Res> {
   factory $ChatSessionCopyWith(
-          ChatSession value, $Res Function(ChatSession) then) =
-      _$ChatSessionCopyWithImpl<$Res, ChatSession>;
+    ChatSession value,
+    $Res Function(ChatSession) then,
+  ) = _$ChatSessionCopyWithImpl<$Res, ChatSession>;
   @useResult
-  $Res call(
-      {String id,
-      String characterId,
-      int sessionIndex,
-      List<ChatMessage> messages,
-      int updatedAt});
+  $Res call({
+    String id,
+    String characterId,
+    int sessionIndex,
+    List<ChatMessage> messages,
+    int updatedAt,
+  });
 }
 
 /// @nodoc
@@ -401,6 +431,8 @@ class _$ChatSessionCopyWithImpl<$Res, $Val extends ChatSession>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
+  /// Create a copy of ChatSession
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -410,28 +442,31 @@ class _$ChatSessionCopyWithImpl<$Res, $Val extends ChatSession>
     Object? messages = null,
     Object? updatedAt = null,
   }) {
-    return _then(_value.copyWith(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      characterId: null == characterId
-          ? _value.characterId
-          : characterId // ignore: cast_nullable_to_non_nullable
-              as String,
-      sessionIndex: null == sessionIndex
-          ? _value.sessionIndex
-          : sessionIndex // ignore: cast_nullable_to_non_nullable
-              as int,
-      messages: null == messages
-          ? _value.messages
-          : messages // ignore: cast_nullable_to_non_nullable
-              as List<ChatMessage>,
-      updatedAt: null == updatedAt
-          ? _value.updatedAt
-          : updatedAt // ignore: cast_nullable_to_non_nullable
-              as int,
-    ) as $Val);
+    return _then(
+      _value.copyWith(
+            id: null == id
+                ? _value.id
+                : id // ignore: cast_nullable_to_non_nullable
+                      as String,
+            characterId: null == characterId
+                ? _value.characterId
+                : characterId // ignore: cast_nullable_to_non_nullable
+                      as String,
+            sessionIndex: null == sessionIndex
+                ? _value.sessionIndex
+                : sessionIndex // ignore: cast_nullable_to_non_nullable
+                      as int,
+            messages: null == messages
+                ? _value.messages
+                : messages // ignore: cast_nullable_to_non_nullable
+                      as List<ChatMessage>,
+            updatedAt: null == updatedAt
+                ? _value.updatedAt
+                : updatedAt // ignore: cast_nullable_to_non_nullable
+                      as int,
+          )
+          as $Val,
+    );
   }
 }
 
@@ -439,16 +474,18 @@ class _$ChatSessionCopyWithImpl<$Res, $Val extends ChatSession>
 abstract class _$$ChatSessionImplCopyWith<$Res>
     implements $ChatSessionCopyWith<$Res> {
   factory _$$ChatSessionImplCopyWith(
-          _$ChatSessionImpl value, $Res Function(_$ChatSessionImpl) then) =
-      __$$ChatSessionImplCopyWithImpl<$Res>;
+    _$ChatSessionImpl value,
+    $Res Function(_$ChatSessionImpl) then,
+  ) = __$$ChatSessionImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call(
-      {String id,
-      String characterId,
-      int sessionIndex,
-      List<ChatMessage> messages,
-      int updatedAt});
+  $Res call({
+    String id,
+    String characterId,
+    int sessionIndex,
+    List<ChatMessage> messages,
+    int updatedAt,
+  });
 }
 
 /// @nodoc
@@ -456,9 +493,12 @@ class __$$ChatSessionImplCopyWithImpl<$Res>
     extends _$ChatSessionCopyWithImpl<$Res, _$ChatSessionImpl>
     implements _$$ChatSessionImplCopyWith<$Res> {
   __$$ChatSessionImplCopyWithImpl(
-      _$ChatSessionImpl _value, $Res Function(_$ChatSessionImpl) _then)
-      : super(_value, _then);
+    _$ChatSessionImpl _value,
+    $Res Function(_$ChatSessionImpl) _then,
+  ) : super(_value, _then);
 
+  /// Create a copy of ChatSession
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -468,41 +508,43 @@ class __$$ChatSessionImplCopyWithImpl<$Res>
     Object? messages = null,
     Object? updatedAt = null,
   }) {
-    return _then(_$ChatSessionImpl(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      characterId: null == characterId
-          ? _value.characterId
-          : characterId // ignore: cast_nullable_to_non_nullable
-              as String,
-      sessionIndex: null == sessionIndex
-          ? _value.sessionIndex
-          : sessionIndex // ignore: cast_nullable_to_non_nullable
-              as int,
-      messages: null == messages
-          ? _value._messages
-          : messages // ignore: cast_nullable_to_non_nullable
-              as List<ChatMessage>,
-      updatedAt: null == updatedAt
-          ? _value.updatedAt
-          : updatedAt // ignore: cast_nullable_to_non_nullable
-              as int,
-    ));
+    return _then(
+      _$ChatSessionImpl(
+        id: null == id
+            ? _value.id
+            : id // ignore: cast_nullable_to_non_nullable
+                  as String,
+        characterId: null == characterId
+            ? _value.characterId
+            : characterId // ignore: cast_nullable_to_non_nullable
+                  as String,
+        sessionIndex: null == sessionIndex
+            ? _value.sessionIndex
+            : sessionIndex // ignore: cast_nullable_to_non_nullable
+                  as int,
+        messages: null == messages
+            ? _value._messages
+            : messages // ignore: cast_nullable_to_non_nullable
+                  as List<ChatMessage>,
+        updatedAt: null == updatedAt
+            ? _value.updatedAt
+            : updatedAt // ignore: cast_nullable_to_non_nullable
+                  as int,
+      ),
+    );
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$ChatSessionImpl implements _ChatSession {
-  const _$ChatSessionImpl(
-      {required this.id,
-      required this.characterId,
-      required this.sessionIndex,
-      final List<ChatMessage> messages = const [],
-      this.updatedAt = 0})
-      : _messages = messages;
+  const _$ChatSessionImpl({
+    required this.id,
+    required this.characterId,
+    required this.sessionIndex,
+    final List<ChatMessage> messages = const [],
+    this.updatedAt = 0,
+  }) : _messages = messages;
 
   factory _$ChatSessionImpl.fromJson(Map<String, dynamic> json) =>
       _$$ChatSessionImplFromJson(json);
@@ -546,12 +588,20 @@ class _$ChatSessionImpl implements _ChatSession {
                 other.updatedAt == updatedAt));
   }
 
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(runtimeType, id, characterId, sessionIndex,
-      const DeepCollectionEquality().hash(_messages), updatedAt);
+  int get hashCode => Object.hash(
+    runtimeType,
+    id,
+    characterId,
+    sessionIndex,
+    const DeepCollectionEquality().hash(_messages),
+    updatedAt,
+  );
 
-  @JsonKey(ignore: true)
+  /// Create a copy of ChatSession
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
   _$$ChatSessionImplCopyWith<_$ChatSessionImpl> get copyWith =>
@@ -559,19 +609,18 @@ class _$ChatSessionImpl implements _ChatSession {
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$ChatSessionImplToJson(
-      this,
-    );
+    return _$$ChatSessionImplToJson(this);
   }
 }
 
 abstract class _ChatSession implements ChatSession {
-  const factory _ChatSession(
-      {required final String id,
-      required final String characterId,
-      required final int sessionIndex,
-      final List<ChatMessage> messages,
-      final int updatedAt}) = _$ChatSessionImpl;
+  const factory _ChatSession({
+    required final String id,
+    required final String characterId,
+    required final int sessionIndex,
+    final List<ChatMessage> messages,
+    final int updatedAt,
+  }) = _$ChatSessionImpl;
 
   factory _ChatSession.fromJson(Map<String, dynamic> json) =
       _$ChatSessionImpl.fromJson;
@@ -586,8 +635,11 @@ abstract class _ChatSession implements ChatSession {
   List<ChatMessage> get messages;
   @override
   int get updatedAt;
+
+  /// Create a copy of ChatSession
+  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   _$$ChatSessionImplCopyWith<_$ChatSessionImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

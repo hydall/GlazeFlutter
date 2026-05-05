@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
+
 import '../db/app_db.dart';
 import '../db/repositories/character_repo.dart';
 import '../db/repositories/chat_repo.dart';
@@ -7,29 +7,24 @@ import '../db/repositories/preset_repo.dart';
 import '../db/repositories/api_config_repo.dart';
 import '../db/repositories/persona_repo.dart';
 
-final isarProvider = FutureProvider<Isar>((ref) => AppDb.instance);
+final appDbProvider = Provider<AppDatabase>((ref) => AppDatabase());
 
-final characterRepoProvider = FutureProvider<CharacterRepo>((ref) async {
-  final isar = await ref.watch(isarProvider.future);
-  return CharacterRepo(isar);
+final characterRepoProvider = Provider<CharacterRepo>((ref) {
+  return CharacterRepo(ref.watch(appDbProvider));
 });
 
-final chatRepoProvider = FutureProvider<ChatRepo>((ref) async {
-  final isar = await ref.watch(isarProvider.future);
-  return ChatRepo(isar);
+final chatRepoProvider = Provider<ChatRepo>((ref) {
+  return ChatRepo(ref.watch(appDbProvider));
 });
 
-final presetRepoProvider = FutureProvider<PresetRepo>((ref) async {
-  final isar = await ref.watch(isarProvider.future);
-  return PresetRepo(isar);
+final presetRepoProvider = Provider<PresetRepo>((ref) {
+  return PresetRepo(ref.watch(appDbProvider));
 });
 
-final apiConfigRepoProvider = FutureProvider<ApiConfigRepo>((ref) async {
-  final isar = await ref.watch(isarProvider.future);
-  return ApiConfigRepo(isar);
+final apiConfigRepoProvider = Provider<ApiConfigRepo>((ref) {
+  return ApiConfigRepo(ref.watch(appDbProvider));
 });
 
-final personaRepoProvider = FutureProvider<PersonaRepo>((ref) async {
-  final isar = await ref.watch(isarProvider.future);
-  return PersonaRepo(isar);
+final personaRepoProvider = Provider<PersonaRepo>((ref) {
+  return PersonaRepo(ref.watch(appDbProvider));
 });

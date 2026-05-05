@@ -1,45 +1,37 @@
 import 'dart:convert';
-import 'package:isar/isar.dart';
-import '../collections.dart';
+
+import 'package:drift/drift.dart';
+
+import '../app_db.dart';
 import '../../models/chat_message.dart';
 
 class ChatRepo {
-  final Isar _db;
+  final AppDatabase _db;
   ChatRepo(this._db);
 
   Future<List<ChatSession>> getByCharacterId(String charId) async {
-    final items = await _db.chatSessionCollections
-        .where()
-        .filter()
-        .characterIdEqualTo(charId)
-        .findAll();
-    return items.map(_toModel).toList();
+    final rows = await (_db.select(_db.chatSessions)
+          ..where((t) => t.characterId.equals(charId)))
+        .get();
+    return rows.map(_toModel).toList();
   }
 
   Future<ChatSession?> getById(String sessionId) async {
-    final c = await _db.chatSessionCollections
-        .where()
-        .sessionIdEqualTo(sessionId)
-        .findFirst();
-    return c != null ? _toModel(c) : null;
+    final row = await (_db.select(_db.chatSessions)
+          ..where((t) => t.sessionId.equals(sessionId)))
+        .getSingleOrNull();
+    return row != null ? _toModel(row) : null;
   }
 
   Future<void> put(ChatSession session) async {
-    await _db.writeTxn(() async {
-      await _db.chatSessionCollections.put(_toCollection(session));
-    });
+    await _db.into(_db.chatSessions).insertOnConflictUpdate(_toCompanion(session));
   }
 
   Future<void> delete(String sessionId) async {
-    await _db.writeTxn(() async {
-      await _db.chatSessionCollections
-          .where()
-          .sessionIdEqualTo(sessionId)
-          .deleteAll();
-    });
+    await (_db.delete(_db.chatSessions)..where((t) => t.sessionId.equals(sessionId))).go();
   }
 
-  ChatSession _toModel(ChatSessionCollection c) => ChatSession(
+  ChatSession _toModel(ChatSessionRow c) => ChatSession(
         id: c.sessionId,
         characterId: c.characterId,
         sessionIndex: c.sessionIndex,
@@ -49,11 +41,11 @@ class ChatRepo {
         updatedAt: c.updatedAt,
       );
 
-  ChatSessionCollection _toCollection(ChatSession m) => ChatSessionCollection()
-    ..sessionId = m.id
-    ..characterId = m.characterId
-    ..sessionIndex = m.sessionIndex
-    ..messagesJson =
-        jsonEncode(m.messages.map((e) => e.toJson()).toList())
-    ..updatedAt = m.updatedAt;
+  ChatSessionsCompanion _toCompanion(ChatSession m) => ChatSessionsCompanion(
+        sessionId: Value(m.id),
+        characterId: Value(m.characterId),
+        sessionIndex: Value(m.sessionIndex),
+        messagesJson: Value(jsonEncode(m.messages.map((e) => e.toJson()).toList())),
+        updatedAt: Value(m.updatedAt),
+      );
 }

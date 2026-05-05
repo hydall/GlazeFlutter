@@ -1,28 +1,58 @@
-import 'package:isar/isar.dart';
-import 'package:path_provider/path_provider.dart';
-import 'collections.dart';
+import 'dart:io';
 
-class AppDb {
-  static Isar? _instance;
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:path/path.dart' as p;
 
-  static Future<Isar> get instance async {
-    if (_instance != null && _instance!.isOpen) return _instance!;
-    _instance = await _open();
-    return _instance!;
+import 'tables.dart';
+
+part 'app_db.g.dart';
+
+@DriftDatabase(tables: [
+  Characters,
+  ChatSessions,
+  Presets,
+  ApiConfigs,
+  Personas,
+])
+class AppDatabase extends _$AppDatabase {
+  AppDatabase() : super(_openConnection());
+
+  AppDatabase.forTesting(super.e);
+
+  @override
+  int get schemaVersion => 1;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (Migrator m) async {
+          await m.createAll();
+        },
+      );
+}
+
+LazyDatabase _openConnection() {
+  return LazyDatabase(() async {
+    final dbFolder = _getAppDataDir();
+    final dir = Directory(dbFolder);
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+    final file = File(p.join(dbFolder, 'glaze.db'));
+    return NativeDatabase.createInBackground(file);
+  });
+}
+
+String _getAppDataDir() {
+  if (Platform.isWindows) {
+    final appData = Platform.environment['APPDATA']!;
+    return p.join(appData, 'Glaze');
+  } else if (Platform.isLinux) {
+    final xdg = Platform.environment['XDG_DATA_HOME'] ??
+        p.join(Platform.environment['HOME']!, '.local', 'share');
+    return p.join(xdg, 'Glaze');
+  } else if (Platform.isMacOS) {
+    return p.join(Platform.environment['HOME']!, 'Library', 'Application Support', 'Glaze');
   }
-
-  static Future<Isar> _open() async {
-    final dir = await getApplicationDocumentsDirectory();
-    return await Isar.open(
-      [
-        CharacterCollectionSchema,
-        ChatSessionCollectionSchema,
-        PresetCollectionSchema,
-        ApiConfigCollectionSchema,
-        PersonaCollectionSchema,
-      ],
-      directory: dir.path,
-      inspector: true,
-    );
-  }
+  throw UnsupportedError('Platform not supported yet');
 }

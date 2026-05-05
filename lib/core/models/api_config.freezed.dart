@@ -12,7 +12,8 @@ part of 'api_config.dart';
 T _$identity<T>(T value) => value;
 
 final _privateConstructorUsedError = UnsupportedError(
-    'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models');
+  'It seems like you constructed your class using `MyClass._()`. This constructor is only meant to be used by freezed and you are not supposed to need it nor use it.\nPlease check the documentation here for more information: https://github.com/rrousselGit/freezed#adding-getters-and-methods-to-our-models',
+);
 
 ApiConfig _$ApiConfigFromJson(Map<String, dynamic> json) {
   return _ApiConfig.fromJson(json);
@@ -36,8 +37,12 @@ mixin _$ApiConfig {
   String? get reasoningTagStart => throw _privateConstructorUsedError;
   String? get reasoningTagEnd => throw _privateConstructorUsedError;
 
+  /// Serializes this ApiConfig to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
-  @JsonKey(ignore: true)
+
+  /// Create a copy of ApiConfig
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   $ApiConfigCopyWith<ApiConfig> get copyWith =>
       throw _privateConstructorUsedError;
 }
@@ -47,22 +52,23 @@ abstract class $ApiConfigCopyWith<$Res> {
   factory $ApiConfigCopyWith(ApiConfig value, $Res Function(ApiConfig) then) =
       _$ApiConfigCopyWithImpl<$Res, ApiConfig>;
   @useResult
-  $Res call(
-      {String id,
-      String name,
-      String providerId,
-      String endpoint,
-      String apiKey,
-      String model,
-      int maxTokens,
-      int contextSize,
-      double temperature,
-      double topP,
-      bool stream,
-      String reasoningEffort,
-      bool requestReasoning,
-      String? reasoningTagStart,
-      String? reasoningTagEnd});
+  $Res call({
+    String id,
+    String name,
+    String providerId,
+    String endpoint,
+    String apiKey,
+    String model,
+    int maxTokens,
+    int contextSize,
+    double temperature,
+    double topP,
+    bool stream,
+    String reasoningEffort,
+    bool requestReasoning,
+    String? reasoningTagStart,
+    String? reasoningTagEnd,
+  });
 }
 
 /// @nodoc
@@ -75,6 +81,8 @@ class _$ApiConfigCopyWithImpl<$Res, $Val extends ApiConfig>
   // ignore: unused_field
   final $Res Function($Val) _then;
 
+  /// Create a copy of ApiConfig
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -94,68 +102,71 @@ class _$ApiConfigCopyWithImpl<$Res, $Val extends ApiConfig>
     Object? reasoningTagStart = freezed,
     Object? reasoningTagEnd = freezed,
   }) {
-    return _then(_value.copyWith(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      name: null == name
-          ? _value.name
-          : name // ignore: cast_nullable_to_non_nullable
-              as String,
-      providerId: null == providerId
-          ? _value.providerId
-          : providerId // ignore: cast_nullable_to_non_nullable
-              as String,
-      endpoint: null == endpoint
-          ? _value.endpoint
-          : endpoint // ignore: cast_nullable_to_non_nullable
-              as String,
-      apiKey: null == apiKey
-          ? _value.apiKey
-          : apiKey // ignore: cast_nullable_to_non_nullable
-              as String,
-      model: null == model
-          ? _value.model
-          : model // ignore: cast_nullable_to_non_nullable
-              as String,
-      maxTokens: null == maxTokens
-          ? _value.maxTokens
-          : maxTokens // ignore: cast_nullable_to_non_nullable
-              as int,
-      contextSize: null == contextSize
-          ? _value.contextSize
-          : contextSize // ignore: cast_nullable_to_non_nullable
-              as int,
-      temperature: null == temperature
-          ? _value.temperature
-          : temperature // ignore: cast_nullable_to_non_nullable
-              as double,
-      topP: null == topP
-          ? _value.topP
-          : topP // ignore: cast_nullable_to_non_nullable
-              as double,
-      stream: null == stream
-          ? _value.stream
-          : stream // ignore: cast_nullable_to_non_nullable
-              as bool,
-      reasoningEffort: null == reasoningEffort
-          ? _value.reasoningEffort
-          : reasoningEffort // ignore: cast_nullable_to_non_nullable
-              as String,
-      requestReasoning: null == requestReasoning
-          ? _value.requestReasoning
-          : requestReasoning // ignore: cast_nullable_to_non_nullable
-              as bool,
-      reasoningTagStart: freezed == reasoningTagStart
-          ? _value.reasoningTagStart
-          : reasoningTagStart // ignore: cast_nullable_to_non_nullable
-              as String?,
-      reasoningTagEnd: freezed == reasoningTagEnd
-          ? _value.reasoningTagEnd
-          : reasoningTagEnd // ignore: cast_nullable_to_non_nullable
-              as String?,
-    ) as $Val);
+    return _then(
+      _value.copyWith(
+            id: null == id
+                ? _value.id
+                : id // ignore: cast_nullable_to_non_nullable
+                      as String,
+            name: null == name
+                ? _value.name
+                : name // ignore: cast_nullable_to_non_nullable
+                      as String,
+            providerId: null == providerId
+                ? _value.providerId
+                : providerId // ignore: cast_nullable_to_non_nullable
+                      as String,
+            endpoint: null == endpoint
+                ? _value.endpoint
+                : endpoint // ignore: cast_nullable_to_non_nullable
+                      as String,
+            apiKey: null == apiKey
+                ? _value.apiKey
+                : apiKey // ignore: cast_nullable_to_non_nullable
+                      as String,
+            model: null == model
+                ? _value.model
+                : model // ignore: cast_nullable_to_non_nullable
+                      as String,
+            maxTokens: null == maxTokens
+                ? _value.maxTokens
+                : maxTokens // ignore: cast_nullable_to_non_nullable
+                      as int,
+            contextSize: null == contextSize
+                ? _value.contextSize
+                : contextSize // ignore: cast_nullable_to_non_nullable
+                      as int,
+            temperature: null == temperature
+                ? _value.temperature
+                : temperature // ignore: cast_nullable_to_non_nullable
+                      as double,
+            topP: null == topP
+                ? _value.topP
+                : topP // ignore: cast_nullable_to_non_nullable
+                      as double,
+            stream: null == stream
+                ? _value.stream
+                : stream // ignore: cast_nullable_to_non_nullable
+                      as bool,
+            reasoningEffort: null == reasoningEffort
+                ? _value.reasoningEffort
+                : reasoningEffort // ignore: cast_nullable_to_non_nullable
+                      as String,
+            requestReasoning: null == requestReasoning
+                ? _value.requestReasoning
+                : requestReasoning // ignore: cast_nullable_to_non_nullable
+                      as bool,
+            reasoningTagStart: freezed == reasoningTagStart
+                ? _value.reasoningTagStart
+                : reasoningTagStart // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            reasoningTagEnd: freezed == reasoningTagEnd
+                ? _value.reasoningTagEnd
+                : reasoningTagEnd // ignore: cast_nullable_to_non_nullable
+                      as String?,
+          )
+          as $Val,
+    );
   }
 }
 
@@ -163,26 +174,28 @@ class _$ApiConfigCopyWithImpl<$Res, $Val extends ApiConfig>
 abstract class _$$ApiConfigImplCopyWith<$Res>
     implements $ApiConfigCopyWith<$Res> {
   factory _$$ApiConfigImplCopyWith(
-          _$ApiConfigImpl value, $Res Function(_$ApiConfigImpl) then) =
-      __$$ApiConfigImplCopyWithImpl<$Res>;
+    _$ApiConfigImpl value,
+    $Res Function(_$ApiConfigImpl) then,
+  ) = __$$ApiConfigImplCopyWithImpl<$Res>;
   @override
   @useResult
-  $Res call(
-      {String id,
-      String name,
-      String providerId,
-      String endpoint,
-      String apiKey,
-      String model,
-      int maxTokens,
-      int contextSize,
-      double temperature,
-      double topP,
-      bool stream,
-      String reasoningEffort,
-      bool requestReasoning,
-      String? reasoningTagStart,
-      String? reasoningTagEnd});
+  $Res call({
+    String id,
+    String name,
+    String providerId,
+    String endpoint,
+    String apiKey,
+    String model,
+    int maxTokens,
+    int contextSize,
+    double temperature,
+    double topP,
+    bool stream,
+    String reasoningEffort,
+    bool requestReasoning,
+    String? reasoningTagStart,
+    String? reasoningTagEnd,
+  });
 }
 
 /// @nodoc
@@ -190,9 +203,12 @@ class __$$ApiConfigImplCopyWithImpl<$Res>
     extends _$ApiConfigCopyWithImpl<$Res, _$ApiConfigImpl>
     implements _$$ApiConfigImplCopyWith<$Res> {
   __$$ApiConfigImplCopyWithImpl(
-      _$ApiConfigImpl _value, $Res Function(_$ApiConfigImpl) _then)
-      : super(_value, _then);
+    _$ApiConfigImpl _value,
+    $Res Function(_$ApiConfigImpl) _then,
+  ) : super(_value, _then);
 
+  /// Create a copy of ApiConfig
+  /// with the given fields replaced by the non-null parameter values.
   @pragma('vm:prefer-inline')
   @override
   $Res call({
@@ -212,90 +228,93 @@ class __$$ApiConfigImplCopyWithImpl<$Res>
     Object? reasoningTagStart = freezed,
     Object? reasoningTagEnd = freezed,
   }) {
-    return _then(_$ApiConfigImpl(
-      id: null == id
-          ? _value.id
-          : id // ignore: cast_nullable_to_non_nullable
-              as String,
-      name: null == name
-          ? _value.name
-          : name // ignore: cast_nullable_to_non_nullable
-              as String,
-      providerId: null == providerId
-          ? _value.providerId
-          : providerId // ignore: cast_nullable_to_non_nullable
-              as String,
-      endpoint: null == endpoint
-          ? _value.endpoint
-          : endpoint // ignore: cast_nullable_to_non_nullable
-              as String,
-      apiKey: null == apiKey
-          ? _value.apiKey
-          : apiKey // ignore: cast_nullable_to_non_nullable
-              as String,
-      model: null == model
-          ? _value.model
-          : model // ignore: cast_nullable_to_non_nullable
-              as String,
-      maxTokens: null == maxTokens
-          ? _value.maxTokens
-          : maxTokens // ignore: cast_nullable_to_non_nullable
-              as int,
-      contextSize: null == contextSize
-          ? _value.contextSize
-          : contextSize // ignore: cast_nullable_to_non_nullable
-              as int,
-      temperature: null == temperature
-          ? _value.temperature
-          : temperature // ignore: cast_nullable_to_non_nullable
-              as double,
-      topP: null == topP
-          ? _value.topP
-          : topP // ignore: cast_nullable_to_non_nullable
-              as double,
-      stream: null == stream
-          ? _value.stream
-          : stream // ignore: cast_nullable_to_non_nullable
-              as bool,
-      reasoningEffort: null == reasoningEffort
-          ? _value.reasoningEffort
-          : reasoningEffort // ignore: cast_nullable_to_non_nullable
-              as String,
-      requestReasoning: null == requestReasoning
-          ? _value.requestReasoning
-          : requestReasoning // ignore: cast_nullable_to_non_nullable
-              as bool,
-      reasoningTagStart: freezed == reasoningTagStart
-          ? _value.reasoningTagStart
-          : reasoningTagStart // ignore: cast_nullable_to_non_nullable
-              as String?,
-      reasoningTagEnd: freezed == reasoningTagEnd
-          ? _value.reasoningTagEnd
-          : reasoningTagEnd // ignore: cast_nullable_to_non_nullable
-              as String?,
-    ));
+    return _then(
+      _$ApiConfigImpl(
+        id: null == id
+            ? _value.id
+            : id // ignore: cast_nullable_to_non_nullable
+                  as String,
+        name: null == name
+            ? _value.name
+            : name // ignore: cast_nullable_to_non_nullable
+                  as String,
+        providerId: null == providerId
+            ? _value.providerId
+            : providerId // ignore: cast_nullable_to_non_nullable
+                  as String,
+        endpoint: null == endpoint
+            ? _value.endpoint
+            : endpoint // ignore: cast_nullable_to_non_nullable
+                  as String,
+        apiKey: null == apiKey
+            ? _value.apiKey
+            : apiKey // ignore: cast_nullable_to_non_nullable
+                  as String,
+        model: null == model
+            ? _value.model
+            : model // ignore: cast_nullable_to_non_nullable
+                  as String,
+        maxTokens: null == maxTokens
+            ? _value.maxTokens
+            : maxTokens // ignore: cast_nullable_to_non_nullable
+                  as int,
+        contextSize: null == contextSize
+            ? _value.contextSize
+            : contextSize // ignore: cast_nullable_to_non_nullable
+                  as int,
+        temperature: null == temperature
+            ? _value.temperature
+            : temperature // ignore: cast_nullable_to_non_nullable
+                  as double,
+        topP: null == topP
+            ? _value.topP
+            : topP // ignore: cast_nullable_to_non_nullable
+                  as double,
+        stream: null == stream
+            ? _value.stream
+            : stream // ignore: cast_nullable_to_non_nullable
+                  as bool,
+        reasoningEffort: null == reasoningEffort
+            ? _value.reasoningEffort
+            : reasoningEffort // ignore: cast_nullable_to_non_nullable
+                  as String,
+        requestReasoning: null == requestReasoning
+            ? _value.requestReasoning
+            : requestReasoning // ignore: cast_nullable_to_non_nullable
+                  as bool,
+        reasoningTagStart: freezed == reasoningTagStart
+            ? _value.reasoningTagStart
+            : reasoningTagStart // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        reasoningTagEnd: freezed == reasoningTagEnd
+            ? _value.reasoningTagEnd
+            : reasoningTagEnd // ignore: cast_nullable_to_non_nullable
+                  as String?,
+      ),
+    );
   }
 }
 
 /// @nodoc
 @JsonSerializable()
 class _$ApiConfigImpl implements _ApiConfig {
-  const _$ApiConfigImpl(
-      {required this.id,
-      this.name = '',
-      this.providerId = 'openai_compatible',
-      this.endpoint = '',
-      this.apiKey = '',
-      this.model = '',
-      this.maxTokens = 8000,
-      this.contextSize = 32000,
-      this.temperature = 0.7,
-      this.topP = 0.9,
-      this.stream = true,
-      this.reasoningEffort = 'medium',
-      this.requestReasoning = false,
-      this.reasoningTagStart,
-      this.reasoningTagEnd});
+  const _$ApiConfigImpl({
+    required this.id,
+    this.name = '',
+    this.providerId = 'openai_compatible',
+    this.endpoint = '',
+    this.apiKey = '',
+    this.model = '',
+    this.maxTokens = 8000,
+    this.contextSize = 32000,
+    this.temperature = 0.7,
+    this.topP = 0.9,
+    this.stream = true,
+    this.reasoningEffort = 'medium',
+    this.requestReasoning = false,
+    this.reasoningTagStart,
+    this.reasoningTagEnd,
+  });
 
   factory _$ApiConfigImpl.fromJson(Map<String, dynamic> json) =>
       _$$ApiConfigImplFromJson(json);
@@ -379,27 +398,30 @@ class _$ApiConfigImpl implements _ApiConfig {
                 other.reasoningTagEnd == reasoningTagEnd));
   }
 
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   int get hashCode => Object.hash(
-      runtimeType,
-      id,
-      name,
-      providerId,
-      endpoint,
-      apiKey,
-      model,
-      maxTokens,
-      contextSize,
-      temperature,
-      topP,
-      stream,
-      reasoningEffort,
-      requestReasoning,
-      reasoningTagStart,
-      reasoningTagEnd);
+    runtimeType,
+    id,
+    name,
+    providerId,
+    endpoint,
+    apiKey,
+    model,
+    maxTokens,
+    contextSize,
+    temperature,
+    topP,
+    stream,
+    reasoningEffort,
+    requestReasoning,
+    reasoningTagStart,
+    reasoningTagEnd,
+  );
 
-  @JsonKey(ignore: true)
+  /// Create a copy of ApiConfig
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
   _$$ApiConfigImplCopyWith<_$ApiConfigImpl> get copyWith =>
@@ -407,29 +429,28 @@ class _$ApiConfigImpl implements _ApiConfig {
 
   @override
   Map<String, dynamic> toJson() {
-    return _$$ApiConfigImplToJson(
-      this,
-    );
+    return _$$ApiConfigImplToJson(this);
   }
 }
 
 abstract class _ApiConfig implements ApiConfig {
-  const factory _ApiConfig(
-      {required final String id,
-      final String name,
-      final String providerId,
-      final String endpoint,
-      final String apiKey,
-      final String model,
-      final int maxTokens,
-      final int contextSize,
-      final double temperature,
-      final double topP,
-      final bool stream,
-      final String reasoningEffort,
-      final bool requestReasoning,
-      final String? reasoningTagStart,
-      final String? reasoningTagEnd}) = _$ApiConfigImpl;
+  const factory _ApiConfig({
+    required final String id,
+    final String name,
+    final String providerId,
+    final String endpoint,
+    final String apiKey,
+    final String model,
+    final int maxTokens,
+    final int contextSize,
+    final double temperature,
+    final double topP,
+    final bool stream,
+    final String reasoningEffort,
+    final bool requestReasoning,
+    final String? reasoningTagStart,
+    final String? reasoningTagEnd,
+  }) = _$ApiConfigImpl;
 
   factory _ApiConfig.fromJson(Map<String, dynamic> json) =
       _$ApiConfigImpl.fromJson;
@@ -464,8 +485,11 @@ abstract class _ApiConfig implements ApiConfig {
   String? get reasoningTagStart;
   @override
   String? get reasoningTagEnd;
+
+  /// Create a copy of ApiConfig
+  /// with the given fields replaced by the non-null parameter values.
   @override
-  @JsonKey(ignore: true)
+  @JsonKey(includeFromJson: false, includeToJson: false)
   _$$ApiConfigImplCopyWith<_$ApiConfigImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

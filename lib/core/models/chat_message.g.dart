@@ -15,7 +15,8 @@ _$ChatMessageImpl _$$ChatMessageImplFromJson(Map<String, dynamic> json) =>
       personaId: json['personaId'] as String?,
       personaName: json['personaName'] as String?,
       imagePath: json['imagePath'] as String?,
-      swipes: (json['swipes'] as List<dynamic>?)
+      swipes:
+          (json['swipes'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
           const [],
@@ -42,7 +43,8 @@ _$ChatSessionImpl _$$ChatSessionImplFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String,
       characterId: json['characterId'] as String,
       sessionIndex: (json['sessionIndex'] as num).toInt(),
-      messages: (json['messages'] as List<dynamic>?)
+      messages:
+          (json['messages'] as List<dynamic>?)
               ?.map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
