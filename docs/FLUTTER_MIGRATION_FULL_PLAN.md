@@ -22,7 +22,7 @@ A working chat app on iOS + Android + Windows that:
 
 ---
 
-## Phase 0: Project Scaffold (Day 1–2)
+## Phase 0: Project Scaffold (Day 1–2) — DONE
 
 ### Step 0.1: Create Flutter project
 
@@ -157,15 +157,15 @@ class AppTheme {
 }
 ```
 
-### Deliverables Phase 0
-- [ ] App runs on iOS simulator, Android emulator, Windows desktop
-- [ ] Isar DB opens without errors
-- [ ] GoRouter navigates between 3 empty screens
-- [ ] Dark theme applied
+### Deliverables Phase 0 — DONE
+- [x] App runs on iOS simulator, Android emulator, Windows desktop
+- [x] Isar DB opens without errors
+- [x] GoRouter navigates between 3 empty screens
+- [x] Dark theme applied
 
 ---
 
-## Phase 1: Data Layer (Day 3–7)
+## Phase 1: Data Layer (Day 3–7) — DONE
 
 ### Step 1.1: Freezed models
 
@@ -567,18 +567,18 @@ dart run build_runner build --delete-conflicting-outputs
 
 Generates: `*.g.dart`, `*.freezed.dart` files.
 
-### Deliverables Phase 1
-- [ ] All 6 Freezed models compile with `fromJson`
-- [ ] All 5 Isar collections with indexes
-- [ ] All 5 repository classes with CRUD
-- [ ] ImageStorage saves/reads files correctly
-- [ ] Riverpod providers wire repos to UI
-- [ ] EventHub publish/subscribe works
-- [ ] Unit tests for each repo (in-memory Isar)
+### Deliverables Phase 1 — DONE
+- [x] All 6 Freezed models compile with `fromJson`
+- [x] All 5 Isar collections with indexes
+- [x] All 5 repository classes with CRUD
+- [x] ImageStorage saves/reads files correctly
+- [x] Riverpod providers wire repos to UI
+- [x] EventHub publish/subscribe works
+- [x] Unit tests for each repo (in-memory Isar)
 
 ---
 
-## Phase 2: Character Import + Chat (Day 8–16)
+## Phase 2: Character Import + Chat (Day 8–16) — IN PROGRESS
 
 ### Step 2.1: PNG tEXt chunk parser
 

@@ -6,7 +6,7 @@ Working chat app on iOS/Android/Windows that proves: Flutter works, no WKWebView
 
 ---
 
-## Phase 0: Scaffold (Day 1-2)
+## Phase 0: Scaffold (Day 1-2) — DONE
 
 ### Project setup
 ```
@@ -78,7 +78,7 @@ dev_dependencies:
 
 ---
 
-## Phase 1: Data Layer (Day 3-7)
+## Phase 1: Data Layer (Day 3-7) — DONE
 
 ### Models — 1:1 from JS, typed with Freezed
 
@@ -285,7 +285,7 @@ class CharacterRepo {
 
 ---
 
-## Phase 2: Core Feature — Chat (Day 8-18)
+## Phase 2: Core Feature — Chat (Day 8-18) — IN PROGRESS
 
 ### 2a: Character list screen (Day 8-10)
 
