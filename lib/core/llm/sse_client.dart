@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 typedef SseOnUpdate = void Function(String delta, String? reasoningDelta);
 typedef SseOnComplete = void Function(String text, String? reasoning);
@@ -10,6 +11,25 @@ class SseClient {
   final Dio _dio;
 
   SseClient() : _dio = Dio();
+
+  static String normalizeEndpoint(String endpoint) {
+    var normalized = endpoint.trim();
+    if (normalized.isEmpty) return '';
+    if (!normalized.startsWith(RegExp(r'https?://'))) {
+      normalized = 'https://$normalized';
+    }
+    if (normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+    const suffix = '/chat/completions';
+    if (normalized.toLowerCase().endsWith(suffix)) {
+      normalized = normalized.substring(0, normalized.length - suffix.length);
+    }
+    if (normalized.endsWith('/')) {
+      normalized = normalized.substring(0, normalized.length - 1);
+    }
+    return normalized;
+  }
 
   Future<void> streamChatCompletion({
     required String endpoint,
@@ -27,22 +47,33 @@ class SseClient {
     bool requestReasoning = false,
     String? reasoningEffort,
   }) async {
-    final url = endpoint.endsWith('/')
-        ? '${endpoint}chat/completions'
-        : '$endpoint/chat/completions';
+    final base = normalizeEndpoint(endpoint);
+    final url = '$base/chat/completions';
 
     final body = <String, dynamic>{
       'model': model,
       'messages': messages,
-      'max_tokens': maxTokens,
-      'temperature': temperature,
-      'top_p': topP,
       'stream': stream,
     };
 
-    if (requestReasoning) {
-      body['reasoning_effort'] = reasoningEffort ?? 'medium';
+    if (maxTokens > 0) {
+      body['max_tokens'] = maxTokens;
     }
+    if (temperature > 0) {
+      body['temperature'] = temperature;
+    }
+    if (topP > 0 && topP < 1) {
+      body['top_p'] = topP;
+    }
+    if (requestReasoning &&
+        reasoningEffort != null &&
+        reasoningEffort != 'auto') {
+      body['reasoning_effort'] = reasoningEffort;
+    }
+
+    debugPrint('SSE: POST $url model=$model stream=$stream');
+    debugPrint('SSE: messages count=${messages.length}');
+    debugPrint('SSE: body keys=${body.keys.toList()}');
 
     try {
       if (stream) {
@@ -54,8 +85,11 @@ class SseClient {
       if (e.type == DioExceptionType.cancel) {
         return;
       }
+      final respData = e.response?.data;
+      debugPrint('SSE ERROR ${e.response?.statusCode}: $respData');
       onError?.call(e);
     } catch (e) {
+      debugPrint('SSE ERROR: $e');
       onError?.call(e);
     }
   }
@@ -161,9 +195,8 @@ class SseClient {
     required String endpoint,
     required String apiKey,
   }) async {
-    final url = endpoint.endsWith('/')
-        ? '${endpoint}models'
-        : '$endpoint/models';
+    final base = normalizeEndpoint(endpoint);
+    final url = '$base/models';
 
     try {
       final response = await _dio.get(

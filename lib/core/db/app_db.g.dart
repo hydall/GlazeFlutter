@@ -1029,6 +1029,17 @@ class $ChatSessionsTable extends ChatSessions
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _sessionVarsJsonMeta = const VerificationMeta(
+    'sessionVarsJson',
+  );
+  @override
+  late final GeneratedColumn<String> sessionVarsJson = GeneratedColumn<String>(
+    'session_vars_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     sessionId,
@@ -1036,6 +1047,7 @@ class $ChatSessionsTable extends ChatSessions
     sessionIndex,
     messagesJson,
     updatedAt,
+    sessionVarsJson,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1096,6 +1108,15 @@ class $ChatSessionsTable extends ChatSessions
         updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
       );
     }
+    if (data.containsKey('session_vars_json')) {
+      context.handle(
+        _sessionVarsJsonMeta,
+        sessionVarsJson.isAcceptableOrUnknown(
+          data['session_vars_json']!,
+          _sessionVarsJsonMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1125,6 +1146,10 @@ class $ChatSessionsTable extends ChatSessions
         DriftSqlType.int,
         data['${effectivePrefix}updated_at'],
       )!,
+      sessionVarsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}session_vars_json'],
+      ),
     );
   }
 
@@ -1140,12 +1165,14 @@ class ChatSessionRow extends DataClass implements Insertable<ChatSessionRow> {
   final int sessionIndex;
   final String messagesJson;
   final int updatedAt;
+  final String? sessionVarsJson;
   const ChatSessionRow({
     required this.sessionId,
     required this.characterId,
     required this.sessionIndex,
     required this.messagesJson,
     required this.updatedAt,
+    this.sessionVarsJson,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1155,6 +1182,9 @@ class ChatSessionRow extends DataClass implements Insertable<ChatSessionRow> {
     map['session_index'] = Variable<int>(sessionIndex);
     map['messages_json'] = Variable<String>(messagesJson);
     map['updated_at'] = Variable<int>(updatedAt);
+    if (!nullToAbsent || sessionVarsJson != null) {
+      map['session_vars_json'] = Variable<String>(sessionVarsJson);
+    }
     return map;
   }
 
@@ -1165,6 +1195,9 @@ class ChatSessionRow extends DataClass implements Insertable<ChatSessionRow> {
       sessionIndex: Value(sessionIndex),
       messagesJson: Value(messagesJson),
       updatedAt: Value(updatedAt),
+      sessionVarsJson: sessionVarsJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sessionVarsJson),
     );
   }
 
@@ -1179,6 +1212,7 @@ class ChatSessionRow extends DataClass implements Insertable<ChatSessionRow> {
       sessionIndex: serializer.fromJson<int>(json['sessionIndex']),
       messagesJson: serializer.fromJson<String>(json['messagesJson']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
+      sessionVarsJson: serializer.fromJson<String?>(json['sessionVarsJson']),
     );
   }
   @override
@@ -1190,6 +1224,7 @@ class ChatSessionRow extends DataClass implements Insertable<ChatSessionRow> {
       'sessionIndex': serializer.toJson<int>(sessionIndex),
       'messagesJson': serializer.toJson<String>(messagesJson),
       'updatedAt': serializer.toJson<int>(updatedAt),
+      'sessionVarsJson': serializer.toJson<String?>(sessionVarsJson),
     };
   }
 
@@ -1199,12 +1234,16 @@ class ChatSessionRow extends DataClass implements Insertable<ChatSessionRow> {
     int? sessionIndex,
     String? messagesJson,
     int? updatedAt,
+    Value<String?> sessionVarsJson = const Value.absent(),
   }) => ChatSessionRow(
     sessionId: sessionId ?? this.sessionId,
     characterId: characterId ?? this.characterId,
     sessionIndex: sessionIndex ?? this.sessionIndex,
     messagesJson: messagesJson ?? this.messagesJson,
     updatedAt: updatedAt ?? this.updatedAt,
+    sessionVarsJson: sessionVarsJson.present
+        ? sessionVarsJson.value
+        : this.sessionVarsJson,
   );
   ChatSessionRow copyWithCompanion(ChatSessionsCompanion data) {
     return ChatSessionRow(
@@ -1219,6 +1258,9 @@ class ChatSessionRow extends DataClass implements Insertable<ChatSessionRow> {
           ? data.messagesJson.value
           : this.messagesJson,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      sessionVarsJson: data.sessionVarsJson.present
+          ? data.sessionVarsJson.value
+          : this.sessionVarsJson,
     );
   }
 
@@ -1229,7 +1271,8 @@ class ChatSessionRow extends DataClass implements Insertable<ChatSessionRow> {
           ..write('characterId: $characterId, ')
           ..write('sessionIndex: $sessionIndex, ')
           ..write('messagesJson: $messagesJson, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('sessionVarsJson: $sessionVarsJson')
           ..write(')'))
         .toString();
   }
@@ -1241,6 +1284,7 @@ class ChatSessionRow extends DataClass implements Insertable<ChatSessionRow> {
     sessionIndex,
     messagesJson,
     updatedAt,
+    sessionVarsJson,
   );
   @override
   bool operator ==(Object other) =>
@@ -1250,7 +1294,8 @@ class ChatSessionRow extends DataClass implements Insertable<ChatSessionRow> {
           other.characterId == this.characterId &&
           other.sessionIndex == this.sessionIndex &&
           other.messagesJson == this.messagesJson &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.sessionVarsJson == this.sessionVarsJson);
 }
 
 class ChatSessionsCompanion extends UpdateCompanion<ChatSessionRow> {
@@ -1259,6 +1304,7 @@ class ChatSessionsCompanion extends UpdateCompanion<ChatSessionRow> {
   final Value<int> sessionIndex;
   final Value<String> messagesJson;
   final Value<int> updatedAt;
+  final Value<String?> sessionVarsJson;
   final Value<int> rowid;
   const ChatSessionsCompanion({
     this.sessionId = const Value.absent(),
@@ -1266,6 +1312,7 @@ class ChatSessionsCompanion extends UpdateCompanion<ChatSessionRow> {
     this.sessionIndex = const Value.absent(),
     this.messagesJson = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.sessionVarsJson = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ChatSessionsCompanion.insert({
@@ -1274,6 +1321,7 @@ class ChatSessionsCompanion extends UpdateCompanion<ChatSessionRow> {
     required int sessionIndex,
     required String messagesJson,
     this.updatedAt = const Value.absent(),
+    this.sessionVarsJson = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : sessionId = Value(sessionId),
        characterId = Value(characterId),
@@ -1285,6 +1333,7 @@ class ChatSessionsCompanion extends UpdateCompanion<ChatSessionRow> {
     Expression<int>? sessionIndex,
     Expression<String>? messagesJson,
     Expression<int>? updatedAt,
+    Expression<String>? sessionVarsJson,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1293,6 +1342,7 @@ class ChatSessionsCompanion extends UpdateCompanion<ChatSessionRow> {
       if (sessionIndex != null) 'session_index': sessionIndex,
       if (messagesJson != null) 'messages_json': messagesJson,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (sessionVarsJson != null) 'session_vars_json': sessionVarsJson,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1303,6 +1353,7 @@ class ChatSessionsCompanion extends UpdateCompanion<ChatSessionRow> {
     Value<int>? sessionIndex,
     Value<String>? messagesJson,
     Value<int>? updatedAt,
+    Value<String?>? sessionVarsJson,
     Value<int>? rowid,
   }) {
     return ChatSessionsCompanion(
@@ -1311,6 +1362,7 @@ class ChatSessionsCompanion extends UpdateCompanion<ChatSessionRow> {
       sessionIndex: sessionIndex ?? this.sessionIndex,
       messagesJson: messagesJson ?? this.messagesJson,
       updatedAt: updatedAt ?? this.updatedAt,
+      sessionVarsJson: sessionVarsJson ?? this.sessionVarsJson,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1333,6 +1385,9 @@ class ChatSessionsCompanion extends UpdateCompanion<ChatSessionRow> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<int>(updatedAt.value);
     }
+    if (sessionVarsJson.present) {
+      map['session_vars_json'] = Variable<String>(sessionVarsJson.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1347,6 +1402,7 @@ class ChatSessionsCompanion extends UpdateCompanion<ChatSessionRow> {
           ..write('sessionIndex: $sessionIndex, ')
           ..write('messagesJson: $messagesJson, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('sessionVarsJson: $sessionVarsJson, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1683,6 +1739,16 @@ class $ApiConfigsTable extends ApiConfigs
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _modeMeta = const VerificationMeta('mode');
+  @override
+  late final GeneratedColumn<String> mode = GeneratedColumn<String>(
+    'mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('chat'),
+  );
   static const VerificationMeta _maxTokensMeta = const VerificationMeta(
     'maxTokens',
   );
@@ -1799,6 +1865,7 @@ class $ApiConfigsTable extends ApiConfigs
     endpoint,
     apiKey,
     model,
+    mode,
     maxTokens,
     contextSize,
     temperature,
@@ -1859,6 +1926,12 @@ class $ApiConfigsTable extends ApiConfigs
       context.handle(
         _modelMeta,
         model.isAcceptableOrUnknown(data['model']!, _modelMeta),
+      );
+    }
+    if (data.containsKey('mode')) {
+      context.handle(
+        _modeMeta,
+        mode.isAcceptableOrUnknown(data['mode']!, _modeMeta),
       );
     }
     if (data.containsKey('max_tokens')) {
@@ -1966,6 +2039,10 @@ class $ApiConfigsTable extends ApiConfigs
         DriftSqlType.string,
         data['${effectivePrefix}model'],
       ),
+      mode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}mode'],
+      )!,
       maxTokens: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}max_tokens'],
@@ -2018,6 +2095,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
   final String? endpoint;
   final String? apiKey;
   final String? model;
+  final String mode;
   final int maxTokens;
   final int contextSize;
   final double temperature;
@@ -2034,6 +2112,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
     this.endpoint,
     this.apiKey,
     this.model,
+    required this.mode,
     required this.maxTokens,
     required this.contextSize,
     required this.temperature,
@@ -2059,6 +2138,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
     if (!nullToAbsent || model != null) {
       map['model'] = Variable<String>(model);
     }
+    map['mode'] = Variable<String>(mode);
     map['max_tokens'] = Variable<int>(maxTokens);
     map['context_size'] = Variable<int>(contextSize);
     map['temperature'] = Variable<double>(temperature);
@@ -2091,6 +2171,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
       model: model == null && nullToAbsent
           ? const Value.absent()
           : Value(model),
+      mode: Value(mode),
       maxTokens: Value(maxTokens),
       contextSize: Value(contextSize),
       temperature: Value(temperature),
@@ -2121,6 +2202,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
       endpoint: serializer.fromJson<String?>(json['endpoint']),
       apiKey: serializer.fromJson<String?>(json['apiKey']),
       model: serializer.fromJson<String?>(json['model']),
+      mode: serializer.fromJson<String>(json['mode']),
       maxTokens: serializer.fromJson<int>(json['maxTokens']),
       contextSize: serializer.fromJson<int>(json['contextSize']),
       temperature: serializer.fromJson<double>(json['temperature']),
@@ -2144,6 +2226,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
       'endpoint': serializer.toJson<String?>(endpoint),
       'apiKey': serializer.toJson<String?>(apiKey),
       'model': serializer.toJson<String?>(model),
+      'mode': serializer.toJson<String>(mode),
       'maxTokens': serializer.toJson<int>(maxTokens),
       'contextSize': serializer.toJson<int>(contextSize),
       'temperature': serializer.toJson<double>(temperature),
@@ -2163,6 +2246,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
     Value<String?> endpoint = const Value.absent(),
     Value<String?> apiKey = const Value.absent(),
     Value<String?> model = const Value.absent(),
+    String? mode,
     int? maxTokens,
     int? contextSize,
     double? temperature,
@@ -2179,6 +2263,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
     endpoint: endpoint.present ? endpoint.value : this.endpoint,
     apiKey: apiKey.present ? apiKey.value : this.apiKey,
     model: model.present ? model.value : this.model,
+    mode: mode ?? this.mode,
     maxTokens: maxTokens ?? this.maxTokens,
     contextSize: contextSize ?? this.contextSize,
     temperature: temperature ?? this.temperature,
@@ -2205,6 +2290,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
       endpoint: data.endpoint.present ? data.endpoint.value : this.endpoint,
       apiKey: data.apiKey.present ? data.apiKey.value : this.apiKey,
       model: data.model.present ? data.model.value : this.model,
+      mode: data.mode.present ? data.mode.value : this.mode,
       maxTokens: data.maxTokens.present ? data.maxTokens.value : this.maxTokens,
       contextSize: data.contextSize.present
           ? data.contextSize.value
@@ -2238,6 +2324,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
           ..write('endpoint: $endpoint, ')
           ..write('apiKey: $apiKey, ')
           ..write('model: $model, ')
+          ..write('mode: $mode, ')
           ..write('maxTokens: $maxTokens, ')
           ..write('contextSize: $contextSize, ')
           ..write('temperature: $temperature, ')
@@ -2259,6 +2346,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
     endpoint,
     apiKey,
     model,
+    mode,
     maxTokens,
     contextSize,
     temperature,
@@ -2279,6 +2367,7 @@ class ApiConfigRow extends DataClass implements Insertable<ApiConfigRow> {
           other.endpoint == this.endpoint &&
           other.apiKey == this.apiKey &&
           other.model == this.model &&
+          other.mode == this.mode &&
           other.maxTokens == this.maxTokens &&
           other.contextSize == this.contextSize &&
           other.temperature == this.temperature &&
@@ -2297,6 +2386,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfigRow> {
   final Value<String?> endpoint;
   final Value<String?> apiKey;
   final Value<String?> model;
+  final Value<String> mode;
   final Value<int> maxTokens;
   final Value<int> contextSize;
   final Value<double> temperature;
@@ -2314,6 +2404,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfigRow> {
     this.endpoint = const Value.absent(),
     this.apiKey = const Value.absent(),
     this.model = const Value.absent(),
+    this.mode = const Value.absent(),
     this.maxTokens = const Value.absent(),
     this.contextSize = const Value.absent(),
     this.temperature = const Value.absent(),
@@ -2332,6 +2423,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfigRow> {
     this.endpoint = const Value.absent(),
     this.apiKey = const Value.absent(),
     this.model = const Value.absent(),
+    this.mode = const Value.absent(),
     this.maxTokens = const Value.absent(),
     this.contextSize = const Value.absent(),
     this.temperature = const Value.absent(),
@@ -2351,6 +2443,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfigRow> {
     Expression<String>? endpoint,
     Expression<String>? apiKey,
     Expression<String>? model,
+    Expression<String>? mode,
     Expression<int>? maxTokens,
     Expression<int>? contextSize,
     Expression<double>? temperature,
@@ -2369,6 +2462,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfigRow> {
       if (endpoint != null) 'endpoint': endpoint,
       if (apiKey != null) 'api_key': apiKey,
       if (model != null) 'model': model,
+      if (mode != null) 'mode': mode,
       if (maxTokens != null) 'max_tokens': maxTokens,
       if (contextSize != null) 'context_size': contextSize,
       if (temperature != null) 'temperature': temperature,
@@ -2389,6 +2483,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfigRow> {
     Value<String?>? endpoint,
     Value<String?>? apiKey,
     Value<String?>? model,
+    Value<String>? mode,
     Value<int>? maxTokens,
     Value<int>? contextSize,
     Value<double>? temperature,
@@ -2407,6 +2502,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfigRow> {
       endpoint: endpoint ?? this.endpoint,
       apiKey: apiKey ?? this.apiKey,
       model: model ?? this.model,
+      mode: mode ?? this.mode,
       maxTokens: maxTokens ?? this.maxTokens,
       contextSize: contextSize ?? this.contextSize,
       temperature: temperature ?? this.temperature,
@@ -2440,6 +2536,9 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfigRow> {
     }
     if (model.present) {
       map['model'] = Variable<String>(model.value);
+    }
+    if (mode.present) {
+      map['mode'] = Variable<String>(mode.value);
     }
     if (maxTokens.present) {
       map['max_tokens'] = Variable<int>(maxTokens.value);
@@ -2483,6 +2582,7 @@ class ApiConfigsCompanion extends UpdateCompanion<ApiConfigRow> {
           ..write('endpoint: $endpoint, ')
           ..write('apiKey: $apiKey, ')
           ..write('model: $model, ')
+          ..write('mode: $mode, ')
           ..write('maxTokens: $maxTokens, ')
           ..write('contextSize: $contextSize, ')
           ..write('temperature: $temperature, ')
@@ -3266,6 +3366,7 @@ typedef $$ChatSessionsTableCreateCompanionBuilder =
       required int sessionIndex,
       required String messagesJson,
       Value<int> updatedAt,
+      Value<String?> sessionVarsJson,
       Value<int> rowid,
     });
 typedef $$ChatSessionsTableUpdateCompanionBuilder =
@@ -3275,6 +3376,7 @@ typedef $$ChatSessionsTableUpdateCompanionBuilder =
       Value<int> sessionIndex,
       Value<String> messagesJson,
       Value<int> updatedAt,
+      Value<String?> sessionVarsJson,
       Value<int> rowid,
     });
 
@@ -3309,6 +3411,11 @@ class $$ChatSessionsTableFilterComposer
 
   ColumnFilters<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sessionVarsJson => $composableBuilder(
+    column: $table.sessionVarsJson,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3346,6 +3453,11 @@ class $$ChatSessionsTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get sessionVarsJson => $composableBuilder(
+    column: $table.sessionVarsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ChatSessionsTableAnnotationComposer
@@ -3377,6 +3489,11 @@ class $$ChatSessionsTableAnnotationComposer
 
   GeneratedColumn<int> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get sessionVarsJson => $composableBuilder(
+    column: $table.sessionVarsJson,
+    builder: (column) => column,
+  );
 }
 
 class $$ChatSessionsTableTableManager
@@ -3415,6 +3532,7 @@ class $$ChatSessionsTableTableManager
                 Value<int> sessionIndex = const Value.absent(),
                 Value<String> messagesJson = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
+                Value<String?> sessionVarsJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ChatSessionsCompanion(
                 sessionId: sessionId,
@@ -3422,6 +3540,7 @@ class $$ChatSessionsTableTableManager
                 sessionIndex: sessionIndex,
                 messagesJson: messagesJson,
                 updatedAt: updatedAt,
+                sessionVarsJson: sessionVarsJson,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3431,6 +3550,7 @@ class $$ChatSessionsTableTableManager
                 required int sessionIndex,
                 required String messagesJson,
                 Value<int> updatedAt = const Value.absent(),
+                Value<String?> sessionVarsJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ChatSessionsCompanion.insert(
                 sessionId: sessionId,
@@ -3438,6 +3558,7 @@ class $$ChatSessionsTableTableManager
                 sessionIndex: sessionIndex,
                 messagesJson: messagesJson,
                 updatedAt: updatedAt,
+                sessionVarsJson: sessionVarsJson,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -3629,6 +3750,7 @@ typedef $$ApiConfigsTableCreateCompanionBuilder =
       Value<String?> endpoint,
       Value<String?> apiKey,
       Value<String?> model,
+      Value<String> mode,
       Value<int> maxTokens,
       Value<int> contextSize,
       Value<double> temperature,
@@ -3648,6 +3770,7 @@ typedef $$ApiConfigsTableUpdateCompanionBuilder =
       Value<String?> endpoint,
       Value<String?> apiKey,
       Value<String?> model,
+      Value<String> mode,
       Value<int> maxTokens,
       Value<int> contextSize,
       Value<double> temperature,
@@ -3696,6 +3819,11 @@ class $$ApiConfigsTableFilterComposer
 
   ColumnFilters<String> get model => $composableBuilder(
     column: $table.model,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get mode => $composableBuilder(
+    column: $table.mode,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3784,6 +3912,11 @@ class $$ApiConfigsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get mode => $composableBuilder(
+    column: $table.mode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get maxTokens => $composableBuilder(
     column: $table.maxTokens,
     builder: (column) => ColumnOrderings(column),
@@ -3858,6 +3991,9 @@ class $$ApiConfigsTableAnnotationComposer
 
   GeneratedColumn<String> get model =>
       $composableBuilder(column: $table.model, builder: (column) => column);
+
+  GeneratedColumn<String> get mode =>
+      $composableBuilder(column: $table.mode, builder: (column) => column);
 
   GeneratedColumn<int> get maxTokens =>
       $composableBuilder(column: $table.maxTokens, builder: (column) => column);
@@ -3936,6 +4072,7 @@ class $$ApiConfigsTableTableManager
                 Value<String?> endpoint = const Value.absent(),
                 Value<String?> apiKey = const Value.absent(),
                 Value<String?> model = const Value.absent(),
+                Value<String> mode = const Value.absent(),
                 Value<int> maxTokens = const Value.absent(),
                 Value<int> contextSize = const Value.absent(),
                 Value<double> temperature = const Value.absent(),
@@ -3953,6 +4090,7 @@ class $$ApiConfigsTableTableManager
                 endpoint: endpoint,
                 apiKey: apiKey,
                 model: model,
+                mode: mode,
                 maxTokens: maxTokens,
                 contextSize: contextSize,
                 temperature: temperature,
@@ -3972,6 +4110,7 @@ class $$ApiConfigsTableTableManager
                 Value<String?> endpoint = const Value.absent(),
                 Value<String?> apiKey = const Value.absent(),
                 Value<String?> model = const Value.absent(),
+                Value<String> mode = const Value.absent(),
                 Value<int> maxTokens = const Value.absent(),
                 Value<int> contextSize = const Value.absent(),
                 Value<double> temperature = const Value.absent(),
@@ -3989,6 +4128,7 @@ class $$ApiConfigsTableTableManager
                 endpoint: endpoint,
                 apiKey: apiKey,
                 model: model,
+                mode: mode,
                 maxTokens: maxTokens,
                 contextSize: contextSize,
                 temperature: temperature,

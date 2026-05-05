@@ -85,8 +85,12 @@ class _PersonaTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ListTile(
+      visualDensity: VisualDensity.compact,
       leading: CircleAvatar(
-        child: Text(persona.name.isNotEmpty ? persona.name[0].toUpperCase() : '?'),
+        radius: 14,
+        child: Text(
+            persona.name.isNotEmpty ? persona.name[0].toUpperCase() : '?',
+            style: const TextStyle(fontSize: 12)),
       ),
       title: Text(persona.name),
       subtitle: persona.prompt != null && persona.prompt!.isNotEmpty

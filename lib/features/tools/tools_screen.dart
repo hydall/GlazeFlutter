@@ -13,28 +13,24 @@ class ToolsScreen extends StatelessWidget {
         leading: BackButton(onPressed: () => context.go('/menu')),
         title: const Text('Tools'),
       ),
-      body: GridView.count(
-        crossAxisCount: 2,
-        padding: const EdgeInsets.all(16),
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 1.4,
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         children: [
-          _ToolCard(
+          _ToolTile(
             icon: Icons.api,
             title: 'API',
             subtitle: 'Endpoints & models',
             color: const Color(0xFF4CAF50),
             onTap: () => context.go('/tools/api'),
           ),
-          _ToolCard(
+          _ToolTile(
             icon: Icons.tune,
             title: 'Presets',
             subtitle: 'Generation presets',
             color: const Color(0xFF2196F3),
             onTap: () => context.go('/tools/presets'),
           ),
-          _ToolCard(
+          _ToolTile(
             icon: Icons.menu_book,
             title: 'Lorebooks',
             subtitle: 'World info',
@@ -45,25 +41,21 @@ class ToolsScreen extends StatelessWidget {
               );
             },
           ),
-          _ToolCard(
+          _ToolTile(
             icon: Icons.code,
             title: 'Regex',
             subtitle: 'Find & replace scripts',
             color: const Color(0xFF9C27B0),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Regex scripts coming soon')),
-              );
-            },
+            onTap: () => context.go('/tools/regex'),
           ),
-          _ToolCard(
+          _ToolTile(
             icon: Icons.face,
             title: 'Personas',
             subtitle: 'Your identities',
             color: const Color(0xFFE91E63),
             onTap: () => context.go('/tools/personas'),
           ),
-          _ToolCard(
+          _ToolTile(
             icon: Icons.help_outline,
             title: 'Glossary',
             subtitle: 'Help & terms',
@@ -80,14 +72,14 @@ class ToolsScreen extends StatelessWidget {
   }
 }
 
-class _ToolCard extends StatelessWidget {
+class _ToolTile extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
   final Color color;
   final VoidCallback onTap;
 
-  const _ToolCard({
+  const _ToolTile({
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -97,27 +89,19 @@ class _ToolCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: color, size: 32),
-              const Spacer(),
-              Text(title,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 16)),
-              Text(subtitle,
-                  style: TextStyle(
-                      fontSize: 12, color: AppColors.textSecondary)),
-            ],
-          ),
+    return ListTile(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(
+          color: Theme.of(context).colorScheme.outlineVariant,
         ),
       ),
+      leading: Icon(icon, color: color, size: 20),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle,
+          style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+      trailing: const Icon(Icons.chevron_right, size: 18),
+      onTap: onTap,
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/chat_message.dart';
+import '../../core/state/active_selection_provider.dart';
 import '../../core/state/db_provider.dart';
 import 'chat_provider.dart';
 
@@ -34,6 +35,45 @@ class ChatScreen extends ConsumerWidget {
                 : const SizedBox.shrink(),
             loading: () => const SizedBox.shrink(),
             error: (_, __) => const SizedBox.shrink(),
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              switch (value) {
+                case 'preset':
+                  _showPresetPicker(context, ref);
+                case 'persona':
+                  _showPersonaPicker(context, ref);
+                case 'clear':
+                  _confirmClearChat(context, ref);
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'preset',
+                child: Row(children: [
+                  Icon(Icons.tune, size: 18),
+                  SizedBox(width: 8),
+                  Text('Preset'),
+                ]),
+              ),
+              const PopupMenuItem(
+                value: 'persona',
+                child: Row(children: [
+                  Icon(Icons.person, size: 18),
+                  SizedBox(width: 8),
+                  Text('Persona'),
+                ]),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'clear',
+                child: Row(children: [
+                  Icon(Icons.delete_sweep, size: 18, color: Colors.red),
+                  SizedBox(width: 8),
+                  Text('Clear Chat', style: TextStyle(color: Colors.red)),
+                ]),
+              ),
+            ],
           ),
         ],
       ),
@@ -83,6 +123,102 @@ class ChatScreen extends ConsumerWidget {
     return FutureBuilder<String>(
       future: charAsync.getById(charId).then((c) => c?.name ?? 'Chat'),
       builder: (_, snap) => Text(snap.data ?? 'Chat'),
+    );
+  }
+
+  void _showPresetPicker(BuildContext context, WidgetRef ref) async {
+    final presets = await ref.read(presetRepoProvider).getAll();
+    final activeId = ref.read(activePresetIdProvider);
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Select Preset'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () {
+              setActivePreset(ref, null);
+              Navigator.pop(ctx);
+            },
+            child: Row(children: [
+              if (activeId == null) const Icon(Icons.check, size: 16),
+              const SizedBox(width: 8),
+              const Text('Default (first)'),
+            ]),
+          ),
+          ...presets.map((p) => SimpleDialogOption(
+                onPressed: () {
+                  setActivePreset(ref, p.id);
+                  Navigator.pop(ctx);
+                },
+                child: Row(children: [
+                  if (activeId == p.id) const Icon(Icons.check, size: 16),
+                  const SizedBox(width: 8),
+                  Text(p.name),
+                ]),
+              )),
+        ],
+      ),
+    );
+  }
+
+  void _showPersonaPicker(BuildContext context, WidgetRef ref) async {
+    final personas = await ref.read(personaRepoProvider).getAll();
+    final activeId = ref.read(activePersonaIdProvider);
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Select Persona'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () {
+              setActivePersona(ref, null);
+              Navigator.pop(ctx);
+            },
+            child: Row(children: [
+              if (activeId == null) const Icon(Icons.check, size: 16),
+              const SizedBox(width: 8),
+              const Text('Default (first)'),
+            ]),
+          ),
+          ...personas.map((p) => SimpleDialogOption(
+                onPressed: () {
+                  setActivePersona(ref, p.id);
+                  Navigator.pop(ctx);
+                },
+                child: Row(children: [
+                  if (activeId == p.id) const Icon(Icons.check, size: 16),
+                  const SizedBox(width: 8),
+                  Text(p.name),
+                ]),
+              )),
+        ],
+      ),
+    );
+  }
+
+  void _confirmClearChat(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear Chat'),
+        content: const Text('Delete all messages? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ref.read(chatProvider(charId).notifier).clearChat();
+            },
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -21,12 +21,20 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (Migrator m) async {
           await m.createAll();
+        },
+        onUpgrade: (Migrator m, int from, int to) async {
+          if (from < 2) {
+            await m.addColumn(apiConfigs, apiConfigs.mode);
+          }
+          if (from < 3) {
+            await m.addColumn(chatSessions, chatSessions.sessionVarsJson);
+          }
         },
       );
 }

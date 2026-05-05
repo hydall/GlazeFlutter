@@ -30,6 +30,7 @@ class ChatSession with _$ChatSession {
     required int sessionIndex,
     @Default([]) List<ChatMessage> messages,
     @Default(0) int updatedAt,
+    @Default({}) Map<String, String> sessionVars,
   }) = _ChatSession;
 
   factory ChatSession.fromJson(Map<String, dynamic> json) =>

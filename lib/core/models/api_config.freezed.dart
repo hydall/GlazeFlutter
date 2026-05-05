@@ -27,6 +27,7 @@ mixin _$ApiConfig {
   String get endpoint => throw _privateConstructorUsedError;
   String get apiKey => throw _privateConstructorUsedError;
   String get model => throw _privateConstructorUsedError;
+  String get mode => throw _privateConstructorUsedError;
   int get maxTokens => throw _privateConstructorUsedError;
   int get contextSize => throw _privateConstructorUsedError;
   double get temperature => throw _privateConstructorUsedError;
@@ -59,6 +60,7 @@ abstract class $ApiConfigCopyWith<$Res> {
     String endpoint,
     String apiKey,
     String model,
+    String mode,
     int maxTokens,
     int contextSize,
     double temperature,
@@ -92,6 +94,7 @@ class _$ApiConfigCopyWithImpl<$Res, $Val extends ApiConfig>
     Object? endpoint = null,
     Object? apiKey = null,
     Object? model = null,
+    Object? mode = null,
     Object? maxTokens = null,
     Object? contextSize = null,
     Object? temperature = null,
@@ -127,6 +130,10 @@ class _$ApiConfigCopyWithImpl<$Res, $Val extends ApiConfig>
             model: null == model
                 ? _value.model
                 : model // ignore: cast_nullable_to_non_nullable
+                      as String,
+            mode: null == mode
+                ? _value.mode
+                : mode // ignore: cast_nullable_to_non_nullable
                       as String,
             maxTokens: null == maxTokens
                 ? _value.maxTokens
@@ -186,6 +193,7 @@ abstract class _$$ApiConfigImplCopyWith<$Res>
     String endpoint,
     String apiKey,
     String model,
+    String mode,
     int maxTokens,
     int contextSize,
     double temperature,
@@ -218,6 +226,7 @@ class __$$ApiConfigImplCopyWithImpl<$Res>
     Object? endpoint = null,
     Object? apiKey = null,
     Object? model = null,
+    Object? mode = null,
     Object? maxTokens = null,
     Object? contextSize = null,
     Object? temperature = null,
@@ -253,6 +262,10 @@ class __$$ApiConfigImplCopyWithImpl<$Res>
         model: null == model
             ? _value.model
             : model // ignore: cast_nullable_to_non_nullable
+                  as String,
+        mode: null == mode
+            ? _value.mode
+            : mode // ignore: cast_nullable_to_non_nullable
                   as String,
         maxTokens: null == maxTokens
             ? _value.maxTokens
@@ -305,6 +318,7 @@ class _$ApiConfigImpl implements _ApiConfig {
     this.endpoint = '',
     this.apiKey = '',
     this.model = '',
+    this.mode = 'chat',
     this.maxTokens = 8000,
     this.contextSize = 32000,
     this.temperature = 0.7,
@@ -338,6 +352,9 @@ class _$ApiConfigImpl implements _ApiConfig {
   final String model;
   @override
   @JsonKey()
+  final String mode;
+  @override
+  @JsonKey()
   final int maxTokens;
   @override
   @JsonKey()
@@ -364,7 +381,7 @@ class _$ApiConfigImpl implements _ApiConfig {
 
   @override
   String toString() {
-    return 'ApiConfig(id: $id, name: $name, providerId: $providerId, endpoint: $endpoint, apiKey: $apiKey, model: $model, maxTokens: $maxTokens, contextSize: $contextSize, temperature: $temperature, topP: $topP, stream: $stream, reasoningEffort: $reasoningEffort, requestReasoning: $requestReasoning, reasoningTagStart: $reasoningTagStart, reasoningTagEnd: $reasoningTagEnd)';
+    return 'ApiConfig(id: $id, name: $name, providerId: $providerId, endpoint: $endpoint, apiKey: $apiKey, model: $model, mode: $mode, maxTokens: $maxTokens, contextSize: $contextSize, temperature: $temperature, topP: $topP, stream: $stream, reasoningEffort: $reasoningEffort, requestReasoning: $requestReasoning, reasoningTagStart: $reasoningTagStart, reasoningTagEnd: $reasoningTagEnd)';
   }
 
   @override
@@ -380,6 +397,7 @@ class _$ApiConfigImpl implements _ApiConfig {
                 other.endpoint == endpoint) &&
             (identical(other.apiKey, apiKey) || other.apiKey == apiKey) &&
             (identical(other.model, model) || other.model == model) &&
+            (identical(other.mode, mode) || other.mode == mode) &&
             (identical(other.maxTokens, maxTokens) ||
                 other.maxTokens == maxTokens) &&
             (identical(other.contextSize, contextSize) ||
@@ -408,6 +426,7 @@ class _$ApiConfigImpl implements _ApiConfig {
     endpoint,
     apiKey,
     model,
+    mode,
     maxTokens,
     contextSize,
     temperature,
@@ -441,6 +460,7 @@ abstract class _ApiConfig implements ApiConfig {
     final String endpoint,
     final String apiKey,
     final String model,
+    final String mode,
     final int maxTokens,
     final int contextSize,
     final double temperature,
@@ -467,6 +487,8 @@ abstract class _ApiConfig implements ApiConfig {
   String get apiKey;
   @override
   String get model;
+  @override
+  String get mode;
   @override
   int get maxTokens;
   @override

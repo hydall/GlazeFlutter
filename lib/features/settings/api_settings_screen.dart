@@ -87,11 +87,16 @@ class _ApiConfigTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isEmbedding = config.mode == 'embedding';
     return ListTile(
-      leading: const Icon(Icons.api),
+      leading: Icon(
+        isEmbedding ? Icons.hub : Icons.smart_toy,
+        color: isEmbedding ? AppColors.accent : null,
+        size: 20,
+      ),
       title: Text(config.name.isNotEmpty ? config.name : config.model),
       subtitle: Text(
-        '${config.endpoint.replaceAll(RegExp(r'https?://'), '').split('/').first} · ${config.model}',
+        '${config.endpoint.replaceAll(RegExp(r'https?://'), '').split('/').first} · ${config.model} · ${isEmbedding ? 'Embedding' : 'Chat'}',
         style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
@@ -135,7 +140,11 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
   late final _endpointCtrl =
       TextEditingController(text: widget.config?.endpoint ?? '');
   late final _keyCtrl = TextEditingController(text: widget.config?.apiKey ?? '');
-  late final _modelCtrl = TextEditingController(text: widget.config?.model ?? '');
+  late String _mode = widget.config?.mode ?? 'chat';
+  String _selectedModel = '';
+  List<Map<String, dynamic>> _fetchedModels = [];
+  bool _isLoadingModels = false;
+  String? _modelsError;
   late final _maxTokensCtrl = TextEditingController(
       text: (widget.config?.maxTokens ?? 8000).toString());
   late final _contextSizeCtrl = TextEditingController(
@@ -146,11 +155,16 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
   bool _isTesting = false;
 
   @override
+  void initState() {
+    super.initState();
+    _selectedModel = widget.config?.model ?? '';
+  }
+
+  @override
   void dispose() {
     _nameCtrl.dispose();
     _endpointCtrl.dispose();
     _keyCtrl.dispose();
-    _modelCtrl.dispose();
     _maxTokensCtrl.dispose();
     _contextSizeCtrl.dispose();
     super.dispose();
@@ -158,6 +172,8 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isChat = _mode == 'chat';
+
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => Navigator.of(context).pop()),
@@ -177,103 +193,220 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
             decoration: const InputDecoration(
               labelText: 'Config Name',
               hintText: 'My OpenAI',
+              prefixIcon: Icon(Icons.label),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
+          _ModeSelector(
+            mode: _mode,
+            onChanged: (m) => setState(() => _mode = m),
+          ),
+          const SizedBox(height: 16),
           TextField(
             controller: _endpointCtrl,
             decoration: const InputDecoration(
               labelText: 'Endpoint',
-              hintText: 'https://api.openai.com/v1/chat/completions',
+              hintText: 'https://api.openai.com/v1  (chat/completions appended auto)',
+              prefixIcon: Icon(Icons.link),
             ),
+            onChanged: (_) {},
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _keyCtrl,
-            decoration: const InputDecoration(labelText: 'API Key'),
-            obscureText: true,
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _modelCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Model',
-              hintText: 'gpt-4o',
+            decoration: InputDecoration(
+              labelText: 'API Key',
+              prefixIcon: const Icon(Icons.key),
+              suffixIcon: IconButton(
+                icon: const Icon(Icons.download),
+                tooltip: 'Fetch models',
+                onPressed: _isLoadingModels ? null : _fetchModels,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _maxTokensCtrl,
-                  decoration: const InputDecoration(labelText: 'Max Tokens'),
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextField(
-                  controller: _contextSizeCtrl,
-                  decoration: const InputDecoration(labelText: 'Context Size'),
-                  keyboardType: TextInputType.number,
-                ),
-              ),
-            ],
+            obscureText: true,
+            onChanged: (_) {},
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              const Text('Temperature'),
-              Expanded(
-                child: Slider(
-                  value: _temperature,
-                  min: 0,
-                  max: 2,
-                  divisions: 20,
-                  label: _temperature.toStringAsFixed(1),
-                  onChanged: (v) => setState(() => _temperature = v),
+          _buildModelSelector(),
+          if (isChat) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _maxTokensCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Max Tokens',
+                      prefixIcon: Icon(Icons.numbers),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
                 ),
-              ),
-              SizedBox(
-                  width: 48, child: Text(_temperature.toStringAsFixed(1))),
-            ],
-          ),
-          Row(
-            children: [
-              const Text('Top P'),
-              Expanded(
-                child: Slider(
-                  value: _topP,
-                  min: 0,
-                  max: 1,
-                  divisions: 20,
-                  label: _topP.toStringAsFixed(1),
-                  onChanged: (v) => setState(() => _topP = v),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _contextSizeCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Context Size',
+                      prefixIcon: Icon(Icons.data_array),
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
                 ),
-              ),
-              SizedBox(width: 48, child: Text(_topP.toStringAsFixed(1))),
-            ],
-          ),
-          SwitchListTile(
-            title: const Text('Stream'),
-            value: _stream,
-            onChanged: (v) => setState(() => _stream = v),
-          ),
-          const SizedBox(height: 24),
-          OutlinedButton(
+              ],
+            ),
+            const SizedBox(height: 16),
+            _ParamSlider(
+              label: 'Temperature',
+              value: _temperature,
+              min: 0,
+              max: 2,
+              onChanged: (v) => setState(() => _temperature = v),
+            ),
+            _ParamSlider(
+              label: 'Top P',
+              value: _topP,
+              min: 0,
+              max: 1,
+              onChanged: (v) => setState(() => _topP = v),
+            ),
+            SwitchListTile(
+              title: const Text('Stream'),
+              value: _stream,
+              onChanged: (v) => setState(() => _stream = v),
+            ),
+          ],
+          const SizedBox(height: 16),
+          OutlinedButton.icon(
             onPressed: _isTesting ? null : _testConnection,
-            child: _isTesting
+            icon: _isTesting
                 ? const SizedBox(
                     width: 16,
                     height: 16,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Text('Test Connection'),
+                : const Icon(Icons.wifi_find),
+            label: Text(_isTesting ? 'Testing...' : 'Test Connection'),
           ),
         ],
       ),
     );
+  }
+
+  Widget _buildModelSelector() {
+    if (_isLoadingModels) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_fetchedModels.isNotEmpty) {
+      final modelNames = _fetchedModels.map((m) => m['id'] as String).toList();
+      if (!modelNames.contains(_selectedModel) && _selectedModel.isNotEmpty) {
+        modelNames.insert(0, _selectedModel);
+      }
+
+      return DropdownButtonFormField<String>(
+        initialValue: modelNames.contains(_selectedModel) ? _selectedModel : null,
+        decoration: InputDecoration(
+          labelText: _mode == 'chat' ? 'Chat Model' : 'Embedding Model',
+          prefixIcon: Icon(
+            _mode == 'chat' ? Icons.smart_toy : Icons.hub,
+          ),
+        ),
+        items: modelNames
+            .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+            .toList(),
+        onChanged: (v) {
+          if (v != null) setState(() => _selectedModel = v);
+        },
+      );
+    }
+
+    if (_modelsError != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: TextEditingController(text: _selectedModel),
+            decoration: InputDecoration(
+              labelText: _mode == 'chat' ? 'Chat Model' : 'Embedding Model',
+              prefixIcon: Icon(
+                _mode == 'chat' ? Icons.smart_toy : Icons.hub,
+              ),
+            ),
+            onChanged: (v) => _selectedModel = v,
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 4, left: 12),
+            child: Text(
+              'Could not fetch models: $_modelsError',
+              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.error),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return TextField(
+      controller: TextEditingController(text: _selectedModel),
+      decoration: InputDecoration(
+        labelText: _mode == 'chat' ? 'Chat Model' : 'Embedding Model',
+        hintText: 'gpt-4o',
+        prefixIcon: Icon(
+          _mode == 'chat' ? Icons.smart_toy : Icons.hub,
+        ),
+        suffixIcon: IconButton(
+          icon: const Icon(Icons.download, size: 20),
+          tooltip: 'Fetch models from API',
+          onPressed: _isLoadingModels ? null : _fetchModels,
+        ),
+      ),
+      onChanged: (v) => _selectedModel = v,
+    );
+  }
+
+  Future<void> _fetchModels() async {
+    final endpoint = _endpointCtrl.text.trim();
+    final apiKey = _keyCtrl.text.trim();
+
+    if (endpoint.isEmpty || apiKey.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter endpoint and API key first')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoadingModels = true;
+      _modelsError = null;
+    });
+
+    try {
+      final client = SseClient();
+      final models = await client.fetchModels(
+        endpoint: endpoint,
+        apiKey: apiKey,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _fetchedModels = models;
+        _isLoadingModels = false;
+      });
+
+      if (models.isEmpty) {
+        setState(() => _modelsError = 'No models returned by API');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _modelsError = e.toString();
+          _isLoadingModels = false;
+        });
+      }
+    }
   }
 
   Future<void> _save() async {
@@ -283,7 +416,8 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
       name: _nameCtrl.text.trim(),
       endpoint: _endpointCtrl.text.trim(),
       apiKey: _keyCtrl.text.trim(),
-      model: _modelCtrl.text.trim(),
+      model: _selectedModel.trim(),
+      mode: _mode,
       maxTokens: int.tryParse(_maxTokensCtrl.text) ?? 8000,
       contextSize: int.tryParse(_contextSizeCtrl.text) ?? 32000,
       temperature: _temperature,
@@ -297,14 +431,13 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
   Future<void> _testConnection() async {
     final endpoint = _endpointCtrl.text.trim();
     final apiKey = _keyCtrl.text.trim();
-    final model = _modelCtrl.text.trim();
+    final model = _selectedModel.trim();
 
     if (endpoint.isEmpty || apiKey.isEmpty || model.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content:
-                  Text('Fill in endpoint, API key, and model first')),
+              content: Text('Fill in endpoint, API key, and model first')),
         );
       }
       return;
@@ -372,5 +505,132 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
     } finally {
       if (mounted) setState(() => _isTesting = false);
     }
+  }
+}
+
+class _ModeSelector extends StatelessWidget {
+  final String mode;
+  final ValueChanged<String> onChanged;
+
+  const _ModeSelector({required this.mode, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          Expanded(
+            child: _ModeChip(
+              icon: Icons.smart_toy,
+              label: 'Chat',
+              selected: mode == 'chat',
+              color: scheme.primary,
+              onTap: () => onChanged('chat'),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _ModeChip(
+              icon: Icons.hub,
+              label: 'Embedding',
+              selected: mode == 'embedding',
+              color: AppColors.accent,
+              onTap: () => onChanged('embedding'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ModeChip({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? color : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon,
+                size: 18,
+                color: selected ? scheme.onPrimary : scheme.onSurfaceVariant),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color:
+                    selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ParamSlider extends StatelessWidget {
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final ValueChanged<double> onChanged;
+
+  const _ParamSlider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        SizedBox(width: 90, child: Text(label)),
+        Expanded(
+          child: Slider(
+            value: value,
+            min: min,
+            max: max,
+            divisions: ((max - min) * 10).toInt(),
+            label: value.toStringAsFixed(1),
+            onChanged: onChanged,
+          ),
+        ),
+        SizedBox(width: 40, child: Text(value.toStringAsFixed(1))),
+      ],
+    );
   }
 }
