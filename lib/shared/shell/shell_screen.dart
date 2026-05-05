@@ -45,6 +45,11 @@ class _GlassNavBar extends StatelessWidget {
       activeIcon: Icons.person_rounded,
     ),
     _NavItem(
+      label: 'Tools',
+      icon: Icons.grid_view_rounded,
+      activeIcon: Icons.grid_view_rounded,
+    ),
+    _NavItem(
       label: 'Menu',
       icon: Icons.menu_rounded,
       activeIcon: Icons.menu_rounded,

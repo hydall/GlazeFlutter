@@ -19,77 +19,81 @@ import 'features/tools/tools_screen.dart';
 import 'shared/shell/shell_screen.dart';
 import 'shared/theme/app_theme.dart';
 
-final routerProvider = Provider<GoRouter>((ref) => GoRouter(
-      routes: [
-        StatefulShellRoute.indexedStack(
-          builder: (_, __, navigationShell) =>
-              ShellScreen(navigationShell: navigationShell),
-          branches: [
-            StatefulShellBranch(routes: [
-              GoRoute(
-                path: '/',
-                builder: (_, __) => const ChatHistoryScreen(),
-              ),
-            ]),
-            StatefulShellBranch(routes: [
+final routerProvider = Provider<GoRouter>(
+  (ref) => GoRouter(
+    routes: [
+      StatefulShellRoute.indexedStack(
+        builder: (_, __, navigationShell) =>
+            ShellScreen(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/', builder: (_, __) => const ChatHistoryScreen()),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
               GoRoute(
                 path: '/characters',
                 builder: (_, __) => const CharacterListScreen(),
               ),
-            ]),
-            StatefulShellBranch(routes: [
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
               GoRoute(
-                path: '/menu',
-                builder: (_, __) => const MenuScreen(),
+                path: '/tools',
+                builder: (_, __) => const ToolsScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'api',
+                    builder: (_, __) => const ApiSettingsScreen(),
+                  ),
+                  GoRoute(
+                    path: 'personas',
+                    builder: (_, __) => const PersonaListScreen(),
+                  ),
+                  GoRoute(
+                    path: 'presets',
+                    builder: (_, __) => const PresetListScreen(),
+                  ),
+                  GoRoute(
+                    path: 'regex',
+                    builder: (_, __) => const RegexListScreen(),
+                  ),
+                ],
               ),
-            ]),
-          ],
-        ),
-        GoRoute(
-          path: '/chat/:charId',
-          builder: (_, state) =>
-              ChatScreen(charId: state.pathParameters['charId']!),
-        ),
-        GoRoute(
-          path: '/character/:charId',
-          builder: (_, state) =>
-              CharacterDetailScreen(charId: state.pathParameters['charId']!),
-          routes: [
-            GoRoute(
-              path: 'edit',
-              builder: (_, state) => CharacterEditorScreen(
-                  charId: state.pathParameters['charId']!),
-            ),
-          ],
-        ),
-        GoRoute(
-          path: '/tools',
-          builder: (_, __) => const ToolsScreen(),
-          routes: [
-            GoRoute(
-              path: 'api',
-              builder: (_, __) => const ApiSettingsScreen(),
-            ),
-            GoRoute(
-              path: 'personas',
-              builder: (_, __) => const PersonaListScreen(),
-            ),
-            GoRoute(
-              path: 'presets',
-              builder: (_, __) => const PresetListScreen(),
-            ),
-            GoRoute(
-              path: 'regex',
-              builder: (_, __) => const RegexListScreen(),
-            ),
-          ],
-        ),
-        GoRoute(
-          path: '/settings',
-          builder: (_, __) => const AppSettingsScreen(),
-        ),
-      ],
-    ));
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(path: '/menu', builder: (_, __) => const MenuScreen()),
+            ],
+          ),
+        ],
+      ),
+      GoRoute(
+        path: '/chat/:charId',
+        builder: (_, state) =>
+            ChatScreen(charId: state.pathParameters['charId']!),
+      ),
+      GoRoute(
+        path: '/character/:charId',
+        builder: (_, state) =>
+            CharacterDetailScreen(charId: state.pathParameters['charId']!),
+        routes: [
+          GoRoute(
+            path: 'edit',
+            builder: (_, state) =>
+                CharacterEditorScreen(charId: state.pathParameters['charId']!),
+          ),
+        ],
+      ),
+
+      GoRoute(path: '/settings', builder: (_, __) => const AppSettingsScreen()),
+    ],
+  ),
+);
 
 class GlazeApp extends ConsumerStatefulWidget {
   const GlazeApp({super.key});

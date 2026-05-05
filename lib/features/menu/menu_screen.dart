@@ -23,60 +23,56 @@ class MenuScreen extends ConsumerWidget {
           ),
           Expanded(
             child: ListView(
-        children: [
-          _SectionHeader('Settings'),
-          _MenuCard(
-            icon: Icons.build_outlined,
-            title: 'Tools',
-            subtitle: 'Presets, API, Lorebooks, Regex, Personas',
-            onTap: () => context.go('/tools'),
-          ),
-          _MenuCard(
-            icon: Icons.settings_outlined,
-            title: 'App Settings',
-            subtitle: 'Interface, language, notifications',
-            onTap: () => context.go('/settings'),
-          ),
-          _MenuCard(
-            icon: Icons.palette_outlined,
-            title: 'Theme',
-            subtitle: 'Colors, fonts, background',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Theme settings coming soon')),
-              );
-            },
-          ),
-          _SectionHeader('Data'),
-          _MenuCard(
-            icon: Icons.cloud_outlined,
-            title: 'Cloud Sync',
-            subtitle: 'Sync your data across devices',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Cloud sync coming soon')),
-              );
-            },
-          ),
-          _MenuCard(
-            icon: Icons.backup_outlined,
-            title: 'Backups',
-            subtitle: 'Create and restore backups',
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Backups coming soon')),
-              );
-            },
-          ),
-          _SectionHeader('Info'),
-          _MenuCard(
-            icon: Icons.info_outline,
-            title: 'About',
-            subtitle: 'Glaze v0.1.0-alpha',
-            onTap: () => _showAbout(context),
-          ),
-        ],
-      ),
+              children: [
+                _SectionHeader('Settings'),
+                _MenuCard(
+                  icon: Icons.settings_outlined,
+                  title: 'App Settings',
+                  subtitle: 'Interface, language, notifications',
+                  onTap: () => context.go('/settings'),
+                ),
+                _MenuCard(
+                  icon: Icons.palette_outlined,
+                  title: 'Theme',
+                  subtitle: 'Colors, fonts, background',
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Theme settings coming soon'),
+                      ),
+                    );
+                  },
+                ),
+                _SectionHeader('Data'),
+                _MenuCard(
+                  icon: Icons.cloud_outlined,
+                  title: 'Cloud Sync',
+                  subtitle: 'Sync your data across devices',
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Cloud sync coming soon')),
+                    );
+                  },
+                ),
+                _MenuCard(
+                  icon: Icons.backup_outlined,
+                  title: 'Backups',
+                  subtitle: 'Create and restore backups',
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Backups coming soon')),
+                    );
+                  },
+                ),
+                _SectionHeader('Info'),
+                _MenuCard(
+                  icon: Icons.info_outline,
+                  title: 'About',
+                  subtitle: 'Glaze v0.1.0-alpha',
+                  onTap: () => _showAbout(context),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -143,8 +139,10 @@ class _MenuCard extends StatelessWidget {
     return ListTile(
       leading: Icon(icon, color: AppColors.accent),
       title: Text(title),
-      subtitle: Text(subtitle,
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
       trailing: const Icon(Icons.chevron_right, size: 20),
       onTap: onTap,
     );
