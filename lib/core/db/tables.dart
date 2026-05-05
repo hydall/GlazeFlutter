@@ -36,6 +36,7 @@ class ChatSessions extends Table {
   IntColumn get sessionIndex => integer()();
   TextColumn get messagesJson => text()();
   IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+  TextColumn get sessionVarsJson => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {sessionId};
@@ -65,6 +66,7 @@ class ApiConfigs extends Table {
   TextColumn get endpoint => text().nullable()();
   TextColumn get apiKey => text().nullable()();
   TextColumn get model => text().nullable()();
+  TextColumn get mode => text().withDefault(const Constant('chat'))();
   IntColumn get maxTokens => integer().withDefault(const Constant(8000))();
   IntColumn get contextSize => integer().withDefault(const Constant(32000))();
   RealColumn get temperature => real().withDefault(const Constant(0.7))();

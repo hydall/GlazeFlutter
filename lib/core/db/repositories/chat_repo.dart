@@ -46,6 +46,10 @@ class ChatRepo {
             .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
             .toList(),
         updatedAt: c.updatedAt,
+        sessionVars: c.sessionVarsJson != null
+            ? Map<String, String>.from(
+                jsonDecode(c.sessionVarsJson!) as Map)
+            : {},
       );
 
   ChatSessionsCompanion _toCompanion(ChatSession m) => ChatSessionsCompanion(
@@ -54,5 +58,8 @@ class ChatRepo {
         sessionIndex: Value(m.sessionIndex),
         messagesJson: Value(jsonEncode(m.messages.map((e) => e.toJson()).toList())),
         updatedAt: Value(m.updatedAt),
+        sessionVarsJson: Value(m.sessionVars.isNotEmpty
+            ? jsonEncode(m.sessionVars)
+            : null),
       );
 }

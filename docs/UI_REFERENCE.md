@@ -366,14 +366,14 @@ Flutter uses **bottom nav + GoRouter**. Desktop layout is Phase 6.
 | Menu | `/menu` | ✅ | ✅ | |
 | Chat | `/chat/:charId` | ✅ | ✅ | Context menu TODO |
 | Character Detail | `/character/:charId` | ✅ | ✅ | |
-| Character Editor | `/character/:charId/edit` | ❌ | ❌ | |
+| Character Editor | `/character/:charId/edit` | ✅ | ✅ | |
 | Tools Hub | `/tools` | ✅ | ✅ | |
 | API Settings | `/tools/api` | ✅ | ✅ | |
-| Presets | `/tools/presets` | ❌ | ✅ | Repo done |
-| Lorebooks | `/tools/lorebooks` | ❌ | ✅ | Repo done |
-| Regex | `/tools/regex` | ❌ | ❌ | |
+| Presets | `/tools/presets` | ✅ | ✅ | |
+| Lorebooks | `/tools/lorebooks` | ✅ | ✅ | |
+| Regex | `/tools/regex` | ✅ | ✅ | |
 | Personas | `/tools/personas` | ✅ | ✅ | |
 | App Settings | `/settings` | ✅ | ✅ | SharedPreferences |
-| Glossary | `/tools/glossary` | ❌ | ❌ | |
+| Glossary | `/tools/glossary` | ✅ | ✅ | |
 | Theme Settings | `/settings/theme` | ❌ | ❌ | Phase 6 |
 | Onboarding | overlay | ❌ | ❌ | Phase 6 |

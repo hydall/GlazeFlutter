@@ -394,6 +394,7 @@ mixin _$ChatSession {
   int get sessionIndex => throw _privateConstructorUsedError;
   List<ChatMessage> get messages => throw _privateConstructorUsedError;
   int get updatedAt => throw _privateConstructorUsedError;
+  Map<String, String> get sessionVars => throw _privateConstructorUsedError;
 
   /// Serializes this ChatSession to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -418,6 +419,7 @@ abstract class $ChatSessionCopyWith<$Res> {
     int sessionIndex,
     List<ChatMessage> messages,
     int updatedAt,
+    Map<String, String> sessionVars,
   });
 }
 
@@ -441,6 +443,7 @@ class _$ChatSessionCopyWithImpl<$Res, $Val extends ChatSession>
     Object? sessionIndex = null,
     Object? messages = null,
     Object? updatedAt = null,
+    Object? sessionVars = null,
   }) {
     return _then(
       _value.copyWith(
@@ -464,6 +467,10 @@ class _$ChatSessionCopyWithImpl<$Res, $Val extends ChatSession>
                 ? _value.updatedAt
                 : updatedAt // ignore: cast_nullable_to_non_nullable
                       as int,
+            sessionVars: null == sessionVars
+                ? _value.sessionVars
+                : sessionVars // ignore: cast_nullable_to_non_nullable
+                      as Map<String, String>,
           )
           as $Val,
     );
@@ -485,6 +492,7 @@ abstract class _$$ChatSessionImplCopyWith<$Res>
     int sessionIndex,
     List<ChatMessage> messages,
     int updatedAt,
+    Map<String, String> sessionVars,
   });
 }
 
@@ -507,6 +515,7 @@ class __$$ChatSessionImplCopyWithImpl<$Res>
     Object? sessionIndex = null,
     Object? messages = null,
     Object? updatedAt = null,
+    Object? sessionVars = null,
   }) {
     return _then(
       _$ChatSessionImpl(
@@ -530,6 +539,10 @@ class __$$ChatSessionImplCopyWithImpl<$Res>
             ? _value.updatedAt
             : updatedAt // ignore: cast_nullable_to_non_nullable
                   as int,
+        sessionVars: null == sessionVars
+            ? _value._sessionVars
+            : sessionVars // ignore: cast_nullable_to_non_nullable
+                  as Map<String, String>,
       ),
     );
   }
@@ -544,7 +557,9 @@ class _$ChatSessionImpl implements _ChatSession {
     required this.sessionIndex,
     final List<ChatMessage> messages = const [],
     this.updatedAt = 0,
-  }) : _messages = messages;
+    final Map<String, String> sessionVars = const {},
+  }) : _messages = messages,
+       _sessionVars = sessionVars;
 
   factory _$ChatSessionImpl.fromJson(Map<String, dynamic> json) =>
       _$$ChatSessionImplFromJson(json);
@@ -567,10 +582,18 @@ class _$ChatSessionImpl implements _ChatSession {
   @override
   @JsonKey()
   final int updatedAt;
+  final Map<String, String> _sessionVars;
+  @override
+  @JsonKey()
+  Map<String, String> get sessionVars {
+    if (_sessionVars is EqualUnmodifiableMapView) return _sessionVars;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableMapView(_sessionVars);
+  }
 
   @override
   String toString() {
-    return 'ChatSession(id: $id, characterId: $characterId, sessionIndex: $sessionIndex, messages: $messages, updatedAt: $updatedAt)';
+    return 'ChatSession(id: $id, characterId: $characterId, sessionIndex: $sessionIndex, messages: $messages, updatedAt: $updatedAt, sessionVars: $sessionVars)';
   }
 
   @override
@@ -585,7 +608,11 @@ class _$ChatSessionImpl implements _ChatSession {
                 other.sessionIndex == sessionIndex) &&
             const DeepCollectionEquality().equals(other._messages, _messages) &&
             (identical(other.updatedAt, updatedAt) ||
-                other.updatedAt == updatedAt));
+                other.updatedAt == updatedAt) &&
+            const DeepCollectionEquality().equals(
+              other._sessionVars,
+              _sessionVars,
+            ));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -597,6 +624,7 @@ class _$ChatSessionImpl implements _ChatSession {
     sessionIndex,
     const DeepCollectionEquality().hash(_messages),
     updatedAt,
+    const DeepCollectionEquality().hash(_sessionVars),
   );
 
   /// Create a copy of ChatSession
@@ -620,6 +648,7 @@ abstract class _ChatSession implements ChatSession {
     required final int sessionIndex,
     final List<ChatMessage> messages,
     final int updatedAt,
+    final Map<String, String> sessionVars,
   }) = _$ChatSessionImpl;
 
   factory _ChatSession.fromJson(Map<String, dynamic> json) =
@@ -635,6 +664,8 @@ abstract class _ChatSession implements ChatSession {
   List<ChatMessage> get messages;
   @override
   int get updatedAt;
+  @override
+  Map<String, String> get sessionVars;
 
   /// Create a copy of ChatSession
   /// with the given fields replaced by the non-null parameter values.

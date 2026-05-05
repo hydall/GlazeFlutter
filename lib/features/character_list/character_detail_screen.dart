@@ -44,6 +44,12 @@ class CharacterDetailScreen extends ConsumerWidget {
                   label: const Text('Start Chat'),
                 ),
               ),
+              const SizedBox(width: 12),
+              OutlinedButton.icon(
+                onPressed: () => context.go('/character/$charId/edit'),
+                icon: const Icon(Icons.edit),
+                label: const Text('Edit'),
+              ),
             ],
           ),
         ),

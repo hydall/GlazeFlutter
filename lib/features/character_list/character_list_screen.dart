@@ -67,7 +67,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
             padding: const EdgeInsets.all(12),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
-              childAspectRatio: 0.62,
+              childAspectRatio: 0.78,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,
             ),
@@ -219,7 +219,7 @@ class _CharacterCard extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              flex: 5,
+              flex: 3,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
@@ -232,56 +232,56 @@ class _CharacterCard extends ConsumerWidget {
                 ],
               ),
             ),
-            Expanded(
-              flex: 3,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      character.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 14),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    character.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  if (character.description != null &&
+                      character.description!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        character.description!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            fontSize: 11, color: AppColors.textSecondary),
+                      ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      character.description ?? '',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 12, color: AppColors.textSecondary),
-                    ),
-                    const Spacer(),
-                    Row(
-                      children: [
-                        if (character.tags.isNotEmpty)
-                          Expanded(
-                            child: Text(
-                              character.tags.take(2).join(', '),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 10, color: AppColors.accent),
-                            ),
+                  Row(
+                    children: [
+                      if (character.tags.isNotEmpty)
+                        Expanded(
+                          child: Text(
+                            character.tags.take(2).join(', '),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 10, color: AppColors.accent),
                           ),
-                        const SizedBox(width: 4),
-                        FilledButton.tonal(
-                          style: FilledButton.styleFrom(
-                            minimumSize: const Size(0, 28),
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            textStyle: const TextStyle(fontSize: 11),
-                          ),
-                          onPressed: () =>
-                              context.go('/chat/${character.id}'),
-                          child: const Text('Chat'),
                         ),
-                      ],
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 4),
+                      FilledButton.tonal(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 26),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          textStyle: const TextStyle(fontSize: 11),
+                        ),
+                        onPressed: () =>
+                            context.go('/chat/${character.id}'),
+                        child: const Text('Chat'),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
@@ -292,10 +292,13 @@ class _CharacterCard extends ConsumerWidget {
 
   Widget _buildAvatar() {
     if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
-      return Image.file(
-        File(character.avatarPath!),
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildPlaceholderAvatar(),
+      return Container(
+        color: _avatarColor().withValues(alpha: 0.08),
+        child: Image.file(
+          File(character.avatarPath!),
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => _buildPlaceholderAvatar(),
+        ),
       );
     }
     return _buildPlaceholderAvatar();
@@ -345,16 +348,14 @@ class _CharacterCard extends ConsumerWidget {
             case 'info':
               context.go('/character/${character.id}');
             case 'edit':
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Character editor coming soon')),
-              );
+              context.go('/character/${character.id}/edit');
             case 'delete':
               _confirmDelete(context, ref);
           }
         },
         itemBuilder: (_) => [
           const PopupMenuItem(value: 'info', child: Text('View Info')),
-          const PopupMenuItem(value: 'edit', child: Text('Edit (coming soon)')),
+          const PopupMenuItem(value: 'edit', child: Text('Edit')),
           const PopupMenuItem(value: 'delete', child: Text('Delete')),
         ],
       ),
@@ -378,12 +379,10 @@ class _CharacterCard extends ConsumerWidget {
             ),
             ListTile(
               leading: const Icon(Icons.edit),
-              title: const Text('Edit (coming soon)'),
+              title: const Text('Edit'),
               onTap: () {
                 Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Character editor coming soon')),
-                );
+                context.go('/character/${character.id}/edit');
               },
             ),
             ListTile(

@@ -2,13 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/state/active_selection_provider.dart';
+import 'core/services/preset_seeder.dart';
 import 'features/character_list/character_detail_screen.dart';
+import 'features/character_list/character_editor_screen.dart';
 import 'features/character_list/character_list_screen.dart';
 import 'features/chat/chat_screen.dart';
 import 'features/chat_history/chat_history_screen.dart';
 import 'features/menu/menu_screen.dart';
 import 'features/personas/persona_list_screen.dart';
 import 'features/presets/preset_list_screen.dart';
+import 'features/regex/regex_list_screen.dart';
 import 'features/settings/api_settings_screen.dart';
 import 'features/settings/app_settings_screen.dart';
 import 'features/tools/tools_screen.dart';
@@ -50,6 +54,13 @@ final routerProvider = Provider<GoRouter>((ref) => GoRouter(
           path: '/character/:charId',
           builder: (_, state) =>
               CharacterDetailScreen(charId: state.pathParameters['charId']!),
+          routes: [
+            GoRoute(
+              path: 'edit',
+              builder: (_, state) => CharacterEditorScreen(
+                  charId: state.pathParameters['charId']!),
+            ),
+          ],
         ),
         GoRoute(
           path: '/tools',
@@ -67,6 +78,10 @@ final routerProvider = Provider<GoRouter>((ref) => GoRouter(
               path: 'presets',
               builder: (_, __) => const PresetListScreen(),
             ),
+            GoRoute(
+              path: 'regex',
+              builder: (_, __) => const RegexListScreen(),
+            ),
           ],
         ),
         GoRoute(
@@ -76,11 +91,23 @@ final routerProvider = Provider<GoRouter>((ref) => GoRouter(
       ],
     ));
 
-class GlazeApp extends ConsumerWidget {
+class GlazeApp extends ConsumerStatefulWidget {
   const GlazeApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GlazeApp> createState() => _GlazeAppState();
+}
+
+class _GlazeAppState extends ConsumerState<GlazeApp> {
+  @override
+  void initState() {
+    super.initState();
+    loadActiveSelections(ref);
+    seedDefaultPresets(ref);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
       title: 'Glaze',

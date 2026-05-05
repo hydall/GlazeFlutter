@@ -1,6 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/models/preset.dart';
 import '../../core/state/db_provider.dart';
@@ -39,6 +44,10 @@ class PresetListScreen extends ConsumerWidget {
         leading: BackButton(onPressed: () => context.go('/tools')),
         title: const Text('Presets'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.file_upload),
+            onPressed: () => _importPreset(context, ref),
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => Navigator.of(context).push(
@@ -79,6 +88,126 @@ class PresetListScreen extends ConsumerWidget {
       ),
     );
   }
+
+  Future<void> _importPreset(BuildContext context, WidgetRef ref) async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.any,
+      allowMultiple: false,
+    );
+    if (result == null || result.files.isEmpty) {
+      debugPrint('IMPORT: file picker returned nothing');
+      return;
+    }
+
+    final picked = result.files.first;
+    debugPrint('IMPORT: picked "${picked.name}", bytes=${picked.bytes?.length}, path=${picked.path}');
+
+    String jsonString;
+    if (picked.bytes != null) {
+      jsonString = utf8.decode(picked.bytes!);
+    } else if (picked.path != null && picked.path!.isNotEmpty) {
+      jsonString = File(picked.path!).readAsStringSync();
+    } else {
+      debugPrint('IMPORT: no bytes and no path');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot read file')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final json = jsonDecode(jsonString) as Map<String, dynamic>;
+      debugPrint('IMPORT: json parsed, keys=${json.keys.toList()}');
+      final preset = _parseSillyTavernPreset(json, picked.name);
+      debugPrint('IMPORT: parsed ${preset.blocks.length} blocks, ${preset.regexes.length} regexes');
+      await ref.read(presetListProvider.notifier).add(preset);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imported "${preset.name}" (${preset.blocks.length} blocks)')),
+        );
+      }
+    } catch (e, st) {
+      debugPrint('IMPORT ERROR: $e\n$st');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import failed: $e')),
+        );
+      }
+    }
+  }
+
+  Preset _parseSillyTavernPreset(Map<String, dynamic> json, String fileName) {
+    final blocks = <PresetBlock>[];
+    final regexes = <PresetRegex>[];
+
+    final prompts = json['prompts'] as List<dynamic>?;
+    if (prompts != null) {
+      for (int i = 0; i < prompts.length; i++) {
+        final p = prompts[i] as Map<String, dynamic>;
+        final rawDepth = p['injection_depth'] as int? ?? p['depth'] as int?;
+        final rawPos = p['injection_position'] as int? ?? 0;
+        String insertionMode;
+        int? depth;
+        if (rawPos == 0 && rawDepth != null && rawDepth > 0) {
+          insertionMode = 'depth';
+          depth = rawDepth;
+        } else if (rawPos == 0) {
+          insertionMode = 'relative';
+        } else {
+          insertionMode = 'relative';
+        }
+        blocks.add(PresetBlock(
+          id: p['id'] as String? ?? 'imported_b$i',
+          name: (p['name'] as String?) ?? 'Block $i',
+          role: (p['role'] as String?) ?? 'system',
+          content: (p['content'] as String?) ?? '',
+          enabled: p['enabled'] as bool? ?? true,
+          insertionMode: insertionMode,
+          depth: depth,
+        ));
+      }
+    }
+
+    final stRegexes = json['regexes'] as List<dynamic>?;
+    final extRegexes =
+        (json['extensions'] as Map<String, dynamic>?)?['regex_scripts']
+            as List<dynamic>?;
+    final regexSource = extRegexes ?? stRegexes;
+    if (regexSource != null) {
+      for (int i = 0; i < regexSource.length; i++) {
+        final r = regexSource[i] as Map<String, dynamic>;
+        regexes.add(PresetRegex(
+          id: r['id'] as String? ?? 'imported_r$i',
+          name: (r['scriptName'] as String?) ?? 'Regex $i',
+          regex: (r['findRegex'] as String?) ?? '',
+          replacement: (r['replaceString'] as String?) ?? '',
+          placement: (r['placement'] as List<dynamic>?)
+                  ?.map((e) => e as int)
+                  .toList() ??
+              [1, 2],
+          disabled: !(r['isEnabled'] as bool? ?? !((r['disabled'] as bool?) ?? false)),
+          ephemerality: (r['ephemerality'] as List<dynamic>?)
+                  ?.map((e) => e as int)
+                  .toList() ??
+              [1, 2],
+          minDepth: r['minDepth'] as int?,
+          maxDepth: r['maxDepth'] as int?,
+        ));
+      }
+    }
+
+    return Preset(
+      id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+      name: (json['name'] as String?) ?? fileName.replaceAll('.json', ''),
+      blocks: blocks,
+      regexes: regexes,
+      reasoningEnabled:
+          json['reasoning'] as bool? ?? json['reasoning_enabled'] as bool? ?? false,
+      createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    );
+  }
 }
 
 class _PresetTile extends ConsumerWidget {
@@ -94,36 +223,126 @@ class _PresetTile extends ConsumerWidget {
         '${preset.blocks.length} blocks · ${preset.regexes.length} regex',
         style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
       ),
-      trailing: PopupMenuButton<String>(
-        onSelected: (value) {
-          if (value == 'edit') {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => PresetEditorScreen(preset: preset),
-              ),
-            );
-          } else if (value == 'duplicate') {
-            final dup = preset.copyWith(
-              id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
-              name: '${preset.name} (copy)',
-            );
-            ref.read(presetListProvider.notifier).add(dup);
-          } else if (value == 'delete') {
-            ref.read(presetListProvider.notifier).remove(preset.id);
-          }
-        },
-        itemBuilder: (_) => [
-          const PopupMenuItem(value: 'edit', child: Text('Edit')),
-          const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
-          const PopupMenuItem(value: 'delete', child: Text('Delete')),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.upload_file, size: 20),
+            tooltip: 'Export',
+            onPressed: () {
+              debugPrint('EXPORT: icon button pressed for "${preset.name}"');
+              _exportPreset(ref, context, preset);
+            },
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              debugPrint('MENU: selected="$value"');
+              if (value == 'edit') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => PresetEditorScreen(preset: preset),
+                  ),
+                );
+              } else if (value == 'duplicate') {
+                final dup = preset.copyWith(
+                  id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+                  name: '${preset.name} (copy)',
+                );
+                ref.read(presetListProvider.notifier).add(dup);
+              } else if (value == 'export') {
+                _exportPreset(ref, context, preset);
+              } else if (value == 'delete') {
+                ref.read(presetListProvider.notifier).remove(preset.id);
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'edit', child: Text('Edit')),
+              const PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+              const PopupMenuItem(value: 'export', child: Text('Export')),
+              const PopupMenuItem(value: 'delete', child: Text('Delete')),
+            ],
+          ),
         ],
       ),
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => PresetEditorScreen(preset: preset),
-        ),
-      ),
     );
+  }
+
+  void _exportPreset(WidgetRef ref, BuildContext context, Preset preset) async {
+    debugPrint('EXPORT: start for "${preset.name}"');
+    try {
+      final exportJson = <String, dynamic>{
+        'name': preset.name,
+        'prompts': preset.blocks.map((b) => <String, dynamic>{
+          'name': b.name,
+          'role': b.role,
+          'content': b.content,
+          'enabled': b.enabled,
+          'insertion_mode': b.insertionMode,
+          if (b.depth != null) 'depth': b.depth,
+        }).toList(),
+        'regexes': preset.regexes.map((r) => <String, dynamic>{
+          'scriptName': r.name,
+          'findRegex': r.regex,
+          'replaceString': r.replacement,
+          'placement': r.placement,
+          'isEnabled': !r.disabled,
+        }).toList(),
+        'reasoning': preset.reasoningEnabled,
+      };
+
+      debugPrint('EXPORT: json built, blocks=${preset.blocks.length}');
+
+      final encoded = const JsonEncoder.withIndent('  ').convert(exportJson);
+      debugPrint('EXPORT: encoded ${encoded.length} chars');
+
+      final safeName = preset.name.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
+      final desktop = Platform.environment['USERPROFILE'] ?? '.';
+      final exportDir = Directory(p.join(desktop, 'Desktop'));
+      final file = File(p.join(exportDir.path, '$safeName.json'));
+      debugPrint('EXPORT: writing to ${file.path}');
+      file.writeAsStringSync(encoded);
+      debugPrint('EXPORT: done, size=${file.lengthSync()}');
+
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Export Complete'),
+            content: Text('Saved to:\n${file.path}'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Process.run('explorer', ['/select,', file.path]);
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Open File Location'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e, st) {
+      debugPrint('EXPORT ERROR: $e\n$st');
+      if (context.mounted) {
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Export Failed'),
+            content: Text('$e'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+      }
+    }
   }
 }
 

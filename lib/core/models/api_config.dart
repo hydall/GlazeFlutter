@@ -12,6 +12,7 @@ class ApiConfig with _$ApiConfig {
     @Default('') String endpoint,
     @Default('') String apiKey,
     @Default('') String model,
+    @Default('chat') String mode,
     @Default(8000) int maxTokens,
     @Default(32000) int contextSize,
     @Default(0.7) double temperature,

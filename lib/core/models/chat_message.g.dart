@@ -49,6 +49,11 @@ _$ChatSessionImpl _$$ChatSessionImplFromJson(Map<String, dynamic> json) =>
               .toList() ??
           const [],
       updatedAt: (json['updatedAt'] as num?)?.toInt() ?? 0,
+      sessionVars:
+          (json['sessionVars'] as Map<String, dynamic>?)?.map(
+            (k, e) => MapEntry(k, e as String),
+          ) ??
+          const {},
     );
 
 Map<String, dynamic> _$$ChatSessionImplToJson(_$ChatSessionImpl instance) =>
@@ -58,4 +63,5 @@ Map<String, dynamic> _$$ChatSessionImplToJson(_$ChatSessionImpl instance) =>
       'sessionIndex': instance.sessionIndex,
       'messages': instance.messages,
       'updatedAt': instance.updatedAt,
+      'sessionVars': instance.sessionVars,
     };
