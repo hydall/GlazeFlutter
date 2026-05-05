@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -104,16 +105,25 @@ class MenuScreen extends ConsumerWidget {
       if (!context.mounted) return;
       Navigator.of(context).pop();
 
+      ref.invalidate(charactersProvider);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Import complete: ${migrationResult.characters} characters, '
+            'Imported: ${migrationResult.characters} characters, '
             '${migrationResult.sessions} chats, '
             '${migrationResult.presets} presets, '
-            '${migrationResult.apiConfigs} API configs, '
-            '${migrationResult.personas} personas',
+            '${migrationResult.apiConfigs} APIs, '
+            '${migrationResult.personas} personas'
+            '${migrationResult.errors > 0 ? ' (${migrationResult.errors} errors)' : ''}',
           ),
-          duration: const Duration(seconds: 5),
+          duration: const Duration(seconds: 6),
+          action: migrationResult.characters > 0
+              ? SnackBarAction(
+                  label: 'View',
+                  onPressed: () => context.go('/'),
+                )
+              : null,
         ),
       );
     } catch (e) {
