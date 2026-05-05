@@ -368,10 +368,10 @@ class AppTheme {
 ```
 
 ### Deliverables Phase 0
-- [ ] App runs on iOS simulator, Android emulator, Windows desktop
-- [ ] Isar DB opens without errors
-- [ ] GoRouter navigates between 3 empty screens
-- [ ] Dark theme applied
+- [x] App runs on iOS simulator, Android emulator, Windows desktop
+- [x] Isar DB opens without errors
+- [x] GoRouter navigates between 3 empty screens
+- [x] Dark theme applied
 
 ---
 
@@ -778,12 +778,12 @@ dart run build_runner build --delete-conflicting-outputs
 Generates: `*.g.dart`, `*.freezed.dart` files.
 
 ### Deliverables Phase 1
-- [ ] All 6 Freezed models compile with `fromJson`
-- [ ] All 5 Isar collections with indexes
-- [ ] All 5 repository classes with CRUD
-- [ ] ImageStorage saves/reads files correctly
-- [ ] Riverpod providers wire repos to UI
-- [ ] EventHub publish/subscribe works
+- [x] All 6 Freezed models compile with `fromJson`
+- [x] All 5 Isar collections with indexes
+- [x] All 5 repository classes with CRUD
+- [x] ImageStorage saves/reads files correctly
+- [x] Riverpod providers wire repos to UI
+- [x] EventHub publish/subscribe works
 - [ ] Unit tests for each repo (in-memory Isar)
 
 ---
@@ -1475,17 +1475,17 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
 ```
 
 ### Deliverables Phase 2 (Go/No-Go checkpoint)
-- [ ] Import character from PNG (tEXt chunk parsed, avatar saved)
-- [ ] Import character from JSON
-- [ ] Character list displays all imported characters
-- [ ] Tap character → opens chat screen
-- [ ] Type message → builds prompt in isolate → streams response
-- [ ] Streaming text updates in real-time in chat bubble
-- [ ] Abort generation works
-- [ ] API settings persist across app restarts
-- [ ] Runs on iOS without WKWebView issues
-- [ ] Runs on Android
-- [ ] Runs on Windows
+- [x] Import character from PNG (tEXt chunk parsed, avatar saved)
+- [x] Import character from JSON
+- [x] Character list displays all imported characters
+- [x] Tap character → opens chat screen
+- [x] Type message → builds prompt in isolate → streams response
+- [x] Streaming text updates in real-time in chat bubble
+- [x] Abort generation works
+- [x] API settings persist across app restarts
+- [x] Runs on iOS without WKWebView issues
+- [x] Runs on Android
+- [x] Runs on Windows
 
 ---
 
@@ -1638,14 +1638,14 @@ Add a "Import from Glaze" button in the Menu/Tools screen that:
 4. Marks migration as done in SharedPreferences
 
 ### Deliverables Phase 2.5
-- [ ] `MigrationService` with .glz backup import
-- [ ] Character import from IDB format (data URL avatar → file)
-- [ ] Chat session import from gz_chats_* keyvalue entries
-- [ ] API config import
-- [ ] Preset import from Glaze internal format
-- [ ] Persona import
-- [ ] Migration UI in Menu/Tools
-- [ ] One-time migration flag in SharedPreferences
+- [x] `MigrationService` with .glz backup import
+- [x] Character import from IDB format (data URL avatar → file)
+- [x] Chat session import from gz_chats_* keyvalue entries
+- [x] API config import
+- [x] Preset import from Glaze internal format
+- [x] Persona import
+- [x] Migration UI in Menu/Tools
+- [x] One-time migration flag in SharedPreferences
 
 ---
 
@@ -1757,14 +1757,14 @@ Resolution order (from JS): Chat > Character > Global
 - Persona management screen: create/edit/delete
 
 ### Deliverables Phase 3
-- [ ] Preset CRUD (create, read, update, delete)
-- [ ] Preset import from SillyTavern JSON format
-- [ ] Default presets pre-loaded on first launch
-- [ ] Block editor with macro preview
-- [ ] Regex editor (add/edit/delete regex scripts)
-- [ ] Persona CRUD + avatar
-- [ ] Persona connections per character/chat
-- [ ] Persona selector in chat screen
+- [x] Preset CRUD (create, read, update, delete)
+- [x] Preset import from SillyTavern JSON format
+- [x] Default presets pre-loaded on first launch
+- [x] Block editor with macro preview
+- [x] Regex editor (add/edit/delete regex scripts)
+- [x] Persona CRUD + avatar
+- [x] Persona connections per character/chat
+- [x] Persona selector in chat screen
 
 ---
 
@@ -2046,22 +2046,22 @@ class VectorIndexingService {
 - Character detail: show attached lorebooks, toggle activation
 
 ### Deliverables Phase 4
-- [ ] Lorebook CRUD + Isar storage
-- [ ] Lorebook keyword scanner (runs in prompt isolate)
-- [ ] Constant entry injection
-- [ ] Recursive scan
-- [ ] Selective logic (any/all/not any/not all)
-- [ ] Sticky/cooldown
-- [ ] Activation per character/chat
-- [ ] Embedding service (OpenAI-compatible API)
-- [ ] Embedding storage (Isar)
-- [ ] Vector similarity search with cosine distance
-- [ ] Vector search pipeline step (after keyword scan)
-- [ ] Late vector lore injection (dedup vs keyword)
-- [ ] Indexing service (on-entry + reindex all)
-- [ ] Lorebook UI (list, editor, entry editor with vector toggle)
+- [x] Lorebook CRUD + Isar storage
+- [x] Lorebook keyword scanner (runs in prompt isolate)
+- [x] Constant entry injection
+- [x] Recursive scan
+- [x] Selective logic (any/all/not any/not all)
+- [x] Sticky/cooldown
+- [x] Activation per character/chat
+- [x] Embedding service (OpenAI-compatible API)
+- [x] Embedding storage (Isar)
+- [x] Vector similarity search with cosine distance
+- [x] Vector search pipeline step (after keyword scan)
+- [x] Late vector lore injection (dedup vs keyword)
+- [x] Indexing service (on-entry + reindex all)
+- [x] Lorebook UI (list, editor, entry editor with vector toggle)
 - [ ] Import lorebook from SillyTavern JSON
-- [ ] Embedding config UI (endpoint, model, reindex)
+- [x] Embedding config UI (endpoint, model, reindex)
 
 ---
 
@@ -2152,12 +2152,12 @@ Apply regexes to:
 - World info content (placement=4) after lorebook injection
 
 ### Deliverables Phase 5
-- [ ] Regex service with placement/ephemerality/depth filtering
-- [ ] Trim token support
-- [ ] /pattern/flags parsing
-- [ ] Macro expansion in regex patterns
-- [ ] Backreference support in replacements
-- [ ] Integrated into prompt builder pipeline
+- [x] Regex service with placement/ephemerality/depth filtering
+- [x] Trim token support
+- [x] /pattern/flags parsing
+- [x] Macro expansion in regex patterns
+- [x] Backreference support in replacements
+- [x] Integrated into prompt builder pipeline
 
 ---
 
