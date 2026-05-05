@@ -9,6 +9,7 @@ import 'features/character_list/character_editor_screen.dart';
 import 'features/character_list/character_list_screen.dart';
 import 'features/chat/chat_screen.dart';
 import 'features/chat_history/chat_history_screen.dart';
+import 'features/lorebooks/lorebook_list_screen.dart';
 import 'features/menu/menu_screen.dart';
 import 'features/personas/persona_list_screen.dart';
 import 'features/presets/preset_list_screen.dart';
@@ -60,6 +61,10 @@ final routerProvider = Provider<GoRouter>(
                   GoRoute(
                     path: 'regex',
                     builder: (_, __) => const RegexListScreen(),
+                  ),
+                  GoRoute(
+                    path: 'lorebooks',
+                    builder: (_, __) => const LorebookListScreen(),
                   ),
                 ],
               ),

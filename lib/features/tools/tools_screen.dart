@@ -58,13 +58,7 @@ class ToolsScreen extends StatelessWidget {
                           icon: Icons.menu_book,
                           title: 'Lorebooks',
                           subtitle: 'World info',
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Lorebooks coming soon'),
-                              ),
-                            );
-                          },
+                          onTap: () => context.go('/tools/lorebooks'),
                         ),
                       ),
                     ],

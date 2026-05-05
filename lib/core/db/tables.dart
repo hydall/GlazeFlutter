@@ -94,3 +94,20 @@ class Personas extends Table {
   @override
   Set<Column> get primaryKey => {personaId};
 }
+
+@DataClassName('LorebookRow')
+class Lorebooks extends Table {
+  @override
+  String get tableName => 'lorebooks';
+
+  TextColumn get lorebookId => text()();
+  TextColumn get name => text()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+  TextColumn get activationScope => text().withDefault(const Constant('global'))();
+  TextColumn get activationTargetId => text().nullable()();
+  TextColumn get entriesJson => text()();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {lorebookId};
+}

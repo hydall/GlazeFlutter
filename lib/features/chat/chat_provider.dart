@@ -10,6 +10,7 @@ import '../../core/llm/stream_accumulator.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/db_provider.dart';
+import '../../core/state/lorebook_provider.dart';
 
 final chatProvider =
     AsyncNotifierProvider.family<ChatNotifier, ChatState, String>(
@@ -199,6 +200,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         apiConfig: apiConfig,
         sessionVars: session.sessionVars,
         globalVars: ref.read(globalVarsProvider),
+        lorebooks: await ref.read(lorebookRepoProvider).getAll(),
+        lorebookSettings: ref.read(lorebookSettingsProvider),
+        lorebookActivations: ref.read(lorebookActivationsProvider),
       );
 
       debugPrint(

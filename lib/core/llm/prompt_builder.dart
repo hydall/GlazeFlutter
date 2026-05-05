@@ -5,10 +5,12 @@ import '../models/persona.dart';
 import '../models/preset.dart';
 import '../models/chat_message.dart';
 import '../models/api_config.dart';
+import '../models/lorebook.dart';
 import 'macro_engine.dart';
 import 'history_assembler.dart';
 import 'context_calculator.dart';
 import 'tokenizer.dart';
+import 'lorebook_scanner.dart';
 
 const _stToInternalBlockId = <String, String>{
   'personaDescription': 'user_persona',
@@ -32,6 +34,9 @@ class PromptPayload {
   final Map<String, String> globalVars;
   final String? summaryContent;
   final String? summaryPrefix;
+  final List<Lorebook> lorebooks;
+  final LorebookGlobalSettings lorebookSettings;
+  final LorebookActivations lorebookActivations;
 
   const PromptPayload({
     required this.character,
@@ -43,6 +48,9 @@ class PromptPayload {
     this.globalVars = const {},
     this.summaryContent,
     this.summaryPrefix,
+    this.lorebooks = const [],
+    this.lorebookSettings = const LorebookGlobalSettings(),
+    this.lorebookActivations = const LorebookActivations(),
   });
 }
 
@@ -90,6 +98,44 @@ PromptResult buildPrompt(PromptPayload payload) {
 
   final depthBlocks = <_ResolvedDepthBlock>[];
   final relativeBlocks = <_ResolvedRelativeBlock>[];
+
+  final lastUserMsg = payload.history
+      .where((m) => m.role == 'user')
+      .lastOrNull;
+  final textToScan = lastUserMsg?.content ?? '';
+
+  final loreEntries = scanLorebooks(
+    history: payload.history,
+    char: char,
+    textToScan: textToScan,
+    chatId: null,
+    lorebooks: payload.lorebooks,
+    globalSettings: payload.lorebookSettings,
+    activations: payload.lorebookActivations,
+  );
+
+  final loreBefore = <PromptMessage>[];
+  final loreAfter = <PromptMessage>[];
+  final loreMacroBuffer = <String>[];
+
+  for (final entry in loreEntries) {
+    var content = replaceMacros(entry.content, macroCtx).text;
+    if (content.trim().isEmpty) continue;
+
+    final pos = entry.position == 'matchGlobal'
+        ? payload.lorebookSettings.injectionPosition
+        : entry.position;
+
+    if (pos == 'lorebooksMacro') {
+      loreMacroBuffer.add(content);
+    } else if (pos == 'worldInfoAfter') {
+      loreAfter.add(PromptMessage(role: 'system', content: content));
+    } else {
+      loreBefore.add(PromptMessage(role: 'system', content: content));
+    }
+  }
+
+  final macroLoreContent = loreMacroBuffer.join('\n\n');
 
 
 
@@ -153,7 +199,15 @@ PromptResult buildPrompt(PromptPayload payload) {
     isDepth: true,
   )).toList();
 
+  bool loreBeforeInjected = false;
+  bool loreAfterInjected = false;
+
   for (final block in relativeBlocks) {
+    if (!loreBeforeInjected) {
+      messages.addAll(loreBefore);
+      loreBeforeInjected = true;
+    }
+
     if (block.id == 'chat_history') {
       if (mergeBuffer != null) {
         messages.add(PromptMessage(
@@ -161,6 +215,11 @@ PromptResult buildPrompt(PromptPayload payload) {
           content: mergeBuffer,
         ));
         mergeBuffer = null;
+      }
+
+      if (!loreAfterInjected) {
+        messages.addAll(loreAfter);
+        loreAfterInjected = true;
       }
 
       debugPrint('VARS: Before history - session=${currentSessionVars.keys.toList()}, global=${currentGlobalVars.keys.toList()}');
@@ -186,8 +245,11 @@ PromptResult buildPrompt(PromptPayload payload) {
       final interleaved = interleaveDepthWithHistory(historyMsgs, resolvedDepthMsgs);
       messages.addAll(interleaved);
     } else {
-      final content = block.content.trim();
+      var content = block.content.trim();
       if (content.isEmpty) continue;
+
+      content = content
+          .replaceAll('{{lorebooks}}', macroLoreContent);
 
       if (preset.mergePrompts && block.role != 'assistant') {
         if (mergeBuffer != null) {
@@ -211,6 +273,9 @@ PromptResult buildPrompt(PromptPayload payload) {
       }
     }
   }
+
+  if (!loreBeforeInjected) messages.addAll(loreBefore);
+  if (!loreAfterInjected) messages.addAll(loreAfter);
 
   if (mergeBuffer != null) {
     messages.add(PromptMessage(
