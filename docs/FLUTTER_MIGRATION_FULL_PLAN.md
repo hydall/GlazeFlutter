@@ -1,10 +1,42 @@
 # Glaze Flutter Migration — Full Plan
 
-Two documents in one file:
-- **Part 1**: MVP (Day 1–18) — proves Flutter works, chat loops end-to-end
-- **Part 2**: Post-MVP (Day 19–50) — feature parity with current Glaze
+## Current Status (updated 2025-05-05)
 
-Go/No-Go checkpoint: **Day 18**. If chat streams on iOS without WKWebView bugs → continue. Otherwise → pivot.
+**Go/No-Go: PASSED.** Chat streams on all platforms. MVP core is production-quality.
+
+### Completed phases
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 0: Scaffold | Done | main, app, GoRouter, theme, shell |
+| Phase 1: Data Layer | Done | Drift (not Isar), 5 tables, 5 repos, Freezed models, providers, event_hub |
+| Phase 2: Chat + Import | Done | PNG/JSON/ZIP import, prompt builder in isolate, SSE streaming, abort, edit, branch |
+| Phase 3: Presets & Personas | Done | SillyTavern import, block/regex editor, persona CRUD, active selection |
+| Phase 5: Regex Runtime | Done | Applied in chat_provider during generation (placement/ephemerality/depth) |
+
+### Remaining phases (in priority order)
+
+| Phase | Priority | What's Missing |
+|-------|----------|----------------|
+| 2.5: JS Migration | High | Import .glz backup (keyvalue chats, characters, personas, presets, API configs) |
+| 4: Lorebooks | High | Model, scanner, UI, vector search |
+| 6: Chat Import/Export | Medium | ST JSONL import/export, PNG export, backup import |
+| 7: Image Generation | Low | Service, config, gallery, UI |
+| 8: Cloud Sync | Low | Crypto, adapters, manifest, engine, UI |
+| 9: Theme + Polish | Low (@hydall) | Theme engine, swipe, search, onboarding, crash recovery, notifications |
+| 10: CI/CD | Low | GitHub Actions, code signing |
+
+### Known stubs in current codebase
+
+- `chat_screen.dart` — 3 input bar buttons (image gen, fullscreen, auto) are decorative
+- `character_list_screen.dart` — search button no-op, Catalog tab "coming soon"
+- `tools_screen.dart` — Lorebooks "coming soon"
+- `menu_screen.dart` — Theme, Cloud Sync, Backups all "coming soon"
+- `tokenizer.dart` — heuristic (chars/3.35), no real BPE
+
+### Architecture note
+
+Plan originally specified **Isar**; actual implementation uses **Drift** (SQLite). This is intentional — Drift has better Windows support and doesn't require native binaries per platform. All model/DB references in this doc should be read as "Drift" instead of "Isar".
 
 ---
 
@@ -1279,37 +1311,43 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
 
 ---
 
-## Phase 2.5: Data Migration from JS Glaze (Day 17–18)
+## Phase 2.5: Data Migration from JS Glaze
 
-### Step 2.14: One-time migration tool
+### Context
 
-Create an export function in the JS app and an import function in Flutter.
+Glaze JS has `exportFullBackupAsync()` in `backupService.js` that produces a `.glz` JSON file containing all user data. We already import character cards (PNG/JSON/ZIP) via `CharacterImporter`. What's missing is importing the **full backup** which includes chats, personas, presets, API configs, and lorebooks stored in IDB keyvalue store.
 
-**JS side** (add to current Glaze):
-```js
-// New export endpoint: exports all DB + localStorage as a single JSON
-export async function exportForFlutterMigration() {
-  const data = {
-    _format: 'glaze_migration',
-    _version: 1,
-    exportedAt: Date.now(),
-    characters: await db.getAll('characters'),
-    chats: {},
-    personas: await db.getAll('personas'),
-    presets: JSON.parse(localStorage.getItem('silly_cradle_presets') || '{}'),
-    apiConfigs: await db.get('gz_api_connection_presets') || [],
-    lorebooks: await db.get('gz_lorebooks') || { lorebooks: [] },
-  };
+### Glaze JS backup format (.glz)
 
-  // Export all chats
-  const allChats = await db.getChats();
-  data.chats = allChats;
-
-  return JSON.stringify(data);
+```json
+{
+  "_isGlazeBackup": true,
+  "_glazeVersion": 1,
+  "keyvalue": {
+    "gz_chats_{charId}": { "sessions": { "0": [msg, ...], "1": [msg, ...] } },
+    "gz_api_connection_presets": [ { id, name, endpoint, key, model, temp, ... }, ... ],
+    "silly_cradle_presets": { "presets": [ { id, name, prompt_order, ... }, ... ] },
+    "gz_lorebooks": { "lorebooks": [ { id, name, entries, ... }, ... ] },
+    "gz_active_preset": "preset_id",
+    "gz_active_persona": "persona_id",
+    "gz_theme_state": { ... },
+    "gz_chat_recovery_{id}": { ... },
+    ...other keys
+  },
+  "characters": [ { id, name, avatar, description, ... }, ... ],
+  "personas": [ { id, name, prompt, avatar, ... }, ... ],
+  "localStorage": { "key": "value", ... }
 }
 ```
 
-**Flutter side**:
+### What we already handle
+
+- **Characters** from PNG/JSON/ZIP via `CharacterImporter` — but NOT from IDB format (data URL avatars, different field layout)
+- **Presets** from SillyTavern JSON via `PresetListScreen._parseSillyTavernPreset()` — but NOT from Glaze internal format (`silly_cradle_presets`)
+- **Personas** from IDB format — NOT handled yet
+
+### Step 2.14: Migration service
+
 ```dart
 // core/services/migration_service.dart
 class MigrationService {
@@ -1318,81 +1356,118 @@ class MigrationService {
   final PersonaRepo _personaRepo;
   final PresetRepo _presetRepo;
   final ApiConfigRepo _apiRepo;
-  final ImageStorage _imageStorage;
+  final ImageStorageService _imageStorage;
 
-  Future<MigrationResult> importFromGlazeJS(String jsonPath) async {
+  Future<MigrationResult> importGlzBackup(String jsonPath) async {
     final bytes = await File(jsonPath).readAsBytes();
     final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
 
-    // 1. Characters
-    for (final charJson in data['characters'] as List) {
-      final char = _mapCharacter(charJson);
-      // Decode data URL avatar → save file
-      if (charJson['avatar'] != null && charJson['avatar'].startsWith('data:')) {
-        final path = await _imageStorage.saveDataUrl(charJson['avatar'], 'avatars', char.id);
-        char = char.copyWith(avatarPath: path);
-      }
+    if (data['_isGlazeBackup'] != true) {
+      throw FormatException('Not a valid Glaze backup file');
+    }
+
+    final kv = Map<String, dynamic>.from(data['keyvalue'] ?? {});
+    final result = MigrationResult();
+
+    // 1. Characters (from IDB 'characters' store)
+    for (final charJson in data['characters'] as List? ?? []) {
+      final char = await _mapCharacter(charJson);
       await _charRepo.put(char);
+      result.characters++;
     }
 
-    // 2. Chats (map sessions + messages)
-    final chats = data['chats'] as Map<String, dynamic>;
-    for (final entry in chats.entries) {
-      final charId = entry.key;
-      final chatData = entry.value as Map<String, dynamic>;
-      final sessions = chatData['sessions'] as Map<String, dynamic>;
-      for (final sessionEntry in sessions.entries) {
-        final sessionIndex = int.parse(sessionEntry.key);
-        final messages = (sessionEntry.value as List).map(_mapMessage).toList();
-        final session = ChatSession(
-          id: '${charId}_$sessionIndex',
-          characterId: charId,
-          sessionIndex: sessionIndex,
-          messages: messages,
-        );
-        await _chatRepo.put(session);
+    // 2. Personas
+    for (final pJson in data['personas'] as List? ?? []) {
+      final persona = _mapPersona(pJson);
+      await _personaRepo.put(persona);
+      result.personas++;
+    }
+
+    // 3. Chats (from keyvalue, gz_chats_* keys)
+    for (final entry in kv.entries) {
+      if (entry.key.startsWith('gz_chats_')) {
+        final charId = entry.key.replaceFirst('gz_chats_', '');
+        final chatData = entry.value as Map<String, dynamic>;
+        final sessions = chatData['sessions'] as Map<String, dynamic>? ?? {};
+        for (final sessionEntry in sessions.entries) {
+          final sessionIndex = int.tryParse(sessionEntry.key) ?? 0;
+          final session = await _mapChatSession(charId, sessionIndex, sessionEntry.value);
+          await _chatRepo.put(session);
+          result.sessions++;
+        }
       }
     }
 
-    // 3. Personas
-    // 4. Presets
-    // 5. API configs
+    // 4. API configs (from keyvalue, gz_api_connection_presets)
+    final apiConfigs = kv['gz_api_connection_presets'];
+    if (apiConfigs is List) {
+      for (final cfgJson in apiConfigs) {
+        final config = _mapApiConfig(cfgJson);
+        await _apiRepo.put(config);
+        result.apiConfigs++;
+      }
+    }
 
-    return MigrationResult(characters: ..., chats: ...);
+    // 5. Presets (from keyvalue, silly_cradle_presets)
+    final presetsData = kv['silly_cradle_presets'];
+    if (presetsData is Map && presetsData['presets'] is List) {
+      for (final pJson in presetsData['presets']) {
+        final preset = _mapGlazePreset(pJson);
+        await _presetRepo.put(preset);
+        result.presets++;
+      }
+    }
+
+    // 6. Mark migration complete
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('gz_migration_done', true);
+
+    return result;
   }
-
-  Character _mapCharacter(Map<String, dynamic> json) => Character(
-    id: json['id'] ?? generateId(),
-    name: json['name'] ?? 'Unknown',
-    description: json['description'],
-    personality: json['personality'],
-    scenario: json['scenario'],
-    firstMes: json['first_mes'],
-    mesExample: json['mes_example'],
-    systemPrompt: json['system_prompt'],
-    tags: List<String>.from(json['tags'] ?? []),
-    alternateGreetings: List<String>.from(json['alternate_greetings'] ?? []),
-  );
-
-  ChatMessage _mapMessage(Map<String, dynamic> msg) => ChatMessage(
-    id: msg['id'] ?? generateId(),
-    role: msg['role'] == 'char' ? 'assistant' : (msg['role'] ?? 'user'),
-    content: msg['text'] ?? msg['mes'] ?? '',
-    timestamp: msg['timestamp'],
-    personaId: msg['persona']?['id'],
-    personaName: msg['persona']?['name'],
-    swipes: List<String>.from(msg['swipes'] ?? []),
-    swipeId: msg['swipeId'] ?? 0,
-    reasoning: msg['reasoning'],
-  );
 }
 ```
 
+### Key mapping details
+
+**Characters** (IDB → Flutter):
+- `avatar` is a data URL → decode to bytes → `ImageStorageService.saveAvatar()`
+- Field names already match (name, description, personality, scenario, first_mes, etc.)
+
+**Chat messages** (IDB → Flutter):
+- Message `role`: JS `'char'` → Dart `'assistant'`
+- Message `mes`/`text` → `content`
+- Message `persona.id`/`persona.name` → `personaId`/`personaName`
+- Message `swipes` → `swipes`, `swipe_id` → `swipeId`
+- Message `reasoning` → `reasoning`
+- Message `is_hidden` → hidden flag on ChatMessage
+
+**API configs** (IDB → Flutter):
+- `key` → `apiKey`
+- `temp` → `temperature`
+- `reasoningTags.start`/`end` → `reasoningTagStart`/`reasoningTagEnd`
+
+**Presets** (Glaze internal → Flutter):
+- `prompt_order` → convert to ordered `PresetBlock` list
+- `regex_scripts` → `List<PresetRegex>`
+- Same block structure as SillyTavern but already in Glaze format
+
+### Step 2.15: Migration UI
+
+Add a "Import from Glaze" button in the Menu/Tools screen that:
+1. Opens file picker filtered for `.glz` files
+2. Shows progress dialog during import
+3. Displays summary (X characters, Y chats, Z presets imported)
+4. Marks migration as done in SharedPreferences
+
 ### Deliverables Phase 2.5
-- [ ] JS export function added to current Glaze
-- [ ] Flutter migration service imports all data types
-- [ ] Data URLs decoded → files saved → paths stored
-- [ ] Existing Glaze users can migrate without data loss
+- [ ] `MigrationService` with .glz backup import
+- [ ] Character import from IDB format (data URL avatar → file)
+- [ ] Chat session import from gz_chats_* keyvalue entries
+- [ ] API config import
+- [ ] Preset import from Glaze internal format
+- [ ] Persona import
+- [ ] Migration UI in Menu/Tools
+- [ ] One-time migration flag in SharedPreferences
 
 ---
 
