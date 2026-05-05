@@ -2,17 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_scaffold.dart';
 
 class ToolsScreen extends StatelessWidget {
   const ToolsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => context.go('/menu')),
-        title: const Text('Tools'),
-      ),
+    return GlazeScaffold(
+      title: 'Tools',
+      onBack: () => context.go('/menu'),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         children: [
@@ -92,14 +91,14 @@ class _ToolTile extends StatelessWidget {
     return ListTile(
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: BorderSide(
-          color: Theme.of(context).colorScheme.outlineVariant,
-        ),
+        side: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
       ),
       leading: Icon(icon, color: color, size: 20),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle,
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
       trailing: const Icon(Icons.chevron_right, size: 18),
       onTap: onTap,
     );

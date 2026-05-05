@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_scaffold.dart';
 
 final chatHistoryProvider =
     AsyncNotifierProvider<ChatHistoryNotifier, List<ChatSessionInfo>>(
@@ -85,34 +86,52 @@ class ChatHistoryScreen extends ConsumerWidget {
     final sessions = ref.watch(chatHistoryProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Chats')),
-      body: sessions.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
-        data: (list) {
-          if (list.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.chat_bubble_outline,
-                      size: 64, color: AppColors.textSecondary),
-                  const SizedBox(height: 16),
-                  const Text('No chats yet'),
-                  const SizedBox(height: 8),
-                  FilledButton.tonal(
-                    onPressed: () => context.go('/characters'),
-                    child: const Text('Browse Characters'),
-                  ),
-                ],
+      backgroundColor: AppColors.background,
+      body: Column(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: GlazeAppBar(title: 'Chats'),
+            ),
+          ),
+          Expanded(
+            child: sessions.when(
+              loading: () => const Center(
+                child: CircularProgressIndicator(color: AppColors.accent),
               ),
-            );
-          }
-          return ListView.builder(
-            itemCount: list.length,
-            itemBuilder: (_, i) => _SessionTile(info: list[i]),
-          );
-        },
+              error: (e, _) => Center(child: Text('Error: $e')),
+              data: (list) {
+                if (list.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.chat_bubble_outline,
+                            size: 64,
+                            color: AppColors.textSecondary.withValues(alpha: 0.5)),
+                        const SizedBox(height: 16),
+                        const Text('No chats yet',
+                            style: TextStyle(color: AppColors.textSecondary)),
+                        const SizedBox(height: 20),
+                        GlazePillButton(
+                          icon: Icons.person_search_rounded,
+                          label: 'Browse Characters',
+                          onTap: () => context.go('/characters'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  itemCount: list.length,
+                  itemBuilder: (_, i) => _SessionTile(info: list[i]),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

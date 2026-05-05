@@ -4,10 +4,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/persona.dart';
 import '../../core/state/db_provider.dart';
+import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_scaffold.dart';
 
 final personaListProvider =
     AsyncNotifierProvider<PersonaListNotifier, List<Persona>>(
-        PersonaListNotifier.new);
+      PersonaListNotifier.new,
+    );
 
 class PersonaListNotifier extends AsyncNotifier<List<Persona>> {
   @override
@@ -33,17 +36,16 @@ class PersonaListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final personas = ref.watch(personaListProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => context.go('/tools')),
-        title: const Text('Personas'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => _showEditor(context, ref),
-          ),
-        ],
-      ),
+    return GlazeScaffold(
+      title: 'Personas',
+      onBack: () => context.go('/tools'),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.add),
+          color: AppColors.accent,
+          onPressed: () => _showEditor(context, ref),
+        ),
+      ],
       body: personas.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -89,8 +91,9 @@ class _PersonaTile extends ConsumerWidget {
       leading: CircleAvatar(
         radius: 14,
         child: Text(
-            persona.name.isNotEmpty ? persona.name[0].toUpperCase() : '?',
-            style: const TextStyle(fontSize: 12)),
+          persona.name.isNotEmpty ? persona.name[0].toUpperCase() : '?',
+          style: const TextStyle(fontSize: 12),
+        ),
       ),
       title: Text(persona.name),
       subtitle: persona.prompt != null && persona.prompt!.isNotEmpty
@@ -127,8 +130,12 @@ class _PersonaEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
-  late final _nameCtrl = TextEditingController(text: widget.existing?.name ?? '');
-  late final _promptCtrl = TextEditingController(text: widget.existing?.prompt ?? '');
+  late final _nameCtrl = TextEditingController(
+    text: widget.existing?.name ?? '',
+  );
+  late final _promptCtrl = TextEditingController(
+    text: widget.existing?.prompt ?? '',
+  );
 
   @override
   void dispose() {
@@ -139,16 +146,15 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.existing != null ? 'Edit Persona' : 'New Persona'),
-        actions: [
-          TextButton(
-            onPressed: _save,
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+    return GlazeScaffold(
+      title: widget.existing != null ? 'Edit Persona' : 'New Persona',
+      onBack: () => Navigator.of(context).pop(),
+      actions: [
+        TextButton(
+          onPressed: _save,
+          child: const Text('Save', style: TextStyle(color: Colors.white)),
+        ),
+      ],
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -164,7 +170,8 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
             controller: _promptCtrl,
             decoration: const InputDecoration(
               labelText: 'Persona Prompt',
-              hintText: 'Describe your persona — this gets injected into the prompt',
+              hintText:
+                  'Describe your persona — this gets injected into the prompt',
               alignLabelWithHint: true,
             ),
             maxLines: 12,
@@ -180,7 +187,8 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
     if (name.isEmpty) return;
 
     final persona = Persona(
-      id: widget.existing?.id ??
+      id:
+          widget.existing?.id ??
           DateTime.now().millisecondsSinceEpoch.toRadixString(36),
       name: name,
       prompt: _promptCtrl.text.trim().isEmpty ? null : _promptCtrl.text.trim(),

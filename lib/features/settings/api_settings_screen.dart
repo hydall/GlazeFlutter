@@ -5,10 +5,11 @@ import '../../core/llm/sse_client.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/models/api_config.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_scaffold.dart';
 
-final apiListProvider =
-    AsyncNotifierProvider<ApiListNotifier, List<ApiConfig>>(
-        ApiListNotifier.new);
+final apiListProvider = AsyncNotifierProvider<ApiListNotifier, List<ApiConfig>>(
+  ApiListNotifier.new,
+);
 
 class ApiListNotifier extends AsyncNotifier<List<ApiConfig>> {
   @override
@@ -34,21 +35,18 @@ class ApiSettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final configs = ref.watch(apiListProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => context.go('/tools')),
-        title: const Text('API Settings'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const ApiEditorScreen(),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return GlazeScaffold(
+      title: 'API Settings',
+      onBack: () => context.go('/tools'),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.add),
+          color: AppColors.accent,
+          onPressed: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const ApiEditorScreen())),
+        ),
+      ],
       body: configs.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -119,9 +117,7 @@ class _ApiConfigTile extends ConsumerWidget {
         ],
       ),
       onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ApiEditorScreen(config: config),
-        ),
+        MaterialPageRoute(builder: (_) => ApiEditorScreen(config: config)),
       ),
     );
   }
@@ -137,18 +133,23 @@ class ApiEditorScreen extends ConsumerStatefulWidget {
 
 class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
   late final _nameCtrl = TextEditingController(text: widget.config?.name ?? '');
-  late final _endpointCtrl =
-      TextEditingController(text: widget.config?.endpoint ?? '');
-  late final _keyCtrl = TextEditingController(text: widget.config?.apiKey ?? '');
+  late final _endpointCtrl = TextEditingController(
+    text: widget.config?.endpoint ?? '',
+  );
+  late final _keyCtrl = TextEditingController(
+    text: widget.config?.apiKey ?? '',
+  );
   late String _mode = widget.config?.mode ?? 'chat';
   String _selectedModel = '';
   List<Map<String, dynamic>> _fetchedModels = [];
   bool _isLoadingModels = false;
   String? _modelsError;
   late final _maxTokensCtrl = TextEditingController(
-      text: (widget.config?.maxTokens ?? 8000).toString());
+    text: (widget.config?.maxTokens ?? 8000).toString(),
+  );
   late final _contextSizeCtrl = TextEditingController(
-      text: (widget.config?.contextSize ?? 32000).toString());
+    text: (widget.config?.contextSize ?? 32000).toString(),
+  );
   late double _temperature = widget.config?.temperature ?? 0.7;
   late double _topP = widget.config?.topP ?? 0.9;
   late bool _stream = widget.config?.stream ?? true;
@@ -174,17 +175,15 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
   Widget build(BuildContext context) {
     final isChat = _mode == 'chat';
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
-        title: Text(widget.config != null ? 'Edit API Config' : 'New API Config'),
-        actions: [
-          TextButton(
-            onPressed: _save,
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+    return GlazeScaffold(
+      title: widget.config != null ? 'Edit API Config' : 'New API Config',
+      onBack: () => Navigator.of(context).pop(),
+      actions: [
+        TextButton(
+          onPressed: _save,
+          child: const Text('Save', style: TextStyle(color: Colors.white)),
+        ),
+      ],
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -206,7 +205,8 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
             controller: _endpointCtrl,
             decoration: const InputDecoration(
               labelText: 'Endpoint',
-              hintText: 'https://api.openai.com/v1  (chat/completions appended auto)',
+              hintText:
+                  'https://api.openai.com/v1  (chat/completions appended auto)',
               prefixIcon: Icon(Icons.link),
             ),
             onChanged: (_) {},
@@ -308,12 +308,12 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
       }
 
       return DropdownButtonFormField<String>(
-        initialValue: modelNames.contains(_selectedModel) ? _selectedModel : null,
+        initialValue: modelNames.contains(_selectedModel)
+            ? _selectedModel
+            : null,
         decoration: InputDecoration(
           labelText: _mode == 'chat' ? 'Chat Model' : 'Embedding Model',
-          prefixIcon: Icon(
-            _mode == 'chat' ? Icons.smart_toy : Icons.hub,
-          ),
+          prefixIcon: Icon(_mode == 'chat' ? Icons.smart_toy : Icons.hub),
         ),
         items: modelNames
             .map((m) => DropdownMenuItem(value: m, child: Text(m)))
@@ -332,9 +332,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
             controller: TextEditingController(text: _selectedModel),
             decoration: InputDecoration(
               labelText: _mode == 'chat' ? 'Chat Model' : 'Embedding Model',
-              prefixIcon: Icon(
-                _mode == 'chat' ? Icons.smart_toy : Icons.hub,
-              ),
+              prefixIcon: Icon(_mode == 'chat' ? Icons.smart_toy : Icons.hub),
             ),
             onChanged: (v) => _selectedModel = v,
           ),
@@ -342,7 +340,10 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
             padding: const EdgeInsets.only(top: 4, left: 12),
             child: Text(
               'Could not fetch models: $_modelsError',
-              style: TextStyle(fontSize: 12, color: Theme.of(context).colorScheme.error),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.error,
+              ),
             ),
           ),
         ],
@@ -354,9 +355,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
       decoration: InputDecoration(
         labelText: _mode == 'chat' ? 'Chat Model' : 'Embedding Model',
         hintText: 'gpt-4o',
-        prefixIcon: Icon(
-          _mode == 'chat' ? Icons.smart_toy : Icons.hub,
-        ),
+        prefixIcon: Icon(_mode == 'chat' ? Icons.smart_toy : Icons.hub),
         suffixIcon: IconButton(
           icon: const Icon(Icons.download, size: 20),
           tooltip: 'Fetch models from API',
@@ -411,8 +410,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
 
   Future<void> _save() async {
     final config = ApiConfig(
-      id: widget.config?.id ??
-          DateTime.now().millisecondsSinceEpoch.toString(),
+      id: widget.config?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
       name: _nameCtrl.text.trim(),
       endpoint: _endpointCtrl.text.trim(),
       apiKey: _keyCtrl.text.trim(),
@@ -437,7 +435,8 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('Fill in endpoint, API key, and model first')),
+            content: Text('Fill in endpoint, API key, and model first'),
+          ),
         );
       }
       return;
@@ -460,7 +459,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
           apiKey: apiKey,
           model: model,
           messages: [
-            {'role': 'user', 'content': 'Hi'}
+            {'role': 'user', 'content': 'Hi'},
           ],
           maxTokens: 8,
           temperature: 0.0,
@@ -487,7 +486,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
               modelExists
                   ? 'Connection successful! Model "$model" found.'
                   : 'Connected, but model "$model" not found. '
-                      'Available: ${models.take(5).map((m) => m['id']).join(', ')}${models.length > 5 ? '...' : ''}',
+                        'Available: ${models.take(5).map((m) => m['id']).join(', ')}${models.length > 5 ? '...' : ''}',
             ),
             backgroundColor: modelExists ? Colors.green : Colors.orange,
           ),
@@ -580,16 +579,17 @@ class _ModeChip extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon,
-                size: 18,
-                color: selected ? scheme.onPrimary : scheme.onSurfaceVariant),
+            Icon(
+              icon,
+              size: 18,
+              color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+            ),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontWeight: FontWeight.w600,
-                color:
-                    selected ? scheme.onPrimary : scheme.onSurfaceVariant,
+                color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
               ),
             ),
           ],

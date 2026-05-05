@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_scaffold.dart';
 
 class MenuScreen extends ConsumerWidget {
   const MenuScreen({super.key});
@@ -10,8 +11,18 @@ class MenuScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Menu')),
-      body: ListView(
+      backgroundColor: AppColors.background,
+      body: Column(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: GlazeAppBar(title: 'Menu'),
+            ),
+          ),
+          Expanded(
+            child: ListView(
         children: [
           _SectionHeader('Settings'),
           _MenuCard(
@@ -63,6 +74,9 @@ class MenuScreen extends ConsumerWidget {
             title: 'About',
             subtitle: 'Glaze v0.1.0-alpha',
             onTap: () => _showAbout(context),
+          ),
+        ],
+      ),
           ),
         ],
       ),

@@ -31,6 +31,10 @@ mixin _$ChatMessage {
   List<String> get swipes => throw _privateConstructorUsedError;
   int get swipeId => throw _privateConstructorUsedError;
   String? get reasoning => throw _privateConstructorUsedError;
+  bool get isHidden => throw _privateConstructorUsedError;
+  bool get isError => throw _privateConstructorUsedError;
+  String? get genTime => throw _privateConstructorUsedError;
+  int? get tokens => throw _privateConstructorUsedError;
 
   /// Serializes this ChatMessage to a JSON map.
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
@@ -60,6 +64,10 @@ abstract class $ChatMessageCopyWith<$Res> {
     List<String> swipes,
     int swipeId,
     String? reasoning,
+    bool isHidden,
+    bool isError,
+    String? genTime,
+    int? tokens,
   });
 }
 
@@ -88,6 +96,10 @@ class _$ChatMessageCopyWithImpl<$Res, $Val extends ChatMessage>
     Object? swipes = null,
     Object? swipeId = null,
     Object? reasoning = freezed,
+    Object? isHidden = null,
+    Object? isError = null,
+    Object? genTime = freezed,
+    Object? tokens = freezed,
   }) {
     return _then(
       _value.copyWith(
@@ -131,6 +143,22 @@ class _$ChatMessageCopyWithImpl<$Res, $Val extends ChatMessage>
                 ? _value.reasoning
                 : reasoning // ignore: cast_nullable_to_non_nullable
                       as String?,
+            isHidden: null == isHidden
+                ? _value.isHidden
+                : isHidden // ignore: cast_nullable_to_non_nullable
+                      as bool,
+            isError: null == isError
+                ? _value.isError
+                : isError // ignore: cast_nullable_to_non_nullable
+                      as bool,
+            genTime: freezed == genTime
+                ? _value.genTime
+                : genTime // ignore: cast_nullable_to_non_nullable
+                      as String?,
+            tokens: freezed == tokens
+                ? _value.tokens
+                : tokens // ignore: cast_nullable_to_non_nullable
+                      as int?,
           )
           as $Val,
     );
@@ -157,6 +185,10 @@ abstract class _$$ChatMessageImplCopyWith<$Res>
     List<String> swipes,
     int swipeId,
     String? reasoning,
+    bool isHidden,
+    bool isError,
+    String? genTime,
+    int? tokens,
   });
 }
 
@@ -184,6 +216,10 @@ class __$$ChatMessageImplCopyWithImpl<$Res>
     Object? swipes = null,
     Object? swipeId = null,
     Object? reasoning = freezed,
+    Object? isHidden = null,
+    Object? isError = null,
+    Object? genTime = freezed,
+    Object? tokens = freezed,
   }) {
     return _then(
       _$ChatMessageImpl(
@@ -227,6 +263,22 @@ class __$$ChatMessageImplCopyWithImpl<$Res>
             ? _value.reasoning
             : reasoning // ignore: cast_nullable_to_non_nullable
                   as String?,
+        isHidden: null == isHidden
+            ? _value.isHidden
+            : isHidden // ignore: cast_nullable_to_non_nullable
+                  as bool,
+        isError: null == isError
+            ? _value.isError
+            : isError // ignore: cast_nullable_to_non_nullable
+                  as bool,
+        genTime: freezed == genTime
+            ? _value.genTime
+            : genTime // ignore: cast_nullable_to_non_nullable
+                  as String?,
+        tokens: freezed == tokens
+            ? _value.tokens
+            : tokens // ignore: cast_nullable_to_non_nullable
+                  as int?,
       ),
     );
   }
@@ -246,6 +298,10 @@ class _$ChatMessageImpl implements _ChatMessage {
     final List<String> swipes = const [],
     this.swipeId = 0,
     this.reasoning,
+    this.isHidden = false,
+    this.isError = false,
+    this.genTime,
+    this.tokens,
   }) : _swipes = swipes;
 
   factory _$ChatMessageImpl.fromJson(Map<String, dynamic> json) =>
@@ -279,10 +335,20 @@ class _$ChatMessageImpl implements _ChatMessage {
   final int swipeId;
   @override
   final String? reasoning;
+  @override
+  @JsonKey()
+  final bool isHidden;
+  @override
+  @JsonKey()
+  final bool isError;
+  @override
+  final String? genTime;
+  @override
+  final int? tokens;
 
   @override
   String toString() {
-    return 'ChatMessage(id: $id, role: $role, content: $content, timestamp: $timestamp, personaId: $personaId, personaName: $personaName, imagePath: $imagePath, swipes: $swipes, swipeId: $swipeId, reasoning: $reasoning)';
+    return 'ChatMessage(id: $id, role: $role, content: $content, timestamp: $timestamp, personaId: $personaId, personaName: $personaName, imagePath: $imagePath, swipes: $swipes, swipeId: $swipeId, reasoning: $reasoning, isHidden: $isHidden, isError: $isError, genTime: $genTime, tokens: $tokens)';
   }
 
   @override
@@ -304,7 +370,12 @@ class _$ChatMessageImpl implements _ChatMessage {
             const DeepCollectionEquality().equals(other._swipes, _swipes) &&
             (identical(other.swipeId, swipeId) || other.swipeId == swipeId) &&
             (identical(other.reasoning, reasoning) ||
-                other.reasoning == reasoning));
+                other.reasoning == reasoning) &&
+            (identical(other.isHidden, isHidden) ||
+                other.isHidden == isHidden) &&
+            (identical(other.isError, isError) || other.isError == isError) &&
+            (identical(other.genTime, genTime) || other.genTime == genTime) &&
+            (identical(other.tokens, tokens) || other.tokens == tokens));
   }
 
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -321,6 +392,10 @@ class _$ChatMessageImpl implements _ChatMessage {
     const DeepCollectionEquality().hash(_swipes),
     swipeId,
     reasoning,
+    isHidden,
+    isError,
+    genTime,
+    tokens,
   );
 
   /// Create a copy of ChatMessage
@@ -349,6 +424,10 @@ abstract class _ChatMessage implements ChatMessage {
     final List<String> swipes,
     final int swipeId,
     final String? reasoning,
+    final bool isHidden,
+    final bool isError,
+    final String? genTime,
+    final int? tokens,
   }) = _$ChatMessageImpl;
 
   factory _ChatMessage.fromJson(Map<String, dynamic> json) =
@@ -374,6 +453,14 @@ abstract class _ChatMessage implements ChatMessage {
   int get swipeId;
   @override
   String? get reasoning;
+  @override
+  bool get isHidden;
+  @override
+  bool get isError;
+  @override
+  String? get genTime;
+  @override
+  int? get tokens;
 
   /// Create a copy of ChatMessage
   /// with the given fields replaced by the non-null parameter values.

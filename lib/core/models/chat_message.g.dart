@@ -22,6 +22,10 @@ _$ChatMessageImpl _$$ChatMessageImplFromJson(Map<String, dynamic> json) =>
           const [],
       swipeId: (json['swipeId'] as num?)?.toInt() ?? 0,
       reasoning: json['reasoning'] as String?,
+      isHidden: json['isHidden'] as bool? ?? false,
+      isError: json['isError'] as bool? ?? false,
+      genTime: json['genTime'] as String?,
+      tokens: (json['tokens'] as num?)?.toInt(),
     );
 
 Map<String, dynamic> _$$ChatMessageImplToJson(_$ChatMessageImpl instance) =>
@@ -36,6 +40,10 @@ Map<String, dynamic> _$$ChatMessageImplToJson(_$ChatMessageImpl instance) =>
       'swipes': instance.swipes,
       'swipeId': instance.swipeId,
       'reasoning': instance.reasoning,
+      'isHidden': instance.isHidden,
+      'isError': instance.isError,
+      'genTime': instance.genTime,
+      'tokens': instance.tokens,
     };
 
 _$ChatSessionImpl _$$ChatSessionImplFromJson(Map<String, dynamic> json) =>

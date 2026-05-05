@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/character.dart';
 import '../../core/state/db_provider.dart';
+import '../../shared/widgets/glaze_scaffold.dart';
 
 class CharacterDetailScreen extends ConsumerWidget {
   final String charId;
@@ -14,45 +15,49 @@ class CharacterDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => context.go('/characters')),
-        title: const Text('Character Info'),
-      ),
-      body: FutureBuilder<Character?>(
-        future: ref.read(characterRepoProvider).getById(charId),
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final char = snap.data;
-          if (char == null) {
-            return const Center(child: Text('Character not found'));
-          }
-          return _CharacterDetailView(character: char);
-        },
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: FilledButton.icon(
-                  onPressed: () => context.go('/chat/$charId'),
-                  icon: const Icon(Icons.chat_bubble),
-                  label: const Text('Start Chat'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: () => context.go('/character/$charId/edit'),
-                icon: const Icon(Icons.edit),
-                label: const Text('Edit'),
-              ),
-            ],
+    return GlazeScaffold(
+      title: 'Character Info',
+      onBack: () => context.go('/characters'),
+      body: Column(
+        children: [
+          Expanded(
+            child: FutureBuilder<Character?>(
+              future: ref.read(characterRepoProvider).getById(charId),
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final char = snap.data;
+                if (char == null) {
+                  return const Center(child: Text('Character not found'));
+                }
+                return _CharacterDetailView(character: char);
+              },
+            ),
           ),
-        ),
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: () => context.go('/chat/$charId'),
+                      icon: const Icon(Icons.chat_bubble),
+                      label: const Text('Start Chat'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => context.go('/character/$charId/edit'),
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Edit'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -75,14 +80,19 @@ class _CharacterDetailView extends StatelessWidget {
               children: [
                 _buildAvatar(context, 96),
                 const SizedBox(height: 12),
-                Text(character.name,
-                    style: theme.textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.bold)),
-                if (character.creator != null &&
-                    character.creator!.isNotEmpty)
-                  Text('by ${character.creator}',
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                Text(
+                  character.name,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (character.creator != null && character.creator!.isNotEmpty)
+                  Text(
+                    'by ${character.creator}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -94,10 +104,12 @@ class _CharacterDetailView extends StatelessWidget {
               spacing: 6,
               runSpacing: 4,
               children: character.tags
-                  .map((t) => Chip(
-                        label: Text(t, style: const TextStyle(fontSize: 12)),
-                        visualDensity: VisualDensity.compact,
-                      ))
+                  .map(
+                    (t) => Chip(
+                      label: Text(t, style: const TextStyle(fontSize: 12)),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  )
                   .toList(),
             ),
             const SizedBox(height: 16),
@@ -116,15 +128,13 @@ class _CharacterDetailView extends StatelessWidget {
             _ExpandableText(character.personality!),
             const SizedBox(height: 16),
           ],
-          if (character.scenario != null &&
-              character.scenario!.isNotEmpty) ...[
+          if (character.scenario != null && character.scenario!.isNotEmpty) ...[
             _SectionLabel('Scenario'),
             const SizedBox(height: 4),
             _ExpandableText(character.scenario!),
             const SizedBox(height: 16),
           ],
-          if (character.firstMes != null &&
-              character.firstMes!.isNotEmpty) ...[
+          if (character.firstMes != null && character.firstMes!.isNotEmpty) ...[
             _SectionLabel('First Message'),
             const SizedBox(height: 4),
             _ExpandableText(character.firstMes!),
@@ -190,11 +200,13 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.w600,
-            ));
+    return Text(
+      text,
+      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+        color: Theme.of(context).colorScheme.primary,
+        fontWeight: FontWeight.w600,
+      ),
+    );
   }
 }
 

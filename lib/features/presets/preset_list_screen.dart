@@ -10,10 +10,12 @@ import 'package:path/path.dart' as p;
 import '../../core/models/preset.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_scaffold.dart';
 
 final presetListProvider =
     AsyncNotifierProvider<PresetListNotifier, List<Preset>>(
-        PresetListNotifier.new);
+      PresetListNotifier.new,
+    );
 
 class PresetListNotifier extends AsyncNotifier<List<Preset>> {
   @override
@@ -39,25 +41,23 @@ class PresetListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final presets = ref.watch(presetListProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => context.go('/tools')),
-        title: const Text('Presets'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.file_upload),
-            onPressed: () => _importPreset(context, ref),
-          ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => const PresetEditorScreen(),
-              ),
-            ),
-          ),
-        ],
-      ),
+    return GlazeScaffold(
+      title: 'Presets',
+      onBack: () => context.go('/tools'),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.file_upload),
+          color: AppColors.accent,
+          onPressed: () => _importPreset(context, ref),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add),
+          color: AppColors.accent,
+          onPressed: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => const PresetEditorScreen())),
+        ),
+      ],
       body: presets.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -100,7 +100,9 @@ class PresetListScreen extends ConsumerWidget {
     }
 
     final picked = result.files.first;
-    debugPrint('IMPORT: picked "${picked.name}", bytes=${picked.bytes?.length}, path=${picked.path}');
+    debugPrint(
+      'IMPORT: picked "${picked.name}", bytes=${picked.bytes?.length}, path=${picked.path}',
+    );
 
     String jsonString;
     if (picked.bytes != null) {
@@ -110,9 +112,9 @@ class PresetListScreen extends ConsumerWidget {
     } else {
       debugPrint('IMPORT: no bytes and no path');
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Cannot read file')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Cannot read file')));
       }
       return;
     }
@@ -121,19 +123,25 @@ class PresetListScreen extends ConsumerWidget {
       final json = jsonDecode(jsonString) as Map<String, dynamic>;
       debugPrint('IMPORT: json parsed, keys=${json.keys.toList()}');
       final preset = _parseSillyTavernPreset(json, picked.name);
-      debugPrint('IMPORT: parsed ${preset.blocks.length} blocks, ${preset.regexes.length} regexes');
+      debugPrint(
+        'IMPORT: parsed ${preset.blocks.length} blocks, ${preset.regexes.length} regexes',
+      );
       await ref.read(presetListProvider.notifier).add(preset);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Imported "${preset.name}" (${preset.blocks.length} blocks)')),
+          SnackBar(
+            content: Text(
+              'Imported "${preset.name}" (${preset.blocks.length} blocks)',
+            ),
+          ),
         );
       }
     } catch (e, st) {
       debugPrint('IMPORT ERROR: $e\n$st');
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
       }
     }
   }
@@ -184,19 +192,24 @@ class PresetListScreen extends ConsumerWidget {
         } else {
           insertionMode = 'relative';
         }
-        final rawId = p['identifier'] as String? ?? p['id'] as String? ?? 'imported_b$i';
+        final rawId =
+            p['identifier'] as String? ?? p['id'] as String? ?? 'imported_b$i';
         final blockName = (p['name'] as String?) ?? 'Block $i';
         final normalizedId = _normalizeImportedBlockId(rawId, blockName);
-        debugPrint('IMPORT: block rawId="$rawId" name="$blockName" → normalizedId="$normalizedId" marker=${p['marker']}');
-        blocks.add(PresetBlock(
-          id: normalizedId,
-          name: blockName,
-          role: (p['role'] as String?) ?? 'system',
-          content: (p['content'] as String?) ?? '',
-          enabled: p['enabled'] as bool? ?? true,
-          insertionMode: insertionMode,
-          depth: depth,
-        ));
+        debugPrint(
+          'IMPORT: block rawId="$rawId" name="$blockName" → normalizedId="$normalizedId" marker=${p['marker']}',
+        );
+        blocks.add(
+          PresetBlock(
+            id: normalizedId,
+            name: blockName,
+            role: (p['role'] as String?) ?? 'system',
+            content: (p['content'] as String?) ?? '',
+            enabled: p['enabled'] as bool? ?? true,
+            insertionMode: insertionMode,
+            depth: depth,
+          ),
+        );
       }
     }
 
@@ -208,23 +221,29 @@ class PresetListScreen extends ConsumerWidget {
     if (regexSource != null) {
       for (int i = 0; i < regexSource.length; i++) {
         final r = regexSource[i] as Map<String, dynamic>;
-        regexes.add(PresetRegex(
-          id: r['id'] as String? ?? 'imported_r$i',
-          name: (r['scriptName'] as String?) ?? 'Regex $i',
-          regex: (r['findRegex'] as String?) ?? '',
-          replacement: (r['replaceString'] as String?) ?? '',
-          placement: (r['placement'] as List<dynamic>?)
-                  ?.map((e) => e as int)
-                  .toList() ??
-              [1, 2],
-          disabled: !(r['isEnabled'] as bool? ?? !((r['disabled'] as bool?) ?? false)),
-          ephemerality: (r['ephemerality'] as List<dynamic>?)
-                  ?.map((e) => e as int)
-                  .toList() ??
-              [1, 2],
-          minDepth: r['minDepth'] as int?,
-          maxDepth: r['maxDepth'] as int?,
-        ));
+        regexes.add(
+          PresetRegex(
+            id: r['id'] as String? ?? 'imported_r$i',
+            name: (r['scriptName'] as String?) ?? 'Regex $i',
+            regex: (r['findRegex'] as String?) ?? '',
+            replacement: (r['replaceString'] as String?) ?? '',
+            placement:
+                (r['placement'] as List<dynamic>?)
+                    ?.map((e) => e as int)
+                    .toList() ??
+                [1, 2],
+            disabled:
+                !(r['isEnabled'] as bool? ??
+                    !((r['disabled'] as bool?) ?? false)),
+            ephemerality:
+                (r['ephemerality'] as List<dynamic>?)
+                    ?.map((e) => e as int)
+                    .toList() ??
+                [1, 2],
+            minDepth: r['minDepth'] as int?,
+            maxDepth: r['maxDepth'] as int?,
+          ),
+        );
       }
     }
 
@@ -234,7 +253,9 @@ class PresetListScreen extends ConsumerWidget {
       blocks: blocks,
       regexes: regexes,
       reasoningEnabled:
-          json['reasoning'] as bool? ?? json['reasoning_enabled'] as bool? ?? false,
+          json['reasoning'] as bool? ??
+          json['reasoning_enabled'] as bool? ??
+          false,
       createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
   }
@@ -302,21 +323,29 @@ class _PresetTile extends ConsumerWidget {
     try {
       final exportJson = <String, dynamic>{
         'name': preset.name,
-        'prompts': preset.blocks.map((b) => <String, dynamic>{
-          'name': b.name,
-          'role': b.role,
-          'content': b.content,
-          'enabled': b.enabled,
-          'insertion_mode': b.insertionMode,
-          if (b.depth != null) 'depth': b.depth,
-        }).toList(),
-        'regexes': preset.regexes.map((r) => <String, dynamic>{
-          'scriptName': r.name,
-          'findRegex': r.regex,
-          'replaceString': r.replacement,
-          'placement': r.placement,
-          'isEnabled': !r.disabled,
-        }).toList(),
+        'prompts': preset.blocks
+            .map(
+              (b) => <String, dynamic>{
+                'name': b.name,
+                'role': b.role,
+                'content': b.content,
+                'enabled': b.enabled,
+                'insertion_mode': b.insertionMode,
+                if (b.depth != null) 'depth': b.depth,
+              },
+            )
+            .toList(),
+        'regexes': preset.regexes
+            .map(
+              (r) => <String, dynamic>{
+                'scriptName': r.name,
+                'findRegex': r.regex,
+                'replaceString': r.replacement,
+                'placement': r.placement,
+                'isEnabled': !r.disabled,
+              },
+            )
+            .toList(),
         'reasoning': preset.reasoningEnabled,
       };
 
@@ -391,9 +420,11 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen>
   late List<PresetRegex> _regexes;
   late bool _reasoningEnabled;
   late final _reasoningStartCtrl = TextEditingController(
-      text: widget.preset?.reasoningStart ?? '');
+    text: widget.preset?.reasoningStart ?? '',
+  );
   late final _reasoningEndCtrl = TextEditingController(
-      text: widget.preset?.reasoningEnd ?? '');
+    text: widget.preset?.reasoningEnd ?? '',
+  );
 
   late final _tabController = TabController(length: 2, vsync: this);
 
@@ -416,26 +447,30 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
-        title: Text(widget.preset != null ? 'Edit Preset' : 'New Preset'),
-        actions: [
-          TextButton(
-            onPressed: _save,
-            child: const Text('Save'),
-          ),
-        ],
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [Tab(text: 'Blocks'), Tab(text: 'Regex')],
+    return GlazeScaffold(
+      title: widget.preset != null ? 'Edit Preset' : 'New Preset',
+      onBack: () => Navigator.of(context).pop(),
+      actions: [
+        TextButton(
+          onPressed: _save,
+          child: const Text('Save', style: TextStyle(color: Colors.white)),
         ),
-      ),
-      body: TabBarView(
-        controller: _tabController,
+      ],
+      body: Column(
         children: [
-          _buildBlocksTab(),
-          _buildRegexTab(),
+          TabBar(
+            controller: _tabController,
+            tabs: const [
+              Tab(text: 'Blocks'),
+              Tab(text: 'Regex'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [_buildBlocksTab(), _buildRegexTab()],
+            ),
+          ),
         ],
       ),
     );
@@ -466,15 +501,17 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen>
                   child: TextField(
                     controller: _reasoningStartCtrl,
                     decoration: const InputDecoration(
-                        labelText: 'Reasoning Start Tag'),
+                      labelText: 'Reasoning Start Tag',
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _reasoningEndCtrl,
-                    decoration:
-                        const InputDecoration(labelText: 'Reasoning End Tag'),
+                    decoration: const InputDecoration(
+                      labelText: 'Reasoning End Tag',
+                    ),
                   ),
                 ),
               ],
@@ -531,8 +568,11 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen>
         Expanded(
           child: _regexes.isEmpty
               ? Center(
-                  child: Text('No regex scripts',
-                      style: TextStyle(color: AppColors.textSecondary)))
+                  child: Text(
+                    'No regex scripts',
+                    style: TextStyle(color: AppColors.textSecondary),
+                  ),
+                )
               : ListView.builder(
                   itemCount: _regexes.length,
                   itemBuilder: (_, i) => Dismissible(
@@ -566,22 +606,26 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen>
 
   void _addBlock() {
     setState(() {
-      _blocks.add(PresetBlock(
-        id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
-        name: 'Block ${_blocks.length + 1}',
-        role: 'system',
-        content: '',
-      ));
+      _blocks.add(
+        PresetBlock(
+          id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+          name: 'Block ${_blocks.length + 1}',
+          role: 'system',
+          content: '',
+        ),
+      );
     });
   }
 
   void _addRegex() {
     setState(() {
-      _regexes.add(PresetRegex(
-        id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
-        name: 'Regex ${_regexes.length + 1}',
-        regex: '',
-      ));
+      _regexes.add(
+        PresetRegex(
+          id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+          name: 'Regex ${_regexes.length + 1}',
+          regex: '',
+        ),
+      );
     });
   }
 
@@ -590,7 +634,8 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen>
     if (name.isEmpty) return;
 
     final preset = Preset(
-      id: widget.preset?.id ??
+      id:
+          widget.preset?.id ??
           DateTime.now().millisecondsSinceEpoch.toRadixString(36),
       name: name,
       author: widget.preset?.author,
@@ -599,7 +644,8 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen>
       reasoningEnabled: _reasoningEnabled,
       reasoningStart: _reasoningEnabled ? _reasoningStartCtrl.text : null,
       reasoningEnd: _reasoningEnabled ? _reasoningEndCtrl.text : null,
-      createdAt: widget.preset?.createdAt ??
+      createdAt:
+          widget.preset?.createdAt ??
           DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
 
@@ -625,8 +671,11 @@ class _BlockTile extends StatelessWidget {
             onChanged: (v) => onChanged(block.copyWith(enabled: v)),
           ),
           Expanded(
-            child: Text(block.name,
-                maxLines: 1, overflow: TextOverflow.ellipsis),
+            child: Text(
+              block.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
           _roleChip(),
         ],
@@ -643,10 +692,15 @@ class _BlockTile extends StatelessWidget {
                       initialValue: block.role,
                       decoration: const InputDecoration(labelText: 'Role'),
                       items: const [
-                        DropdownMenuItem(value: 'system', child: Text('System')),
+                        DropdownMenuItem(
+                          value: 'system',
+                          child: Text('System'),
+                        ),
                         DropdownMenuItem(value: 'user', child: Text('User')),
                         DropdownMenuItem(
-                            value: 'assistant', child: Text('Assistant')),
+                          value: 'assistant',
+                          child: Text('Assistant'),
+                        ),
                       ],
                       onChanged: (v) {
                         if (v != null) onChanged(block.copyWith(role: v));
@@ -702,8 +756,14 @@ class _BlockTile extends StatelessWidget {
         color: color.withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(block.role,
-          style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+      child: Text(
+        block.role,
+        style: TextStyle(
+          fontSize: 11,
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }
@@ -724,8 +784,11 @@ class _RegexTile extends StatelessWidget {
             onChanged: (v) => onChanged(regex.copyWith(disabled: !v)),
           ),
           Expanded(
-            child: Text(regex.name,
-                maxLines: 1, overflow: TextOverflow.ellipsis),
+            child: Text(
+              regex.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -748,8 +811,7 @@ class _RegexTile extends StatelessWidget {
               const SizedBox(height: 8),
               TextFormField(
                 initialValue: regex.replacement,
-                decoration:
-                    const InputDecoration(labelText: 'Replace with'),
+                decoration: const InputDecoration(labelText: 'Replace with'),
                 onChanged: (v) => onChanged(regex.copyWith(replacement: v)),
               ),
             ],

@@ -13,7 +13,8 @@ import '../../core/state/db_provider.dart';
 
 final chatProvider =
     AsyncNotifierProvider.family<ChatNotifier, ChatState, String>(
-        ChatNotifier.new);
+      ChatNotifier.new,
+    );
 
 class ChatState {
   final ChatSession? session;
@@ -85,12 +86,14 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         sessionId: '${arg}_0',
       );
       final resolved = replaceMacros(character.firstMes!, macroCtx);
-      initialMessages.add(ChatMessage(
-        id: _generateId(),
-        role: 'assistant',
-        content: resolved.text,
-        timestamp: DateTime.now().millisecondsSinceEpoch,
-      ));
+      initialMessages.add(
+        ChatMessage(
+          id: _generateId(),
+          role: 'assistant',
+          content: resolved.text,
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
     }
 
     final newSession = ChatSession(
@@ -136,21 +139,25 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
       final character = await charRepo.getById(arg);
       if (character == null) {
-        state = AsyncData(ChatState(
-          session: session,
-          isGenerating: false,
-          error: 'Character not found',
-        ));
+        state = AsyncData(
+          ChatState(
+            session: session,
+            isGenerating: false,
+            error: 'Character not found',
+          ),
+        );
         return;
       }
 
       final apiConfigs = await apiConfigRepo.getAll();
       if (apiConfigs.isEmpty) {
-        state = AsyncData(ChatState(
-          session: session,
-          isGenerating: false,
-          error: 'No API config',
-        ));
+        state = AsyncData(
+          ChatState(
+            session: session,
+            isGenerating: false,
+            error: 'No API config',
+          ),
+        );
         return;
       }
       final apiConfig = apiConfigs.first;
@@ -164,10 +171,17 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
           : (presets.isNotEmpty ? presets.first : null);
 
       if (preset != null) {
-        final hasChatHistory = preset.blocks.any((b) => b.id == 'chat_history' || b.id == 'chatHistory');
-        debugPrint('CHAT: preset "${preset.name}" loaded, blocks=${preset.blocks.length}, hasChatHistory=$hasChatHistory');
+        final hasChatHistory = preset.blocks.any(
+          (b) => b.id == 'chat_history' || b.id == 'chatHistory',
+        );
+        debugPrint(
+          'CHAT: preset "${preset.name}" loaded, blocks=${preset.blocks.length}, hasChatHistory=$hasChatHistory',
+        );
         if (!hasChatHistory) {
-          final last10 = preset.blocks.reversed.take(10).map((b) => '${b.id}(${b.name})').toList();
+          final last10 = preset.blocks.reversed
+              .take(10)
+              .map((b) => '${b.id}(${b.name})')
+              .toList();
           debugPrint('CHAT: last 10 blocks: $last10');
         }
       }
@@ -187,12 +201,16 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         globalVars: ref.read(globalVarsProvider),
       );
 
-      debugPrint('CHAT: building prompt for "${character.name}", '
-          'history=${session.messages.length}, preset=${preset?.name ?? "none"}');
+      debugPrint(
+        'CHAT: building prompt for "${character.name}", '
+        'history=${session.messages.length}, preset=${preset?.name ?? "none"}',
+      );
 
       final promptResult = await buildPromptInIsolate(payload);
 
-      debugPrint('CHAT: prompt built, ${promptResult.messages.length} messages');
+      debugPrint(
+        'CHAT: prompt built, ${promptResult.messages.length} messages',
+      );
 
       if (promptResult.sessionVars.isNotEmpty ||
           promptResult.globalVars.isNotEmpty) {
@@ -214,7 +232,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
           .where((m) => m.content.trim().isNotEmpty)
           .map((m) => m.toApiMap())
           .toList();
-      debugPrint('CHAT: sending ${apiMessages.length} messages to ${apiConfig.endpoint}');
+      debugPrint(
+        'CHAT: sending ${apiMessages.length} messages to ${apiConfig.endpoint}',
+      );
       for (int i = 0; i < apiMessages.length; i++) {
         final m = apiMessages[i];
         final preview = m['content']!.length > 80
@@ -223,6 +243,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         debugPrint('  [$i] ${m['role']}: $preview');
       }
 
+      final startGenTime = DateTime.now();
       final sseClient = SseClient();
       await sseClient.streamChatCompletion(
         endpoint: apiConfig.endpoint,
@@ -237,37 +258,50 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         requestReasoning: apiConfig.requestReasoning,
         onUpdate: (delta, reasoningDelta) {
           accumulator.consumeDelta(delta, reasoningDelta: reasoningDelta);
-          state = AsyncData(ChatState(
-            session: session,
-            isGenerating: true,
-            streamingText: accumulator.text,
-            streamingReasoning: accumulator.reasoning.isNotEmpty
-                ? accumulator.reasoning
-                : null,
-          ));
+          state = AsyncData(
+            ChatState(
+              session: session,
+              isGenerating: true,
+              streamingText: accumulator.text,
+              streamingReasoning: accumulator.reasoning.isNotEmpty
+                  ? accumulator.reasoning
+                  : null,
+            ),
+          );
         },
         onComplete: (text, reasoning) {
-          _saveAssistantMessage(text, reasoning, session);
+          final elapsed = DateTime.now()
+              .difference(startGenTime)
+              .inMilliseconds;
+          final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
+          final tokenCount = (text.length / 4).round();
+          _saveAssistantMessage(
+            text,
+            reasoning,
+            session,
+            genTime: timeStr,
+            tokens: tokenCount,
+          );
         },
         onError: (error) {
           final partialText = accumulator.text;
           if (partialText.isNotEmpty) {
             _saveAssistantMessage(partialText, null, session);
           } else {
-            state = AsyncData(ChatState(
-              session: session,
-              isGenerating: false,
-              error: error.toString(),
-            ));
+            state = AsyncData(
+              ChatState(
+                session: session,
+                isGenerating: false,
+                error: error.toString(),
+              ),
+            );
           }
         },
       );
     } catch (e) {
-      state = AsyncData(ChatState(
-        session: session,
-        isGenerating: false,
-        error: e.toString(),
-      ));
+      state = AsyncData(
+        ChatState(session: session, isGenerating: false, error: e.toString()),
+      );
     }
   }
 
@@ -317,12 +351,14 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         sessionId: current.session!.id,
       );
       final resolved = replaceMacros(character.firstMes!, macroCtx);
-      initialMessages.add(ChatMessage(
-        id: _generateId(),
-        role: 'assistant',
-        content: resolved.text,
-        timestamp: DateTime.now().millisecondsSinceEpoch,
-      ));
+      initialMessages.add(
+        ChatMessage(
+          id: _generateId(),
+          role: 'assistant',
+          content: resolved.text,
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
     }
 
     final clearedSession = current.session!.copyWith(messages: initialMessages);
@@ -367,7 +403,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
   Future<void> regenerateLastAssistant() async {
     final current = state.value;
-    if (current == null || current.session == null || current.isGenerating) return;
+    if (current == null || current.session == null || current.isGenerating)
+      return;
 
     final messages = current.messages;
     if (messages.isEmpty) return;
@@ -390,13 +427,17 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   Future<void> _saveAssistantMessage(
     String text,
     String? reasoning,
-    ChatSession currentSession,
-  ) async {
+    ChatSession currentSession, {
+    String? genTime,
+    int? tokens,
+  }) async {
     final assistantMsg = ChatMessage(
       id: _generateId(),
       role: 'assistant',
       content: text,
       reasoning: reasoning,
+      genTime: genTime,
+      tokens: tokens,
       timestamp: DateTime.now().millisecondsSinceEpoch,
     );
     final finalMessages = [...currentSession.messages, assistantMsg];
@@ -410,6 +451,85 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     );
     await ref.read(chatRepoProvider).put(finalSession);
     state = AsyncData(ChatState(session: finalSession));
+  }
+
+  Future<void> toggleMessageHidden(int index) async {
+    final current = state.value;
+    if (current == null || current.session == null) return;
+    if (index < 0 || index >= current.messages.length) return;
+
+    final msg = current.messages[index];
+    final updated = msg.copyWith(isHidden: !msg.isHidden);
+
+    final newMessages = List<ChatMessage>.from(current.messages);
+    newMessages[index] = updated;
+
+    final newSession = current.session!.copyWith(
+      messages: newMessages,
+      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    );
+    await ref.read(chatRepoProvider).put(newSession);
+    state = AsyncData(ChatState(session: newSession));
+  }
+
+  Future<void> unhideAllMessages() async {
+    final current = state.value;
+    if (current == null || current.session == null) return;
+
+    bool changed = false;
+    final newMessages = current.messages.map((m) {
+      if (m.isHidden) {
+        changed = true;
+        return m.copyWith(isHidden: false);
+      }
+      return m;
+    }).toList();
+
+    if (!changed) {
+      return;
+    }
+
+    final newSession = current.session!.copyWith(
+      messages: newMessages,
+      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    );
+    await ref.read(chatRepoProvider).put(newSession);
+    state = AsyncData(ChatState(session: newSession));
+  }
+
+  Future<void> branchSession(int index) async {
+    final current = state.value;
+    if (current == null || current.session == null) return;
+    if (index < 0 || index >= current.messages.length) return;
+
+    if (current.isGenerating) {
+      abortGeneration();
+    }
+
+    final repo = ref.read(chatRepoProvider);
+    final sessions = await repo.getByCharacterId(arg);
+
+    int maxIdx = 0;
+    for (final s in sessions) {
+      if (s.sessionIndex > maxIdx) maxIdx = s.sessionIndex;
+    }
+
+    final newSessionIndex = maxIdx + 1;
+    final newSessionId = '${arg}_$newSessionIndex';
+
+    final branchedMessages = current.messages.sublist(0, index + 1);
+
+    final newSession = ChatSession(
+      id: newSessionId,
+      characterId: arg,
+      sessionIndex: newSessionIndex,
+      messages: branchedMessages,
+      sessionVars: current.session!.sessionVars,
+      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    );
+
+    await repo.put(newSession);
+    state = AsyncData(ChatState(session: newSession));
   }
 
   String _generateId() {

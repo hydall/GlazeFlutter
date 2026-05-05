@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_scaffold.dart';
 import 'app_settings_provider.dart';
 
 class AppSettingsScreen extends ConsumerWidget {
@@ -12,11 +13,9 @@ class AppSettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settingsAsync = ref.watch(appSettingsProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => context.go('/menu')),
-        title: const Text('App Settings'),
-      ),
+    return GlazeScaffold(
+      title: 'App Settings',
+      onBack: () => context.go('/menu'),
       body: settingsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -25,8 +24,9 @@ class AppSettingsScreen extends ConsumerWidget {
             _SectionHeader('Input'),
             SwitchListTile(
               title: const Text('Enter to Send'),
-              subtitle:
-                  const Text('Enter key sends message instead of new line'),
+              subtitle: const Text(
+                'Enter key sends message instead of new line',
+              ),
               value: s.enterToSend,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
@@ -37,8 +37,9 @@ class AppSettingsScreen extends ConsumerWidget {
               title: const Text('Bubble Layout'),
               subtitle: const Text('Show messages as chat bubbles'),
               value: s.chatLayout == 'bubble',
-              onChanged: (v) => ref.read(appSettingsProvider.notifier).save(
-                  s.copyWith(chatLayout: v ? 'bubble' : 'default')),
+              onChanged: (v) => ref
+                  .read(appSettingsProvider.notifier)
+                  .save(s.copyWith(chatLayout: v ? 'bubble' : 'default')),
             ),
             SwitchListTile(
               title: const Text('Group Dialogs'),
@@ -50,8 +51,9 @@ class AppSettingsScreen extends ConsumerWidget {
             ),
             SwitchListTile(
               title: const Text('Disable Swipe Regeneration'),
-              subtitle:
-                  const Text('Disable swipe left/right for alternative responses'),
+              subtitle: const Text(
+                'Disable swipe left/right for alternative responses',
+              ),
               value: s.disableSwipeRegeneration,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
@@ -108,8 +110,7 @@ class AppSettingsScreen extends ConsumerWidget {
     );
   }
 
-  void _showLanguagePicker(
-      BuildContext context, WidgetRef ref, AppSettings s) {
+  void _showLanguagePicker(BuildContext context, WidgetRef ref, AppSettings s) {
     showDialog(
       context: context,
       builder: (ctx) => SimpleDialog(

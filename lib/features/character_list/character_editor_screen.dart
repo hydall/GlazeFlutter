@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../../core/models/character.dart';
 import '../../core/state/db_provider.dart';
+import '../../shared/widgets/glaze_scaffold.dart';
 
 class CharacterEditorScreen extends ConsumerStatefulWidget {
   final String charId;
@@ -84,34 +85,31 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('Edit Character')),
-        body: const Center(child: CircularProgressIndicator()),
+      return const GlazeScaffold(
+        title: 'Edit Character',
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(
-          onPressed: () => context.go('/character/${widget.charId}'),
-        ),
-        title: const Text('Edit Character'),
-        actions: [
-          if (_saving)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
-            )
-          else
-            TextButton(
-              onPressed: _save,
-              child: const Text('Save'),
+    return GlazeScaffold(
+      title: 'Edit Character',
+      onBack: () => context.go('/character/${widget.charId}'),
+      actions: [
+        if (_saving)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
             ),
-        ],
-      ),
+          )
+        else
+          TextButton(
+            onPressed: _save,
+            child: const Text('Save', style: TextStyle(color: Colors.white)),
+          ),
+      ],
       body: Form(
         key: _formKey,
         child: ListView(
@@ -186,8 +184,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
             _SectionHeader('Prompts'),
             TextFormField(
               controller: _sysPromptCtrl,
-              decoration:
-                  const InputDecoration(labelText: 'System Prompt'),
+              decoration: const InputDecoration(labelText: 'System Prompt'),
               maxLines: 6,
               minLines: 2,
             ),
@@ -195,7 +192,8 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
             TextFormField(
               controller: _postHistoryCtrl,
               decoration: const InputDecoration(
-                  labelText: 'Post-History Instructions'),
+                labelText: 'Post-History Instructions',
+              ),
               maxLines: 4,
               minLines: 2,
             ),
@@ -223,8 +221,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
             backgroundImage: _avatarPath != null && _avatarPath!.isNotEmpty
                 ? FileImage(File(_avatarPath!))
                 : null,
-            backgroundColor:
-                Theme.of(context).colorScheme.primaryContainer,
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
             child: _avatarPath == null || _avatarPath!.isEmpty
                 ? Text(
                     _nameCtrl.text.isNotEmpty
@@ -256,17 +253,14 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
   }
 
   Future<void> _pickAvatar() async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.image,
-    );
+    final result = await FilePicker.pickFiles(type: FileType.image);
     if (result == null || result.files.isEmpty) return;
 
     final file = result.files.first;
     if (file.bytes == null) return;
 
     final storage = ref.read(imageStorageProvider);
-    final savedPath =
-        await storage.saveAvatar(widget.charId, file.bytes!);
+    final savedPath = await storage.saveAvatar(widget.charId, file.bytes!);
     if (mounted) {
       setState(() => _avatarPath = savedPath);
     }
@@ -287,22 +281,30 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         id: widget.charId,
         name: _nameCtrl.text.trim(),
         avatarPath: _avatarPath,
-        description: _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-        personality:
-            _personalityCtrl.text.trim().isEmpty ? null : _personalityCtrl.text.trim(),
-        scenario:
-            _scenarioCtrl.text.trim().isEmpty ? null : _scenarioCtrl.text.trim(),
-        firstMes:
-            _firstMesCtrl.text.trim().isEmpty ? null : _firstMesCtrl.text.trim(),
-        mesExample:
-            _mesExampleCtrl.text.trim().isEmpty ? null : _mesExampleCtrl.text.trim(),
-        systemPrompt:
-            _sysPromptCtrl.text.trim().isEmpty ? null : _sysPromptCtrl.text.trim(),
+        description: _descCtrl.text.trim().isEmpty
+            ? null
+            : _descCtrl.text.trim(),
+        personality: _personalityCtrl.text.trim().isEmpty
+            ? null
+            : _personalityCtrl.text.trim(),
+        scenario: _scenarioCtrl.text.trim().isEmpty
+            ? null
+            : _scenarioCtrl.text.trim(),
+        firstMes: _firstMesCtrl.text.trim().isEmpty
+            ? null
+            : _firstMesCtrl.text.trim(),
+        mesExample: _mesExampleCtrl.text.trim().isEmpty
+            ? null
+            : _mesExampleCtrl.text.trim(),
+        systemPrompt: _sysPromptCtrl.text.trim().isEmpty
+            ? null
+            : _sysPromptCtrl.text.trim(),
         postHistoryInstructions: _postHistoryCtrl.text.trim().isEmpty
             ? null
             : _postHistoryCtrl.text.trim(),
-        creator:
-            _creatorCtrl.text.trim().isEmpty ? null : _creatorCtrl.text.trim(),
+        creator: _creatorCtrl.text.trim().isEmpty
+            ? null
+            : _creatorCtrl.text.trim(),
         creatorNotes: _creatorNotesCtrl.text.trim().isEmpty
             ? null
             : _creatorNotesCtrl.text.trim(),
@@ -314,16 +316,16 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
 
       await ref.read(characterRepoProvider).put(updated);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Character saved')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Character saved')));
         context.go('/character/${widget.charId}');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Save failed: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -342,9 +344,9 @@ class _SectionHeader extends StatelessWidget {
       child: Text(
         text,
         style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: Theme.of(context).colorScheme.primary,
-              fontWeight: FontWeight.w600,
-            ),
+          color: Theme.of(context).colorScheme.primary,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

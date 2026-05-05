@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/preset.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_scaffold.dart';
 
 class RegexListScreen extends ConsumerWidget {
   const RegexListScreen({super.key});
@@ -13,11 +14,9 @@ class RegexListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final presetsAsync = ref.watch(presetRepoProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: BackButton(onPressed: () => context.go('/tools')),
-        title: const Text('Regex Scripts'),
-      ),
+    return GlazeScaffold(
+      title: 'Regex Scripts',
+      onBack: () => context.go('/tools'),
       body: FutureBuilder<List<Preset>>(
         future: presetsAsync.getAll(),
         builder: (context, snap) {
