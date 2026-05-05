@@ -7,7 +7,9 @@ import '../../core/llm/prompt_builder.dart';
 import '../../core/llm/prompt_isolate.dart';
 import '../../core/llm/sse_client.dart';
 import '../../core/llm/stream_accumulator.dart';
+import '../../core/llm/lorebook_vector_search.dart';
 import '../../core/models/chat_message.dart';
+import '../../core/models/lorebook.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/state/lorebook_provider.dart';
@@ -203,6 +205,11 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         lorebooks: await ref.read(lorebookRepoProvider).getAll(),
         lorebookSettings: ref.read(lorebookSettingsProvider),
         lorebookActivations: ref.read(lorebookActivationsProvider),
+        vectorEntries: await _runVectorSearch(
+          ref,
+          session.messages,
+          session.messages.lastOrNull?.content ?? '',
+        ),
       );
 
       debugPrint(
@@ -538,5 +545,50 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
   String _generateId() {
     return DateTime.now().millisecondsSinceEpoch.toRadixString(36);
+  }
+
+  Future<List<LorebookEntry>> _runVectorSearch(
+    Ref ref,
+    List<ChatMessage> history,
+    String currentText,
+  ) async {
+    final settings = ref.read(lorebookSettingsProvider);
+    if (settings.searchType == 'keys') return [];
+
+    final config = ref.read(embeddingConfigProvider);
+    if (config.endpoint.isEmpty) return [];
+
+    final lorebooks = await ref.read(lorebookRepoProvider).getAll();
+    if (lorebooks.isEmpty) return [];
+
+    final searchHistory = history
+        .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
+        .toList();
+
+    try {
+      final searchService = ref.read(lorebookVectorSearchProvider);
+      final results = await searchService.search(
+        searchHistory,
+        currentText,
+        lorebooks,
+        settings,
+        config,
+      );
+
+      final entryMap = <String, LorebookEntry>{};
+      for (final lb in lorebooks) {
+        for (final entry in lb.entries) {
+          entryMap[entry.id] = entry;
+        }
+      }
+
+      return results
+          .where((r) => entryMap.containsKey(r.entryId))
+          .map((r) => entryMap[r.entryId]!.copyWith())
+          .toList();
+    } catch (e) {
+      debugPrint('VECTOR SEARCH: failed: $e');
+      return [];
+    }
   }
 }

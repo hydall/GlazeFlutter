@@ -111,3 +111,21 @@ class Lorebooks extends Table {
   @override
   Set<Column> get primaryKey => {lorebookId};
 }
+
+@DataClassName('EmbeddingRow')
+class Embeddings extends Table {
+  @override
+  String get tableName => 'embeddings';
+
+  TextColumn get entryId => text()();
+  TextColumn get sourceType => text().withDefault(const Constant('lorebook_entry'))();
+  TextColumn get sourceId => text().nullable()();
+  BlobColumn get vectorsBlob => blob().nullable()();
+  TextColumn get textHash => text().nullable()();
+  TextColumn get retrievalHintsJson => text().nullable()();
+  TextColumn get errorJson => text().nullable()();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {entryId};
+}

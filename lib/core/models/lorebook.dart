@@ -76,6 +76,8 @@ class LorebookGlobalSettings with _$LorebookGlobalSettings {
     @Default('tokens') String reserveMode,
     @Default(0) int reserveValue,
     @Default(50) int keywordVectorSplit,
+    @Default(0.45) double vectorThreshold,
+    @Default(10) int vectorTopK,
   }) = _LorebookGlobalSettings;
 
   factory LorebookGlobalSettings.fromJson(Map<String, dynamic> json) =>

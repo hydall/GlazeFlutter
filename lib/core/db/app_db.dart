@@ -15,6 +15,7 @@ part 'app_db.g.dart';
   ApiConfigs,
   Personas,
   Lorebooks,
+  Embeddings,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -22,7 +23,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -38,6 +39,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 4) {
             await m.createTable(lorebooks);
+          }
+          if (from < 5) {
+            await m.createTable(embeddings);
           }
         },
       );
