@@ -1,6 +1,11 @@
 import 'tokenizer.dart';
-import 'prompt_block_resolver.dart';
 import 'history_assembler.dart';
+
+class StaticBlock {
+  final String id;
+  final String content;
+  const StaticBlock({required this.id, required this.content});
+}
 
 class ContextCalculator {
   final int contextSize;
@@ -14,7 +19,7 @@ class ContextCalculator {
   int get safeContext => (contextSize - maxTokens).clamp(1000, contextSize);
 
   TokenBreakdown calculate({
-    required List<ResolvedBlock> staticBlocks,
+    required List<StaticBlock> staticBlocks,
     required List<PromptMessage> historyMessages,
   }) {
     final sourceTokens = <String, int>{};

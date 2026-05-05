@@ -1,8 +1,13 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/llm/prompt_builder.dart';
+import '../../core/llm/prompt_isolate.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/db_provider.dart';
@@ -43,6 +48,8 @@ class ChatScreen extends ConsumerWidget {
                   _showPresetPicker(context, ref);
                 case 'persona':
                   _showPersonaPicker(context, ref);
+                case 'raw':
+                  _showRawPrompt(context, ref);
                 case 'clear':
                   _confirmClearChat(context, ref);
               }
@@ -65,6 +72,14 @@ class ChatScreen extends ConsumerWidget {
                 ]),
               ),
               const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'raw',
+                child: Row(children: [
+                  Icon(Icons.data_object, size: 18),
+                  SizedBox(width: 8),
+                  Text('View Raw Prompt'),
+                ]),
+              ),
               const PopupMenuItem(
                 value: 'clear',
                 child: Row(children: [
@@ -89,6 +104,8 @@ class ChatScreen extends ConsumerWidget {
                     state.isGenerating ? state.streamingText : null,
                 streamingReasoning:
                     state.isGenerating ? state.streamingReasoning : null,
+                isGenerating: state.isGenerating,
+                charId: charId,
               ),
             ),
             if (state.error != null)
@@ -123,6 +140,102 @@ class ChatScreen extends ConsumerWidget {
     return FutureBuilder<String>(
       future: charAsync.getById(charId).then((c) => c?.name ?? 'Chat'),
       builder: (_, snap) => Text(snap.data ?? 'Chat'),
+    );
+  }
+
+  void _showRawPrompt(BuildContext context, WidgetRef ref) async {
+    final chatState = ref.read(chatProvider(charId)).value;
+    if (chatState == null || chatState.session == null) return;
+
+    final charRepo = ref.read(characterRepoProvider);
+    final presetRepo = ref.read(presetRepoProvider);
+    final personaRepo = ref.read(personaRepoProvider);
+    final apiConfigRepo = ref.read(apiConfigRepoProvider);
+
+    final character = await charRepo.getById(charId);
+    if (character == null) return;
+
+    final apiConfigs = await apiConfigRepo.getAll();
+    if (apiConfigs.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No API config')),
+        );
+      }
+      return;
+    }
+    final apiConfig = apiConfigs.first;
+
+    final activePresetId = ref.read(activePresetIdProvider);
+    final activePersonaId = ref.read(activePersonaIdProvider);
+
+    final presets = await presetRepo.getAll();
+    final preset = activePresetId != null
+        ? presets.where((p) => p.id == activePresetId).firstOrNull
+        : (presets.isNotEmpty ? presets.first : null);
+
+    final personas = await personaRepo.getAll();
+    final persona = activePersonaId != null
+        ? personas.where((p) => p.id == activePersonaId).firstOrNull
+        : (personas.isNotEmpty ? personas.first : null);
+
+    final payload = PromptPayload(
+      character: character,
+      persona: persona,
+      preset: preset,
+      history: chatState.session!.messages,
+      apiConfig: apiConfig,
+      sessionVars: chatState.session!.sessionVars,
+      globalVars: ref.read(globalVarsProvider),
+    );
+
+    final result = await buildPromptInIsolate(payload);
+
+    final rawJson = const JsonEncoder.withIndent('  ').convert({
+      'model': apiConfig.model,
+      'messages': result.messages.map((m) => m.toApiMap()).toList(),
+      'max_tokens': apiConfig.maxTokens,
+      'temperature': apiConfig.temperature,
+      'top_p': apiConfig.topP,
+      'stream': apiConfig.stream,
+    });
+
+    if (!context.mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Text('Raw Prompt'),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.copy),
+              tooltip: 'Copy',
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: rawJson));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Copied to clipboard')),
+                );
+              },
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.8,
+          height: MediaQuery.of(context).size.height * 0.7,
+          child: SelectableText(
+            rawJson,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -227,11 +340,15 @@ class _MessageList extends StatefulWidget {
   final List<ChatMessage> messages;
   final String? streamingText;
   final String? streamingReasoning;
+  final bool isGenerating;
+  final String charId;
 
   const _MessageList({
     required this.messages,
     this.streamingText,
     this.streamingReasoning,
+    required this.isGenerating,
+    required this.charId,
   });
 
   @override
@@ -276,6 +393,10 @@ class _MessageListState extends State<_MessageList> {
             isUser: msg.role == 'user',
             isSystem: msg.role == 'system',
             reasoning: msg.reasoning,
+            messageIndex: index,
+            isLast: index == widget.messages.length - 1,
+            isGenerating: widget.isGenerating,
+            charId: widget.charId,
           );
         }
         return _MessageBubble(
@@ -283,18 +404,26 @@ class _MessageListState extends State<_MessageList> {
           isUser: false,
           isStreaming: true,
           reasoning: widget.streamingReasoning,
+          messageIndex: -1,
+          isLast: false,
+          isGenerating: true,
+          charId: widget.charId,
         );
       },
     );
   }
 }
 
-class _MessageBubble extends StatelessWidget {
+class _MessageBubble extends ConsumerWidget {
   final String content;
   final bool isUser;
   final bool isSystem;
   final bool isStreaming;
   final String? reasoning;
+  final int messageIndex;
+  final bool isLast;
+  final bool isGenerating;
+  final String charId;
 
   const _MessageBubble({
     required this.content,
@@ -302,10 +431,14 @@ class _MessageBubble extends StatelessWidget {
     this.isSystem = false,
     this.isStreaming = false,
     this.reasoning,
+    required this.messageIndex,
+    required this.isLast,
+    required this.isGenerating,
+    required this.charId,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
 
     Color bg;
@@ -321,7 +454,7 @@ class _MessageBubble extends StatelessWidget {
       alignment = Alignment.centerLeft;
     }
 
-    return Align(
+    Widget bubble = Align(
       alignment: alignment,
       child: Container(
         constraints: BoxConstraints(
@@ -387,8 +520,164 @@ class _MessageBubble extends StatelessWidget {
                     color: isUser ? scheme.onPrimary : scheme.onSurfaceVariant,
                     fontWeight: FontWeight.bold,
                   )),
+            if (!isSystem && !isStreaming) ...[
+              const SizedBox(height: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ActionChip(
+                    icon: Icons.copy,
+                    tooltip: 'Copy',
+                    color: isUser ? scheme.onPrimary : null,
+                    onTap: () =>
+                        Clipboard.setData(ClipboardData(text: content)),
+                  ),
+                  _ActionChip(
+                    icon: Icons.edit,
+                    tooltip: 'Edit',
+                    color: isUser ? scheme.onPrimary : null,
+                    onTap: () => _showEditDialog(context, ref),
+                  ),
+                  if (isLast && !isGenerating)
+                    _ActionChip(
+                      icon: Icons.refresh,
+                      tooltip: 'Regenerate',
+                      color: isUser ? scheme.onPrimary : null,
+                      onTap: () => ref
+                          .read(chatProvider(charId).notifier)
+                          .regenerateLastAssistant(),
+                    ),
+                  if (isLast && !isGenerating)
+                    _ActionChip(
+                      icon: Icons.delete_outline,
+                      tooltip: 'Delete',
+                      color: isUser ? scheme.onPrimary : Colors.red,
+                      onTap: () =>
+                          ref.read(chatProvider(charId).notifier).deleteMessage(messageIndex),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
+      ),
+    );
+
+    if (isSystem || isStreaming) return bubble;
+
+    return GestureDetector(
+      onLongPress: () => _showContextMenu(context, ref),
+      child: bubble,
+    );
+  }
+
+  void _showContextMenu(BuildContext context, WidgetRef ref) {
+    final notifier = ref.read(chatProvider(charId).notifier);
+
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.copy),
+              title: const Text('Copy'),
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: content));
+                Navigator.pop(ctx);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.edit),
+              title: const Text('Edit'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showEditDialog(context, ref);
+              },
+            ),
+            if (!isUser && isLast && !isGenerating)
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: const Text('Regenerate'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  notifier.regenerateLastAssistant();
+                },
+              ),
+            if (isLast && !isGenerating)
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text('Delete',
+                    style: TextStyle(color: Colors.red)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  notifier.deleteMessage(messageIndex);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditDialog(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController(text: content);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit Message'),
+        content: TextField(
+          controller: controller,
+          maxLines: 8,
+          minLines: 3,
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              final newText = controller.text.trim();
+              if (newText.isNotEmpty) {
+                ref
+                    .read(chatProvider(charId).notifier)
+                    .editMessage(messageIndex, newText);
+              }
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionChip extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+  final Color? color;
+
+  const _ActionChip({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+    this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? Theme.of(context).colorScheme.onSurfaceVariant;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: Icon(icon, size: 16, color: c),
       ),
     );
   }

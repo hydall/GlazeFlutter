@@ -137,27 +137,8 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
     (_) => ctx.reasoningEnd ?? '',
   );
 
-  result = result.replaceAllMapped(
-    RegExp(r'\{\{setvar::([\s\S]*?)::([\s\S]*?)\}\}', caseSensitive: false),
-    (m) {
-      final name = m.group(1)!.trim();
-      final value = m.group(2)!.trim();
-      sessionVars[name] = value;
-      varsChanged = true;
-      return '';
-    },
-  );
-
-  result = result.replaceAllMapped(
-    RegExp(r'\{\{setglobalvar::([\s\S]*?)::([\s\S]*?)\}\}', caseSensitive: false),
-    (m) {
-      final name = m.group(1)!.trim();
-      final value = m.group(2)!.trim();
-      globalVars[name] = value;
-      varsChanged = true;
-      return '';
-    },
-  );
+  result = _replaceSetVar(result, 'setvar', sessionVars, () => varsChanged = true);
+  result = _replaceSetVar(result, 'setglobalvar', globalVars, () => varsChanged = true);
 
   result = result.replaceAllMapped(
     RegExp(r'\{\{getvar::([\s\S]*?)\}\}', caseSensitive: false),
@@ -258,4 +239,49 @@ int _rollDice(String spec) {
     total += random.nextInt(sides) + 1;
   }
   return total;
+}
+
+String _replaceSetVar(String text, String keyword, Map<String, String> vars, void Function() markChanged) {
+  final tag = '{{$keyword::';
+  final buf = StringBuffer();
+  int i = 0;
+  while (i < text.length) {
+    final idx = text.indexOf(tag, i);
+    if (idx < 0) {
+      buf.write(text.substring(i));
+      break;
+    }
+    buf.write(text.substring(i, idx));
+    final afterTag = idx + tag.length;
+    final secondDblColon = text.indexOf('::', afterTag);
+    if (secondDblColon < 0) {
+      buf.write(text.substring(idx));
+      break;
+    }
+    final name = text.substring(afterTag, secondDblColon).trim();
+    final valueStart = secondDblColon + 2;
+    var depth = 1;
+    var pos = valueStart;
+    while (pos < text.length && depth > 0) {
+      if (pos + 1 < text.length && text[pos] == '{' && text[pos + 1] == '{') {
+        depth++;
+        pos += 2;
+      } else if (pos + 1 < text.length && text[pos] == '}' && text[pos + 1] == '}') {
+        depth--;
+        if (depth == 0) break;
+        pos += 2;
+      } else {
+        pos++;
+      }
+    }
+    if (depth != 0) {
+      buf.write(text.substring(idx));
+      break;
+    }
+    final value = text.substring(valueStart, pos).trim();
+    vars[name] = value;
+    markChanged();
+    i = pos + 2;
+  }
+  return buf.toString();
 }

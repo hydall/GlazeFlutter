@@ -138,6 +138,32 @@ class PresetListScreen extends ConsumerWidget {
     }
   }
 
+  static const _stBlockIds = <String, String>{
+    'chatHistory': 'chat_history',
+    'charDescription': 'char_card',
+    'charPersonality': 'char_personality',
+    'personaDescription': 'user_persona',
+    'dialogueExamples': 'example_dialogue',
+  };
+
+  static const _blockNameToId = <String, String>{
+    'Chat History': 'chat_history',
+    'charDescription': 'char_card',
+    'Character Description': 'char_card',
+    'charPersonality': 'char_personality',
+    'Character Personality': 'char_personality',
+    'personaDescription': 'user_persona',
+    'User Persona': 'user_persona',
+    'dialogueExamples': 'example_dialogue',
+    'Dialogue Examples': 'example_dialogue',
+  };
+
+  String _normalizeImportedBlockId(String rawId, String name) {
+    if (_stBlockIds.containsKey(rawId)) return _stBlockIds[rawId]!;
+    if (_blockNameToId.containsKey(name)) return _blockNameToId[name]!;
+    return rawId;
+  }
+
   Preset _parseSillyTavernPreset(Map<String, dynamic> json, String fileName) {
     final blocks = <PresetBlock>[];
     final regexes = <PresetRegex>[];
@@ -158,9 +184,13 @@ class PresetListScreen extends ConsumerWidget {
         } else {
           insertionMode = 'relative';
         }
+        final rawId = p['identifier'] as String? ?? p['id'] as String? ?? 'imported_b$i';
+        final blockName = (p['name'] as String?) ?? 'Block $i';
+        final normalizedId = _normalizeImportedBlockId(rawId, blockName);
+        debugPrint('IMPORT: block rawId="$rawId" name="$blockName" → normalizedId="$normalizedId" marker=${p['marker']}');
         blocks.add(PresetBlock(
-          id: p['id'] as String? ?? 'imported_b$i',
-          name: (p['name'] as String?) ?? 'Block $i',
+          id: normalizedId,
+          name: blockName,
           role: (p['role'] as String?) ?? 'system',
           content: (p['content'] as String?) ?? '',
           enabled: p['enabled'] as bool? ?? true,

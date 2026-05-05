@@ -27,11 +27,13 @@ class PromptBlockResolver {
 
   String _resolveContent(PresetBlock block) {
     return switch (block.id) {
-      'char_card' => _charCardContent(),
-      'char_personality' => _charPersonalityContent(),
+      'char_card' || 'charCard' => _charCardContent(),
+      'char_personality' || 'charPersonality' => _charPersonalityContent(),
       'scenario' => _scenarioContent(),
-      'example_dialogue' => _exampleDialogueContent(),
-      'user_persona' => _userPersonaContent(),
+      'example_dialogue' || 'exampleDialogue' => _exampleDialogueContent(),
+      'user_persona' || 'userPersona' => _userPersonaContent(),
+      'chat_history' || 'chatHistory' => '',
+      'summary' => '',
       _ => block.content,
     };
   }
@@ -104,7 +106,8 @@ class ResolvedBlock {
     required this.varsChanged,
   });
 
-  bool get isChatHistory => id == 'chat_history';
+  bool get isChatHistory =>
+      id == 'chat_history' || id == 'chatHistory';
   bool get isDepthBlock => insertionMode == 'depth' && !isChatHistory;
   bool get hasContent => content.trim().isNotEmpty;
 }
