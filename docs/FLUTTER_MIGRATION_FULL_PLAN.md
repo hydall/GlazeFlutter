@@ -29,8 +29,8 @@ A working chat app on iOS + Android + Windows that:
 ```bash
 flutter create --org com.glaze --project-name glaze_flutter glaze_flutter
 cd glaze_flutter
-flutter pub add flutter_riverpod riverpod_annotation isar isar_flutter_libs dio go_router freezed_annotation json_annotation path_provider shared_preferences flutter_markdown url_launcher archive crypto encrypt image
-flutter pub add --dev build_runner freezed json_serializable riverpod_generator isar_generator flutter_test integration_test
+flutter pub add flutter_riverpod riverpod_annotation drift sqlite3_flutter_libs dio go_router freezed_annotation json_annotation path_provider shared_preferences flutter_markdown url_launcher archive crypto encrypt image
+flutter pub add --dev build_runner freezed json_serializable riverpod_generator drift_dev flutter_test integration_test
 ```
 
 ### Step 0.2: Project structure
@@ -41,8 +41,8 @@ lib/
 ├── app.dart                      # MaterialApp + GoRouter
 ├── core/
 │   ├── db/
-│   │   ├── app_db.dart           # Isar instance singleton
-│   │   ├── collections.dart      # Isar @collection classes
+│   │   ├── app_db.dart           # Drift database singleton
+│   │   ├── tables.dart           # Drift table definitions
 │   │   └── repositories/
 │   │       ├── character_repo.dart
 │   │       ├── chat_repo.dart
@@ -105,29 +105,28 @@ lib/
 
 ```yaml
 dependency_overrides:
-  isar: ^4.0.0
-  isar_flutter_libs: ^4.0.0
+  drift: ^2.22.1
+  sqlite3_flutter_libs: ^0.5.28
 ```
 
 ### Step 0.4: main.dart
 
 ```dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:isar/isar.dart';
+import 'package:drift/drift.dart';
+import 'package:drift/native.dart';
+import 'package:sqlite3_flutter_libs/sqlite3_flutter_libs.dart';
 import 'package:path_provider/path_provider.dart';
 import 'app.dart';
-import 'core/db/collections.dart';
+import 'core/db/app_db.dart';
+import 'core/db/tables.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final dir = await getApplicationDocumentsDirectory();
-  final isar = await Isar.open(
-    [CharacterCollectionSchema, ChatSessionCollectionSchema,
-     PresetCollectionSchema, ApiConfigCollectionSchema, PersonaCollectionSchema],
-    directory: dir.path,
-  );
-  runApp(ProviderScope(overrides: [isarProvider.overrideWithValue(isar)], child: const GlazeApp()));
+  final db = AppDatabase();
+  runApp(ProviderScope(overrides: [dbProvider.overrideWithValue(db)], child: const GlazeApp()));
 }
 ```
 
@@ -159,7 +158,7 @@ class AppTheme {
 
 ### Deliverables Phase 0 — DONE
 - [x] App runs on iOS simulator, Android emulator, Windows desktop
-- [x] Isar DB opens without errors
+- [x] Drift DB opens without errors
 - [x] GoRouter navigates between 3 empty screens
 - [x] Dark theme applied
 
@@ -378,40 +377,41 @@ class Persona with _$Persona {
 }
 ```
 
-### Step 1.2: Isar collections
+### Step 1.2: Drift tables
 
 ```dart
-// core/db/collections.dart
-part 'collections.g.dart';
+// core/db/tables.dart
+import 'package:drift/drift.dart';
 
-@collection
-class CharacterCollection {
-  Id id = Isar.autoIncrement;
-  late String charId;
-  late String name;
-  String? avatarPath;
-  String? description;
-  String? personality;
-  String? scenario;
-  String? firstMes;
-  String? mesExample;
-  String? systemPrompt;
-  String? postHistoryInstructions;
-  String? creator;
-  String? creatorNotes;
-  String? color;
-  int updatedAt = 0;
-  String? tagsJson;              // JSON-encoded List<String>
-  String? alternateGreetingsJson;
+class Characters extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get avatarPath => text().nullable()();
+  TextColumn get description => text().nullable()();
+  TextColumn get personality => text().nullable()();
+  TextColumn get scenario => text().nullable()();
+  TextColumn get firstMes => text().nullable()();
+  TextColumn get mesExample => text().nullable()();
+  TextColumn get systemPrompt => text().nullable()();
+  TextColumn get postHistoryInstructions => text().nullable()();
+  TextColumn get creator => text().nullable()();
+  TextColumn get creatorNotes => text().nullable()();
+  TextColumn get color => text().nullable()();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+  TextColumn get tagsJson => text().nullable()();
+  TextColumn get alternateGreetingsJson => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
 }
 ```
 
-Index `charId` for fast lookup. Same pattern for all collections.
+Index `id` for fast lookup (primary key). Same pattern for all tables.
 
-`ChatSessionCollection` stores `messagesJson` (serialized `List<ChatMessage>`).
-`PresetCollection` stores `dataJson` (serialized full `Preset`).
-`ApiConfigCollection` stores flat fields (endpoint, model, etc.).
-`PersonaCollection` stores flat fields.
+`ChatSessions` table stores `messagesJson` (serialized `List<ChatMessage>`).
+`Presets` table stores `dataJson` (serialized full `Preset`).
+`ApiConfigs` table stores flat fields (endpoint, model, etc.).
+`Personas` table stores flat fields.
 
 ### Step 1.3: Repository classes
 
@@ -419,53 +419,50 @@ Each repo follows this pattern:
 
 ```dart
 class CharacterRepo {
-  final Isar _db;
+  final AppDatabase _db;
   CharacterRepo(this._db);
 
   Future<List<Character>> getAll() async {
-    final collections = _db.characterCollections.where().findAll();
-    return collections.map(_toModel).toList();
+    final rows = _db.select(_db.characters).get();
+    return rows.map(_toModel).toList();
   }
 
   Future<Character?> getById(String id) async {
-    final c = _db.characterCollections.where().charIdEqualTo(id).findFirst();
-    return c != null ? _toModel(c) : null;
+    final row = (_db.select(_db.characters)..where((t) => t.id.equals(id))).getSingleOrNull();
+    return row != null ? _toModel(row) : null;
   }
 
   Future<void> put(Character char) async {
-    await _db.writeAsync(() {
-      _db.characterCollections.put(_toCollection(char));
-    });
+    await _db.into(_db.characters).insertOnConflictUpdate(_toCompanion(char));
   }
 
   Future<void> delete(String id) async {
-    await _db.writeAsync(() {
-      _db.characterCollections.where().charIdEqualTo(id).deleteAll();
-    });
+    await (_db.delete(_db.characters)..where((t) => t.id.equals(id))).go();
   }
 
-  Character _toModel(CharacterCollection c) => Character(
-    id: c.charId, name: c.name, avatarPath: c.avatarPath,
+  Character _toModel(CharacterData c) => Character(
+    id: c.id, name: c.name, avatarPath: c.avatarPath,
     description: c.description, /* ... */
     tags: c.tagsJson != null ? List<String>.from(jsonDecode(c.tagsJson!)) : [],
   );
 
-  CharacterCollection _toCollection(Character m) => CharacterCollection()
-    ..charId = m.id
-    ..name = m.name
-    ..avatarPath = m.avatarPath
-    ..description = m.description
-    ..tagsJson = jsonEncode(m.tags)
-    /* ... */;
+  CharactersCompanion _toCompanion(Character m) => CharactersCompanion(
+    id: Value(m.id),
+    name: Value(m.name),
+    avatarPath: Value(m.avatarPath),
+    description: Value(m.description),
+    tagsJson: Value(jsonEncode(m.tags)),
+    /* ... */
+  );
 }
 ```
 
 Repositories to implement:
-- `CharacterRepo` — maps `CharacterCollection` ↔ `Character`
-- `ChatRepo` — maps `ChatSessionCollection` ↔ `ChatSession`. Key: sessionId = `{charId}_{sessionIndex}`
-- `PresetRepo` — maps `PresetCollection` ↔ `Preset`
-- `ApiConfigRepo` — maps `ApiConfigCollection` ↔ `ApiConfig`
-- `PersonaRepo` — maps `PersonaCollection` ↔ `Persona`
+- `CharacterRepo` — maps `Characters` table ↔ `Character`
+- `ChatRepo` — maps `ChatSessions` table ↔ `ChatSession`. Key: sessionId = `{charId}_{sessionIndex}`
+- `PresetRepo` — maps `Presets` table ↔ `Preset`
+- `ApiConfigRepo` — maps `ApiConfigs` table ↔ `ApiConfig`
+- `PersonaRepo` — maps `Personas` table ↔ `Persona`
 
 ### Step 1.4: Image storage service
 
@@ -504,9 +501,9 @@ Subfolder structure:
 
 ```dart
 // core/state/db_provider.dart
-final isarProvider = Provider<Isar>((ref) => throw UnimplementedError('Isar not initialized'));
-final characterRepoProvider = Provider<CharacterRepo>((ref) => CharacterRepo(ref.watch(isarProvider)));
-final chatRepoProvider = Provider<ChatRepo>((ref) => ChatRepo(ref.watch(isarProvider)));
+final dbProvider = Provider<AppDatabase>((ref) => throw UnimplementedError('Database not initialized'));
+final characterRepoProvider = Provider<CharacterRepo>((ref) => CharacterRepo(ref.watch(dbProvider)));
+final chatRepoProvider = Provider<ChatRepo>((ref) => ChatRepo(ref.watch(dbProvider)));
 // ... same for all repos
 
 // core/state/character_provider.dart
@@ -569,12 +566,12 @@ Generates: `*.g.dart`, `*.freezed.dart` files.
 
 ### Deliverables Phase 1 — DONE
 - [x] All 6 Freezed models compile with `fromJson`
-- [x] All 5 Isar collections with indexes
+- [x] All 5 Drift tables with indexes
 - [x] All 5 repository classes with CRUD
 - [x] ImageStorage saves/reads files correctly
 - [x] Riverpod providers wire repos to UI
 - [x] EventHub publish/subscribe works
-- [x] Unit tests for each repo (in-memory Isar)
+- [x] Unit tests for each repo (AppDatabase.forTesting(NativeDatabase.memory()))
 
 ---
 
@@ -858,7 +855,7 @@ Future<PromptResult> buildPromptInIsolate(PromptPayload payload) {
 }
 ```
 
-Note: `MacroEngine` and `PromptPayload` must be serializable (no closures, no Isar objects). Freezed models are fine.
+Note: `MacroEngine` and `PromptPayload` must be serializable (no closures, no Drift objects). Freezed models are fine.
 
 ### Step 2.7: SSE client + streaming
 
@@ -1640,17 +1637,19 @@ class EmbeddingService {
 }
 ```
 
-Isar collection for embeddings:
+Drift table for embeddings:
 
 ```dart
-@collection
-class EmbeddingCollection {
-  Id id = Isar.autoIncrement;
-  late String sourceId;        // lorebook entry ID
-  late String sourceType;      // 'lorebook_entry' | 'chat_message'
-  late String sourceContent;   // original text (for display)
-  late int updatedAt;
-  String? vectorJson;          // JSON-encoded List<double>
+class Embeddings extends Table {
+  TextColumn get id => text()();
+  TextColumn get sourceId => text()();
+  TextColumn get sourceType => text()();
+  TextColumn get sourceContent => text()();
+  IntColumn get updatedAt => integer()();
+  TextColumn get vectorJson => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
 }
 ```
 
@@ -1793,7 +1792,7 @@ class VectorIndexingService {
 - Character detail: show attached lorebooks, toggle activation
 
 ### Deliverables Phase 4
-- [ ] Lorebook CRUD + Isar storage
+- [ ] Lorebook CRUD + Drift storage
 - [ ] Lorebook keyword scanner (runs in prompt isolate)
 - [ ] Constant entry injection
 - [ ] Recursive scan
@@ -1801,7 +1800,7 @@ class VectorIndexingService {
 - [ ] Sticky/cooldown
 - [ ] Activation per character/chat
 - [ ] Embedding service (OpenAI-compatible API)
-- [ ] Embedding storage (Isar)
+- [ ] Embedding storage (Drift)
 - [ ] Vector similarity search with cosine distance
 - [ ] Vector search pipeline step (after keyword scan)
 - [ ] Late vector lore injection (dedup vs keyword)
@@ -2082,7 +2081,7 @@ const characterFields = [
 
 Port from JS `backupService.js` (221 lines).
 
-- Export: serialize all Isar collections + SharedPreferences to JSON
+- Export: serialize all Drift tables + SharedPreferences to JSON
 - Import: clear DB, deserialize, write back
 
 ### Deliverables Phase 6
@@ -2212,7 +2211,7 @@ class GalleryService {
     );
 
     // Append to character's gallery list
-    // (stored as JSON array in CharacterCollection.galleryJson)
+    // (stored as JSON array in Characters.galleryJson)
     return entry;
   }
 }
@@ -2397,7 +2396,7 @@ class SyncManifest {
   }
 
   Future<void> writeLocalManifest(ManifestV2 manifest) async {
-    // Store manifest in Isar keyvalue collection
+    // Store manifest in Drift keyvalue table
   }
 }
 ```
@@ -2495,7 +2494,7 @@ class AppThemeState {
 
 ### Step 9.2: Theme persistence
 
-- Save/load theme as Isar keyvalue
+- Save/load theme as Drift keyvalue
 - Theme presets (import/export)
 - Real-time theme preview
 
@@ -2523,7 +2522,7 @@ class AppThemeState {
 ### Step 9.7: Crash recovery
 
 Port from JS `db.js` crash recovery logic:
-- Before generation: save state to Isar
+- Before generation: save state to Drift
 - After generation: clear recovery state
 - On app start: check for orphaned recovery state → offer resume
 
@@ -2633,7 +2632,7 @@ jobs:
 | `ref()` / `reactive()` | `StateNotifier` / `ChangeNotifier` / Riverpod |
 | `computed()` | `Provider` with selector |
 | `postMessage` (Worker) | `compute()` / `Isolate.spawn()` |
-| `IndexedDB` | `Isar` |
+| `IndexedDB` | `Drift (SQLite)` |
 | `localStorage` | `SharedPreferences` |
 | `fetch()` / `XHR` | `Dio` |
 | `EventTarget` / `window` | `StreamController` / `EventHub` |
@@ -2657,7 +2656,7 @@ jobs:
 |------|-----------|
 | Rust-speed tokenizer not available | Use heuristic (len/3.35) for MVP, add real tokenizer later |
 | iOS background execution limits | Generation only in foreground, notification on complete |
-| Isar DB corruption | Crash recovery + backup system already designed |
-| Large chat history (10k+ messages) | Lazy loading in CustomScrollView, Isar pagination |
+| Drift DB corruption | Crash recovery + backup system already designed |
+| Large chat history (10k+ messages) | Lazy loading in CustomScrollView, Drift pagination |
 | PNG export complexity | Start with JSON-only export, add PNG in Phase 6 |
 | OAuth flow differences per platform | flutter_web_auth_2 + flutter_secure_storage |

@@ -1,6 +1,6 @@
 # Race Condition Prevention Rules
 
-Every new feature or fix that touches async boundaries, generation state, or Isar must satisfy these rules before commit.
+Every new feature or fix that touches async boundaries, generation state, or Drift must satisfy these rules before commit.
 
 ## Rule 1: Every `await` is a checkpoint
 
@@ -25,21 +25,21 @@ if (!mounted) return;
 - New providers that participate in generation lifecycle MUST use generation registry for ownership tokens
 - Transient state (isGenerating, typing placeholder, pending swipe) is owned by a single generation token and auto-cleaned on finalization
 
-## Rule 3: Isar write transactions for all read-mutate-write
+## Rule 3: Drift transactions for all read-mutate-write
 
 - NEVER do `final data = await repo.getById(id); /* mutate */; await repo.put(data)` outside a transaction — this is a race
-- ALWAYS use `isar.writeTxn(() async { ... })` for any read-mutate-write cycle — Isar serializes writes
+- ALWAYS use `_db.transaction(() async { ... })` for any read-mutate-write cycle — Drift serializes writes
 - For chat sessions with heavy concurrent access (streaming updates), use a dedicated write queue or throttle to avoid txn conflicts
 
 Pattern:
 ```dart
-await isar.writeTxn(() async {
-  final collection = await isar.chatSessionCollections
-      .where().sessionIdEqualTo(sessionId).findFirst();
-  if (collection == null) return;
-  // mutate collection
-  collection.messagesJson = jsonEncode(updatedMessages);
-  await isar.chatSessionCollections.put(collection);
+await _db.transaction(() async {
+  final row = await (_db.select(_db.chatSessions)
+        ..where((t) => t.sessionId.equals(sessionId)))
+      .getSingleOrNull();
+  if (row == null) return;
+  // mutate and write back
+  await _db.into(_db.chatSessions).insertOnConflictUpdate(companion);
 });
 ```
 
@@ -48,7 +48,7 @@ await isar.writeTxn(() async {
 When adding a new provider or service function that:
 - receives callbacks from transport/pipeline layer
 - mutates Riverpod state
-- persists data to Isar
+- persists data to Drift
 
 ...it MUST include a staleness/ownership check before the mutation. Without it, a late completion from a canceled generation WILL corrupt state.
 
@@ -75,7 +75,7 @@ When adding a new provider or service function that:
 - Delete state that async completion handlers need
 
 ### The principle: unsubscribe ≠ cancel
-When a widget disposes, it **disconnects from results**, not **cancels the operation**. The operation continues in the background, writing to Isar through repository-layer paths. When the user navigates back, data is loaded from Isar.
+When a widget disposes, it **disconnects from results**, not **cancels the operation**. The operation continues in the background, writing to Drift through repository-layer paths. When the user navigates back, data is loaded from Drift.
 
 ### Ownership model
 - **Provider layer** owns the operation lifecycle: start, progress, completion, cleanup
@@ -84,7 +84,7 @@ When a widget disposes, it **disconnects from results**, not **cancels the opera
 
 ## Why this matters
 
-Dart's event loop has the same boundaries as JS. Each `await` yields control, and other microtasks can run. The same races that existed in JS exist in Dart — the rules are the same, just with different primitives (`CancelToken` instead of `AbortController`, Isar txn instead of `patchChatData`).
+Dart's event loop has the same boundaries as JS. Each `await` yields control, and other microtasks can run. The same races that existed in JS exist in Dart — the rules are the same, just with different primitives (`CancelToken` instead of `AbortController`, Drift txn instead of `patchChatData`).
 
 ## Known race classes and their fixes
 
@@ -92,6 +92,6 @@ Dart's event loop has the same boundaries as JS. Each `await` yields control, an
 |------|-------|-----|
 | Stale completion mutates new typing state | Callback didn't check genId | `expectedGenId` in finalize/restore/complete |
 | Cancel didn't reach Dio | cancelToken not passed to request | Signal chain through request config |
-| Read-mutate-write in Isar | `getById` + `put` without txn | `isar.writeTxn` for read-mutate-write |
+| Read-mutate-write in Drift | `getById` + `put` without txn | `_db.transaction` for read-mutate-write |
 | Registry leak after dispose | `clearGenerationState` not called | Fix in dispose guard |
 | Memory draft + chat generation simultaneously | No mutual exclusion | Block in both directions |

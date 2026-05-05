@@ -2,7 +2,7 @@
 
 ## Goal
 
-Working chat app on iOS/Android/Windows that proves: Flutter works, no WKWebView, Isar DB, prompt building in isolate, API streaming works.
+Working chat app on iOS/Android/Windows that proves: Flutter works, no WKWebView, Drift/SQLite DB, prompt building in isolate, API streaming works.
 
 ---
 
@@ -15,7 +15,7 @@ glaze_flutter/
 │   ├── main.dart
 │   ├── app.dart
 │   ├── core/
-│   │   ├── db/              # Isar database
+│   │   ├── db/              # Drift/SQLite database
 │   │   ├── models/          # Data classes
 │   │   ├── state/           # Riverpod providers
 │   │   ├── llm/             # Generation pipeline
@@ -44,33 +44,29 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_riverpod: ^2.6        # State management
-  riverpod_annotation: ^2.5     # Codegen
-  isar: ^4.0.0                  # Database
-  isar_flutter_libs: ^4.0.0
-  dio: ^5.7                     # HTTP + streaming
-  go_router: ^14.6              # Navigation
-  freezed_annotation: ^2.4      # Immutable models
+  drift: ^2.22                   # Database (SQLite)
+  sqlite3_flutter_libs: ^0.5     # SQLite native binaries
+  dio: ^5.7                      # HTTP + streaming
+  go_router: ^14.6               # Navigation
+  freezed_annotation: ^2.4       # Immutable models
   json_annotation: ^4.9
-  path_provider: ^2.1
+  path: ^1.9
   shared_preferences: ^2.3
-  flutter_markdown: ^0.7        # Markdown rendering
+  flutter_markdown: ^0.7         # Markdown rendering
   url_launcher: ^6.3
 
 dev_dependencies:
   build_runner: ^2.4
   freezed: ^2.5
   json_serializable: ^6.8
-  riverpod_generator: ^2.5
-  isar_generator: ^4.0.0
+  drift_dev: ^2.22               # Drift codegen
   flutter_test:
-    sdk: flutter
-  integration_test:
     sdk: flutter
 ```
 
 ### Deliverables
 - [x] `flutter create` project
-- [x] Isar DB initialized
+- [x] Drift/SQLite DB initialized
 - [x] GoRouter with shell route
 - [x] Riverpod setup
 - [x] Basic theme (dark mode, accent color)
@@ -185,73 +181,86 @@ class Persona with _$Persona {
 }
 ```
 
-### Isar Collections
+### Drift Tables
 
 ```dart
-// lib/core/db/collections.dart
-part 'collections.g.dart';
+// lib/core/db/tables.dart
+@DataClassName('CharacterRow')
+class Characters extends Table {
+  TextColumn get charId => text()();
+  TextColumn get name => text()();
+  TextColumn get avatarPath => text().nullable()();
+  TextColumn get description => text().nullable()();
+  TextColumn get personality => text().nullable()();
+  TextColumn get scenario => text().nullable()();
+  TextColumn get firstMes => text().nullable()();
+  TextColumn get mesExample => text().nullable()();
+  TextColumn get systemPrompt => text().nullable()();
+  TextColumn get postHistoryInstructions => text().nullable()();
+  TextColumn get creator => text().nullable()();
+  TextColumn get creatorNotes => text().nullable()();
+  TextColumn get color => text().nullable()();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+  TextColumn get tagsJson => text().nullable()();
+  TextColumn get alternateGreetingsJson => text().nullable()();
 
-@collection
-class CharacterCollection {
-  Id id = Isar.autoIncrement;
-  late String charId;
-  late String name;
-  String? avatarPath;
-  String? description;
-  String? personality;
-  String? scenario;
-  String? firstMes;
-  String? mesExample;
-  String? systemPrompt;
-  String? color;
-  int updatedAt = 0;
-  // JSON blob for fields we don't query on
-  String? extensionsJson;
-  String? alternateGreetingsJson;
-  String? tagsJson;
+  @override
+  Set<Column> get primaryKey => {charId};
 }
 
-@collection
-class ChatSessionCollection {
-  Id id = Isar.autoIncrement;
-  late String sessionId;
-  late String characterId;
-  late int sessionIndex;
-  late String messagesJson;    // List<ChatMessage> serialized
-  int updatedAt = 0;
+@DataClassName('ChatSessionRow')
+class ChatSessions extends Table {
+  TextColumn get sessionId => text()();
+  TextColumn get characterId => text()();
+  IntColumn get sessionIndex => integer()();
+  TextColumn get messagesJson => text()();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {sessionId};
 }
 
-@collection
-class PresetCollection {
-  Id id = Isar.autoIncrement;
-  late String presetId;
-  late String name;
-  late String dataJson;        // Full Preset serialized
+@DataClassName('PresetRow')
+class Presets extends Table {
+  TextColumn get presetId => text()();
+  TextColumn get name => text()();
+  TextColumn get dataJson => text()();
+
+  @override
+  Set<Column> get primaryKey => {presetId};
 }
 
-@collection
-class ApiConfigCollection {
-  Id id = Isar.autoIncrement;
-  late String configId;
-  late String name;
-  late String providerId;
-  String? endpoint;
-  String? apiKey;
-  String? model;
-  int maxTokens = 8000;
-  int contextSize = 32000;
-  double temperature = 0.7;
-  double topP = 0.9;
-  bool stream = true;
+@DataClassName('ApiConfigRow')
+class ApiConfigs extends Table {
+  TextColumn get configId => text()();
+  TextColumn get name => text()();
+  TextColumn get providerId => text().withDefault(const Constant('openai_compatible'))();
+  TextColumn get endpoint => text().nullable()();
+  TextColumn get apiKey => text().nullable()();
+  TextColumn get model => text().nullable()();
+  IntColumn get maxTokens => integer().withDefault(const Constant(8000))();
+  IntColumn get contextSize => integer().withDefault(const Constant(32000))();
+  RealColumn get temperature => real().withDefault(const Constant(0.7))();
+  RealColumn get topP => real().withDefault(const Constant(0.9))();
+  BoolColumn get stream => boolean().withDefault(const Constant(true))();
+  TextColumn get reasoningEffort => text().nullable()();
+  BoolColumn get requestReasoning => boolean().withDefault(const Constant(false))();
+  TextColumn get reasoningTagStart => text().nullable()();
+  TextColumn get reasoningTagEnd => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {configId};
 }
 
-@collection
-class PersonaCollection {
-  Id id = Isar.autoIncrement;
-  late String personaId;
-  late String name;
-  String? prompt;
-  String? avatarPath;
+@DataClassName('PersonaRow')
+class Personas extends Table {
+  TextColumn get personaId => text()();
+  TextColumn get name => text()();
+  TextColumn get prompt => text().nullable()();
+  TextColumn get avatarPath => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {personaId};
 }
 ```
 
@@ -260,25 +269,25 @@ class PersonaCollection {
 ```dart
 // lib/core/db/repositories/character_repo.dart
 class CharacterRepo {
-  final Isar _db;
+  final AppDatabase _db;
   Future<List<Character>> getAll();
   Future<Character?> getById(String id);
   Future<void> put(Character character);
   Future<void> delete(String id);
 }
 
-// Same pattern for ChatSessionRepo, PresetRepo, ApiConfigRepo, PersonaRepo
+// Same pattern for ChatRepo, PresetRepo, ApiConfigRepo, PersonaRepo
 ```
 
 ### Image storage migration
 - JS stores images as data URLs in IDB → Flutter stores as files in app directory
-- `path_provider.getApplicationDocumentsDirectory()` / `gallery/{charId}/{imgId}.jpg`
+- `Platform.environment['APPDATA']/Glaze` (Windows), `~/.local/share/Glaze` (Linux), `~/Library/Application Support/Glaze` (macOS)
 - DB stores only file path reference
 - Import: decode data URL → write to file → store path
 
 ### Deliverables
 - [x] All models defined with Freezed
-- [x] Isar collections with indexes
+- [x] Drift tables with @DataClassName
 - [x] Repository classes for CRUD
 - [x] Image storage via filesystem
 - [x] Unit tests for all repositories
@@ -437,7 +446,7 @@ class ChatNotifier extends _$ChatNotifier {
 
 - Form with validation
 - Test connection button (sends minimal request)
-- Save to Isar
+- Save to Drift
 
 ### Deliverables
 - [x] Character list with import
@@ -573,7 +582,7 @@ Future<void> migrateFromGlazeJS(String exportJsonPath) async {
   // 1. Read Glaze export JSON
   // 2. Parse characters, chats, personas, presets, lorebooks
   // 3. Decode data URLs → write images to filesystem
-  // 4. Write to Isar collections
+  // 4. Write to Drift tables
   // 5. Mark migration complete in SharedPreferences
 }
 ```
@@ -586,7 +595,7 @@ User flow: Export from Glaze JS → Import in Glaze Flutter → Done.
 
 After Phase 2 (Day 18), we know:
 1. ✅ Flutter works on iOS without WKWebView bugs
-2. ✅ Isar DB performs well with real data
+2. ✅ Drift/SQLite DB performs well with real data
 3. ✅ Prompt building in isolate is fast
 4. ✅ API streaming works
 5. ✅ Basic chat loop is functional

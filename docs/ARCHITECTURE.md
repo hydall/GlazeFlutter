@@ -1,7 +1,7 @@
 # Architecture — GlazeFlutter
 
 Mobile-first LLM frontend for AI roleplay. Flutter rewrite of [Glaze](https://github.com/hydall/Glaze).
-**Stack:** Flutter 3.41 + Riverpod 2 + Isar 3 + GoRouter. **Language:** Dart only. **License:** AGPL-3.0.
+**Stack:** Flutter 3.41 + Riverpod 2 + Drift (SQLite) + GoRouter. **Language:** Dart only. **License:** AGPL-3.0.
 
 Related docs:
 - Migration plan: `docs/FLUTTER_MIGRATION_MVP.md`, `docs/FLUTTER_MIGRATION_FULL_PLAN.md`
@@ -18,14 +18,14 @@ Related docs:
 UI (screens/widgets)
   → Riverpod providers (state + business logic)
     → Repositories (DB abstraction)
-      → Isar (persistence)
+      → Drift / SQLite (persistence)
     → Services (LLM, prompt builder, macro engine)
       → Dio (HTTP/SSE)
 ```
 
 - `UI` gathers user intent and renders state.
 - `Providers` own actions like chat generation, summary, memory-draft.
-- `Repositories` abstract Isar persistence.
+- `Repositories` abstract Drift/SQLite persistence.
 - `Services` handle LLM transport, prompt building, macro engine, sync.
 
 ### Event System
@@ -42,8 +42,8 @@ lib/
 ├── app.dart                        # MaterialApp + GoRouter
 ├── core/
 │   ├── db/
-│   │   ├── app_db.dart             # Isar instance singleton
-│   │   ├── collections.dart        # Isar @collection classes
+│   │   ├── app_db.dart             # Drift database singleton
+│   │   ├── tables.dart             # Drift table definitions
 │   │   └── repositories/
 │   │       ├── character_repo.dart
 │   │       ├── chat_repo.dart
@@ -150,7 +150,7 @@ lib/
 - `lib/core/llm/vector/embedding_service.dart` — Embedding API calls
 - `lib/core/llm/vector/vector_search.dart` — Cosine similarity search
 - `lib/core/llm/vector/indexing_service.dart` — Entry indexing with hash check
-- `lib/core/db/repositories/embedding_repo.dart` — Isar persistence
+- `lib/core/db/repositories/embedding_repo.dart` — Drift persistence
 
 ### Structure
 
@@ -286,7 +286,7 @@ class MemoryEntry with _$MemoryEntry {
 
 **Chat Generation:**
 1. User taps send → `ChatNotifier.sendMessage(text)`
-2. Add user message to state + Isar
+2. Add user message to state + Drift
 3. Build prompt in isolate via `compute(buildPrompt, payload)`
 4. After isolate returns, perform late enrichment:
    - Vector lore retrieval
@@ -294,7 +294,7 @@ class MemoryEntry with _$MemoryEntry {
    - Context breakdown assembly
 5. Stream response via `streamChatCompletion()` with `CancelToken`
 6. `onUpdate()` applies streaming text/reasoning to state
-7. `onComplete()` finalizes message, persists to Isar, clears generation state
+7. `onComplete()` finalizes message, persists to Drift, clears generation state
 8. `onError()` restores state and writes formatted error output
 
 **Cancel Signal Propagation:**
@@ -354,10 +354,10 @@ class MemoryEntry with _$MemoryEntry {
 - Without encryption, payloads are plain JSON
 
 ### Synced Data
-- Characters, personas, chats: full Isar collections
-- Lorebooks: single Isar blob
-- API connection presets: single Isar blob
-- Theme presets: single Isar blob
+- Characters, personas, chats: full Drift tables
+- Lorebooks: single Drift blob
+- API connection presets: single Drift blob
+- Theme presets: single Drift blob
 - App/API runtime settings: SharedPreferences keys bundled under `local_storage` entity
 
 Not synced: active generation state, temporary UI state, debug traces, embedding vectors
@@ -366,21 +366,21 @@ Not synced: active generation state, temporary UI state, debug traces, embedding
 
 ## Database Layer
 
-### Isar
+### Drift (SQLite)
 
-All data stored in Isar. Collections defined in `lib/core/db/collections.dart`.
+All data stored in Drift/SQLite. Tables defined in `lib/core/db/tables.dart`.
 
 ### Write Transactions
 
-All writes go through `isar.writeTxn()`. This serializes concurrent writes automatically.
+All writes go through `_db.transaction()`. This serializes concurrent writes automatically.
 
 ### Repository Pattern
 
-Each collection has a repository class that maps between Freezed models and Isar collections:
+Each table has a repository class that maps between Freezed models and Drift row classes:
 
 ```dart
 class CharacterRepo {
-  final Isar _db;
+  final AppDatabase _db;
   Future<List<Character>> getAll();
   Future<Character?> getById(String id);
   Future<void> put(Character character);
@@ -390,15 +390,16 @@ class CharacterRepo {
 
 ### Read-Mutate-Write
 
-Always inside a `writeTxn`:
+Always inside a `transaction`:
 
 ```dart
-await isar.writeTxn(() async {
-  final col = await isar.chatSessionCollections
-      .where().sessionIdEqualTo(id).findFirst();
-  if (col == null) return;
+await _db.transaction(() async {
+  final row = await (_db.select(_db.chatSessions)
+        ..where((t) => t.sessionId.equals(id)))
+      .getSingleOrNull();
+  if (row == null) return;
   // mutate
-  await isar.chatSessionCollections.put(col);
+  await _db.into(_db.chatSessions).insertOnConflictUpdate(companion);
 });
 ```
 
@@ -407,14 +408,14 @@ Never: `getById` → mutate → `put` outside a transaction.
 ### Image Storage
 
 - Character avatars and chat images stored on file system
-- `path_provider.getApplicationDocumentsDirectory()` → `avatars/`, `gallery/`, `chat_images/`
-- Isar stores only relative file path strings, not binary data
+- `Platform.environment['APPDATA']/Glaze` (Windows), `~/.local/share/Glaze` (Linux), `~/Library/Application Support/Glaze` (macOS)
+- Drift stores only relative file path strings, not binary data
 - Import: decode data URL → write file → store path
 
 ### Crash Recovery
 
 - `WidgetsBindingObserver.appLifecycleState` detects backgrounding
-- Save intermediate state to Isar on `AppLifecycleState.paused`
+- Save intermediate state to Drift on `AppLifecycleState.paused`
 - On resume, verify generation state consistency
 - In-progress operations that were suspended may need restart
 
@@ -424,7 +425,7 @@ Never: `getById` → mutate → `put` outside a transaction.
 
 | Setting | Owner | Location |
 |---------|-------|----------|
-| Embedding endpoint/key/model | API | `ApiConfigCollection` |
+| Embedding endpoint/key/model | API | `ApiConfigs` table |
 | Search type (keys/vector/both) | Lorebook | `LorebookGlobalSettings` |
 | Vector threshold / topK | Lorebook | `LorebookGlobalSettings` |
 | Memory search type | MemoryBook session | `MemorySettings` |
@@ -432,10 +433,10 @@ Never: `getById` → mutate → `put` outside a transaction.
 | Google Drive OAuth client ID | Build config | `.env` |
 | Connected sync provider | Sync state | SharedPreferences |
 | Sync OAuth tokens | Sync state | `flutter_secure_storage` |
-| Recovery phrase-derived key | Crypto | Isar |
-| API endpoint/key/model | API runtime config | `ApiConfigCollection` |
-| Temperature / stream / maxTokens | API runtime config | `ApiConfigCollection` |
-| Reasoning toggle/tags | API + preset override | `ApiConfigCollection`, `Preset` |
+| Recovery phrase-derived key | Crypto | Drift |
+| API endpoint/key/model | API runtime config | `ApiConfigs` table |
+| Temperature / stream / maxTokens | API runtime config | `ApiConfigs` table |
+| Reasoning toggle/tags | API + preset override | `ApiConfigs` table, `Preset` |
 
 ---
 

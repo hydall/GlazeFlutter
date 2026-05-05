@@ -42,7 +42,7 @@ any session variable mutations that occurred during prompt preparation.
 ### INV-C6: Background generation continues independently
 
 When a generation is running for character A and the user navigates to character B,
-generation for A continues in the background. Stream deltas are persisted to Isar
+generation for A continues in the background. Stream deltas are persisted to Drift
 via background persistence provider.
 
 ### INV-C7: Stale completions are silently discarded

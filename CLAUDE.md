@@ -1,7 +1,7 @@
 # GlazeFlutter
 
 Native LLM frontend for AI roleplay. Flutter rewrite of [Glaze](https://github.com/hydall/Glaze).
-**Stack:** Flutter 3.41 + Riverpod 2 + Isar 3 + GoRouter. **Language:** Dart only. **License:** AGPL-3.0.
+**Stack:** Flutter 3.41 + Riverpod 2 + Drift (SQLite) + GoRouter. **Language:** Dart only. **License:** AGPL-3.0.
 
 Architecture: `docs/ARCHITECTURE.md`. Migration plan: `docs/FLUTTER_MIGRATION_MVP.md`.
 
@@ -12,7 +12,7 @@ flutter run -d windows          # Dev run (Windows)
 flutter run -d chrome           # Dev run (Web)
 flutter build windows           # Production build
 flutter analyze                 # Lint + typecheck
-dart run build_runner build     # Generate freezed/isar code
+dart run build_runner build     # Generate freezed/drift code
 flutter test                    # Run tests
 ```
 
@@ -55,12 +55,12 @@ flutter test                    # Run tests
 
 | Data | Backend | Pattern |
 |------|---------|---------|
-| Characters | Isar `CharacterCollection` | Repository |
-| Chat sessions | Isar `ChatSessionCollection` | Repository |
-| Presets | Isar `PresetCollection` | Repository |
-| API config | Isar `ApiConfigCollection` | Repository |
-| Personas | Isar `PersonaCollection` | Repository |
-| Images | File system (`path_provider`) | Image storage service |
+| Characters | Drift `Characters` table | Repository |
+| Chat sessions | Drift `ChatSessions` table | Repository |
+| Presets | Drift `Presets` table | Repository |
+| API config | Drift `ApiConfigs` table | Repository |
+| Personas | Drift `Personas` table | Repository |
+| Images | File system (`dart:io` Platform) | Image storage service |
 
 ## Architecture Layers
 
@@ -68,7 +68,7 @@ flutter test                    # Run tests
 UI (screens/widgets)
   → Riverpod providers (state + business logic)
     → Repositories (DB abstraction)
-      → Isar (persistence)
+      → Drift / SQLite (persistence)
     → Services (LLM, prompt builder, macro engine)
       → Dio (HTTP/SSE)
 ```
@@ -81,7 +81,7 @@ When editing files matching a pattern below, READ the corresponding rule file FI
 |----------------|-----------|
 | Generation, transport, streaming, abort | `docs/rules/generation.md` |
 | Any async boundary, DB writes | `docs/rules/race-conditions.md` |
-| Isar reads/writes, repositories | `docs/rules/database.md` |
+| Drift reads/writes, repositories | `docs/rules/database.md` |
 | Architecture details, full flow | `docs/ARCHITECTURE.md` |
 | Formal invariants with code references | `docs/INVARIANTS.md` |
 
@@ -90,6 +90,6 @@ When editing files matching a pattern below, READ the corresponding rule file FI
 - Add Provider/BLoC/GetX — Riverpod only
 - Use WebSocket for LLM streaming (SSE only)
 - Break SillyTavern V2 format compatibility for character cards
-- Store API keys in plain text in Isar
+- Store API keys in plain text in Drift
 - Mutate state directly — use immutable patterns with freezed
 - Forget `ref.watch` select for streaming UI (causes full rebuild per chunk)
