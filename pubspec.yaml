@@ -1,7 +1,7 @@
 name: glaze_flutter
 description: "Glaze — AI chat client (Flutter)"
 publish_to: 'none'
-version: 0.1.0+1
+version: 0.1.0-alpha
 
 environment:
   sdk: ^3.11.5
@@ -26,6 +26,7 @@ dependencies:
   image: ^4.0.0
   file_picker: ^11.0.2
   google_fonts: ^8.1.0
+  flutter_svg: ^2.0.16
 
 dev_dependencies:
   flutter_test:
@@ -38,6 +39,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/logos/
 
 dependency_overrides:
   path_provider: 2.1.5

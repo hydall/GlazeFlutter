@@ -11,6 +11,7 @@ import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_tab_bar.dart';
 
 enum _SortType { name, date }
 
@@ -47,30 +48,28 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                 actions: [
                   _HeaderIconButton(
                     icon: Icons.search_rounded,
-                    onTap: () {/* TODO: search */},
+                    onTap: () {
+                      /* TODO: search */
+                    },
                   ),
                 ],
               ),
             ),
           ),
 
-          // ── Tabs row: My Characters | Catalog + Add button ───────────────
+          // ── Tabs row: My Characters | Catalog ───────────────────────────
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: Row(
-              children: [
-                Expanded(child: _TabsRow(
-                  showCatalog: _showCatalog,
-                  onTabChanged: (v) => setState(() => _showCatalog = v),
-                )),
-                const SizedBox(width: 12),
-                if (!_showCatalog)
-                  GlazePillButton(
-                    icon: Icons.add_rounded,
-                    label: 'Add',
-                    onTap: () => _importCharacter(context, ref),
-                  ),
+            child: GlazeTabBar(
+              tabs: const [
+                GlazeTabItem(
+                  label: 'My Characters',
+                  icon: Icons.person_rounded,
+                ),
+                GlazeTabItem(label: 'Discover', icon: Icons.public_rounded),
               ],
+              activeIndex: _showCatalog ? 1 : 0,
+              onChanged: (i) => setState(() => _showCatalog = i == 1),
             ),
           ),
 
@@ -80,14 +79,13 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                 ? const _CatalogPlaceholder()
                 : characters.when(
                     loading: () => const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.accent,
-                      ),
+                      child: CircularProgressIndicator(color: AppColors.accent),
                     ),
                     error: (e, _) => Center(
-                      child: Text('Error: $e',
-                          style: const TextStyle(
-                              color: AppColors.textSecondary)),
+                      child: Text(
+                        'Error: $e',
+                        style: const TextStyle(color: AppColors.textSecondary),
+                      ),
                     ),
                     data: (chars) {
                       if (chars.isEmpty) {
@@ -105,14 +103,48 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                               ? _SortDir.desc
                               : _SortDir.asc;
                         }),
-                        onSortTypeChanged: (t) =>
-                            setState(() => _sortBy = t),
+                        onSortTypeChanged: (t) => setState(() => _sortBy = t),
                       );
                     },
                   ),
           ),
         ],
       ),
+      floatingActionButton: _showCatalog
+          ? null
+          : GestureDetector(
+              onTap: () => _importCharacter(context, ref),
+              child: Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                decoration: BoxDecoration(
+                  color: AppColors.accent,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.3),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add_rounded, color: Colors.white, size: 24),
+                    SizedBox(width: 8),
+                    Text(
+                      'Add',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 
@@ -163,121 +195,25 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
 
       if (!context.mounted) return;
       if (imported > 0) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text('Imported $imported character${imported > 1 ? 's' : ''}'),
-          backgroundColor: AppColors.accent,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Imported $imported character${imported > 1 ? 's' : ''}',
+            ),
+            backgroundColor: AppColors.accent,
+          ),
+        );
       } else if (lastError != null) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(lastError)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(lastError)));
       }
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Import failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
     }
-  }
-}
-
-// ─── Tabs row ──────────────────────────────────────────────────────────────
-
-class _TabsRow extends StatelessWidget {
-  final bool showCatalog;
-  final ValueChanged<bool> onTabChanged;
-
-  const _TabsRow({required this.showCatalog, required this.onTabChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (_, constraints) {
-      final w = constraints.maxWidth;
-      return Container(
-        height: 36,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceHigh.withValues(alpha: 0.6),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.glassBorder),
-        ),
-        child: Stack(
-          children: [
-            // Sliding active background
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              left: showCatalog ? w / 2 : 0,
-              top: 0,
-              bottom: 0,
-              width: w / 2,
-              child: Container(
-                margin: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: AppColors.accent.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-            ),
-            // Tab buttons
-            Row(
-              children: [
-                _Tab(
-                  label: 'My Characters',
-                  icon: Icons.person_rounded,
-                  isActive: !showCatalog,
-                  onTap: () => onTabChanged(false),
-                ),
-                _Tab(
-                  label: 'Catalog',
-                  icon: Icons.public_rounded,
-                  isActive: showCatalog,
-                  onTap: () => onTabChanged(true),
-                ),
-              ],
-            ),
-          ],
-        ),
-      );
-    });
-  }
-}
-
-class _Tab extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _Tab({
-    required this.label,
-    required this.icon,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isActive ? AppColors.accent : AppColors.inactiveTab;
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 14, color: color),
-            const SizedBox(width: 5),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 
@@ -316,10 +252,7 @@ class _CharacterGrid extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 // Sort type pill
-                _SortTypePill(
-                  sortBy: sortBy,
-                  onChanged: onSortTypeChanged,
-                ),
+                _SortTypePill(sortBy: sortBy, onChanged: onSortTypeChanged),
               ],
             ),
           ),
@@ -376,8 +309,7 @@ class _SortDirButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.accent.withValues(alpha: 0.15),
           shape: BoxShape.circle,
-          border: Border.all(
-              color: AppColors.accent.withValues(alpha: 0.2)),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
         ),
         child: AnimatedRotation(
           turns: isAsc ? 0.5 : 0,
@@ -412,8 +344,7 @@ class _SortTypePill extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.accent.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: AppColors.accent.withValues(alpha: 0.2)),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -427,8 +358,11 @@ class _SortTypePill extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_down_rounded,
-                size: 18, color: AppColors.accent),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: AppColors.accent,
+            ),
           ],
         ),
       ),
@@ -485,8 +419,11 @@ class _PickerItem extends StatelessWidget {
   final bool isActive;
   final VoidCallback onTap;
 
-  const _PickerItem(
-      {required this.label, required this.isActive, required this.onTap});
+  const _PickerItem({
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -658,30 +595,42 @@ class _CharacterCard extends ConsumerWidget {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.info_outline_rounded,
-                  color: AppColors.textPrimary),
-              title: const Text('View Info',
-                  style: TextStyle(color: AppColors.textPrimary)),
+              leading: const Icon(
+                Icons.info_outline_rounded,
+                color: AppColors.textPrimary,
+              ),
+              title: const Text(
+                'View Info',
+                style: TextStyle(color: AppColors.textPrimary),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 context.go('/character/${character.id}');
               },
             ),
             ListTile(
-              leading: const Icon(Icons.edit_rounded,
-                  color: AppColors.textPrimary),
-              title: const Text('Edit',
-                  style: TextStyle(color: AppColors.textPrimary)),
+              leading: const Icon(
+                Icons.edit_rounded,
+                color: AppColors.textPrimary,
+              ),
+              title: const Text(
+                'Edit',
+                style: TextStyle(color: AppColors.textPrimary),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 context.go('/character/${character.id}/edit');
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline_rounded,
-                  color: Color(0xFFFF4444)),
-              title: const Text('Delete',
-                  style: TextStyle(color: Color(0xFFFF4444))),
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: Color(0xFFFF4444),
+              ),
+              title: const Text(
+                'Delete',
+                style: TextStyle(color: Color(0xFFFF4444)),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _confirmDelete(context, ref);
@@ -699,23 +648,31 @@ class _CharacterCard extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceHigh,
-        title: const Text('Delete Character',
-            style: TextStyle(color: AppColors.textPrimary)),
-        content: Text('Delete ${character.name}? This cannot be undone.',
-            style: const TextStyle(color: AppColors.textSecondary)),
+        title: const Text(
+          'Delete Character',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        content: Text(
+          'Delete ${character.name}? This cannot be undone.',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               ref.read(charactersProvider.notifier).remove(character.id);
             },
-            child: const Text('Delete',
-                style: TextStyle(color: Color(0xFFFF4444))),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Color(0xFFFF4444)),
+            ),
           ),
         ],
       ),
@@ -785,9 +742,7 @@ class _CardInfo extends StatelessWidget {
                 fontSize: 11,
                 color: Colors.white.withValues(alpha: 0.75),
                 height: 1.3,
-                shadows: const [
-                  Shadow(blurRadius: 4, color: Colors.black87),
-                ],
+                shadows: const [Shadow(blurRadius: 4, color: Colors.black87)],
               ),
             ),
           ],
@@ -829,8 +784,11 @@ class _TokenBadge extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.description_outlined,
-                  size: 11, color: Colors.white70),
+              const Icon(
+                Icons.description_outlined,
+                size: 11,
+                color: Colors.white70,
+              ),
               const SizedBox(width: 4),
               Text(
                 '${_estimateTokens()}',
@@ -894,9 +852,11 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.group_outlined,
-              size: 64,
-              color: AppColors.textSecondary.withValues(alpha: 0.5)),
+          Icon(
+            Icons.group_outlined,
+            size: 64,
+            color: AppColors.textSecondary.withValues(alpha: 0.5),
+          ),
           const SizedBox(height: 16),
           const Text(
             'No characters yet',

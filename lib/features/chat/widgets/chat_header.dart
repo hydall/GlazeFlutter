@@ -1,0 +1,98 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import '../../../core/models/character.dart';
+import '../../../shared/theme/app_colors.dart';
+
+class ChatHeader extends StatelessWidget {
+  final Character character;
+  final String sessionName;
+
+  const ChatHeader({
+    super.key,
+    required this.character,
+    required this.sessionName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    Color avatarColor = AppColors.accent;
+    if (character.color != null && character.color!.isNotEmpty) {
+      try {
+        final String c = character.color!.replaceFirst('#', '');
+        avatarColor = Color(int.parse('FF$c', radix: 16));
+      } catch (_) {}
+    }
+
+    final String initial = character.name.isNotEmpty
+        ? character.name[0].toUpperCase()
+        : '?';
+
+    Widget avatar;
+    if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
+      avatar = CircleAvatar(
+        radius: 17,
+        backgroundImage: FileImage(File(character.avatarPath!)),
+        onBackgroundImageError: (_, __) {},
+        backgroundColor: avatarColor.withValues(alpha: 0.2),
+        child: const SizedBox.shrink(),
+      );
+    } else {
+      avatar = Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(
+          color: avatarColor.withValues(alpha: 0.2),
+          shape: BoxShape.circle,
+        ),
+        child: Center(
+          child: Text(
+            initial,
+            style: TextStyle(
+              fontSize: 16,
+              color: avatarColor,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        avatar,
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                character.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  height: 1.1,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                sessionName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  height: 1.1,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
