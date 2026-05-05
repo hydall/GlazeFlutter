@@ -296,6 +296,8 @@ class CharacterRepo {
 
 ## Phase 2: Core Feature — Chat (Day 8-18) — IN PROGRESS
 
+> **UI Reference**: See [`docs/UI_REFERENCE.md`](./UI_REFERENCE.md) for the complete screen-by-screen inventory of all Glaze JS views, buttons, navigation paths, and their Flutter port status. Consult this before implementing any screen.
+
 ### 2a: Character list screen (Day 8-10)
 
 ```

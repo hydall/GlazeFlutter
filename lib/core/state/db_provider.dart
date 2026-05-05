@@ -6,8 +6,18 @@ import '../db/repositories/chat_repo.dart';
 import '../db/repositories/preset_repo.dart';
 import '../db/repositories/api_config_repo.dart';
 import '../db/repositories/persona_repo.dart';
+import '../services/character_importer.dart';
+import '../services/image_storage_service.dart';
 
 final appDbProvider = Provider<AppDatabase>((ref) => AppDatabase());
+
+final imageStorageProvider = Provider<ImageStorageService>((ref) {
+  return ImageStorageService.create();
+});
+
+final characterImporterProvider = Provider<CharacterImporter>((ref) {
+  return CharacterImporter(ref.watch(imageStorageProvider));
+});
 
 final characterRepoProvider = Provider<CharacterRepo>((ref) {
   return CharacterRepo(ref.watch(appDbProvider));

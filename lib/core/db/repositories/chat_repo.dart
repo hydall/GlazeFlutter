@@ -16,6 +16,13 @@ class ChatRepo {
     return rows.map(_toModel).toList();
   }
 
+  Future<List<ChatSession>> getAllSessions() async {
+    final rows = await (_db.select(_db.chatSessions)
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+        .get();
+    return rows.map(_toModel).toList();
+  }
+
   Future<ChatSession?> getById(String sessionId) async {
     final row = await (_db.select(_db.chatSessions)
           ..where((t) => t.sessionId.equals(sessionId)))

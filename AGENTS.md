@@ -29,6 +29,7 @@ Urgent fixes branch from `main`, merge back to `main`.
 - **Delete merged branches** — both local and remote
 - **Run `flutter analyze && flutter build windows`** before committing
 - **Run `dart run build_runner build`** after changing freezed/drift models
+- **Every sub-screen must have a back button** — use `leading: BackButton(onPressed: () => context.go('/parent'))` in AppBar since GoRouter `go()` replaces the stack and doesn't auto-provide one
 
 ## Known Issue: `path_provider_foundation` + `objective_c` on Windows
 
@@ -54,6 +55,32 @@ Urgent fixes branch from `main`, merge back to `main`.
 3. `git checkout -b feat/xxx` — create feature branch
 4. `flutter analyze` — verify before committing
 
+## No God Objects — Parallel Decomposition
+
+Every class/file must have a **single responsibility**. When a class grows beyond ~150 lines or takes on more than one logical role, split it before continuing.
+
+### Rules
+
+1. **One class = one job.** If the class name needs "and" to describe it (`CharacterImportAndNormalization`), it's two classes.
+2. **Thin orchestrator, fat specialists.** The top-level class (e.g. `PromptBuilder`) only calls other classes in order — it contains zero business logic itself. All logic lives in focused components below.
+3. **Split before extend.** When adding a new feature to an existing file, check: does it belong there, or does it need its own file? If the file is already >150 lines, the answer is almost always "new file."
+4. **No circular dependencies.** Lower layers never import from higher layers. Direction: `UI → Providers → Services/Repos → Models/DB`. Data flows down, events flow up.
+5. **Extract during implementation, not after.** If while writing a method you realize "this chunk could be its own class," extract it immediately. Don't leave a TODO to refactor later.
+6. **Constructor injection only.** Dependencies are passed in, not looked up. This keeps classes testable and boundaries visible.
+
+### Architecture layers (dependency direction ↓)
+
+```
+UI (screens/widgets)
+  → Providers (Riverpod state + actions)
+    → Services (orchestrators: PromptBuilder, CharacterImporter)
+      → Components (specialists: MacroEngine, TokenEstimator, HistoryAssembler)
+        → Models (Freezed data classes)
+        → Repos (Drift abstraction)
+```
+
+A component may only import from layers at its level or below. Never upward.
+
 ## Code Rules (lazy-loaded)
 
 Detailed rules are split into topic files. When in doubt, read all that apply before editing:
@@ -66,6 +93,9 @@ Detailed rules are split into topic files. When in doubt, read all that apply be
 | Formal invariants with code references | `docs/INVARIANTS.md` |
 | Architecture, directory structure, full flow | `docs/ARCHITECTURE.md` |
 | Flutter/Riverpod specifics | `CLAUDE.md` |
+| **All screens, buttons, navigation, port status** | **`docs/UI_REFERENCE.md`** |
+
+**Before building or modifying any UI screen**, read the relevant section in `docs/UI_REFERENCE.md`. It maps every Glaze JS view to its Flutter route, lists every button/action, and tracks port status.
 
 ## Cleanup Checklist After Merge
 
