@@ -1,0 +1,73 @@
+import 'dart:convert';
+
+import 'package:drift/drift.dart';
+
+import '../app_db.dart';
+import '../../models/character.dart';
+
+class CharacterRepo {
+  final AppDatabase _db;
+  CharacterRepo(this._db);
+
+  Future<List<Character>> getAll() async {
+    final rows = await _db.select(_db.characters).get();
+    return rows.map(_toModel).toList();
+  }
+
+  Future<Character?> getById(String id) async {
+    final row = await (_db.select(_db.characters)
+          ..where((t) => t.charId.equals(id)))
+        .getSingleOrNull();
+    return row != null ? _toModel(row) : null;
+  }
+
+  Future<void> put(Character character) async {
+    await _db.into(_db.characters).insertOnConflictUpdate(_toCompanion(character));
+  }
+
+  Future<void> delete(String id) async {
+    await (_db.delete(_db.characters)..where((t) => t.charId.equals(id))).go();
+  }
+
+  Character _toModel(CharacterRow c) => Character(
+        id: c.charId,
+        name: c.name,
+        avatarPath: c.avatarPath,
+        description: c.description,
+        personality: c.personality,
+        scenario: c.scenario,
+        firstMes: c.firstMes,
+        mesExample: c.mesExample,
+        systemPrompt: c.systemPrompt,
+        postHistoryInstructions: c.postHistoryInstructions,
+        creator: c.creator,
+        creatorNotes: c.creatorNotes,
+        color: c.color,
+        updatedAt: c.updatedAt,
+        tags: c.tagsJson != null
+            ? List<String>.from(jsonDecode(c.tagsJson!))
+            : [],
+        alternateGreetings: c.alternateGreetingsJson != null
+            ? List<String>.from(jsonDecode(c.alternateGreetingsJson!))
+            : [],
+      );
+
+  CharactersCompanion _toCompanion(Character m) => CharactersCompanion(
+        charId: Value(m.id),
+        name: Value(m.name),
+        avatarPath: Value(m.avatarPath),
+        description: Value(m.description),
+        personality: Value(m.personality),
+        scenario: Value(m.scenario),
+        firstMes: Value(m.firstMes),
+        mesExample: Value(m.mesExample),
+        systemPrompt: Value(m.systemPrompt),
+        postHistoryInstructions: Value(m.postHistoryInstructions),
+        creator: Value(m.creator),
+        creatorNotes: Value(m.creatorNotes),
+        color: Value(m.color),
+        updatedAt: Value(m.updatedAt),
+        tagsJson: Value(jsonEncode(m.tags)),
+        alternateGreetingsJson: Value(jsonEncode(m.alternateGreetings)),
+      );
+}
