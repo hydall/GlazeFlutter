@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/theme/app_colors.dart';
+import 'chat_dialogs.dart';
 import 'tokenizer_sheet.dart';
 
-class MagicDrawerPanel extends StatelessWidget {
+class MagicDrawerPanel extends ConsumerWidget {
   final String charId;
   const MagicDrawerPanel({super.key, required this.charId});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.background,
@@ -87,6 +89,7 @@ class MagicDrawerPanel extends StatelessWidget {
                   label: 'Raw Prompt',
                   onTap: () {
                     Navigator.pop(context);
+                    showRawPromptDialog(context, ref, charId);
                   },
                 ),
                 _MagicItem(
@@ -110,6 +113,7 @@ class MagicDrawerPanel extends StatelessWidget {
                   label: 'Context',
                   onTap: () {
                     Navigator.pop(context);
+                    showTokenizerSheet(context, charId);
                   },
                 ),
               ],
