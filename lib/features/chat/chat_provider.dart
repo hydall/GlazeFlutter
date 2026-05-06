@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/chat_message.dart';
 import '../../core/models/persona.dart';
+import '../../core/services/generation_notification_service.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../cloud_sync/sync_provider.dart';
@@ -70,6 +71,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _invalidateHistory();
     state = AsyncData(ChatState(session: updatedSession, isGenerating: true));
 
+    final notifService = GenerationNotificationService.instance;
+    await notifService.onGenerationStarted();
+
     final service = ChatGenerationService(ref);
     final result = await service.generate(
       session: updatedSession,
@@ -86,6 +90,10 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       onStateUpdate: (s) => state = AsyncData(s),
     );
     notifySyncMessageGenerated(ref);
+
+    final charRepo = ref.read(characterRepoProvider);
+    final character = await charRepo.getById(arg);
+    await notifService.onGenerationCompleted(character?.name ?? 'Unknown', arg);
   }
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
@@ -114,6 +122,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _invalidateHistory();
     state = AsyncData(ChatState(session: trimmedSession, isGenerating: true));
 
+    final notifService = GenerationNotificationService.instance;
+    await notifService.onGenerationStarted();
+
     final service = ChatGenerationService(ref);
     final result = await service.generate(
       session: trimmedSession,
@@ -137,6 +148,10 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       onStateUpdate: (s) => state = AsyncData(s),
     );
     notifySyncMessageGenerated(ref);
+
+    final charRepo = ref.read(characterRepoProvider);
+    final character = await charRepo.getById(arg);
+    await notifService.onGenerationCompleted(character?.name ?? 'Unknown', arg);
   }
 
   Future<void> clearChat() async {
@@ -340,6 +355,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   void abortGeneration() {
     _cancelToken?.cancel();
     _cancelToken = null;
+
+    GenerationNotificationService.instance.onGenerationAborted();
 
     final current = state.value;
     if (current == null) return;

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/services/generation_notification_service.dart';
 import 'core/state/active_selection_provider.dart';
 import 'core/services/preset_seeder.dart';
 import 'core/services/crash_recovery_service.dart';
@@ -129,16 +132,40 @@ class GlazeApp extends ConsumerStatefulWidget {
   ConsumerState<GlazeApp> createState() => _GlazeAppState();
 }
 
-class _GlazeAppState extends ConsumerState<GlazeApp> {
+class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver {
+  StreamSubscription<String>? _navSub;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     loadActiveSelections(ref);
     seedDefaultPresets(ref);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAndOfferCrashRecovery(context, ref);
       checkAndShowOnboarding(context);
+      _listenNotificationNavigation();
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _navSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    GenerationNotificationService.instance.updateLifecycleState(state);
+  }
+
+  void _listenNotificationNavigation() {
+    _navSub = GenerationNotificationService.instance.navigationStream.listen(
+      (charId) {
+        if (mounted) context.push('/chat/$charId');
+      },
+    );
   }
 
   @override
