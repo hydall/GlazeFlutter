@@ -2,256 +2,707 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/character.dart';
 import '../../core/state/db_provider.dart';
+import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 
-class CharacterDetailScreen extends ConsumerWidget {
+// ─── Colour tokens (mirror CharacterCardSheet.vue) ─────────────────────────
+
+const _kAccent = AppColors.accent; // #7996CE
+const _kAccentDim = Color(0x1F7996CE); // 12 %
+const _kAccentBorder = Color(0x337996CE); // 20 %
+const _kNsfw = Color(0xFFFF4444);
+const _kNsfwBg = Color(0x33FF4444);
+const _kNsfwBorder = Color(0x4DFF4444);
+const _kSfw = Color(0xFF4CAF50);
+const _kSfwBg = Color(0x334CAF50);
+const _kSfwBorder = Color(0x524CAF50);
+const _kSurface = Color(0x0DFFFFFF); // rgba(255,255,255,0.05)
+const _kBorderLine = Color(0x0DFFFFFF); // rgba(255,255,255,0.05)
+const _kText75 = Color(0xBFFFFFFF);
+const _kText50 = Color(0x80FFFFFF);
+const _kText35 = Color(0x59FFFFFF);
+
+// ─── Screen ────────────────────────────────────────────────────────────────
+
+class CharacterDetailScreen extends ConsumerStatefulWidget {
   final String charId;
   const CharacterDetailScreen({super.key, required this.charId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CharacterDetailScreen> createState() =>
+      _CharacterDetailScreenState();
+}
+
+class _CharacterDetailScreenState
+    extends ConsumerState<CharacterDetailScreen> {
+  int _activeTab = 0;
+
+  void _openActionsMenu() {
+    GlazeBottomSheet.show(
+      context,
+      items: [
+        BottomSheetItem(
+          icon: Icons.edit_outlined,
+          label: 'Edit',
+          onTap: () {
+            Navigator.pop(context);
+            context.go('/character/${widget.charId}/edit');
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.delete_outline,
+          label: 'Delete',
+          isDestructive: true,
+          onTap: () => Navigator.pop(context),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return GlazeScaffold(
-      title: 'Character Info',
+      extendBodyBehindHeader: true,
+      title: '',
+      actions: [_HeaderMenuButton(onTap: _openActionsMenu)],
       onBack: () => context.go('/characters'),
-      body: Column(
-        children: [
-          Expanded(
-            child: FutureBuilder<Character?>(
-              future: ref.read(characterRepoProvider).getById(charId),
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final char = snap.data;
-                if (char == null) {
-                  return const Center(child: Text('Character not found'));
-                }
-                return _CharacterDetailView(character: char);
-              },
-            ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: () => context.go('/chat/$charId'),
-                      icon: const Icon(Icons.chat_bubble),
-                      label: const Text('Start Chat'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  OutlinedButton.icon(
-                    onPressed: () => context.go('/character/$charId/edit'),
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Edit'),
-                  ),
-                ],
+      body: FutureBuilder<Character?>(
+        future: ref.read(characterRepoProvider).getById(widget.charId),
+        builder: (context, snap) {
+          if (snap.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final char = snap.data;
+          if (char == null) {
+            return const Center(
+              child: Text(
+                'Character not found',
+                style: TextStyle(color: AppColors.textPrimary),
               ),
-            ),
-          ),
-        ],
+            );
+          }
+          return _CharacterDetailBody(
+            character: char,
+            charId: widget.charId,
+            activeTab: _activeTab,
+            onTabChange: (i) => setState(() => _activeTab = i),
+          );
+        },
       ),
     );
   }
 }
 
-class _CharacterDetailView extends StatelessWidget {
+// ─── Body ──────────────────────────────────────────────────────────────────
+
+class _CharacterDetailBody extends StatelessWidget {
   final Character character;
-  const _CharacterDetailView({required this.character});
+  final String charId;
+  final int activeTab;
+  final ValueChanged<int> onTabChange;
+
+  const _CharacterDetailBody({
+    required this.character,
+    required this.charId,
+    required this.activeTab,
+    required this.onTabChange,
+  });
+
+  static const _tabLabels = ['Information', 'Prompts'];
+  static const _tabIcons = [
+    Icons.info_outline_rounded,
+    Icons.description_outlined,
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Column(
-              children: [
-                _buildAvatar(context, 96),
-                const SizedBox(height: 12),
-                Text(
-                  character.name,
-                  style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                if (character.creator != null && character.creator!.isNotEmpty)
-                  Text(
-                    'by ${character.creator}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-              ],
+    final sab = MediaQuery.of(context).padding.bottom;
+    return Stack(
+      children: [
+        Column(
+          children: [
+            _HeroSection(character: character),
+            _TabsRow(
+              labels: _tabLabels,
+              icons: _tabIcons,
+              activeIndex: activeTab,
+              onTabChange: onTabChange,
             ),
-          ),
-          const SizedBox(height: 24),
-          if (character.tags.isNotEmpty) ...[
-            _SectionLabel('Tags'),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: character.tags
-                  .map(
-                    (t) => Chip(
-                      label: Text(t, style: const TextStyle(fontSize: 12)),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  )
-                  .toList(),
-            ),
-            const SizedBox(height: 16),
-          ],
-          if (character.description != null &&
-              character.description!.isNotEmpty) ...[
-            _SectionLabel('Description'),
-            const SizedBox(height: 4),
-            _ExpandableText(character.description!),
-            const SizedBox(height: 16),
-          ],
-          if (character.personality != null &&
-              character.personality!.isNotEmpty) ...[
-            _SectionLabel('Personality'),
-            const SizedBox(height: 4),
-            _ExpandableText(character.personality!),
-            const SizedBox(height: 16),
-          ],
-          if (character.scenario != null && character.scenario!.isNotEmpty) ...[
-            _SectionLabel('Scenario'),
-            const SizedBox(height: 4),
-            _ExpandableText(character.scenario!),
-            const SizedBox(height: 16),
-          ],
-          if (character.firstMes != null && character.firstMes!.isNotEmpty) ...[
-            _SectionLabel('First Message'),
-            const SizedBox(height: 4),
-            _ExpandableText(character.firstMes!),
-            const SizedBox(height: 16),
-          ],
-          if (character.mesExample != null &&
-              character.mesExample!.isNotEmpty) ...[
-            _SectionLabel('Example Dialogue'),
-            const SizedBox(height: 4),
-            _ExpandableText(character.mesExample!),
-            const SizedBox(height: 16),
-          ],
-          if (character.systemPrompt != null &&
-              character.systemPrompt!.isNotEmpty) ...[
-            _SectionLabel('System Prompt'),
-            const SizedBox(height: 4),
-            _ExpandableText(character.systemPrompt!),
-            const SizedBox(height: 16),
-          ],
-          if (character.postHistoryInstructions != null &&
-              character.postHistoryInstructions!.isNotEmpty) ...[
-            _SectionLabel('Post-History Instructions'),
-            const SizedBox(height: 4),
-            _ExpandableText(character.postHistoryInstructions!),
-            const SizedBox(height: 16),
-          ],
-          if (character.creatorNotes != null &&
-              character.creatorNotes!.isNotEmpty) ...[
-            _SectionLabel('Creator Notes'),
-            const SizedBox(height: 4),
-            _ExpandableText(character.creatorNotes!),
-            const SizedBox(height: 16),
-          ],
-          const SizedBox(height: 80),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAvatar(BuildContext context, double radius) {
-    if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
-      final file = File(character.avatarPath!);
-      return CircleAvatar(
-        radius: radius,
-        backgroundImage: FileImage(file),
-        onBackgroundImageError: (_, __) {},
-      );
-    }
-    return CircleAvatar(
-      radius: radius,
-      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-      child: Text(
-        character.name.isNotEmpty ? character.name[0].toUpperCase() : '?',
-        style: TextStyle(fontSize: radius * 0.6),
-      ),
-    );
-  }
-}
-
-class _SectionLabel extends StatelessWidget {
-  final String text;
-  const _SectionLabel(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-        color: Theme.of(context).colorScheme.primary,
-        fontWeight: FontWeight.w600,
-      ),
-    );
-  }
-}
-
-class _ExpandableText extends StatefulWidget {
-  final String text;
-  const _ExpandableText(this.text);
-
-  @override
-  State<_ExpandableText> createState() => _ExpandableTextState();
-}
-
-class _ExpandableTextState extends State<_ExpandableText> {
-  bool _expanded = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = Theme.of(context).textTheme.bodyMedium;
-    if (widget.text.length <= 300 || _expanded) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SelectableText(widget.text, style: style),
-          if (widget.text.length > 300)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () => setState(() => _expanded = false),
-                child: const Text('Show less'),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                switchInCurve: Curves.easeOut,
+                switchOutCurve: Curves.easeIn,
+                child: activeTab == 0
+                    ? _InfoTab(key: const ValueKey('info'), character: character)
+                    : _PromptsTab(
+                        key: const ValueKey('prompts'),
+                        character: character,
+                      ),
               ),
             ),
-        ],
-      );
-    }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(widget.text.substring(0, 300) + '...', style: style),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: () => setState(() => _expanded = true),
-            child: const Text('Show more'),
-          ),
+          ],
+        ),
+        // Chat FAB
+        Positioned(
+          right: 16,
+          bottom: 16 + sab,
+          child: _ChatFab(onTap: () => context.go('/chat/$charId')),
         ),
       ],
     );
   }
 }
+
+// ─── Hero ──────────────────────────────────────────────────────────────────
+
+class _HeroSection extends StatelessWidget {
+  final Character character;
+  const _HeroSection({required this.character});
+
+  @override
+  Widget build(BuildContext context) {
+    final topPad = MediaQuery.of(context).padding.top;
+    return SizedBox(
+      height: 310 + topPad,
+      width: double.infinity,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          _buildImage(),
+          // Bottom gradient
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                stops: [0.35, 0.60, 1.0],
+                colors: [
+                  Colors.transparent,
+                  Color(0x33000000),
+                  Color(0xBF000000),
+                ],
+              ),
+            ),
+          ),
+          // Name + creator overlay
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 16,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  character.name,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                    shadows: [Shadow(blurRadius: 6, color: Color(0xCC000000))],
+                  ),
+                ),
+                if (character.creator != null && character.creator!.isNotEmpty)
+                  Text(
+                    '@${character.creator}',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: _kText50,
+                      shadows: [Shadow(blurRadius: 3, color: Color(0xCC000000))],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildImage() {
+    if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
+      return Image.file(
+        File(character.avatarPath!),
+        fit: BoxFit.cover,
+        alignment: Alignment.topCenter,
+        errorBuilder: (_, __, _) => _HeroPlaceholder(name: character.name),
+      );
+    }
+    return _HeroPlaceholder(name: character.name);
+  }
+}
+
+class _HeroPlaceholder extends StatelessWidget {
+  final String name;
+  const _HeroPlaceholder({required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0x147996CE),
+      child: Center(
+        child: Text(
+          name.isNotEmpty ? name[0].toUpperCase() : '?',
+          style: const TextStyle(
+            fontSize: 64,
+            fontWeight: FontWeight.w700,
+            color: _kText35,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Tab bar ───────────────────────────────────────────────────────────────
+
+class _TabsRow extends StatelessWidget {
+  final List<String> labels;
+  final List<IconData> icons;
+  final int activeIndex;
+  final ValueChanged<int> onTabChange;
+
+  const _TabsRow({
+    required this.labels,
+    required this.icons,
+    required this.activeIndex,
+    required this.onTabChange,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: LayoutBuilder(
+        builder: (_, constraints) {
+          final totalW = constraints.maxWidth;
+          final tabW = totalW / labels.length;
+          return SizedBox(
+            height: 44,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: const Color(0x14FFFFFF),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0x0DFFFFFF)),
+              ),
+              child: Stack(
+                children: [
+                  // Animated slider
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                    left: activeIndex * tabW + 2,
+                    top: 2,
+                    bottom: 2,
+                    width: tabW - 4,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: _kAccent.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(
+                          color: _kAccent.withValues(alpha: 0.28),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Tab items
+                  Row(
+                    children: List.generate(labels.length, (i) {
+                      final active = i == activeIndex;
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () => onTabChange(i),
+                          behavior: HitTestBehavior.opaque,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                icons[i],
+                                size: 15,
+                                color: active ? _kAccent : _kText50,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                labels[i],
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: active ? _kAccent : _kText50,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// ─── Info tab ──────────────────────────────────────────────────────────────
+
+class _InfoTab extends StatelessWidget {
+  final Character character;
+  const _InfoTab({super.key, required this.character});
+
+  @override
+  Widget build(BuildContext context) {
+    final tags = character.tags;
+    final notes = character.creatorNotes;
+    final hasNotes = notes != null && notes.isNotEmpty;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 100),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (tags.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: tags.map((t) => _TagChip(tag: t)).toList(),
+              ),
+            ),
+          if (hasNotes) ...[
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
+              child: Text(
+                'CREATOR NOTES',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.77,
+                  color: _kText35,
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: SelectableText(
+                notes,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  height: 1.55,
+                  color: _kText75,
+                ),
+              ),
+            ),
+          ],
+          if (tags.isEmpty && !hasNotes)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(40),
+                child: Text(
+                  'No information available',
+                  style: TextStyle(color: _kText35),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TagChip extends StatelessWidget {
+  final String tag;
+  const _TagChip({required this.tag});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color bg, fg, border;
+    if (tag == 'NSFW') {
+      bg = _kNsfwBg;
+      fg = _kNsfw;
+      border = _kNsfwBorder;
+    } else if (tag == 'SFW') {
+      bg = _kSfwBg;
+      fg = _kSfw;
+      border = _kSfwBorder;
+    } else if (tag.startsWith('#')) {
+      bg = const Color(0x1A00FFFF);
+      fg = const Color(0xFF00CCCC);
+      border = const Color(0x3300FFFF);
+    } else {
+      bg = _kAccentDim;
+      fg = _kAccent;
+      border = _kAccentBorder;
+    }
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: border),
+      ),
+      child: Text(
+        tag,
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
+      ),
+    );
+  }
+}
+
+// ─── Prompts tab ───────────────────────────────────────────────────────────
+
+class _PromptsTab extends StatefulWidget {
+  final Character character;
+  const _PromptsTab({super.key, required this.character});
+
+  @override
+  State<_PromptsTab> createState() => _PromptsTabState();
+}
+
+class _PromptsTabState extends State<_PromptsTab> {
+  final Map<String, bool> _expanded = {};
+
+  List<({String key, String label, String text})> get _sections {
+    final c = widget.character;
+    return [
+      (key: 'description', label: 'Description', text: c.description ?? ''),
+      (key: 'personality', label: 'Personality', text: c.personality ?? ''),
+      (key: 'scenario', label: 'Scenario', text: c.scenario ?? ''),
+      (key: 'mesExample', label: 'Example Dialogue', text: c.mesExample ?? ''),
+      (
+        key: 'systemPrompt',
+        label: 'System Prompt',
+        text: c.systemPrompt ?? '',
+      ),
+      (
+        key: 'postHistory',
+        label: 'Post-History Instructions',
+        text: c.postHistoryInstructions ?? '',
+      ),
+    ].where((s) => s.text.isNotEmpty).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sections = _sections;
+    final firstMes = widget.character.firstMes ?? '';
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 100),
+      child: Column(
+        children: [
+          ...sections.map(
+            (s) => _AccordionCard(
+              key: ValueKey(s.key),
+              label: s.label,
+              text: s.text,
+              expanded: _expanded[s.key] ?? false,
+              onToggle: () => setState(
+                () => _expanded[s.key] = !(_expanded[s.key] ?? false),
+              ),
+            ),
+          ),
+          if (firstMes.isNotEmpty)
+            _AccordionCard(
+              key: const ValueKey('firstMes'),
+              label: 'First Message',
+              text: firstMes,
+              expanded: _expanded['firstMes'] ?? false,
+              onToggle: () => setState(
+                () =>
+                    _expanded['firstMes'] = !(_expanded['firstMes'] ?? false),
+              ),
+            ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+}
+
+class _AccordionCard extends StatelessWidget {
+  final String label;
+  final String text;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  const _AccordionCard({
+    super.key,
+    required this.label,
+    required this.text,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      decoration: BoxDecoration(
+        color: _kSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _kBorderLine),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          GestureDetector(
+            onTap: onToggle,
+            behavior: HitTestBehavior.opaque,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label.toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.65,
+                        color: _kAccent,
+                      ),
+                    ),
+                  ),
+                  AnimatedRotation(
+                    turns: expanded ? 0.0 : 0.5,
+                    duration: const Duration(milliseconds: 280),
+                    curve: Curves.easeOutCubic,
+                    child: const Icon(
+                      Icons.keyboard_arrow_up_rounded,
+                      color: _kText50,
+                      size: 24,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Body
+          AnimatedCrossFade(
+            crossFadeState:
+                expanded
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 280),
+            sizeCurve: Curves.easeOutCubic,
+            firstChild: ShaderMask(
+              shaderCallback:
+                  (bounds) => const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: [0.45, 1.0],
+                    colors: [Colors.white, Colors.transparent],
+                  ).createShader(bounds),
+              blendMode: BlendMode.dstIn,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                child: Text(
+                  text,
+                  maxLines: 3,
+                  overflow: TextOverflow.clip,
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    height: 1.55,
+                    color: _kText75,
+                  ),
+                ),
+              ),
+            ),
+            secondChild: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: SelectableText(
+                text,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  height: 1.55,
+                  color: _kText75,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Chat FAB ──────────────────────────────────────────────────────────────
+
+class _ChatFab extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ChatFab({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: _kAccent,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: const [
+            BoxShadow(blurRadius: 16, color: Color(0x80000000)),
+          ],
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.chat_bubble_rounded, color: Colors.white, size: 18),
+            SizedBox(width: 8),
+            Text(
+              'Open Chat',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Header menu button ────────────────────────────────────────────────────
+
+class _HeaderMenuButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _HeaderMenuButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 36,
+        height: 36,
+        margin: const EdgeInsets.only(right: 4),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: const Color(0xCC1E1E1E),
+          border: Border.all(color: const Color(0x1AFFFFFF)),
+        ),
+        child: const Icon(
+          Icons.more_vert_rounded,
+          color: _kAccent,
+          size: 20,
+        ),
+      ),
+    );
+  }
+}
+

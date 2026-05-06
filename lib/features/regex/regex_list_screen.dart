@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/preset.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
-import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/sheet_view.dart';
 import '../presets/widgets/regex_tile.dart';
 
 class RegexListScreen extends ConsumerWidget {
@@ -15,8 +15,9 @@ class RegexListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final presetsAsync = ref.watch(presetRepoProvider);
 
-    return GlazeScaffold(
+    return SheetView(
       title: 'Regex Scripts',
+      showBack: true,
       onBack: () => context.go('/tools'),
       body: FutureBuilder<List<Preset>>(
         future: presetsAsync.getAll(),
@@ -51,7 +52,7 @@ class RegexListScreen extends ConsumerWidget {
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.only(bottom: 40),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             itemCount: allRegexes.length,
             itemBuilder: (_, i) {
               final entry = allRegexes[i];
@@ -86,7 +87,7 @@ class _EditableRegexItem extends ConsumerWidget {
     final presetName = presets.firstWhere((p) => p.id == presetId).name;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      margin: const EdgeInsets.only(bottom: 8),
       color: Colors.white.withValues(alpha: 0.03),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),

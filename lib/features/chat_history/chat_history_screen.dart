@@ -9,6 +9,7 @@ import '../../core/models/chat_message.dart';
 import '../../core/db/repositories/chat_repo.dart' show SessionMetadata;
 import '../../core/db/repositories/character_repo.dart' show CharacterRepo;
 import '../../core/state/db_provider.dart';
+import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 
@@ -164,7 +165,11 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
               ),
             ),
           Expanded(
-            child: sessions.when(
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: ref.watch(navHeightProvider) + 20,
+              ),
+              child: sessions.when(
               loading: () => const Center(
                 child: CircularProgressIndicator(color: AppColors.accent),
               ),
@@ -204,6 +209,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                   itemBuilder: (_, i) => _SessionTile(info: filtered[i]),
                 );
               },
+              ),
             ),
           ),
         ],

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../app.dart' show rootNavigatorKey;
 import '../../shared/theme/app_colors.dart';
 
 const _onboardingCompleteKey = 'onboarding_complete';
@@ -19,10 +20,15 @@ Future<void> markOnboardingComplete() async {
 
 Future<void> checkAndShowOnboarding(BuildContext context) async {
   if (await isOnboardingComplete()) return;
-  if (!context.mounted) return;
 
-  await Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => const _OnboardingFlow(), fullscreenDialog: true),
+  final nav = rootNavigatorKey.currentState;
+  if (nav == null) return;
+
+  await nav.push(
+    MaterialPageRoute(
+      builder: (_) => const _OnboardingFlow(),
+      fullscreenDialog: true,
+    ),
   );
 }
 
@@ -41,18 +47,21 @@ class _OnboardingFlowState extends ConsumerState<_OnboardingFlow> {
     _OnboardingStep(
       icon: Icons.waving_hand,
       title: 'Welcome to Glaze',
-      description: 'Your AI character chat companion. Let\'s get you set up in a few quick steps.',
+      description:
+          'Your AI character chat companion. Let\'s get you set up in a few quick steps.',
     ),
     _OnboardingStep(
       icon: Icons.api,
       title: 'Connect Your API',
-      description: 'Add an OpenAI-compatible API endpoint to start chatting. You can always change this later in Settings.',
+      description:
+          'Add an OpenAI-compatible API endpoint to start chatting. You can always change this later in Settings.',
       route: '/tools/api',
     ),
     _OnboardingStep(
       icon: Icons.person_add,
       title: 'Import a Character',
-      description: 'Bring in a character card (PNG or JSON) to start your first conversation.',
+      description:
+          'Bring in a character card (PNG or JSON) to start your first conversation.',
       route: '/characters',
     ),
     _OnboardingStep(
@@ -79,7 +88,10 @@ class _OnboardingFlowState extends ConsumerState<_OnboardingFlow> {
               alignment: Alignment.topRight,
               child: TextButton(
                 onPressed: () => _finish(),
-                child: const Text('Skip', style: TextStyle(color: AppColors.textSecondary)),
+                child: const Text(
+                  'Skip',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
               ),
             ),
             Expanded(
@@ -94,16 +106,21 @@ class _OnboardingFlowState extends ConsumerState<_OnboardingFlow> {
               padding: const EdgeInsets.all(24),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(_steps.length, (i) => AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                  width: _currentPage == i ? 24 : 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: _currentPage == i ? AppColors.accent : AppColors.textSecondary.withValues(alpha: 0.3),
-                    borderRadius: BorderRadius.circular(4),
+                children: List.generate(
+                  _steps.length,
+                  (i) => AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    width: _currentPage == i ? 24 : 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: _currentPage == i
+                          ? AppColors.accent
+                          : AppColors.textSecondary.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ),
-                )),
+                ),
               ),
             ),
             Padding(
@@ -116,11 +133,16 @@ class _OnboardingFlowState extends ConsumerState<_OnboardingFlow> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.accent,
                     foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: Text(
                     _currentPage == _steps.length - 1 ? 'Get Started' : 'Next',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
@@ -138,7 +160,8 @@ class _OnboardingFlowState extends ConsumerState<_OnboardingFlow> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            width: 80, height: 80,
+            width: 80,
+            height: 80,
             decoration: BoxDecoration(
               color: AppColors.accent.withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(20),
@@ -148,13 +171,21 @@ class _OnboardingFlowState extends ConsumerState<_OnboardingFlow> {
           const SizedBox(height: 24),
           Text(
             step.title,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
           Text(
             step.description,
-            style: const TextStyle(fontSize: 15, color: AppColors.textSecondary, height: 1.5),
+            style: const TextStyle(
+              fontSize: 15,
+              color: AppColors.textSecondary,
+              height: 1.5,
+            ),
             textAlign: TextAlign.center,
           ),
         ],
@@ -164,7 +195,10 @@ class _OnboardingFlowState extends ConsumerState<_OnboardingFlow> {
 
   void _nextStep() {
     if (_currentPage < _steps.length - 1) {
-      _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
+      _pageController.nextPage(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
     } else {
       _finish();
     }
@@ -181,5 +215,10 @@ class _OnboardingStep {
   final String title;
   final String description;
   final String? route;
-  const _OnboardingStep({required this.icon, required this.title, required this.description, this.route});
+  const _OnboardingStep({
+    required this.icon,
+    required this.title,
+    required this.description,
+    this.route,
+  });
 }

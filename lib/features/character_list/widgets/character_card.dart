@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/models/character.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 
 class CharacterCard extends ConsumerWidget {
   final Character character;
@@ -105,60 +106,35 @@ class CharacterCard extends ConsumerWidget {
   }
 
   void _showActions(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surfaceHigh,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                color: AppColors.inactiveTab.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.info_outline_rounded,
-                  color: AppColors.textPrimary),
-              title: const Text('View Info',
-                  style: TextStyle(color: AppColors.textPrimary)),
-              onTap: () {
-                Navigator.pop(ctx);
-                context.go('/character/${character.id}');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit_rounded,
-                  color: AppColors.textPrimary),
-              title: const Text('Edit',
-                  style: TextStyle(color: AppColors.textPrimary)),
-              onTap: () {
-                Navigator.pop(ctx);
-                context.go('/character/${character.id}/edit');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete_outline_rounded,
-                  color: Color(0xFFFF4444)),
-              title: const Text('Delete',
-                  style: TextStyle(color: Color(0xFFFF4444))),
-              onTap: () {
-                Navigator.pop(ctx);
-                _confirmDelete(context, ref);
-              },
-            ),
-            const SizedBox(height: 4),
-          ],
+    GlazeBottomSheet.show(
+      context,
+      items: [
+        BottomSheetItem(
+          icon: Icons.info_outline_rounded,
+          label: 'View Info',
+          onTap: () {
+            Navigator.pop(context);
+            context.go('/character/${character.id}');
+          },
         ),
-      ),
+        BottomSheetItem(
+          icon: Icons.edit_rounded,
+          label: 'Edit',
+          onTap: () {
+            Navigator.pop(context);
+            context.go('/character/${character.id}/edit');
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.delete_outline_rounded,
+          label: 'Delete',
+          isDestructive: true,
+          onTap: () {
+            Navigator.pop(context);
+            _confirmDelete(context, ref);
+          },
+        ),
+      ],
     );
   }
 

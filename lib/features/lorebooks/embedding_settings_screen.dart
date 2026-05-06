@@ -7,15 +7,18 @@ import '../../../core/llm/lorebook_vector_search.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 
 class EmbeddingSettingsScreen extends ConsumerStatefulWidget {
   const EmbeddingSettingsScreen({super.key});
 
   @override
-  ConsumerState<EmbeddingSettingsScreen> createState() => _EmbeddingSettingsScreenState();
+  ConsumerState<EmbeddingSettingsScreen> createState() =>
+      _EmbeddingSettingsScreenState();
 }
 
-class _EmbeddingSettingsScreenState extends ConsumerState<EmbeddingSettingsScreen> {
+class _EmbeddingSettingsScreenState
+    extends ConsumerState<EmbeddingSettingsScreen> {
   late TextEditingController _endpointCtrl;
   late TextEditingController _apiKeyCtrl;
   late TextEditingController _modelCtrl;
@@ -34,8 +37,12 @@ class _EmbeddingSettingsScreenState extends ConsumerState<EmbeddingSettingsScree
     _endpointCtrl = TextEditingController(text: config.endpoint);
     _apiKeyCtrl = TextEditingController(text: config.apiKey);
     _modelCtrl = TextEditingController(text: config.model);
-    _maxChunkTokensCtrl = TextEditingController(text: config.maxChunkTokens.toString());
-    _thresholdCtrl = TextEditingController(text: settings.vectorThreshold.toString());
+    _maxChunkTokensCtrl = TextEditingController(
+      text: config.maxChunkTokens.toString(),
+    );
+    _thresholdCtrl = TextEditingController(
+      text: settings.vectorThreshold.toString(),
+    );
     _topKCtrl = TextEditingController(text: settings.vectorTopK.toString());
     _scanDepthCtrl = TextEditingController(text: settings.scanDepth.toString());
     _searchType = settings.searchType;
@@ -70,9 +77,7 @@ class _EmbeddingSettingsScreenState extends ConsumerState<EmbeddingSettingsScree
       scanDepth: int.tryParse(_scanDepthCtrl.text) ?? 10,
     );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Saved'), duration: Duration(seconds: 1)),
-    );
+    GlazeToast.show(context, 'Saved');
   }
 
   Future<void> _testConnection() async {
@@ -88,16 +93,12 @@ class _EmbeddingSettingsScreenState extends ConsumerState<EmbeddingSettingsScree
       final result = await service.getEmbeddings(['test'], config);
       if (result.isNotEmpty && result.first.isNotEmpty) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('OK — vector dim: ${result.first.length}')),
-          );
+          GlazeToast.show(context, 'OK — vector dim: ${result.first.length}');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed: $e'), backgroundColor: Colors.red),
-        );
+        GlazeToast.show(context, 'Failed: $e');
       }
     } finally {
       if (mounted) setState(() => _isTesting = false);
@@ -126,7 +127,11 @@ class _EmbeddingSettingsScreenState extends ConsumerState<EmbeddingSettingsScree
               children: [
                 const Text(
                   'Search Mode',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Row(
@@ -153,10 +158,18 @@ class _EmbeddingSettingsScreenState extends ConsumerState<EmbeddingSettingsScree
                 const SizedBox(height: 20),
                 const Text(
                   'Embedding API',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 8),
-                _field('Endpoint', _endpointCtrl, hint: 'http://127.0.0.1:11434/v1'),
+                _field(
+                  'Endpoint',
+                  _endpointCtrl,
+                  hint: 'http://127.0.0.1:11434/v1',
+                ),
                 const SizedBox(height: 8),
                 _field('API Key', _apiKeyCtrl, hint: 'Optional', obscure: true),
                 const SizedBox(height: 8),
@@ -169,7 +182,11 @@ class _EmbeddingSettingsScreenState extends ConsumerState<EmbeddingSettingsScree
                   child: OutlinedButton.icon(
                     onPressed: _isTesting ? null : _testConnection,
                     icon: _isTesting
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
                         : const Icon(Icons.wifi_tethering, size: 18),
                     label: Text(_isTesting ? 'Testing...' : 'Test Connection'),
                   ),
@@ -177,7 +194,11 @@ class _EmbeddingSettingsScreenState extends ConsumerState<EmbeddingSettingsScree
                 const SizedBox(height: 24),
                 const Text(
                   'Vector Search Parameters',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 _field('Similarity Threshold', _thresholdCtrl, hint: '0.45'),
@@ -189,7 +210,10 @@ class _EmbeddingSettingsScreenState extends ConsumerState<EmbeddingSettingsScree
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.black),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: Colors.black,
+                    ),
                     onPressed: _save,
                     child: const Text('Save Settings'),
                   ),
@@ -202,7 +226,13 @@ class _EmbeddingSettingsScreenState extends ConsumerState<EmbeddingSettingsScree
     );
   }
 
-  Widget _field(String label, TextEditingController controller, {String? hint, bool obscure = false, int maxLines = 1}) {
+  Widget _field(
+    String label,
+    TextEditingController controller, {
+    String? hint,
+    bool obscure = false,
+    int maxLines = 1,
+  }) {
     return TextField(
       controller: controller,
       obscureText: obscure,
@@ -212,7 +242,10 @@ class _EmbeddingSettingsScreenState extends ConsumerState<EmbeddingSettingsScree
         labelText: label,
         hintText: hint,
         labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5), fontSize: 12),
+        hintStyle: TextStyle(
+          color: AppColors.textSecondary.withValues(alpha: 0.5),
+          fontSize: 12,
+        ),
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.05),
         isDense: true,
@@ -227,17 +260,25 @@ class _SearchModeChip extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  const _SearchModeChip({required this.label, required this.selected, required this.onTap});
+  const _SearchModeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.accent : Colors.white.withValues(alpha: 0.1);
+    final color = selected
+        ? AppColors.accent
+        : Colors.white.withValues(alpha: 0.1);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? AppColors.accent.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05),
+          color: selected
+              ? AppColors.accent.withValues(alpha: 0.2)
+              : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: color),
         ),

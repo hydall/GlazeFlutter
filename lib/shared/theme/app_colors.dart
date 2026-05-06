@@ -6,7 +6,7 @@ class AppColors {
   static const Color surface = Color(0xFF19191A); // --vk-header-bg
   static const Color surfaceHigh = Color(0xFF1E1E1E); // ~rgba(30,30,30)
   static const Color accent = Color(0xFF7996CE); // --vk-blue
-  static const Color activeTab = Color(0xFF71AAEB); // --active-tab
+  static const Color activeTab = Color(0xFF7996CE); // --vk-blue (matching source BottomNavigation)
   static const Color inactiveTab = Color(0xFF828282); // --inactive-tab
   static const Color textPrimary = Color(0xFFE1E3E6); // --text-black
   static const Color textSecondary = Color(0xFFB0B8C1); // --text-gray

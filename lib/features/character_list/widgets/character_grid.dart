@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import 'character_card.dart';
 
 enum SortType { name, date }
@@ -153,72 +154,29 @@ class _SortTypePill extends StatelessWidget {
   }
 
   void _showPicker(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surfaceHigh,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.inactiveTab.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ListTile(
-              title: Text(
-                'Sort by Name',
-                style: TextStyle(
-                  color: sortBy == SortType.name
-                      ? AppColors.accent
-                      : AppColors.textPrimary,
-                  fontWeight: sortBy == SortType.name
-                      ? FontWeight.w600
-                      : FontWeight.normal,
-                ),
-              ),
-              trailing: sortBy == SortType.name
-                  ? const Icon(Icons.check_rounded,
-                      color: AppColors.accent, size: 20)
-                  : null,
-              onTap: () {
-                Navigator.pop(context);
-                onChanged(SortType.name);
-              },
-            ),
-            ListTile(
-              title: Text(
-                'Sort by Date',
-                style: TextStyle(
-                  color: sortBy == SortType.date
-                      ? AppColors.accent
-                      : AppColors.textPrimary,
-                  fontWeight: sortBy == SortType.date
-                      ? FontWeight.w600
-                      : FontWeight.normal,
-                ),
-              ),
-              trailing: sortBy == SortType.date
-                  ? const Icon(Icons.check_rounded,
-                      color: AppColors.accent, size: 20)
-                  : null,
-              onTap: () {
-                Navigator.pop(context);
-                onChanged(SortType.date);
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
+    GlazeBottomSheet.show(
+      context,
+      title: 'Sort by',
+      items: [
+        BottomSheetItem(
+          icon: sortBy == SortType.name ? Icons.check_rounded : null,
+          iconColor: AppColors.accent,
+          label: 'Sort by Name',
+          onTap: () {
+            Navigator.pop(context);
+            onChanged(SortType.name);
+          },
         ),
-      ),
+        BottomSheetItem(
+          icon: sortBy == SortType.date ? Icons.check_rounded : null,
+          iconColor: AppColors.accent,
+          label: 'Sort by Date',
+          onTap: () {
+            Navigator.pop(context);
+            onChanged(SortType.date);
+          },
+        ),
+      ],
     );
   }
 }

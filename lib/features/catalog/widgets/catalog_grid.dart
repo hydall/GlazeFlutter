@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
 import '../services/datacat_provider.dart';
@@ -44,7 +46,10 @@ class CatalogGrid extends ConsumerWidget {
                 child: Center(
                   child: Text(
                     state.error!,
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -55,7 +60,10 @@ class CatalogGrid extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
               child: Text(
                 '${state.total} result${state.total == 1 ? '' : 's'}',
-                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                ),
               ),
             ),
           ),
@@ -66,7 +74,10 @@ class CatalogGrid extends ConsumerWidget {
                 child: Center(
                   child: Text(
                     state.error != null ? '' : 'No characters found',
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
                   ),
                 ),
               ),
@@ -98,7 +109,10 @@ class CatalogGrid extends ConsumerWidget {
                   child: SizedBox(
                     width: 28,
                     height: 28,
-                    child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.accent),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      color: AppColors.accent,
+                    ),
                   ),
                 ),
               ),
@@ -110,7 +124,10 @@ class CatalogGrid extends ConsumerWidget {
                 child: Center(
                   child: Text(
                     'End of results',
-                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary.withValues(alpha: 0.5)),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary.withValues(alpha: 0.5),
+                    ),
                   ),
                 ),
               ),
@@ -121,12 +138,7 @@ class CatalogGrid extends ConsumerWidget {
   }
 
   void _onCardTap(BuildContext context, WidgetRef ref, CatalogItem item) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _PreviewSheet(item: item),
-    );
+    GlazeBottomSheet.show(context, child: _PreviewSheet(item: item));
   }
 }
 
@@ -137,42 +149,43 @@ class _CatalogControls extends StatelessWidget {
   const _CatalogControls({required this.state, required this.notifier});
 
   static String _providerLabel(CatalogProvider p) => switch (p) {
-        CatalogProvider.janitor => 'JanitorAI',
-        CatalogProvider.janny => 'JannyAI',
-        CatalogProvider.datacat => 'DataCat',
-        CatalogProvider.chub => 'Chub.ai',
-      };
+    CatalogProvider.janitor => 'JanitorAI',
+    CatalogProvider.janny => 'JannyAI',
+    CatalogProvider.datacat => 'DataCat',
+    CatalogProvider.chub => 'Chub.ai',
+  };
 
-  static Map<String, String> _sortOptionsForProvider(CatalogProvider p) => switch (p) {
+  static Map<String, String> _sortOptionsForProvider(CatalogProvider p) =>
+      switch (p) {
         CatalogProvider.janitor => {
-            'trending': 'Trending',
-            'trending_24h': 'Trending 24h',
-            'popular': 'Popular',
-            'latest': 'Latest',
-          },
+          'trending': 'Trending',
+          'trending_24h': 'Trending 24h',
+          'popular': 'Popular',
+          'latest': 'Latest',
+        },
         CatalogProvider.janny => {
-            'newest': 'Newest',
-            'oldest': 'Oldest',
-            'tokens_desc': 'Most Tokens',
-            'tokens_asc': 'Least Tokens',
-            'relevant': 'Relevant',
-          },
+          'newest': 'Newest',
+          'oldest': 'Oldest',
+          'tokens_desc': 'Most Tokens',
+          'tokens_asc': 'Least Tokens',
+          'relevant': 'Relevant',
+        },
         CatalogProvider.datacat => {
-            'recent': 'Recent',
-            'fresh': 'Fresh',
-            'score_week': 'Score (Week)',
-            'score_24h': 'Score (24h)',
-            'chat_count_week': 'Chats (Week)',
-            'chat_count_24h': 'Chats (24h)',
-          },
+          'recent': 'Recent',
+          'fresh': 'Fresh',
+          'score_week': 'Score (Week)',
+          'score_24h': 'Score (24h)',
+          'chat_count_week': 'Chats (Week)',
+          'chat_count_24h': 'Chats (24h)',
+        },
         CatalogProvider.chub => {
-            'popular': 'Popular',
-            'trending_week': 'Trending (Week)',
-            'trending_24h': 'Trending (24h)',
-            'latest': 'Latest',
-            'rating': 'Rating',
-            'updated': 'Updated',
-          },
+          'popular': 'Popular',
+          'trending_week': 'Trending (Week)',
+          'trending_24h': 'Trending (24h)',
+          'latest': 'Latest',
+          'rating': 'Rating',
+          'updated': 'Updated',
+        },
       };
 
   int _activeFilterCount() {
@@ -197,22 +210,41 @@ class _CatalogControls extends StatelessWidget {
             context,
             title: 'Provider',
             items: CatalogProvider.values
-                .map((p) => _PickerItem(label: _providerLabel(p), isActive: p == state.activeProvider, value: p))
+                .map(
+                  (p) => _PickerItem(
+                    label: _providerLabel(p),
+                    isActive: p == state.activeProvider,
+                    value: p,
+                  ),
+                )
                 .toList(),
             onSelect: (v) => notifier.setProvider(v as CatalogProvider),
           ),
         ),
         const SizedBox(width: 8),
-        Expanded(child: _SearchField(query: state.query, onSubmitted: (q) { notifier.setQuery(q); notifier.search(reset: true); })),
+        Expanded(
+          child: _SearchField(
+            query: state.query,
+            onSubmitted: (q) {
+              notifier.setQuery(q);
+              notifier.search(reset: true);
+            },
+          ),
+        ),
         const SizedBox(width: 8),
         _IconPill(
           icon: Icons.sort_rounded,
           onTap: () => _showPickerSheet(
             context,
             title: 'Sort',
-            items: _sortOptionsForProvider(state.activeProvider)
-                .entries
-                .map((e) => _PickerItem(label: e.value, isActive: e.key == state.filters.sort, value: e.key))
+            items: _sortOptionsForProvider(state.activeProvider).entries
+                .map(
+                  (e) => _PickerItem(
+                    label: e.value,
+                    isActive: e.key == state.filters.sort,
+                    value: e.key,
+                  ),
+                )
                 .toList(),
             onSelect: (v) => notifier.setSort(v as String),
           ),
@@ -226,40 +258,35 @@ class _CatalogControls extends StatelessWidget {
     );
   }
 
-  void _showPickerSheet(BuildContext context, {required String title, required List<_PickerItem> items, required ValueChanged<dynamic> onSelect}) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surfaceHigh,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.inactiveTab.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 12),
-            ...items.map((item) => ListTile(
-                  title: Text(item.label, style: TextStyle(color: item.isActive ? AppColors.accent : AppColors.textPrimary, fontWeight: item.isActive ? FontWeight.w600 : FontWeight.normal)),
-                  trailing: item.isActive ? const Icon(Icons.check_rounded, color: AppColors.accent, size: 20) : null,
-                  onTap: () {
-                    Navigator.pop(context);
-                    onSelect(item.value);
-                  },
-                )),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
+  void _showPickerSheet(
+    BuildContext context, {
+    required String title,
+    required List<_PickerItem> items,
+    required ValueChanged<dynamic> onSelect,
+  }) {
+    GlazeBottomSheet.show(
+      context,
+      title: title,
+      items: items
+          .map(
+            (item) => BottomSheetItem(
+              icon: item.isActive ? Icons.check_rounded : null,
+              iconColor: AppColors.accent,
+              label: item.label,
+              onTap: () {
+                Navigator.pop(context);
+                onSelect(item.value);
+              },
+            ),
+          )
+          .toList(),
     );
   }
 
   void _showFilterSheet(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surfaceHigh,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => _FilterSheet(
+    GlazeBottomSheet.show(
+      context,
+      child: _FilterSheet(
         filters: state.filters,
         provider: state.activeProvider,
         onApply: (f) => notifier.setFilters(f),
@@ -272,7 +299,11 @@ class _PickerItem {
   final String label;
   final bool isActive;
   final dynamic value;
-  const _PickerItem({required this.label, required this.isActive, required this.value});
+  const _PickerItem({
+    required this.label,
+    required this.isActive,
+    required this.value,
+  });
 }
 
 class _ProviderPill extends StatelessWidget {
@@ -302,9 +333,20 @@ class _ProviderPill extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.accent)),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.accent,
+              ),
+            ),
             const SizedBox(width: 2),
-            const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: AppColors.accent),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 16,
+              color: AppColors.accent,
+            ),
           ],
         ),
       ),
@@ -350,14 +392,24 @@ class _FilterPillBadge extends StatelessWidget {
         height: 36,
         width: 36,
         decoration: BoxDecoration(
-          color: count > 0 ? AppColors.accent.withValues(alpha: 0.3) : AppColors.accent.withValues(alpha: 0.15),
+          color: count > 0
+              ? AppColors.accent.withValues(alpha: 0.3)
+              : AppColors.accent.withValues(alpha: 0.15),
           shape: BoxShape.circle,
-          border: Border.all(color: count > 0 ? AppColors.accent.withValues(alpha: 0.4) : AppColors.accent.withValues(alpha: 0.2)),
+          border: Border.all(
+            color: count > 0
+                ? AppColors.accent.withValues(alpha: 0.4)
+                : AppColors.accent.withValues(alpha: 0.2),
+          ),
         ),
         child: Stack(
           alignment: Alignment.center,
           children: [
-            const Icon(Icons.filter_list_rounded, size: 18, color: AppColors.accent),
+            const Icon(
+              Icons.filter_list_rounded,
+              size: 18,
+              color: AppColors.accent,
+            ),
             if (count > 0)
               Positioned(
                 top: 4,
@@ -365,8 +417,20 @@ class _FilterPillBadge extends StatelessWidget {
                 child: Container(
                   width: 14,
                   height: 14,
-                  decoration: const BoxDecoration(color: AppColors.accent, shape: BoxShape.circle),
-                  child: Center(child: Text('$count', style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w700, color: Colors.white))),
+                  decoration: const BoxDecoration(
+                    color: AppColors.accent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$count',
+                      style: const TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
                 ),
               ),
           ],
@@ -404,18 +468,35 @@ class _SearchFieldState extends State<_SearchField> {
         style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
         decoration: InputDecoration(
           hintText: 'Search characters...',
-          hintStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
-          prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppColors.textSecondary),
+          hintStyle: const TextStyle(
+            fontSize: 13,
+            color: AppColors.textSecondary,
+          ),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            size: 18,
+            color: AppColors.textSecondary,
+          ),
           suffixIcon: _controller.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear_rounded, size: 16, color: AppColors.textSecondary),
-                  onPressed: () { _controller.clear(); widget.onSubmitted(''); },
+                  icon: const Icon(
+                    Icons.clear_rounded,
+                    size: 16,
+                    color: AppColors.textSecondary,
+                  ),
+                  onPressed: () {
+                    _controller.clear();
+                    widget.onSubmitted('');
+                  },
                 )
               : null,
           filled: true,
           fillColor: AppColors.surfaceHigh,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: BorderSide.none,
+          ),
         ),
         onSubmitted: widget.onSubmitted,
       ),
@@ -430,7 +511,11 @@ class _FilterSheet extends StatefulWidget {
   final CatalogProvider provider;
   final ValueChanged<CatalogFilters> onApply;
 
-  const _FilterSheet({required this.filters, required this.provider, required this.onApply});
+  const _FilterSheet({
+    required this.filters,
+    required this.provider,
+    required this.onApply,
+  });
 
   @override
   State<_FilterSheet> createState() => _FilterSheetState();
@@ -453,87 +538,140 @@ class _FilterSheetState extends State<_FilterSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.inactiveTab.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(2))),
-            const SizedBox(height: 12),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: Align(alignment: Alignment.centerLeft, child: Text('Filters', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary))),
-            ),
-            const SizedBox(height: 16),
-            _toggleTile('NSFW', _nsfw, (v) => setState(() => _nsfw = v)),
-            if (widget.provider == CatalogProvider.chub)
-              _toggleTile('NSFL', _nsfl, (v) => setState(() => _nsfl = v)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Row(
-                children: [
-                  Expanded(child: _tokenField('Min tokens', _minTokens, (v) => setState(() => _minTokens = v))),
-                  const SizedBox(width: 12),
-                  Expanded(child: _tokenField('Max tokens', _maxTokens, (v) => setState(() => _maxTokens = v))),
-                ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 16),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Filters',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() { _nsfw = false; _nsfl = false; _minTokens = 29; _maxTokens = 100000; }),
-                      child: Container(
-                        height: 44,
-                        decoration: BoxDecoration(color: AppColors.surfaceHigh, borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.border)),
-                        child: const Center(child: Text('Reset', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600))),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: GestureDetector(
-                      onTap: () {
-                        widget.onApply(CatalogFilters(
-                          sort: widget.filters.sort,
-                          nsfw: _nsfw,
-                          nsfl: _nsfl,
-                          tagIds: widget.filters.tagIds,
-                          tagNames: widget.filters.tagNames,
-                          minTokens: _minTokens,
-                          maxTokens: _maxTokens,
-                        ));
-                        Navigator.pop(context);
-                      },
-                      child: Container(
-                        height: 44,
-                        decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(12)),
-                        child: const Center(child: Text('Apply', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 16),
+        _toggleTile('NSFW', _nsfw, (v) => setState(() => _nsfw = v)),
+        if (widget.provider == CatalogProvider.chub)
+          _toggleTile('NSFL', _nsfl, (v) => setState(() => _nsfl = v)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: _tokenField(
+                  'Min tokens',
+                  _minTokens,
+                  (v) => setState(() => _minTokens = v),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _tokenField(
+                  'Max tokens',
+                  _maxTokens,
+                  (v) => setState(() => _maxTokens = v),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+          child: Row(
+            children: [
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => setState(() {
+                    _nsfw = false;
+                    _nsfl = false;
+                    _minTokens = 29;
+                    _maxTokens = 100000;
+                  }),
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceHigh,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Reset',
+                        style: TextStyle(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: GestureDetector(
+                  onTap: () {
+                    widget.onApply(
+                      CatalogFilters(
+                        sort: widget.filters.sort,
+                        nsfw: _nsfw,
+                        nsfl: _nsfl,
+                        tagIds: widget.filters.tagIds,
+                        tagNames: widget.filters.tagNames,
+                        minTokens: _minTokens,
+                        maxTokens: _maxTokens,
+                      ),
+                    );
+                    Navigator.pop(context);
+                  },
+                  child: Container(
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.accent,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'Apply',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
   Widget _toggleTile(String label, bool value, ValueChanged<bool> onChanged) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(children: [
-        Text(label, style: const TextStyle(color: AppColors.textPrimary, fontSize: 15)),
-        const Spacer(),
-        Switch(value: value, onChanged: onChanged, activeThumbColor: AppColors.accent),
-      ]),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+          ),
+          const Spacer(),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: AppColors.accent,
+          ),
+        ],
+      ),
     );
   }
 
@@ -541,7 +679,10 @@ class _FilterSheetState extends State<_FilterSheet> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 11)),
+        Text(
+          label,
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+        ),
         const SizedBox(height: 4),
         SizedBox(
           height: 36,
@@ -553,9 +694,15 @@ class _FilterSheetState extends State<_FilterSheet> {
               filled: true,
               fillColor: AppColors.background,
               contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+                borderSide: BorderSide.none,
+              ),
             ),
-            onSubmitted: (v) { final p = int.tryParse(v); if (p != null) onChanged(p); },
+            onSubmitted: (v) {
+              final p = int.tryParse(v);
+              if (p != null) onChanged(p);
+            },
           ),
         ),
       ],
@@ -586,7 +733,10 @@ class _PreviewSheetState extends ConsumerState<_PreviewSheet> {
   }
 
   Future<void> _fetchCharacter() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final state = ref.read(catalogProvider);
       final provider = state.activeProvider;
@@ -599,42 +749,36 @@ class _PreviewSheetState extends ConsumerState<_PreviewSheet> {
         case CatalogProvider.datacat:
           result = await datacatGetCharacter(widget.item.id);
         case CatalogProvider.chub:
-          result = await chubGetCharacter(widget.item.fullPath ?? widget.item.id);
+          result = await chubGetCharacter(
+            widget.item.fullPath ?? widget.item.id,
+          );
       }
-      if (mounted) setState(() { _downloaded = result; _loading = false; });
+      if (mounted)
+        setState(() {
+          _downloaded = result;
+          _loading = false;
+        });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted)
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.surfaceHigh,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    if (_loading)
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.accent),
         ),
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            Container(width: 36, height: 4, decoration: BoxDecoration(color: AppColors.inactiveTab.withValues(alpha: 0.4), borderRadius: BorderRadius.circular(2))),
-            Expanded(
-              child: _loading
-                  ? const Center(child: CircularProgressIndicator(color: AppColors.accent))
-                  : _error != null
-                      ? _buildError()
-                      : _downloaded != null
-                          ? _buildPreview(scrollController)
-                          : const SizedBox.shrink(),
-            ),
-          ],
-        ),
-      ),
-    );
+      );
+    if (_error != null) return _buildError();
+    if (_downloaded == null) return const SizedBox.shrink();
+    return _buildPreview();
   }
 
   Widget _buildError() {
@@ -644,16 +788,39 @@ class _PreviewSheetState extends ConsumerState<_PreviewSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.error_outline_rounded, size: 48, color: AppColors.textSecondary),
+            const Icon(
+              Icons.error_outline_rounded,
+              size: 48,
+              color: AppColors.textSecondary,
+            ),
             const SizedBox(height: 16),
-            Text(_error ?? 'Unknown error', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13), textAlign: TextAlign.center),
+            Text(
+              _error ?? 'Unknown error',
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 16),
             GestureDetector(
               onTap: _fetchCharacter,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                decoration: BoxDecoration(color: AppColors.accent, borderRadius: BorderRadius.circular(12)),
-                child: const Text('Retry', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.accent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  'Retry',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ],
@@ -662,99 +829,154 @@ class _PreviewSheetState extends ConsumerState<_PreviewSheet> {
     );
   }
 
-  Widget _buildPreview(ScrollController controller) {
+  Widget _buildPreview() {
     final char = _downloaded!.charData;
-    return Stack(
-      children: [
-        ListView(
-          controller: controller,
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 80),
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: SizedBox(
-                    width: 120,
-                    height: 160,
-                    child: _downloaded!.avatarUrl != null
-                        ? CachedNetworkImage(imageUrl: _downloaded!.avatarUrl!, fit: BoxFit.cover, errorWidget: (_, _, _) => _avatarPlaceholder())
-                        : _avatarPlaceholder(),
-                  ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(
+                  width: 120,
+                  height: 160,
+                  child: _downloaded!.avatarUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: _downloaded!.avatarUrl!,
+                          fit: BoxFit.cover,
+                          errorWidget: (_, _, _) => _avatarPlaceholder(),
+                        )
+                      : _avatarPlaceholder(),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(char.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-                      if (char.creator.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text('by @${char.creator}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                      ],
-                      if (char.tags.isNotEmpty) ...[
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: char.tags.take(6).map((t) {
-                            final isNsfw = t.toUpperCase() == 'NSFW';
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: isNsfw ? Colors.red.withValues(alpha: 0.2) : AppColors.accent.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Text(t, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: isNsfw ? Colors.redAccent : AppColors.accent)),
-                            );
-                          }).toList(),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            if (char.creatorNotes.isNotEmpty) ...[
-              _sectionTitle('Creator Notes'),
-              const SizedBox(height: 4),
-              Text(char.creatorNotes, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4)),
-              const SizedBox(height: 16),
-            ],
-            if (char.description.isNotEmpty) ...[
-              _sectionTitle('Description'),
-              const SizedBox(height: 4),
-              Text(char.description, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4)),
-              const SizedBox(height: 16),
-            ],
-            if (char.scenario.isNotEmpty) ...[
-              _sectionTitle('Scenario'),
-              const SizedBox(height: 4),
-              Text(char.scenario, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, height: 1.4)),
-              const SizedBox(height: 16),
-            ],
-            if (char.firstMes.isNotEmpty) ...[
-              _sectionTitle('First Message'),
-              const SizedBox(height: 4),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: AppColors.background, borderRadius: BorderRadius.circular(12)),
-                child: Text(char.firstMes, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, height: 1.4)),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      char.name,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    if (char.creator.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'by @${char.creator}',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                    if (char.tags.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: char.tags.take(6).map((t) {
+                          final isNsfw = t.toUpperCase() == 'NSFW';
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isNsfw
+                                  ? Colors.red.withValues(alpha: 0.2)
+                                  : AppColors.accent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              t,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: isNsfw
+                                    ? Colors.redAccent
+                                    : AppColors.accent,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ],
+          ),
+          const SizedBox(height: 20),
+          if (char.creatorNotes.isNotEmpty) ...[
+            _sectionTitle('Creator Notes'),
+            const SizedBox(height: 4),
+            Text(
+              char.creatorNotes,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
           ],
-        ),
-        Positioned(
-          bottom: 16,
-          left: 16,
-          right: 16,
-          child: _ImportButton(importing: _importing, onTap: _doImport),
-        ),
-      ],
+          if (char.description.isNotEmpty) ...[
+            _sectionTitle('Description'),
+            const SizedBox(height: 4),
+            Text(
+              char.description,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (char.scenario.isNotEmpty) ...[
+            _sectionTitle('Scenario'),
+            const SizedBox(height: 4),
+            Text(
+              char.scenario,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (char.firstMes.isNotEmpty) ...[
+            _sectionTitle('First Message'),
+            const SizedBox(height: 4),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                char.firstMes,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+          _ImportButton(importing: _importing, onTap: _doImport),
+        ],
+      ),
     );
   }
 
@@ -763,15 +985,28 @@ class _PreviewSheetState extends ConsumerState<_PreviewSheet> {
       color: AppColors.accent.withValues(alpha: 0.2),
       child: Center(
         child: Text(
-          _downloaded!.charData.name.isNotEmpty ? _downloaded!.charData.name[0].toUpperCase() : '?',
-          style: const TextStyle(fontSize: 40, color: AppColors.accent, fontWeight: FontWeight.bold),
+          _downloaded!.charData.name.isNotEmpty
+              ? _downloaded!.charData.name[0].toUpperCase()
+              : '?',
+          style: const TextStyle(
+            fontSize: 40,
+            color: AppColors.accent,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );
   }
 
   Widget _sectionTitle(String title) {
-    return Text(title, style: const TextStyle(color: AppColors.textPrimary, fontSize: 14, fontWeight: FontWeight.w700));
+    return Text(
+      title,
+      style: const TextStyle(
+        color: AppColors.textPrimary,
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+      ),
+    );
   }
 
   Future<void> _doImport() async {
@@ -781,12 +1016,12 @@ class _PreviewSheetState extends ConsumerState<_PreviewSheet> {
       await ref.read(catalogProvider.notifier).importCharacter(_downloaded!);
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Imported ${_downloaded!.charData.name}'), backgroundColor: AppColors.accent));
+        GlazeToast.show(context, 'Imported ${_downloaded!.charData.name}');
       }
     } catch (e) {
       if (mounted) {
         setState(() => _importing = false);
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+        GlazeToast.show(context, 'Import failed: $e');
       }
     }
   }
@@ -805,19 +1040,41 @@ class _ImportButton extends StatelessWidget {
       child: Container(
         height: 48,
         decoration: BoxDecoration(
-          color: importing ? AppColors.accent.withValues(alpha: 0.5) : AppColors.accent,
+          color: importing
+              ? AppColors.accent.withValues(alpha: 0.5)
+              : AppColors.accent,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))],
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Center(
           child: importing
-              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Colors.white,
+                  ),
+                )
               : const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.download_rounded, color: Colors.white, size: 22),
                     SizedBox(width: 8),
-                    Text('Import Character', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600)),
+                    Text(
+                      'Import Character',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ],
                 ),
         ),

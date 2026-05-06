@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 
-class ToolsScreen extends StatelessWidget {
+class ToolsScreen extends ConsumerWidget {
   const ToolsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bottomPad = ref.watch(navHeightProvider) + 20;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
@@ -22,7 +25,7 @@ class ToolsScreen extends StatelessWidget {
           ),
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+              padding: EdgeInsets.fromLTRB(16, 16, 16, bottomPad),
               children: [
                 _HeroCard(
                   icon: Icons.face,

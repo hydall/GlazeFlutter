@@ -11,6 +11,7 @@ import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../chat_provider.dart';
 
 void showRawPromptDialog(
@@ -32,7 +33,7 @@ void showRawPromptDialog(
   final apiConfigs = await apiConfigRepo.getAll();
   if (apiConfigs.isEmpty) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('No API config')));
+      GlazeToast.show(context, 'No API config');
     }
     return;
   }
@@ -77,7 +78,9 @@ void showRawPromptDialog(
     lorebookSettings: ref.read(lorebookSettingsProvider),
     lorebookActivations: ref.read(lorebookActivationsProvider),
     summaryContent: summaryContent,
-    memoryContent: memoryResult.content.isNotEmpty ? memoryResult.content : null,
+    memoryContent: memoryResult.content.isNotEmpty
+        ? memoryResult.content
+        : null,
     memoryInjectionTarget: memoryResult.injectionTarget,
   );
 
@@ -109,9 +112,7 @@ void showRawResponseDialog(BuildContext context, WidgetRef ref, String charId) {
   final chatState = ref.read(chatProvider(charId)).value;
   final raw = chatState?.lastRawResponse;
   if (raw == null || raw.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No response yet — generate something first')),
-    );
+    GlazeToast.show(context, 'No response yet — generate something first');
     return;
   }
 
@@ -207,7 +208,11 @@ void showPersonaPickerDialog(BuildContext context, WidgetRef ref) async {
   );
 }
 
-void confirmClearChatDialog(BuildContext context, WidgetRef ref, String charId) {
+void confirmClearChatDialog(
+  BuildContext context,
+  WidgetRef ref,
+  String charId,
+) {
   showDialog(
     context: context,
     builder: (ctx) => AlertDialog(
@@ -248,9 +253,7 @@ class _CopyableDialog extends StatelessWidget {
             tooltip: 'Copy',
             onPressed: () {
               Clipboard.setData(ClipboardData(text: content));
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Copied to clipboard')),
-              );
+              GlazeToast.show(context, 'Copied to clipboard');
             },
           ),
         ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../chat_provider.dart';
 
 void showMessageContextMenu({
@@ -19,69 +20,62 @@ void showMessageContextMenu({
 }) {
   final notifier = ref.read(chatProvider(charId).notifier);
 
-  showModalBottomSheet(
-    context: context,
-    builder: (ctx) => SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isTyping) ...[
-              ListTile(
-                leading: const Icon(Icons.stop_circle, color: Colors.orange),
-                title: const Text('Stop Generating', style: TextStyle(color: Colors.orange)),
-                onTap: () { Navigator.pop(ctx); notifier.abortGeneration(); },
-              ),
-            ] else ...[
-              ListTile(
-                leading: const Icon(Icons.copy),
-                title: const Text('Copy'),
-                enabled: !(isGenerating && isLast),
-                onTap: isGenerating && isLast ? null : () { Clipboard.setData(ClipboardData(text: content)); Navigator.pop(ctx); },
-              ),
-              if (!isError)
-                ListTile(
-                  leading: const Icon(Icons.edit),
-                  title: const Text('Edit'),
-                  enabled: !(isGenerating && isLast),
-                  onTap: isGenerating && isLast ? null : () { Navigator.pop(ctx); showMessageEditDialog(context: context, ref: ref, charId: charId, content: content, messageIndex: messageIndex); },
-                ),
-              if ((!isUser && isLast && !isGenerating) || isError)
-                ListTile(
-                  leading: const Icon(Icons.refresh),
-                  title: const Text('Regenerate'),
-                  onTap: () { Navigator.pop(ctx); notifier.regenerateLastAssistant(); },
-                ),
-              if (isGenerating && isLast)
-                ListTile(
-                  leading: const Icon(Icons.stop_circle, color: Colors.orange),
-                  title: const Text('Stop Generating', style: TextStyle(color: Colors.orange)),
-                  onTap: () { Navigator.pop(ctx); notifier.abortGeneration(); },
-                ),
-              if (!isError)
-                ListTile(
-                  leading: const Icon(Icons.call_split),
-                  title: const Text('Branch'),
-                  enabled: !(isGenerating && isLast),
-                  onTap: isGenerating && isLast ? null : () { Navigator.pop(ctx); notifier.branchSession(messageIndex); },
-                ),
-              ListTile(
-                leading: Icon(isHidden ? Icons.visibility : Icons.visibility_off),
-                title: Text(isHidden ? 'Unhide' : 'Hide'),
-                onTap: () { Navigator.pop(ctx); notifier.toggleMessageHidden(messageIndex); },
-              ),
-              if (isLast && !isGenerating)
-                ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.red),
-                  title: const Text('Delete', style: TextStyle(color: Colors.red)),
-                  onTap: () { Navigator.pop(ctx); notifier.deleteMessage(messageIndex); },
-                ),
-            ],
-          ],
+  final items = <BottomSheetItem>[
+    if (isTyping)
+      BottomSheetItem(
+        icon: Icons.stop_circle,
+        iconColor: Colors.orange,
+        label: 'Stop Generating',
+        onTap: () { Navigator.pop(context); notifier.abortGeneration(); },
+      )
+    else ...[
+      if (!(isGenerating && isLast))
+        BottomSheetItem(
+          icon: Icons.copy,
+          label: 'Copy',
+          onTap: () { Clipboard.setData(ClipboardData(text: content)); Navigator.pop(context); },
         ),
+      if (!isError && !(isGenerating && isLast))
+        BottomSheetItem(
+          icon: Icons.edit,
+          label: 'Edit',
+          onTap: () { Navigator.pop(context); showMessageEditDialog(context: context, ref: ref, charId: charId, content: content, messageIndex: messageIndex); },
+        ),
+      if ((!isUser && isLast && !isGenerating) || isError)
+        BottomSheetItem(
+          icon: Icons.refresh,
+          label: 'Regenerate',
+          onTap: () { Navigator.pop(context); notifier.regenerateLastAssistant(); },
+        ),
+      if (isGenerating && isLast)
+        BottomSheetItem(
+          icon: Icons.stop_circle,
+          iconColor: Colors.orange,
+          label: 'Stop Generating',
+          onTap: () { Navigator.pop(context); notifier.abortGeneration(); },
+        ),
+      if (!isError && !(isGenerating && isLast))
+        BottomSheetItem(
+          icon: Icons.call_split,
+          label: 'Branch',
+          onTap: () { Navigator.pop(context); notifier.branchSession(messageIndex); },
+        ),
+      BottomSheetItem(
+        icon: isHidden ? Icons.visibility : Icons.visibility_off,
+        label: isHidden ? 'Unhide' : 'Hide',
+        onTap: () { Navigator.pop(context); notifier.toggleMessageHidden(messageIndex); },
       ),
-    ),
-  );
+      if (isLast && !isGenerating)
+        BottomSheetItem(
+          icon: Icons.delete,
+          label: 'Delete',
+          isDestructive: true,
+          onTap: () { Navigator.pop(context); notifier.deleteMessage(messageIndex); },
+        ),
+    ],
+  ];
+
+  GlazeBottomSheet.show(context, items: items);
 }
 
 void showMessageEditDialog({

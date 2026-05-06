@@ -7,7 +7,8 @@ import '../../core/import/st_lorebook_importer.dart';
 import '../../core/models/lorebook.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/theme/app_colors.dart';
-import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/sheet_view.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import 'embedding_settings_screen.dart';
 import 'lorebook_connections_sheet.dart';
 import 'lorebook_editor_screen.dart';
@@ -20,91 +21,94 @@ class LorebookListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final lorebooksAsync = ref.watch(lorebooksProvider);
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return SheetView(
+      title: 'Lorebooks',
+      showBack: true,
+      onBack: () => context.go('/tools'),
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppColors.accent,
         child: const Icon(Icons.add, color: Colors.black),
         onPressed: () => _createLorebook(context, ref),
       ),
-      body: Column(
-        children: [
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child:               GlazeAppBar(
-                title: 'Lorebooks',
-                leading: BackButton(onPressed: () => context.go('/tools')),
-                actions: [
-                  IconButton(
-                    icon: const Icon(Icons.settings_outlined, size: 20),
-                    tooltip: 'Global Settings',
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const LorebookGlobalSettingsScreen()),
+      actions: [
+        SheetViewAction(
+          icon: const Icon(Icons.settings_outlined, size: 20),
+          tooltip: 'Global Settings',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const LorebookGlobalSettingsScreen(),
+            ),
+          ),
+        ),
+        SheetViewAction(
+          icon: const Icon(Icons.upload_file, size: 20),
+          tooltip: 'Import ST Lorebook',
+          onPressed: () => _importSTLorebook(context, ref),
+        ),
+        SheetViewAction(
+          icon: const Icon(Icons.search, size: 20),
+          tooltip: 'Embedding Settings',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => const EmbeddingSettingsScreen(),
+            ),
+          ),
+        ),
+      ],
+      body: lorebooksAsync.when(
+        data: (lorebooks) {
+          if (lorebooks.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.menu_book_outlined,
+                    size: 64,
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No lorebooks yet',
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: AppColors.textSecondary,
                     ),
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.upload_file, size: 20),
-                    tooltip: 'Import ST Lorebook',
-                    onPressed: () => _importSTLorebook(context, ref),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.search, size: 20),
-                    tooltip: 'Embedding Settings',
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const EmbeddingSettingsScreen()),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Tap + to create one',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
                     ),
                   ),
                 ],
               ),
-            ),
-          ),
-          Expanded(
-            child: lorebooksAsync.when(
-              data: (lorebooks) {
-                if (lorebooks.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.menu_book_outlined, size: 64, color: AppColors.textSecondary),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No lorebooks yet',
-                          style: TextStyle(fontSize: 16, color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Tap + to create one',
-                          style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                  itemCount: lorebooks.length,
-                  itemBuilder: (_, i) => _LorebookTile(
-                    lorebook: lorebooks[i],
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => LorebookEditorScreen(lorebookId: lorebooks[i].id),
-                      ),
-                    ),
-                    onDelete: () => _deleteLorebook(context, ref, lorebooks[i]),
-                    onToggle: () => ref
-                        .read(lorebooksProvider.notifier)
-                        .updateLorebook(lorebooks[i].copyWith(enabled: !lorebooks[i].enabled)),
+            );
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+            itemCount: lorebooks.length,
+            itemBuilder: (_, i) => _LorebookTile(
+              lorebook: lorebooks[i],
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      LorebookEditorScreen(lorebookId: lorebooks[i].id),
+                ),
+              ),
+              onDelete: () => _deleteLorebook(context, ref, lorebooks[i]),
+              onToggle: () => ref
+                  .read(lorebooksProvider.notifier)
+                  .updateLorebook(
+                    lorebooks[i].copyWith(enabled: !lorebooks[i].enabled),
                   ),
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(child: Text('Error: $e')),
             ),
-          ),
-        ],
+          );
+        },
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e')),
       ),
     );
   }
@@ -119,9 +123,7 @@ class LorebookListScreen extends ConsumerWidget {
     );
     ref.read(lorebooksProvider.notifier).addLorebook(lorebook).then((_) {
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => LorebookEditorScreen(lorebookId: id),
-        ),
+        MaterialPageRoute(builder: (_) => LorebookEditorScreen(lorebookId: id)),
       );
     });
   }
@@ -138,22 +140,24 @@ class LorebookListScreen extends ConsumerWidget {
 
     try {
       final importResult = await importSTLorebookFromFile(filePath);
-      await ref.read(lorebooksProvider.notifier).addLorebook(importResult.lorebook);
+      await ref
+          .read(lorebooksProvider.notifier)
+          .addLorebook(importResult.lorebook);
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Imported "${importResult.lorebook.name}" (${importResult.entryCount} entries)')),
+        GlazeToast.show(
+          context,
+          'Imported "${importResult.lorebook.name}" (${importResult.entryCount} entries)',
         );
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (_) => LorebookEditorScreen(lorebookId: importResult.lorebook.id),
+            builder: (_) =>
+                LorebookEditorScreen(lorebookId: importResult.lorebook.id),
           ),
         );
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Import failed: $e')),
-        );
+        GlazeToast.show(context, 'Import failed: $e');
       }
     }
   }
@@ -165,7 +169,10 @@ class LorebookListScreen extends ConsumerWidget {
         title: const Text('Delete Lorebook'),
         content: Text('Delete "${lb.name}"? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () {
               ref.read(lorebooksProvider.notifier).deleteLorebook(lb.id);
@@ -224,7 +231,11 @@ class _LorebookTile extends StatelessWidget {
               ),
               child: Text(
                 lorebook.activationScope,
-                style: TextStyle(fontSize: 10, color: scopeColor, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 10,
+                  color: scopeColor,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -242,8 +253,15 @@ class _LorebookTile extends StatelessWidget {
               tooltip: 'Connections',
               onPressed: () => showLorebookConnections(context, lorebook.id),
             ),
-            Switch(value: lorebook.enabled, onChanged: (_) => onToggle(), activeColor: AppColors.accent),
-            IconButton(icon: const Icon(Icons.delete_outline, size: 20), onPressed: onDelete),
+            Switch(
+              value: lorebook.enabled,
+              onChanged: (_) => onToggle(),
+              activeColor: AppColors.accent,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 20),
+              onPressed: onDelete,
+            ),
           ],
         ),
         onTap: onTap,

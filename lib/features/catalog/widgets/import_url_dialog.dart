@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
 import '../services/datacat_provider.dart';
@@ -48,10 +49,16 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
             style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
             decoration: InputDecoration(
               hintText: 'https://...',
-              hintStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              hintStyle: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 14,
+              ),
               filled: true,
               fillColor: AppColors.background,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -67,13 +74,21 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
                 const SizedBox(
                   width: 20,
                   height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.accent,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    _phase != null ? 'Phase: $_phase' : 'Extracting character...',
-                    style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                    _phase != null
+                        ? 'Phase: $_phase'
+                        : 'Extracting character...',
+                    style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ],
@@ -92,17 +107,26 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
         if (!_loading)
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
         if (!_loading)
           TextButton(
             onPressed: _startExtraction,
-            child: const Text('Import', style: TextStyle(color: AppColors.accent)),
+            child: const Text(
+              'Import',
+              style: TextStyle(color: AppColors.accent),
+            ),
           ),
         if (_loading)
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel', style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
       ],
     );
@@ -145,12 +169,7 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
         await notifier.importCharacter(downloaded);
         if (mounted) {
           Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Imported ${result.charData!.name}'),
-              backgroundColor: AppColors.accent,
-            ),
-          );
+          GlazeToast.show(context, 'Imported ${result.charData!.name}');
         }
       }
     } catch (e) {

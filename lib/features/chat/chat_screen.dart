@@ -11,7 +11,9 @@ import '../../core/services/chat_import_export.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import '../chat_history/chat_history_screen.dart' show chatHistoryProvider;
 import '../image_gen/widgets/image_gen_sheet.dart';
 import 'chat_provider.dart';
@@ -44,184 +46,261 @@ class ChatScreen extends ConsumerWidget {
     return SessionLifecycleTracker(
       charId: charId,
       child: GlazeScaffold(
-      extendBodyBehindHeader: true,
-      title: title,
-      titleWidget: character != null
-          ? ChatHeader(character: character, sessionName: sessionName, currentSessionIndex: sessionIndex)
-          : null,
-      onBack: () => context.go('/'),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.info_outline),
-          onPressed: () => context.go('/character/$charId'),
-          color: AppColors.accent,
-        ),
-        chatStateAsync.when(
-          data: (state) => state.isGenerating
-              ? IconButton(
-                  icon: const Icon(Icons.stop_circle),
-                  color: AppColors.accent,
-                  onPressed: () =>
-                      ref.read(chatProvider(charId).notifier).abortGeneration(),
-                )
-              : const SizedBox.shrink(),
-          loading: () => const SizedBox.shrink(),
-          error: (_, __) => const SizedBox.shrink(),
-        ),
-        Theme(
-          data: Theme.of(context).copyWith(
-              iconTheme: const IconThemeData(color: AppColors.accent)),
-          child: PopupMenuButton<String>(
-            iconColor: AppColors.accent,
-            onSelected: (value) {
-              switch (value) {
-                case 'preset':
-                  showPresetPickerDialog(context, ref);
-                case 'persona':
-                  showPersonaPickerDialog(context, ref);
-                case 'summary':
-                  _generateSummary(context, ref, charId);
-                case 'memory':
-                  _showMemoryBooks(context, ref, charId);
-                case 'export_chat':
-                  _exportChat(context, ref, charId);
-                case 'import_chat':
-                  _importChat(context, ref, charId);
-                case 'raw':
-                  showRawPromptDialog(context, ref, charId);
-                case 'rawResponse':
-                  showRawResponseDialog(context, ref, charId);
-                case 'tokenizer':
-                  showTokenizerSheet(context, charId);
-                case 'clear':
-                  confirmClearChatDialog(context, ref, charId);
-              }
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem(
-                value: 'preset',
-                child: Row(children: [Icon(Icons.tune, size: 18), SizedBox(width: 8), Text('Preset')]),
+        extendBodyBehindHeader: true,
+        title: title,
+        titleWidget: character != null
+            ? ChatHeader(
+                character: character,
+                sessionName: sessionName,
+                currentSessionIndex: sessionIndex,
+              )
+            : null,
+        onBack: () => context.go('/'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => context.go('/character/$charId'),
+            color: AppColors.accent,
+          ),
+          chatStateAsync.when(
+            data: (state) => state.isGenerating
+                ? IconButton(
+                    icon: const Icon(Icons.stop_circle),
+                    color: AppColors.accent,
+                    onPressed: () => ref
+                        .read(chatProvider(charId).notifier)
+                        .abortGeneration(),
+                  )
+                : const SizedBox.shrink(),
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+          Theme(
+            data: Theme.of(
+              context,
+            ).copyWith(iconTheme: const IconThemeData(color: AppColors.accent)),
+            child: PopupMenuButton<String>(
+              iconColor: AppColors.accent,
+              onSelected: (value) {
+                switch (value) {
+                  case 'preset':
+                    showPresetPickerDialog(context, ref);
+                  case 'persona':
+                    showPersonaPickerDialog(context, ref);
+                  case 'summary':
+                    _generateSummary(context, ref, charId);
+                  case 'memory':
+                    _showMemoryBooks(context, ref, charId);
+                  case 'export_chat':
+                    _exportChat(context, ref, charId);
+                  case 'import_chat':
+                    _importChat(context, ref, charId);
+                  case 'raw':
+                    showRawPromptDialog(context, ref, charId);
+                  case 'rawResponse':
+                    showRawResponseDialog(context, ref, charId);
+                  case 'tokenizer':
+                    showTokenizerSheet(context, charId);
+                  case 'clear':
+                    confirmClearChatDialog(context, ref, charId);
+                }
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'preset',
+                  child: Row(
+                    children: [
+                      Icon(Icons.tune, size: 18),
+                      SizedBox(width: 8),
+                      Text('Preset'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'persona',
+                  child: Row(
+                    children: [
+                      Icon(Icons.person, size: 18),
+                      SizedBox(width: 8),
+                      Text('Persona'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'summary',
+                  child: Row(
+                    children: [
+                      Icon(Icons.summarize, size: 18),
+                      SizedBox(width: 8),
+                      Text('Generate Summary'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'memory',
+                  child: Row(
+                    children: [
+                      Icon(Icons.auto_stories, size: 18),
+                      SizedBox(width: 8),
+                      Text('Memory Books'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'export_chat',
+                  child: Row(
+                    children: [
+                      Icon(Icons.upload_file, size: 18),
+                      SizedBox(width: 8),
+                      Text('Export Chat (JSONL)'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'import_chat',
+                  child: Row(
+                    children: [
+                      Icon(Icons.file_download, size: 18),
+                      SizedBox(width: 8),
+                      Text('Import Chat'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'raw',
+                  child: Row(
+                    children: [
+                      Icon(Icons.data_object, size: 18),
+                      SizedBox(width: 8),
+                      Text('View Raw Prompt'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'rawResponse',
+                  child: Row(
+                    children: [
+                      Icon(Icons.output, size: 18),
+                      SizedBox(width: 8),
+                      Text('View Raw Response'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'tokenizer',
+                  child: Row(
+                    children: [
+                      Icon(Icons.pie_chart_outline, size: 18),
+                      SizedBox(width: 8),
+                      Text('Context Usage'),
+                    ],
+                  ),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'clear',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_sweep, size: 18, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Clear Chat', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        body: chatStateAsync.when(
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (e, _) => Center(child: Text('Error: $e')),
+          data: (state) => Stack(
+            children: [
+              MessageList(
+                messages: state.messages,
+                streamingText: state.isGenerating ? state.streamingText : null,
+                streamingReasoning: state.isGenerating
+                    ? state.streamingReasoning
+                    : null,
+                isGenerating: state.isGenerating,
+                charId: charId,
               ),
-              const PopupMenuItem(
-                value: 'persona',
-                child: Row(children: [Icon(Icons.person, size: 18), SizedBox(width: 8), Text('Persona')]),
-              ),
-              const PopupMenuItem(
-                value: 'summary',
-                child: Row(children: [Icon(Icons.summarize, size: 18), SizedBox(width: 8), Text('Generate Summary')]),
-              ),
-              const PopupMenuItem(
-                value: 'memory',
-                child: Row(children: [Icon(Icons.auto_stories, size: 18), SizedBox(width: 8), Text('Memory Books')]),
-              ),
-              const PopupMenuItem(
-                value: 'export_chat',
-                child: Row(children: [Icon(Icons.upload_file, size: 18), SizedBox(width: 8), Text('Export Chat (JSONL)')]),
-              ),
-              const PopupMenuItem(
-                value: 'import_chat',
-                child: Row(children: [Icon(Icons.file_download, size: 18), SizedBox(width: 8), Text('Import Chat')]),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'raw',
-                child: Row(children: [Icon(Icons.data_object, size: 18), SizedBox(width: 8), Text('View Raw Prompt')]),
-              ),
-              const PopupMenuItem(
-                value: 'rawResponse',
-                child: Row(children: [Icon(Icons.output, size: 18), SizedBox(width: 8), Text('View Raw Response')]),
-              ),
-              const PopupMenuItem(
-                value: 'tokenizer',
-                child: Row(children: [Icon(Icons.pie_chart_outline, size: 18), SizedBox(width: 8), Text('Context Usage')]),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'clear',
-                child: Row(children: [Icon(Icons.delete_sweep, size: 18, color: Colors.red), SizedBox(width: 8), Text('Clear Chat', style: TextStyle(color: Colors.red))]),
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (state.error != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        child: Text(
+                          state.error!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ChatInputBar(
+                      onSend: (text) {
+                        if (text.trim().isEmpty) return;
+                        ref
+                            .read(chatProvider(charId).notifier)
+                            .sendMessage(text);
+                      },
+                      onSendWithGuidance: (text, guidance) {
+                        if (text.trim().isEmpty) return;
+                        ref
+                            .read(chatProvider(charId).notifier)
+                            .sendMessage(text, guidanceText: guidance);
+                      },
+                      isGenerating: state.isGenerating,
+                      onStop: state.isGenerating
+                          ? () => ref
+                                .read(chatProvider(charId).notifier)
+                                .abortGeneration()
+                          : null,
+                      onMagicDrawer: () => GlazeBottomSheet.show(
+                        context,
+                        child: MagicDrawerPanel(charId: charId),
+                      ),
+                      onImageGen: () => GlazeBottomSheet.show(
+                        context,
+                        child: const ImageGenSheet(),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
         ),
-      ],
-      body: chatStateAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
-        data: (state) => Stack(
-          children: [
-            MessageList(
-              messages: state.messages,
-              streamingText: state.isGenerating ? state.streamingText : null,
-              streamingReasoning: state.isGenerating ? state.streamingReasoning : null,
-              isGenerating: state.isGenerating,
-              charId: charId,
-            ),
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (state.error != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      child: Text(
-                        state.error!,
-                        style: TextStyle(color: Theme.of(context).colorScheme.error, fontSize: 12),
-                      ),
-                    ),
-                  ChatInputBar(
-                    onSend: (text) {
-                      if (text.trim().isEmpty) return;
-                      ref.read(chatProvider(charId).notifier).sendMessage(text);
-                    },
-                    onSendWithGuidance: (text, guidance) {
-                      if (text.trim().isEmpty) return;
-                      ref.read(chatProvider(charId).notifier).sendMessage(text, guidanceText: guidance);
-                    },
-                    isGenerating: state.isGenerating,
-                    onStop: state.isGenerating
-                        ? () => ref.read(chatProvider(charId).notifier).abortGeneration()
-                        : null,
-                    onMagicDrawer: () => showModalBottomSheet(
-                      context: context,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) => MagicDrawerPanel(charId: charId),
-                    ),
-                    onImageGen: () => showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (_) => const ImageGenSheet(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
-    ),
     );
   }
 }
 
-Future<void> _generateSummary(BuildContext context, WidgetRef ref, String charId) async {
+Future<void> _generateSummary(
+  BuildContext context,
+  WidgetRef ref,
+  String charId,
+) async {
   final chatState = ref.read(chatProvider(charId)).value;
   if (chatState == null || chatState.session == null) return;
 
   final apiConfigs = await ref.read(apiConfigRepoProvider).getAll();
   if (apiConfigs.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('No API config — set one up first')),
-    );
+    GlazeToast.show(context, 'No API config — set one up first');
     return;
   }
 
-  ScaffoldMessenger.of(context).showSnackBar(
-    const SnackBar(content: Text('Generating summary...'), duration: Duration(seconds: 2)),
-  );
+  GlazeToast.show(context, 'Generating summary...');
 
   try {
     final summaryService = ref.read(summaryServiceProvider);
@@ -231,15 +310,11 @@ Future<void> _generateSummary(BuildContext context, WidgetRef ref, String charId
       apiConfig: apiConfigs.first,
     );
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Summary generated (${summary.length} chars)'), duration: const Duration(seconds: 2)),
-      );
+      GlazeToast.show(context, 'Summary generated (${summary.length} chars)');
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Summary failed: $e'), backgroundColor: Colors.red),
-      );
+      GlazeToast.show(context, 'Summary failed: $e');
     }
   }
 }
@@ -248,21 +323,17 @@ void _showMemoryBooks(BuildContext context, WidgetRef ref, String charId) {
   final chatState = ref.read(chatProvider(charId)).value;
   if (chatState == null || chatState.session == null) return;
 
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (_, controller) => MemoryBooksSheet(sessionId: chatState.session!.id),
-    ),
+  GlazeBottomSheet.show(
+    context,
+    child: MemoryBooksSheet(sessionId: chatState.session!.id),
   );
 }
 
-Future<void> _exportChat(BuildContext context, WidgetRef ref, String charId) async {
+Future<void> _exportChat(
+  BuildContext context,
+  WidgetRef ref,
+  String charId,
+) async {
   final chatState = ref.read(chatProvider(charId)).value;
   if (chatState == null || chatState.session == null) return;
 
@@ -271,7 +342,10 @@ Future<void> _exportChat(BuildContext context, WidgetRef ref, String charId) asy
   if (character == null) return;
 
   try {
-    final desktop = Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '.';
+    final desktop =
+        Platform.environment['USERPROFILE'] ??
+        Platform.environment['HOME'] ??
+        '.';
     final outputDir = '${desktop}\\Desktop';
 
     final result = await exportChatAsJsonl(
@@ -280,20 +354,20 @@ Future<void> _exportChat(BuildContext context, WidgetRef ref, String charId) asy
       outputDir: outputDir,
     );
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Chat exported to ${result.filePath}')),
-      );
+      GlazeToast.show(context, 'Chat exported to ${result.filePath}');
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $e')),
-      );
+      GlazeToast.show(context, 'Export failed: $e');
     }
   }
 }
 
-Future<void> _importChat(BuildContext context, WidgetRef ref, String charId) async {
+Future<void> _importChat(
+  BuildContext context,
+  WidgetRef ref,
+  String charId,
+) async {
   final result = await FilePicker.pickFiles(
     type: FileType.custom,
     allowedExtensions: ['jsonl', 'json'],
@@ -308,9 +382,7 @@ Future<void> _importChat(BuildContext context, WidgetRef ref, String charId) asy
     final importResult = await importChatFromJsonl(filePath);
     if (importResult.messages.isEmpty) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No messages found in file')),
-        );
+        GlazeToast.show(context, 'No messages found in file');
       }
       return;
     }
@@ -336,15 +408,14 @@ Future<void> _importChat(BuildContext context, WidgetRef ref, String charId) asy
     ref.invalidate(chatHistoryProvider);
 
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Imported ${importResult.messages.length} messages')),
+      GlazeToast.show(
+        context,
+        'Imported ${importResult.messages.length} messages',
       );
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Import failed: $e')),
-      );
+      GlazeToast.show(context, 'Import failed: $e');
     }
   }
 }

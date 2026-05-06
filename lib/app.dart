@@ -24,8 +24,11 @@ import 'shared/shell/shell_screen.dart';
 import 'shared/theme/app_theme.dart';
 import 'shared/theme/theme_provider.dart';
 
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+
 final routerProvider = Provider<GoRouter>(
   (ref) => GoRouter(
+    navigatorKey: rootNavigatorKey,
     routes: [
       StatefulShellRoute.indexedStack(
         builder: (_, __, navigationShell) =>

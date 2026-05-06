@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/sse_client.dart';
 import '../../../core/models/api_config.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import 'api_settings_screen.dart';
 import 'widgets/widgets.dart';
 
@@ -253,9 +254,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
     final apiKey = _keyCtrl.text.trim();
 
     if (endpoint.isEmpty || apiKey.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter endpoint and API key first')),
-      );
+      GlazeToast.show(context, 'Enter endpoint and API key first');
       return;
     }
 
@@ -315,11 +314,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
 
     if (endpoint.isEmpty || apiKey.isEmpty || model.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Fill in endpoint, API key, and model first'),
-          ),
-        );
+        GlazeToast.show(context, 'Fill in endpoint, API key, and model first');
       }
       return;
     }
@@ -353,35 +348,21 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
 
         if (!mounted) return;
         if (responseText != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Connection successful!'),
-              backgroundColor: Colors.green,
-            ),
-          );
+          GlazeToast.show(context, 'Connection successful!');
         }
       } else {
         final modelExists = models.any((m) => m['id'] == model);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              modelExists
-                  ? 'Connection successful! Model "$model" found.'
-                  : 'Connected, but model "$model" not found. '
-                        'Available: ${models.take(5).map((m) => m['id']).join(', ')}${models.length > 5 ? '...' : ''}',
-            ),
-            backgroundColor: modelExists ? Colors.green : Colors.orange,
-          ),
+        GlazeToast.show(
+          context,
+          modelExists
+              ? 'Connection successful! Model "$model" found.'
+              : 'Connected, but model "$model" not found. '
+                    'Available: ${models.take(5).map((m) => m['id']).join(', ')}${models.length > 5 ? '...' : ''}',
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Connection failed: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+        GlazeToast.show(context, 'Connection failed: $e');
       }
     } finally {
       if (mounted) setState(() => _isTesting = false);

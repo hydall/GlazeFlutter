@@ -9,6 +9,7 @@ import '../../core/models/persona.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/sheet_view.dart';
 
 final personaListProvider =
     AsyncNotifierProvider<PersonaListNotifier, List<Persona>>(
@@ -39,13 +40,14 @@ class PersonaListScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final personas = ref.watch(personaListProvider);
 
-    return GlazeScaffold(
+    return SheetView(
       title: 'Personas',
+      showBack: true,
       onBack: () => context.go('/tools'),
       actions: [
-        IconButton(
-          icon: const Icon(Icons.add),
-          color: AppColors.accent,
+        SheetViewAction(
+          icon: const Icon(Icons.add, size: 20),
+          tooltip: 'Add Persona',
           onPressed: () => _showEditor(context, ref),
         ),
       ],
@@ -67,6 +69,7 @@ class PersonaListScreen extends ConsumerWidget {
                 ),
               )
             : ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                 itemCount: list.length,
                 itemBuilder: (_, i) => _PersonaTile(persona: list[i]),
               ),
@@ -89,35 +92,51 @@ class _PersonaTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ListTile(
-      visualDensity: VisualDensity.compact,
-      leading: CircleAvatar(
-        radius: 14,
-        child: Text(
-          persona.name.isNotEmpty ? persona.name[0].toUpperCase() : '?',
-          style: const TextStyle(fontSize: 12),
-        ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
       ),
-      title: Text(persona.name),
-      subtitle: persona.prompt != null && persona.prompt!.isNotEmpty
-          ? Text(persona.prompt!, maxLines: 1, overflow: TextOverflow.ellipsis)
-          : null,
-      trailing: PopupMenuButton<String>(
-        onSelected: (value) {
-          if (value == 'edit') {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => _PersonaEditorScreen(existing: persona),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        leading: CircleAvatar(
+          radius: 24,
+          backgroundColor: AppColors.accent.withValues(alpha: 0.18),
+          child: Text(
+            persona.name.isNotEmpty ? persona.name[0].toUpperCase() : '?',
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ),
+        title: Text(persona.name),
+        subtitle: persona.prompt != null && persona.prompt!.isNotEmpty
+            ? Text(persona.prompt!, maxLines: 1, overflow: TextOverflow.ellipsis)
+            : const Text(
+                'No prompt',
+                style: TextStyle(color: AppColors.textSecondary),
               ),
-            );
-          } else if (value == 'delete') {
-            ref.read(personaListProvider.notifier).remove(persona.id);
-          }
-        },
-        itemBuilder: (_) => [
-          const PopupMenuItem(value: 'edit', child: Text('Edit')),
-          const PopupMenuItem(value: 'delete', child: Text('Delete')),
-        ],
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) {
+            if (value == 'edit') {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => _PersonaEditorScreen(existing: persona),
+                ),
+              );
+            } else if (value == 'delete') {
+              ref.read(personaListProvider.notifier).remove(persona.id);
+            }
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(value: 'edit', child: Text('Edit')),
+            const PopupMenuItem(value: 'delete', child: Text('Delete')),
+          ],
+        ),
       ),
     );
   }

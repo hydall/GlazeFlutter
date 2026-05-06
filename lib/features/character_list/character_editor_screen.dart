@@ -13,6 +13,7 @@ import '../../core/services/character_exporter.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_toast.dart';
 
 class CharacterEditorScreen extends ConsumerStatefulWidget {
   final String charId;
@@ -329,16 +330,12 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
 
       await ref.read(characterRepoProvider).put(updated);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Character saved')));
+        GlazeToast.show(context, 'Character saved');
         context.go('/character/${widget.charId}');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+        GlazeToast.show(context, 'Save failed: $e');
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -350,7 +347,10 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
     if (char == null) return;
 
     try {
-      final desktop = Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '.';
+      final desktop =
+          Platform.environment['USERPROFILE'] ??
+          Platform.environment['HOME'] ??
+          '.';
       final outputDir = p.join(desktop, 'Desktop');
 
       if (format == 'png') {
@@ -367,9 +367,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
           outputDir: outputDir,
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Exported PNG to ${result.filePath}')),
-          );
+          GlazeToast.show(context, 'Exported PNG to ${result.filePath}');
         }
       } else {
         final result = await exportCharacterAsJson(
@@ -377,16 +375,12 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
           outputDir: outputDir,
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Exported JSON to ${result.filePath}')),
-          );
+          GlazeToast.show(context, 'Exported JSON to ${result.filePath}');
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
-        );
+        GlazeToast.show(context, 'Export failed: $e');
       }
     }
   }
@@ -395,9 +389,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
     final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     final width = 400, height = 600;
 
-    final pngHeader = <int>[
-      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-    ];
+    final pngHeader = <int>[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
     final ihdrData = ByteData(13);
     ihdrData.setUint32(0, width, Endian.big);
@@ -424,7 +416,8 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
 
     final iendChunk = _buildPngChunk('IEND', Uint8List(0));
 
-    final totalLen = pngHeader.length + ihdrChunk.length + iendChunk.length + 100;
+    final totalLen =
+        pngHeader.length + ihdrChunk.length + iendChunk.length + 100;
     final result = BytesBuilder();
     result.add(pngHeader);
     result.add(ihdrChunk);

@@ -9,20 +9,10 @@ import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../features/chat/chat_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 
 void showContextInfoSheet(BuildContext context, WidgetRef ref, String charId) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.3,
-      maxChildSize: 0.85,
-      expand: false,
-      builder: (_, controller) => _ContextInfoPanel(charId: charId),
-    ),
-  );
+  GlazeBottomSheet.show(context, child: _ContextInfoPanel(charId: charId));
 }
 
 class _ContextInfoPanel extends ConsumerStatefulWidget {
@@ -139,49 +129,37 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            margin: const EdgeInsets.only(top: 8),
-            width: 40, height: 4,
-            decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-            child: Row(
-              children: [
-                const Icon(Icons.info_outline, color: AppColors.accent, size: 22),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text('Context Sources', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1, color: Colors.white10),
-          if (_loading)
-            const Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())
-          else
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                padding: const EdgeInsets.all(12),
-                itemCount: _sources.length,
-                itemBuilder: (_, i) => _SourceTile(source: _sources[i]),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
+          child: Row(
+            children: [
+              const Icon(Icons.info_outline, color: AppColors.accent, size: 22),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('Context Sources', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
               ),
-            ),
-        ],
-      ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1, color: Colors.white10),
+        if (_loading)
+          const Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(12),
+            itemCount: _sources.length,
+            itemBuilder: (_, i) => _SourceTile(source: _sources[i]),
+          ),
+      ],
     );
   }
 }

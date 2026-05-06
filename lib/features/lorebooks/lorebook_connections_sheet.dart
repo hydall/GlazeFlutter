@@ -6,16 +6,20 @@ import '../../../core/models/lorebook.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 
 class LorebookConnectionsSheet extends ConsumerStatefulWidget {
   final String lorebookId;
   const LorebookConnectionsSheet({super.key, required this.lorebookId});
 
   @override
-  ConsumerState<LorebookConnectionsSheet> createState() => _LorebookConnectionsSheetState();
+  ConsumerState<LorebookConnectionsSheet> createState() =>
+      _LorebookConnectionsSheetState();
 }
 
-class _LorebookConnectionsSheetState extends ConsumerState<LorebookConnectionsSheet> {
+class _LorebookConnectionsSheetState
+    extends ConsumerState<LorebookConnectionsSheet> {
   @override
   Widget build(BuildContext context) {
     final lorebooks = ref.watch(lorebooksProvider).value ?? [];
@@ -32,77 +36,88 @@ class _LorebookConnectionsSheetState extends ConsumerState<LorebookConnectionsSh
         .map((e) => e.key)
         .toList();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Connections: ${lb.name}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
-              ],
-            ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Connections: ${lb.name}',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ],
           ),
-          const Divider(height: 1),
+        ),
+        const Divider(height: 1),
 
-          _Section(
-            icon: Icons.public,
-            title: 'Global',
-            child: _ToggleRow(
-              label: 'Enabled for all chats',
-              value: lb.enabled,
-              onChanged: (v) {
-                final notifier = ref.read(lorebooksProvider.notifier);
-                notifier.updateLorebook(lb.copyWith(enabled: v));
-              },
-            ),
+        _Section(
+          icon: Icons.public,
+          title: 'Global',
+          child: _ToggleRow(
+            label: 'Enabled for all chats',
+            value: lb.enabled,
+            onChanged: (v) {
+              final notifier = ref.read(lorebooksProvider.notifier);
+              notifier.updateLorebook(lb.copyWith(enabled: v));
+            },
           ),
+        ),
 
-          _Section(
-            icon: Icons.person,
-            title: 'Characters',
-            onAdd: () => _addCharacterConnection(lb),
-            child: charIds.isEmpty
-                ? const _EmptyHint('Not bound to any character')
-                : Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: charIds.map((id) => _ConnectionChip(
-                      id: id,
-                      futureLabel: _charName(id),
-                      onRemove: () => _toggleActivation(lb.id, 'character', id),
-                    )).toList(),
-                  ),
-          ),
+        _Section(
+          icon: Icons.person,
+          title: 'Characters',
+          onAdd: () => _addCharacterConnection(lb),
+          child: charIds.isEmpty
+              ? const _EmptyHint('Not bound to any character')
+              : Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: charIds
+                      .map(
+                        (id) => _ConnectionChip(
+                          id: id,
+                          futureLabel: _charName(id),
+                          onRemove: () =>
+                              _toggleActivation(lb.id, 'character', id),
+                        ),
+                      )
+                      .toList(),
+                ),
+        ),
 
-          _Section(
-            icon: Icons.chat,
-            title: 'Chats',
-            onAdd: () => _addChatConnection(lb),
-            child: chatIds.isEmpty
-                ? const _EmptyHint('Not bound to any chat')
-                : Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: chatIds.map((id) => _ConnectionChip(
-                      id: id,
-                      futureLabel: Future.value(id),
-                      onRemove: () => _toggleActivation(lb.id, 'chat', id),
-                    )).toList(),
-                  ),
-          ),
+        _Section(
+          icon: Icons.chat,
+          title: 'Chats',
+          onAdd: () => _addChatConnection(lb),
+          child: chatIds.isEmpty
+              ? const _EmptyHint('Not bound to any chat')
+              : Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: chatIds
+                      .map(
+                        (id) => _ConnectionChip(
+                          id: id,
+                          futureLabel: Future.value(id),
+                          onRemove: () => _toggleActivation(lb.id, 'chat', id),
+                        ),
+                      )
+                      .toList(),
+                ),
+        ),
 
-          const SizedBox(height: 24),
-        ],
-      ),
+        const SizedBox(height: 24),
+      ],
     );
   }
 
@@ -145,7 +160,7 @@ class _LorebookConnectionsSheetState extends ConsumerState<LorebookConnectionsSh
 
     final available = chars.where((c) => !existingIds.contains(c.id)).toList();
     if (available.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All characters already connected')));
+      GlazeToast.show(context, 'All characters already connected');
       return;
     }
 
@@ -153,10 +168,14 @@ class _LorebookConnectionsSheetState extends ConsumerState<LorebookConnectionsSh
       context: context,
       builder: (ctx) => SimpleDialog(
         title: const Text('Add Character'),
-        children: available.map((c) => SimpleDialogOption(
-          onPressed: () => Navigator.pop(ctx, c),
-          child: Text(c.name),
-        )).toList(),
+        children: available
+            .map(
+              (c) => SimpleDialogOption(
+                onPressed: () => Navigator.pop(ctx, c),
+                child: Text(c.name),
+              ),
+            )
+            .toList(),
       ),
     );
 
@@ -166,8 +185,9 @@ class _LorebookConnectionsSheetState extends ConsumerState<LorebookConnectionsSh
   }
 
   void _addChatConnection(Lorebook lb) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Chat binding: open a chat first, then bind from there')),
+    GlazeToast.show(
+      context,
+      'Chat binding: open a chat first, then bind from there',
     );
   }
 }
@@ -178,7 +198,12 @@ class _Section extends StatelessWidget {
   final VoidCallback? onAdd;
   final Widget child;
 
-  const _Section({required this.icon, required this.title, this.onAdd, required this.child});
+  const _Section({
+    required this.icon,
+    required this.title,
+    this.onAdd,
+    required this.child,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -191,10 +216,22 @@ class _Section extends StatelessWidget {
             children: [
               Icon(icon, size: 16, color: AppColors.textSecondary),
               const SizedBox(width: 6),
-              Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               const Spacer(),
               if (onAdd != null)
-                IconButton(icon: const Icon(Icons.add, size: 18), onPressed: onAdd, padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                IconButton(
+                  icon: const Icon(Icons.add, size: 18),
+                  onPressed: onAdd,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
             ],
           ),
           const SizedBox(height: 6),
@@ -210,15 +247,26 @@ class _ToggleRow extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
-  const _ToggleRow({required this.label, required this.value, required this.onChanged});
+  const _ToggleRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
-        Switch(value: value, onChanged: onChanged, activeColor: AppColors.accent),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+        ),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeColor: AppColors.accent,
+        ),
       ],
     );
   }
@@ -229,14 +277,19 @@ class _ConnectionChip extends StatelessWidget {
   final Future<String> futureLabel;
   final VoidCallback onRemove;
 
-  const _ConnectionChip({required this.id, required this.futureLabel, required this.onRemove});
+  const _ConnectionChip({
+    required this.id,
+    required this.futureLabel,
+    required this.onRemove,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Chip(
       label: FutureBuilder<String>(
         future: futureLabel,
-        builder: (_, snap) => Text(snap.data ?? id, style: const TextStyle(fontSize: 12)),
+        builder: (_, snap) =>
+            Text(snap.data ?? id, style: const TextStyle(fontSize: 12)),
       ),
       deleteIcon: const Icon(Icons.close, size: 14),
       onDeleted: onRemove,
@@ -253,14 +306,20 @@ class _EmptyHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(text, style: TextStyle(fontSize: 12, color: AppColors.textSecondary.withValues(alpha: 0.6), fontStyle: FontStyle.italic));
+    return Text(
+      text,
+      style: TextStyle(
+        fontSize: 12,
+        color: AppColors.textSecondary.withValues(alpha: 0.6),
+        fontStyle: FontStyle.italic,
+      ),
+    );
   }
 }
 
 void showLorebookConnections(BuildContext context, String lorebookId) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    builder: (_) => LorebookConnectionsSheet(lorebookId: lorebookId),
+  GlazeBottomSheet.show(
+    context,
+    child: LorebookConnectionsSheet(lorebookId: lorebookId),
   );
 }

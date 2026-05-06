@@ -5,6 +5,7 @@ import '../../../core/models/character.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../chat_provider.dart';
 
 class ChatHeader extends ConsumerWidget {
@@ -119,34 +120,25 @@ class ChatHeader extends ConsumerWidget {
     if (!context.mounted) return;
     if (sessions.length <= 1) return;
 
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text('Switch Session', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-            ),
-            const Divider(height: 1),
-            ...sessions.map((s) => ListTile(
-              leading: Icon(
-                s.sessionIndex == currentSessionIndex ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                color: s.sessionIndex == currentSessionIndex ? AppColors.accent : AppColors.textSecondary,
-              ),
-              title: Text('Session #${s.sessionIndex}'),
-              subtitle: Text('${s.messages.length} messages', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-              onTap: () {
-                Navigator.pop(ctx);
-                if (s.sessionIndex != currentSessionIndex) {
-                  ref.read(chatProvider(character.id).notifier).switchSession(s.sessionIndex);
-                }
-              },
-            )),
-          ],
-        ),
-      ),
+    GlazeBottomSheet.show(
+      context,
+      title: 'Switch Session',
+      items: sessions.map((s) => BottomSheetItem(
+        icon: s.sessionIndex == currentSessionIndex
+            ? Icons.radio_button_checked
+            : Icons.radio_button_unchecked,
+        iconColor: s.sessionIndex == currentSessionIndex
+            ? AppColors.accent
+            : AppColors.textSecondary,
+        label: 'Session #${s.sessionIndex}',
+        hint: '${s.messages.length} messages',
+        onTap: () {
+          Navigator.pop(context);
+          if (s.sessionIndex != currentSessionIndex) {
+            ref.read(chatProvider(character.id).notifier).switchSession(s.sessionIndex);
+          }
+        },
+      )).toList(),
     );
   }
 }

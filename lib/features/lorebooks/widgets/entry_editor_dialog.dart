@@ -7,6 +7,7 @@ import '../../../core/llm/lorebook_vector_search.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 
 class EntryEditorDialog extends ConsumerStatefulWidget {
   final LorebookEntry? entry;
@@ -48,12 +49,24 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
     _commentController = TextEditingController(text: e?.comment ?? '');
     _contentController = TextEditingController(text: e?.content ?? '');
     _keysController = TextEditingController(text: e?.keys.join(', ') ?? '');
-    _secondaryKeysController = TextEditingController(text: e?.secondaryKeys.join(', ') ?? '');
-    _orderController = TextEditingController(text: (e?.order ?? 100).toString());
-    _scanDepthController = TextEditingController(text: e?.scanDepth?.toString() ?? '');
-    _probabilityController = TextEditingController(text: (e?.probability ?? 100).toString());
-    _stickyController = TextEditingController(text: (e?.sticky ?? 0).toString());
-    _cooldownController = TextEditingController(text: (e?.cooldown ?? 0).toString());
+    _secondaryKeysController = TextEditingController(
+      text: e?.secondaryKeys.join(', ') ?? '',
+    );
+    _orderController = TextEditingController(
+      text: (e?.order ?? 100).toString(),
+    );
+    _scanDepthController = TextEditingController(
+      text: e?.scanDepth?.toString() ?? '',
+    );
+    _probabilityController = TextEditingController(
+      text: (e?.probability ?? 100).toString(),
+    );
+    _stickyController = TextEditingController(
+      text: (e?.sticky ?? 0).toString(),
+    );
+    _cooldownController = TextEditingController(
+      text: (e?.cooldown ?? 0).toString(),
+    );
     _groupController = TextEditingController(text: e?.group ?? '');
     _enabled = e?.enabled ?? true;
     _constant = e?.constant ?? false;
@@ -89,8 +102,9 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
     if (widget.entry?.id == null || widget.lorebookId == null) return;
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Set up embedding API in Embedding Settings first')),
+      GlazeToast.show(
+        context,
+        'Set up embedding API in Embedding Settings first',
       );
       return;
     }
@@ -98,18 +112,17 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
     setState(() => _isIndexing = true);
     try {
       final service = ref.read(lorebookEmbeddingServiceProvider);
-      final result = await service.indexLorebookEntries(
-        widget.lorebookId!,
-        [widget.entry!],
-        config,
-      );
+      final result = await service.indexLorebookEntries(widget.lorebookId!, [
+        widget.entry!,
+      ], config);
       if (mounted) {
         setState(() {
           _isIndexing = false;
           _embeddingStatus = result.indexed > 0 ? 'indexed' : 'error';
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.indexed > 0 ? 'Entry indexed' : 'Indexing failed'), duration: const Duration(seconds: 1)),
+        GlazeToast.show(
+          context,
+          result.indexed > 0 ? 'Entry indexed' : 'Indexing failed',
         );
       }
     } catch (e) {
@@ -139,7 +152,9 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
 
   LorebookEntry _buildEntry() {
     return LorebookEntry(
-      id: widget.entry?.id ?? DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+      id:
+          widget.entry?.id ??
+          DateTime.now().millisecondsSinceEpoch.toRadixString(36),
       comment: _commentController.text.trim(),
       enabled: _enabled,
       constant: _constant,
@@ -163,7 +178,11 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
   }
 
   List<String> _parseList(String text) {
-    return text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    return text
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
   }
 
   @override
@@ -182,9 +201,15 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                 children: [
                   Text(
                     widget.entry == null ? 'New Entry' : 'Edit Entry',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
                 ],
               ),
             ),
@@ -194,18 +219,31 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                 children: [
                   _field('Comment', _commentController),
                   const SizedBox(height: 12),
-                  _field('Keys (comma separated)', _keysController, hint: 'dragon, castle'),
+                  _field(
+                    'Keys (comma separated)',
+                    _keysController,
+                    hint: 'dragon, castle',
+                  ),
                   const SizedBox(height: 12),
-                  _field('Secondary Keys', _secondaryKeysController, hint: 'fire, knight'),
+                  _field(
+                    'Secondary Keys',
+                    _secondaryKeysController,
+                    hint: 'fire, knight',
+                  ),
                   const SizedBox(height: 8),
-                  _dropdown('Secondary Logic', _selectiveLogic, {
-                    0: 'ANY secondary',
-                    1: 'ALL secondary',
-                    2: 'NOT ANY secondary',
-                    3: 'NOT ALL secondary',
-                    4: 'No secondary needed',
-                    5: 'Default (no secondary)',
-                  }, (v) => setState(() => _selectiveLogic = v)),
+                  _dropdown(
+                    'Secondary Logic',
+                    _selectiveLogic,
+                    {
+                      0: 'ANY secondary',
+                      1: 'ALL secondary',
+                      2: 'NOT ANY secondary',
+                      3: 'NOT ALL secondary',
+                      4: 'No secondary needed',
+                      5: 'Default (no secondary)',
+                    },
+                    (v) => setState(() => _selectiveLogic = v),
+                  ),
                   const SizedBox(height: 12),
                   _field('Content', _contentController, maxLines: 5),
                   const SizedBox(height: 8),
@@ -219,13 +257,21 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                     children: [
                       Expanded(child: _field('Order', _orderController)),
                       const SizedBox(width: 8),
-                      Expanded(child: _field('Scan Depth', _scanDepthController, hint: 'global')),
+                      Expanded(
+                        child: _field(
+                          'Scan Depth',
+                          _scanDepthController,
+                          hint: 'global',
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(child: _field('Probability %', _probabilityController)),
+                      Expanded(
+                        child: _field('Probability %', _probabilityController),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(child: _field('Sticky', _stickyController)),
                       const SizedBox(width: 8),
@@ -239,17 +285,41 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                     spacing: 8,
                     runSpacing: 4,
                     children: [
-                      _chip('Enabled', _enabled, (v) => setState(() => _enabled = v)),
-                      _chip('Constant', _constant, (v) => setState(() => _constant = v)),
-                      _chip('Case Sensitive', _caseSensitive, (v) => setState(() => _caseSensitive = v)),
-                      _chip('Prevent Recursion', _preventRecursion, (v) => setState(() => _preventRecursion = v)),
-                      _chip('Ignore Budget', _ignoreBudget, (v) => setState(() => _ignoreBudget = v)),
+                      _chip(
+                        'Enabled',
+                        _enabled,
+                        (v) => setState(() => _enabled = v),
+                      ),
+                      _chip(
+                        'Constant',
+                        _constant,
+                        (v) => setState(() => _constant = v),
+                      ),
+                      _chip(
+                        'Case Sensitive',
+                        _caseSensitive,
+                        (v) => setState(() => _caseSensitive = v),
+                      ),
+                      _chip(
+                        'Prevent Recursion',
+                        _preventRecursion,
+                        (v) => setState(() => _preventRecursion = v),
+                      ),
+                      _chip(
+                        'Ignore Budget',
+                        _ignoreBudget,
+                        (v) => setState(() => _ignoreBudget = v),
+                      ),
                       _chip('Vector Search', _vectorSearch, (v) {
                         setState(() => _vectorSearch = v);
                         if (v) _loadEmbeddingStatus();
                       }),
                       if (_vectorSearch)
-                        _chip('Keyword Search', _useKeywordSearch, (v) => setState(() => _useKeywordSearch = v)),
+                        _chip(
+                          'Keyword Search',
+                          _useKeywordSearch,
+                          (v) => setState(() => _useKeywordSearch = v),
+                        ),
                     ],
                   ),
                   if (_vectorSearch && !_constant) ...[
@@ -263,25 +333,46 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                         ),
                         onPressed: _isIndexing ? null : _indexEntry,
                         icon: _isIndexing
-                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.black,
+                                ),
+                              )
                             : const Icon(Icons.cloud_upload, size: 18),
-                        label: Text(_isIndexing ? 'Indexing...' : 'Index Entry'),
+                        label: Text(
+                          _isIndexing ? 'Indexing...' : 'Index Entry',
+                        ),
                       ),
                     ),
                     if (_embeddingStatus == 'indexed')
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        child: Text('Entry indexed', style: TextStyle(fontSize: 12, color: Colors.green)),
+                        child: Text(
+                          'Entry indexed',
+                          style: TextStyle(fontSize: 12, color: Colors.green),
+                        ),
                       ),
                     if (_embeddingStatus == 'none')
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        child: Text('Not indexed yet', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                        child: Text(
+                          'Not indexed yet',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
                       ),
                     if (_embeddingStatus == 'error')
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
-                        child: Text('Indexing error — retry?', style: TextStyle(fontSize: 12, color: Colors.orange)),
+                        child: Text(
+                          'Indexing error — retry?',
+                          style: TextStyle(fontSize: 12, color: Colors.orange),
+                        ),
                       ),
                   ],
                 ],
@@ -292,10 +383,16 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
                   const SizedBox(width: 8),
                   FilledButton(
-                    style: FilledButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.black),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.accent,
+                      foregroundColor: Colors.black,
+                    ),
                     onPressed: () => Navigator.pop(context, _buildEntry()),
                     child: const Text('Save'),
                   ),
@@ -308,7 +405,12 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
     );
   }
 
-  Widget _field(String label, TextEditingController controller, {int maxLines = 1, String? hint}) {
+  Widget _field(
+    String label,
+    TextEditingController controller, {
+    int maxLines = 1,
+    String? hint,
+  }) {
     return TextField(
       controller: controller,
       maxLines: maxLines,
@@ -317,7 +419,10 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
         labelText: label,
         hintText: hint,
         labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-        hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5), fontSize: 12),
+        hintStyle: TextStyle(
+          color: AppColors.textSecondary.withValues(alpha: 0.5),
+          fontSize: 12,
+        ),
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.05),
         isDense: true,
@@ -326,7 +431,12 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
     );
   }
 
-  Widget _dropdown<T>(String label, T value, Map<T, String> items, ValueChanged<T> onChanged) {
+  Widget _dropdown<T>(
+    String label,
+    T value,
+    Map<T, String> items,
+    ValueChanged<T> onChanged,
+  ) {
     return InputDecorator(
       decoration: InputDecoration(
         labelText: label,
@@ -342,8 +452,17 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
           isDense: true,
           isExpanded: true,
           style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
-          items: items.entries.map((e) => DropdownMenuItem(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 13)))).toList(),
-          onChanged: (v) { if (v != null) onChanged(v); },
+          items: items.entries
+              .map(
+                (e) => DropdownMenuItem(
+                  value: e.key,
+                  child: Text(e.value, style: const TextStyle(fontSize: 13)),
+                ),
+              )
+              .toList(),
+          onChanged: (v) {
+            if (v != null) onChanged(v);
+          },
         ),
       ),
     );
@@ -351,7 +470,13 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
 
   Widget _chip(String label, bool value, ValueChanged<bool> onChanged) {
     return FilterChip(
-      label: Text(label, style: TextStyle(fontSize: 11, color: value ? AppColors.accent : AppColors.textSecondary)),
+      label: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          color: value ? AppColors.accent : AppColors.textSecondary,
+        ),
+      ),
       selected: value,
       onSelected: onChanged,
       selectedColor: AppColors.accent.withValues(alpha: 0.2),

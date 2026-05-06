@@ -7,6 +7,7 @@ import '../../core/state/db_provider.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import 'widgets/entry_editor_dialog.dart';
 
 class LorebookEditorScreen extends ConsumerStatefulWidget {
@@ -15,7 +16,8 @@ class LorebookEditorScreen extends ConsumerStatefulWidget {
   const LorebookEditorScreen({super.key, required this.lorebookId});
 
   @override
-  ConsumerState<LorebookEditorScreen> createState() => _LorebookEditorScreenState();
+  ConsumerState<LorebookEditorScreen> createState() =>
+      _LorebookEditorScreenState();
 }
 
 class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
@@ -80,7 +82,9 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   Future<void> _save() async {
     final lb = Lorebook(
       id: widget.lorebookId,
-      name: _nameController.text.trim().isEmpty ? 'Untitled' : _nameController.text.trim(),
+      name: _nameController.text.trim().isEmpty
+          ? 'Untitled'
+          : _nameController.text.trim(),
       enabled: true,
       activationScope: _scope,
       entries: _entries,
@@ -88,9 +92,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     );
     await ref.read(lorebooksProvider.notifier).updateLorebook(lb);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saved'), duration: Duration(seconds: 1)),
-      );
+      GlazeToast.show(context, 'Saved');
     }
   }
 
@@ -108,7 +110,10 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   void _editEntry(int index) async {
     final entry = await showDialog<LorebookEntry>(
       context: context,
-      builder: (_) => EntryEditorDialog(entry: _entries[index], lorebookId: widget.lorebookId),
+      builder: (_) => EntryEditorDialog(
+        entry: _entries[index],
+        lorebookId: widget.lorebookId,
+      ),
     );
     if (entry != null) {
       setState(() => _entries[index] = entry);
@@ -124,17 +129,18 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   Future<void> _indexEntries() async {
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Set up embedding API in Embedding Settings first')),
+      GlazeToast.show(
+        context,
+        'Set up embedding API in Embedding Settings first',
       );
       return;
     }
 
-    final vectorEntries = _entries.where((e) => e.vectorSearch && e.enabled && !e.constant).toList();
+    final vectorEntries = _entries
+        .where((e) => e.vectorSearch && e.enabled && !e.constant)
+        .toList();
     if (vectorEntries.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No vector-enabled entries to index')),
-      );
+      GlazeToast.show(context, 'No vector-enabled entries to index');
       return;
     }
 
@@ -160,8 +166,9 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           _indexStatus = '';
         });
         _loadEmbeddingStatuses();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Indexed: ${result.indexed}, Skipped: ${result.skipped}, Failed: ${result.failed}')),
+        GlazeToast.show(
+          context,
+          'Indexed: ${result.indexed}, Skipped: ${result.skipped}, Failed: ${result.failed}',
         );
       }
     } catch (e) {
@@ -171,16 +178,16 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           _indexStatus = '';
         });
         _loadEmbeddingStatuses();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Indexing failed: $e'), backgroundColor: Colors.red),
-        );
+        GlazeToast.show(context, 'Indexing failed: $e');
       }
     }
   }
 
   void _toggleEntry(int index) {
     setState(() {
-      _entries[index] = _entries[index].copyWith(enabled: !_entries[index].enabled);
+      _entries[index] = _entries[index].copyWith(
+        enabled: !_entries[index].enabled,
+      );
     });
     _save();
   }
@@ -195,9 +202,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
       }
     });
     _save();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Entry settings reset to global defaults'), duration: Duration(seconds: 1)),
-    );
+    GlazeToast.show(context, 'Entry settings reset to global defaults');
   }
 
   List<LorebookEntry> get _filteredEntries {
@@ -211,13 +216,25 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   }
 
   bool get _needsReindex {
-    return _entries.any((e) =>
-        e.vectorSearch && e.enabled && !e.constant && _embeddingStatuses[e.id] != 'indexed');
+    return _entries.any(
+      (e) =>
+          e.vectorSearch &&
+          e.enabled &&
+          !e.constant &&
+          _embeddingStatuses[e.id] != 'indexed',
+    );
   }
 
   int get _missingVectorCount {
-    return _entries.where((e) =>
-        e.vectorSearch && e.enabled && !e.constant && _embeddingStatuses[e.id] != 'indexed').length;
+    return _entries
+        .where(
+          (e) =>
+              e.vectorSearch &&
+              e.enabled &&
+              !e.constant &&
+              _embeddingStatuses[e.id] != 'indexed',
+        )
+        .length;
   }
 
   @override
@@ -251,7 +268,9 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                   child: GlazeAppBar(
                     title: 'Edit Lorebook',
-                    leading: BackButton(onPressed: () => Navigator.pop(context)),
+                    leading: BackButton(
+                      onPressed: () => Navigator.pop(context),
+                    ),
                     actions: [
                       IconButton(
                         icon: const Icon(Icons.restore, size: 20),
@@ -262,7 +281,13 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           child: Center(
-                            child: Text(_indexStatus, style: const TextStyle(fontSize: 12, color: AppColors.accent)),
+                            child: Text(
+                              _indexStatus,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.accent,
+                              ),
+                            ),
                           ),
                         )
                       else
@@ -287,20 +312,40 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                         labelStyle: TextStyle(color: AppColors.textSecondary),
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.05),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
                       ),
                       onSubmitted: (_) => _save(),
                     ),
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        const Text('Scope:', style: TextStyle(color: AppColors.textSecondary)),
+                        const Text(
+                          'Scope:',
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
                         const SizedBox(width: 8),
-                        _ScopeChip(label: 'global', selected: _scope == 'global', color: Colors.green, onTap: () => setState(() => _scope = 'global')),
+                        _ScopeChip(
+                          label: 'global',
+                          selected: _scope == 'global',
+                          color: Colors.green,
+                          onTap: () => setState(() => _scope = 'global'),
+                        ),
                         const SizedBox(width: 6),
-                        _ScopeChip(label: 'character', selected: _scope == 'character', color: Colors.purple, onTap: () => setState(() => _scope = 'character')),
+                        _ScopeChip(
+                          label: 'character',
+                          selected: _scope == 'character',
+                          color: Colors.purple,
+                          onTap: () => setState(() => _scope = 'character'),
+                        ),
                         const SizedBox(width: 6),
-                        _ScopeChip(label: 'chat', selected: _scope == 'chat', color: Colors.orange, onTap: () => setState(() => _scope = 'chat')),
+                        _ScopeChip(
+                          label: 'chat',
+                          selected: _scope == 'chat',
+                          color: Colors.orange,
+                          onTap: () => setState(() => _scope = 'chat'),
+                        ),
                       ],
                     ),
                   ],
@@ -311,16 +356,27 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: TextField(
                   controller: _searchController,
-                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Search keys, content...',
-                    hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
-                    prefixIcon: Icon(Icons.search, size: 18, color: AppColors.textSecondary),
+                    hintStyle: TextStyle(
+                      color: AppColors.textSecondary.withValues(alpha: 0.5),
+                    ),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: 18,
+                      color: AppColors.textSecondary,
+                    ),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 10),
                     filled: true,
                     fillColor: Colors.white.withValues(alpha: 0.05),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -333,7 +389,9 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: Colors.orange.withValues(alpha: 0.1),
-                      border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+                      border: Border.all(
+                        color: Colors.orange.withValues(alpha: 0.3),
+                      ),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -342,17 +400,37 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Vector entries need reindexing', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.orange)),
+                              Text(
+                                'Vector entries need reindexing',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.orange,
+                                ),
+                              ),
                               SizedBox(height: 2),
-                              Text('$_missingVectorCount entries without embeddings', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                              Text(
+                                '$_missingVectorCount entries without embeddings',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                         const SizedBox(width: 8),
                         FilledButton(
-                          style: FilledButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(horizontal: 12)),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.orange,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                          ),
                           onPressed: _isIndexing ? null : _indexEntries,
-                          child: Text(_isIndexing ? '...' : 'Index All', style: const TextStyle(fontSize: 12)),
+                          child: Text(
+                            _isIndexing ? '...' : 'Index All',
+                            style: const TextStyle(fontSize: 12),
+                          ),
                         ),
                       ],
                     ),
@@ -364,11 +442,24 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.article_outlined, size: 48, color: AppColors.textSecondary),
+                            Icon(
+                              Icons.article_outlined,
+                              size: 48,
+                              color: AppColors.textSecondary,
+                            ),
                             const SizedBox(height: 12),
-                            Text('No entries yet', style: TextStyle(color: AppColors.textSecondary)),
+                            Text(
+                              'No entries yet',
+                              style: TextStyle(color: AppColors.textSecondary),
+                            ),
                             const SizedBox(height: 4),
-                            Text('Tap + to add one', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                            Text(
+                              'Tap + to add one',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
                           ],
                         ),
                       )
@@ -392,7 +483,8 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           ),
         );
       },
-      loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
+      loading: () =>
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(body: Center(child: Text('Error: $e'))),
     );
   }
@@ -404,7 +496,12 @@ class _ScopeChip extends StatelessWidget {
   final Color color;
   final VoidCallback onTap;
 
-  const _ScopeChip({required this.label, required this.selected, required this.color, required this.onTap});
+  const _ScopeChip({
+    required this.label,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -413,13 +510,21 @@ class _ScopeChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: selected ? color.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.05),
+          color: selected
+              ? color.withValues(alpha: 0.3)
+              : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: selected ? color : Colors.white.withValues(alpha: 0.1)),
+          border: Border.all(
+            color: selected ? color : Colors.white.withValues(alpha: 0.1),
+          ),
         ),
         child: Text(
           label,
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: selected ? color : AppColors.textSecondary),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: selected ? color : AppColors.textSecondary,
+          ),
         ),
       ),
     );
@@ -439,7 +544,14 @@ class _Badge extends StatelessWidget {
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: color)),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
     );
   }
 }
@@ -451,7 +563,13 @@ class _EntryTile extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  const _EntryTile({required this.entry, this.embeddingStatus, required this.onToggle, required this.onEdit, required this.onDelete});
+  const _EntryTile({
+    required this.entry,
+    this.embeddingStatus,
+    required this.onToggle,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -470,11 +588,15 @@ class _EntryTile extends StatelessWidget {
           activeColor: AppColors.accent,
         ),
         title: Text(
-          entry.comment.isNotEmpty ? entry.comment : (entry.keys.isNotEmpty ? entry.keys.join(', ') : 'Entry'),
+          entry.comment.isNotEmpty
+              ? entry.comment
+              : (entry.keys.isNotEmpty ? entry.keys.join(', ') : 'Entry'),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: entry.enabled ? AppColors.textPrimary : AppColors.textSecondary,
+            color: entry.enabled
+                ? AppColors.textPrimary
+                : AppColors.textSecondary,
           ),
         ),
         subtitle: Text(
@@ -485,17 +607,20 @@ class _EntryTile extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (entry.vectorSearch) ...[
-              _Badge(
-                label: 'vec',
-                color: Colors.cyan,
-              ),
+              _Badge(label: 'vec', color: Colors.cyan),
               if (embeddingStatus == 'indexed')
                 _Badge(label: 'idx', color: Colors.green),
               if (embeddingStatus == 'error')
                 _Badge(label: 'err', color: Colors.orange),
             ],
-            IconButton(icon: const Icon(Icons.edit_outlined, size: 18), onPressed: onEdit),
-            IconButton(icon: const Icon(Icons.delete_outline, size: 18), onPressed: onDelete),
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, size: 18),
+              onPressed: onEdit,
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              onPressed: onDelete,
+            ),
           ],
         ),
         onTap: onEdit,

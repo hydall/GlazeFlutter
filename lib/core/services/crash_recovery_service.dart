@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../app.dart' show rootNavigatorKey;
+
 class CrashRecoveryService {
   static const _activeSessionKey = 'crash_recovery_active_session';
   static const _activeCharKey = 'crash_recovery_active_char';
@@ -34,18 +36,28 @@ class CrashRecoveryInfo {
   const CrashRecoveryInfo({required this.sessionId, required this.charId});
 }
 
-final crashRecoveryProvider = Provider<CrashRecoveryService>((_) => CrashRecoveryService());
+final crashRecoveryProvider = Provider<CrashRecoveryService>(
+  (_) => CrashRecoveryService(),
+);
 
-Future<void> checkAndOfferCrashRecovery(BuildContext context, WidgetRef ref) async {
+Future<void> checkAndOfferCrashRecovery(
+  BuildContext context,
+  WidgetRef ref,
+) async {
   final service = ref.read(crashRecoveryProvider);
   final info = await service.checkRecovery();
-  if (info == null || !context.mounted) return;
+  if (info == null) return;
+
+  final navContext = rootNavigatorKey.currentContext;
+  if (navContext == null) return;
 
   final shouldRecover = await showDialog<bool>(
-    context: context,
+    context: navContext,
     builder: (ctx) => AlertDialog(
       title: const Text('Recover Session?'),
-      content: const Text('It looks like the app was closed unexpectedly. Would you like to recover your last chat session?'),
+      content: const Text(
+        'It looks like the app was closed unexpectedly. Would you like to recover your last chat session?',
+      ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(ctx, false),
