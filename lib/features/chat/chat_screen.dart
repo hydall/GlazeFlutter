@@ -7,11 +7,11 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/llm/summary_service.dart';
 import '../../core/services/chat_import_export.dart';
-import '../../core/services/crash_recovery_service.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../image_gen/widgets/image_gen_sheet.dart';
 import 'chat_provider.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
@@ -186,6 +186,12 @@ class ChatScreen extends ConsumerWidget {
                       context: context,
                       backgroundColor: Colors.transparent,
                       builder: (_) => MagicDrawerPanel(charId: charId),
+                    ),
+                    onImageGen: () => showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (_) => const ImageGenSheet(),
                     ),
                   ),
                 ],

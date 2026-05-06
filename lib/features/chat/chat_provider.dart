@@ -76,6 +76,12 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       guidanceText: guidanceText,
     );
     state = AsyncData(result);
+
+    await service.processImageTags(
+      currentState: result,
+      charId: arg,
+      onStateUpdate: (s) => state = AsyncData(s),
+    );
   }
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
@@ -119,6 +125,12 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       guidanceText: guidanceText,
     );
     state = AsyncData(result);
+
+    await service.processImageTags(
+      currentState: result,
+      charId: arg,
+      onStateUpdate: (s) => state = AsyncData(s),
+    );
   }
 
   Future<void> clearChat() async {

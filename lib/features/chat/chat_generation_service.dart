@@ -14,6 +14,8 @@ import '../../core/models/lorebook.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/state/lorebook_provider.dart';
+import '../image_gen/image_gen_provider.dart';
+import '../image_gen/services/image_gen_service.dart';
 import 'chat_provider.dart';
 import 'chat_state.dart';
 
@@ -189,6 +191,81 @@ class ChatGenerationService {
     } catch (e) {
       return ChatState(session: session, isGenerating: false, error: e.toString());
     }
+  }
+
+  Future<void> processImageTags({
+    required ChatState currentState,
+    required String charId,
+    required void Function(ChatState) onStateUpdate,
+  }) async {
+    final session = currentState.session;
+    if (session == null) return;
+
+    final imgGenSettingsAsync = _ref.read(imageGenSettingsProvider);
+    final imgGenSettings = imgGenSettingsAsync.value;
+    if (imgGenSettings == null || !imgGenSettings.enabled) return;
+
+    final lastIdx = session.messages.length - 1;
+    if (lastIdx < 0) return;
+    final lastMsg = session.messages[lastIdx];
+    if (lastMsg.role != 'assistant') return;
+
+    final service = _ref.read(imageGenSettingsProvider.notifier).getService();
+    if (!service.hasImageGenTags(lastMsg.content)) return;
+
+    final apiConfigs = await _ref.read(apiConfigRepoProvider).getAll();
+    if (apiConfigs.isEmpty) return;
+    final apiConfig = apiConfigs.first;
+
+    final charRepo = _ref.read(characterRepoProvider);
+    final character = await charRepo.getById(charId);
+
+    final personaRepo = _ref.read(personaRepoProvider);
+    final personas = await personaRepo.getAll();
+    final activePersonaId = _ref.read(activePersonaIdProvider);
+    final persona = activePersonaId != null
+        ? personas.where((p) => p.id == activePersonaId).firstOrNull
+        : (personas.isNotEmpty ? personas.first : null);
+
+    final recentContexts = _collectRecentImageContexts(session.messages);
+
+    final updatedContent = await service.processMessageImages(
+      text: lastMsg.content,
+      settings: imgGenSettings,
+      llmEndpoint: apiConfig.endpoint,
+      llmApiKey: apiConfig.apiKey,
+      llmModel: apiConfig.model,
+      character: character,
+      persona: persona,
+      recentImageContexts: recentContexts,
+      onUpdate: (updatedText) {
+        final newMessages = List<ChatMessage>.from(session.messages);
+        newMessages[lastIdx] = lastMsg.copyWith(content: updatedText);
+        final updatedSession = session.copyWith(
+          messages: newMessages,
+          updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        );
+        onStateUpdate(ChatState(session: updatedSession));
+      },
+    );
+
+    final newMessages = List<ChatMessage>.from(session.messages);
+    newMessages[lastIdx] = lastMsg.copyWith(content: updatedContent);
+    final finalSession = session.copyWith(
+      messages: newMessages,
+      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    );
+    _ref.read(chatRepoProvider).put(finalSession);
+    onStateUpdate(ChatState(session: finalSession));
+  }
+
+  List<String> _collectRecentImageContexts(List<ChatMessage> messages) {
+    final contexts = <String>[];
+    for (int i = messages.length - 1; i >= 0 && contexts.length < 3; i--) {
+      final paths = ImageGenService.extractImageResultPaths(messages[i].content);
+      contexts.addAll(paths);
+    }
+    return contexts.reversed.toList();
   }
 
   ChatState _saveAssistantMessage(

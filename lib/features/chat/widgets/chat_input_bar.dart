@@ -8,6 +8,7 @@ class ChatInputBar extends StatefulWidget {
   final bool isGenerating;
   final VoidCallback? onStop;
   final VoidCallback? onMagicDrawer;
+  final VoidCallback? onImageGen;
 
   const ChatInputBar({
     super.key,
@@ -16,6 +17,7 @@ class ChatInputBar extends StatefulWidget {
     required this.isGenerating,
     this.onStop,
     this.onMagicDrawer,
+    this.onImageGen,
   });
 
   @override
@@ -140,7 +142,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     const SizedBox(width: 8),
                     _CircleBtn(icon: Icons.auto_awesome, onTap: widget.onMagicDrawer),
                     const SizedBox(width: 8),
-                    _CircleBtn(icon: Icons.image_outlined),
+                    _CircleBtn(icon: Icons.image_outlined, onTap: widget.onImageGen),
                     const SizedBox(width: 8),
                     _CircleBtn(icon: Icons.fullscreen_rounded),
                   ],

@@ -333,11 +333,70 @@ features/catalog/
     widgets.dart
 ```
 
+### Phase 6: Image Generation (2026-05-06)
+
+Full image generation system with 4 providers, auto-gen, and settings UI.
+
+**Data layer:**
+- `ImageGenSettings` — Freezed model with per-provider settings, reference images, image context
+- `ReferenceImage` — name, imageData (base64), matchMode (match/always)
+- `ImageGenApiType` enum — openai, gemini, naistera, routmy
+- `RoutMyConstants`, `NaisteraConstants`, `OpenAIConstants`, `GeminiConstants` — static options
+- Settings persisted via SharedPreferences key `gz_imggen_settings`
+
+**Provider services (4 providers):**
+- `openai_image_provider.dart` — DALL-E API (b64_json response format)
+- `gemini_image_provider.dart` — Imagen API (predictions response)
+- `naistera_image_provider.dart` — Naistera API (hardcoded endpoint, reference images)
+- `routmy_image_provider.dart` — RoutMy API + RU Bridge (two-step: LLM description → image gen)
+- `image_gen_http.dart` — shared Dio-based HTTP client with POST/base64 extraction helpers
+
+**Orchestrator:**
+- `image_gen_service.dart` — `processMessageImages()` scans for `[IMG:GEN:...]` tags, generates images, replaces with `[IMG:RESULT:path]` or `[IMG:ERROR:...]`
+- `generateImage()` dispatches to provider based on settings
+- Reference images built from character/persona avatars, additional refs, and image context
+- Generated images saved to `generated/` subdirectory via `ImageStorageService`
+- `_buildReferences()` handles match mode (keyword/always) per provider
+
+**State management:**
+- `ImageGenSettingsNotifier` (Riverpod AsyncNotifier) — load/save from SharedPreferences, JSON serialization
+- `getService()` factory for ImageGenService (reuses ImageStorageService from db_provider)
+
+**UI:**
+- `ImageGenSheet` — draggable settings panel: enabled toggle, provider selector (4 providers), per-provider fields, image context settings, tip about `[IMG:GEN:...]` tag format
+- `ImageContentRenderer` — parses message content for `[IMG:GEN:...]`, `[IMG:RESULT:path]`, `[IMG:ERROR:...]` markers, renders MarkdownBody for text spans and Image.file/loading/error widgets for image spans
+- `MessageBubble` updated — uses `ImageContentRenderer` when image markers detected, else MarkdownBody
+- `ChatInputBar` updated — image button now wired (`onImageGen` callback → opens ImageGenSheet)
+- `MagicDrawerPanel` updated — added "ImgGen On/Off" item that opens ImageGenSheet
+
+**Integration:**
+- `ChatGenerationService.processImageTags()` — post-generation hook that processes `[IMG:GEN:...]` tags after LLM response is saved
+- `ChatNotifier.sendMessage()` and `regenerateLastAssistant()` call `processImageTags()` after generation completes
+- `ImageStorageService.baseDir` changed from private to public for image gen save path
+- `image_gen_provider.dart` imports added to `db_provider.dart` dependency chain
+
+**Directory structure:**
+```
+features/image_gen/
+  image_gen_models.dart
+  image_gen_provider.dart
+  services/
+    image_gen_http.dart
+    openai_image_provider.dart
+    gemini_image_provider.dart
+    naistera_image_provider.dart
+    routmy_image_provider.dart
+    image_gen_service.dart
+  widgets/
+    image_gen_sheet.dart
+    image_content_renderer.dart
+    widgets.dart
+```
+
 ### Remaining phases (in priority order)
 
 | Phase | Priority | What's Missing |
 |-------|----------|----------------|
-| Image Generation | Medium | 4 API types (OpenAI, Gemini, Naistera, RoutMy + RU bridge), auto-gen from `[IMG:GEN:...]` tags, per-message manual gen, reference images |
 | Cloud Sync | Medium | Dropbox + GDrive adapters, manifest, engine, conflict resolution UI (no encryption for now) |
 | Backup Export/Import | Medium | .glz backup export, ST backup ZIP import, backup/restore UI in menu |
 | Character Gallery | Medium | Per-character image gallery, add/delete, full-screen viewer, sync support |
@@ -353,7 +412,7 @@ features/catalog/
 
 ### Known stubs in current codebase
 
-- `chat_screen.dart` → `input_bar.dart` — 3 input bar buttons (image gen, fullscreen, auto) are decorative
+- `chat_screen.dart` → `input_bar.dart` — 2 input bar buttons (fullscreen, auto) are decorative
 - `menu_screen.dart` — Cloud Sync, Backups "coming soon"
 - `tokenizer.dart` — heuristic (chars/3.35), no real BPE
 
