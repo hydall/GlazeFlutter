@@ -24,16 +24,16 @@ class _SessionLifecycleTrackerState extends ConsumerState<SessionLifecycleTracke
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _markClosed();
+    _doMarkClosed();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _markActive();
+      if (mounted) _markActive();
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
-      _markClosed();
+      if (mounted) _doMarkClosed();
     }
   }
 
@@ -46,9 +46,11 @@ class _SessionLifecycleTrackerState extends ConsumerState<SessionLifecycleTracke
     }
   }
 
-  Future<void> _markClosed() async {
-    final service = ref.read(crashRecoveryProvider);
-    await service.markSessionClosed();
+  void _doMarkClosed() {
+    try {
+      final service = ref.read(crashRecoveryProvider);
+      service.markSessionClosed();
+    } catch (_) {}
   }
 
   @override

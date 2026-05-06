@@ -1,12 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../db/app_db.dart';
-import '../services/image_storage_service.dart';
+import '../models/preset.dart';
+import 'image_storage_service.dart';
+import 'preset_defaults.dart';
 
 class BackupService {
   final AppDatabase _db;
@@ -172,7 +175,8 @@ class BackupService {
           final columns = r.keys.toList();
           final placeholders = columns.map((_) => '?').join(', ');
 
-          final sql = 'INSERT OR REPLACE INTO $tableName (${columns.join(', ')}) VALUES ($placeholders)';
+          final sql =
+              'INSERT OR REPLACE INTO $tableName (${columns.join(', ')}) VALUES ($placeholders)';
           final args = <dynamic>[];
           for (final c in columns) {
             final v = r[c];
@@ -195,103 +199,182 @@ class BackupService {
   }
 
   Future<void> _importJsBackup(Map<String, dynamic> data) async {
-    final characters = data['characters'] as List<dynamic>?;
-    if (characters != null) {
-      await _db.customStatement('DELETE FROM characters');
-      for (final c in characters) {
-        final char = c as Map<String, dynamic>;
-        await _db.into(_db.characters).insertOnConflictUpdate(
-              CharactersCompanion.insert(
-                charId: char['id'] as String? ?? '',
-                name: char['name'] as String? ?? '',
-                avatarPath: Value(char['avatar'] as String?),
-                description: Value(char['description'] as String?),
-                personality: Value(char['personality'] as String?),
-                scenario: Value(char['scenario'] as String?),
-                firstMes: Value(char['first_mes'] as String?),
-                mesExample: Value(char['mes_example'] as String?),
-                systemPrompt: Value(char['system_prompt'] as String?),
-                postHistoryInstructions:
-                    Value(char['post_history_instructions'] as String?),
-                creator: Value(char['creator'] as String?),
-                creatorNotes: Value(char['creator_notes'] as String?),
-                tagsJson: Value(char['tags'] != null
-                    ? jsonEncode(char['tags'])
-                    : null),
-                alternateGreetingsJson: Value(
-                    char['alternate_greetings'] != null
-                        ? jsonEncode(char['alternate_greetings'])
-                        : null),
-              ),
-            );
-      }
-    }
+    await _clearAllTables();
 
-    final personas = data['personas'] as List<dynamic>?;
-    if (personas != null) {
-      await _db.customStatement('DELETE FROM personas');
-      for (final p in personas) {
-        final per = p as Map<String, dynamic>;
-        await _db.into(_db.personas).insertOnConflictUpdate(
-              PersonasCompanion.insert(
-                personaId: per['id'] as String? ?? '',
-                name: per['name'] as String? ?? '',
-                prompt: Value(per['prompt'] as String? ?? per['description'] as String?),
-                avatarPath: Value(per['avatar'] as String?),
-              ),
-            );
-      }
-    }
+    final kv = Map<String, dynamic>.from(data['keyvalue'] ?? {});
+    final ls = Map<String, dynamic>.from(data['localStorage'] ?? {});
 
-    final kv = data['keyvalue'] as Map<String, dynamic>?;
-    if (kv != null) {
-      await _importJsKeyValue(kv);
+    await _importJsCharacters(data['characters']);
+    await _importJsPersonas(data['personas']);
+    await _importJsLorebooks(kv);
+    await _importJsApiConfigs(kv);
+    await _importJsChats(kv);
+    await _importJsPresets(kv, ls);
+    await _importJsActiveSelections(kv, ls);
+    await _importJsGalleryFromCharacters(data['characters']);
+  }
+
+  Future<void> _clearAllTables() async {
+    await _db.customStatement('PRAGMA foreign_keys = OFF');
+    await _db.transaction(() async {
+      const tables = [
+        'characters',
+        'chat_sessions',
+        'presets',
+        'api_configs',
+        'personas',
+        'lorebooks',
+        'embeddings',
+        'chat_summaries',
+        'memory_book_rows',
+      ];
+      for (final table in tables) {
+        try {
+          await _db.customStatement('DELETE FROM $table');
+        } catch (_) {}
+      }
+    });
+    await _db.customStatement('PRAGMA foreign_keys = ON');
+  }
+
+  Future<void> _importJsCharacters(dynamic data) async {
+    if (data is! List) return;
+    for (final c in data) {
+      final char = c as Map<String, dynamic>;
+      String? avatarPath;
+      final avatar = char['avatar'] as String?;
+      if (avatar != null && avatar.startsWith('data:')) {
+        final id = char['id'] as String? ?? _generateId();
+        avatarPath = await _imageStorage.saveAvatarFromDataUrl(id, avatar);
+      } else {
+        avatarPath = avatar;
+      }
+
+      await _db.into(_db.characters).insertOnConflictUpdate(
+            CharactersCompanion.insert(
+              charId: char['id'] as String? ?? '',
+              name: char['name'] as String? ?? '',
+              avatarPath: Value(avatarPath),
+              description: Value(char['description'] as String?),
+              personality: Value(char['personality'] as String?),
+              scenario: Value(char['scenario'] as String?),
+              firstMes: Value(char['first_mes'] as String?),
+              mesExample: Value(char['mes_example'] as String?),
+              systemPrompt: Value(char['system_prompt'] as String?),
+              postHistoryInstructions:
+                  Value(char['post_history_instructions'] as String?),
+              creator: Value(char['creator'] as String?),
+              creatorNotes: Value(char['creator_notes'] as String?),
+              color: Value(char['color'] as String?),
+              tagsJson:
+                  Value(char['tags'] != null ? jsonEncode(char['tags']) : null),
+              alternateGreetingsJson: Value(
+                  char['alternate_greetings'] != null
+                      ? jsonEncode(char['alternate_greetings'])
+                      : null),
+            ),
+          );
     }
   }
 
-  Future<void> _importJsKeyValue(Map<String, dynamic> kv) async {
+  Future<void> _importJsPersonas(dynamic data) async {
+    if (data is! List) return;
+    for (final p in data) {
+      final per = p as Map<String, dynamic>;
+      String? avatarPath;
+      final avatar = per['avatar'] as String?;
+      if (avatar != null && avatar.startsWith('data:')) {
+        final id = per['id'] as String? ?? _generateId();
+        avatarPath = await _imageStorage.saveAvatarFromDataUrl(id, avatar);
+      } else {
+        avatarPath = avatar;
+      }
+
+      await _db.into(_db.personas).insertOnConflictUpdate(
+            PersonasCompanion.insert(
+              personaId: per['id'] as String? ?? '',
+              name: per['name'] as String? ?? '',
+              prompt:
+                  Value(per['prompt'] as String? ?? per['description'] as String?),
+              avatarPath: Value(avatarPath),
+            ),
+          );
+    }
+  }
+
+  Future<void> _importJsLorebooks(Map<String, dynamic> kv) async {
     final lorebooksRaw = kv['gz_lorebooks'];
-    if (lorebooksRaw != null) {
-      final lb = lorebooksRaw as Map<String, dynamic>;
-      final lorebooks = lb['lorebooks'] as List<dynamic>?;
-      if (lorebooks != null) {
-        await _db.customStatement('DELETE FROM lorebooks');
-        for (final l in lorebooks) {
-          final entry = l as Map<String, dynamic>;
-          await _db.into(_db.lorebooks).insertOnConflictUpdate(
-                LorebooksCompanion.insert(
-                  lorebookId: entry['id'] as String? ?? '',
-                  name: entry['name'] as String? ?? '',
-                  entriesJson: jsonEncode(entry['entries'] ?? []),
-                ),
-              );
-        }
-      }
-    }
+    if (lorebooksRaw == null) return;
+    final lb = lorebooksRaw as Map<String, dynamic>;
+    final lorebooks = lb['lorebooks'] as List<dynamic>?;
+    if (lorebooks == null) return;
 
+    for (final l in lorebooks) {
+      final entry = l as Map<String, dynamic>;
+      await _db.into(_db.lorebooks).insertOnConflictUpdate(
+            LorebooksCompanion.insert(
+              lorebookId: entry['id'] as String? ?? '',
+              name: entry['name'] as String? ?? '',
+              enabled: Value(entry['enabled'] as bool? ?? true),
+              activationScope: Value(
+                  entry['activationScope'] as String? ??
+                      entry['scope'] as String? ??
+                      'global'),
+              activationTargetId: Value(
+                  entry['activationTargetId'] as String? ??
+                      entry['targetId'] as String?),
+              entriesJson: jsonEncode(entry['entries'] ?? []),
+            ),
+          );
+    }
+  }
+
+  Future<void> _importJsApiConfigs(Map<String, dynamic> kv) async {
     final apiPresetsRaw = kv['gz_api_connection_presets'];
-    if (apiPresetsRaw != null) {
-      final presets = apiPresetsRaw as List<dynamic>;
-      await _db.customStatement('DELETE FROM api_configs');
-      for (final p in presets) {
-        final preset = p as Map<String, dynamic>;
-        await _db.into(_db.apiConfigs).insertOnConflictUpdate(
-              ApiConfigsCompanion.insert(
-                configId: preset['id'] as String? ?? '',
-                name: preset['name'] as String? ?? '',
-                providerId: Value(preset['provider'] as String? ?? 'openai_compatible'),
-                endpoint: Value(preset['endpoint'] as String?),
-                apiKey: Value(preset['apiKey'] as String?),
-                model: Value(preset['model'] as String?),
-                mode: Value(preset['mode'] as String? ?? 'chat'),
-              ),
-            );
-      }
-    }
+    if (apiPresetsRaw == null) return;
+    final presets = apiPresetsRaw as List<dynamic>;
 
-    final chatPrefix = 'gz_chat_';
-    final chatKeys =
-        kv.keys.where((k) => k.startsWith(chatPrefix));
+    for (final p in presets) {
+      final preset = p as Map<String, dynamic>;
+      await _db.into(_db.apiConfigs).insertOnConflictUpdate(
+            ApiConfigsCompanion.insert(
+              configId: preset['id'] as String? ?? '',
+              name: preset['name'] as String? ?? '',
+              providerId: Value(
+                  preset['providerId'] as String? ??
+                      preset['provider'] as String? ??
+                      'openai_compatible'),
+              endpoint: Value(preset['endpoint'] as String?),
+              apiKey: Value(
+                  preset['apiKey'] as String? ?? preset['key'] as String?),
+              model: Value(preset['model'] as String?),
+              mode: Value(preset['mode'] as String? ?? 'chat'),
+              maxTokens: Value(_toInt(preset['max_tokens']) ?? 8000),
+              contextSize: Value(_toInt(preset['context']) ?? 32000),
+              temperature: Value(_toDouble(preset['temp']) ?? 0.7),
+              topP: Value(_toDouble(preset['topp']) ?? 0.9),
+              stream: Value(preset['stream'] as bool? ?? true),
+              reasoningEffort: Value(preset['reasoningEffort'] as String? ??
+                  _extractReasoningEffort(preset)),
+              requestReasoning:
+                  Value(preset['requestReasoning'] as bool? ?? false),
+              reasoningTagStart: Value(
+                  preset['reasoningTagStart'] as String? ??
+                      (preset['reasoningTags'] as Map<String, dynamic>?)
+                          ?['start'] as String?),
+              reasoningTagEnd: Value(
+                  preset['reasoningTagEnd'] as String? ??
+                      (preset['reasoningTags'] as Map<String, dynamic>?)
+                          ?['end'] as String?),
+            ),
+          );
+    }
+  }
+
+  Future<void> _importJsChats(Map<String, dynamic> kv) async {
+    const chatPrefix = 'gz_chat_';
+    final chatKeys = kv.keys.where((k) => k.startsWith(chatPrefix));
+
     for (final key in chatKeys) {
       final charId = key.substring(chatPrefix.length);
       final chatData = kv[key] as Map<String, dynamic>?;
@@ -302,20 +385,58 @@ class BackupService {
 
       for (final sessionEntry in sessions.entries) {
         final sessionIdx = int.tryParse(sessionEntry.key) ?? 0;
-        final messages = sessionEntry.value as List<dynamic>;
+        final rawMessages = sessionEntry.value as List<dynamic>;
 
-        final messagesJson = jsonEncode(messages.map((m) {
+        final messages = rawMessages.map((m) {
           final msg = m as Map<String, dynamic>;
+          var role = msg['role'] as String? ?? 'user';
+          if (role == 'char') role = 'assistant';
+
+          final content =
+              msg['content'] as String? ?? msg['text'] as String? ?? msg['mes'] as String? ?? '';
+
+          final swipes = <String>[];
+          final rawSwipes = msg['swipes'];
+          if (rawSwipes is List) {
+            for (final s in rawSwipes) {
+              swipes.add(s.toString());
+            }
+          }
+          if (swipes.isEmpty && content.isNotEmpty) {
+            swipes.add(content);
+          }
+
+          String? reasoning;
+          final rawReasoning = msg['reasoning'];
+          if (rawReasoning is String && rawReasoning.isNotEmpty) {
+            reasoning = rawReasoning;
+          }
+
+          final persona = msg['persona'];
+          String? personaId;
+          String? personaName;
+          if (persona is Map) {
+            personaId = persona['id'] as String?;
+            personaName = persona['name'] as String?;
+          }
+
           return {
             'id': msg['id']?.toString() ??
-                '${charId}_${sessionIdx}_${messages.indexOf(m)}',
-            'role': msg['role'] ?? 'user',
-            'content': msg['content'] ?? msg['text'] ?? '',
+                '${charId}_${sessionIdx}_${rawMessages.indexOf(m)}',
+            'role': role,
+            'content': content,
             'timestamp': msg['timestamp'],
-            'personaId': msg['personaId'],
-            'personaName': msg['personaName'],
+            'personaId': msg['personaId'] ?? personaId,
+            'personaName': msg['personaName'] ?? personaName,
+            'swipes': swipes,
+            'swipeId': _toInt(msg['swipeId'] ?? msg['swipe_id']) ?? 0,
+            'reasoning': reasoning,
+            'isHidden': msg['isHidden'] ?? msg['is_hidden'] ?? false,
+            'isError': msg['isError'] ?? false,
+            'genTime': msg['genTime'] as String?,
+            'tokens': _toInt(msg['tokens']),
           };
-        }).toList());
+        }).toList();
 
         final sessionId = '${charId}_$sessionIdx';
         await _db.into(_db.chatSessions).insertOnConflictUpdate(
@@ -323,26 +444,131 @@ class BackupService {
                 sessionId: sessionId,
                 characterId: charId,
                 sessionIndex: sessionIdx,
-                messagesJson: messagesJson,
+                messagesJson: jsonEncode(messages),
               ),
             );
       }
     }
+  }
 
-    final lsData = kv;
-    final themePresetsRaw = lsData['gz_theme_presets'];
-    if (themePresetsRaw != null) {
-      final presets = themePresetsRaw as List<dynamic>;
-      await _db.customStatement('DELETE FROM presets');
-      for (final p in presets) {
-        final preset = p as Map<String, dynamic>;
+  Future<void> _importJsPresets(
+      Map<String, dynamic> kv, Map<String, dynamic> ls) async {
+    final presetList = <Map<String, dynamic>>[];
+
+    final sillyCradleRaw = kv['silly_cradle_presets'] ?? ls['silly_cradle_presets'];
+    if (sillyCradleRaw != null) {
+      Map<String, dynamic> presetsMap;
+      if (sillyCradleRaw is String) {
+        presetsMap = jsonDecode(sillyCradleRaw) as Map<String, dynamic>;
+      } else if (sillyCradleRaw is Map<String, dynamic>) {
+        presetsMap = sillyCradleRaw;
+      } else {
+        presetsMap = {};
+      }
+
+      var inner = presetsMap['presets'];
+      if (inner is Map<String, dynamic>) {
+        for (final entry in inner.entries) {
+          if (entry.value is Map<String, dynamic>) {
+            presetList.add(entry.value as Map<String, dynamic>);
+          }
+        }
+      } else if (inner is List) {
+        for (final p in inner) {
+          if (p is Map<String, dynamic>) presetList.add(p);
+        }
+      }
+    }
+
+    if (presetList.isEmpty) return;
+
+    for (final presetJson in presetList) {
+      try {
+        final preset = _mapJsPreset(presetJson);
         await _db.into(_db.presets).insertOnConflictUpdate(
               PresetsCompanion.insert(
-                presetId: preset['id'] as String? ?? '',
-                name: preset['name'] as String? ?? '',
-                dataJson: jsonEncode(preset),
+                presetId: preset.id,
+                name: preset.name,
+                dataJson: jsonEncode(preset.toJson()),
               ),
             );
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _importJsActiveSelections(
+      Map<String, dynamic> kv, Map<String, dynamic> ls) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final activePresetId =
+        ls['silly_cradle_current_preset_id'] ?? kv['gz_active_preset'];
+    if (activePresetId is String && activePresetId.isNotEmpty) {
+      await prefs.setString('active_preset_id', activePresetId);
+    }
+
+    final activePersonaRaw = ls['gz_active_persona'] ?? kv['gz_active_persona'];
+    if (activePersonaRaw is String) {
+      try {
+        final persona =
+            jsonDecode(activePersonaRaw) as Map<String, dynamic>;
+        final id = persona['id'] as String?;
+        if (id != null) await prefs.setString('activePersonaId', id);
+      } catch (_) {}
+    } else if (activePersonaRaw is Map) {
+      final id = activePersonaRaw['id'] as String?;
+      if (id != null) await prefs.setString('activePersonaId', id);
+    }
+  }
+
+  Future<void> _importJsGalleryFromCharacters(dynamic data) async {
+    if (data is! List) return;
+    for (final c in data) {
+      final char = c as Map<String, dynamic>;
+      final charId = char['id'] as String?;
+      if (charId == null) continue;
+
+      final galleryRaw = char['gallery'] ?? char['data']?['extensions']?['gallery'];
+      if (galleryRaw is! List || galleryRaw.isEmpty) continue;
+
+      final galleryEntries = <Map<String, dynamic>>[];
+      for (int i = 0; i < galleryRaw.length; i++) {
+        final g = galleryRaw[i];
+        if (g is! Map<String, dynamic>) continue;
+
+        final imageUrl = g['url'] as String? ?? g['image'] as String?;
+        if (imageUrl == null) continue;
+
+        String? imagePath;
+        if (imageUrl.startsWith('data:')) {
+          final galId = 'gal_${charId}_$i';
+          imagePath = await _imageStorage.saveAvatarFromDataUrl(
+              '${charId}_gallery_$i', imageUrl);
+          if (imagePath == null) continue;
+          imagePath = await _imageStorage.saveBytes(
+            await File(imagePath).readAsBytes(),
+            'gallery/$charId',
+            galId,
+            'png',
+          );
+        } else {
+          continue;
+        }
+
+        galleryEntries.add({
+          'id': g['id'] as String? ?? 'gal_${charId}_$i',
+          'characterId': charId,
+          'imagePath': imagePath,
+          'label': g['label'] as String? ?? g['name'] as String?,
+          'createdAt': _toInt(g['createdAt']) ?? 0,
+        });
+      }
+
+      if (galleryEntries.isNotEmpty) {
+        await (_db.update(_db.characters)
+              ..where((t) => t.charId.equals(charId)))
+            .write(CharactersCompanion(
+          galleryJson: Value(jsonEncode(galleryEntries)),
+        ));
       }
     }
   }
@@ -377,6 +603,80 @@ class BackupService {
     }
   }
 
+  Preset _mapJsPreset(Map<String, dynamic> json) {
+    final blocks = <PresetBlock>[];
+    final rawBlocks = json['blocks'] ?? json['prompt_order'];
+    if (rawBlocks is List) {
+      for (final b in rawBlocks) {
+        if (b is! Map<String, dynamic>) continue;
+        blocks.add(PresetBlock(
+          id: b['id'] as String? ?? _generateId(),
+          name: b['name'] as String? ?? '',
+          role: b['role'] as String? ?? 'system',
+          content: b['content'] as String? ?? '',
+          enabled: b['enabled'] as bool? ?? true,
+          isStatic: b['isStatic'] as bool? ?? false,
+          insertionMode: (b['insertion_mode'] as String?) ??
+              (b['insertionMode'] as String?) ??
+              'relative',
+          depth: _toInt(b['depth']),
+          prefix: b['prefix'] as String?,
+          isStashed: b['isStashed'] as bool? ?? false,
+        ));
+      }
+    }
+
+    final regexes = <PresetRegex>[];
+    final rawRegexes = json['regexes'] ?? json['regex_scripts'];
+    if (rawRegexes is List) {
+      for (final r in rawRegexes) {
+        if (r is! Map<String, dynamic>) continue;
+        regexes.add(PresetRegex(
+          id: r['id'] as String? ?? _generateId(),
+          name: r['name'] as String? ?? r['scriptName'] as String? ?? '',
+          regex: r['regex'] as String? ?? r['findRegex'] as String? ?? '',
+          replacement:
+              r['replacement'] as String? ?? r['replaceString'] as String? ?? '',
+          trimOut: r['trimOut'] as String? ??
+              _joinTrimStrings(r['trimStrings']),
+          placement: _toIntList(r['placement']),
+          ephemerality: _toIntList(r['ephemerality']),
+          disabled: r['disabled'] as bool? ?? false,
+          macroRules:
+              (r['macroRules'] ?? r['substituteRegex'] ?? 0).toString(),
+          minDepth: _toInt(r['minDepth']),
+          maxDepth: _toInt(r['maxDepth']),
+        ));
+      }
+    }
+
+    return finalizeImportedPreset(Preset(
+      id: json['id'] as String? ?? _generateId(),
+      name: json['name'] as String? ?? 'Imported',
+      author: json['author'] as String?,
+      blocks: blocks,
+      regexes: regexes,
+      reasoningEnabled: json['reasoningEnabled'] as bool? ?? false,
+      reasoningStart: json['reasoningStart'] as String?,
+      reasoningEnd: json['reasoningEnd'] as String?,
+      guidedGenerationPrompt: json['guidedGenerationPrompt'] as String?,
+      guidedImpersonationPrompt: json['guidedImpersonationPrompt'] as String?,
+      summaryPrompt: json['summaryPrompt'] as String?,
+      mergePrompts: json['mergePrompts'] as bool? ?? false,
+      mergeRole: json['mergeRole'] as String? ?? 'system',
+      createdAt: _toInt(json['createdAt']) ?? 0,
+    ));
+  }
+
+  String _extractReasoningEffort(Map<String, dynamic> preset) {
+    final tags = preset['reasoningTags'] as Map<String, dynamic>?;
+    if (tags != null) {
+      final effort = tags['effort'] as String?;
+      if (effort != null) return effort;
+    }
+    return 'medium';
+  }
+
   String _extFromEntry(Map<String, dynamic>? entry) {
     final path = entry?['imagePath'] as String?;
     if (path != null) {
@@ -384,5 +684,40 @@ class BackupService {
       if (ext.isNotEmpty) return ext;
     }
     return 'png';
+  }
+
+  String _generateId() {
+    return DateTime.now().millisecondsSinceEpoch.toRadixString(36) +
+        Random().nextInt(9999).toRadixString(36);
+  }
+
+  int? _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    if (value is double) return value.toInt();
+    return null;
+  }
+
+  double? _toDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
+  List<int> _toIntList(dynamic value) {
+    if (value is List) {
+      return value.map((e) {
+        if (e is int) return e;
+        if (e is num) return e.toInt();
+        return int.tryParse(e.toString()) ?? 0;
+      }).toList();
+    }
+    return [1, 2];
+  }
+
+  String _joinTrimStrings(dynamic value) {
+    if (value is List) return value.map((e) => e.toString()).join('\n');
+    return '';
   }
 }

@@ -110,6 +110,11 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     );
   }
 
+  void _restartApp() {
+    final ctx = context;
+    Navigator.of(ctx).pushNamedAndRemoveUntil('/', (_) => false);
+  }
+
   Future<void> _exportBackup() async {
     setState(() => _exporting = true);
     try {
@@ -189,10 +194,22 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       await service.importBackup(jsonString);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Backup restored! Restart the app to apply all changes.'),
-            duration: Duration(seconds: 5),
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Backup Restored'),
+            content: const Text(
+                'All data has been replaced. Restart the app to apply all changes.'),
+            actions: [
+              FilledButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  _restartApp();
+                },
+                child: const Text('Restart'),
+              ),
+            ],
           ),
         );
       }
