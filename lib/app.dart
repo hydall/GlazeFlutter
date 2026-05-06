@@ -10,6 +10,7 @@ import 'features/character_list/character_detail_screen.dart';
 import 'features/character_list/character_editor_screen.dart';
 import 'features/character_list/character_list_screen.dart';
 import 'features/character_gallery/gallery_screen.dart';
+import 'features/backup/backup_screen.dart';
 import 'features/chat/chat_screen.dart';
 import 'features/chat_history/chat_history_screen.dart';
 import 'features/lorebooks/lorebook_list_screen.dart';
@@ -115,6 +116,7 @@ final routerProvider = Provider<GoRouter>(
 
       GoRoute(path: '/settings', builder: (_, __) => const AppSettingsScreen()),
       GoRoute(path: '/sync', builder: (_, __) => const SyncSheet()),
+      GoRoute(path: '/backup', builder: (_, __) => const BackupScreen()),
     ],
   ),
 );
