@@ -11,6 +11,25 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
 import '../chat_provider.dart';
 
+const _kSourceMeta = <String, _SourceMeta>{
+  'character':       _SourceMeta(label: 'Character',       color: Color(0xFFFF6B6B)),
+  'preset':          _SourceMeta(label: 'Preset',          color: Color(0xFF4ECDC4)),
+  'persona':         _SourceMeta(label: 'Persona',         color: Color(0xFF81ECEC)),
+  'authorsNote':     _SourceMeta(label: "Author's Note",   color: Color(0xFFFFD93D)),
+  'summary':         _SourceMeta(label: 'Summary',         color: Color(0xFF95E1D3)),
+  'memory':          _SourceMeta(label: 'Memory',          color: Color(0xFFA8E6CF)),
+  'lorebook':        _SourceMeta(label: 'Keyword Lorebook', color: Color(0xFFF4A261)),
+  'vectorLore':      _SourceMeta(label: 'Vector Lorebook', color: Color(0xFFE76F51)),
+  'lorebookReserve': _SourceMeta(label: 'Lorebook Reserve', color: Color(0xFFA8DADC)),
+  'history':         _SourceMeta(label: 'History',         color: Color(0xFF6C5CE7)),
+};
+
+class _SourceMeta {
+  final String label;
+  final Color color;
+  const _SourceMeta({required this.label, required this.color});
+}
+
 class TokenizerSheet extends ConsumerStatefulWidget {
   final String charId;
   const TokenizerSheet({super.key, required this.charId});
@@ -23,15 +42,6 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   TokenBreakdown? _breakdown;
   int? _contextSize;
   bool _loading = false;
-
-  static const _sourceColors = <String, Color>{
-    'character': Color(0xFFFF6B6B),
-    'persona': Color(0xFF4ECDC4),
-    'summary': Color(0xFF95E1D3),
-    'preset': Color(0xFFFFD93D),
-    'lorebook': Color(0xFFF4A261),
-    'history': Color(0xFF6C5CE7),
-  };
 
   @override
   void initState() {
@@ -96,9 +106,12 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   @override
   Widget build(BuildContext context) {
     final contextSize = _contextSize ?? 4096;
-    final used = _breakdown?.totalTokens ?? 0;
-    final remaining = contextSize - used;
+    final bd = _breakdown;
+    final used = bd?.totalTokens ?? 0;
+    final remaining = bd?.remaining ?? (contextSize - used);
     final usedPercent = contextSize > 0 ? (used / contextSize * 100) : 0.0;
+    final historyFill = bd?.historyFillPercent ?? 0.0;
+    final nearLimit = historyFill >= 85;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -117,16 +130,24 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
-                : _breakdown == null
+                : bd == null
                     ? Center(child: Text('No data', style: TextStyle(color: AppColors.textSecondary)))
                     : ListView(
                         padding: const EdgeInsets.all(16),
                         children: [
-                          _HeroSection(used: used, contextSize: contextSize, remaining: remaining, usedPercent: usedPercent),
+                          _HeroCard(used: used, contextSize: contextSize, remaining: remaining, usedPercent: usedPercent, historyFill: historyFill),
                           const SizedBox(height: 20),
-                          _ContextBar(breakdown: _breakdown!, contextSize: contextSize),
+                          _VerticalBar(breakdown: bd, contextSize: contextSize),
                           const SizedBox(height: 20),
-                          _BreakdownList(breakdown: _breakdown!),
+                          _BreakdownRows(breakdown: bd),
+                          if (bd.cutoffIndex > 0) ...[
+                            const SizedBox(height: 12),
+                            _CutoffWarning(cutoffCount: bd.cutoffIndex),
+                          ],
+                          if (nearLimit) ...[
+                            const SizedBox(height: 12),
+                            _NearLimitWarning(historyFill: historyFill),
+                          ],
                           const SizedBox(height: 16),
                           OutlinedButton.icon(
                             onPressed: _calculate,
@@ -142,131 +163,247 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   }
 }
 
-class _HeroSection extends StatelessWidget {
+class _HeroCard extends StatelessWidget {
   final int used;
   final int contextSize;
   final int remaining;
   final double usedPercent;
-  const _HeroSection({required this.used, required this.contextSize, required this.remaining, required this.usedPercent});
+  final double historyFill;
+
+  const _HeroCard({
+    required this.used,
+    required this.contextSize,
+    required this.remaining,
+    required this.usedPercent,
+    required this.historyFill,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(used.toString(), style: const TextStyle(fontSize: 40, fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
-        Text('used / $contextSize', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _MiniStat(value: remaining.toString(), label: 'remaining'),
-            const SizedBox(width: 24),
-            _MiniStat(value: '${usedPercent.toStringAsFixed(1)}%', label: 'fill'),
-          ],
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF1a5276), Color(0xFF2980b9)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-      ],
-    );
-  }
-}
-
-class _MiniStat extends StatelessWidget {
-  final String value;
-  final String label;
-  const _MiniStat({required this.value, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.accent)),
-        Text(label, style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-      ],
-    );
-  }
-}
-
-class _ContextBar extends StatelessWidget {
-  final TokenBreakdown breakdown;
-  final int contextSize;
-  const _ContextBar({required this.breakdown, required this.contextSize});
-
-  @override
-  Widget build(BuildContext context) {
-    final segments = <_BarSegment>[];
-    final sortedSources = breakdown.sourceTokens.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    for (final entry in sortedSources) {
-      final pct = contextSize > 0 ? entry.value / contextSize * 100 : 0.0;
-      segments.add(_BarSegment(
-        key: entry.key,
-        tokens: entry.value,
-        percent: pct,
-        color: _TokenizerSheetState._sourceColors[entry.key] ?? Colors.grey,
-      ));
-    }
-
-    final usedPct = breakdown.totalTokens / (contextSize > 0 ? contextSize : 1) * 100;
-    final remainingPct = 100 - usedPct;
-    if (remainingPct > 0) {
-      segments.add(_BarSegment(key: 'remaining', tokens: contextSize - breakdown.totalTokens, percent: remainingPct, color: Colors.white.withValues(alpha: 0.05)));
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: SizedBox(
-            height: 24,
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+      child: Column(
+        children: [
+          Text(
+            _fmtNum(used),
+            style: const TextStyle(fontSize: 36, fontWeight: FontWeight.w800, color: Colors.white),
+          ),
+          Text(
+            'used / ${_fmtNum(contextSize)}',
+            style: const TextStyle(fontSize: 14, color: Colors.white70),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
-              children: segments.map((s) => Expanded(
-                flex: (s.percent * 100).round().clamp(1, 10000),
-                child: Container(color: s.color, height: 24),
-              )).toList(),
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _KpiItem(value: _fmtNum(remaining), label: 'Remaining'),
+                Container(width: 1, height: 28, color: Colors.white24),
+                _KpiItem(value: '${usedPercent.toStringAsFixed(1)}%', label: 'Total Fill'),
+                Container(width: 1, height: 28, color: Colors.white24),
+                _KpiItem(value: '${historyFill.toStringAsFixed(1)}%', label: 'History Fill'),
+              ],
             ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 12,
-          runSpacing: 4,
-          children: sortedSources.map((e) => _LegendItem(
-            label: e.key,
-            color: _TokenizerSheetState._sourceColors[e.key] ?? Colors.grey,
-          )).toList(),
-        ),
-      ],
+        ],
+      ),
     );
+  }
+
+  String _fmtNum(int n) {
+    final s = n.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
   }
 }
 
-class _LegendItem extends StatelessWidget {
+class _KpiItem extends StatelessWidget {
+  final String value;
   final String label;
-  final Color color;
-  const _LegendItem({required this.label, required this.color});
+  const _KpiItem({required this.value, required this.label});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+    return Column(
       children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(2))),
-        const SizedBox(width: 4),
-        Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+        Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Colors.white)),
+        Text(label, style: const TextStyle(fontSize: 10, color: Colors.white60)),
       ],
     );
   }
 }
 
-class _BreakdownList extends StatelessWidget {
+class _VerticalBar extends StatelessWidget {
   final TokenBreakdown breakdown;
-  const _BreakdownList({required this.breakdown});
+  final int contextSize;
+  const _VerticalBar({required this.breakdown, required this.contextSize});
 
   @override
   Widget build(BuildContext context) {
-    final sorted = breakdown.sourceTokens.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final mainItems = <_BarRow>[];
+    final reserveItems = <_BarRow>[];
+
+    final orderedKeys = [
+      'character', 'preset', 'persona', 'authorsNote', 'summary', 'memory', 'history',
+      'lorebook', 'vectorLore', 'lorebookReserve',
+    ];
+
+    for (final key in orderedKeys) {
+      int tokens;
+      switch (key) {
+        case 'lorebookReserve':
+          tokens = breakdown.lorebookReserveTokens;
+        case 'memory':
+          tokens = breakdown.memoryTokens;
+        case 'vectorLore':
+          tokens = breakdown.vectorLoreTokens;
+        default:
+          tokens = breakdown.sourceTokens[key] ?? 0;
+      }
+      if (tokens <= 0) continue;
+
+      final meta = _kSourceMeta[key] ?? _SourceMeta(label: key, color: Colors.grey);
+      final row = _BarRow(key: key, label: meta.label, tokens: tokens, color: meta.color);
+
+      if (key == 'lorebook' || key == 'vectorLore' || key == 'lorebookReserve') {
+        reserveItems.add(row);
+      } else {
+        mainItems.add(row);
+      }
+    }
+
+    final totalMain = mainItems.fold<int>(0, (s, r) => s + r.tokens);
+    final totalReserve = reserveItems.fold<int>(0, (s, r) => s + r.tokens);
+    final emptyTokens = contextSize - totalMain - totalReserve;
+    final ctxPct = contextSize > 0 ? 1.0 / contextSize : 0.0;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 48,
+          child: Column(
+            children: [
+              for (final item in mainItems)
+                _barSegment(item.tokens.toDouble() * ctxPct, item.color),
+              if (emptyTokens > 0)
+                _barSegment(emptyTokens.toDouble() * ctxPct, Colors.white.withValues(alpha: 0.04)),
+              for (final item in reserveItems)
+                _barSegment(item.tokens.toDouble() * ctxPct, item.color),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ...mainItems.map((r) => _barRow(r)),
+              if (reserveItems.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('Reserve', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                const SizedBox(height: 4),
+                ...reserveItems.map((r) => _barRow(r)),
+              ],
+              if (breakdown.lorebookTotal > 0 && (breakdown.sourceTokens['lorebook'] ?? 0) > 0 && breakdown.vectorLoreTokens > 0) ...[
+                const SizedBox(height: 4),
+                _barRow(_BarRow(
+                  key: 'lorebookTotal',
+                  label: 'Lorebook Total',
+                  tokens: breakdown.lorebookTotal,
+                  color: const Color(0xFFF4A261),
+                )),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _barSegment(double fraction, Color color) {
+    final height = (fraction * 240).clamp(2.0, 240.0);
+    return Container(
+      width: 48,
+      height: height,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: fraction < 0.02 ? null : BorderRadius.zero,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 2, offset: const Offset(1, 0)),
+        ],
+      ),
+    );
+  }
+
+  Widget _barRow(_BarRow row) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: row.color, borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(width: 6),
+          Expanded(child: Text(row.label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary))),
+          Text('~${row.tokens} tok', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+        ],
+      ),
+    );
+  }
+}
+
+class _BreakdownRows extends StatelessWidget {
+  final TokenBreakdown breakdown;
+  const _BreakdownRows({required this.breakdown});
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = <_BarRow>[];
+    final orderedKeys = [
+      'character', 'preset', 'persona', 'authorsNote', 'summary', 'memory',
+      'lorebook', 'vectorLore', 'lorebookReserve', 'history',
+    ];
+
+    for (final key in orderedKeys) {
+      int tokens;
+      switch (key) {
+        case 'lorebookReserve':
+          tokens = breakdown.lorebookReserveTokens;
+        case 'memory':
+          tokens = breakdown.memoryTokens;
+        case 'vectorLore':
+          tokens = breakdown.vectorLoreTokens;
+        default:
+          tokens = breakdown.sourceTokens[key] ?? 0;
+      }
+      if (tokens <= 0) continue;
+      final meta = _kSourceMeta[key] ?? _SourceMeta(label: key, color: Colors.grey);
+      rows.add(_BarRow(key: key, label: meta.label, tokens: tokens, color: meta.color));
+    }
+
+    if (breakdown.lorebookTotal > 0 && (breakdown.sourceTokens['lorebook'] ?? 0) > 0 && breakdown.vectorLoreTokens > 0) {
+      rows.add(_BarRow(key: 'lorebookTotal', label: 'Lorebook Total', tokens: breakdown.lorebookTotal, color: const Color(0xFFF4A261)));
+    }
 
     return Card(
       color: Colors.white.withValues(alpha: 0.03),
@@ -276,22 +413,23 @@ class _BreakdownList extends StatelessWidget {
       ),
       child: Column(
         children: [
-          for (int i = 0; i < sorted.length; i++) ...[
+          for (int i = 0; i < rows.length; i++) ...[
             if (i > 0) const Divider(height: 1, indent: 12, endIndent: 12),
             ListTile(
               dense: true,
               leading: Container(
                 width: 8,
                 height: 8,
-                decoration: BoxDecoration(
-                  color: _TokenizerSheetState._sourceColors[sorted[i].key] ?? Colors.grey,
-                  shape: BoxShape.circle,
-                ),
+                decoration: BoxDecoration(color: rows[i].color, shape: BoxShape.circle),
               ),
-              title: Text(sorted[i].key, style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+              title: Text(rows[i].label, style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
               trailing: Text(
-                '~${sorted[i].value} tok',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
+                '~${rows[i].tokens} tok',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: rows[i].key == 'lorebookTotal' ? FontWeight.w700 : FontWeight.w500,
+                  color: rows[i].key == 'lorebookTotal' ? AppColors.accent : AppColors.textPrimary,
+                ),
               ),
             ),
           ],
@@ -304,26 +442,84 @@ class _BreakdownList extends StatelessWidget {
               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.accent),
             ),
           ),
-          if (breakdown.cutoffIndex > 0) ...[
-            const Divider(height: 1, indent: 12, endIndent: 12),
-            ListTile(
-              dense: true,
-              title: Text('${breakdown.cutoffIndex} messages cut from history', style: TextStyle(fontSize: 12, color: Colors.orange.withValues(alpha: 0.8))),
-              trailing: const Icon(Icons.warning_amber, size: 16, color: Colors.orange),
-            ),
-          ],
         ],
       ),
     );
   }
 }
 
-class _BarSegment {
+class _CutoffWarning extends StatelessWidget {
+  final int cutoffCount;
+  const _CutoffWarning({required this.cutoffCount});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.warning_amber, size: 18, color: Colors.orange),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$cutoffCount message${cutoffCount > 1 ? 's' : ''} cut from history',
+              style: const TextStyle(fontSize: 13, color: Colors.orange),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NearLimitWarning extends StatelessWidget {
+  final double historyFill;
+  const _NearLimitWarning({required this.historyFill});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFB84D).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFFFB84D).withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.speed, size: 18, color: Color(0xFFFFB84D)),
+              const SizedBox(width: 8),
+              Text(
+                'History is near its limit',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFFFFB84D)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'History fill: ${historyFill.toStringAsFixed(1)}%. Consider hiding older messages or increasing context size.',
+            style: TextStyle(fontSize: 12, color: const Color(0xFFFFB84D).withValues(alpha: 0.8)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BarRow {
   final String key;
+  final String label;
   final int tokens;
-  final double percent;
   final Color color;
-  const _BarSegment({required this.key, required this.tokens, required this.percent, required this.color});
+  const _BarRow({required this.key, required this.label, required this.tokens, required this.color});
 }
 
 void showTokenizerSheet(BuildContext context, String charId) {

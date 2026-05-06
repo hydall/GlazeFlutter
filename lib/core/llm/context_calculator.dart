@@ -16,13 +16,14 @@ class ContextCalculator {
     required this.maxTokens,
   });
 
-  // NOTE: contextSize is the total context window size for the prompt.
-  // maxTokens is reserved separately for the model's response, NOT subtracted from prompt budget.
   int get safeContext => contextSize;
 
   TokenBreakdown calculate({
     required List<StaticBlock> staticBlocks,
     required List<PromptMessage> historyMessages,
+    int lorebookReserveTokens = 0,
+    int memoryTokens = 0,
+    int vectorLoreTokens = 0,
   }) {
     final sourceTokens = <String, int>{};
     var staticTotal = 0;
@@ -34,7 +35,7 @@ class ContextCalculator {
       staticTotal += tokens;
     }
 
-    final historyBudget = safeContext - staticTotal;
+    final historyBudget = safeContext - staticTotal - lorebookReserveTokens - memoryTokens;
 
     final (trimmedHistory, cutoffIndex) = _trimHistory(
       historyMessages,
@@ -47,14 +48,26 @@ class ContextCalculator {
     );
     sourceTokens['history'] = historyTokens;
 
+    if (vectorLoreTokens > 0) {
+      sourceTokens['vectorLore'] = vectorLoreTokens;
+    }
+
+    final fixedTotal = staticTotal + lorebookReserveTokens + memoryTokens + vectorLoreTokens;
+    final remaining = safeContext - fixedTotal - historyTokens;
+
     return TokenBreakdown(
       sourceTokens: sourceTokens,
       staticTotal: staticTotal,
       historyBudget: historyBudget,
       historyTokens: historyTokens,
-      totalTokens: staticTotal + historyTokens,
+      totalTokens: fixedTotal + historyTokens,
       cutoffIndex: cutoffIndex,
       trimmedHistory: trimmedHistory,
+      lorebookReserveTokens: lorebookReserveTokens,
+      memoryTokens: memoryTokens,
+      vectorLoreTokens: vectorLoreTokens,
+      fixedTotal: fixedTotal,
+      remaining: remaining,
     );
   }
 
@@ -63,7 +76,9 @@ class ContextCalculator {
       'char_card' || 'char_personality' || 'scenario' || 'example_dialogue' => 'character',
       'user_persona' => 'persona',
       'summary' => 'summary',
+      'authors_note' => 'authorsNote',
       'chat_history' => 'history',
+      'worldInfoBefore' || 'worldInfoAfter' => 'lorebook',
       _ => 'preset',
     };
   }
@@ -97,6 +112,11 @@ class TokenBreakdown {
   final int totalTokens;
   final int cutoffIndex;
   final List<PromptMessage> trimmedHistory;
+  final int lorebookReserveTokens;
+  final int memoryTokens;
+  final int vectorLoreTokens;
+  final int fixedTotal;
+  final int remaining;
 
   const TokenBreakdown({
     required this.sourceTokens,
@@ -106,5 +126,16 @@ class TokenBreakdown {
     required this.totalTokens,
     required this.cutoffIndex,
     required this.trimmedHistory,
+    this.lorebookReserveTokens = 0,
+    this.memoryTokens = 0,
+    this.vectorLoreTokens = 0,
+    this.fixedTotal = 0,
+    this.remaining = 0,
   });
+
+  int get lorebookTotal => (sourceTokens['lorebook'] ?? 0) + vectorLoreTokens;
+
+  double get historyFillPercent => historyBudget > 0
+      ? (historyTokens / historyBudget * 100).clamp(0, 100)
+      : 0;
 }
