@@ -612,7 +612,9 @@ core/
 | Character Gallery | ~~Medium~~ **DONE** | ~~Per-character image gallery, add/delete, full-screen viewer~~ Implemented |
 | Persona Connections | ~~Medium~~ **DONE** | ~~Per-character and per-chat persona bindings~~ Implemented |
 | Memory Coverage/Preview | ~~Medium~~ **DONE** | ~~Coverage analysis, prompt preview~~ Implemented: `lorebook_coverage.dart` + `lorebook_coverage_sheet.dart` + `prompt_preview_screen.dart` |
+| Tech Debt Cleanup | ~~Medium~~ **DONE** | ~~Catalog grid split (1084→4 files), dead gallery sync methods removed from SyncEngine~~ |
 | Cloud Sync: Deep-links mobile | Low | Android/iOS deep-link config for Dropbox/GDrive OAuth |
+| Cloud Sync: Chat image sync | Low | Binary images in chat messages not synced to cloud yet (deferred) |
 | Glossary / Help | Low | Categorized help articles, inline HelpTip components |
 | Stats Dashboard | Low | Per-chat/char/global stats (tokens, messages, time) |
 | Notifications | Low | In-app notification center + native push for background gen |

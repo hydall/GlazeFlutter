@@ -96,8 +96,6 @@ class SyncEngine {
       await _queue.enqueue(() => _pushEntry(entry));
     }
 
-    await _pushGalleryImages(localManifest, onProgress, processed, entries.length);
-
     final updatedManifest = localManifest.copyWith(
       lastSync: DateTime.now().millisecondsSinceEpoch,
     );
@@ -150,8 +148,6 @@ class SyncEngine {
 
       await _queue.enqueue(() => _pullEntry(cloudEntry));
     }
-
-    await _pullGalleryImages(cloudManifest, onProgress);
 
     await _manifestBuilder.writeLocalManifest(cloudManifest.copyWith(
       lastSync: DateTime.now().millisecondsSinceEpoch,
@@ -325,84 +321,6 @@ class SyncEngine {
             return;
           }
         } catch (_) {}
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _pushGalleryImages(
-    SyncManifest manifest,
-    void Function(SyncProgress) onProgress,
-    int startCount,
-    int totalBase,
-  ) async {
-    try {
-      final characters = await _characterRepo.getAll();
-      var processed = startCount;
-      final total = totalBase + characters.length;
-
-      for (final c in characters) {
-        if (c.avatarPath != null) continue;
-        processed++;
-        onProgress(SyncProgress(
-          current: processed,
-          total: total,
-          message: 'Pushing gallery for ${c.name}',
-        ));
-
-        final galleryDir = Directory(
-          '${_imageStorage.baseDir}/gallery/${c.id}',
-        );
-        if (!await galleryDir.exists()) continue;
-
-        await _adapter.ensureFolder('$cloudBase/galleries/${c.id}');
-        await for (final f in galleryDir.list()) {
-          if (f is File) {
-            final name = f.path.split(Platform.pathSeparator).last;
-            final ext = name.split('.').last;
-            final imgId = name.replaceAll('.$ext', '');
-            final bytes = await f.readAsBytes();
-            await _adapter.uploadBinary(
-              galleryCloudPath(c.id, imgId, ext),
-              bytes,
-            );
-          }
-        }
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _pullGalleryImages(
-    SyncManifest cloudManifest,
-    void Function(SyncProgress) onProgress,
-  ) async {
-    try {
-      List<CloudFileInfo> galleryFiles;
-      try {
-        galleryFiles = await _adapter.listFolder('$cloudBase/galleries');
-      } catch (_) {
-        return;
-      }
-
-      var processed = 0;
-      for (final folder in galleryFiles.where((f) => f.isFolder)) {
-        processed++;
-        onProgress(SyncProgress(
-          current: processed,
-          total: galleryFiles.length,
-          message: 'Pulling gallery: ${folder.name}',
-        ));
-
-        final charId = folder.name;
-        final images = await _adapter.listFolder(folder.path);
-        for (final img in images.where((f) => !f.isFolder)) {
-          try {
-            final bytes = await _adapter.downloadBinary(img.path);
-            if (bytes.isEmpty) continue;
-            final ext = img.name.split('.').last;
-            final imgId = img.name.replaceAll('.$ext', '');
-            await _imageStorage.saveBytes(bytes, 'gallery/$charId', imgId, ext);
-          } catch (_) {}
-        }
       }
     } catch (_) {}
   }
