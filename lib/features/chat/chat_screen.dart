@@ -10,11 +10,13 @@ import '../../core/llm/prompt_isolate.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
+import '../../core/state/lorebook_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import 'chat_provider.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
+import 'widgets/magic_drawer.dart';
 import 'widgets/message_list.dart';
 
 class ChatScreen extends ConsumerWidget {
@@ -168,6 +170,7 @@ class ChatScreen extends ConsumerWidget {
                               .read(chatProvider(charId).notifier)
                               .abortGeneration()
                         : null,
+                    onMagicDrawer: () => _showMagicDrawer(context),
                   ),
                 ],
               ),
@@ -175,6 +178,14 @@ class ChatScreen extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  void _showMagicDrawer(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => MagicDrawerPanel(charId: charId),
     );
   }
 
@@ -222,13 +233,21 @@ class ChatScreen extends ConsumerWidget {
       apiConfig: apiConfig,
       sessionVars: chatState.session!.sessionVars,
       globalVars: ref.read(globalVarsProvider),
+      lorebooks: await ref.read(lorebookRepoProvider).getAll(),
+      lorebookSettings: ref.read(lorebookSettingsProvider),
+      lorebookActivations: ref.read(lorebookActivationsProvider),
     );
 
     final result = await buildPromptInIsolate(payload);
 
     final rawJson = const JsonEncoder.withIndent('  ').convert({
       'model': apiConfig.model,
-      'messages': result.messages.map((m) => m.toApiMap()).toList(),
+      'messages': result.messages.map((m) {
+        final map = <String, dynamic>{'role': m.role, 'content': m.content};
+        if (m.isLorebook) map['lorebook'] = true;
+        if (m.blockName != null) map['block'] = m.blockName;
+        return map;
+      }).toList(),
       'max_tokens': apiConfig.maxTokens,
       'temperature': apiConfig.temperature,
       'top_p': apiConfig.topP,

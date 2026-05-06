@@ -1,12 +1,13 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../core/state/character_provider.dart';
-import '../chat_provider.dart';
-import '../../settings/app_settings_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
+import '../../settings/app_settings_provider.dart';
+import 'message_actions.dart';
 
 class MessageBubble extends ConsumerWidget {
   final String content;
@@ -46,63 +47,30 @@ class MessageBubble extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final appSettings = ref.watch(appSettingsProvider).value;
-    final layoutMode = appSettings?.chatLayout ?? 'default';
-    final isStandard = layoutMode == 'default';
+    final isStandard = (appSettings?.chatLayout ?? 'default') == 'default';
 
     final chars = ref.watch(charactersProvider).value ?? [];
     final character = chars.where((c) => c.id == charId).firstOrNull;
 
-    Color bg;
-    Alignment alignment;
-    if (isStandard) {
-      bg = Colors.transparent;
-      alignment = Alignment.centerLeft;
-    } else {
-      if (isUser) {
-        bg = scheme.primary;
-        alignment = Alignment.centerRight;
-      } else if (isSystem) {
-        bg = scheme.surfaceContainerLow;
-        alignment = Alignment.center;
-      } else {
-        bg = scheme.surfaceContainerHighest;
-        alignment = Alignment.centerLeft;
-      }
-    }
+    final style = _BubbleStyle.resolve(scheme: scheme, isStandard: isStandard, isUser: isUser, isSystem: isSystem);
 
     String displayName = isUser ? 'User' : (character?.name ?? 'Character');
-    String avatarLetter = displayName.isNotEmpty
-        ? displayName[0].toUpperCase()
-        : '?';
+    String avatarLetter = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
     FileImage? avatarImage;
-    if (!isUser &&
-        character?.avatarPath != null &&
-        character!.avatarPath!.isNotEmpty) {
+    if (!isUser && character?.avatarPath != null && character!.avatarPath!.isNotEmpty) {
       avatarImage = FileImage(File(character.avatarPath!));
     }
 
+    final textColor = style.textColor;
+
     Widget bubble = Align(
-      alignment: alignment,
+      alignment: style.alignment,
       child: Container(
-        constraints: BoxConstraints(
-          maxWidth: isStandard
-              ? double.infinity
-              : MediaQuery.of(context).size.width * 0.88,
-        ),
-        margin: EdgeInsets.symmetric(
-          horizontal: isStandard ? 16 : 12,
-          vertical: isStandard ? 8 : 4,
-        ),
-        padding: isStandard
-            ? const EdgeInsets.all(0)
-            : const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: isStandard
-              ? BorderRadius.zero
-              : BorderRadius.circular(16),
-        ),
+        constraints: BoxConstraints(maxWidth: isStandard ? double.infinity : MediaQuery.of(context).size.width * 0.88),
+        margin: EdgeInsets.symmetric(horizontal: isStandard ? 16 : 12, vertical: isStandard ? 8 : 4),
+        padding: isStandard ? const EdgeInsets.all(0) : const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: style.bg, borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -112,192 +80,38 @@ class MessageBubble extends ConsumerWidget {
                 children: [
                   CircleAvatar(
                     radius: 12,
-                    backgroundColor: isUser
-                        ? scheme.primary
-                        : scheme.surfaceContainerHighest,
+                    backgroundColor: isUser ? scheme.primary : scheme.surfaceContainerHighest,
                     backgroundImage: avatarImage,
-                    child: avatarImage == null
-                        ? Text(
-                            avatarLetter,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isUser
-                                  ? scheme.onPrimary
-                                  : scheme.onSurface,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          )
-                        : null,
+                    child: avatarImage == null ? Text(avatarLetter, style: TextStyle(fontSize: 12, color: isUser ? scheme.onPrimary : scheme.onSurface, fontWeight: FontWeight.bold)) : null,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    displayName,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
+                  Text(displayName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: scheme.onSurfaceVariant)),
                 ],
               ),
               const SizedBox(height: 8),
             ],
             if (reasoning != null && reasoning!.isNotEmpty)
-              Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerLow,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.psychology,
-                          size: 14,
-                          color: scheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Reasoning',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: scheme.onSurfaceVariant,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      reasoning!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: scheme.onSurfaceVariant,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              _ReasoningBlock(reasoning: reasoning!, scheme: scheme),
             if (isTyping && content.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    PencilAnimation(
-                      size: 16,
-                      color: (isStandard || !isUser)
-                          ? scheme.primary
-                          : scheme.onPrimary,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Generating...',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontStyle: FontStyle.italic,
-                        color: (isStandard || !isUser)
-                            ? scheme.onSurfaceVariant
-                            : scheme.onPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-              )
+              _TypingIndicator(textColor: textColor, scheme: scheme)
             else
-              MarkdownBody(
-                data: content,
-                styleSheet: MarkdownStyleSheet(
-                  p: TextStyle(
-                    color: (isStandard || !isUser)
-                        ? scheme.onSurface
-                        : scheme.onPrimary,
-                  ),
-                ),
-              ),
+              MarkdownBody(data: content, styleSheet: MarkdownStyleSheet(p: TextStyle(color: textColor))),
             if (isStreaming)
-              Text(
-                '...',
-                style: TextStyle(
-                  color: (isStandard || !isUser)
-                      ? scheme.onSurfaceVariant
-                      : scheme.onPrimary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text('...', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
             if (!isSystem && !isStreaming) ...[
               const SizedBox(height: 6),
-              Row(
-                children: [
-                  if (genTime != null) ...[
-                    Icon(
-                      Icons.access_time,
-                      size: 12,
-                      color: (isStandard || !isUser)
-                          ? scheme.onSurfaceVariant
-                          : scheme.onPrimary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      genTime!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: (isStandard || !isUser)
-                            ? scheme.onSurfaceVariant
-                            : scheme.onPrimary,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                  ],
-                  if (tokens != null && tokens! > 0) ...[
-                    Icon(
-                      Icons.description_outlined,
-                      size: 12,
-                      color: (isStandard || !isUser)
-                          ? scheme.onSurfaceVariant
-                          : scheme.onPrimary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${tokens}t',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: (isStandard || !isUser)
-                            ? scheme.onSurfaceVariant
-                            : scheme.onPrimary,
-                      ),
-                    ),
-                  ],
-                  const Spacer(),
-                  InkWell(
-                    onTap: () => _showContextMenu(context, ref),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: isStandard
-                            ? scheme.surfaceContainerHighest
-                            : (isUser
-                                  ? Colors.transparent
-                                  : scheme.surfaceContainerHighest),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.menu,
-                        size: 16,
-                        color: (isStandard || !isUser)
-                            ? scheme.onSurfaceVariant
-                            : scheme.onPrimary,
-                      ),
-                    ),
-                  ),
-                ],
+              _MetadataRow(
+                genTime: genTime,
+                tokens: tokens,
+                textColor: textColor,
+                isStandard: isStandard,
+                isUser: isUser,
+                scheme: scheme,
+                onMenuTap: () => showMessageContextMenu(
+                  context: context, ref: ref, charId: charId, content: content,
+                  messageIndex: messageIndex, isUser: isUser, isTyping: isTyping,
+                  isError: isError, isLast: isLast, isGenerating: isGenerating, isHidden: isHidden,
+                ),
               ),
             ],
           ],
@@ -305,160 +119,142 @@ class MessageBubble extends ConsumerWidget {
       ),
     );
 
-    Widget bubbleWidget = isHidden
-        ? Opacity(opacity: 0.5, child: bubble)
-        : bubble;
+    Widget bubbleWidget = isHidden ? Opacity(opacity: 0.5, child: bubble) : bubble;
     if (isSystem || isStreaming) return bubbleWidget;
 
     return GestureDetector(
-      onLongPress: () => _showContextMenu(context, ref),
+      onLongPress: () => showMessageContextMenu(
+        context: context, ref: ref, charId: charId, content: content,
+        messageIndex: messageIndex, isUser: isUser, isTyping: isTyping,
+        isError: isError, isLast: isLast, isGenerating: isGenerating, isHidden: isHidden,
+      ),
       child: bubbleWidget,
     );
   }
+}
 
-  void _showContextMenu(BuildContext context, WidgetRef ref) {
-    final notifier = ref.read(chatProvider(charId).notifier);
+class _BubbleStyle {
+  final Color bg;
+  final Alignment alignment;
+  final Color textColor;
 
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isTyping) ...[
-                ListTile(
-                  leading: const Icon(Icons.stop_circle, color: Colors.orange),
-                  title: const Text(
-                    'Stop Generating',
-                    style: TextStyle(color: Colors.orange),
-                  ),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    notifier.abortGeneration();
-                  },
-                ),
-              ] else ...[
-                ListTile(
-                  leading: const Icon(Icons.copy),
-                  title: const Text('Copy'),
-                  onTap: isGenerating && isLast
-                      ? null
-                      : () {
-                          Clipboard.setData(ClipboardData(text: content));
-                          Navigator.pop(ctx);
-                        },
-                  enabled: !(isGenerating && isLast),
-                ),
-                if (!isError)
-                  ListTile(
-                    leading: const Icon(Icons.edit),
-                    title: const Text('Edit'),
-                    onTap: isGenerating && isLast
-                        ? null
-                        : () {
-                            Navigator.pop(ctx);
-                            _showEditDialog(context, ref);
-                          },
-                    enabled: !(isGenerating && isLast),
-                  ),
-                if ((!isUser && isLast && !isGenerating) || isError)
-                  ListTile(
-                    leading: const Icon(Icons.refresh),
-                    title: const Text('Regenerate'),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      notifier.regenerateLastAssistant();
-                    },
-                  ),
-                if (isGenerating && isLast)
-                  ListTile(
-                    leading: const Icon(
-                      Icons.stop_circle,
-                      color: Colors.orange,
-                    ),
-                    title: const Text(
-                      'Stop Generating',
-                      style: TextStyle(color: Colors.orange),
-                    ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      notifier.abortGeneration();
-                    },
-                  ),
-                if (!isError)
-                  ListTile(
-                    leading: const Icon(Icons.call_split),
-                    title: const Text('Branch'),
-                    onTap: isGenerating && isLast
-                        ? null
-                        : () {
-                            Navigator.pop(ctx);
-                            notifier.branchSession(messageIndex);
-                          },
-                    enabled: !(isGenerating && isLast),
-                  ),
-                ListTile(
-                  leading: Icon(
-                    isHidden ? Icons.visibility : Icons.visibility_off,
-                  ),
-                  title: Text(isHidden ? 'Unhide' : 'Hide'),
-                  onTap: () {
-                    Navigator.pop(ctx);
-                    notifier.toggleMessageHidden(messageIndex);
-                  },
-                ),
-                if (isLast && !isGenerating)
-                  ListTile(
-                    leading: const Icon(Icons.delete, color: Colors.red),
-                    title: const Text(
-                      'Delete',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      notifier.deleteMessage(messageIndex);
-                    },
-                  ),
-              ],
-            ],
-          ),
-        ),
+  const _BubbleStyle({required this.bg, required this.alignment, required this.textColor});
+
+  factory _BubbleStyle.resolve({
+    required ColorScheme scheme,
+    required bool isStandard,
+    required bool isUser,
+    required bool isSystem,
+  }) {
+    if (isStandard) {
+      return _BubbleStyle(bg: Colors.transparent, alignment: Alignment.centerLeft, textColor: scheme.onSurface);
+    }
+    if (isUser) {
+      return _BubbleStyle(bg: scheme.primary, alignment: Alignment.centerRight, textColor: scheme.onPrimary);
+    }
+    if (isSystem) {
+      return _BubbleStyle(bg: scheme.surfaceContainerLow, alignment: Alignment.center, textColor: scheme.onSurface);
+    }
+    return _BubbleStyle(bg: scheme.surfaceContainerHighest, alignment: Alignment.centerLeft, textColor: scheme.onSurface);
+  }
+}
+
+class _ReasoningBlock extends StatelessWidget {
+  final String reasoning;
+  final ColorScheme scheme;
+  const _ReasoningBlock({required this.reasoning, required this.scheme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.psychology, size: 14, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Text('Reasoning', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+          ]),
+          const SizedBox(height: 4),
+          Text(reasoning, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontStyle: FontStyle.italic)),
+        ],
       ),
     );
   }
+}
 
-  void _showEditDialog(BuildContext context, WidgetRef ref) {
-    final controller = TextEditingController(text: content);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Message'),
-        content: TextField(
-          controller: controller,
-          maxLines: 8,
-          minLines: 3,
-          autofocus: true,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final newText = controller.text.trim();
-              if (newText.isNotEmpty) {
-                ref
-                    .read(chatProvider(charId).notifier)
-                    .editMessage(messageIndex, newText);
-              }
-              Navigator.pop(ctx);
-            },
-            child: const Text('Save'),
-          ),
+class _TypingIndicator extends StatelessWidget {
+  final Color textColor;
+  final ColorScheme scheme;
+  const _TypingIndicator({required this.textColor, required this.scheme});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PencilAnimation(size: 16, color: scheme.primary),
+          const SizedBox(width: 8),
+          Text('Generating...', style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: textColor)),
         ],
       ),
+    );
+  }
+}
+
+class _MetadataRow extends StatelessWidget {
+  final String? genTime;
+  final int? tokens;
+  final Color textColor;
+  final bool isStandard;
+  final bool isUser;
+  final ColorScheme scheme;
+  final VoidCallback onMenuTap;
+
+  const _MetadataRow({
+    required this.genTime,
+    required this.tokens,
+    required this.textColor,
+    required this.isStandard,
+    required this.isUser,
+    required this.scheme,
+    required this.onMenuTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        if (genTime != null) ...[
+          Icon(Icons.access_time, size: 12, color: textColor),
+          const SizedBox(width: 4),
+          Text(genTime!, style: TextStyle(fontSize: 12, color: textColor)),
+          const SizedBox(width: 12),
+        ],
+        if (tokens != null && tokens! > 0) ...[
+          Icon(Icons.description_outlined, size: 12, color: textColor),
+          const SizedBox(width: 4),
+          Text('${tokens}t', style: TextStyle(fontSize: 12, color: textColor)),
+        ],
+        const Spacer(),
+        InkWell(
+          onTap: onMenuTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: isStandard ? scheme.surfaceContainerHighest : (isUser ? Colors.transparent : scheme.surfaceContainerHighest),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.menu, size: 16, color: textColor),
+          ),
+        ),
+      ],
     );
   }
 }

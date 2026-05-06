@@ -1,14 +1,16 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
 import '../../../shared/theme/app_colors.dart';
 
-class ChatInputBar extends StatefulWidget {
+class InputBar extends StatefulWidget {
   final ValueChanged<String> onSend;
   final bool isGenerating;
   final VoidCallback? onStop;
   final VoidCallback? onMagicDrawer;
 
-  const ChatInputBar({
+  const InputBar({
     super.key,
     required this.onSend,
     required this.isGenerating,
@@ -17,10 +19,10 @@ class ChatInputBar extends StatefulWidget {
   });
 
   @override
-  State<ChatInputBar> createState() => _ChatInputBarState();
+  State<InputBar> createState() => _InputBarState();
 }
 
-class _ChatInputBarState extends State<ChatInputBar> {
+class _InputBarState extends State<InputBar> {
   final _controller = TextEditingController();
 
   @override

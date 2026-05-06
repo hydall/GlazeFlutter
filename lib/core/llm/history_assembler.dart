@@ -60,6 +60,8 @@ class PromptMessage {
   final int? depth;
   final bool isHistory;
   final bool isDepth;
+  final bool isLorebook;
+  final String? blockName;
 
   const PromptMessage({
     required this.role,
@@ -67,6 +69,8 @@ class PromptMessage {
     this.depth,
     this.isHistory = false,
     this.isDepth = false,
+    this.isLorebook = false,
+    this.blockName,
   });
 
   Map<String, String> toApiMap() => {'role': role, 'content': content};

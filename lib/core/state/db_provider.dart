@@ -6,8 +6,11 @@ import '../db/repositories/chat_repo.dart';
 import '../db/repositories/preset_repo.dart';
 import '../db/repositories/api_config_repo.dart';
 import '../db/repositories/persona_repo.dart';
+import '../db/repositories/lorebook_repo.dart';
+import '../db/repositories/embedding_repo.dart';
 import '../services/character_importer.dart';
 import '../services/image_storage_service.dart';
+import '../services/migration_service.dart';
 
 final appDbProvider = Provider<AppDatabase>((ref) => AppDatabase());
 
@@ -17,6 +20,17 @@ final imageStorageProvider = Provider<ImageStorageService>((ref) {
 
 final characterImporterProvider = Provider<CharacterImporter>((ref) {
   return CharacterImporter(ref.watch(imageStorageProvider));
+});
+
+final migrationServiceProvider = Provider<MigrationService>((ref) {
+  return MigrationService(
+    charRepo: ref.watch(characterRepoProvider),
+    chatRepo: ref.watch(chatRepoProvider),
+    personaRepo: ref.watch(personaRepoProvider),
+    presetRepo: ref.watch(presetRepoProvider),
+    apiRepo: ref.watch(apiConfigRepoProvider),
+    imageStorage: ref.watch(imageStorageProvider),
+  );
 });
 
 final characterRepoProvider = Provider<CharacterRepo>((ref) {
@@ -37,4 +51,12 @@ final apiConfigRepoProvider = Provider<ApiConfigRepo>((ref) {
 
 final personaRepoProvider = Provider<PersonaRepo>((ref) {
   return PersonaRepo(ref.watch(appDbProvider));
+});
+
+final lorebookRepoProvider = Provider<LorebookRepo>((ref) {
+  return LorebookRepo(ref.watch(appDbProvider));
+});
+
+final embeddingRepoProvider = Provider<EmbeddingRepo>((ref) {
+  return EmbeddingRepo(ref.watch(appDbProvider));
 });

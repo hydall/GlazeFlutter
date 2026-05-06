@@ -533,7 +533,7 @@ class GDriveAdapter implements CloudAdapter { ... }
 
 ---
 
-## Phase 6: Polish (Day 41-50)
+## Phase 6: Polish (Day 41-50) — @hydall
 
 - [ ] Theme system (accent color, dark/light, custom colors)
 - [ ] Onboarding flow (first-run setup)

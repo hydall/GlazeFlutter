@@ -1,10 +1,220 @@
 # Glaze Flutter Migration — Full Plan
 
-Two documents in one file:
-- **Part 1**: MVP (Day 1–18) — proves Flutter works, chat loops end-to-end
-- **Part 2**: Post-MVP (Day 19–50) — feature parity with current Glaze
+## Current Status (updated 2025-05-06)
 
-Go/No-Go checkpoint: **Day 18**. If chat streams on iOS without WKWebView bugs → continue. Otherwise → pivot.
+**Go/No-Go: PASSED.** Chat streams on all platforms. MVP core is production-quality.
+
+### Completed phases
+
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 0: Scaffold | Done | main, app, GoRouter, theme, shell |
+| Phase 1: Data Layer | Done | Drift (not Isar), 6 tables, 6 repos, Freezed models, providers, event_hub |
+| Phase 2: Chat + Import | Done | PNG/JSON/ZIP import, prompt builder in isolate, SSE streaming, abort, edit, branch |
+| Phase 2.5: JS Migration | Done | .glz backup import (characters, chats, personas, presets, API configs, active selections), migration UI in menu |
+| Phase 3: Presets & Personas | Done | SillyTavern import, block/regex editor, persona CRUD, active selection |
+| Phase 4: Lorebooks | Done | Model, keyword scanner, prompt integration, UI — see below |
+| Phase 4b: Vector Search | Done | Embedding service, vector math, DB storage, indexing pipeline, runtime search, UI — see below |
+| Phase 5: Regex Runtime | Done | Applied in chat_provider during generation (placement/ephemerality/depth) |
+| UI Refactoring (round 2) | Done | God object decomposition: 6 monoliths → 19 single-responsibility files, -1308 net lines (see below) |
+
+### UI Refactoring (2025-05-05 → 2025-05-06)
+
+Two rounds of decomposition following the "No God Objects — Parallel Decomposition" rule from AGENTS.md. Every extracted class has a single responsibility; top-level screens are thin orchestrators with zero business logic.
+
+**Round 1** — widget extraction into `widgets/` subdirectories:
+
+| Before | After | Extracted widgets |
+|--------|-------|-------------------|
+| `chat_screen.dart` (1047 lines) | `chat_screen.dart` (~300 lines) + `widgets/` | `message_bubble.dart`, `input_bar.dart`, `edit_message_dialog.dart`, `raw_prompt_viewer.dart` |
+| `preset_list_screen.dart` (882 lines) | `preset_list_screen.dart` (~350 lines) + `preset_editor_screen.dart` + `widgets/` | `block_tile.dart`, `regex_tile.dart` |
+| `character_list_screen.dart` (858 lines) | `character_list_screen.dart` (~250 lines) + `widgets/` | `character_card.dart`, `character_grid.dart`, `empty_state.dart` |
+| `api_settings_screen.dart` (593 lines) | `api_settings_screen.dart` (~130 lines) + `api_editor_screen.dart` + `widgets/` | `mode_selector.dart`, `param_slider.dart` |
+
+**Round 2** — god object decomposition (business logic + state + UI separated):
+
+| Before | After | Extracted files |
+|--------|-------|----------------|
+| `character_list_screen.dart` (895) | `character_list_screen.dart` (139) | Reused existing `widgets/` (character_card, character_grid, empty_state) |
+| `chat_provider.dart` (594) | `chat_provider.dart` (241) | `chat_state.dart`, `chat_generation_service.dart`, `initial_message_builder.dart` |
+| `menu_screen.dart` (521) | `menu_screen.dart` (55) | `about_overlay.dart`, `menu_group.dart` (shared) |
+| `preset_list_screen.dart` (499) | `preset_list_screen.dart` (79) | `silly_tavern_preset_parser.dart`, `preset_list_provider.dart`, `preset_tile.dart` |
+| `prompt_builder.dart` (521) | `prompt_builder.dart` (227) | `fallback_prompt_builder.dart`, `prompt_block_resolver.dart`, `lorebook_merger.dart` |
+| `message_bubble.dart` (465) | `message_bubble.dart` (220) | `message_actions.dart` (context menu + edit dialog) |
+
+Net result: **-1308 lines** across 19 files (8 modified + 11 new).
+
+New directory structure for feature folders:
+```
+features/
+  chat/
+    chat_screen.dart
+    chat_provider.dart
+    chat_state.dart
+    chat_generation_service.dart
+    initial_message_builder.dart
+    widgets/
+      message_bubble.dart
+      message_actions.dart
+      input_bar.dart
+      edit_message_dialog.dart
+      raw_prompt_viewer.dart
+  character_list/
+    character_list_screen.dart
+    widgets/
+      character_card.dart
+      character_grid.dart
+      empty_state.dart
+  menu/
+    menu_screen.dart
+    about_overlay.dart
+  presets/
+    preset_list_screen.dart
+    preset_list_provider.dart
+    preset_editor_screen.dart
+    widgets/
+      preset_tile.dart
+      block_tile.dart
+      regex_tile.dart
+  settings/
+    api_settings_screen.dart
+    api_editor_screen.dart
+    widgets/
+      mode_selector.dart
+      param_slider.dart
+core/
+  llm/
+    prompt_builder.dart
+    prompt_block_resolver.dart
+    fallback_prompt_builder.dart
+    lorebook_merger.dart
+    ...
+  import/
+    silly_tavern_preset_parser.dart
+shared/
+  widgets/
+    menu_group.dart
+    ...
+```
+
+Enums `SortType`/`SortDir` extracted from `_SortType`/`_SortDir` (private) to public in `character_grid.dart` — reused by the screen. `ChatState`, `NotifyObj`/`ResolvedContent`, `MenuGroup`/`MenuItem`, `ActionButton`, `PresetTile` extracted from private to public single-responsibility files.
+
+### Phase 4: Lorebooks (2025-05-06)
+
+Full keyword-based lorebook system ported from Glaze JS.
+
+**Data layer:**
+- `LorebookEntry` (Freezed) — all JS fields: keys, secondaryKeys, selectiveLogic, position, order, scanDepth, caseSensitive, matchWholeWords, probability, preventRecursion, sticky/cooldown/delay, group, characterFilter, ignoreBudget, vectorSearch/useKeywordSearch
+- `Lorebook` (Freezed) — id, name, enabled, activationScope (global/character/chat), entries
+- `LorebookGlobalSettings` / `LorebookActivations` — Freezed state models
+- Drift `Lorebooks` table (schema v4), `LorebookRepo` with JSON entries column
+- `LorebookProvider` (Riverpod) with CRUD, settings/activations state
+
+**Keyword scanner (`lorebook_scanner.dart`):**
+- Direct port of JS `scanLorebooksPure` / `lorebookSearchService.scanLorebooks`
+- Recursive scan (up to 5 iterations)
+- Glaze boundary matching (`[\s.,!?;:"'\u201C\u201D\u2018\u2019\u00AB\u00BB(){}[\]—–*]`)
+- Sticky/cooldown temporal logic
+- Selective logic: ANY (0), ALL (1), NOT ANY (2), NOT ALL (3), no secondary (4/5)
+- Probability gate, character filter, vector-only entry skip
+
+**Prompt integration:**
+- `PromptPayload` extended with `lorebooks`, `lorebookSettings`, `lorebookActivations`
+- `loreBefore` injected before preset blocks, `loreAfter` after chat_history
+- `{{lorebooks}}` macro resolved for `lorebooksMacro` position entries
+- `chat_provider` passes all lorebook state to prompt builder
+
+**UI:**
+- `LorebookListScreen` — list with scope badges, enable toggle, delete
+- `LorebookEditorScreen` — name/scope editor + entry list
+- `EntryEditorDialog` — full entry editor (keys, content, position, selective logic, temporal, group, flags)
+- Route `/tools/lorebooks`, tools_screen tile navigates
+
+**Not yet ported:**
+- `{{lorebooks}}` macro content in PromptMessage metadata (no `isLorebook` / `blockName` tracking yet)
+- ST lorebook import format converter
+- Character book extraction from PNG cards
+
+### Phase 4b: Lorebook Vector Search (2025-05-06)
+
+Full vector/semantic search system ported from Glaze JS.
+
+**Vector math (`vector_math.dart`):**
+- `cosineSimilarity(a, b)` — standard dot/(||a||*||b||)
+- `findTopKMulti(queryChunks, candidates, k, threshold)` — MaxSim strategy: max similarity across all query-candidate chunk pairs
+- `findTopK(queryVector, candidates, k, threshold)` — single-query wrapper
+- `VectorChunk`, `VectorCandidate`, `TopKResult` data classes
+- `vectorToBytes`/`bytesToVector` — Float64 BLOB serialization for single vectors
+- `vectorListToBytes`/`bytesToVectorList` — multi-vector BLOB serialization (count + dim + floats)
+
+**Embedding service (`embedding_service.dart`):**
+- OpenAI-compatible `/embeddings` endpoint (auto-appends if not in URL)
+- Bearer token auth (optional)
+- Text chunking by `maxChunkTokens` (split at newline → `. ` → space → hard cut)
+- Batch processing with 200ms inter-call delay
+- 429 rate limit detection → `RateLimitException(retryAfter)`
+- Multi-chunk embedding with averaging for `getEmbeddings()` and per-chunk results for `getEmbeddingsWithChunks()`
+- `EmbeddingChunk`, `EmbeddingConfig` data classes
+
+**Embedding DB storage:**
+- Drift `Embeddings` table (schema v5): `entryId` (PK), `sourceType`, `sourceId`, `vectorsBlob` (multi-vector BLOB), `textHash` (SHA-256), `retrievalHintsJson`, `errorJson`, `updatedAt`
+- `EmbeddingRepo` with CRUD + `putEmbeddingVector`/`putEmbeddingError` helpers + `decodeVectors`/`decodeHints`/`decodeError`
+
+**Indexing pipeline (`lorebook_embedding_service.dart`):**
+- `indexLorebookEntries(lorebookId, entries, config, onProgress, retryFailedOnly)`
+- SHA-256 fingerprint cache: skip entries where `textHash` matches stored hash
+- On 429 rate limit: immediately mark all remaining entries as rate-limited errors and stop
+- `extractRetrievalHints(entry)`: up to 32 hints from comment, keys, first 8 content lines, `label: value` patterns
+- `IndexResult` with indexed/skipped/failed/rateLimited counts
+
+**Runtime vector search (`lorebook_vector_search.dart`):**
+- `search(history, currentText, lorebooks, settings, config)` → `List<VectorSearchResult>`
+- Filters active lorebooks, vector-enabled entries (excluding constants)
+- Loads embeddings from DB, skips stale/missing ones
+- Dual query strategy: **focused** (user messages only, bounded by `maxChunkTokens*2`) + **fallback** (all messages, bounded by `maxChunkTokens*3`), merges by higher score
+- Query sanitization: strips HTML, OOC, base64 images
+- Hybrid boost: name/key substring match (+0.18), key token overlap (+0.04/key, max +0.12), descriptor token overlap (+0.025/hint, max +0.10)
+- Applies `vectorThreshold` (default 0.45) and `vectorTopK` (default 10)
+- `embeddingConfigProvider` (StateProvider), `lorebookVectorSearchProvider`, `lorebookEmbeddingServiceProvider`
+
+**Prompt integration:**
+- `PromptPayload` extended with `vectorEntries: List<LorebookEntry>`
+- `_mergeKeywordVector()` in prompt_builder: splits `maxInjectedEntries` budget by `keywordVectorSplit` %, deduplicates by entry ID, unused keyword slots roll over to vector
+- `chat_provider._runVectorSearch()`: runs before `buildPromptInIsolate`, skipped if `searchType == 'keys'` or config endpoint empty
+
+**LorebookGlobalSettings additions:**
+- `vectorThreshold` (default 0.45)
+- `vectorTopK` (default 10)
+
+**UI:**
+- `EntryEditorDialog`: added "Vector Search" and "Keyword Search" chips; vector-only mode when vector=on + keyword=off
+- `LorebookEditorScreen`: index button in AppBar with progress status; calls `LorebookEmbeddingService.indexLorebookEntries`
+- `EmbeddingSettingsScreen`: search mode selector (keyword/vector/both), embedding API config (endpoint, key, model, maxChunkTokens), test connection button, vector params (threshold, topK, scan depth)
+- Route `/tools/embeddings`, search icon in LorebookListScreen navigates to embedding settings
+
+### Remaining phases (in priority order)
+
+| Phase | Priority | What's Missing |
+|-------|----------|----------------|
+| 6: Chat Import/Export | Medium | ST JSONL import/export, PNG export, backup import |
+| 7: Image Generation | Low | Service, config, gallery, UI |
+| 8: Cloud Sync | Low | Crypto, adapters, manifest, engine, UI |
+| 9: Theme + Polish | Low (@hydall) | Theme engine, swipe, search, onboarding, crash recovery, notifications |
+| 10: CI/CD | Low | GitHub Actions, code signing |
+
+### Known stubs in current codebase
+
+- `chat_screen.dart` → `input_bar.dart` — 3 input bar buttons (image gen, fullscreen, auto) are decorative
+- `character_list_screen.dart` — search button no-op, Catalog tab "coming soon"
+- `menu_screen.dart` — Lorebooks "coming soon"
+- `menu_screen.dart` — Theme, Cloud Sync, Backups all "coming soon"
+- `tokenizer.dart` — heuristic (chars/3.35), no real BPE
+
+### Architecture note
+
+Plan originally specified **Isar**; actual implementation uses **Drift** (SQLite). This is intentional — Drift has better Windows support and doesn't require native binaries per platform. All model/DB references in this doc should be read as "Drift" instead of "Isar".
+
+Also: the project structure now uses **widget subdirectories** per feature folder. Each `features/{feature}/widgets/` contains extracted, focused widgets (cards, tiles, dialogs, etc.) that were previously inline in the screen file. This follows the "No God Objects" rule from AGENTS.md — no file should exceed ~150 lines or take on more than one role.
 
 ---
 
@@ -158,10 +368,10 @@ class AppTheme {
 ```
 
 ### Deliverables Phase 0
-- [ ] App runs on iOS simulator, Android emulator, Windows desktop
-- [ ] Isar DB opens without errors
-- [ ] GoRouter navigates between 3 empty screens
-- [ ] Dark theme applied
+- [x] App runs on iOS simulator, Android emulator, Windows desktop
+- [x] Isar DB opens without errors
+- [x] GoRouter navigates between 3 empty screens
+- [x] Dark theme applied
 
 ---
 
@@ -568,12 +778,12 @@ dart run build_runner build --delete-conflicting-outputs
 Generates: `*.g.dart`, `*.freezed.dart` files.
 
 ### Deliverables Phase 1
-- [ ] All 6 Freezed models compile with `fromJson`
-- [ ] All 5 Isar collections with indexes
-- [ ] All 5 repository classes with CRUD
-- [ ] ImageStorage saves/reads files correctly
-- [ ] Riverpod providers wire repos to UI
-- [ ] EventHub publish/subscribe works
+- [x] All 6 Freezed models compile with `fromJson`
+- [x] All 5 Isar collections with indexes
+- [x] All 5 repository classes with CRUD
+- [x] ImageStorage saves/reads files correctly
+- [x] Riverpod providers wire repos to UI
+- [x] EventHub publish/subscribe works
 - [ ] Unit tests for each repo (in-memory Isar)
 
 ---
@@ -1265,51 +1475,57 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
 ```
 
 ### Deliverables Phase 2 (Go/No-Go checkpoint)
-- [ ] Import character from PNG (tEXt chunk parsed, avatar saved)
-- [ ] Import character from JSON
-- [ ] Character list displays all imported characters
-- [ ] Tap character → opens chat screen
-- [ ] Type message → builds prompt in isolate → streams response
-- [ ] Streaming text updates in real-time in chat bubble
-- [ ] Abort generation works
-- [ ] API settings persist across app restarts
-- [ ] Runs on iOS without WKWebView issues
-- [ ] Runs on Android
-- [ ] Runs on Windows
+- [x] Import character from PNG (tEXt chunk parsed, avatar saved)
+- [x] Import character from JSON
+- [x] Character list displays all imported characters
+- [x] Tap character → opens chat screen
+- [x] Type message → builds prompt in isolate → streams response
+- [x] Streaming text updates in real-time in chat bubble
+- [x] Abort generation works
+- [x] API settings persist across app restarts
+- [x] Runs on iOS without WKWebView issues
+- [x] Runs on Android
+- [x] Runs on Windows
 
 ---
 
-## Phase 2.5: Data Migration from JS Glaze (Day 17–18)
+## Phase 2.5: Data Migration from JS Glaze
 
-### Step 2.14: One-time migration tool
+### Context
 
-Create an export function in the JS app and an import function in Flutter.
+Glaze JS has `exportFullBackupAsync()` in `backupService.js` that produces a `.glz` JSON file containing all user data. We already import character cards (PNG/JSON/ZIP) via `CharacterImporter`. What's missing is importing the **full backup** which includes chats, personas, presets, API configs, and lorebooks stored in IDB keyvalue store.
 
-**JS side** (add to current Glaze):
-```js
-// New export endpoint: exports all DB + localStorage as a single JSON
-export async function exportForFlutterMigration() {
-  const data = {
-    _format: 'glaze_migration',
-    _version: 1,
-    exportedAt: Date.now(),
-    characters: await db.getAll('characters'),
-    chats: {},
-    personas: await db.getAll('personas'),
-    presets: JSON.parse(localStorage.getItem('silly_cradle_presets') || '{}'),
-    apiConfigs: await db.get('gz_api_connection_presets') || [],
-    lorebooks: await db.get('gz_lorebooks') || { lorebooks: [] },
-  };
+### Glaze JS backup format (.glz)
 
-  // Export all chats
-  const allChats = await db.getChats();
-  data.chats = allChats;
-
-  return JSON.stringify(data);
+```json
+{
+  "_isGlazeBackup": true,
+  "_glazeVersion": 1,
+  "keyvalue": {
+    "gz_chats_{charId}": { "sessions": { "0": [msg, ...], "1": [msg, ...] } },
+    "gz_api_connection_presets": [ { id, name, endpoint, key, model, temp, ... }, ... ],
+    "silly_cradle_presets": { "presets": [ { id, name, prompt_order, ... }, ... ] },
+    "gz_lorebooks": { "lorebooks": [ { id, name, entries, ... }, ... ] },
+    "gz_active_preset": "preset_id",
+    "gz_active_persona": "persona_id",
+    "gz_theme_state": { ... },
+    "gz_chat_recovery_{id}": { ... },
+    ...other keys
+  },
+  "characters": [ { id, name, avatar, description, ... }, ... ],
+  "personas": [ { id, name, prompt, avatar, ... }, ... ],
+  "localStorage": { "key": "value", ... }
 }
 ```
 
-**Flutter side**:
+### What we already handle
+
+- **Characters** from PNG/JSON/ZIP via `CharacterImporter` — but NOT from IDB format (data URL avatars, different field layout)
+- **Presets** from SillyTavern JSON via `PresetListScreen._parseSillyTavernPreset()` — but NOT from Glaze internal format (`silly_cradle_presets`)
+- **Personas** from IDB format — NOT handled yet
+
+### Step 2.14: Migration service
+
 ```dart
 // core/services/migration_service.dart
 class MigrationService {
@@ -1318,81 +1534,118 @@ class MigrationService {
   final PersonaRepo _personaRepo;
   final PresetRepo _presetRepo;
   final ApiConfigRepo _apiRepo;
-  final ImageStorage _imageStorage;
+  final ImageStorageService _imageStorage;
 
-  Future<MigrationResult> importFromGlazeJS(String jsonPath) async {
+  Future<MigrationResult> importGlzBackup(String jsonPath) async {
     final bytes = await File(jsonPath).readAsBytes();
     final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
 
-    // 1. Characters
-    for (final charJson in data['characters'] as List) {
-      final char = _mapCharacter(charJson);
-      // Decode data URL avatar → save file
-      if (charJson['avatar'] != null && charJson['avatar'].startsWith('data:')) {
-        final path = await _imageStorage.saveDataUrl(charJson['avatar'], 'avatars', char.id);
-        char = char.copyWith(avatarPath: path);
-      }
+    if (data['_isGlazeBackup'] != true) {
+      throw FormatException('Not a valid Glaze backup file');
+    }
+
+    final kv = Map<String, dynamic>.from(data['keyvalue'] ?? {});
+    final result = MigrationResult();
+
+    // 1. Characters (from IDB 'characters' store)
+    for (final charJson in data['characters'] as List? ?? []) {
+      final char = await _mapCharacter(charJson);
       await _charRepo.put(char);
+      result.characters++;
     }
 
-    // 2. Chats (map sessions + messages)
-    final chats = data['chats'] as Map<String, dynamic>;
-    for (final entry in chats.entries) {
-      final charId = entry.key;
-      final chatData = entry.value as Map<String, dynamic>;
-      final sessions = chatData['sessions'] as Map<String, dynamic>;
-      for (final sessionEntry in sessions.entries) {
-        final sessionIndex = int.parse(sessionEntry.key);
-        final messages = (sessionEntry.value as List).map(_mapMessage).toList();
-        final session = ChatSession(
-          id: '${charId}_$sessionIndex',
-          characterId: charId,
-          sessionIndex: sessionIndex,
-          messages: messages,
-        );
-        await _chatRepo.put(session);
+    // 2. Personas
+    for (final pJson in data['personas'] as List? ?? []) {
+      final persona = _mapPersona(pJson);
+      await _personaRepo.put(persona);
+      result.personas++;
+    }
+
+    // 3. Chats (from keyvalue, gz_chats_* keys)
+    for (final entry in kv.entries) {
+      if (entry.key.startsWith('gz_chats_')) {
+        final charId = entry.key.replaceFirst('gz_chats_', '');
+        final chatData = entry.value as Map<String, dynamic>;
+        final sessions = chatData['sessions'] as Map<String, dynamic>? ?? {};
+        for (final sessionEntry in sessions.entries) {
+          final sessionIndex = int.tryParse(sessionEntry.key) ?? 0;
+          final session = await _mapChatSession(charId, sessionIndex, sessionEntry.value);
+          await _chatRepo.put(session);
+          result.sessions++;
+        }
       }
     }
 
-    // 3. Personas
-    // 4. Presets
-    // 5. API configs
+    // 4. API configs (from keyvalue, gz_api_connection_presets)
+    final apiConfigs = kv['gz_api_connection_presets'];
+    if (apiConfigs is List) {
+      for (final cfgJson in apiConfigs) {
+        final config = _mapApiConfig(cfgJson);
+        await _apiRepo.put(config);
+        result.apiConfigs++;
+      }
+    }
 
-    return MigrationResult(characters: ..., chats: ...);
+    // 5. Presets (from keyvalue, silly_cradle_presets)
+    final presetsData = kv['silly_cradle_presets'];
+    if (presetsData is Map && presetsData['presets'] is List) {
+      for (final pJson in presetsData['presets']) {
+        final preset = _mapGlazePreset(pJson);
+        await _presetRepo.put(preset);
+        result.presets++;
+      }
+    }
+
+    // 6. Mark migration complete
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('gz_migration_done', true);
+
+    return result;
   }
-
-  Character _mapCharacter(Map<String, dynamic> json) => Character(
-    id: json['id'] ?? generateId(),
-    name: json['name'] ?? 'Unknown',
-    description: json['description'],
-    personality: json['personality'],
-    scenario: json['scenario'],
-    firstMes: json['first_mes'],
-    mesExample: json['mes_example'],
-    systemPrompt: json['system_prompt'],
-    tags: List<String>.from(json['tags'] ?? []),
-    alternateGreetings: List<String>.from(json['alternate_greetings'] ?? []),
-  );
-
-  ChatMessage _mapMessage(Map<String, dynamic> msg) => ChatMessage(
-    id: msg['id'] ?? generateId(),
-    role: msg['role'] == 'char' ? 'assistant' : (msg['role'] ?? 'user'),
-    content: msg['text'] ?? msg['mes'] ?? '',
-    timestamp: msg['timestamp'],
-    personaId: msg['persona']?['id'],
-    personaName: msg['persona']?['name'],
-    swipes: List<String>.from(msg['swipes'] ?? []),
-    swipeId: msg['swipeId'] ?? 0,
-    reasoning: msg['reasoning'],
-  );
 }
 ```
 
+### Key mapping details
+
+**Characters** (IDB → Flutter):
+- `avatar` is a data URL → decode to bytes → `ImageStorageService.saveAvatar()`
+- Field names already match (name, description, personality, scenario, first_mes, etc.)
+
+**Chat messages** (IDB → Flutter):
+- Message `role`: JS `'char'` → Dart `'assistant'`
+- Message `mes`/`text` → `content`
+- Message `persona.id`/`persona.name` → `personaId`/`personaName`
+- Message `swipes` → `swipes`, `swipe_id` → `swipeId`
+- Message `reasoning` → `reasoning`
+- Message `is_hidden` → hidden flag on ChatMessage
+
+**API configs** (IDB → Flutter):
+- `key` → `apiKey`
+- `temp` → `temperature`
+- `reasoningTags.start`/`end` → `reasoningTagStart`/`reasoningTagEnd`
+
+**Presets** (Glaze internal → Flutter):
+- `prompt_order` → convert to ordered `PresetBlock` list
+- `regex_scripts` → `List<PresetRegex>`
+- Same block structure as SillyTavern but already in Glaze format
+
+### Step 2.15: Migration UI
+
+Add a "Import from Glaze" button in the Menu/Tools screen that:
+1. Opens file picker filtered for `.glz` files
+2. Shows progress dialog during import
+3. Displays summary (X characters, Y chats, Z presets imported)
+4. Marks migration as done in SharedPreferences
+
 ### Deliverables Phase 2.5
-- [ ] JS export function added to current Glaze
-- [ ] Flutter migration service imports all data types
-- [ ] Data URLs decoded → files saved → paths stored
-- [ ] Existing Glaze users can migrate without data loss
+- [x] `MigrationService` with .glz backup import
+- [x] Character import from IDB format (data URL avatar → file)
+- [x] Chat session import from gz_chats_* keyvalue entries
+- [x] API config import
+- [x] Preset import from Glaze internal format
+- [x] Persona import
+- [x] Migration UI in Menu/Tools
+- [x] One-time migration flag in SharedPreferences
 
 ---
 
@@ -1504,14 +1757,14 @@ Resolution order (from JS): Chat > Character > Global
 - Persona management screen: create/edit/delete
 
 ### Deliverables Phase 3
-- [ ] Preset CRUD (create, read, update, delete)
-- [ ] Preset import from SillyTavern JSON format
-- [ ] Default presets pre-loaded on first launch
-- [ ] Block editor with macro preview
-- [ ] Regex editor (add/edit/delete regex scripts)
-- [ ] Persona CRUD + avatar
-- [ ] Persona connections per character/chat
-- [ ] Persona selector in chat screen
+- [x] Preset CRUD (create, read, update, delete)
+- [x] Preset import from SillyTavern JSON format
+- [x] Default presets pre-loaded on first launch
+- [x] Block editor with macro preview
+- [x] Regex editor (add/edit/delete regex scripts)
+- [x] Persona CRUD + avatar
+- [x] Persona connections per character/chat
+- [x] Persona selector in chat screen
 
 ---
 
@@ -1793,22 +2046,22 @@ class VectorIndexingService {
 - Character detail: show attached lorebooks, toggle activation
 
 ### Deliverables Phase 4
-- [ ] Lorebook CRUD + Isar storage
-- [ ] Lorebook keyword scanner (runs in prompt isolate)
-- [ ] Constant entry injection
-- [ ] Recursive scan
-- [ ] Selective logic (any/all/not any/not all)
-- [ ] Sticky/cooldown
-- [ ] Activation per character/chat
-- [ ] Embedding service (OpenAI-compatible API)
-- [ ] Embedding storage (Isar)
-- [ ] Vector similarity search with cosine distance
-- [ ] Vector search pipeline step (after keyword scan)
-- [ ] Late vector lore injection (dedup vs keyword)
-- [ ] Indexing service (on-entry + reindex all)
-- [ ] Lorebook UI (list, editor, entry editor with vector toggle)
+- [x] Lorebook CRUD + Isar storage
+- [x] Lorebook keyword scanner (runs in prompt isolate)
+- [x] Constant entry injection
+- [x] Recursive scan
+- [x] Selective logic (any/all/not any/not all)
+- [x] Sticky/cooldown
+- [x] Activation per character/chat
+- [x] Embedding service (OpenAI-compatible API)
+- [x] Embedding storage (Isar)
+- [x] Vector similarity search with cosine distance
+- [x] Vector search pipeline step (after keyword scan)
+- [x] Late vector lore injection (dedup vs keyword)
+- [x] Indexing service (on-entry + reindex all)
+- [x] Lorebook UI (list, editor, entry editor with vector toggle)
 - [ ] Import lorebook from SillyTavern JSON
-- [ ] Embedding config UI (endpoint, model, reindex)
+- [x] Embedding config UI (endpoint, model, reindex)
 
 ---
 
@@ -1899,12 +2152,12 @@ Apply regexes to:
 - World info content (placement=4) after lorebook injection
 
 ### Deliverables Phase 5
-- [ ] Regex service with placement/ephemerality/depth filtering
-- [ ] Trim token support
-- [ ] /pattern/flags parsing
-- [ ] Macro expansion in regex patterns
-- [ ] Backreference support in replacements
-- [ ] Integrated into prompt builder pipeline
+- [x] Regex service with placement/ephemerality/depth filtering
+- [x] Trim token support
+- [x] /pattern/flags parsing
+- [x] Macro expansion in regex patterns
+- [x] Backreference support in replacements
+- [x] Integrated into prompt builder pipeline
 
 ---
 

@@ -94,3 +94,38 @@ class Personas extends Table {
   @override
   Set<Column> get primaryKey => {personaId};
 }
+
+@DataClassName('LorebookRow')
+class Lorebooks extends Table {
+  @override
+  String get tableName => 'lorebooks';
+
+  TextColumn get lorebookId => text()();
+  TextColumn get name => text()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+  TextColumn get activationScope => text().withDefault(const Constant('global'))();
+  TextColumn get activationTargetId => text().nullable()();
+  TextColumn get entriesJson => text()();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {lorebookId};
+}
+
+@DataClassName('EmbeddingRow')
+class Embeddings extends Table {
+  @override
+  String get tableName => 'embeddings';
+
+  TextColumn get entryId => text()();
+  TextColumn get sourceType => text().withDefault(const Constant('lorebook_entry'))();
+  TextColumn get sourceId => text().nullable()();
+  BlobColumn get vectorsBlob => blob().nullable()();
+  TextColumn get textHash => text().nullable()();
+  TextColumn get retrievalHintsJson => text().nullable()();
+  TextColumn get errorJson => text().nullable()();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {entryId};
+}

@@ -1,0 +1,243 @@
+import 'dart:convert';
+
+import 'package:dio/dio.dart';
+
+class EmbeddingConfig {
+  final String endpoint;
+  final String apiKey;
+  final String model;
+  final int maxChunkTokens;
+
+  const EmbeddingConfig({
+    required this.endpoint,
+    this.apiKey = '',
+    this.model = '',
+    this.maxChunkTokens = 512,
+  });
+}
+
+class RateLimitException implements Exception {
+  final int retryAfter;
+  RateLimitException(this.retryAfter);
+  @override
+  String toString() => 'Rate limited. Retry after ${retryAfter}s';
+}
+
+class EmbeddingChunk {
+  final String text;
+  final List<double> vector;
+
+  const EmbeddingChunk({required this.text, required this.vector});
+}
+
+class EmbeddingService {
+  final Dio _dio = Dio();
+
+  Future<List<List<double>>> getEmbeddings(
+    List<String> texts,
+    EmbeddingConfig config,
+  ) async {
+    final allChunks = <List<String>>[];
+    final chunkMap = <int, int>{};
+
+    int chunkOffset = 0;
+    for (int i = 0; i < texts.length; i++) {
+      final chunks = _chunkText(texts[i], config.maxChunkTokens);
+      allChunks.add(chunks);
+      for (int j = 0; j < chunks.length; j++) {
+        chunkMap[chunkOffset + j] = i;
+      }
+      chunkOffset += chunks.length;
+    }
+
+    final flatChunks = allChunks.expand((c) => c).toList();
+    final allVectors = await _batchEmbed(flatChunks, config);
+
+    final result = <List<double>>[];
+    int offset = 0;
+    for (final chunks in allChunks) {
+      if (chunks.length == 1) {
+        result.add(allVectors[offset]);
+      } else {
+        result.add(_averageVectors(allVectors.sublist(offset, offset + chunks.length)));
+      }
+      offset += chunks.length;
+    }
+
+    return result;
+  }
+
+  Future<List<EmbeddingChunk>> getEmbeddingsWithChunks(
+    List<String> texts,
+    EmbeddingConfig config,
+  ) async {
+    final allChunks = <String>[];
+    final textChunkRanges = <_ChunkRange>[];
+
+    for (final text in texts) {
+      final chunks = _chunkText(text, config.maxChunkTokens);
+      final start = allChunks.length;
+      allChunks.addAll(chunks);
+      textChunkRanges.add(_ChunkRange(start: start, end: allChunks.length));
+    }
+
+    final allVectors = await _batchEmbed(allChunks, config);
+
+    final result = <EmbeddingChunk>[];
+    int offset = 0;
+    for (int i = 0; i < texts.length; i++) {
+      final range = textChunkRanges[i];
+      final chunks = allChunks.sublist(range.start, range.end);
+      final vectors = allVectors.sublist(range.start - offset + offset, range.end - offset + offset);
+
+      for (int j = 0; j < chunks.length; j++) {
+        result.add(EmbeddingChunk(text: chunks[j], vector: vectors[j]));
+      }
+      offset = range.end;
+    }
+
+    return result;
+  }
+
+  Future<List<List<double>>> _batchEmbed(
+    List<String> chunks,
+    EmbeddingConfig config,
+  ) async {
+    const batchSize = 32;
+    final allVectors = <List<double>>[];
+
+    for (int i = 0; i < chunks.length; i += batchSize) {
+      final batch = chunks.sublist(i, (i + batchSize).clamp(0, chunks.length));
+      final vectors = await _callEmbeddingApi(batch, config);
+      allVectors.addAll(vectors);
+
+      if (i + batchSize < chunks.length) {
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+    }
+
+    return allVectors;
+  }
+
+  Future<List<List<double>>> _callEmbeddingApi(
+    List<String> texts,
+    EmbeddingConfig config,
+  ) async {
+    if (texts.isEmpty) return [];
+
+    final url = _resolveEndpoint(config.endpoint);
+
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+    if (config.apiKey.isNotEmpty) {
+      headers['Authorization'] = 'Bearer ${config.apiKey}';
+    }
+
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        url,
+        data: {
+          'model': config.model,
+          'input': texts,
+        },
+        options: Options(headers: headers),
+      );
+
+      final data = response.data;
+      if (data == null) throw 'Empty response';
+
+      if (data['error'] != null) {
+        final msg = data['error']['message'] ?? data['error'].toString();
+        throw 'API error: $msg';
+      }
+
+      final dataList = data['data'] as List<dynamic>?;
+      if (dataList == null) throw 'Invalid embedding response: missing data array';
+
+      dataList.sort((a, b) =>
+          ((a as Map)['index'] as int? ?? 0).compareTo((b as Map)['index'] as int? ?? 0));
+
+      return dataList.map((item) {
+        final embedding = (item as Map)['embedding'] as List<dynamic>;
+        return embedding.map((v) => (v as num).toDouble()).toList();
+      }).toList();
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 429) {
+        final retryAfter = int.tryParse(
+              e.response?.headers.value('retry-after') ?? '',
+            ) ??
+            60;
+        throw RateLimitException(retryAfter);
+      }
+      throw 'Network error: ${e.message}';
+    }
+  }
+
+  String _resolveEndpoint(String endpoint) {
+    if (endpoint.isEmpty) return endpoint;
+    if (RegExp(r'/embeddings/?$', caseSensitive: false).hasMatch(endpoint)) {
+      return endpoint;
+    }
+    return '${endpoint.replaceFirst(RegExp(r'/+$'), '')}/embeddings';
+  }
+
+  List<String> _chunkText(String text, int maxTokens) {
+    if (maxTokens <= 0 || text.isEmpty) return [text];
+
+    final estChars = maxTokens * 4;
+    if (text.length <= estChars) return [text];
+
+    final chunks = <String>[];
+    var remaining = text;
+
+    while (remaining.isNotEmpty) {
+      if (remaining.length <= estChars) {
+        chunks.add(remaining);
+        break;
+      }
+
+      int cutPos = remaining.lastIndexOf('\n', estChars);
+      if (cutPos <= 0) {
+        cutPos = remaining.lastIndexOf('. ', estChars);
+      }
+      if (cutPos <= 0) {
+        cutPos = remaining.lastIndexOf(' ', estChars);
+      }
+      if (cutPos <= 0) {
+        cutPos = estChars;
+      }
+
+      chunks.add(remaining.substring(0, cutPos + 1).trim());
+      remaining = remaining.substring(cutPos + 1);
+    }
+
+    return chunks.where((c) => c.isNotEmpty).toList();
+  }
+
+  List<double> _averageVectors(List<List<double>> vectors) {
+    if (vectors.isEmpty) return [];
+    if (vectors.length == 1) return vectors.first;
+
+    final dim = vectors.first.length;
+    final result = List<double>.filled(dim, 0);
+
+    for (final v in vectors) {
+      for (int i = 0; i < dim && i < v.length; i++) {
+        result[i] += v[i];
+      }
+    }
+
+    for (int i = 0; i < dim; i++) {
+      result[i] /= vectors.length;
+    }
+
+    return result;
+  }
+}
+
+class _ChunkRange {
+  final int start;
+  final int end;
+  const _ChunkRange({required this.start, required this.end});
+}
