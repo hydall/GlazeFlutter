@@ -6,6 +6,7 @@ class ChatState {
   final String streamingText;
   final String? streamingReasoning;
   final String? error;
+  final String? lastRawResponse;
 
   const ChatState({
     this.session,
@@ -13,6 +14,7 @@ class ChatState {
     this.streamingText = '',
     this.streamingReasoning,
     this.error,
+    this.lastRawResponse,
   });
 
   ChatState copyWith({
@@ -21,6 +23,7 @@ class ChatState {
     String? streamingText,
     String? streamingReasoning,
     String? error,
+    String? lastRawResponse,
   }) {
     return ChatState(
       session: session ?? this.session,
@@ -28,6 +31,7 @@ class ChatState {
       streamingText: streamingText ?? this.streamingText,
       streamingReasoning: streamingReasoning ?? this.streamingReasoning,
       error: error,
+      lastRawResponse: lastRawResponse ?? this.lastRawResponse,
     );
   }
 

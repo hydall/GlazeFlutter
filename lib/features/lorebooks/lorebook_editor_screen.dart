@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/lorebook.dart';
-import '../../core/llm/embedding_service.dart';
 import '../../core/llm/lorebook_vector_search.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/theme/app_colors.dart';
@@ -20,6 +19,7 @@ class LorebookEditorScreen extends ConsumerStatefulWidget {
 
 class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   late TextEditingController _nameController;
+  late TextEditingController _searchController;
   String _scope = 'global';
   List<LorebookEntry> _entries = [];
   bool _loaded = false;
@@ -30,11 +30,13 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController();
+    _searchController = TextEditingController();
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -159,6 +161,16 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     _save();
   }
 
+  List<LorebookEntry> get _filteredEntries {
+    final q = _searchController.text.trim().toLowerCase();
+    if (q.isEmpty) return _entries;
+    return _entries.where((e) {
+      return e.keys.any((k) => k.toLowerCase().contains(q)) ||
+          e.content.toLowerCase().contains(q) ||
+          e.comment.toLowerCase().contains(q);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final lorebooksAsync = ref.watch(lorebooksProvider);
@@ -241,8 +253,27 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                 ),
               ),
               const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Search keys, content...',
+                    hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+                    prefixIcon: Icon(Icons.search, size: 18, color: AppColors.textSecondary),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(height: 8),
               Expanded(
-                child: _entries.isEmpty
+                child: _filteredEntries.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -257,13 +288,17 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-                        itemCount: _entries.length,
-                        itemBuilder: (_, i) => _EntryTile(
-                          entry: _entries[i],
-                          onToggle: () => _toggleEntry(i),
-                          onEdit: () => _editEntry(i),
-                          onDelete: () => _deleteEntry(i),
-                        ),
+                        itemCount: _filteredEntries.length,
+                        itemBuilder: (_, i) {
+                          final entry = _filteredEntries[i];
+                          final realIndex = _entries.indexOf(entry);
+                          return _EntryTile(
+                            entry: entry,
+                            onToggle: () => _toggleEntry(realIndex),
+                            onEdit: () => _editEntry(realIndex),
+                            onDelete: () => _deleteEntry(realIndex),
+                          );
+                        },
                       ),
               ),
             ],

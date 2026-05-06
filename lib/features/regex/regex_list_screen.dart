@@ -6,6 +6,7 @@ import '../../core/models/preset.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../presets/widgets/regex_tile.dart';
 
 class RegexListScreen extends ConsumerWidget {
   const RegexListScreen({super.key});
@@ -50,12 +51,13 @@ class RegexListScreen extends ConsumerWidget {
           }
 
           return ListView.builder(
+            padding: const EdgeInsets.only(bottom: 40),
             itemCount: allRegexes.length,
             itemBuilder: (_, i) {
               final entry = allRegexes[i];
               final regex = entry.value;
               final presetId = entry.key;
-              return _RegexTile(
+              return _EditableRegexItem(
                 regex: regex,
                 presetId: presetId,
                 presets: presets,
@@ -68,12 +70,12 @@ class RegexListScreen extends ConsumerWidget {
   }
 }
 
-class _RegexTile extends ConsumerWidget {
+class _EditableRegexItem extends ConsumerWidget {
   final PresetRegex regex;
   final String presetId;
   final List<Preset> presets;
 
-  const _RegexTile({
+  const _EditableRegexItem({
     required this.regex,
     required this.presetId,
     required this.presets,
@@ -83,32 +85,55 @@ class _RegexTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final presetName = presets.firstWhere((p) => p.id == presetId).name;
 
-    return ListTile(
-      leading: Icon(
-        regex.disabled ? Icons.code_off : Icons.code,
-        color: regex.disabled ? AppColors.textSecondary : null,
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      color: Colors.white.withValues(alpha: 0.03),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
       ),
-      title: Text(regex.name),
-      subtitle: Text(
-        'From: $presetName · /${regex.regex.length > 30 ? '${regex.regex.substring(0, 30)}...' : regex.regex}/',
-        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      trailing: Switch(
-        value: !regex.disabled,
-        onChanged: (v) async {
-          final preset = presets.firstWhere((p) => p.id == presetId);
-          final updatedRegexes = preset.regexes.map((r) {
-            if (r.id == regex.id) return r.copyWith(disabled: !v);
-            return r;
-          }).toList();
-          await ref
-              .read(presetRepoProvider)
-              .put(preset.copyWith(regexes: updatedRegexes));
-          ref.invalidate(presetRepoProvider);
-        },
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Row(
+                children: [
+                  Icon(
+                    regex.disabled ? Icons.code_off : Icons.code,
+                    size: 16,
+                    color: regex.disabled ? AppColors.textSecondary : AppColors.accent,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text('From: $presetName', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary))),
+                  Switch(
+                    value: !regex.disabled,
+                    onChanged: (v) => _updateRegex(ref, regex.copyWith(disabled: !v)),
+                    activeColor: AppColors.accent,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ],
+              ),
+            ),
+            RegexTile(
+              regex: regex,
+              onChanged: (updated) => _updateRegex(ref, updated),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  void _updateRegex(WidgetRef ref, PresetRegex updated) async {
+    final preset = presets.firstWhere((p) => p.id == presetId);
+    final updatedRegexes = preset.regexes.map((r) {
+      if (r.id == regex.id) return updated;
+      return r;
+    }).toList();
+    await ref.read(presetRepoProvider).put(preset.copyWith(regexes: updatedRegexes));
+    ref.invalidate(presetRepoProvider);
   }
 }

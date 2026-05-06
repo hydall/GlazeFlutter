@@ -1,13 +1,17 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/import/st_lorebook_importer.dart';
 import '../../core/models/lorebook.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import 'embedding_settings_screen.dart';
+import 'lorebook_connections_sheet.dart';
 import 'lorebook_editor_screen.dart';
+import 'lorebook_global_settings_screen.dart';
 
 class LorebookListScreen extends ConsumerWidget {
   const LorebookListScreen({super.key});
@@ -33,6 +37,18 @@ class LorebookListScreen extends ConsumerWidget {
                 title: 'Lorebooks',
                 leading: BackButton(onPressed: () => context.go('/tools')),
                 actions: [
+                  IconButton(
+                    icon: const Icon(Icons.settings_outlined, size: 20),
+                    tooltip: 'Global Settings',
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const LorebookGlobalSettingsScreen()),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.upload_file, size: 20),
+                    tooltip: 'Import ST Lorebook',
+                    onPressed: () => _importSTLorebook(context, ref),
+                  ),
                   IconButton(
                     icon: const Icon(Icons.search, size: 20),
                     tooltip: 'Embedding Settings',
@@ -108,6 +124,38 @@ class LorebookListScreen extends ConsumerWidget {
         ),
       );
     });
+  }
+
+  Future<void> _importSTLorebook(BuildContext context, WidgetRef ref) async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+      dialogTitle: 'Import SillyTavern Lorebook',
+    );
+    if (result == null || result.files.isEmpty) return;
+    final filePath = result.files.single.path;
+    if (filePath == null) return;
+
+    try {
+      final importResult = await importSTLorebookFromFile(filePath);
+      await ref.read(lorebooksProvider.notifier).addLorebook(importResult.lorebook);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Imported "${importResult.lorebook.name}" (${importResult.entryCount} entries)')),
+        );
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => LorebookEditorScreen(lorebookId: importResult.lorebook.id),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Import failed: $e')),
+        );
+      }
+    }
   }
 
   void _deleteLorebook(BuildContext context, WidgetRef ref, Lorebook lb) {
@@ -189,6 +237,11 @@ class _LorebookTile extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            IconButton(
+              icon: const Icon(Icons.link, size: 18),
+              tooltip: 'Connections',
+              onPressed: () => showLorebookConnections(context, lorebook.id),
+            ),
             Switch(value: lorebook.enabled, onChanged: (_) => onToggle(), activeColor: AppColors.accent),
             IconButton(icon: const Icon(Icons.delete_outline, size: 20), onPressed: onDelete),
           ],

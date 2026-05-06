@@ -1,0 +1,119 @@
+import 'dart:convert';
+import 'dart:io';
+
+import '../models/lorebook.dart';
+
+class STLorebookImportResult {
+  final Lorebook lorebook;
+  final int entryCount;
+  const STLorebookImportResult({required this.lorebook, required this.entryCount});
+}
+
+LorebookEntry _convertSTEntry(dynamic rawEntry, int index) {
+  final e = rawEntry as Map<String, dynamic>;
+
+  final rawKeys = e['keys'] ?? e['key'] ?? [];
+  final rawSecondary = e['secondary_keys'] ?? e['keysecondary'] ?? [];
+
+  List<String> parseKeys(dynamic v) {
+    if (v is List) return v.map((k) => k.toString().trim()).where((k) => k.isNotEmpty).toList();
+    if (v is String && v.isNotEmpty) return v.split(',').map((k) => k.trim()).where((k) => k.isNotEmpty).toList();
+    return [];
+  }
+
+  final stPosition = e['position'];
+  final glazeMeta = e['glazeMetadata'] as Map<String, dynamic>?;
+  final metaPosition = glazeMeta?['position'] as String?;
+
+  String resolvePosition() {
+    if (metaPosition == 'worldInfoBefore' ||
+        metaPosition == 'worldInfoAfter' ||
+        metaPosition == 'lorebooksMacro' ||
+        metaPosition == 'matchGlobal') {
+      return metaPosition!;
+    }
+    if (stPosition is int) {
+      return stPosition == 0 ? 'worldInfoBefore' : 'worldInfoAfter';
+    }
+    if (stPosition is String) {
+      if (['worldInfoBefore', 'worldInfoAfter', 'lorebooksMacro', 'matchGlobal'].contains(stPosition)) {
+        return stPosition;
+      }
+    }
+    return 'matchGlobal';
+  }
+
+  final rawFilter = e['characterFilter'];
+  LorebookCharacterFilter? charFilter;
+  if (rawFilter is List && rawFilter.isNotEmpty) {
+    charFilter = LorebookCharacterFilter(
+      names: rawFilter.map((n) => n.toString()).toList(),
+    );
+  } else if (rawFilter is String && rawFilter.isNotEmpty) {
+    charFilter = LorebookCharacterFilter(names: [rawFilter]);
+  }
+
+  return LorebookEntry(
+    id: (e['uid']?.toString()) ?? '${DateTime.now().millisecondsSinceEpoch}_$index',
+    comment: (e['comment'] as String?) ?? '',
+    enabled: e['enabled'] != false && e['disable'] != true,
+    constant: (e['constant'] as bool?) ?? false,
+    keys: parseKeys(rawKeys),
+    secondaryKeys: parseKeys(rawSecondary),
+    selectiveLogic: (e['selectiveLogic'] as int?) ?? 5,
+    content: (e['content'] as String?) ?? '',
+    position: resolvePosition(),
+    order: (e['order'] as int?) ?? 100,
+    scanDepth: e['scanDepth'] as int?,
+    caseSensitive: (e['caseSensitive'] as bool?) ?? false,
+    matchWholeWords: (e['matchWholeWords'] as bool?) ?? false,
+    probability: (e['probability'] as int?) ?? 100,
+    preventRecursion: (e['preventRecursion'] as bool?) ?? false,
+    sticky: (e['sticky'] as int?) ?? 0,
+    cooldown: (e['cooldown'] as int?) ?? 0,
+    delay: (e['delay'] as int?) ?? 0,
+    group: (e['group'] as String?) ?? '',
+    groupProminence: (e['groupProminence'] as int?) ?? 100,
+    characterFilter: charFilter,
+    ignoreBudget: (e['ignoreBudget'] as bool?) ?? false,
+    vectorSearch: false,
+    useKeywordSearch: true,
+  );
+}
+
+Future<STLorebookImportResult> importSTLorebookFromFile(String filePath, {String? nameOverride}) async {
+  final file = File(filePath);
+  final jsonString = await file.readAsString();
+  final json = jsonDecode(jsonString) as Map<String, dynamic>;
+  return importSTLorebook(json, nameOverride: nameOverride ?? file.uri.pathSegments.last);
+}
+
+STLorebookImportResult importSTLorebook(Map<String, dynamic> json, {String nameOverride = 'Imported'}) {
+  final entriesRaw = json['entries'] ?? [];
+
+  List<dynamic> normalizedEntries;
+  if (entriesRaw is List) {
+    normalizedEntries = entriesRaw;
+  } else if (entriesRaw is Map) {
+    normalizedEntries = entriesRaw.values.toList();
+  } else {
+    normalizedEntries = [];
+  }
+
+  final entries = <LorebookEntry>[];
+  for (int i = 0; i < normalizedEntries.length; i++) {
+    entries.add(_convertSTEntry(normalizedEntries[i], i));
+  }
+
+  final id = '${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${DateTime.now().microsecond.toRadixString(36)}';
+  final lb = Lorebook(
+    id: id,
+    name: (json['name'] as String?) ?? nameOverride.replaceAll('.json', ''),
+    enabled: true,
+    activationScope: 'global',
+    entries: entries,
+    updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+  );
+
+  return STLorebookImportResult(lorebook: lb, entryCount: entries.length);
+}

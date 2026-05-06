@@ -18,6 +18,7 @@ import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/message_list.dart';
+import 'widgets/tokenizer_sheet.dart';
 
 class ChatScreen extends ConsumerWidget {
   final String charId;
@@ -74,6 +75,10 @@ class ChatScreen extends ConsumerWidget {
                   _showPersonaPicker(context, ref);
                 case 'raw':
                   _showRawPrompt(context, ref);
+                case 'rawResponse':
+                  _showRawResponse(context, ref);
+                case 'tokenizer':
+                  showTokenizerSheet(context, charId);
                 case 'clear':
                   _confirmClearChat(context, ref);
               }
@@ -110,6 +115,27 @@ class ChatScreen extends ConsumerWidget {
                   ],
                 ),
               ),
+              const PopupMenuItem(
+                value: 'rawResponse',
+                child: Row(
+                  children: [
+                    Icon(Icons.output, size: 18),
+                    SizedBox(width: 8),
+                    Text('View Raw Response'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'tokenizer',
+                child: Row(
+                  children: [
+                    Icon(Icons.pie_chart_outline, size: 18),
+                    SizedBox(width: 8),
+                    Text('Context Usage'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
               const PopupMenuItem(
                 value: 'clear',
                 child: Row(
@@ -280,6 +306,53 @@ class ChatScreen extends ConsumerWidget {
           height: MediaQuery.of(context).size.height * 0.7,
           child: SelectableText(
             rawJson,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRawResponse(BuildContext context, WidgetRef ref) {
+    final chatState = ref.read(chatProvider(charId)).value;
+    final raw = chatState?.lastRawResponse;
+    if (raw == null || raw.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No response yet — generate something first')),
+      );
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Text('Raw Response'),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(Icons.copy),
+              tooltip: 'Copy',
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: raw));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Copied to clipboard')),
+                );
+              },
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.8,
+          height: MediaQuery.of(context).size.height * 0.7,
+          child: SelectableText(
+            raw,
             style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
           ),
         ),

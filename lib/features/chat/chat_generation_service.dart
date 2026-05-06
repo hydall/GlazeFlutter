@@ -140,6 +140,7 @@ class ChatGenerationService {
             text, reasoning, session,
             pendingSessionVars: pendingSessionVars,
             genTime: timeStr, tokens: tokenCount,
+            rawResponse: text,
           );
         },
         onError: (error) {
@@ -165,6 +166,7 @@ class ChatGenerationService {
     Map<String, String>? pendingSessionVars,
     String? genTime,
     int? tokens,
+    String? rawResponse,
   }) {
     final assistantMsg = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
@@ -184,7 +186,7 @@ class ChatGenerationService {
       sessionVars: sessionVars,
     );
     _ref.read(chatRepoProvider).put(finalSession);
-    return ChatState(session: finalSession);
+    return ChatState(session: finalSession, lastRawResponse: rawResponse);
   }
 
   Future<List<LorebookEntry>> _runVectorSearch(

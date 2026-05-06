@@ -27,6 +27,7 @@ dependencies:
   file_picker: ^11.0.2
   google_fonts: ^8.1.0
   flutter_svg: ^2.0.16
+  tiktoken: ^1.0.3
 
 dev_dependencies:
   flutter_test:

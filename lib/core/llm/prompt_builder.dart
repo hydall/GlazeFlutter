@@ -248,6 +248,7 @@ PromptResult _assembleMessages({
       var content = block.content.trim();
       if (content.isEmpty) continue;
       content = content.replaceAll('{{lorebooks}}', macroLoreContent);
+      if (content.trim().isEmpty) continue;
 
       if (preset.mergePrompts && block.role != 'assistant') {
         if (mergeBuffer != null) { mergeBuffer = '$mergeBuffer\n\n$content'; } else { mergeBuffer = content; mergeRole = preset.mergeRole; }
@@ -276,7 +277,7 @@ PromptResult _assembleMessages({
   for (final msg in messages) {
     if (msg.isHistory) {
       if (!historyInserted) { finalMessages.addAll(breakdown.trimmedHistory); historyInserted = true; }
-    } else {
+    } else if (msg.content.trim().isNotEmpty) {
       finalMessages.add(msg);
     }
   }
