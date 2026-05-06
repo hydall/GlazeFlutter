@@ -66,7 +66,8 @@ final routerProvider = Provider<GoRouter>(
                   ),
                   GoRoute(
                     path: 'presets',
-                    builder: (_, __) => const PresetListScreen(),
+                    builder: (_, __) =>
+                        const PresetListScreen(startExpanded: true),
                   ),
                   GoRoute(
                     path: 'regex',

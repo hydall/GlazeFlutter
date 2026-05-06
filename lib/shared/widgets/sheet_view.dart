@@ -48,6 +48,7 @@ class SheetView extends StatefulWidget {
   final FloatingActionButton? floatingActionButton;
   final bool showHandle;
   final EdgeInsetsGeometry? bodyPadding;
+  final bool startExpanded;
 
   const SheetView({
     super.key,
@@ -65,6 +66,7 @@ class SheetView extends StatefulWidget {
     this.floatingActionButton,
     this.showHandle = true,
     this.bodyPadding,
+    this.startExpanded = false,
   });
 
   @override
@@ -101,7 +103,9 @@ class _SheetViewState extends State<SheetView>
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_heightInit) {
-      _currentHeight = _collapsed(context);
+      _currentHeight =
+          widget.startExpanded ? _full(context) : _collapsed(context);
+      _expanded = widget.startExpanded;
       _heightInit = true;
     }
   }

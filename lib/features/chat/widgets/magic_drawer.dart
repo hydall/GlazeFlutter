@@ -17,6 +17,7 @@ import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../../image_gen/widgets/image_gen_sheet.dart';
 import '../chat_provider.dart';
+import '../../presets/preset_list_screen.dart';
 import 'lorebook_coverage_sheet.dart';
 import 'magic_drawer_models.dart';
 import 'magic_drawer_widgets.dart';
@@ -409,7 +410,16 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         return;
       case 'presets':
         Navigator.of(context).pop();
-        if (mounted) context.go('/tools/presets');
+        if (mounted) {
+          showModalBottomSheet(
+            context: context,
+            useRootNavigator: true,
+            backgroundColor: Colors.transparent,
+            barrierColor: Colors.black54,
+            isScrollControlled: true,
+            builder: (_) => const PresetListScreen(),
+          );
+        }
         return;
       case 'preview':
         showPromptPreviewScreen(context, widget.charId);
