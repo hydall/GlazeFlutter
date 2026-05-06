@@ -24,8 +24,9 @@ import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../../image_gen/widgets/image_gen_sheet.dart';
 import '../chat_provider.dart';
-import 'chat_dialogs.dart';
+import 'lorebook_coverage_sheet.dart';
 import 'memory_books_sheet.dart';
+import 'prompt_preview_screen.dart';
 import 'tokenizer_sheet.dart';
 
 class MagicDrawerPanel extends ConsumerStatefulWidget {
@@ -96,6 +97,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       id: 'preview',
       label: 'Request Preview',
       icon: Icons.visibility_outlined,
+    ),
+    _MagicDrawerItemDef(
+      id: 'coverage',
+      label: 'Coverage',
+      icon: Icons.search,
     ),
     _MagicDrawerItemDef(
       id: 'personas',
@@ -335,6 +341,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
               ? '${_stats.activePreset!.name} • ${_stats.presetTokens} tokens'
               : _stats.activePreset!.name,
       'preview' => _stats.promptTokens > 0 ? '${_stats.promptTokens} tokens' : null,
+      'coverage' => _stats.lorebookEntryCount > 0 ? '${_stats.lorebookEntryCount} entries' : null,
       'personas' => _stats.activePersona?.name ?? 'Default',
       'image-gen' => _stats.imageGenEnabled ? 'On' : 'Off',
       _ => null,
@@ -434,7 +441,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         return;
       case 'preview':
         Navigator.of(context).pop();
-        showRawPromptDialog(context, ref, widget.charId);
+        showPromptPreviewScreen(context, widget.charId);
+        return;
+      case 'coverage':
+        Navigator.of(context).pop();
+        showLorebookCoverageSheet(context, ref, widget.charId);
         return;
       case 'personas':
         Navigator.of(context).pop();

@@ -23,6 +23,8 @@ import 'widgets/chat_dialogs.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/memory_books_sheet.dart';
 import 'widgets/message_list.dart';
+import 'widgets/lorebook_coverage_sheet.dart';
+import 'widgets/prompt_preview_screen.dart';
 import 'widgets/session_lifecycle_tracker.dart';
 import 'widgets/tokenizer_sheet.dart';
 
@@ -101,6 +103,10 @@ class ChatScreen extends ConsumerWidget {
                     showRawResponseDialog(context, ref, charId);
                   case 'tokenizer':
                     showTokenizerSheet(context, charId);
+                  case 'coverage':
+                    showLorebookCoverageSheet(context, ref, charId);
+                  case 'preview':
+                    showPromptPreviewScreen(context, charId);
                   case 'clear':
                     confirmClearChatDialog(context, ref, charId);
                 }
@@ -167,6 +173,26 @@ class ChatScreen extends ConsumerWidget {
                   ),
                 ),
                 const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'preview',
+                  child: Row(
+                    children: [
+                      Icon(Icons.visibility, size: 18),
+                      SizedBox(width: 8),
+                      Text('Prompt Preview'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'coverage',
+                  child: Row(
+                    children: [
+                      Icon(Icons.search, size: 18),
+                      SizedBox(width: 8),
+                      Text('Lorebook Coverage'),
+                    ],
+                  ),
+                ),
                 const PopupMenuItem(
                   value: 'raw',
                   child: Row(

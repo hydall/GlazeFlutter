@@ -1,0 +1,434 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/llm/history_assembler.dart';
+import '../../../core/llm/memory_injection_service.dart';
+import '../../../core/llm/prompt_builder.dart';
+import '../../../core/llm/prompt_isolate.dart';
+import '../../../core/llm/summary_service.dart';
+import '../../../core/llm/tokenizer.dart';
+import '../../../core/models/api_config.dart';
+import '../../../core/models/persona.dart';
+import '../../../core/state/active_selection_provider.dart';
+import '../../../core/state/db_provider.dart';
+import '../../../core/state/lorebook_provider.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_scaffold.dart';
+import '../../../shared/widgets/glaze_toast.dart';
+import '../chat_provider.dart';
+
+class PromptPreviewScreen extends ConsumerStatefulWidget {
+  final String charId;
+  const PromptPreviewScreen({super.key, required this.charId});
+
+  @override
+  ConsumerState<PromptPreviewScreen> createState() => _PromptPreviewScreenState();
+}
+
+class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
+  PromptResult? _result;
+  ApiConfig? _apiConfig;
+  bool _loading = true;
+  _SectionFilter _filter = _SectionFilter.all;
+  bool _showTokens = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _build();
+  }
+
+  Future<void> _build() async {
+    setState(() => _loading = true);
+
+    try {
+      final chatState = ref.read(chatProvider(widget.charId)).value;
+      final session = chatState?.session;
+      if (session == null) { setState(() => _loading = false); return; }
+
+      final charRepo = ref.read(characterRepoProvider);
+      final presetRepo = ref.read(presetRepoProvider);
+      final apiConfigRepo = ref.read(apiConfigRepoProvider);
+
+      final character = await charRepo.getById(widget.charId);
+      if (character == null) { setState(() => _loading = false); return; }
+
+      final apiConfigs = await apiConfigRepo.getAll();
+      if (apiConfigs.isEmpty) { setState(() => _loading = false); return; }
+      _apiConfig = apiConfigs.first;
+
+      final activePresetId = ref.read(activePresetIdProvider);
+      final effectivePersona = await _resolvePersona();
+
+      final presets = await presetRepo.getAll();
+      final preset = activePresetId != null
+          ? presets.where((p) => p.id == activePresetId).firstOrNull
+          : (presets.isNotEmpty ? presets.first : null);
+
+      final summaryService = ref.read(summaryServiceProvider);
+      final summaryContent = await summaryService.getSummary(session.id);
+
+      final memoryService = ref.read(memoryInjectionServiceProvider);
+      final historyText = session.messages
+          .where((m) => m.role == 'user' || m.role == 'assistant')
+          .map((m) => m.content)
+          .join('\n');
+      final memoryResult = await memoryService.buildInjection(
+        sessionId: session.id,
+        historyText: historyText,
+        messageCount: session.messages.length,
+      );
+
+      final payload = PromptPayload(
+        character: character,
+        persona: effectivePersona,
+        preset: preset,
+        history: session.messages,
+        apiConfig: _apiConfig!,
+        sessionVars: session.sessionVars,
+        globalVars: ref.read(globalVarsProvider),
+        lorebooks: await ref.read(lorebookRepoProvider).getAll(),
+        lorebookSettings: ref.read(lorebookSettingsProvider),
+        lorebookActivations: ref.read(lorebookActivationsProvider),
+        summaryContent: summaryContent,
+        memoryContent: memoryResult.content.isNotEmpty ? memoryResult.content : null,
+        memoryInjectionTarget: memoryResult.injectionTarget,
+      );
+
+      final result = await buildPromptInIsolate(payload);
+      if (mounted) setState(() { _result = result; _loading = false; });
+    } catch (e) {
+      debugPrint('Prompt preview error: $e');
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<Persona?> _resolvePersona() async {
+    final personaRepo = ref.read(personaRepoProvider);
+    final personas = await personaRepo.getAll();
+    final activePersonaId = ref.read(activePersonaIdProvider);
+    return activePersonaId != null
+        ? personas.where((p) => p.id == activePersonaId).firstOrNull
+        : (personas.isNotEmpty ? personas.first : null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Column(
+        children: [
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: GlazeAppBar(
+                title: 'Prompt Preview',
+                leading: BackButton(onPressed: () => Navigator.pop(context)),
+                actions: [
+                  IconButton(
+                    icon: Icon(_showTokens ? Icons.numbers : Icons.numbers_outlined, size: 20),
+                    tooltip: 'Toggle token counts',
+                    onPressed: () => setState(() => _showTokens = !_showTokens),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.copy, size: 20),
+                    tooltip: 'Copy as JSON',
+                    onPressed: _copyJson,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_result != null && _apiConfig != null) _SummaryBar(result: _result!, contextSize: _apiConfig!.contextSize),
+          _FilterBar(current: _filter, onSelected: (f) => setState(() => _filter = f)),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _result == null
+                    ? Center(child: Text('No data', style: TextStyle(color: AppColors.textSecondary)))
+                    : _MessageList(
+                        messages: _filteredMessages,
+                        showTokens: _showTokens,
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<PromptMessage> get _filteredMessages {
+    final msgs = _result?.messages ?? [];
+    return switch (_filter) {
+      _SectionFilter.all => msgs,
+      _SectionFilter.system => msgs.where((m) => m.role == 'system' && !m.isHistory && !m.isLorebook).toList(),
+      _SectionFilter.lorebook => msgs.where((m) => m.isLorebook).toList(),
+      _SectionFilter.history => msgs.where((m) => m.isHistory).toList(),
+      _SectionFilter.depth => msgs.where((m) => m.isDepth).toList(),
+    };
+  }
+
+  void _copyJson() {
+    if (_result == null) return;
+    final json = _result!.messages.map((m) {
+      final map = <String, dynamic>{'role': m.role, 'content': m.content};
+      if (m.isLorebook) map['lorebook'] = true;
+      if (m.blockName != null) map['block'] = m.blockName;
+      if (m.isDepth) map['depth'] = m.depth;
+      return map;
+    }).toList();
+    Clipboard.setData(ClipboardData(text: json.toString()));
+    GlazeToast.show(context, 'Copied to clipboard');
+  }
+}
+
+class _SummaryBar extends StatelessWidget {
+  final PromptResult result;
+  final int contextSize;
+  const _SummaryBar({required this.result, required this.contextSize});
+
+  @override
+  Widget build(BuildContext context) {
+    final total = result.breakdown.totalTokens;
+    final pct = contextSize > 0 ? (total / contextSize * 100).clamp(0, 100) : 0.0;
+    final barColor = pct > 90 ? Colors.red : pct > 75 ? Colors.orange : Colors.green;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('$total', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: barColor)),
+              Text(' / $contextSize tokens', style: TextStyle(fontSize: 14, color: AppColors.textSecondary)),
+              const Spacer(),
+              Text('${pct.toStringAsFixed(1)}%', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: barColor)),
+              const SizedBox(width: 8),
+              Text('${result.messages.length} msgs', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: pct / 100,
+              backgroundColor: Colors.white10,
+              color: barColor,
+              minHeight: 6,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+enum _SectionFilter { all, system, lorebook, history, depth }
+
+class _FilterBar extends StatelessWidget {
+  final _SectionFilter current;
+  final ValueChanged<_SectionFilter> onSelected;
+  const _FilterBar({required this.current, required this.onSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: _SectionFilter.values.map((f) {
+            final selected = f == current;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 3),
+              child: ChoiceChip(
+                label: Text(_labelFor(f)),
+                selected: selected,
+                onSelected: (_) => onSelected(f),
+                labelStyle: TextStyle(fontSize: 12, color: selected ? AppColors.accent : AppColors.textSecondary),
+                selectedColor: AppColors.accent.withValues(alpha: 0.15),
+                side: BorderSide(color: selected ? AppColors.accent : Colors.white12),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  String _labelFor(_SectionFilter f) => switch (f) {
+    _SectionFilter.all => 'All',
+    _SectionFilter.system => 'System',
+    _SectionFilter.lorebook => 'Lorebook',
+    _SectionFilter.history => 'History',
+    _SectionFilter.depth => 'Depth',
+  };
+}
+
+class _MessageList extends StatelessWidget {
+  final List<PromptMessage> messages;
+  final bool showTokens;
+  const _MessageList({required this.messages, required this.showTokens});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+      itemCount: messages.length,
+      itemBuilder: (_, i) => _PromptMessageCard(message: messages[i], index: i, showTokens: showTokens),
+    );
+  }
+}
+
+class _PromptMessageCard extends StatefulWidget {
+  final PromptMessage message;
+  final int index;
+  final bool showTokens;
+  const _PromptMessageCard({required this.message, required this.index, required this.showTokens});
+
+  @override
+  State<_PromptMessageCard> createState() => _PromptMessageCardState();
+}
+
+class _PromptMessageCardState extends State<_PromptMessageCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final msg = widget.message;
+    final scheme = _schemeFor(msg);
+    final tokenCount = widget.showTokens ? estimateTokens(msg.content) : 0;
+
+    return Card(
+      color: scheme.bgColor,
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: scheme.accentColor.withValues(alpha: 0.2)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: Padding(
+          padding: const EdgeInsets.all(10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(color: scheme.accentColor, shape: BoxShape.circle),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(scheme.label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: scheme.accentColor)),
+                  if (msg.blockName != null) ...[
+                    const SizedBox(width: 6),
+                    Flexible(child: Text(msg.blockName!, style: TextStyle(fontSize: 11, color: AppColors.textSecondary), overflow: TextOverflow.ellipsis)),
+                  ],
+                  const Spacer(),
+                  if (widget.showTokens) Text('$tokenCount t', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                  if (msg.isDepth && msg.depth != null) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                      child: Text('d${msg.depth}', style: const TextStyle(fontSize: 9, color: Colors.orange)),
+                    ),
+                  ],
+                  Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 16, color: AppColors.textSecondary),
+                ],
+              ),
+              if (!_expanded) ...[
+                const SizedBox(height: 6),
+                Text(
+                  msg.content,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary.withValues(alpha: 0.8)),
+                ),
+              ],
+              if (_expanded) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.04),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  constraints: const BoxConstraints(maxHeight: 300),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      msg.content,
+                      style: const TextStyle(fontSize: 12, color: AppColors.textPrimary, fontFamily: 'monospace'),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+_SectionScheme _schemeFor(PromptMessage msg) {
+  if (msg.isLorebook) {
+    return _SectionScheme(
+      label: 'Lorebook',
+      accentColor: Colors.cyan,
+      bgColor: Colors.cyan.withValues(alpha: 0.04),
+    );
+  }
+  if (msg.isDepth) {
+    return _SectionScheme(
+      label: 'Depth Block',
+      accentColor: Colors.orange,
+      bgColor: Colors.orange.withValues(alpha: 0.04),
+    );
+  }
+  if (msg.isHistory) {
+    return _SectionScheme(
+      label: msg.role == 'user' ? 'User' : 'Assistant',
+      accentColor: msg.role == 'user' ? Colors.blue : Colors.green,
+      bgColor: (msg.role == 'user' ? Colors.blue : Colors.green).withValues(alpha: 0.04),
+    );
+  }
+  if (msg.blockName == 'Memory Book') {
+    return _SectionScheme(
+      label: 'Memory Book',
+      accentColor: Colors.amber,
+      bgColor: Colors.amber.withValues(alpha: 0.04),
+    );
+  }
+  if (msg.blockName == 'Summary') {
+    return _SectionScheme(
+      label: 'Summary',
+      accentColor: Colors.purple,
+      bgColor: Colors.purple.withValues(alpha: 0.04),
+    );
+  }
+  return _SectionScheme(
+    label: msg.blockName ?? msg.role,
+    accentColor: AppColors.accent,
+    bgColor: AppColors.accent.withValues(alpha: 0.04),
+  );
+}
+
+class _SectionScheme {
+  final String label;
+  final Color accentColor;
+  final Color bgColor;
+  const _SectionScheme({required this.label, required this.accentColor, required this.bgColor});
+}
+
+void showPromptPreviewScreen(BuildContext context, String charId) {
+  Navigator.of(context).push(
+    MaterialPageRoute(builder: (_) => PromptPreviewScreen(charId: charId)),
+  );
+}
