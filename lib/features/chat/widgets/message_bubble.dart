@@ -12,6 +12,7 @@ import '../../../core/state/character_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
 import '../../settings/app_settings_provider.dart';
+import '../chat_provider.dart';
 import 'message_actions.dart';
 
 class MessageBubble extends ConsumerWidget {
@@ -30,6 +31,8 @@ class MessageBubble extends ConsumerWidget {
   final bool isLast;
   final bool isGenerating;
   final String charId;
+  final List<String> swipes;
+  final int swipeId;
 
   const MessageBubble({
     super.key,
@@ -48,6 +51,8 @@ class MessageBubble extends ConsumerWidget {
     required this.isLast,
     required this.isGenerating,
     required this.charId,
+    this.swipes = const [],
+    this.swipeId = 0,
   });
 
   @override
@@ -132,6 +137,14 @@ class MessageBubble extends ConsumerWidget {
                   messageIndex: messageIndex, isUser: isUser, isTyping: isTyping,
                   isError: isError, isLast: isLast, isGenerating: isGenerating, isHidden: isHidden,
                 ),
+                swipeCount: swipes.length,
+                swipeId: swipeId,
+                onSwipeLeft: swipeId > 0
+                    ? () => ref.read(chatProvider(charId).notifier).setSwipe(messageIndex, swipeId - 1)
+                    : null,
+                onSwipeRight: swipeId < swipes.length - 1
+                    ? () => ref.read(chatProvider(charId).notifier).setSwipe(messageIndex, swipeId + 1)
+                    : null,
               ),
             ],
           ],
@@ -235,6 +248,10 @@ class _MetadataRow extends StatelessWidget {
   final bool isUser;
   final ColorScheme scheme;
   final VoidCallback onMenuTap;
+  final int swipeCount;
+  final int swipeId;
+  final VoidCallback? onSwipeLeft;
+  final VoidCallback? onSwipeRight;
 
   const _MetadataRow({
     required this.genTime,
@@ -244,12 +261,22 @@ class _MetadataRow extends StatelessWidget {
     required this.isUser,
     required this.scheme,
     required this.onMenuTap,
+    this.swipeCount = 1,
+    this.swipeId = 0,
+    this.onSwipeLeft,
+    this.onSwipeRight,
   });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
+        if (swipeCount > 1) ...[
+          _swipeBtn(Icons.chevron_left, onSwipeLeft),
+          Text('${swipeId + 1}/$swipeCount', style: TextStyle(fontSize: 11, color: textColor)),
+          _swipeBtn(Icons.chevron_right, onSwipeRight),
+          const SizedBox(width: 6),
+        ],
         if (genTime != null) ...[
           Icon(Icons.access_time, size: 12, color: textColor),
           const SizedBox(width: 4),
@@ -275,6 +302,17 @@ class _MetadataRow extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _swipeBtn(IconData icon, VoidCallback? onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Icon(icon, size: 18, color: onTap != null ? textColor : textColor.withValues(alpha: 0.3)),
+      ),
     );
   }
 }

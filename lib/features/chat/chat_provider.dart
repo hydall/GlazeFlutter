@@ -81,11 +81,22 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final current = state.value;
     if (current == null || current.session == null || current.isGenerating) return;
 
-    final trimmed = List<ChatMessage>.from(current.messages);
-    if (trimmed.last.role == 'assistant') trimmed.removeLast();
+    final lastIdx = current.messages.length - 1;
+    if (lastIdx < 0) return;
+
+    final lastMsg = current.messages[lastIdx];
+    List<ChatMessage> baseMessages;
+    ChatMessage? prevAssistant;
+
+    if (lastMsg.role == 'assistant') {
+      prevAssistant = lastMsg;
+      baseMessages = current.messages.sublist(0, lastIdx);
+    } else {
+      baseMessages = List<ChatMessage>.from(current.messages);
+    }
 
     final trimmedSession = current.session!.copyWith(
-      messages: trimmed,
+      messages: baseMessages,
       updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     await ref.read(chatRepoProvider).put(trimmedSession);
@@ -97,6 +108,13 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       charId: arg,
       currentState: current,
       onStateUpdate: (s) => state = AsyncData(s),
+      previousSwipes: prevAssistant != null
+          ? (prevAssistant.swipes.isNotEmpty ? prevAssistant.swipes : [prevAssistant.content])
+          : null,
+      previousSwipeId: prevAssistant?.swipeId ?? 0,
+      previousReasoning: prevAssistant?.reasoning,
+      previousGenTime: prevAssistant?.genTime,
+      previousTokens: prevAssistant?.tokens,
     );
     state = AsyncData(result);
   }
@@ -210,6 +228,30 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     await ref.read(chatRepoProvider).put(newSession);
+    state = AsyncData(ChatState(session: newSession));
+  }
+
+  void setSwipe(int messageIndex, int swipeId) {
+    final current = state.value;
+    if (current == null || current.session == null) return;
+    if (messageIndex < 0 || messageIndex >= current.messages.length) return;
+
+    final msg = current.messages[messageIndex];
+    if (msg.swipes.isEmpty || swipeId < 0 || swipeId >= msg.swipes.length) return;
+
+    final updated = msg.copyWith(
+      swipeId: swipeId,
+      content: msg.swipes[swipeId],
+    );
+
+    final newMessages = List<ChatMessage>.from(current.messages);
+    newMessages[messageIndex] = updated;
+
+    final newSession = current.session!.copyWith(
+      messages: newMessages,
+      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    );
+    ref.read(chatRepoProvider).put(newSession);
     state = AsyncData(ChatState(session: newSession));
   }
 

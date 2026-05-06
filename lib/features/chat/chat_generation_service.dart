@@ -25,6 +25,11 @@ class ChatGenerationService {
     required String charId,
     required ChatState currentState,
     required void Function(ChatState) onStateUpdate,
+    List<String>? previousSwipes,
+    int previousSwipeId = 0,
+    String? previousReasoning,
+    String? previousGenTime,
+    int? previousTokens,
   }) async {
     try {
       final charRepo = _ref.read(characterRepoProvider);
@@ -141,6 +146,11 @@ class ChatGenerationService {
             pendingSessionVars: pendingSessionVars,
             genTime: timeStr, tokens: tokenCount,
             rawResponse: text,
+            previousSwipes: previousSwipes,
+            previousSwipeId: previousSwipeId,
+            previousReasoning: previousReasoning,
+            previousGenTime: previousGenTime,
+            previousTokens: previousTokens,
           );
         },
         onError: (error) {
@@ -167,7 +177,23 @@ class ChatGenerationService {
     String? genTime,
     int? tokens,
     String? rawResponse,
+    List<String>? previousSwipes,
+    int previousSwipeId = 0,
+    String? previousReasoning,
+    String? previousGenTime,
+    int? previousTokens,
   }) {
+    List<String> swipes;
+    int swipeId;
+
+    if (previousSwipes != null && previousSwipes.isNotEmpty) {
+      swipes = [...previousSwipes, text];
+      swipeId = swipes.length - 1;
+    } else {
+      swipes = [text];
+      swipeId = 0;
+    }
+
     final assistantMsg = ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
       role: 'assistant',
@@ -176,6 +202,8 @@ class ChatGenerationService {
       genTime: genTime,
       tokens: tokens,
       timestamp: DateTime.now().millisecondsSinceEpoch,
+      swipes: swipes,
+      swipeId: swipeId,
     );
     final finalMessages = [...currentSession.messages, assistantMsg];
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;

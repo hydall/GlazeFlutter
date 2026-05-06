@@ -73,6 +73,8 @@ class _MessageListState extends State<MessageList> {
             isLast: index == widget.messages.length - 1,
             isGenerating: widget.isGenerating,
             charId: widget.charId,
+            swipes: msg.swipes,
+            swipeId: msg.swipeId,
           );
         }
 
