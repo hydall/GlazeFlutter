@@ -1,12 +1,17 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/models/character.dart';
+import '../../core/services/character_exporter.dart';
 import '../../core/state/db_provider.dart';
+import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 
 class CharacterEditorScreen extends ConsumerStatefulWidget {
@@ -95,6 +100,14 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
       title: 'Edit Character',
       onBack: () => context.go('/character/${widget.charId}'),
       actions: [
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.share_outlined, color: AppColors.accent),
+          onSelected: (value) => _export(value),
+          itemBuilder: (_) => [
+            const PopupMenuItem(value: 'png', child: Text('Export as PNG')),
+            const PopupMenuItem(value: 'json', child: Text('Export as JSON')),
+          ],
+        ),
         if (_saving)
           const Padding(
             padding: EdgeInsets.all(16),
@@ -331,6 +344,124 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
       if (mounted) setState(() => _saving = false);
     }
   }
+
+  Future<void> _export(String format) async {
+    final char = _original;
+    if (char == null) return;
+
+    try {
+      final desktop = Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '.';
+      final outputDir = p.join(desktop, 'Desktop');
+
+      if (format == 'png') {
+        Uint8List? avatarBytes;
+        if (char.avatarPath != null && File(char.avatarPath!).existsSync()) {
+          avatarBytes = await File(char.avatarPath!).readAsBytes();
+        } else {
+          avatarBytes = _generatePlaceholderAvatar(char.name);
+        }
+
+        final result = await exportCharacterAsPng(
+          character: char,
+          avatarBytes: avatarBytes,
+          outputDir: outputDir,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Exported PNG to ${result.filePath}')),
+          );
+        }
+      } else {
+        final result = await exportCharacterAsJson(
+          character: char,
+          outputDir: outputDir,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Exported JSON to ${result.filePath}')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    }
+  }
+
+  Uint8List _generatePlaceholderAvatar(String name) {
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
+    final width = 400, height = 600;
+
+    final pngHeader = <int>[
+      0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+    ];
+
+    final ihdrData = ByteData(13);
+    ihdrData.setUint32(0, width, Endian.big);
+    ihdrData.setUint32(4, height, Endian.big);
+    ihdrData.setUint8(8, 8);
+    ihdrData.setUint8(9, 2);
+    ihdrData.setUint8(10, 0);
+    ihdrData.setUint8(11, 0);
+    ihdrData.setUint8(12, 0);
+
+    final ihdrChunk = _buildPngChunk('IHDR', ihdrData.buffer.asUint8List());
+
+    final rawRow = Uint8List(1 + width * 3);
+    for (int x = 0; x < width; x++) {
+      rawRow[1 + x * 3] = 0x40;
+      rawRow[1 + x * 3 + 1] = 0xCC;
+      rawRow[1 + x * 3 + 2] = 0xFF;
+    }
+
+    final rawData = Uint8List(height * rawRow.length);
+    for (int y = 0; y < height; y++) {
+      rawData.setRange(y * rawRow.length, (y + 1) * rawRow.length, rawRow);
+    }
+
+    final iendChunk = _buildPngChunk('IEND', Uint8List(0));
+
+    final totalLen = pngHeader.length + ihdrChunk.length + iendChunk.length + 100;
+    final result = BytesBuilder();
+    result.add(pngHeader);
+    result.add(ihdrChunk);
+    result.add(iendChunk);
+    return result.toBytes();
+  }
+
+  Uint8List _buildPngChunk(String type, Uint8List data) {
+    final typeBytes = Uint8List.fromList(utf8.encode(type));
+    final chunk = ByteData(4 + 4 + data.length + 4);
+    chunk.setUint32(0, data.length, Endian.big);
+    for (int i = 0; i < 4; i++) chunk.setUint8(4 + i, typeBytes[i]);
+    for (int i = 0; i < data.length; i++) chunk.setUint8(8 + i, data[i]);
+
+    final crcInput = Uint8List(4 + data.length);
+    for (int i = 0; i < 4; i++) crcInput[i] = typeBytes[i];
+    crcInput.setRange(4, crcInput.length, data);
+    final crc = _crc32(crcInput);
+    chunk.setUint32(8 + data.length, crc, Endian.big);
+
+    return chunk.buffer.asUint8List();
+  }
+}
+
+int _crc32(Uint8List data) {
+  int crc = 0xFFFFFFFF;
+  for (int i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (int j = 0; j < 8; j++) {
+      if ((crc & 1) != 0) {
+        crc = (crc >> 1) ^ 0xEDB88320;
+      } else {
+        crc >>= 1;
+      }
+    }
+  }
+  return (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF;
 }
 
 class _SectionHeader extends StatelessWidget {

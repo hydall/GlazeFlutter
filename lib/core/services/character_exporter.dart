@@ -1,0 +1,134 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:path/path.dart' as p;
+
+import '../models/character.dart';
+
+class PngExportResult {
+  final String filePath;
+  PngExportResult({required this.filePath});
+}
+
+Future<PngExportResult> exportCharacterAsPng({
+  required Character character,
+  required Uint8List avatarBytes,
+  required String outputDir,
+  bool includeCharacterBook = false,
+  Map<String, dynamic>? characterBookData,
+}) async {
+  final cardData = _buildV2Data(character, characterBookData: includeCharacterBook ? characterBookData : null);
+  final jsonStr = jsonEncode(cardData);
+  final base64Text = base64Encode(utf8.encode(jsonStr));
+
+  final keyword = 'chara';
+  final keywordBytes = Uint8List.fromList(utf8.encode(keyword));
+  final textBytes = Uint8List.fromList(utf8.encode(base64Text));
+
+  final chunkData = Uint8List(keywordBytes.length + 1 + textBytes.length);
+  chunkData.setRange(0, keywordBytes.length, keywordBytes);
+  chunkData[keywordBytes.length] = 0;
+  chunkData.setRange(keywordBytes.length + 1, chunkData.length, textBytes);
+
+  final chunkTypeBytes = Uint8List.fromList(utf8.encode('tEXt'));
+  final crcInput = Uint8List(4 + chunkData.length);
+  crcInput.setRange(0, 4, chunkTypeBytes);
+  crcInput.setRange(4, crcInput.length, chunkData);
+  final crcValue = _crc32(crcInput);
+
+  final chunkFull = ByteData(4 + 4 + chunkData.length + 4);
+  chunkFull.setUint32(0, chunkData.length, Endian.big);
+  chunkFull.setUint8List(4, chunkTypeBytes);
+  chunkFull.setUint8List(8, chunkData);
+  chunkFull.setUint32(8 + chunkData.length, crcValue, Endian.big);
+
+  final insertPos = _findIhdrEnd(avatarBytes);
+  final resultPng = Uint8List(avatarBytes.length + chunkFull.lengthInBytes);
+  resultPng.setRange(0, insertPos, avatarBytes);
+  resultPng.setRange(insertPos, insertPos + chunkFull.lengthInBytes, chunkFull.buffer.asUint8List());
+  resultPng.setRange(insertPos + chunkFull.lengthInBytes, resultPng.length, avatarBytes.sublist(insertPos));
+
+  final safeName = (character.name.isEmpty ? 'character' : character.name)
+      .replaceAll(RegExp(r'[/\\?%*:|"<>\.]'), '-')
+      .trim();
+  final filePath = p.join(outputDir, '$safeName.png');
+  await File(filePath).writeAsBytes(resultPng);
+
+  return PngExportResult(filePath: filePath);
+}
+
+Future<PngExportResult> exportCharacterAsJson({
+  required Character character,
+  required String outputDir,
+  bool includeCharacterBook = false,
+  Map<String, dynamic>? characterBookData,
+}) async {
+  final cardData = _buildV2Data(character, characterBookData: includeCharacterBook ? characterBookData : null);
+  final jsonStr = const JsonEncoder.withIndent('  ').convert(cardData);
+
+  final safeName = (character.name.isEmpty ? 'character' : character.name)
+      .replaceAll(RegExp(r'[/\\?%*:|"<>\.]'), '-')
+      .trim();
+  final filePath = p.join(outputDir, '$safeName.json');
+  await File(filePath).writeAsString(jsonStr);
+
+  return PngExportResult(filePath: filePath);
+}
+
+Map<String, dynamic> _buildV2Data(Character character, {Map<String, dynamic>? characterBookData}) {
+  final data = <String, dynamic>{
+    'name': character.name,
+    'description': character.description ?? '',
+    'personality': character.personality ?? '',
+    'scenario': character.scenario ?? '',
+    'first_mes': character.firstMes ?? '',
+    'mes_example': character.mesExample ?? '',
+    'system_prompt': character.systemPrompt ?? '',
+    'post_history_instructions': character.postHistoryInstructions ?? '',
+    'creator': character.creator ?? '',
+    'creator_notes': character.creatorNotes ?? '',
+    'tags': character.tags,
+    'alternate_greetings': character.alternateGreetings,
+  };
+
+  if (characterBookData != null) {
+    data['character_book'] = characterBookData;
+  }
+
+  return {
+    'spec': 'chara_card_v2',
+    'spec_version': '2.0',
+    'data': data,
+  };
+}
+
+int _findIhdrEnd(Uint8List pngBytes) {
+  if (pngBytes.length < 33) return 8;
+  final data = ByteData.sublistView(pngBytes);
+  final ihdrLen = data.getUint32(8, Endian.big);
+  return 8 + 4 + 4 + ihdrLen + 4;
+}
+
+int _crc32(Uint8List data) {
+  int crc = 0xFFFFFFFF;
+  for (int i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (int j = 0; j < 8; j++) {
+      if ((crc & 1) != 0) {
+        crc = (crc >> 1) ^ 0xEDB88320;
+      } else {
+        crc >>= 1;
+      }
+    }
+  }
+  return (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF;
+}
+
+extension on ByteData {
+  void setUint8List(int offset, Uint8List data) {
+    for (int i = 0; i < data.length; i++) {
+      setUint8(offset + i, data[i]);
+    }
+  }
+}
