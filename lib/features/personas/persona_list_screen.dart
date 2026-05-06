@@ -107,14 +107,19 @@ class _PersonaTile extends ConsumerWidget {
         leading: CircleAvatar(
           radius: 24,
           backgroundColor: AppColors.accent.withValues(alpha: 0.18),
-          child: Text(
-            persona.name.isNotEmpty ? persona.name[0].toUpperCase() : '?',
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-            ),
-          ),
+          backgroundImage: persona.avatarPath != null
+              ? FileImage(File(persona.avatarPath!))
+              : null,
+          child: persona.avatarPath == null
+              ? Text(
+                  persona.name.isNotEmpty ? persona.name[0].toUpperCase() : '?',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                )
+              : null,
         ),
         title: Text(persona.name),
         subtitle: persona.prompt != null && persona.prompt!.isNotEmpty

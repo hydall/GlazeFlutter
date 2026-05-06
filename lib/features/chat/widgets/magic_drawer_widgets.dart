@@ -136,7 +136,6 @@ class _MagicCardState extends State<MagicCard> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                constraints: const BoxConstraints.expand(),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(
                     alpha: _pressed || hovered ? 0.08 : 0.04,
@@ -151,7 +150,6 @@ class _MagicCardState extends State<MagicCard> {
                   clipBehavior: Clip.none,
                   children: [
                     Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
                           width: 28,
@@ -170,7 +168,7 @@ class _MagicCardState extends State<MagicCard> {
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
                                 item.def.label,
@@ -255,10 +253,9 @@ class AddMagicCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            constraints: const BoxConstraints.expand(),
-            decoration: BoxDecoration(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.04),
               border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
             ),

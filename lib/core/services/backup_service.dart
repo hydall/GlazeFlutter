@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../db/app_db.dart';
+import '../models/lorebook.dart';
 import '../models/preset.dart';
 import 'image_storage_service.dart';
 import 'preset_defaults.dart';
@@ -310,23 +311,113 @@ class BackupService {
     if (lorebooks == null) return;
 
     for (final l in lorebooks) {
-      final entry = l as Map<String, dynamic>;
+      final lbJson = l as Map<String, dynamic>;
+      final rawEntries = lbJson['entries'];
+      final mappedEntries = <Map<String, dynamic>>[];
+
+      if (rawEntries is List) {
+        for (final e in rawEntries) {
+          if (e is Map<String, dynamic>) mappedEntries.add(_mapJsLorebookEntry(e));
+        }
+      } else if (rawEntries is Map) {
+        for (final e in rawEntries.values) {
+          if (e is Map<String, dynamic>) mappedEntries.add(_mapJsLorebookEntry(e));
+        }
+      }
+
       await _db.into(_db.lorebooks).insertOnConflictUpdate(
             LorebooksCompanion.insert(
-              lorebookId: entry['id'] as String? ?? '',
-              name: entry['name'] as String? ?? '',
-              enabled: Value(entry['enabled'] as bool? ?? true),
+              lorebookId: lbJson['id'] as String? ?? '',
+              name: lbJson['name'] as String? ?? '',
+              enabled: Value(lbJson['enabled'] as bool? ?? true),
               activationScope: Value(
-                  entry['activationScope'] as String? ??
-                      entry['scope'] as String? ??
+                  lbJson['activationScope'] as String? ??
+                      lbJson['scope'] as String? ??
                       'global'),
               activationTargetId: Value(
-                  entry['activationTargetId'] as String? ??
-                      entry['targetId'] as String?),
-              entriesJson: jsonEncode(entry['entries'] ?? []),
+                  lbJson['activationTargetId'] as String? ??
+                      lbJson['targetId'] as String?),
+              entriesJson: jsonEncode(mappedEntries),
             ),
           );
     }
+  }
+
+  Map<String, dynamic> _mapJsLorebookEntry(Map<String, dynamic> e) {
+    final keys = _toStringList(e['keys'] ?? e['key']);
+    final secondaryKeys = _toStringList(e['secondaryKeys'] ?? e['secondary_keys'] ?? e['keysecondary']);
+
+    var enabled = e['enabled'] as bool?;
+    if (enabled == null) {
+      final disabled = e['disable'] as bool? ?? false;
+      enabled = !disabled;
+    }
+
+    final position = _mapLorebookPosition(e['position']);
+
+    final charFilter = e['characterFilter'] ?? e['character_filter'];
+    LorebookCharacterFilter? filter;
+    if (charFilter is Map) {
+      final names = charFilter['names'];
+      filter = LorebookCharacterFilter(
+        names: names is List ? names.map((n) => n.toString()).toList() : [],
+        isExclude: charFilter['isExclude'] as bool? ?? false,
+      );
+    } else if (charFilter is List) {
+      filter = LorebookCharacterFilter(
+        names: charFilter.map((n) => n.toString()).toList(),
+      );
+    }
+
+    return {
+      'id': (e['uid'] ?? e['id'] ?? DateTime.now().millisecondsSinceEpoch).toString(),
+      'comment': e['comment'] ?? e['name'] ?? '',
+      'enabled': enabled,
+      'constant': e['constant'] as bool? ?? false,
+      'keys': keys,
+      'secondaryKeys': secondaryKeys,
+      'selectiveLogic': e['selectiveLogic'] ?? e['selective_logic'] ?? 5,
+      'content': e['content'] ?? '',
+      'position': position,
+      'order': _toInt(e['order'] ?? e['insertion_order']) ?? 100,
+      'scanDepth': _toInt(e['scanDepth'] ?? e['scan_depth']),
+      'caseSensitive': e['caseSensitive'] ?? e['case_sensitive'] ?? false,
+      'matchWholeWords': e['matchWholeWords'] ?? e['match_whole_words'] ?? false,
+      'probability': _toInt(e['probability']) ?? 100,
+      'preventRecursion': e['preventRecursion'] ?? e['prevent_recursion'] ?? false,
+      'sticky': _toInt(e['sticky']) ?? 0,
+      'cooldown': _toInt(e['cooldown']) ?? 0,
+      'delay': _toInt(e['delay']) ?? 0,
+      'group': e['group'] ?? '',
+      'groupProminence': _toInt(e['groupProminence'] ?? e['group_prominence']) ?? 100,
+      'characterFilter': filter?.toJson(),
+      'ignoreBudget': e['ignoreBudget'] ?? false,
+      'vectorSearch': e['vectorSearch'] ?? e['vector_search'] ?? false,
+      'useKeywordSearch': e['useKeywordSearch'] ?? e['use_keyword_search'] ?? true,
+    };
+  }
+
+  String _mapLorebookPosition(dynamic pos) {
+    if (pos is String) return pos;
+    if (pos is int) {
+      return switch (pos) {
+        0 => 'worldInfoBefore',
+        1 => 'worldInfoAfter',
+        2 => 'worldInfoBefore',
+        3 => 'worldInfoAfter',
+        4 => 'at_depth',
+        _ => 'worldInfoBefore',
+      };
+    }
+    return 'worldInfoBefore';
+  }
+
+  List<String> _toStringList(dynamic value) {
+    if (value is List) return value.map((e) => e.toString()).toList();
+    if (value is String && value.isNotEmpty) {
+      return value.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    }
+    return [];
   }
 
   Future<void> _importJsApiConfigs(Map<String, dynamic> kv) async {
@@ -455,15 +546,21 @@ class BackupService {
       Map<String, dynamic> kv, Map<String, dynamic> ls) async {
     final presetList = <Map<String, dynamic>>[];
 
-    final sillyCradleRaw = kv['silly_cradle_presets'] ?? ls['silly_cradle_presets'];
-    if (sillyCradleRaw != null) {
+    for (final source in [kv, ls]) {
+      final sillyCradleRaw = source['silly_cradle_presets'];
+      if (sillyCradleRaw == null) continue;
+
       Map<String, dynamic> presetsMap;
       if (sillyCradleRaw is String) {
-        presetsMap = jsonDecode(sillyCradleRaw) as Map<String, dynamic>;
+        try {
+          presetsMap = jsonDecode(sillyCradleRaw) as Map<String, dynamic>;
+        } catch (_) {
+          continue;
+        }
       } else if (sillyCradleRaw is Map<String, dynamic>) {
         presetsMap = sillyCradleRaw;
       } else {
-        presetsMap = {};
+        continue;
       }
 
       var inner = presetsMap['presets'];
@@ -476,6 +573,13 @@ class BackupService {
       } else if (inner is List) {
         for (final p in inner) {
           if (p is Map<String, dynamic>) presetList.add(p);
+        }
+      } else {
+        for (final entry in presetsMap.entries) {
+          if (entry.value is Map<String, dynamic> &&
+              entry.value.containsKey('name')) {
+            presetList.add(entry.value as Map<String, dynamic>);
+          }
         }
       }
     }
@@ -541,11 +645,10 @@ class BackupService {
         String? imagePath;
         if (imageUrl.startsWith('data:')) {
           final galId = 'gal_${charId}_$i';
-          imagePath = await _imageStorage.saveAvatarFromDataUrl(
-              '${charId}_gallery_$i', imageUrl);
-          if (imagePath == null) continue;
+          final bytes = _dataUrlToBytes(imageUrl);
+          if (bytes == null) continue;
           imagePath = await _imageStorage.saveBytes(
-            await File(imagePath).readAsBytes(),
+            bytes,
             'gallery/$charId',
             galId,
             'png',
@@ -719,5 +822,16 @@ class BackupService {
   String _joinTrimStrings(dynamic value) {
     if (value is List) return value.map((e) => e.toString()).join('\n');
     return '';
+  }
+
+  Uint8List? _dataUrlToBytes(String dataUrl) {
+    final commaIndex = dataUrl.indexOf(',');
+    if (commaIndex == -1) return null;
+    final base64Str = dataUrl.substring(commaIndex + 1);
+    try {
+      return Uint8List.fromList(Uri.parse('data:;base64,$base64Str').data!.contentAsBytes());
+    } catch (_) {
+      return null;
+    }
   }
 }

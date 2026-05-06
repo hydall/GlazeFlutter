@@ -154,6 +154,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _loadStats() async {
+    if (!mounted) return;
     final chatState = ref.read(chatProvider(widget.charId)).value;
     final session = chatState?.session;
     final charRepo = ref.read(characterRepoProvider);
@@ -164,10 +165,15 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     final memoryRepo = ref.read(memoryBookRepoProvider);
 
     final character = await charRepo.getById(widget.charId);
+    if (!mounted) return;
     final presets = await presetRepo.getAll();
+    if (!mounted) return;
     final personas = await personaRepo.getAll();
+    if (!mounted) return;
     final apiConfigs = await apiRepo.getAll();
+    if (!mounted) return;
     final lorebooks = await lorebookRepo.getAll();
+    if (!mounted) return;
     final activePresetId = ref.read(activePresetIdProvider);
     final activePersonaId = ref.read(activePersonaIdProvider);
     final activePreset = activePresetId != null
@@ -180,6 +186,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         .where((cfg) => cfg.mode != 'embedding')
         .firstOrNull;
     final regexes = await ref.read(activeRegexesProvider.future);
+    if (!mounted) return;
 
     var summaryChars = 0;
     var memoryEntries = 0;
@@ -196,19 +203,23 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       final summary = await ref
           .read(summaryServiceProvider)
           .getSummary(session.id);
+      if (!mounted) return;
       summaryChars = summary?.length ?? 0;
       final memoryBook = await memoryRepo.getBySessionId(session.id);
       memoryEntries = memoryBook?.entries.length ?? 0;
       sessionCount =
           (await ref.read(chatRepoProvider).getByCharacterId(widget.charId))
               .length;
+      if (!mounted) return;
       messageCount = session.messages.length;
 
       if (character != null && chatApi != null) {
         try {
           final builder = ref.read(promptPayloadBuilderProvider);
           final payload = await builder.buildFromSession(charId: widget.charId, session: session);
+          if (!mounted) return;
           final promptResult = await buildPromptInIsolate(payload);
+          if (!mounted) return;
           final sourceTokens = promptResult.breakdown.sourceTokens;
           promptTokens = promptResult.breakdown.totalTokens;
           contextSize = chatApi.contextSize;
@@ -224,6 +235,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       0,
       (sum, lorebook) => sum + lorebook.entries.length,
     );
+
+    bool imageGenEnabled = false;
+    try {
+      imageGenEnabled = ref.read(imageGenSettingsProvider).value?.enabled == true;
+    } catch (_) {}
 
     _stats = MagicDrawerStats(
       character: character,
@@ -243,8 +259,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       presetTokens: presetTokens,
       personaTokens: personaTokens,
       summaryTokens: summaryTokens,
-      imageGenEnabled:
-          ref.read(imageGenSettingsProvider).value?.enabled == true,
+      imageGenEnabled: imageGenEnabled,
     );
   }
 
