@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/context_calculator.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
+import '../../../core/llm/summary_service.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
@@ -71,6 +72,9 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       _visibleCount = session.messages.where((m) => !m.isHidden).length;
       _hiddenCount = session.messages.where((m) => m.isHidden).length;
 
+      final summaryService = ref.read(summaryServiceProvider);
+      final summaryContent = await summaryService.getSummary(session.id);
+
       final payload = PromptPayload(
         character: character,
         persona: persona,
@@ -82,6 +86,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
         lorebooks: await ref.read(lorebookRepoProvider).getAll(),
         lorebookSettings: ref.read(lorebookSettingsProvider),
         lorebookActivations: ref.read(lorebookActivationsProvider),
+        summaryContent: summaryContent,
       );
 
       final result = await buildPromptInIsolate(payload);

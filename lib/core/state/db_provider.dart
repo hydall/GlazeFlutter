@@ -8,6 +8,7 @@ import '../db/repositories/api_config_repo.dart';
 import '../db/repositories/persona_repo.dart';
 import '../db/repositories/lorebook_repo.dart';
 import '../db/repositories/embedding_repo.dart';
+import '../db/repositories/summary_repo.dart';
 import '../services/character_importer.dart';
 import '../services/image_storage_service.dart';
 import '../services/migration_service.dart';
@@ -59,4 +60,8 @@ final lorebookRepoProvider = Provider<LorebookRepo>((ref) {
 
 final embeddingRepoProvider = Provider<EmbeddingRepo>((ref) {
   return EmbeddingRepo(ref.watch(appDbProvider));
+});
+
+final summaryRepoProvider = Provider<SummaryRepo>((ref) {
+  return SummaryRepo(ref.watch(appDbProvider));
 });

@@ -7,6 +7,7 @@ import '../../core/llm/prompt_builder.dart';
 import '../../core/llm/prompt_isolate.dart';
 import '../../core/llm/sse_client.dart';
 import '../../core/llm/stream_accumulator.dart';
+import '../../core/llm/summary_service.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/models/lorebook.dart';
 import '../../core/state/active_selection_provider.dart';
@@ -66,6 +67,9 @@ class ChatGenerationService {
         session.messages.lastOrNull?.content ?? '',
       );
 
+      final summaryService = _ref.read(summaryServiceProvider);
+      final summaryContent = await summaryService.getSummary(session.id);
+
       final payload = PromptPayload(
         character: character,
         persona: persona,
@@ -78,6 +82,7 @@ class ChatGenerationService {
         lorebookSettings: _ref.read(lorebookSettingsProvider),
         lorebookActivations: _ref.read(lorebookActivationsProvider),
         vectorEntries: vectorEntries,
+        summaryContent: summaryContent,
       );
 
       debugPrint('CHAT: building prompt for "${character.name}", history=${session.messages.length}, preset=${preset?.name ?? "none"}');

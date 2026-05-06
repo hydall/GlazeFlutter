@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/llm/summary_service.dart';
 import '../../core/state/character_provider.dart';
+import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import 'chat_provider.dart';
@@ -66,6 +68,8 @@ class ChatScreen extends ConsumerWidget {
                   showPresetPickerDialog(context, ref);
                 case 'persona':
                   showPersonaPickerDialog(context, ref);
+                case 'summary':
+                  _generateSummary(context, ref, charId);
                 case 'raw':
                   showRawPromptDialog(context, ref, charId);
                 case 'rawResponse':
@@ -84,6 +88,10 @@ class ChatScreen extends ConsumerWidget {
               const PopupMenuItem(
                 value: 'persona',
                 child: Row(children: [Icon(Icons.person, size: 18), SizedBox(width: 8), Text('Persona')]),
+              ),
+              const PopupMenuItem(
+                value: 'summary',
+                child: Row(children: [Icon(Icons.summarize, size: 18), SizedBox(width: 8), Text('Generate Summary')]),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(
@@ -156,5 +164,42 @@ class ChatScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+}
+
+Future<void> _generateSummary(BuildContext context, WidgetRef ref, String charId) async {
+  final chatState = ref.read(chatProvider(charId)).value;
+  if (chatState == null || chatState.session == null) return;
+
+  final apiConfigs = await ref.read(apiConfigRepoProvider).getAll();
+  if (apiConfigs.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('No API config — set one up first')),
+    );
+    return;
+  }
+
+  ScaffoldMessenger.of(context).showSnackBar(
+    const SnackBar(content: Text('Generating summary...'), duration: Duration(seconds: 2)),
+  );
+
+  try {
+    final summaryService = ref.read(summaryServiceProvider);
+    final summary = await summaryService.generateSummary(
+      sessionId: chatState.session!.id,
+      history: chatState.session!.messages,
+      apiConfig: apiConfigs.first,
+    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Summary generated (${summary.length} chars)'), duration: const Duration(seconds: 2)),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Summary failed: $e'), backgroundColor: Colors.red),
+      );
+    }
   }
 }

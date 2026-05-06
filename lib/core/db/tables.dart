@@ -129,3 +129,18 @@ class Embeddings extends Table {
   @override
   Set<Column> get primaryKey => {entryId};
 }
+
+@DataClassName('ChatSummary')
+class ChatSummaries extends Table {
+  @override
+  String get tableName => 'chat_summaries';
+
+  TextColumn get sessionId => text()();
+  TextColumn get content => text()();
+  IntColumn get messageCount => integer().withDefault(const Constant(0))();
+  TextColumn get prompt => text().nullable()();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {sessionId};
+}

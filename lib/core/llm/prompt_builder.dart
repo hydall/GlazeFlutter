@@ -105,6 +105,7 @@ PromptResult buildPrompt(PromptPayload payload) {
     globalVars: payload.globalVars,
     charId: char.id,
     sessionId: '',
+    summaryContent: payload.summaryContent,
   );
 
   var currentSessionVars = Map<String, String>.from(payload.sessionVars);
