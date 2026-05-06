@@ -35,6 +35,8 @@ class PromptPayload {
   final Map<String, String> globalVars;
   final String? summaryContent;
   final String? summaryPrefix;
+  final String? memoryContent;
+  final String memoryInjectionTarget;
   final List<Lorebook> lorebooks;
   final LorebookGlobalSettings lorebookSettings;
   final LorebookActivations lorebookActivations;
@@ -50,6 +52,8 @@ class PromptPayload {
     this.globalVars = const {},
     this.summaryContent,
     this.summaryPrefix,
+    this.memoryContent,
+    this.memoryInjectionTarget = 'summary_block',
     this.lorebooks = const [],
     this.lorebookSettings = const LorebookGlobalSettings(),
     this.lorebookActivations = const LorebookActivations(),
@@ -268,6 +272,36 @@ PromptResult _assembleMessages({
   if (!loreBeforeInjected) messages.addAll(loreBefore);
   if (!loreAfterInjected) messages.addAll(loreAfter);
   if (mergeBuffer != null) messages.add(PromptMessage(role: mergeRole ?? 'system', content: mergeBuffer));
+
+  if (payload.memoryContent != null && payload.memoryContent!.isNotEmpty) {
+    if (payload.memoryInjectionTarget == 'summary_macro') {
+      final summaryIdx = messages.indexWhere((m) => m.blockName == 'Summary');
+      if (summaryIdx >= 0) {
+        final existing = messages[summaryIdx];
+        messages[summaryIdx] = PromptMessage(
+          role: existing.role,
+          content: '${existing.content}\n\n${payload.memoryContent}',
+          blockName: existing.blockName,
+          isHistory: existing.isHistory,
+          isDepth: existing.isDepth,
+          depth: existing.depth,
+          isLorebook: existing.isLorebook,
+        );
+      }
+    } else {
+      final memMsg = PromptMessage(
+        role: 'system',
+        content: payload.memoryContent!,
+        blockName: 'Memory Book',
+      );
+      final historyIdx = messages.indexWhere((m) => m.isHistory);
+      if (historyIdx >= 0) {
+        messages.insert(historyIdx, memMsg);
+      } else {
+        messages.add(memMsg);
+      }
+    }
+  }
 
   final calculator = ContextCalculator(contextSize: payload.apiConfig.contextSize, maxTokens: payload.apiConfig.maxTokens);
   final allStatic = messages.where((m) => !m.isHistory).toList();

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/llm/lorebook_vector_search.dart';
+import '../../core/llm/memory_injection_service.dart';
 import '../../core/llm/prompt_builder.dart';
 import '../../core/llm/prompt_isolate.dart';
 import '../../core/llm/sse_client.dart';
@@ -70,6 +71,18 @@ class ChatGenerationService {
       final summaryService = _ref.read(summaryServiceProvider);
       final summaryContent = await summaryService.getSummary(session.id);
 
+      final memoryService = _ref.read(memoryInjectionServiceProvider);
+      final historyText = session.messages
+          .where((m) => m.role == 'user' || m.role == 'assistant')
+          .map((m) => m.content)
+          .join('\n');
+      final memoryResult = await memoryService.buildInjection(
+        sessionId: session.id,
+        historyText: historyText,
+        messageCount: session.messages.length,
+        summaryExcerpt: summaryContent,
+      );
+
       final payload = PromptPayload(
         character: character,
         persona: persona,
@@ -83,6 +96,8 @@ class ChatGenerationService {
         lorebookActivations: _ref.read(lorebookActivationsProvider),
         vectorEntries: vectorEntries,
         summaryContent: summaryContent,
+        memoryContent: memoryResult.content.isNotEmpty ? memoryResult.content : null,
+        memoryInjectionTarget: memoryResult.injectionTarget,
       );
 
       debugPrint('CHAT: building prompt for "${character.name}", history=${session.messages.length}, preset=${preset?.name ?? "none"}');

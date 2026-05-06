@@ -12,6 +12,7 @@ import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/chat_dialogs.dart';
 import 'widgets/magic_drawer.dart';
+import 'widgets/memory_books_sheet.dart';
 import 'widgets/message_list.dart';
 import 'widgets/tokenizer_sheet.dart';
 
@@ -70,6 +71,8 @@ class ChatScreen extends ConsumerWidget {
                   showPersonaPickerDialog(context, ref);
                 case 'summary':
                   _generateSummary(context, ref, charId);
+                case 'memory':
+                  _showMemoryBooks(context, ref, charId);
                 case 'raw':
                   showRawPromptDialog(context, ref, charId);
                 case 'rawResponse':
@@ -92,6 +95,10 @@ class ChatScreen extends ConsumerWidget {
               const PopupMenuItem(
                 value: 'summary',
                 child: Row(children: [Icon(Icons.summarize, size: 18), SizedBox(width: 8), Text('Generate Summary')]),
+              ),
+              const PopupMenuItem(
+                value: 'memory',
+                child: Row(children: [Icon(Icons.auto_stories, size: 18), SizedBox(width: 8), Text('Memory Books')]),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(
@@ -202,4 +209,22 @@ Future<void> _generateSummary(BuildContext context, WidgetRef ref, String charId
       );
     }
   }
+}
+
+void _showMemoryBooks(BuildContext context, WidgetRef ref, String charId) {
+  final chatState = ref.read(chatProvider(charId)).value;
+  if (chatState == null || chatState.session == null) return;
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => DraggableScrollableSheet(
+      initialChildSize: 0.7,
+      minChildSize: 0.4,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (_, controller) => MemoryBooksSheet(sessionId: chatState.session!.id),
+    ),
+  );
 }

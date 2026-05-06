@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/summary_service.dart';
+import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
@@ -53,6 +54,17 @@ void showRawPromptDialog(
   final summaryService = ref.read(summaryServiceProvider);
   final summaryContent = await summaryService.getSummary(chatState.session!.id);
 
+  final memoryService = ref.read(memoryInjectionServiceProvider);
+  final historyText = chatState.session!.messages
+      .where((m) => m.role == 'user' || m.role == 'assistant')
+      .map((m) => m.content)
+      .join('\n');
+  final memoryResult = await memoryService.buildInjection(
+    sessionId: chatState.session!.id,
+    historyText: historyText,
+    messageCount: chatState.session!.messages.length,
+  );
+
   final payload = PromptPayload(
     character: character,
     persona: persona,
@@ -65,6 +77,8 @@ void showRawPromptDialog(
     lorebookSettings: ref.read(lorebookSettingsProvider),
     lorebookActivations: ref.read(lorebookActivationsProvider),
     summaryContent: summaryContent,
+    memoryContent: memoryResult.content.isNotEmpty ? memoryResult.content : null,
+    memoryInjectionTarget: memoryResult.injectionTarget,
   );
 
   final result = await buildPromptInIsolate(payload);

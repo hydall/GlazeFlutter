@@ -42,6 +42,20 @@ class ChatSessions extends Table {
   Set<Column> get primaryKey => {sessionId};
 }
 
+@DataClassName('MemoryBookRow')
+class MemoryBookRows extends Table {
+  @override
+  String get tableName => 'memory_book_rows';
+
+  TextColumn get sessionId => text()();
+  TextColumn get entriesJson => text().withDefault(const Constant('[]'))();
+  TextColumn get settingsJson => text().withDefault(const Constant('{}'))();
+  IntColumn get lastProcessedMessageCount => integer().withDefault(const Constant(0))();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {sessionId};
+}
 @DataClassName('PresetRow')
 class Presets extends Table {
   @override

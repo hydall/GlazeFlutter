@@ -5,6 +5,7 @@ import '../../../core/llm/context_calculator.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/summary_service.dart';
+import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
@@ -75,6 +76,17 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       final summaryService = ref.read(summaryServiceProvider);
       final summaryContent = await summaryService.getSummary(session.id);
 
+      final memoryService = ref.read(memoryInjectionServiceProvider);
+      final historyText = session.messages
+          .where((m) => m.role == 'user' || m.role == 'assistant')
+          .map((m) => m.content)
+          .join('\n');
+      final memoryResult = await memoryService.buildInjection(
+        sessionId: session.id,
+        historyText: historyText,
+        messageCount: session.messages.length,
+      );
+
       final payload = PromptPayload(
         character: character,
         persona: persona,
@@ -87,6 +99,8 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
         lorebookSettings: ref.read(lorebookSettingsProvider),
         lorebookActivations: ref.read(lorebookActivationsProvider),
         summaryContent: summaryContent,
+        memoryContent: memoryResult.content.isNotEmpty ? memoryResult.content : null,
+        memoryInjectionTarget: memoryResult.injectionTarget,
       );
 
       final result = await buildPromptInIsolate(payload);
