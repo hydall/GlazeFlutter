@@ -4,7 +4,9 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/services/deep_link_service.dart';
 import '../oauth_local_server.dart';
 import '../../sync_config.dart';
 
@@ -68,9 +70,15 @@ class GDriveAuth {
         '&access_type=offline&prompt=consent';
 
     if (Platform.isAndroid || Platform.isIOS) {
-      throw UnimplementedError(
-        'Mobile OAuth requires deep-link setup. URL: $authUrl',
-      );
+      final deepLinkService = DeepLinkService.instance;
+      await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
+      final callbackUri = await deepLinkService.waitForOAuthCallback('gdrive');
+      final code = callbackUri.queryParameters['code'];
+      final returnedState = callbackUri.queryParameters['state'];
+      if (code == null) throw StateError('No authorization code in callback');
+      if (returnedState != state) throw StateError('OAuth state mismatch');
+      await _handleCodeExchange(code, redirectUri);
+      return;
     }
 
     final code = await OAuthLocalServer.authenticate(authUrl);

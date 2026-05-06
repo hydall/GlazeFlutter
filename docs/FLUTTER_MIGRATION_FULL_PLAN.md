@@ -613,11 +613,11 @@ core/
 | Persona Connections | ~~Medium~~ **DONE** | ~~Per-character and per-chat persona bindings~~ Implemented |
 | Memory Coverage/Preview | ~~Medium~~ **DONE** | ~~Coverage analysis, prompt preview~~ Implemented: `lorebook_coverage.dart` + `lorebook_coverage_sheet.dart` + `prompt_preview_screen.dart` |
 | Tech Debt Cleanup | ~~Medium~~ **DONE** | ~~Catalog grid split (1084→4 files), dead gallery sync methods removed from SyncEngine~~ |
-| Cloud Sync: Deep-links mobile | Low | Android/iOS deep-link config for Dropbox/GDrive OAuth |
+| Cloud Sync: Deep-links mobile | ~~Low~~ **DONE** | ~~Android/iOS deep-link config for Dropbox/GDrive OAuth~~ Implemented: `app_links` + custom scheme `com.hydall.glaze`, `DeepLinkService` |
 | Cloud Sync: Chat image sync | Low | Binary images in chat messages not synced to cloud yet (deferred) |
 | Glossary / Help | Low | Categorized help articles, inline HelpTip components |
 | Stats Dashboard | Low | Per-chat/char/global stats (tokens, messages, time) |
-| Notifications | Low | In-app notification center + native push for background gen |
+| Notifications | ~~Low~~ **DONE** | ~~In-app notification center + native push for background gen~~ Implemented: `flutter_foreground_task` (Android foreground service), `flutter_local_notifications` (message notifications), `GenerationNotificationService`, lifecycle-aware |
 | Character Color Picker | Low | Color picker with presets, custom hex, auto — used for theme accent |
 | Drag-and-Drop Import | Low | Desktop: drag PNG/JSON/ZIP onto app |
 | ST Backup Import | Low | Import SillyTavern backup ZIP format |
