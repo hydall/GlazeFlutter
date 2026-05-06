@@ -33,6 +33,8 @@
 | Phase 14b: Import by URL | Done | DataCat extract-and-poll API, phase tracking, dialog UI |
 | Phase 6: Image Generation | Done | 4 providers (OpenAI, Gemini, Naistera, RoutMy+RU Bridge), [IMG:GEN:...] auto-gen, settings UI, inline rendering |
 | Phase 15: Cloud Sync | Done | Dropbox + GDrive adapters, PKCE OAuth (localhost server for desktop), manifest, push/pull/wipe engine with real DB wiring, conflict resolution UI, auto-sync, gallery sync, flutter_dotenv config |
+| Phase 16: Character Gallery | Done | GalleryEntry model, galleryJson column (DB v8), GalleryService, 3-col GridView, full-screen PageView viewer with swipe+zoom, long-press actions, route /character/:charId/gallery |
+| Phase 17: Backup Export/Import | Done | BackupService (sqlite_master auto-table dump, SharedPreferences, gallery base64), Flutter .glz import (table-level), Glaze JS .glz import (IDB/localStorage mapping), FileExportService, BackupScreen, route /backup, share_plus |
 
 ### UI Refactoring (2025-05-05 → 2025-05-06)
 
@@ -499,12 +501,72 @@ features/cloud_sync/
 - Deep-links for mobile OAuth (desktop uses localhost server)
 - Entity read/write for `chat` type (session reconstruction from cloud needs ChatMessage deserialization)
 
+### Phase 16: Character Gallery (2026-05-06)
+
+Per-character image gallery with viewer and management.
+
+**Data layer:**
+- `GalleryEntry` (Freezed) — id, imagePath, addedAt, label
+- `galleryJson` TEXT column added to `Characters` Drift table (schema v8 migration)
+- `Character` model extended with `gallery` field (List<GalleryEntry>), parsed from `galleryJson`
+- `GalleryService` — addEntry, deleteEntry, setAsAvatar, loadGallery
+
+**UI:**
+- `GalleryScreen` — 3-column GridView with card thumbnails, FAB to add from picker
+- Full-screen `PageView` viewer with swipe navigation and pinch-to-zoom (InteractiveViewer)
+- Long-press bottom sheet: "Set as Avatar" / "Delete"
+- Route `/character/:charId/gallery`, gallery button on CharacterDetailScreen
+
+**Directory structure:**
+```
+features/character_gallery/
+  gallery_screen.dart
+  gallery_provider.dart
+core/
+  models/
+    gallery_entry.dart
+  services/
+    gallery_service.dart
+```
+
+### Phase 17: Backup Export/Import (2026-05-06)
+
+Full backup and restore system with Glaze JS compatibility.
+
+**BackupService (`backup_service.dart`):**
+- `exportBackup()` — queries `sqlite_master` for all user tables (auto-includes new features without code changes), dumps each table as row arrays, bundles SharedPreferences, encodes gallery images as base64, writes JSON `.glz`
+- `_importFlutterBackup()` — table-level restore with `PRAGMA foreign_keys = OFF`, DELETE + INSERT OR REPLACE per table, restores gallery images from base64, restores SharedPreferences
+- `_importGlazeJsBackup()` — maps Glaze JS data to Flutter schema:
+  - `characters` array → CharacterRepo
+  - `personas` array → PersonaRepo
+  - `keyvalue` entries: `gz_chat_*` → ChatRepo, `gz_lorebooks` → LorebookRepo, `gz_api_connection_presets` → ApiConfigRepo, `gz_theme_presets` → PresetRepo
+  - `localStorage` → SharedPreferences
+- `_extractTables()` — dynamic table discovery via `sqlite_master`, no hardcoded table list
+
+**FileExportService (`file_export_service.dart`):**
+- Android → `Download/Glaze/{subfolder}/` via `Directory` direct write
+- macOS → `~/Downloads/Glaze/{subfolder}/`
+- Other platforms → `Share.shareXFiles()` from `share_plus`
+
+**UI:**
+- `BackupScreen` — export button (with filename prefix field), import button with file picker, confirmation dialogs, progress indicator
+- Route `/backup`, menu Backups button now navigates (was "coming soon")
+
+**Directory structure:**
+```
+features/backup/
+  backup_screen.dart
+  backup_provider.dart
+core/
+  services/
+    backup_service.dart
+    file_export_service.dart
+```
+
 ### Remaining phases (in priority order)
 
 | Phase | Priority | What's Missing |
 |-------|----------|----------------|
-| Backup Export/Import | Medium | .glz backup export, ST backup ZIP import, backup/restore UI in menu |
-| Character Gallery | Medium | Per-character image gallery, add/delete, full-screen viewer, sync support |
 | Persona Connections | Medium | Per-character and per-chat persona bindings (currently global only) |
 | Memory Coverage/Preview | Medium | Coverage analysis (which memories activate), prompt template editor, prompt preview, text preview |
 | Cloud Sync: Deep-links mobile | Low | Android/iOS deep-link config for Dropbox/GDrive OAuth |
@@ -519,7 +581,6 @@ features/cloud_sync/
 ### Known stubs in current codebase
 
 - `chat_screen.dart` → `input_bar.dart` — 2 input bar buttons (fullscreen, auto) are decorative
-- `menu_screen.dart` — Backups "coming soon"
 - `tokenizer.dart` — heuristic (chars/3.35), no real BPE
 
 ### Architecture note
