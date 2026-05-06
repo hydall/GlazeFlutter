@@ -292,10 +292,7 @@ class ChatScreen extends ConsumerWidget {
                                 .read(chatProvider(charId).notifier)
                                 .abortGeneration()
                           : null,
-                      onMagicDrawer: () => GlazeBottomSheet.show(
-                        context,
-                        child: MagicDrawerPanel(charId: charId),
-                      ),
+                      onMagicDrawer: () => showMagicDrawer(context, charId),
                       onImageGen: () => GlazeBottomSheet.show(
                         context,
                         child: const ImageGenSheet(),

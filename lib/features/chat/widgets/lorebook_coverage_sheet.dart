@@ -6,11 +6,17 @@ import '../../../core/llm/tokenizer.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
 
 void showLorebookCoverageSheet(BuildContext context, WidgetRef ref, String charId) {
-  GlazeBottomSheet.show(context, child: _CoveragePanel(charId: charId));
+  showModalBottomSheet(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _CoveragePanel(charId: charId),
+  );
 }
 
 class _CoveragePanel extends ConsumerStatefulWidget {
@@ -68,34 +74,26 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
-          child: Row(
-            children: [
-              const Icon(Icons.search, color: Colors.cyan, size: 22),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text('Lorebook Coverage', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-              ),
-              IconButton(icon: const Icon(Icons.refresh, size: 18), onPressed: _load),
-              IconButton(icon: const Icon(Icons.close, size: 20), onPressed: () => Navigator.pop(context)),
-            ],
-          ),
+    return SheetView(
+      title: 'Lorebook Coverage',
+      actions: [
+        SheetViewAction(
+          icon: const Icon(Icons.refresh, size: 20),
+          onPressed: _load,
+          tooltip: 'Refresh',
         ),
-        const Divider(height: 1, color: Colors.white10),
-        if (_loading)
-          const Padding(padding: EdgeInsets.all(32), child: CircularProgressIndicator())
-        else if (_result == null)
-          const Padding(padding: EdgeInsets.all(32), child: Text('No data', style: TextStyle(color: AppColors.textSecondary)))
-        else ...[
-          _SummaryBar(result: _result!),
-          _FilterChips(current: _filter, onSelected: (f) => setState(() => _filter = f)),
-          Flexible(child: _EntryList(entries: _filteredEntries, result: _result!)),
-        ],
       ],
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _result == null
+              ? const Center(child: Text('No data', style: TextStyle(color: AppColors.textSecondary)))
+              : Column(
+                  children: [
+                    _SummaryBar(result: _result!),
+                    _FilterChips(current: _filter, onSelected: (f) => setState(() => _filter = f)),
+                    Expanded(child: _EntryList(entries: _filteredEntries, result: _result!)),
+                  ],
+                ),
     );
   }
 

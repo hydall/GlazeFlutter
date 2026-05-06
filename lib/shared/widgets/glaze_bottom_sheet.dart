@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
@@ -210,51 +211,103 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.95,
-      ),
-      decoration: const BoxDecoration(
-        color: Color(0xCC1E1E1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        border: Border(top: BorderSide(color: Color(0x1AFFFFFF))),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _HandleBar(),
-          if (_hasHeader)
-            _Header(title: widget.title, action: widget.headerAction),
-          Flexible(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.only(
-                bottom: bottomInset + bottomPadding + 10,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.95,
+          ),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E).withValues(alpha: 0.8),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: const Border(top: BorderSide(color: AppColors.glassBorder)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Stack(
                 children: [
-                  SizedBox(height: _hasHeader ? 0 : 8),
-                  if (widget.child != null) widget.child!,
-                  if (widget.bigInfo != null) _BigInfo(info: widget.bigInfo!),
-                  if (widget.items != null && widget.items!.isNotEmpty)
-                    _ItemsList(items: widget.items!),
-                  if (widget.sessionItems != null &&
-                      widget.sessionItems!.isNotEmpty)
-                    _SessionList(items: widget.sessionItems!),
-                  if (widget.cardItems != null && widget.cardItems!.isNotEmpty)
-                    _CardList(items: widget.cardItems!),
-                  if (widget.input != null)
-                    _InputSection(
-                      input: widget.input!,
-                      controller: _inputController,
-                      focusNode: _inputFocus,
+                  Positioned.fill(
+                    child: ClipRect(
+                      child: ShaderMask(
+                        shaderCallback: (rect) => const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Colors.black, Colors.transparent],
+                          stops: [0.6, 1.0],
+                        ).createShader(rect),
+                        blendMode: BlendMode.dstIn,
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topCenter,
+                                end: Alignment.bottomCenter,
+                                colors: [
+                                  const Color(
+                                    0xFF141416,
+                                  ).withValues(alpha: 0.85),
+                                  const Color(
+                                    0xFF141416,
+                                  ).withValues(alpha: 0.0),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
+                  ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _HandleBar(),
+                      if (_hasHeader)
+                        _Header(
+                          title: widget.title,
+                          action: widget.headerAction,
+                        ),
+                    ],
+                  ),
                 ],
               ),
-            ),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: EdgeInsets.only(
+                    bottom: bottomInset + bottomPadding + 10,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 4),
+                      if (widget.child != null) widget.child!,
+                      if (widget.bigInfo != null)
+                        _BigInfo(info: widget.bigInfo!),
+                      if (widget.items != null && widget.items!.isNotEmpty)
+                        _ItemsList(items: widget.items!),
+                      if (widget.sessionItems != null &&
+                          widget.sessionItems!.isNotEmpty)
+                        _SessionList(items: widget.sessionItems!),
+                      if (widget.cardItems != null &&
+                          widget.cardItems!.isNotEmpty)
+                        _CardList(items: widget.cardItems!),
+                      if (widget.input != null)
+                        _InputSection(
+                          input: widget.input!,
+                          controller: _inputController,
+                          focusNode: _inputFocus,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

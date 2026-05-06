@@ -10,7 +10,7 @@ import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../shared/widgets/glaze_scaffold.dart';
+import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
 import 'tokenizer_widgets.dart';
 
@@ -124,35 +124,19 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     final historyFill = bd?.historyFillPercent ?? 0.0;
     final nearLimit = historyFill >= _historyFillThreshold;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
-        children: [
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: GlazeAppBar(
-                title: _showSettings ? 'Tokenizer Settings' : 'Context Usage',
-                leading: BackButton(
-                  onPressed: () => _showSettings
-                      ? setState(() => _showSettings = false)
-                      : Navigator.pop(context),
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: _loading
-                ? const Center(child: CircularProgressIndicator())
-                : bd == null
-                    ? Center(child: Text('No data', style: TextStyle(color: AppColors.textSecondary)))
-                    : _showSettings
-                        ? _buildSettings()
-                        : _buildMainView(bd, contextSize, used, remaining, usedPercent, historyFill, nearLimit),
-          ),
-        ],
-      ),
+    return SheetView(
+      title: _showSettings ? 'Tokenizer Settings' : 'Context Usage',
+      showBack: true,
+      onBack: () => _showSettings
+          ? setState(() => _showSettings = false)
+          : Navigator.of(context).maybePop(),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : bd == null
+              ? Center(child: Text('No data', style: TextStyle(color: AppColors.textSecondary)))
+              : _showSettings
+                  ? _buildSettings()
+                  : _buildMainView(bd, contextSize, used, remaining, usedPercent, historyFill, nearLimit),
     );
   }
 
@@ -234,7 +218,11 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
 }
 
 void showTokenizerSheet(BuildContext context, String charId) {
-  Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => TokenizerSheet(charId: charId)),
+  showModalBottomSheet(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => TokenizerSheet(charId: charId),
   );
 }

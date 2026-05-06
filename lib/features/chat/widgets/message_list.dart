@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/chat_message.dart';
-import 'message_bubble.dart';
+import 'message.dart';
 
 class MessageList extends StatefulWidget {
   final List<ChatMessage> messages;
@@ -59,7 +59,7 @@ class _MessageListState extends State<MessageList> {
       itemBuilder: (context, index) {
         if (index < widget.messages.length) {
           final msg = widget.messages[index];
-          return MessageBubble(
+          return Message(
             content: msg.content,
             isUser: msg.role == 'user',
             isSystem: msg.role == 'system',
@@ -79,7 +79,7 @@ class _MessageListState extends State<MessageList> {
         }
 
         if (showStreaming) {
-          return MessageBubble(
+          return Message(
             content: widget.streamingText!,
             isUser: false,
             isStreaming: true,
@@ -92,7 +92,7 @@ class _MessageListState extends State<MessageList> {
           );
         }
 
-        return MessageBubble(
+        return Message(
           content: '',
           isUser: false,
           isTyping: true,

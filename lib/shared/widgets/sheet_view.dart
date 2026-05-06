@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -26,7 +27,13 @@ class SheetViewTab {
   const SheetViewTab({required this.id, required this.label, this.icon});
 }
 
-class SheetView extends StatelessWidget {
+/// Draggable bottom-sheet container.
+///
+/// Use [showModalBottomSheet] with [isScrollControlled: true] and
+/// [backgroundColor: Colors.transparent] to present this widget.
+/// It manages its own height: collapsed (~55 % of screen) or expanded
+/// (full screen), with a swipe gesture and snap animation.
+class SheetView extends StatefulWidget {
   final String? title;
   final Widget? titleWidget;
   final bool showBack;
@@ -60,48 +67,170 @@ class SheetView extends StatelessWidget {
     this.bodyPadding,
   });
 
+  @override
+  State<SheetView> createState() => _SheetViewState();
+}
+
+class _SheetViewState extends State<SheetView>
+    with SingleTickerProviderStateMixin {
+  bool _expanded = false;
+  double _currentHeight = 0;
+  bool _heightInit = false;
+
+  late AnimationController _ctrl;
+  Animation<double>? _anim;
+
+  double _dragStartY = 0;
+  double _dragStartH = 0;
+
+  double _collapsed(BuildContext ctx) =>
+      math.min(MediaQuery.of(ctx).size.height * 0.55, 500.0);
+
+  double _full(BuildContext ctx) => MediaQuery.of(ctx).size.height;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 350),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_heightInit) {
+      _currentHeight = _collapsed(context);
+      _heightInit = true;
+    }
+  }
+
+  @override
+  void dispose() {
+    _anim?.removeListener(_onTick);
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    final target = _expanded ? _collapsed(context) : _full(context);
+    _animateTo(target, expanding: !_expanded);
+  }
+
+  void _animateTo(double target, {required bool expanding}) {
+    final start = _currentHeight;
+    _anim?.removeListener(_onTick);
+    _anim = Tween(begin: start, end: target).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic),
+    )..addListener(_onTick);
+    _ctrl.forward(from: 0);
+    setState(() => _expanded = expanding);
+  }
+
+  void _onTick() => setState(() => _currentHeight = _anim!.value);
+
+  void _onDragStart(DragStartDetails d) {
+    _ctrl.stop();
+    _anim?.removeListener(_onTick);
+    _dragStartY = d.globalPosition.dy;
+    _dragStartH = _currentHeight;
+  }
+
+  void _onDragUpdate(DragUpdateDetails d) {
+    final dy = d.globalPosition.dy - _dragStartY;
+    final h = (_dragStartH - dy).clamp(
+      _collapsed(context) * 0.3,
+      _full(context),
+    );
+    setState(() => _currentHeight = h);
+  }
+
+  void _onDragEnd(DragEndDetails d) {
+    final vy = d.velocity.pixelsPerSecond.dy;
+    final collapsed = _collapsed(context);
+    final full = _full(context);
+    final mid = (collapsed + full) / 2;
+
+    if (vy < -600 || (_currentHeight > mid && vy <= 600)) {
+      _animateTo(full, expanding: true);
+    } else if (vy > 600 || _currentHeight < collapsed * 0.6) {
+      Navigator.of(context).maybePop();
+    } else {
+      _animateTo(
+        _currentHeight >= mid ? full : collapsed,
+        expanding: _currentHeight >= mid,
+      );
+    }
+  }
+
   bool get _hasHeader =>
-      title != null ||
-      titleWidget != null ||
-      showBack ||
-      actions.isNotEmpty ||
-      tabs.isNotEmpty ||
-      headerBottom != null ||
-      showHandle;
+      widget.title != null ||
+      widget.titleWidget != null ||
+      widget.showBack ||
+      widget.actions.isNotEmpty ||
+      widget.tabs.isNotEmpty ||
+      widget.headerBottom != null ||
+      widget.showHandle;
 
   @override
   Widget build(BuildContext context) {
-    final content = Column(
-      children: [
-        if (_hasHeader) _SheetViewHeader(
-          title: title,
-          titleWidget: titleWidget,
-          showBack: showBack,
-          onBack: onBack,
-          actions: actions,
-          tabs: tabs,
-          activeTabId: activeTabId,
-          onTabSelected: onTabSelected,
-          headerBottom: headerBottom,
-          showHandle: showHandle,
-        ),
-        Expanded(
-          child: Padding(
-            padding: bodyPadding ?? EdgeInsets.zero,
-            child: body,
+    final collapsed = _collapsed(context);
+    final full = _full(context);
+    final t = full > collapsed
+        ? ((_currentHeight - collapsed) / (full - collapsed)).clamp(0.0, 1.0)
+        : 0.0;
+    final radius = 20.0 * (1.0 - t);
+    final topPad = MediaQuery.of(context).padding.top * t;
+
+    return SizedBox(
+      height: _currentHeight,
+      child: ClipRRect(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(radius)),
+        child: Container(
+          color: AppColors.background,
+          child: Stack(
+            children: [
+              Column(
+                children: [
+                  if (_hasHeader)
+                    _SheetViewHeader(
+                      title: widget.title,
+                      titleWidget: widget.titleWidget,
+                      showBack: widget.showBack,
+                      onBack: widget.onBack,
+                      actions: widget.actions,
+                      tabs: widget.tabs,
+                      activeTabId: widget.activeTabId,
+                      onTabSelected: widget.onTabSelected,
+                      headerBottom: widget.headerBottom,
+                      showHandle: widget.showHandle,
+                      expanded: _expanded,
+                      topPad: topPad,
+                      onHandleTap: _toggle,
+                      onDragStart: _onDragStart,
+                      onDragUpdate: _onDragUpdate,
+                      onDragEnd: _onDragEnd,
+                    ),
+                  Expanded(
+                    child: Padding(
+                      padding: widget.bodyPadding ?? EdgeInsets.zero,
+                      child: widget.body,
+                    ),
+                  ),
+                ],
+              ),
+              if (widget.floating != null)
+                Positioned.fill(child: widget.floating!),
+              if (widget.floatingActionButton != null)
+                Positioned(
+                  right: 16,
+                  bottom: 16 + MediaQuery.of(context).padding.bottom,
+                  child: widget.floatingActionButton!,
+                ),
+            ],
           ),
         ),
-      ],
-    );
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      floatingActionButton: floatingActionButton,
-      body: Stack(
-        children: [
-          Positioned.fill(child: content),
-          if (floating != null) Positioned.fill(child: floating!),
-        ],
       ),
     );
   }
@@ -118,6 +247,12 @@ class _SheetViewHeader extends StatelessWidget {
   final ValueChanged<String>? onTabSelected;
   final Widget? headerBottom;
   final bool showHandle;
+  final bool expanded;
+  final double topPad;
+  final VoidCallback onHandleTap;
+  final GestureDragStartCallback onDragStart;
+  final GestureDragUpdateCallback onDragUpdate;
+  final GestureDragEndCallback onDragEnd;
 
   const _SheetViewHeader({
     this.title,
@@ -130,13 +265,18 @@ class _SheetViewHeader extends StatelessWidget {
     this.onTabSelected,
     this.headerBottom,
     required this.showHandle,
+    required this.expanded,
+    required this.topPad,
+    required this.onHandleTap,
+    required this.onDragStart,
+    required this.onDragUpdate,
+    required this.onDragEnd,
   });
 
   @override
   Widget build(BuildContext context) {
-    final safeTop = MediaQuery.of(context).padding.top;
     return Container(
-      padding: EdgeInsets.only(top: safeTop),
+      padding: EdgeInsets.only(top: topPad),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -151,14 +291,30 @@ class _SheetViewHeader extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (showHandle)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8, bottom: 8),
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.35),
-                      borderRadius: BorderRadius.circular(2),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onHandleTap,
+                  onVerticalDragStart: onDragStart,
+                  onVerticalDragUpdate: onDragUpdate,
+                  onVerticalDragEnd: onDragEnd,
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Center(
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOutCubic,
+                          width: expanded ? 24.0 : 36.0,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(
+                              alpha: expanded ? 0.6 : 0.35,
+                            ),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -184,8 +340,7 @@ class _SheetViewHeader extends StatelessWidget {
                         const SizedBox(width: 40),
                       const SizedBox(width: 8),
                       Expanded(
-                        child:
-                            titleWidget ??
+                        child: titleWidget ??
                             (title != null
                                 ? Text(
                                     title!,
@@ -228,7 +383,8 @@ class _SheetViewHeader extends StatelessWidget {
                         .map(
                           (tab) => Expanded(
                             child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 4),
                               child: _SheetTabButton(
                                 tab: tab,
                                 active: activeTabId == tab.id,
@@ -290,9 +446,7 @@ class _HeaderIconButton extends StatelessWidget {
       ),
     );
 
-    if (tooltip == null || tooltip!.isEmpty) {
-      return button;
-    }
+    if (tooltip == null || tooltip!.isEmpty) return button;
     return Tooltip(message: tooltip!, child: button);
   }
 }

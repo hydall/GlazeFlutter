@@ -5,6 +5,7 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/regex_service.dart';
+import '../../../core/llm/tokenizer.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
@@ -13,7 +14,7 @@ import '../../settings/app_settings_provider.dart';
 import '../chat_provider.dart';
 import 'message_actions.dart';
 
-class MessageBubble extends ConsumerWidget {
+class Message extends ConsumerWidget {
   final String content;
   final bool isUser;
   final bool isSystem;
@@ -32,7 +33,7 @@ class MessageBubble extends ConsumerWidget {
   final List<String> swipes;
   final int swipeId;
 
-  const MessageBubble({
+  const Message({
     super.key,
     required this.content,
     required this.isUser,
@@ -86,6 +87,9 @@ class MessageBubble extends ConsumerWidget {
     }
 
     final textColor = style.textColor;
+    final effectiveTokens = (tokens != null && tokens! > 0)
+        ? tokens
+        : (isUser && content.isNotEmpty ? estimateTokens(content) : null);
 
     Widget bubble = Align(
       alignment: style.alignment,
@@ -109,6 +113,10 @@ class MessageBubble extends ConsumerWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(displayName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: scheme.onSurfaceVariant)),
+                  if (messageIndex >= 0) ...[
+                    const SizedBox(width: 6),
+                    Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant.withValues(alpha: 0.55))),
+                  ],
                 ],
               ),
               const SizedBox(height: 8),
@@ -127,11 +135,12 @@ class MessageBubble extends ConsumerWidget {
               const SizedBox(height: 6),
               _MetadataRow(
                 genTime: genTime,
-                tokens: tokens,
+                tokens: effectiveTokens,
                 textColor: textColor,
                 isStandard: isStandard,
                 isUser: isUser,
                 scheme: scheme,
+                messageIndex: messageIndex,
                 onMenuTap: () => showMessageContextMenu(
                   context: context, ref: ref, charId: charId, content: content,
                   messageIndex: messageIndex, isUser: isUser, isTyping: isTyping,
@@ -192,27 +201,59 @@ class _BubbleStyle {
   }
 }
 
-class _ReasoningBlock extends StatelessWidget {
+class _ReasoningBlock extends StatefulWidget {
   final String reasoning;
   final ColorScheme scheme;
   const _ReasoningBlock({required this.reasoning, required this.scheme});
 
   @override
+  State<_ReasoningBlock> createState() => _ReasoningBlockState();
+}
+
+class _ReasoningBlockState extends State<_ReasoningBlock> {
+  bool _collapsed = true;
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(color: scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: widget.scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.psychology, size: 14, color: scheme.onSurfaceVariant),
-            const SizedBox(width: 4),
-            Text('Reasoning', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
-          ]),
-          const SizedBox(height: 4),
-          Text(reasoning, style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontStyle: FontStyle.italic)),
+          InkWell(
+            onTap: () => setState(() => _collapsed = !_collapsed),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                children: [
+                  Icon(Icons.psychology, size: 14, color: widget.scheme.onSurfaceVariant),
+                  const SizedBox(width: 4),
+                  Text('Reasoning', style: TextStyle(fontSize: 11, color: widget.scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  AnimatedRotation(
+                    turns: _collapsed ? -0.25 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(Icons.expand_more, size: 16, color: widget.scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeInOut,
+            child: _collapsed
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                    child: Text(
+                      widget.reasoning,
+                      style: TextStyle(fontSize: 12, color: widget.scheme.onSurfaceVariant, fontStyle: FontStyle.italic),
+                    ),
+                  ),
+          ),
         ],
       ),
     );
@@ -248,6 +289,7 @@ class _MetadataRow extends StatelessWidget {
   final bool isUser;
   final ColorScheme scheme;
   final VoidCallback onMenuTap;
+  final int messageIndex;
   final int swipeCount;
   final int swipeId;
   final VoidCallback? onSwipeLeft;
@@ -261,6 +303,7 @@ class _MetadataRow extends StatelessWidget {
     required this.isUser,
     required this.scheme,
     required this.onMenuTap,
+    required this.messageIndex,
     this.swipeCount = 1,
     this.swipeId = 0,
     this.onSwipeLeft,
@@ -276,6 +319,10 @@ class _MetadataRow extends StatelessWidget {
           Text('${swipeId + 1}/$swipeCount', style: TextStyle(fontSize: 11, color: textColor)),
           _swipeBtn(Icons.chevron_right, onSwipeRight),
           const SizedBox(width: 6),
+        ],
+        if (!isStandard && messageIndex >= 0) ...[
+          Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.55))),
+          const SizedBox(width: 8),
         ],
         if (genTime != null) ...[
           Icon(Icons.access_time, size: 12, color: textColor),

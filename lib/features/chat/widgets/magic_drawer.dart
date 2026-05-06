@@ -29,6 +29,17 @@ import 'memory_books_sheet.dart';
 import 'prompt_preview_screen.dart';
 import 'tokenizer_sheet.dart';
 
+void showMagicDrawer(BuildContext context, String charId) {
+  showModalBottomSheet(
+    context: context,
+    useRootNavigator: true,
+    backgroundColor: Colors.transparent,
+    barrierColor: Colors.black54,
+    isScrollControlled: true,
+    builder: (_) => MagicDrawerPanel(charId: charId),
+  );
+}
+
 class MagicDrawerPanel extends ConsumerStatefulWidget {
   final String charId;
 
@@ -43,21 +54,13 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   static const _deletedItemsKey = 'magic_drawer_deleted_items';
 
   static const _allItems = <_MagicDrawerItemDef>[
-    _MagicDrawerItemDef(
-      id: 'context',
-      label: 'Tokenizer',
-      icon: Icons.segment,
-    ),
+    _MagicDrawerItemDef(id: 'context', label: 'Tokenizer', icon: Icons.segment),
     _MagicDrawerItemDef(
       id: 'summary',
       label: 'Summary',
       icon: Icons.summarize_outlined,
     ),
-    _MagicDrawerItemDef(
-      id: 'sessions',
-      label: 'Sessions',
-      icon: Icons.history,
-    ),
+    _MagicDrawerItemDef(id: 'sessions', label: 'Sessions', icon: Icons.history),
     _MagicDrawerItemDef(
       id: 'stats',
       label: 'Stats',
@@ -78,31 +81,15 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       label: 'Memory Books',
       icon: Icons.auto_stories_outlined,
     ),
-    _MagicDrawerItemDef(
-      id: 'regex',
-      label: 'Regex',
-      icon: Icons.code,
-    ),
-    _MagicDrawerItemDef(
-      id: 'api',
-      label: 'API',
-      icon: Icons.api_outlined,
-    ),
-    _MagicDrawerItemDef(
-      id: 'presets',
-      label: 'Presets',
-      icon: Icons.tune,
-    ),
+    _MagicDrawerItemDef(id: 'regex', label: 'Regex', icon: Icons.code),
+    _MagicDrawerItemDef(id: 'api', label: 'API', icon: Icons.api_outlined),
+    _MagicDrawerItemDef(id: 'presets', label: 'Presets', icon: Icons.tune),
     _MagicDrawerItemDef(
       id: 'preview',
       label: 'Request Preview',
       icon: Icons.visibility_outlined,
     ),
-    _MagicDrawerItemDef(
-      id: 'coverage',
-      label: 'Coverage',
-      icon: Icons.search,
-    ),
+    _MagicDrawerItemDef(id: 'coverage', label: 'Coverage', icon: Icons.search),
     _MagicDrawerItemDef(
       id: 'personas',
       label: 'Personas',
@@ -193,7 +180,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     final activePersona = activePersonaId != null
         ? personas.where((p) => p.id == activePersonaId).firstOrNull
         : personas.firstOrNull;
-    final chatApi = apiConfigs.where((cfg) => cfg.mode != 'embedding').firstOrNull;
+    final chatApi = apiConfigs
+        .where((cfg) => cfg.mode != 'embedding')
+        .firstOrNull;
     final regexes = await ref.read(activeRegexesProvider.future);
 
     var summaryChars = 0;
@@ -208,12 +197,15 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     var summaryTokens = 0;
 
     if (session != null) {
-      final summary = await ref.read(summaryServiceProvider).getSummary(session.id);
+      final summary = await ref
+          .read(summaryServiceProvider)
+          .getSummary(session.id);
       summaryChars = summary?.length ?? 0;
       final memoryBook = await memoryRepo.getBySessionId(session.id);
       memoryEntries = memoryBook?.entries.length ?? 0;
-      sessionCount = (await ref.read(chatRepoProvider).getByCharacterId(widget.charId))
-          .length;
+      sessionCount =
+          (await ref.read(chatRepoProvider).getByCharacterId(widget.charId))
+              .length;
       messageCount = session.messages.length;
 
       if (character != null && chatApi != null) {
@@ -270,7 +262,8 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       presetTokens: presetTokens,
       personaTokens: personaTokens,
       summaryTokens: summaryTokens,
-      imageGenEnabled: ref.read(imageGenSettingsProvider).value?.enabled == true,
+      imageGenEnabled:
+          ref.read(imageGenSettingsProvider).value?.enabled == true,
     );
   }
 
@@ -279,7 +272,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         .where((m) => m.role == 'user' || m.role == 'assistant')
         .map((m) => m.content)
         .join('\n');
-    return ref.read(memoryInjectionServiceProvider).buildInjection(
+    return ref
+        .read(memoryInjectionServiceProvider)
+        .buildInjection(
           sessionId: session.id,
           historyText: historyText,
           messageCount: session.messages.length,
@@ -293,10 +288,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         .map((id) => _allItems.where((item) => item.id == id).firstOrNull)
         .whereType<_MagicDrawerItemDef>()
         .map(
-          (def) => _MagicDrawerCardItem(
-            def: def,
-            status: _statusFor(def.id),
-          ),
+          (def) => _MagicDrawerCardItem(def: def, status: _statusFor(def.id)),
         )
         .toList();
     if (_editing && _canAddMore) {
@@ -318,30 +310,39 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
 
   String? _statusFor(String id) {
     return switch (id) {
-      'context' => _stats.promptTokens > 0 && _stats.contextSize > 0
-          ? '${_stats.promptTokens}/${_stats.contextSize} tokens'
-          : null,
-      'summary' => _stats.summaryChars > 0
-          ? '${_stats.summaryChars} chars'
-          : 'Not generated',
+      'context' =>
+        _stats.promptTokens > 0 && _stats.contextSize > 0
+            ? '${_stats.promptTokens}/${_stats.contextSize} tokens'
+            : null,
+      'summary' =>
+        _stats.summaryChars > 0
+            ? '${_stats.summaryChars} chars'
+            : 'Not generated',
       'sessions' => '${_stats.sessionCount} sessions',
       'stats' => '${_stats.messageCount} messages',
-      'char-card' => _stats.characterTokens > 0
-          ? '${_stats.characterTokens} tokens'
-          : (_stats.character?.name ?? null),
+      'char-card' =>
+        _stats.characterTokens > 0
+            ? '${_stats.characterTokens} tokens'
+            : _stats.character?.name,
       'lorebooks' => '${_stats.lorebookEntryCount} entries',
       'memory-books' => '${_stats.memoryEntryCount} entries',
       'regex' => '${_stats.regexCount} scripts',
-      'api' => _stats.apiConfig?.name.isNotEmpty == true
-          ? _stats.apiConfig!.name
-          : _stats.apiConfig?.model,
-      'presets' => _stats.activePreset == null
-          ? 'Default'
-          : _stats.presetTokens > 0
-              ? '${_stats.activePreset!.name} • ${_stats.presetTokens} tokens'
-              : _stats.activePreset!.name,
-      'preview' => _stats.promptTokens > 0 ? '${_stats.promptTokens} tokens' : null,
-      'coverage' => _stats.lorebookEntryCount > 0 ? '${_stats.lorebookEntryCount} entries' : null,
+      'api' =>
+        _stats.apiConfig?.name.isNotEmpty == true
+            ? _stats.apiConfig!.name
+            : _stats.apiConfig?.model,
+      'presets' =>
+        _stats.activePreset == null
+            ? 'Default'
+            : _stats.presetTokens > 0
+            ? '${_stats.activePreset!.name} • ${_stats.presetTokens} tokens'
+            : _stats.activePreset!.name,
+      'preview' =>
+        _stats.promptTokens > 0 ? '${_stats.promptTokens} tokens' : null,
+      'coverage' =>
+        _stats.lorebookEntryCount > 0
+            ? '${_stats.lorebookEntryCount} entries'
+            : null,
       'personas' => _stats.activePersona?.name ?? 'Default',
       'image-gen' => _stats.imageGenEnabled ? 'On' : 'Off',
       _ => null,
@@ -361,7 +362,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _moveItem(int from, int to) async {
-    if (from == to || from < 0 || to < 0 || from >= _itemIds.length || to >= _itemIds.length) {
+    if (from == to ||
+        from < 0 ||
+        to < 0 ||
+        from >= _itemIds.length ||
+        to >= _itemIds.length) {
       return;
     }
     setState(() {
@@ -374,7 +379,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _showAddItemSheet() async {
-    final available = _allItems.where((item) => !_itemIds.contains(item.id)).toList();
+    final available = _allItems
+        .where((item) => !_itemIds.contains(item.id))
+        .toList();
     if (available.isEmpty) return;
 
     await GlazeBottomSheet.show(
@@ -404,7 +411,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
 
     switch (item.id) {
       case 'context':
-        Navigator.of(context).pop();
         showTokenizerSheet(context, widget.charId);
         return;
       case 'summary':
@@ -440,11 +446,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         if (mounted) context.go('/tools/presets');
         return;
       case 'preview':
-        Navigator.of(context).pop();
         showPromptPreviewScreen(context, widget.charId);
         return;
       case 'coverage':
-        Navigator.of(context).pop();
         showLorebookCoverageSheet(context, ref, widget.charId);
         return;
       case 'personas':
@@ -463,7 +467,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     final session = chatState?.session;
     if (session == null) return;
     final apiConfigs = await ref.read(apiConfigRepoProvider).getAll();
-    final chatApi = apiConfigs.where((cfg) => cfg.mode != 'embedding').firstOrNull;
+    final chatApi = apiConfigs
+        .where((cfg) => cfg.mode != 'embedding')
+        .firstOrNull;
     if (chatApi == null) {
       if (mounted) {
         GlazeBottomSheet.show(
@@ -471,16 +477,20 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
           title: 'Summary',
           bigInfo: const BottomSheetBigInfo(
             icon: Icons.api_outlined,
-            description: 'No chat API config found. Add one in API Settings first.',
+            description:
+                'No chat API config found. Add one in API Settings first.',
           ),
         );
       }
       return;
     }
 
+    if (!mounted) return;
     Navigator.of(context).pop();
     try {
-      final summary = await ref.read(summaryServiceProvider).generateSummary(
+      final summary = await ref
+          .read(summaryServiceProvider)
+          .generateSummary(
             sessionId: session.id,
             history: session.messages,
             apiConfig: chatApi,
@@ -514,7 +524,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   Future<void> _showMemoryBooks() async {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
     if (session == null) return;
-    Navigator.of(context).pop();
     GlazeBottomSheet.show(
       context,
       child: MemoryBooksSheet(sessionId: session.id),
@@ -569,7 +578,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   Future<void> _showSessionsSheet() async {
     final currentSession = ref.read(chatProvider(widget.charId)).value?.session;
     if (currentSession == null) return;
-    final sessions = await ref.read(chatProvider(widget.charId).notifier).getSessions();
+    final sessions = await ref
+        .read(chatProvider(widget.charId).notifier)
+        .getSessions();
 
     if (!mounted) return;
     await GlazeBottomSheet.show(
@@ -591,8 +602,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             (session) => BottomSheetSessionItem(
               title: 'Session #${session.sessionIndex}',
               count: session.messages.length,
-              time: session.updatedAt == 0 ? '' : _formatRelativeTime(session.updatedAt),
-              preview: session.messages.lastOrNull?.content ?? 'No messages yet',
+              time: session.updatedAt == 0
+                  ? ''
+                  : _formatRelativeTime(session.updatedAt),
+              preview:
+                  session.messages.lastOrNull?.content ?? 'No messages yet',
               isActive: session.id == currentSession.id,
               onTap: () {
                 Navigator.of(context).pop();
@@ -615,7 +629,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   String _formatRelativeTime(int updatedAtSeconds) {
-    final updated = DateTime.fromMillisecondsSinceEpoch(updatedAtSeconds * 1000);
+    final updated = DateTime.fromMillisecondsSinceEpoch(
+      updatedAtSeconds * 1000,
+    );
     final diff = DateTime.now().difference(updated);
     if (diff.inMinutes < 1) return 'now';
     if (diff.inHours < 1) return '${diff.inMinutes}m';
@@ -625,130 +641,163 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final panelHeight = math.min(MediaQuery.of(context).size.height * 0.54, 430.0);
+    final panelHeight = math.min(
+      MediaQuery.of(context).size.height * 0.54,
+      430.0,
+    );
     final items = _displayItems;
 
-    return SizedBox(
-      height: panelHeight,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.045),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x66000000),
-              blurRadius: 18,
-              offset: Offset(0, -8),
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          height: panelHeight,
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E).withValues(alpha: 0.8),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: const Border(top: BorderSide(color: AppColors.glassBorder)),
+          ),
+          child: Stack(
+        children: [
+          Positioned.fill(
+            child: GridView.builder(
+              padding: EdgeInsets.fromLTRB(
+                12,
+                60,
+                12,
+                16 + MediaQuery.of(context).padding.bottom,
+              ),
+              itemCount: items.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 8,
+                mainAxisExtent: 60,
+              ),
+              itemBuilder: (context, index) {
+                final item = items[index];
+                if (item.isAddButton) {
+                  return _AddMagicCard(onTap: _showAddItemSheet);
+                }
+                return DragTarget<int>(
+                  onWillAcceptWithDetails: (details) {
+                    setState(() => _hoverIndex = index);
+                    return _editing && details.data != index;
+                  },
+                  onLeave: (_) {
+                    if (_hoverIndex == index) {
+                      setState(() => _hoverIndex = null);
+                    }
+                  },
+                  onAcceptWithDetails: (details) {
+                    _moveItem(details.data, index);
+                  },
+                  builder: (context, _, _) {
+                    final card = _MagicCard(
+                      item: item,
+                      editing: _editing,
+                      hovered: _hoverIndex == index && _draggingIndex != index,
+                      onTap: () => _handleTap(item.def),
+                      onDelete: () => _removeItem(item.def.id),
+                      onLongPress: () {
+                        if (!_editing) {
+                          HapticFeedback.mediumImpact();
+                          setState(() => _editing = true);
+                        }
+                      },
+                    );
+
+                    if (!_editing) {
+                      return card;
+                    }
+
+                    return LongPressDraggable<int>(
+                      data: index,
+                      onDragStarted: () {
+                        HapticFeedback.mediumImpact();
+                        setState(() => _draggingIndex = index);
+                      },
+                      onDragEnd: (_) {
+                        setState(() {
+                          _draggingIndex = null;
+                          _hoverIndex = null;
+                        });
+                      },
+                      feedback: SizedBox(
+                        width: (MediaQuery.of(context).size.width - 32) / 3,
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Opacity(opacity: 0.92, child: card),
+                        ),
+                      ),
+                      childWhenDragging: Opacity(opacity: 0.25, child: card),
+                      child: card,
+                    );
+                  },
+                );
+              },
             ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: GridView.builder(
-                    padding: EdgeInsets.fromLTRB(
-                      10,
-                      76,
-                      10,
-                      12 + MediaQuery.of(context).padding.bottom,
-                    ),
-                    itemCount: items.length,
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 6,
-                      mainAxisSpacing: 10,
-                      mainAxisExtent: 60,
-                    ),
-                    itemBuilder: (context, index) {
-                      final item = items[index];
-                      if (item.isAddButton) {
-                        return _AddMagicCard(onTap: _showAddItemSheet);
-                      }
-                      return DragTarget<int>(
-                        onWillAcceptWithDetails: (details) {
-                          setState(() => _hoverIndex = index);
-                          return _editing && details.data != index;
-                        },
-                        onLeave: (_) {
-                          if (_hoverIndex == index) {
-                            setState(() => _hoverIndex = null);
-                          }
-                        },
-                        onAcceptWithDetails: (details) {
-                          _moveItem(details.data, index);
-                        },
-                        builder: (context, _, __) {
-                          final card = _MagicCard(
-                            item: item,
-                            editing: _editing,
-                            hovered: _hoverIndex == index && _draggingIndex != index,
-                            onTap: () => _handleTap(item.def),
-                            onDelete: () => _removeItem(item.def.id),
-                            onLongPress: () {
-                              if (!_editing) {
-                                HapticFeedback.mediumImpact();
-                                setState(() => _editing = true);
-                              }
-                            },
-                          );
-
-                          if (!_editing) {
-                            return card;
-                          }
-
-                          return LongPressDraggable<int>(
-                            data: index,
-                            onDragStarted: () {
-                              HapticFeedback.mediumImpact();
-                              setState(() => _draggingIndex = index);
-                            },
-                            onDragEnd: (_) {
-                              setState(() {
-                                _draggingIndex = null;
-                                _hoverIndex = null;
-                              });
-                            },
-                            feedback: SizedBox(
-                              width: (MediaQuery.of(context).size.width - 32) / 3,
-                              child: Material(
-                                color: Colors.transparent,
-                                child: Opacity(opacity: 0.92, child: card),
-                              ),
-                            ),
-                            childWhenDragging: Opacity(
-                              opacity: 0.25,
-                              child: card,
-                            ),
-                            child: card,
-                          );
-                        },
-                      );
-                    },
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: 96,
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xEB141416),
+                      Color(0x88141416),
+                      Color(0x00141416),
+                    ],
+                    stops: [0.0, 0.55, 1.0],
                   ),
                 ),
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: _DrawerHeader(
-                    editing: _editing,
-                    onToggleEditing: _toggleEditing,
-                  ),
-                ),
-                if (_loading)
-                  const Positioned.fill(
-                    child: ColoredBox(
-                      color: Color(0x22000000),
-                      child: Center(child: CircularProgressIndicator()),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Center(
+                  child: Container(
+                    width: 32,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[600],
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-              ],
+                ),
+              ),
             ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: _DrawerHeader(
+              editing: _editing,
+              onToggleEditing: _toggleEditing,
+            ),
+          ),
+          if (_loading)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Color(0x22000000),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ),
+        ],
           ),
         ),
       ),
@@ -760,63 +809,58 @@ class _DrawerHeader extends StatelessWidget {
   final bool editing;
   final VoidCallback onToggleEditing;
 
-  const _DrawerHeader({
-    required this.editing,
-    required this.onToggleEditing,
-  });
+  const _DrawerHeader({required this.editing, required this.onToggleEditing});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 8, 18, 10),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.black.withValues(alpha: 0.18),
-            Colors.black.withValues(alpha: 0.10),
-            Colors.transparent,
-          ],
-          stops: const [0, 0.55, 1],
-        ),
-      ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const Text(
             'Quick Access',
             style: TextStyle(
-              fontSize: 16,
+              fontSize: 17,
               fontWeight: FontWeight.w700,
               color: AppColors.textPrimary,
+              letterSpacing: -0.2,
             ),
           ),
           const Spacer(),
           GestureDetector(
             onTap: onToggleEditing,
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
               height: 34,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.07),
+                color: editing
+                    ? AppColors.accent.withValues(alpha: 0.22)
+                    : Colors.transparent,
                 borderRadius: BorderRadius.circular(17),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
+                border: Border.all(
+                  color: editing
+                      ? AppColors.accent.withValues(alpha: 0.38)
+                      : Colors.white.withValues(alpha: 0.18),
+                ),
               ),
               child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    editing ? Icons.check : Icons.edit_outlined,
+                    editing ? Icons.check : Icons.edit,
                     size: 16,
-                    color: AppColors.textSecondary,
+                    color: editing ? AppColors.accent : AppColors.textPrimary,
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    editing ? 'Save' : 'Edit',
-                    style: const TextStyle(
+                    editing ? 'Done' : 'Edit',
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
+                      color:
+                          editing ? AppColors.accent : AppColors.textPrimary,
                     ),
                   ),
                 ],
@@ -829,7 +873,7 @@ class _DrawerHeader extends StatelessWidget {
   }
 }
 
-class _MagicCard extends StatelessWidget {
+class _MagicCard extends StatefulWidget {
   final _MagicDrawerCardItem item;
   final bool editing;
   final bool hovered;
@@ -847,107 +891,148 @@ class _MagicCard extends StatelessWidget {
   });
 
   @override
+  State<_MagicCard> createState() => _MagicCardState();
+}
+
+class _MagicCardState extends State<_MagicCard> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
+    final editing = widget.editing;
+    final hovered = widget.hovered;
+
     return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-        constraints: const BoxConstraints.expand(),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: hovered ? 0.08 : 0.035),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: editing
-                ? AppColors.accent.withValues(alpha: 0.55)
-                : Colors.white.withValues(alpha: 0.07),
-          ),
-          boxShadow: hovered
-              ? [
-                  BoxShadow(
-                    color: AppColors.accent.withValues(alpha: 0.35),
-                    blurRadius: 14,
-                  ),
-                ]
+      onTap: widget.onTap,
+      onLongPress: widget.onLongPress,
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.96 : (hovered ? 1.02 : 1.0),
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: Container(
+          // Outer container carries the glow shadow so it isn't clipped
+          decoration: hovered
+              ? BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.accent.withValues(alpha: 0.35),
+                      blurRadius: 14,
+                    ),
+                  ],
+                )
               : null,
-        ),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF88A4DE),
-                    borderRadius: BorderRadius.circular(8),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                constraints: const BoxConstraints.expand(),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(
+                    alpha: _pressed || hovered ? 0.08 : 0.04,
                   ),
-                  child: Icon(
-                    item.def.icon,
-                    size: 16,
-                    color: Colors.white,
+                  border: Border.all(
+                    color: editing
+                        ? AppColors.accent.withValues(alpha: 0.55)
+                        : Colors.white.withValues(alpha: 0.06),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        item.def.label,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                          height: 0.98,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            item.def.icon,
+                            size: 16,
+                            color: Colors.white.withValues(alpha: 0.8),
+                          ),
                         ),
-                      ),
-                      if (item.status != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          item.status!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 8.8,
-                            color: AppColors.textSecondary.withValues(alpha: 0.95),
-                            height: 1,
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                item.def.label,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                  height: 1,
+                                ),
+                              ),
+                              if (item.status != null) ...[
+                                const SizedBox(height: 1),
+                                Text(
+                                  item.status!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: AppColors.textSecondary.withValues(
+                                      alpha: 0.95,
+                                    ),
+                                    height: 1,
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ),
                       ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            if (editing)
-              Positioned(
-                top: -10,
-                right: -10,
-                child: GestureDetector(
-                  onTap: onDelete,
-                  child: Container(
-                    width: 24,
-                    height: 24,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFFF3B30),
-                      shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.close,
-                      size: 14,
-                      color: Colors.white,
-                    ),
-                  ),
+                    if (editing)
+                      Positioned(
+                        top: -8,
+                        right: -8,
+                        child: GestureDetector(
+                          onTap: widget.onDelete,
+                          child: Container(
+                            width: 24,
+                            height: 24,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFFFF3B30),
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Color(0x4DFF3B30),
+                                  blurRadius: 8,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-          ],
+            ),
+          ),
         ),
       ),
     );
@@ -963,39 +1048,48 @@ class _AddMagicCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-        constraints: const BoxConstraints.expand(),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.035),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.add, size: 16, color: AppColors.textPrimary),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            constraints: const BoxConstraints.expand(),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.04),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
             ),
-            const SizedBox(width: 8),
-            const Expanded(
-              child: Text(
-                'Add',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                  height: 1,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    Icons.add,
+                    size: 16,
+                    color: AppColors.textPrimary.withValues(alpha: 0.8),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text(
+                    'Add',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

@@ -14,8 +14,8 @@ import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/glaze_toast.dart';
+import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
 
 class PromptPreviewScreen extends ConsumerStatefulWidget {
@@ -115,43 +115,33 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
+    return SheetView(
+      title: 'Prompt Preview',
+      showBack: true,
+      onBack: () => Navigator.of(context).maybePop(),
+      actions: [
+        SheetViewAction(
+          icon: Icon(_showTokens ? Icons.numbers : Icons.numbers_outlined, size: 20),
+          onPressed: () => setState(() => _showTokens = !_showTokens),
+          tooltip: 'Toggle token counts',
+        ),
+        SheetViewAction(
+          icon: const Icon(Icons.copy, size: 20),
+          onPressed: _copyJson,
+          tooltip: 'Copy as JSON',
+        ),
+      ],
       body: Column(
         children: [
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: GlazeAppBar(
-                title: 'Prompt Preview',
-                leading: BackButton(onPressed: () => Navigator.pop(context)),
-                actions: [
-                  IconButton(
-                    icon: Icon(_showTokens ? Icons.numbers : Icons.numbers_outlined, size: 20),
-                    tooltip: 'Toggle token counts',
-                    onPressed: () => setState(() => _showTokens = !_showTokens),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 20),
-                    tooltip: 'Copy as JSON',
-                    onPressed: _copyJson,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_result != null && _apiConfig != null) _SummaryBar(result: _result!, contextSize: _apiConfig!.contextSize),
+          if (_result != null && _apiConfig != null)
+            _SummaryBar(result: _result!, contextSize: _apiConfig!.contextSize),
           _FilterBar(current: _filter, onSelected: (f) => setState(() => _filter = f)),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
                 : _result == null
                     ? Center(child: Text('No data', style: TextStyle(color: AppColors.textSecondary)))
-                    : _MessageList(
-                        messages: _filteredMessages,
-                        showTokens: _showTokens,
-                      ),
+                    : _MessageList(messages: _filteredMessages, showTokens: _showTokens),
           ),
         ],
       ),
@@ -428,7 +418,11 @@ class _SectionScheme {
 }
 
 void showPromptPreviewScreen(BuildContext context, String charId) {
-  Navigator.of(context).push(
-    MaterialPageRoute(builder: (_) => PromptPreviewScreen(charId: charId)),
+  showModalBottomSheet(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => PromptPreviewScreen(charId: charId),
   );
 }
