@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/character.dart';
+import '../../core/services/character_book_converter.dart';
+import '../../core/services/character_importer.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
@@ -127,20 +129,26 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
 
       final importer = ref.read(characterImporterProvider);
       final notifier = ref.read(charactersProvider.notifier);
+      final lorebookRepo = ref.read(lorebookRepoProvider);
       int imported = 0;
       String? lastError;
 
       for (final file in result.files) {
         try {
+          CharacterImportResult r;
           if (file.bytes != null) {
-            final r = await importer.importFromBytes(file.bytes!, file.name);
-            await notifier.add(r.character);
-            imported++;
+            r = await importer.importFromBytes(file.bytes!, file.name);
           } else if (file.path != null) {
-            final r = await importer.importFromFile(file.path!);
-            await notifier.add(r.character);
-            imported++;
+            r = await importer.importFromFile(file.path!);
+          } else {
+            continue;
           }
+          await notifier.add(r.character);
+          if (r.characterBookData != null) {
+            final lorebook = convertCharacterBook(r.characterBookData!, r.character.id);
+            await lorebookRepo.put(lorebook);
+          }
+          imported++;
         } catch (e) {
           lastError = 'Failed to import ${file.name}: $e';
         }

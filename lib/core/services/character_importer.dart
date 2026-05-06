@@ -12,8 +12,9 @@ import 'png_text_extractor.dart';
 class CharacterImportResult {
   final Character character;
   final bool hadAvatar;
+  final Map<String, dynamic>? characterBookData;
 
-  CharacterImportResult({required this.character, required this.hadAvatar});
+  CharacterImportResult({required this.character, required this.hadAvatar, this.characterBookData});
 }
 
 class CharacterImporter {
@@ -57,7 +58,8 @@ class CharacterImporter {
     final data = _normalizeCharacterData(rawData);
     final character = await _saveCharacterWithAvatar(data, pngBytes);
     return CharacterImportResult(
-        character: character, hadAvatar: true);
+        character: character, hadAvatar: true,
+        characterBookData: data['character_book'] as Map<String, dynamic>?);
   }
 
   Future<CharacterImportResult> _importJson(Uint8List jsonBytes) async {
@@ -73,7 +75,8 @@ class CharacterImporter {
 
     final character = await _saveCharacterWithAvatar(data, avatarBytes);
     return CharacterImportResult(
-        character: character, hadAvatar: avatarBytes != null);
+        character: character, hadAvatar: avatarBytes != null,
+        characterBookData: data['character_book'] as Map<String, dynamic>?);
   }
 
   Future<CharacterImportResult> _importCharX(Uint8List zipBytes) async {
@@ -127,7 +130,8 @@ class CharacterImporter {
 
     final character = await _saveCharacterWithAvatar(data, avatarBytes);
     return CharacterImportResult(
-        character: character, hadAvatar: avatarBytes != null);
+        character: character, hadAvatar: avatarBytes != null,
+        characterBookData: data['character_book'] as Map<String, dynamic>?);
   }
 
   Map<String, dynamic> _normalizeCharacterData(Map<String, dynamic> json) {
