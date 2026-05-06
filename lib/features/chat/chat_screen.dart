@@ -1,8 +1,12 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/llm/summary_service.dart';
+import '../../core/services/chat_import_export.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
@@ -73,6 +77,10 @@ class ChatScreen extends ConsumerWidget {
                   _generateSummary(context, ref, charId);
                 case 'memory':
                   _showMemoryBooks(context, ref, charId);
+                case 'export_chat':
+                  _exportChat(context, ref, charId);
+                case 'import_chat':
+                  _importChat(context, ref, charId);
                 case 'raw':
                   showRawPromptDialog(context, ref, charId);
                 case 'rawResponse':
@@ -99,6 +107,14 @@ class ChatScreen extends ConsumerWidget {
               const PopupMenuItem(
                 value: 'memory',
                 child: Row(children: [Icon(Icons.auto_stories, size: 18), SizedBox(width: 8), Text('Memory Books')]),
+              ),
+              const PopupMenuItem(
+                value: 'export_chat',
+                child: Row(children: [Icon(Icons.upload_file, size: 18), SizedBox(width: 8), Text('Export Chat (JSONL)')]),
+              ),
+              const PopupMenuItem(
+                value: 'import_chat',
+                child: Row(children: [Icon(Icons.file_download, size: 18), SizedBox(width: 8), Text('Import Chat')]),
               ),
               const PopupMenuDivider(),
               const PopupMenuItem(
@@ -231,4 +247,82 @@ void _showMemoryBooks(BuildContext context, WidgetRef ref, String charId) {
       builder: (_, controller) => MemoryBooksSheet(sessionId: chatState.session!.id),
     ),
   );
+}
+
+Future<void> _exportChat(BuildContext context, WidgetRef ref, String charId) async {
+  final chatState = ref.read(chatProvider(charId)).value;
+  if (chatState == null || chatState.session == null) return;
+
+  final charRepo = ref.read(characterRepoProvider);
+  final character = await charRepo.getById(charId);
+  if (character == null) return;
+
+  try {
+    final desktop = Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'] ?? '.';
+    final outputDir = '${desktop}\\Desktop';
+
+    final result = await exportChatAsJsonl(
+      session: chatState.session!,
+      character: character,
+      outputDir: outputDir,
+    );
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Chat exported to ${result.filePath}')),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    }
+  }
+}
+
+Future<void> _importChat(BuildContext context, WidgetRef ref, String charId) async {
+  final result = await FilePicker.pickFiles(
+    type: FileType.custom,
+    allowedExtensions: ['jsonl', 'json'],
+    allowMultiple: false,
+  );
+  if (result == null || result.files.isEmpty) return;
+
+  final filePath = result.files.first.path;
+  if (filePath == null) return;
+
+  try {
+    final importResult = await importChatFromJsonl(filePath);
+    if (importResult.messages.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No messages found in file')),
+        );
+      }
+      return;
+    }
+
+    final chatState = ref.read(chatProvider(charId)).value;
+    if (chatState == null || chatState.session == null) return;
+
+    final newSession = chatState.session!.copyWith(
+      messages: [...chatState.session!.messages, ...importResult.messages],
+      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    );
+
+    await ref.read(chatRepoProvider).put(newSession);
+    ref.invalidate(chatProvider(charId));
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Imported ${importResult.messages.length} messages')),
+      );
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import failed: $e')),
+      );
+    }
+  }
 }
