@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'core/state/active_selection_provider.dart';
 import 'core/services/preset_seeder.dart';
 import 'core/services/crash_recovery_service.dart';
+import 'core/services/onboarding_service.dart';
 import 'features/character_list/character_detail_screen.dart';
 import 'features/character_list/character_editor_screen.dart';
 import 'features/character_list/character_list_screen.dart';
@@ -122,6 +123,7 @@ class _GlazeAppState extends ConsumerState<GlazeApp> {
     seedDefaultPresets(ref);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAndOfferCrashRecovery(context, ref);
+      checkAndShowOnboarding(context);
     });
   }
 

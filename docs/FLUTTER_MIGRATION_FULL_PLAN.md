@@ -21,6 +21,14 @@
 | Phase 5d: Swipe UI | Done | ←→ swipe arrows on assistant messages with swipe counter |
 | Phase 5e: Session Switcher | Done | Session picker in chat header, session creation/deletion |
 | UI Refactoring (round 2) | Done | God object decomposition: 6 monoliths → 19 single-responsibility files, -1308 net lines (see below) |
+| Phase 6: Memory Books | Done | Memory book model, MemoryBooksSheet UI, injection service, {{memory}} macro |
+| Phase 7: Guided Generation | Done | {{guidance}} macro, guided generation prompt in preset, guidance input in chat |
+| Phase 8: Chat Import/Export | Done | ST JSONL import/export, export/import menu in chat |
+| Phase 9: Character Book Extraction | Done | Extract character_book from PNG card, auto-create lorebook |
+| Phase 10: Magic Drawer Polish | Done | Raw Prompt + Context chips wired, Context info sheet |
+| Phase 11: Persona Avatar Picker | Done | Image picker for persona avatar |
+| Phase 12: Character Export | Done | PNG with tEXt chunk + JSON V2 spec export |
+| Phase 13: Theme + Polish | Done | Theme engine (dark/light/system + custom accent), search, crash recovery, onboarding |
 
 ### UI Refactoring (2025-05-05 → 2025-05-06)
 
@@ -267,26 +275,20 @@ Chat session management.
 
 | Phase | Priority | What's Missing |
 |-------|----------|----------------|
-| 6: Memory Books | High | Memory book model, auto-create/automation, draft generation, MemoryBooksSheet UI, injection into {{summary}} or summary_block |
-| 7: Guided Generation | Medium | {{guidance}} macro, guided generation/impersonation prompt templates in preset, UI toggle in chat input |
-| 8: Chat Import/Export | Medium | ST JSONL import/export, PNG export, backup import |
-| 9: Character Book Extraction | Medium | Extract character_book from PNG card JSON, auto-create lorebook with character scope |
-| 10: Magic Drawer Polish | Medium | Wire Raw Prompt + Context chips, memory books chip |
-| 11: Persona Avatar Picker | Medium | Image picker for persona avatar |
-| 12: Image Generation | Low | Service, config, gallery, UI |
-| 13: Cloud Sync | Low | Crypto, adapters, manifest, engine, UI |
-| 14: Theme + Polish | Low | Theme engine (light mode, custom accent), search, onboarding, crash recovery |
-| 15: CI/CD | Low | GitHub Actions, code signing |
+| Image Generation | Low | Service, config, gallery, UI |
+| Cloud Sync | Low | Crypto, adapters, manifest, engine, UI |
+| Background Gen Notification | Low | Notification on generation complete |
+| iOS Keyboard Handling | Low | Keyboard avoidance, accessory view |
+| Android Back Button | Low | Intent system, back navigation |
+| App Icons + Splash | Low | All platforms |
+| CI/CD | Low | GitHub Actions, code signing |
 
 ### Known stubs in current codebase
 
 - `chat_screen.dart` → `input_bar.dart` — 3 input bar buttons (image gen, fullscreen, auto) are decorative
-- `character_list_screen.dart` — search button no-op, Catalog tab "coming soon"
-- `menu_screen.dart` — Theme, Cloud Sync, Backups all "coming soon"
+- `character_list_screen.dart` — Catalog tab "coming soon"
+- `menu_screen.dart` — Cloud Sync, Backups "coming soon"
 - `tokenizer.dart` — heuristic (chars/3.35), no real BPE
-- Memory Books — not yet implemented (pending, high priority)
-- Character book extraction from PNG cards — not yet implemented
-- Guided generation ({{guidance}}) — not yet implemented
 
 ### Architecture note
 
@@ -2877,12 +2879,12 @@ Port from JS `db.js` crash recovery logic:
 - Splash screen with Glaze branding
 
 ### Deliverables Phase 8
-- [ ] Full theme system with presets
-- [ ] Swipe for alternative responses
-- [ ] Chat branching
-- [ ] Search across characters/chats
-- [ ] Onboarding flow
-- [ ] Crash recovery
+- [x] Full theme system with presets
+- [x] Swipe for alternative responses
+- [x] Chat branching
+- [x] Search across characters/chats
+- [x] Onboarding flow
+- [x] Crash recovery
 - [ ] iOS keyboard handling
 - [ ] Local notifications
 - [ ] App icons + splash screens
