@@ -7,18 +7,28 @@
 
 ## Branching Strategy
 
-Each feature = branch from `origin/master`, push to origin, PR to upstream/master.
+Each feature = branch from current working base, push to origin, PR to upstream/master.
+
+While catching up to Glaze JS, features stack — new branches branch off the previous unmerged branch.
 
 ```bash
-git checkout -b feat/my-feature
+# First feature
+git checkout -b feat/first
 # ... work ...
-git push -u origin feat/my-feature
-gh pr create --repo hydall/GlazeFlutter --base master --head danvitv:feat/my-feature
+git push -u origin feat/first
+gh pr create --repo hydall/GlazeFlutter --base master --head danvitv:feat/first
+
+# Next feature — stacks on previous unmerged branch
+git checkout -b feat/second feat/first
+# ... work ...
+git push -u origin feat/second
+gh pr create --repo hydall/GlazeFlutter --base master --head danvitv:feat/second
 ```
 
 ### Rules
 
 - **No direct commits to `master`** — always use feature branches
+- **Stack while catching up** — branch off the latest unmerged branch if needed
 - **Run `dart run build_runner build`** after changing freezed/drift models
 - **Every sub-screen must have a back button** — use `leading: BackButton(onPressed: () => context.go('/parent'))` in AppBar since GoRouter `go()` replaces the stack and doesn't auto-provide one
 
@@ -40,7 +50,7 @@ gh pr create --repo hydall/GlazeFlutter --base master --head danvitv:feat/my-fea
 ## Before Starting Work
 
 1. `git branch --show-current` — make sure you're on the right branch
-2. Sync with latest: `git checkout master && git pull origin master`
+2. Sync with latest: `git checkout master && git pull upstream master`
 3. `git checkout -b feat/xxx` — create feature branch
 4. `flutter analyze` — verify before committing
 
@@ -90,4 +100,4 @@ Detailed rules are split into topic files. When in doubt, read all that apply be
 
 - [ ] Delete local branch: `git branch -D feat/xxx`
 - [ ] Delete remote branch: `git push origin --delete feat/xxx`
-- [ ] Sync master: `git pull origin master`
+- [ ] Sync master: `git checkout master && git pull upstream master`
