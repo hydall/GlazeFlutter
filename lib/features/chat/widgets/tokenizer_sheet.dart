@@ -56,19 +56,21 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       _contextSize = apiConfig.contextSize;
 
       final activePresetId = ref.read(activePresetIdProvider);
-      final activePersonaId = ref.read(activePersonaIdProvider);
       final presets = await presetRepo.getAll();
       final preset = activePresetId != null
           ? presets.where((p) => p.id == activePresetId).firstOrNull
           : (presets.isNotEmpty ? presets.first : null);
       final personas = await personaRepo.getAll();
-      final persona = activePersonaId != null
-          ? personas.where((p) => p.id == activePersonaId).firstOrNull
-          : (personas.isNotEmpty ? personas.first : null);
 
       final chatState = ref.read(chatProvider(widget.charId)).value;
       final session = chatState?.session;
       if (session == null) { setState(() => _loading = false); return; }
+
+      final connections = ref.read(personaConnectionsProvider);
+      final activePersonaId = ref.read(activePersonaIdProvider);
+      final persona = getEffectivePersona(
+        personas, widget.charId, session.id, activePersonaId, connections,
+      );
 
       _visibleCount = session.messages.where((m) => !m.isHidden).length;
       _hiddenCount = session.messages.where((m) => m.isHidden).length;

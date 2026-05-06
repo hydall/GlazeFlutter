@@ -3,12 +3,17 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/persona.dart';
 import '../models/preset.dart';
 import 'db_provider.dart';
 
 final activePresetIdProvider = StateProvider<String?>((ref) => null);
 final activePersonaIdProvider = StateProvider<String?>((ref) => null);
 final globalVarsProvider = StateProvider<Map<String, String>>((ref) => {});
+
+final personaConnectionsProvider = StateProvider<PersonaConnections>((ref) {
+  return const PersonaConnections();
+});
 
 final activeRegexesProvider = FutureProvider<List<PresetRegex>>((ref) async {
   final repo = ref.watch(presetRepoProvider);
@@ -35,6 +40,13 @@ Future<void> loadActiveSelections(WidgetRef ref) async {
           map.map((k, v) => MapEntry(k, v.toString()));
     } catch (_) {}
   }
+  final pcJson = prefs.getString('personaConnections');
+  if (pcJson != null) {
+    try {
+      ref.read(personaConnectionsProvider.notifier).state =
+          PersonaConnections.fromJson(jsonDecode(pcJson) as Map<String, dynamic>);
+    } catch (_) {}
+  }
 }
 
 Future<void> setActivePreset(WidgetRef ref, String? id) async {
@@ -55,6 +67,98 @@ Future<void> setActivePersona(WidgetRef ref, String? id) async {
   } else {
     await prefs.remove('activePersonaId');
   }
+}
+
+Future<void> setPersonaConnection(
+  WidgetRef ref,
+  String type,
+  String targetId,
+  String? personaId,
+) async {
+  final current = ref.read(personaConnectionsProvider);
+  PersonaConnections updated;
+  if (type == 'character') {
+    final map = Map<String, String>.from(current.character);
+    if (personaId == null) {
+      map.remove(targetId);
+    } else {
+      map[targetId] = personaId;
+    }
+    updated = current.copyWith(character: map);
+  } else {
+    final map = Map<String, String>.from(current.chat);
+    if (personaId == null) {
+      map.remove(targetId);
+    } else {
+      map[targetId] = personaId;
+    }
+    updated = current.copyWith(chat: map);
+  }
+  ref.read(personaConnectionsProvider.notifier).state = updated;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('personaConnections', jsonEncode(updated.toJson()));
+}
+
+void setPersonaConnectionRef(
+  Ref ref,
+  String type,
+  String targetId,
+  String? personaId,
+) {
+  final current = ref.read(personaConnectionsProvider);
+  PersonaConnections updated;
+  if (type == 'character') {
+    final map = Map<String, String>.from(current.character);
+    if (personaId == null) {
+      map.remove(targetId);
+    } else {
+      map[targetId] = personaId;
+    }
+    updated = current.copyWith(character: map);
+  } else {
+    final map = Map<String, String>.from(current.chat);
+    if (personaId == null) {
+      map.remove(targetId);
+    } else {
+      map[targetId] = personaId;
+    }
+    updated = current.copyWith(chat: map);
+  }
+  ref.read(personaConnectionsProvider.notifier).state = updated;
+  _persistPersonaConnections(updated);
+}
+
+Future<void> _persistPersonaConnections(PersonaConnections conns) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('personaConnections', jsonEncode(conns.toJson()));
+}
+
+Persona? getEffectivePersona(
+  List<Persona> personas,
+  String? charId,
+  String? sessionId,
+  String? globalPersonaId,
+  PersonaConnections connections,
+) {
+  if (sessionId != null) {
+    final chatPersonaId = connections.chat[sessionId];
+    if (chatPersonaId != null) {
+      final p = personas.where((p) => p.id == chatPersonaId).firstOrNull;
+      if (p != null) return p;
+    }
+  }
+  if (charId != null) {
+    final charPersonaId = connections.character[charId];
+    if (charPersonaId != null) {
+      final p = personas.where((p) => p.id == charPersonaId).firstOrNull;
+      if (p != null) return p;
+    }
+  }
+  if (globalPersonaId != null) {
+    final p = personas.where((p) => p.id == globalPersonaId).firstOrNull;
+    if (p != null) return p;
+  }
+  return personas.isNotEmpty ? personas.first : null;
 }
 
 Future<void> _persistGlobalVars(Map<String, String> vars) async {

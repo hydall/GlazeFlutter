@@ -40,7 +40,6 @@ void showRawPromptDialog(
   final apiConfig = apiConfigs.first;
 
   final activePresetId = ref.read(activePresetIdProvider);
-  final activePersonaId = ref.read(activePersonaIdProvider);
 
   final presets = await presetRepo.getAll();
   final preset = activePresetId != null
@@ -48,9 +47,11 @@ void showRawPromptDialog(
       : (presets.isNotEmpty ? presets.first : null);
 
   final personas = await personaRepo.getAll();
-  final persona = activePersonaId != null
-      ? personas.where((p) => p.id == activePersonaId).firstOrNull
-      : (personas.isNotEmpty ? personas.first : null);
+  final connections = ref.read(personaConnectionsProvider);
+  final activePersonaId = ref.read(activePersonaIdProvider);
+  final persona = getEffectivePersona(
+    personas, charId, chatState.session!.id, activePersonaId, connections,
+  );
 
   final summaryService = ref.read(summaryServiceProvider);
   final summaryContent = await summaryService.getSummary(chatState.session!.id);

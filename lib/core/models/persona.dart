@@ -15,3 +15,14 @@ class Persona with _$Persona {
   factory Persona.fromJson(Map<String, dynamic> json) =>
       _$PersonaFromJson(json);
 }
+
+@freezed
+class PersonaConnections with _$PersonaConnections {
+  const factory PersonaConnections({
+    @Default({}) Map<String, String> character,
+    @Default({}) Map<String, String> chat,
+  }) = _PersonaConnections;
+
+  factory PersonaConnections.fromJson(Map<String, dynamic> json) =>
+      _$PersonaConnectionsFromJson(json);
+}

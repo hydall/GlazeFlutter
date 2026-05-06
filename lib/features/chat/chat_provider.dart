@@ -327,9 +327,10 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final personaRepo = ref.read(personaRepoProvider);
     final personas = await personaRepo.getAll();
     final activePersonaId = ref.read(activePersonaIdProvider);
-    return activePersonaId != null
-        ? personas.where((p) => p.id == activePersonaId).firstOrNull
-        : (personas.isNotEmpty ? personas.first : null);
+    final connections = ref.read(personaConnectionsProvider);
+    return getEffectivePersona(
+      personas, arg, null, activePersonaId, connections,
+    );
   }
 
   String _generateId() => DateTime.now().millisecondsSinceEpoch.toRadixString(36);

@@ -35,6 +35,7 @@
 | Phase 15: Cloud Sync | Done | Dropbox + GDrive adapters, PKCE OAuth (localhost server for desktop), manifest, push/pull/wipe engine with real DB wiring, conflict resolution UI, auto-sync, gallery sync, flutter_dotenv config |
 | Phase 16: Character Gallery | Done | GalleryEntry model, galleryJson column (DB v8), GalleryService, 3-col GridView, full-screen PageView viewer with swipe+zoom, long-press actions, route /character/:charId/gallery |
 | Phase 17: Backup Export/Import | Done | BackupService (sqlite_master auto-table dump, SharedPreferences, gallery base64), Flutter .glz import (table-level), Glaze JS .glz import (IDB/localStorage mapping), FileExportService, BackupScreen, route /backup, share_plus |
+| Phase 18: Persona Connections | Done | PersonaConnections model (character/chat maps), getEffectivePersona (chat>character>global), PersonaConnectionsSheet UI, connections button on persona tiles, JS migration (gz_persona_connections), backup mapping |
 
 ### UI Refactoring (2025-05-05 → 2025-05-06)
 
@@ -563,11 +564,49 @@ core/
     file_export_service.dart
 ```
 
-### Remaining phases (in priority order)
+### Phase 18: Persona Connections (2026-05-06)
+
+Per-character and per-chat persona bindings with priority resolution.
+
+**Data model:**
+- `PersonaConnections` (Freezed) — `Map<String, String> character` (charId -> personaId), `Map<String, String> chat` (sessionId -> personaId)
+- Stored in SharedPreferences as JSON under key `personaConnections`
+- Follows `LorebookActivations` pattern but `Map<String, String>` (one persona per target) instead of `Map<String, List<String>>`
+
+**Resolution logic (`getEffectivePersona`):**
+- Priority: chat binding > character binding > global active persona
+- Used in `chat_generation_service.dart` (2 call sites), `chat_provider.dart`, `chat_dialogs.dart`, `tokenizer_sheet.dart`
+- Replaces previous global-only resolution (was: read `activePersonaIdProvider` directly)
+
+**State management:**
+- `personaConnectionsProvider` — StateProvider<PersonaConnections> with SharedPreferences persistence
+- `setPersonaConnection(ref, type, targetId, personaId)` — bind/unbind (null removes)
+- `setPersonaConnectionRef(ref, type, targetId, personaId)` — same for Ref (non-Widget)
+- Loaded at startup in `loadActiveSelections()`
+
+**UI:**
+- `PersonaConnectionsSheet` — bottom sheet: Global toggle (set as active), Characters chips, Chats chips
+- Follows `lorebook_connections_sheet.dart` template
+- Connection button (link icon) added to each persona tile in `PersonaListScreen`
+
+**Migration/Backup:**
+- `migration_service.dart` — imports `gz_persona_connections` from JS localStorage
+- `backup_service.dart` — maps `gz_persona_connections` to `personaConnections` key on JS backup restore
+
+**Directory structure:**
+```
+features/personas/
+  persona_list_screen.dart
+  persona_connections_sheet.dart
+core/
+  models/
+    persona.dart  (Persona + PersonaConnections)
+  state/
+    active_selection_provider.dart  (personaConnectionsProvider, getEffectivePersona, setPersonaConnection)
+```
 
 | Phase | Priority | What's Missing |
 |-------|----------|----------------|
-| Persona Connections | Medium | Per-character and per-chat persona bindings (currently global only) |
 | Memory Coverage/Preview | Medium | Coverage analysis (which memories activate), prompt template editor, prompt preview, text preview |
 | Cloud Sync: Deep-links mobile | Low | Android/iOS deep-link config for Dropbox/GDrive OAuth |
 | Glossary / Help | Low | Categorized help articles, inline HelpTip components |

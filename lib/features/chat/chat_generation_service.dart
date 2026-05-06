@@ -54,7 +54,6 @@ class ChatGenerationService {
       final apiConfig = apiConfigs.first;
 
       final activePresetId = _ref.read(activePresetIdProvider);
-      final activePersonaId = _ref.read(activePersonaIdProvider);
 
       final presets = await presetRepo.getAll();
       final preset = activePresetId != null
@@ -62,9 +61,11 @@ class ChatGenerationService {
           : (presets.isNotEmpty ? presets.first : null);
 
       final personas = await personaRepo.getAll();
-      final persona = activePersonaId != null
-          ? personas.where((p) => p.id == activePersonaId).firstOrNull
-          : (personas.isNotEmpty ? personas.first : null);
+      final connections = _ref.read(personaConnectionsProvider);
+      final activePersonaId = _ref.read(activePersonaIdProvider);
+      final persona = getEffectivePersona(
+        personas, charId, session.id, activePersonaId, connections,
+      );
 
       final vectorEntries = await _runVectorSearch(
         session.messages,
@@ -222,10 +223,11 @@ class ChatGenerationService {
 
     final personaRepo = _ref.read(personaRepoProvider);
     final personas = await personaRepo.getAll();
+    final connections = _ref.read(personaConnectionsProvider);
     final activePersonaId = _ref.read(activePersonaIdProvider);
-    final persona = activePersonaId != null
-        ? personas.where((p) => p.id == activePersonaId).firstOrNull
-        : (personas.isNotEmpty ? personas.first : null);
+    final persona = getEffectivePersona(
+      personas, charId, session.id, activePersonaId, connections,
+    );
 
     final recentContexts = _collectRecentImageContexts(session.messages);
 

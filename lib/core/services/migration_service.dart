@@ -256,11 +256,31 @@ class MigrationService {
       try {
         final persona = jsonDecode(activePersonaRaw) as Map<String, dynamic>;
         final id = persona['id'] as String?;
-        if (id != null) await prefs.setString('active_persona_id', id);
+        if (id != null) await prefs.setString('activePersonaId', id);
       } catch (_) {}
     } else if (activePersonaRaw is Map) {
       final id = activePersonaRaw['id'] as String?;
-      if (id != null) await prefs.setString('active_persona_id', id);
+      if (id != null) await prefs.setString('activePersonaId', id);
+    }
+
+    final personaConnsRaw = ls['gz_persona_connections'];
+    if (personaConnsRaw is String) {
+      try {
+        final parsed = jsonDecode(personaConnsRaw) as Map<String, dynamic>;
+        final conns = PersonaConnections.fromJson({
+          'character': parsed['character'] ?? {},
+          'chat': parsed['chat'] ?? {},
+        });
+        await prefs.setString('personaConnections', jsonEncode(conns.toJson()));
+      } catch (_) {}
+    } else if (personaConnsRaw is Map) {
+      try {
+        final conns = PersonaConnections.fromJson({
+          'character': personaConnsRaw['character'] ?? {},
+          'chat': personaConnsRaw['chat'] ?? {},
+        });
+        await prefs.setString('personaConnections', jsonEncode(conns.toJson()));
+      } catch (_) {}
     }
   }
 

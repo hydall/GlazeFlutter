@@ -75,6 +75,23 @@ class BackupService {
         }
       }
     }
+
+    final lsData = data['localStorage'] as Map<String, dynamic>?;
+    if (lsData != null) {
+      final personaConnsRaw = lsData['gz_persona_connections'];
+      if (personaConnsRaw != null) {
+        try {
+          final parsed = personaConnsRaw is String
+              ? jsonDecode(personaConnsRaw) as Map<String, dynamic>
+              : personaConnsRaw as Map<String, dynamic>;
+          final conns = {
+            'character': parsed['character'] ?? {},
+            'chat': parsed['chat'] ?? {},
+          };
+          await prefs.setString('personaConnections', jsonEncode(conns));
+        } catch (_) {}
+      }
+    }
   }
 
   Future<Map<String, dynamic>> _readAllTables() async {
