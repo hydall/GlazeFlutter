@@ -4,13 +4,15 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
+import '../utils/platform_paths.dart';
+
 class ImageStorageService {
   final String _baseDir;
 
   ImageStorageService(this._baseDir);
 
-  static ImageStorageService create() {
-    final baseDir = _getAppDataDir();
+  static Future<ImageStorageService> create() async {
+    final baseDir = await getAppDataDir();
     return ImageStorageService(baseDir);
   }
 
@@ -81,20 +83,5 @@ class ImageStorageService {
     } catch (_) {
       return null;
     }
-  }
-
-  static String _getAppDataDir() {
-    if (Platform.isWindows) {
-      final appData = Platform.environment['APPDATA']!;
-      return p.join(appData, 'Glaze');
-    } else if (Platform.isLinux) {
-      final xdg = Platform.environment['XDG_DATA_HOME'] ??
-          p.join(Platform.environment['HOME']!, '.local', 'share');
-      return p.join(xdg, 'Glaze');
-    } else if (Platform.isMacOS) {
-      return p.join(Platform.environment['HOME']!, 'Library',
-          'Application Support', 'Glaze');
-    }
-    throw UnsupportedError('Platform not supported yet');
   }
 }

@@ -146,7 +146,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
       );
       if (result == null || result.files.isEmpty) return;
 
-      final importer = ref.read(characterImporterProvider);
+      final importer = await ref.read(characterImporterProvider.future);
       final notifier = ref.read(charactersProvider.notifier);
       final lorebookRepo = ref.read(lorebookRepoProvider);
       int imported = 0;

@@ -16,22 +16,24 @@ import '../services/migration_service.dart';
 
 final appDbProvider = Provider<AppDatabase>((ref) => AppDatabase());
 
-final imageStorageProvider = Provider<ImageStorageService>((ref) {
-  return ImageStorageService.create();
+final imageStorageProvider = FutureProvider<ImageStorageService>((ref) async {
+  return await ImageStorageService.create();
 });
 
-final characterImporterProvider = Provider<CharacterImporter>((ref) {
-  return CharacterImporter(ref.watch(imageStorageProvider));
+final characterImporterProvider = FutureProvider<CharacterImporter>((ref) async {
+  final imageStorage = await ref.watch(imageStorageProvider.future);
+  return CharacterImporter(imageStorage);
 });
 
-final migrationServiceProvider = Provider<MigrationService>((ref) {
+final migrationServiceProvider = FutureProvider<MigrationService>((ref) async {
+  final imageStorage = await ref.watch(imageStorageProvider.future);
   return MigrationService(
     charRepo: ref.watch(characterRepoProvider),
     chatRepo: ref.watch(chatRepoProvider),
     personaRepo: ref.watch(personaRepoProvider),
     presetRepo: ref.watch(presetRepoProvider),
     apiRepo: ref.watch(apiConfigRepoProvider),
-    imageStorage: ref.watch(imageStorageProvider),
+    imageStorage: imageStorage,
   );
 });
 

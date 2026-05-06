@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 
+import '../utils/platform_paths.dart';
 import 'tables.dart';
 
 part 'app_db.g.dart';
@@ -57,7 +58,7 @@ class AppDatabase extends _$AppDatabase {
 
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
-    final dbFolder = _getAppDataDir();
+    final dbFolder = await getAppDataDir();
     final dir = Directory(dbFolder);
     if (!await dir.exists()) {
       await dir.create(recursive: true);
@@ -65,18 +66,4 @@ LazyDatabase _openConnection() {
     final file = File(p.join(dbFolder, 'glaze.db'));
     return NativeDatabase.createInBackground(file);
   });
-}
-
-String _getAppDataDir() {
-  if (Platform.isWindows) {
-    final appData = Platform.environment['APPDATA']!;
-    return p.join(appData, 'Glaze');
-  } else if (Platform.isLinux) {
-    final xdg = Platform.environment['XDG_DATA_HOME'] ??
-        p.join(Platform.environment['HOME']!, '.local', 'share');
-    return p.join(xdg, 'Glaze');
-  } else if (Platform.isMacOS) {
-    return p.join(Platform.environment['HOME']!, 'Library', 'Application Support', 'Glaze');
-  }
-  throw UnsupportedError('Platform not supported yet');
 }

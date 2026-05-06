@@ -165,7 +165,7 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
     if (filePath == null) return;
 
     final id = widget.existing?.id ?? DateTime.now().millisecondsSinceEpoch.toRadixString(36);
-    final imageStorage = ref.read(imageStorageProvider);
+    final imageStorage = await ref.read(imageStorageProvider.future);
     final bytes = await File(filePath).readAsBytes();
     final savedPath = await imageStorage.saveAvatar('persona_$id', bytes);
     if (mounted) setState(() => _avatarPath = savedPath);
