@@ -29,6 +29,51 @@ class LorebookRepo {
     await (_db.delete(_db.lorebooks)..where((t) => t.lorebookId.equals(id))).go();
   }
 
+  Future<void> createEntryFromCatalog({
+    required String characterId,
+    required List<String> keys,
+    required String content,
+    Map<String, dynamic> extensions = const {},
+    bool enabled = true,
+    int insertionOrder = 0,
+    bool caseSensitive = false,
+    String name = '',
+    int priority = 0,
+    int id = 0,
+    String comment = '',
+    bool selective = false,
+    List<String> secondaryKeys = const [],
+    bool constant = false,
+    int order = 0,
+  }) async {
+    final existing = await getById(characterId);
+    final entries = existing != null ? List<LorebookEntry>.from(existing.entries) : <LorebookEntry>[];
+
+    entries.add(LorebookEntry(
+      id: id.toString(),
+      comment: comment,
+      enabled: enabled,
+      constant: constant,
+      keys: keys,
+      secondaryKeys: secondaryKeys,
+      content: content,
+      order: insertionOrder > 0 ? insertionOrder : order,
+      caseSensitive: caseSensitive,
+    ));
+
+    final lorebook = Lorebook(
+      id: characterId,
+      name: name.isNotEmpty ? name : 'Lorebook for $characterId',
+      enabled: true,
+      activationScope: 'character',
+      activationTargetId: characterId,
+      entries: entries,
+      updatedAt: DateTime.now().millisecondsSinceEpoch,
+    );
+
+    await put(lorebook);
+  }
+
   Lorebook _toModel(LorebookRow r) => Lorebook(
         id: r.lorebookId,
         name: r.name,

@@ -29,6 +29,44 @@ class CharacterRepo {
     await (_db.delete(_db.characters)..where((t) => t.charId.equals(id))).go();
   }
 
+  Future<void> createCharacterFromCatalog({
+    required String id,
+    required String name,
+    String description = '',
+    String personality = '',
+    String scenario = '',
+    String firstMes = '',
+    String mesExample = '',
+    String creatorNotes = '',
+    String systemPrompt = '',
+    String postHistoryInstructions = '',
+    List<String> alternateGreetings = const [],
+    List<String> tags = const [],
+    String creator = '',
+    String creatorId = '',
+    String? avatarPath,
+  }) async {
+    await _db.into(_db.characters).insertOnConflictUpdate(
+          CharactersCompanion(
+            charId: Value(id),
+            name: Value(name),
+            avatarPath: Value(avatarPath),
+            description: Value(description),
+            personality: Value(personality),
+            scenario: Value(scenario),
+            firstMes: Value(firstMes),
+            mesExample: Value(mesExample),
+            systemPrompt: Value(systemPrompt),
+            postHistoryInstructions: Value(postHistoryInstructions),
+            creator: Value(creator),
+            creatorNotes: Value(creatorNotes),
+            updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+            tagsJson: Value(jsonEncode(tags)),
+            alternateGreetingsJson: Value(jsonEncode(alternateGreetings)),
+          ),
+        );
+  }
+
   Character _toModel(CharacterRow c) => Character(
         id: c.charId,
         name: c.name,
