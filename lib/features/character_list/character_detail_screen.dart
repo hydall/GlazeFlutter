@@ -102,17 +102,6 @@ class _CharacterDetailScreenState
           );
         },
       ),
-              ),
-            );
-          }
-          return _CharacterDetailBody(
-            character: char,
-            charId: widget.charId,
-            activeTab: _activeTab,
-            onTabChange: (i) => setState(() => _activeTab = i),
-          );
-        },
-      ),
     );
   }
 }
