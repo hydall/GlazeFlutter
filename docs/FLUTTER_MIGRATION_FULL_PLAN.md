@@ -275,13 +275,21 @@ Chat session management.
 
 | Phase | Priority | What's Missing |
 |-------|----------|----------------|
-| Image Generation | Low | Service, config, gallery, UI |
-| Cloud Sync | Low | Crypto, adapters, manifest, engine, UI |
-| Background Gen Notification | Low | Notification on generation complete |
-| iOS Keyboard Handling | Low | Keyboard avoidance, accessory view |
-| Android Back Button | Low | Intent system, back navigation |
-| App Icons + Splash | Low | All platforms |
-| CI/CD | Low | GitHub Actions, code signing |
+| Character Catalog / Discover | High | 4 providers (JanitorAI/Hampter, DataCat, JannyAI, Chub.ai), filters, preview sheet, infinite scroll, import from catalog |
+| Import by URL | High | DataCat extraction API — paste JanitorAI URL → get character data + avatar |
+| Image Generation | Medium | 4 API types (OpenAI, Gemini, Naistera, RoutMy + RU bridge), auto-gen from `[IMG:GEN:...]` tags, per-message manual gen, reference images |
+| Cloud Sync | Medium | Dropbox + GDrive adapters, manifest, engine, conflict resolution UI (no encryption for now) |
+| Backup Export/Import | Medium | .glz backup export, ST backup ZIP import, backup/restore UI in menu |
+| Character Gallery | Medium | Per-character image gallery, add/delete, full-screen viewer, sync support |
+| Persona Connections | Medium | Per-character and per-chat persona bindings (currently global only) |
+| Memory Coverage/Preview | Medium | Coverage analysis (which memories activate), prompt template editor, prompt preview, text preview |
+| Glossary / Help | Low | Categorized help articles, inline HelpTip components |
+| Stats Dashboard | Low | Per-chat/char/global stats (tokens, messages, time) |
+| Notifications | Low | In-app notification center + native push for background gen |
+| Character Color Picker | Low | Color picker with presets, custom hex, auto — used for theme accent |
+| Drag-and-Drop Import | Low | Desktop: drag PNG/JSON/ZIP onto app |
+| ST Backup Import | Low | Import SillyTavern backup ZIP format |
+| Enhanced Onboarding | Low | Replay from menu, more steps |
 
 ### Known stubs in current codebase
 
