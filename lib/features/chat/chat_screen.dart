@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/llm/summary_service.dart';
 import '../../core/services/chat_import_export.dart';
+import '../../core/services/crash_recovery_service.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
@@ -18,6 +19,7 @@ import 'widgets/chat_dialogs.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/memory_books_sheet.dart';
 import 'widgets/message_list.dart';
+import 'widgets/session_lifecycle_tracker.dart';
 import 'widgets/tokenizer_sheet.dart';
 
 class ChatScreen extends ConsumerWidget {
@@ -37,7 +39,9 @@ class ChatScreen extends ConsumerWidget {
         : 'Loading...';
     final sessionIndex = chatState?.session?.sessionIndex ?? 0;
 
-    return GlazeScaffold(
+    return SessionLifecycleTracker(
+      charId: charId,
+      child: GlazeScaffold(
       extendBodyBehindHeader: true,
       title: title,
       titleWidget: character != null
@@ -190,6 +194,7 @@ class ChatScreen extends ConsumerWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }
