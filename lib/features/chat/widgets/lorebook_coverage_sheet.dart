@@ -6,6 +6,7 @@ import '../../../core/llm/tokenizer.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_filter_chip_bar.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
 
@@ -90,7 +91,12 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
               : Column(
                   children: [
                     _SummaryBar(result: _result!),
-                    _FilterChips(current: _filter, onSelected: (f) => setState(() => _filter = f)),
+                    GlazeFilterChipBar<_FilterMode>(
+                      current: _filter,
+                      options: _FilterMode.values.toList(),
+                      labelBuilder: _labelForFilter,
+                      onSelected: (f) => setState(() => _filter = f),
+                    ),
                     Expanded(child: _EntryList(entries: _filteredEntries, result: _result!)),
                   ],
                 ),
@@ -161,47 +167,12 @@ class _StatChip extends StatelessWidget {
 
 enum _FilterMode { activated, cutOff, notTriggered, all }
 
-class _FilterChips extends StatelessWidget {
-  final _FilterMode current;
-  final ValueChanged<_FilterMode> onSelected;
-  const _FilterChips({required this.current, required this.onSelected});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: _FilterMode.values.map((mode) {
-            final selected = mode == current;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: ChoiceChip(
-                label: Text(_labelFor(mode)),
-                selected: selected,
-                onSelected: (_) => onSelected(mode),
-                labelStyle: TextStyle(
-                  fontSize: 12,
-                  color: selected ? AppColors.accent : AppColors.textSecondary,
-                ),
-                selectedColor: AppColors.accent.withValues(alpha: 0.15),
-                side: BorderSide(color: selected ? AppColors.accent : Colors.white12),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  String _labelFor(_FilterMode m) => switch (m) {
-    _FilterMode.activated => 'Activated',
-    _FilterMode.cutOff => 'Cut Off',
-    _FilterMode.notTriggered => 'Not Triggered',
-    _FilterMode.all => 'All',
-  };
-}
+String _labelForFilter(_FilterMode m) => switch (m) {
+  _FilterMode.activated => 'Activated',
+  _FilterMode.cutOff => 'Cut Off',
+  _FilterMode.notTriggered => 'Not Triggered',
+  _FilterMode.all => 'All',
+};
 
 class _EntryList extends StatelessWidget {
   final List<CoverageEntry> entries;

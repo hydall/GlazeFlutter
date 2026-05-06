@@ -112,7 +112,7 @@ class SyncManifestBuilder {
 
     return SyncManifest(
       deviceId: deviceId,
-      createdAt: previous.createdAt ?? now,
+      createdAt: previous.createdAt,
       lastSync: previous.lastSync,
       entries: entries,
     );

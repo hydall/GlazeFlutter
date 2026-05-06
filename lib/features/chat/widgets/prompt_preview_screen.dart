@@ -3,17 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/history_assembler.dart';
-import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
-import '../../../core/llm/summary_service.dart';
+import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/api_config.dart';
-import '../../../core/models/persona.dart';
-import '../../../core/state/active_selection_provider.dart';
-import '../../../core/state/db_provider.dart';
-import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_filter_chip_bar.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
@@ -47,54 +43,9 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       final session = chatState?.session;
       if (session == null) { setState(() => _loading = false); return; }
 
-      final charRepo = ref.read(characterRepoProvider);
-      final presetRepo = ref.read(presetRepoProvider);
-      final apiConfigRepo = ref.read(apiConfigRepoProvider);
-
-      final character = await charRepo.getById(widget.charId);
-      if (character == null) { setState(() => _loading = false); return; }
-
-      final apiConfigs = await apiConfigRepo.getAll();
-      if (apiConfigs.isEmpty) { setState(() => _loading = false); return; }
-      _apiConfig = apiConfigs.first;
-
-      final activePresetId = ref.read(activePresetIdProvider);
-      final effectivePersona = await _resolvePersona();
-
-      final presets = await presetRepo.getAll();
-      final preset = activePresetId != null
-          ? presets.where((p) => p.id == activePresetId).firstOrNull
-          : (presets.isNotEmpty ? presets.first : null);
-
-      final summaryService = ref.read(summaryServiceProvider);
-      final summaryContent = await summaryService.getSummary(session.id);
-
-      final memoryService = ref.read(memoryInjectionServiceProvider);
-      final historyText = session.messages
-          .where((m) => m.role == 'user' || m.role == 'assistant')
-          .map((m) => m.content)
-          .join('\n');
-      final memoryResult = await memoryService.buildInjection(
-        sessionId: session.id,
-        historyText: historyText,
-        messageCount: session.messages.length,
-      );
-
-      final payload = PromptPayload(
-        character: character,
-        persona: effectivePersona,
-        preset: preset,
-        history: session.messages,
-        apiConfig: _apiConfig!,
-        sessionVars: session.sessionVars,
-        globalVars: ref.read(globalVarsProvider),
-        lorebooks: await ref.read(lorebookRepoProvider).getAll(),
-        lorebookSettings: ref.read(lorebookSettingsProvider),
-        lorebookActivations: ref.read(lorebookActivationsProvider),
-        summaryContent: summaryContent,
-        memoryContent: memoryResult.content.isNotEmpty ? memoryResult.content : null,
-        memoryInjectionTarget: memoryResult.injectionTarget,
-      );
+      final builder = ref.read(promptPayloadBuilderProvider);
+      final payload = await builder.buildFromSession(charId: widget.charId, session: session);
+      _apiConfig = payload.apiConfig;
 
       final result = await buildPromptInIsolate(payload);
       if (mounted) setState(() { _result = result; _loading = false; });
@@ -102,15 +53,6 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       debugPrint('Prompt preview error: $e');
       if (mounted) setState(() => _loading = false);
     }
-  }
-
-  Future<Persona?> _resolvePersona() async {
-    final personaRepo = ref.read(personaRepoProvider);
-    final personas = await personaRepo.getAll();
-    final activePersonaId = ref.read(activePersonaIdProvider);
-    return activePersonaId != null
-        ? personas.where((p) => p.id == activePersonaId).firstOrNull
-        : (personas.isNotEmpty ? personas.first : null);
   }
 
   @override
@@ -135,7 +77,12 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
         children: [
           if (_result != null && _apiConfig != null)
             _SummaryBar(result: _result!, contextSize: _apiConfig!.contextSize),
-          _FilterBar(current: _filter, onSelected: (f) => setState(() => _filter = f)),
+          GlazeFilterChipBar<_SectionFilter>(
+            current: _filter,
+            options: _SectionFilter.values.toList(),
+            labelBuilder: _labelForFilter,
+            onSelected: (f) => setState(() => _filter = f),
+          ),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
@@ -217,45 +164,13 @@ class _SummaryBar extends StatelessWidget {
 
 enum _SectionFilter { all, system, lorebook, history, depth }
 
-class _FilterBar extends StatelessWidget {
-  final _SectionFilter current;
-  final ValueChanged<_SectionFilter> onSelected;
-  const _FilterBar({required this.current, required this.onSelected});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: _SectionFilter.values.map((f) {
-            final selected = f == current;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 3),
-              child: ChoiceChip(
-                label: Text(_labelFor(f)),
-                selected: selected,
-                onSelected: (_) => onSelected(f),
-                labelStyle: TextStyle(fontSize: 12, color: selected ? AppColors.accent : AppColors.textSecondary),
-                selectedColor: AppColors.accent.withValues(alpha: 0.15),
-                side: BorderSide(color: selected ? AppColors.accent : Colors.white12),
-              ),
-            );
-          }).toList(),
-        ),
-      ),
-    );
-  }
-
-  String _labelFor(_SectionFilter f) => switch (f) {
-    _SectionFilter.all => 'All',
-    _SectionFilter.system => 'System',
-    _SectionFilter.lorebook => 'Lorebook',
-    _SectionFilter.history => 'History',
-    _SectionFilter.depth => 'Depth',
-  };
-}
+String _labelForFilter(_SectionFilter f) => switch (f) {
+  _SectionFilter.all => 'All',
+  _SectionFilter.system => 'System',
+  _SectionFilter.lorebook => 'Lorebook',
+  _SectionFilter.history => 'History',
+  _SectionFilter.depth => 'Depth',
+};
 
 class _MessageList extends StatelessWidget {
   final List<PromptMessage> messages;

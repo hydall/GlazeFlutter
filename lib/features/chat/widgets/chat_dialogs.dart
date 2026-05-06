@@ -4,13 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
-import '../../../core/llm/summary_service.dart';
-import '../../../core/llm/memory_injection_service.dart';
+import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
-import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../chat_provider.dart';
 
@@ -22,83 +19,23 @@ void showRawPromptDialog(
   final chatState = ref.read(chatProvider(charId)).value;
   if (chatState == null || chatState.session == null) return;
 
-  final charRepo = ref.read(characterRepoProvider);
-  final presetRepo = ref.read(presetRepoProvider);
-  final personaRepo = ref.read(personaRepoProvider);
-  final apiConfigRepo = ref.read(apiConfigRepoProvider);
+  try {
+    final builder = ref.read(promptPayloadBuilderProvider);
+    final payload = await builder.buildFromSession(charId: charId, session: chatState.session);
+    final result = await buildPromptInIsolate(payload);
 
-  final character = await charRepo.getById(charId);
-  if (character == null) return;
-
-  final apiConfigs = await apiConfigRepo.getAll();
-  if (apiConfigs.isEmpty) {
-    if (context.mounted) {
-      GlazeToast.show(context, 'No API config');
-    }
-    return;
-  }
-  final apiConfig = apiConfigs.first;
-
-  final activePresetId = ref.read(activePresetIdProvider);
-
-  final presets = await presetRepo.getAll();
-  final preset = activePresetId != null
-      ? presets.where((p) => p.id == activePresetId).firstOrNull
-      : (presets.isNotEmpty ? presets.first : null);
-
-  final personas = await personaRepo.getAll();
-  final connections = ref.read(personaConnectionsProvider);
-  final activePersonaId = ref.read(activePersonaIdProvider);
-  final persona = getEffectivePersona(
-    personas, charId, chatState.session!.id, activePersonaId, connections,
-  );
-
-  final summaryService = ref.read(summaryServiceProvider);
-  final summaryContent = await summaryService.getSummary(chatState.session!.id);
-
-  final memoryService = ref.read(memoryInjectionServiceProvider);
-  final historyText = chatState.session!.messages
-      .where((m) => m.role == 'user' || m.role == 'assistant')
-      .map((m) => m.content)
-      .join('\n');
-  final memoryResult = await memoryService.buildInjection(
-    sessionId: chatState.session!.id,
-    historyText: historyText,
-    messageCount: chatState.session!.messages.length,
-  );
-
-  final payload = PromptPayload(
-    character: character,
-    persona: persona,
-    preset: preset,
-    history: chatState.session!.messages,
-    apiConfig: apiConfig,
-    sessionVars: chatState.session!.sessionVars,
-    globalVars: ref.read(globalVarsProvider),
-    lorebooks: await ref.read(lorebookRepoProvider).getAll(),
-    lorebookSettings: ref.read(lorebookSettingsProvider),
-    lorebookActivations: ref.read(lorebookActivationsProvider),
-    summaryContent: summaryContent,
-    memoryContent: memoryResult.content.isNotEmpty
-        ? memoryResult.content
-        : null,
-    memoryInjectionTarget: memoryResult.injectionTarget,
-  );
-
-  final result = await buildPromptInIsolate(payload);
-
-  final rawJson = const JsonEncoder.withIndent('  ').convert({
-    'model': apiConfig.model,
-    'messages': result.messages.map((m) {
-      final map = <String, dynamic>{'role': m.role, 'content': m.content};
-      if (m.isLorebook) map['lorebook'] = true;
-      if (m.blockName != null) map['block'] = m.blockName;
-      return map;
-    }).toList(),
-    'max_tokens': apiConfig.maxTokens,
-    'temperature': apiConfig.temperature,
-    'top_p': apiConfig.topP,
-    'stream': apiConfig.stream,
+    final rawJson = const JsonEncoder.withIndent('  ').convert({
+      'model': payload.apiConfig.model,
+      'messages': result.messages.map((m) {
+        final map = <String, dynamic>{'role': m.role, 'content': m.content};
+        if (m.isLorebook) map['lorebook'] = true;
+        if (m.blockName != null) map['block'] = m.blockName;
+        return map;
+      }).toList(),
+      'max_tokens': payload.apiConfig.maxTokens,
+      'temperature': payload.apiConfig.temperature,
+      'top_p': payload.apiConfig.topP,
+    'stream': payload.apiConfig.stream,
   });
 
   if (!context.mounted) return;
@@ -107,6 +44,9 @@ void showRawPromptDialog(
     context: context,
     builder: (ctx) => _CopyableDialog(title: 'Raw Prompt', content: rawJson),
   );
+  } catch (e) {
+    if (context.mounted) GlazeToast.show(context, 'Failed to build prompt: $e');
+  }
 }
 
 void showRawResponseDialog(BuildContext context, WidgetRef ref, String charId) {

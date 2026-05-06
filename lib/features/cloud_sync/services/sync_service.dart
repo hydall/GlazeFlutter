@@ -17,7 +17,6 @@ import 'sync_conflict.dart';
 import 'sync_engine.dart';
 import 'sync_manifest.dart';
 import '../cloud_adapter.dart';
-import '../sync_config.dart';
 import '../sync_models.dart';
 
 class SyncService {

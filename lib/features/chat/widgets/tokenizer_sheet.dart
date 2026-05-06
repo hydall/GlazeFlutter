@@ -2,13 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/context_calculator.dart';
-import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
-import '../../../core/llm/summary_service.dart';
-import '../../../core/llm/memory_injection_service.dart';
-import '../../../core/state/active_selection_provider.dart';
-import '../../../core/state/db_provider.dart';
-import '../../../core/state/lorebook_provider.dart';
+import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
@@ -42,68 +37,16 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     setState(() => _loading = true);
 
     try {
-      final charRepo = ref.read(characterRepoProvider);
-      final presetRepo = ref.read(presetRepoProvider);
-      final personaRepo = ref.read(personaRepoProvider);
-      final apiConfigRepo = ref.read(apiConfigRepoProvider);
-
-      final character = await charRepo.getById(widget.charId);
-      if (character == null) { setState(() => _loading = false); return; }
-
-      final apiConfigs = await apiConfigRepo.getAll();
-      if (apiConfigs.isEmpty) { setState(() => _loading = false); return; }
-      final apiConfig = apiConfigs.first;
-      _contextSize = apiConfig.contextSize;
-
-      final activePresetId = ref.read(activePresetIdProvider);
-      final presets = await presetRepo.getAll();
-      final preset = activePresetId != null
-          ? presets.where((p) => p.id == activePresetId).firstOrNull
-          : (presets.isNotEmpty ? presets.first : null);
-      final personas = await personaRepo.getAll();
-
       final chatState = ref.read(chatProvider(widget.charId)).value;
       final session = chatState?.session;
       if (session == null) { setState(() => _loading = false); return; }
 
-      final connections = ref.read(personaConnectionsProvider);
-      final activePersonaId = ref.read(activePersonaIdProvider);
-      final persona = getEffectivePersona(
-        personas, widget.charId, session.id, activePersonaId, connections,
-      );
-
       _visibleCount = session.messages.where((m) => !m.isHidden).length;
       _hiddenCount = session.messages.where((m) => m.isHidden).length;
 
-      final summaryService = ref.read(summaryServiceProvider);
-      final summaryContent = await summaryService.getSummary(session.id);
-
-      final memoryService = ref.read(memoryInjectionServiceProvider);
-      final historyText = session.messages
-          .where((m) => m.role == 'user' || m.role == 'assistant')
-          .map((m) => m.content)
-          .join('\n');
-      final memoryResult = await memoryService.buildInjection(
-        sessionId: session.id,
-        historyText: historyText,
-        messageCount: session.messages.length,
-      );
-
-      final payload = PromptPayload(
-        character: character,
-        persona: persona,
-        preset: preset,
-        history: session.messages,
-        apiConfig: apiConfig,
-        sessionVars: session.sessionVars,
-        globalVars: ref.read(globalVarsProvider),
-        lorebooks: await ref.read(lorebookRepoProvider).getAll(),
-        lorebookSettings: ref.read(lorebookSettingsProvider),
-        lorebookActivations: ref.read(lorebookActivationsProvider),
-        summaryContent: summaryContent,
-        memoryContent: memoryResult.content.isNotEmpty ? memoryResult.content : null,
-        memoryInjectionTarget: memoryResult.injectionTarget,
-      );
+      final builder = ref.read(promptPayloadBuilderProvider);
+      final payload = await builder.buildFromSession(charId: widget.charId, session: session);
+      _contextSize = payload.apiConfig.contextSize;
 
       final result = await buildPromptInIsolate(payload);
       if (mounted) setState(() => _breakdown = result.breakdown);

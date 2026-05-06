@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/db/repositories/embedding_repo.dart';
-import '../../../core/llm/lorebook_embedding_service.dart';
 import '../../../core/llm/lorebook_vector_search.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../core/state/db_provider.dart';

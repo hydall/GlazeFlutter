@@ -1,8 +1,6 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
-
 typedef SseOnUpdate = void Function(String delta, String? reasoningDelta);
 typedef SseOnComplete = void Function(String text, String? reasoning);
 typedef SseOnError = void Function(Object error);
@@ -80,7 +78,6 @@ class SseClient {
         await _oneShotResponse(url, apiKey, body, cancelToken, onComplete);
       }
     } on DioException catch (e) {
-      final respData = e.response?.data;
       onError?.call(e);
     } catch (e) {
       onError?.call(e);

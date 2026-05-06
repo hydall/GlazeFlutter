@@ -2,18 +2,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/llm/lorebook_vector_search.dart';
-import '../../core/llm/memory_injection_service.dart';
-import '../../core/llm/prompt_builder.dart';
 import '../../core/llm/prompt_isolate.dart';
+import '../../core/llm/prompt_payload_builder.dart';
 import '../../core/llm/sse_client.dart';
 import '../../core/llm/stream_accumulator.dart';
-import '../../core/llm/summary_service.dart';
 import '../../core/models/chat_message.dart';
-import '../../core/models/lorebook.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/db_provider.dart';
-import '../../core/state/lorebook_provider.dart';
 import '../image_gen/image_gen_provider.dart';
 import '../image_gen/services/image_gen_service.dart';
 import 'chat_provider.dart';
@@ -37,75 +32,16 @@ class ChatGenerationService {
     String? guidanceText,
   }) async {
     try {
-      final charRepo = _ref.read(characterRepoProvider);
-      final presetRepo = _ref.read(presetRepoProvider);
-      final personaRepo = _ref.read(personaRepoProvider);
-      final apiConfigRepo = _ref.read(apiConfigRepoProvider);
-
-      final character = await charRepo.getById(charId);
-      if (character == null) {
-        return ChatState(session: session, isGenerating: false, error: 'Character not found');
-      }
-
-      final apiConfigs = await apiConfigRepo.getAll();
-      if (apiConfigs.isEmpty) {
-        return ChatState(session: session, isGenerating: false, error: 'No API config');
-      }
-      final apiConfig = apiConfigs.first;
-
-      final activePresetId = _ref.read(activePresetIdProvider);
-
-      final presets = await presetRepo.getAll();
-      final preset = activePresetId != null
-          ? presets.where((p) => p.id == activePresetId).firstOrNull
-          : (presets.isNotEmpty ? presets.first : null);
-
-      final personas = await personaRepo.getAll();
-      final connections = _ref.read(personaConnectionsProvider);
-      final activePersonaId = _ref.read(activePersonaIdProvider);
-      final persona = getEffectivePersona(
-        personas, charId, session.id, activePersonaId, connections,
-      );
-
-      final vectorEntries = await _runVectorSearch(
-        session.messages,
-        session.messages.lastOrNull?.content ?? '',
-      );
-
-      final summaryService = _ref.read(summaryServiceProvider);
-      final summaryContent = await summaryService.getSummary(session.id);
-
-      final memoryService = _ref.read(memoryInjectionServiceProvider);
-      final historyText = session.messages
-          .where((m) => m.role == 'user' || m.role == 'assistant')
-          .map((m) => m.content)
-          .join('\n');
-      final memoryResult = await memoryService.buildInjection(
-        sessionId: session.id,
-        historyText: historyText,
-        messageCount: session.messages.length,
-        summaryExcerpt: summaryContent,
-      );
-
-      final payload = PromptPayload(
-        character: character,
-        persona: persona,
-        preset: preset,
-        history: session.messages,
-        apiConfig: apiConfig,
-        sessionVars: session.sessionVars,
-        globalVars: _ref.read(globalVarsProvider),
-        lorebooks: await _ref.read(lorebookRepoProvider).getAll(),
-        lorebookSettings: _ref.read(lorebookSettingsProvider),
-        lorebookActivations: _ref.read(lorebookActivationsProvider),
-        vectorEntries: vectorEntries,
-        summaryContent: summaryContent,
-        memoryContent: memoryResult.content.isNotEmpty ? memoryResult.content : null,
-        memoryInjectionTarget: memoryResult.injectionTarget,
+      final builder = _ref.read(promptPayloadBuilderProvider);
+      final payload = await builder.buildFromSession(
+        charId: charId,
+        session: session,
         guidanceText: guidanceText,
       );
 
-      debugPrint('CHAT: building prompt for "${character.name}", history=${session.messages.length}, preset=${preset?.name ?? "none"}');
+      final apiConfig = payload.apiConfig;
+
+      debugPrint('CHAT: building prompt for "${payload.character.name}", history=${session.messages.length}, preset=${payload.preset?.name ?? "none"}');
 
       final promptResult = await buildPromptInIsolate(payload);
       debugPrint('CHAT: prompt built, ${promptResult.messages.length} messages');
@@ -316,40 +252,5 @@ class ChatGenerationService {
     );
     _ref.read(chatRepoProvider).put(finalSession);
     return ChatState(session: finalSession, lastRawResponse: rawResponse);
-  }
-
-  Future<List<LorebookEntry>> _runVectorSearch(
-    List<ChatMessage> history,
-    String currentText,
-  ) async {
-    final settings = _ref.read(lorebookSettingsProvider);
-    if (settings.searchType == 'keys') return [];
-
-    final config = _ref.read(embeddingConfigProvider);
-    if (config.endpoint.isEmpty) return [];
-
-    final lorebooks = await _ref.read(lorebookRepoProvider).getAll();
-    if (lorebooks.isEmpty) return [];
-
-    final searchHistory = history
-        .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
-        .toList();
-
-    try {
-      final searchService = _ref.read(lorebookVectorSearchProvider);
-      final results = await searchService.search(searchHistory, currentText, lorebooks, settings, config);
-
-      final entryMap = <String, LorebookEntry>{};
-      for (final lb in lorebooks) {
-        for (final entry in lb.entries) {
-          entryMap[entry.id] = entry;
-        }
-      }
-
-      return results.where((r) => entryMap.containsKey(r.entryId)).map((r) => entryMap[r.entryId]!.copyWith()).toList();
-    } catch (e) {
-      debugPrint('VECTOR SEARCH: failed: $e');
-      return [];
-    }
   }
 }

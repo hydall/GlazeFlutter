@@ -7,7 +7,7 @@ import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import 'preset_list_provider.dart';
-import 'widgets/regex_tile.dart';
+import 'widgets/widgets.dart';
 
 /// Standalone screen wrapper around [PresetEditorBody].
 class PresetEditorScreen extends StatefulWidget {

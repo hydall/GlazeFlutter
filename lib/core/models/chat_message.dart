@@ -40,3 +40,10 @@ class ChatSession with _$ChatSession {
   factory ChatSession.fromJson(Map<String, dynamic> json) =>
       _$ChatSessionFromJson(json);
 }
+
+extension ChatSessionX on ChatSession {
+  String get historyText => messages
+      .where((m) => m.role == 'user' || m.role == 'assistant')
+      .map((m) => m.content)
+      .join('\n');
+}

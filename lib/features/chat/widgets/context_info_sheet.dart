@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/llm/lorebook_scanner.dart';
 import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/llm/summary_service.dart';
-import '../../../core/state/active_selection_provider.dart';
+import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../features/chat/chat_provider.dart';
@@ -53,10 +52,7 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
     ));
 
     final memoryService = ref.read(memoryInjectionServiceProvider);
-    final historyText = session.messages
-        .where((m) => m.role == 'user' || m.role == 'assistant')
-        .map((m) => m.content)
-        .join('\n');
+    final historyText = session.historyText;
     final memoryResult = await memoryService.buildInjection(
       sessionId: session.id,
       historyText: historyText,
@@ -73,7 +69,6 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
     ));
 
     final lorebooks = await ref.read(lorebookRepoProvider).getAll();
-    final activations = ref.read(lorebookActivationsProvider);
     final settings = ref.read(lorebookSettingsProvider);
     final activeLorebooks = lorebooks.where((lb) {
       if (!lb.enabled) return false;

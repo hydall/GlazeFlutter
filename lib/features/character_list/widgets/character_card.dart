@@ -3,6 +3,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/llm/tokenizer.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/models/character.dart';
@@ -244,18 +246,6 @@ class _TokenBadge extends StatelessWidget {
 
   const _TokenBadge({required this.character});
 
-  int _estimateTokens() {
-    final text = [
-      character.name,
-      character.description,
-      character.personality,
-      character.scenario,
-      character.firstMes,
-      character.mesExample,
-    ].whereType<String>().join('\n');
-    return (text.length / 3.35).ceil();
-  }
-
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
@@ -275,7 +265,7 @@ class _TokenBadge extends StatelessWidget {
                   size: 11, color: Colors.white70),
               const SizedBox(width: 4),
               Text(
-                '${_estimateTokens()}',
+                '${estimateTokens([character.name, character.description, character.personality, character.scenario, character.firstMes, character.mesExample].whereType<String>().join('\n'))}',
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,

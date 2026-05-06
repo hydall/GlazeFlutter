@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:path/path.dart' as p;
 
 import '../db/repositories/character_repo.dart';
-import '../models/character.dart';
 import '../models/gallery_entry.dart';
 import '../services/image_storage_service.dart';
 

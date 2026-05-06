@@ -386,7 +386,6 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
   }
 
   Uint8List _generatePlaceholderAvatar(String name) {
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
     final width = 400, height = 600;
 
     final pngHeader = <int>[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
@@ -416,8 +415,6 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
 
     final iendChunk = _buildPngChunk('IEND', Uint8List(0));
 
-    final totalLen =
-        pngHeader.length + ihdrChunk.length + iendChunk.length + 100;
     final result = BytesBuilder();
     result.add(pngHeader);
     result.add(ihdrChunk);

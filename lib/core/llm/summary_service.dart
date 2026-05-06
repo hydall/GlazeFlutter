@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -33,10 +31,10 @@ class SummaryService {
     required ApiConfig apiConfig,
     String? customPrompt,
   }) async {
-    if (apiConfig.endpoint == null || apiConfig.endpoint!.isEmpty) {
+    if (apiConfig.endpoint.isEmpty) {
       throw Exception('API endpoint not configured');
     }
-    if (apiConfig.model == null || apiConfig.model!.isEmpty) {
+    if (apiConfig.model.isEmpty) {
       throw Exception('API model not configured');
     }
 
@@ -49,11 +47,11 @@ class SummaryService {
       prompt = '$template\n\n$historyText';
     }
 
-    final uri = _buildUrl(apiConfig.endpoint!);
+    final uri = _buildUrl(apiConfig.endpoint);
     final headers = <String, String>{
       'Content-Type': 'application/json',
     };
-    if (apiConfig.apiKey != null && apiConfig.apiKey!.isNotEmpty) {
+    if (apiConfig.apiKey.isNotEmpty) {
       headers['Authorization'] = 'Bearer ${apiConfig.apiKey}';
     }
 

@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -7,18 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/llm/memory_injection_service.dart';
-import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
+import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/summary_service.dart';
-import '../../../core/models/api_config.dart';
-import '../../../core/models/character.dart';
-import '../../../core/models/chat_message.dart';
-import '../../../core/models/preset.dart';
-import '../../../core/models/persona.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
-import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../image_gen/image_gen_provider.dart';
@@ -26,6 +19,8 @@ import '../../image_gen/widgets/image_gen_sheet.dart';
 import '../chat_provider.dart';
 import '../../presets/preset_list_screen.dart';
 import 'lorebook_coverage_sheet.dart';
+import 'magic_drawer_models.dart';
+import 'magic_drawer_widgets.dart';
 import 'memory_books_sheet.dart';
 import 'prompt_preview_screen.dart';
 import 'tokenizer_sheet.dart';
@@ -54,49 +49,49 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   static const _itemsKey = 'magic_drawer_items';
   static const _deletedItemsKey = 'magic_drawer_deleted_items';
 
-  static const _allItems = <_MagicDrawerItemDef>[
-    _MagicDrawerItemDef(id: 'context', label: 'Tokenizer', icon: Icons.segment),
-    _MagicDrawerItemDef(
+  static const _allItems = <MagicDrawerItemDef>[
+    MagicDrawerItemDef(id: 'context', label: 'Tokenizer', icon: Icons.segment),
+    MagicDrawerItemDef(
       id: 'summary',
       label: 'Summary',
       icon: Icons.summarize_outlined,
     ),
-    _MagicDrawerItemDef(id: 'sessions', label: 'Sessions', icon: Icons.history),
-    _MagicDrawerItemDef(
+    MagicDrawerItemDef(id: 'sessions', label: 'Sessions', icon: Icons.history),
+    MagicDrawerItemDef(
       id: 'stats',
       label: 'Stats',
       icon: Icons.bar_chart_rounded,
     ),
-    _MagicDrawerItemDef(
+    MagicDrawerItemDef(
       id: 'char-card',
       label: 'Character',
       icon: Icons.badge_outlined,
     ),
-    _MagicDrawerItemDef(
+    MagicDrawerItemDef(
       id: 'lorebooks',
       label: 'Lorebooks',
       icon: Icons.menu_book_outlined,
     ),
-    _MagicDrawerItemDef(
+    MagicDrawerItemDef(
       id: 'memory-books',
       label: 'Memory Books',
       icon: Icons.auto_stories_outlined,
     ),
-    _MagicDrawerItemDef(id: 'regex', label: 'Regex', icon: Icons.code),
-    _MagicDrawerItemDef(id: 'api', label: 'API', icon: Icons.api_outlined),
-    _MagicDrawerItemDef(id: 'presets', label: 'Presets', icon: Icons.tune),
-    _MagicDrawerItemDef(
+    MagicDrawerItemDef(id: 'regex', label: 'Regex', icon: Icons.code),
+    MagicDrawerItemDef(id: 'api', label: 'API', icon: Icons.api_outlined),
+    MagicDrawerItemDef(id: 'presets', label: 'Presets', icon: Icons.tune),
+    MagicDrawerItemDef(
       id: 'preview',
       label: 'Request Preview',
       icon: Icons.visibility_outlined,
     ),
-    _MagicDrawerItemDef(id: 'coverage', label: 'Coverage', icon: Icons.search),
-    _MagicDrawerItemDef(
+    MagicDrawerItemDef(id: 'coverage', label: 'Coverage', icon: Icons.search),
+    MagicDrawerItemDef(
       id: 'personas',
       label: 'Personas',
       icon: Icons.face_retouching_natural_outlined,
     ),
-    _MagicDrawerItemDef(
+    MagicDrawerItemDef(
       id: 'image-gen',
       label: 'Image Gen',
       icon: Icons.image_outlined,
@@ -109,7 +104,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   bool _loading = true;
   int? _draggingIndex;
   int? _hoverIndex;
-  _MagicDrawerStats _stats = const _MagicDrawerStats();
+  MagicDrawerStats _stats = const MagicDrawerStats();
 
   @override
   void initState() {
@@ -210,33 +205,18 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       messageCount = session.messages.length;
 
       if (character != null && chatApi != null) {
-        final memoryResult = await _buildMemoryInjection(session);
-        final promptResult = await buildPromptInIsolate(
-          PromptPayload(
-            character: character,
-            persona: activePersona,
-            preset: activePreset,
-            history: session.messages,
-            apiConfig: chatApi,
-            sessionVars: session.sessionVars,
-            globalVars: ref.read(globalVarsProvider),
-            lorebooks: lorebooks,
-            lorebookSettings: ref.read(lorebookSettingsProvider),
-            lorebookActivations: ref.read(lorebookActivationsProvider),
-            summaryContent: summary,
-            memoryContent: memoryResult.content.isNotEmpty
-                ? memoryResult.content
-                : null,
-            memoryInjectionTarget: memoryResult.injectionTarget,
-          ),
-        );
-        final sourceTokens = promptResult.breakdown.sourceTokens;
-        promptTokens = promptResult.breakdown.totalTokens;
-        contextSize = chatApi.contextSize;
-        characterTokens = sourceTokens['character'] ?? 0;
-        presetTokens = sourceTokens['preset'] ?? 0;
-        personaTokens = sourceTokens['persona'] ?? 0;
-        summaryTokens = sourceTokens['summary'] ?? 0;
+        try {
+          final builder = ref.read(promptPayloadBuilderProvider);
+          final payload = await builder.buildFromSession(charId: widget.charId, session: session);
+          final promptResult = await buildPromptInIsolate(payload);
+          final sourceTokens = promptResult.breakdown.sourceTokens;
+          promptTokens = promptResult.breakdown.totalTokens;
+          contextSize = chatApi.contextSize;
+          characterTokens = sourceTokens['character'] ?? 0;
+          presetTokens = sourceTokens['preset'] ?? 0;
+          personaTokens = sourceTokens['persona'] ?? 0;
+          summaryTokens = sourceTokens['summary'] ?? 0;
+        } catch (_) {}
       }
     }
 
@@ -245,7 +225,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       (sum, lorebook) => sum + lorebook.entries.length,
     );
 
-    _stats = _MagicDrawerStats(
+    _stats = MagicDrawerStats(
       character: character,
       activePreset: activePreset,
       activePersona: activePersona,
@@ -268,34 +248,20 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     );
   }
 
-  Future<MemoryInjectionResult> _buildMemoryInjection(ChatSession session) {
-    final historyText = session.messages
-        .where((m) => m.role == 'user' || m.role == 'assistant')
-        .map((m) => m.content)
-        .join('\n');
-    return ref
-        .read(memoryInjectionServiceProvider)
-        .buildInjection(
-          sessionId: session.id,
-          historyText: historyText,
-          messageCount: session.messages.length,
-        );
-  }
-
   bool _isKnownItem(String id) => _allItems.any((item) => item.id == id);
 
-  List<_MagicDrawerCardItem> get _displayItems {
+  List<MagicDrawerCardItem> get _displayItems {
     final list = _itemIds
         .map((id) => _allItems.where((item) => item.id == id).firstOrNull)
-        .whereType<_MagicDrawerItemDef>()
+        .whereType<MagicDrawerItemDef>()
         .map(
-          (def) => _MagicDrawerCardItem(def: def, status: _statusFor(def.id)),
+          (def) => MagicDrawerCardItem(def: def, status: _statusFor(def.id)),
         )
         .toList();
     if (_editing && _canAddMore) {
       list.add(
-        const _MagicDrawerCardItem(
-          def: _MagicDrawerItemDef(
+        const MagicDrawerCardItem(
+          def: MagicDrawerItemDef(
             id: 'add-btn',
             label: 'Add',
             icon: Icons.add,
@@ -407,7 +373,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     );
   }
 
-  Future<void> _handleTap(_MagicDrawerItemDef item) async {
+  Future<void> _handleTap(MagicDrawerItemDef item) async {
     if (_editing) return;
 
     switch (item.id) {
@@ -688,7 +654,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
               itemBuilder: (context, index) {
                 final item = items[index];
                 if (item.isAddButton) {
-                  return _AddMagicCard(onTap: _showAddItemSheet);
+                  return AddMagicCard(onTap: _showAddItemSheet);
                 }
                 return DragTarget<int>(
                   onWillAcceptWithDetails: (details) {
@@ -704,7 +670,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
                     _moveItem(details.data, index);
                   },
                   builder: (context, _, _) {
-                    final card = _MagicCard(
+                    final card = MagicCard(
                       item: item,
                       editing: _editing,
                       hovered: _hoverIndex == index && _draggingIndex != index,
@@ -795,7 +761,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             top: 0,
             left: 0,
             right: 0,
-            child: _DrawerHeader(
+            child: MagicDrawerHeader(
               editing: _editing,
               onToggleEditing: _toggleEditing,
             ),
@@ -813,361 +779,4 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       ),
     );
   }
-}
-
-class _DrawerHeader extends StatelessWidget {
-  final bool editing;
-  final VoidCallback onToggleEditing;
-
-  const _DrawerHeader({required this.editing, required this.onToggleEditing});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const Text(
-            'Quick Access',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
-              letterSpacing: -0.2,
-            ),
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: onToggleEditing,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              height: 34,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: editing
-                    ? AppColors.accent.withValues(alpha: 0.22)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(17),
-                border: Border.all(
-                  color: editing
-                      ? AppColors.accent.withValues(alpha: 0.38)
-                      : Colors.white.withValues(alpha: 0.18),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    editing ? Icons.check : Icons.edit,
-                    size: 16,
-                    color: editing ? AppColors.accent : AppColors.textPrimary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    editing ? 'Done' : 'Edit',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color:
-                          editing ? AppColors.accent : AppColors.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MagicCard extends StatefulWidget {
-  final _MagicDrawerCardItem item;
-  final bool editing;
-  final bool hovered;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
-  final VoidCallback onLongPress;
-
-  const _MagicCard({
-    required this.item,
-    required this.editing,
-    required this.hovered,
-    required this.onTap,
-    required this.onDelete,
-    required this.onLongPress,
-  });
-
-  @override
-  State<_MagicCard> createState() => _MagicCardState();
-}
-
-class _MagicCardState extends State<_MagicCard> {
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final item = widget.item;
-    final editing = widget.editing;
-    final hovered = widget.hovered;
-
-    return GestureDetector(
-      onTap: widget.onTap,
-      onLongPress: widget.onLongPress,
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.96 : (hovered ? 1.02 : 1.0),
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        child: Container(
-          // Outer container carries the glow shadow so it isn't clipped
-          decoration: hovered
-              ? BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.accent.withValues(alpha: 0.35),
-                      blurRadius: 14,
-                    ),
-                  ],
-                )
-              : null,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                constraints: const BoxConstraints.expand(),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(
-                    alpha: _pressed || hovered ? 0.08 : 0.04,
-                  ),
-                  border: Border.all(
-                    color: editing
-                        ? AppColors.accent.withValues(alpha: 0.55)
-                        : Colors.white.withValues(alpha: 0.06),
-                  ),
-                ),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 28,
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: AppColors.accent.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Icon(
-                            item.def.icon,
-                            size: 16,
-                            color: Colors.white.withValues(alpha: 0.8),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                item.def.label,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                  height: 1,
-                                ),
-                              ),
-                              if (item.status != null) ...[
-                                const SizedBox(height: 1),
-                                Text(
-                                  item.status!,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    color: AppColors.textSecondary.withValues(
-                                      alpha: 0.95,
-                                    ),
-                                    height: 1,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (editing)
-                      Positioned(
-                        top: -8,
-                        right: -8,
-                        child: GestureDetector(
-                          onTap: widget.onDelete,
-                          child: Container(
-                            width: 24,
-                            height: 24,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFF3B30),
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Color(0x4DFF3B30),
-                                  blurRadius: 8,
-                                  offset: Offset(0, 4),
-                                ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.close,
-                              size: 14,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AddMagicCard extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _AddMagicCard({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            constraints: const BoxConstraints.expand(),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.04),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    Icons.add,
-                    size: 16,
-                    color: AppColors.textPrimary.withValues(alpha: 0.8),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                const Expanded(
-                  child: Text(
-                    'Add',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                      height: 1,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _MagicDrawerItemDef {
-  final String id;
-  final String label;
-  final IconData icon;
-
-  const _MagicDrawerItemDef({
-    required this.id,
-    required this.label,
-    required this.icon,
-  });
-}
-
-class _MagicDrawerCardItem {
-  final _MagicDrawerItemDef def;
-  final String? status;
-  final bool isAddButton;
-
-  const _MagicDrawerCardItem({
-    required this.def,
-    this.status,
-    this.isAddButton = false,
-  });
-}
-
-class _MagicDrawerStats {
-  final Character? character;
-  final Preset? activePreset;
-  final Persona? activePersona;
-  final ApiConfig? apiConfig;
-  final ChatSession? session;
-  final int sessionCount;
-  final int messageCount;
-  final int lorebookEntryCount;
-  final int memoryEntryCount;
-  final int regexCount;
-  final int summaryChars;
-  final int promptTokens;
-  final int contextSize;
-  final int characterTokens;
-  final int presetTokens;
-  final int personaTokens;
-  final int summaryTokens;
-  final bool imageGenEnabled;
-
-  const _MagicDrawerStats({
-    this.character,
-    this.activePreset,
-    this.activePersona,
-    this.apiConfig,
-    this.session,
-    this.sessionCount = 0,
-    this.messageCount = 0,
-    this.lorebookEntryCount = 0,
-    this.memoryEntryCount = 0,
-    this.regexCount = 0,
-    this.summaryChars = 0,
-    this.promptTokens = 0,
-    this.contextSize = 0,
-    this.characterTokens = 0,
-    this.presetTokens = 0,
-    this.personaTokens = 0,
-    this.summaryTokens = 0,
-    this.imageGenEnabled = false,
-  });
 }

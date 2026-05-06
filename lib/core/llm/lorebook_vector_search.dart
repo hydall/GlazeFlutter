@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/lorebook.dart';
 import '../state/db_provider.dart';
-import '../state/lorebook_provider.dart';
 import '../db/app_db.dart';
 import '../db/repositories/embedding_repo.dart';
 import 'embedding_service.dart';

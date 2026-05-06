@@ -1,7 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../db/repositories/lorebook_repo.dart';
 import '../models/lorebook.dart';
 import '../../features/cloud_sync/services/sync_deletion_tracker.dart';
 import 'db_provider.dart';
