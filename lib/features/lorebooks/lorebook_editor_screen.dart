@@ -161,6 +161,21 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     _save();
   }
 
+  void _resetEntriesToGlobal() {
+    setState(() {
+      for (int i = 0; i < _entries.length; i++) {
+        _entries[i] = _entries[i].copyWith(
+          caseSensitive: null,
+          matchWholeWords: null,
+        );
+      }
+    });
+    _save();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Entry settings reset to global defaults'), duration: Duration(seconds: 1)),
+    );
+  }
+
   List<LorebookEntry> get _filteredEntries {
     final q = _searchController.text.trim().toLowerCase();
     if (q.isEmpty) return _entries;
@@ -204,6 +219,11 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                     title: 'Edit Lorebook',
                     leading: BackButton(onPressed: () => Navigator.pop(context)),
                     actions: [
+                      IconButton(
+                        icon: const Icon(Icons.restore, size: 20),
+                        tooltip: 'Reset Entry Settings to Global',
+                        onPressed: _resetEntriesToGlobal,
+                      ),
                       if (_isIndexing)
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),

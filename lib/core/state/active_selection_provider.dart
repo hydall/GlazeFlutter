@@ -3,9 +3,23 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/preset.dart';
+import 'db_provider.dart';
+
 final activePresetIdProvider = StateProvider<String?>((ref) => null);
 final activePersonaIdProvider = StateProvider<String?>((ref) => null);
 final globalVarsProvider = StateProvider<Map<String, String>>((ref) => {});
+
+final activeRegexesProvider = FutureProvider<List<PresetRegex>>((ref) async {
+  final repo = ref.watch(presetRepoProvider);
+  final presets = await repo.getAll();
+  final activeId = ref.watch(activePresetIdProvider);
+  final preset = activeId != null
+      ? presets.where((p) => p.id == activeId).firstOrNull
+      : (presets.isNotEmpty ? presets.first : null);
+  if (preset == null) return [];
+  return preset.regexes.where((r) => !r.disabled).toList();
+});
 
 Future<void> loadActiveSelections(WidgetRef ref) async {
   final prefs = await SharedPreferences.getInstance();

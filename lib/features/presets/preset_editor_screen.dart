@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/preset.dart';
+import '../../../core/services/preset_defaults.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
 import 'preset_list_provider.dart';
@@ -34,7 +35,7 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen>
   @override
   void initState() {
     super.initState();
-    _blocks = List.from(widget.preset?.blocks ?? []);
+    _blocks = List.from(widget.preset?.blocks ?? defaultPresetBlocks());
     _regexes = List.from(widget.preset?.regexes ?? []);
     _reasoningEnabled = widget.preset?.reasoningEnabled ?? false;
   }

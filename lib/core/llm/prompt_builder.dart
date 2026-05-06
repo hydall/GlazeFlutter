@@ -11,6 +11,7 @@ import 'lorebook_scanner.dart';
 import 'lorebook_merger.dart';
 import 'prompt_block_resolver.dart';
 import 'fallback_prompt_builder.dart';
+import 'regex_service.dart';
 
 const _stToInternalBlockId = <String, String>{
   'personaDescription': 'user_persona',
@@ -176,6 +177,8 @@ PromptResult buildPrompt(PromptPayload payload) {
     currentGlobalVars: currentGlobalVars,
     preset: preset,
     payload: payload,
+    char: char,
+    persona: persona,
   );
 }
 
@@ -217,6 +220,8 @@ PromptResult _assembleMessages({
   required Map<String, String> currentGlobalVars,
   required Preset preset,
   required PromptPayload payload,
+  required Character char,
+  Persona? persona,
 }) {
   final messages = <PromptMessage>[];
   String? mergeBuffer;
@@ -279,6 +284,48 @@ PromptResult _assembleMessages({
       if (!historyInserted) { finalMessages.addAll(breakdown.trimmedHistory); historyInserted = true; }
     } else if (msg.content.trim().isNotEmpty) {
       finalMessages.add(msg);
+    }
+  }
+
+  final regexCtx = RegexApplyContext(
+    char: char,
+    persona: persona,
+    sessionVars: currentSessionVars,
+    globalVars: currentGlobalVars,
+  );
+
+  final regexScripts = preset.regexes.where((r) => !r.disabled).toList();
+
+  for (int i = 0; i < finalMessages.length; i++) {
+    final msg = finalMessages[i];
+    if (msg.isHistory) {
+      final placement = msg.role == 'user' ? 1 : 2;
+      final depth = finalMessages.where((m) => m.isHistory).length - 1 -
+          finalMessages.sublist(0, i).where((m) => m.isHistory).length;
+      final ctx = RegexApplyContext(
+        char: char, persona: persona,
+        sessionVars: currentSessionVars, globalVars: currentGlobalVars,
+        depth: depth,
+      );
+      finalMessages[i] = PromptMessage(
+        role: msg.role,
+        content: applyRegexes(msg.content, placement, 2, regexScripts, ctx),
+        isLorebook: msg.isLorebook,
+        blockName: msg.blockName,
+        isHistory: msg.isHistory,
+        isDepth: msg.isDepth,
+        depth: msg.depth,
+      );
+    } else {
+      finalMessages[i] = PromptMessage(
+        role: msg.role,
+        content: applyRegexes(msg.content, 4, 2, regexScripts, regexCtx),
+        isLorebook: msg.isLorebook,
+        blockName: msg.blockName,
+        isHistory: msg.isHistory,
+        isDepth: msg.isDepth,
+        depth: msg.depth,
+      );
     }
   }
 

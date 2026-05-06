@@ -101,8 +101,8 @@ List<ScannedEntry> scanLorebooks({
       final secondaryKeys = entry.secondaryKeys;
       final logic = entry.selectiveLogic;
 
-      final caseSensitive = entry.caseSensitive || (!entry.caseSensitive && globalSettings.caseSensitive);
-      final wholeWords = _resolveWholeWords(entry.matchWholeWords, globalSettings.matchWholeWords);
+      final caseSensitive = entry.caseSensitive ?? globalSettings.caseSensitive;
+      final wholeWords = _resolveWholeWords(entry.matchWholeWords, globalSettings.matchWholeWords, globalSettings.keySearchMode);
 
       final scanDepth = entry.scanDepth ?? globalSettings.scanDepth;
       final temporalDepth = entry.sticky > entry.cooldown ? entry.sticky : entry.cooldown;
@@ -233,8 +233,11 @@ int _randomPercent() => DateTime.now().microsecond % 100;
 
 enum _WholeWordMode { no, yes, glaze }
 
-_WholeWordMode _resolveWholeWords(bool entryValue, bool globalValue) {
+_WholeWordMode _resolveWholeWords(bool? entryValue, bool globalValue, String keySearchMode) {
   if (entryValue == true) return _WholeWordMode.yes;
+  if (entryValue == false) return _WholeWordMode.no;
+  if (keySearchMode == 'glaze') return _WholeWordMode.glaze;
+  if (globalValue) return _WholeWordMode.yes;
   return _WholeWordMode.no;
 }
 

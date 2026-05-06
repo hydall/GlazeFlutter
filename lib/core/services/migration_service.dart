@@ -4,6 +4,8 @@ import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'preset_defaults.dart';
+
 import '../models/api_config.dart';
 import '../models/character.dart';
 import '../models/chat_message.dart';
@@ -359,7 +361,7 @@ class MigrationService {
       }
     }
 
-    return Preset(
+    return finalizeImportedPreset(Preset(
       id: json['id'] as String? ?? _generateId(),
       name: json['name'] as String? ?? 'Imported',
       author: json['author'] as String?,
@@ -374,7 +376,7 @@ class MigrationService {
       mergePrompts: json['mergePrompts'] as bool? ?? false,
       mergeRole: json['mergeRole'] as String? ?? 'system',
       createdAt: _toInt(json['createdAt']) ?? 0,
-    );
+    ));
   }
 
   String _generateId() {

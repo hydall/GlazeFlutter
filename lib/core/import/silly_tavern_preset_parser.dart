@@ -1,4 +1,5 @@
 import '../../core/models/preset.dart';
+import '../services/preset_defaults.dart';
 
 const _stBlockIds = <String, String>{
   'chatHistory': 'chat_history',
@@ -172,12 +173,12 @@ Preset parseSillyTavernPreset(Map<String, dynamic> json, String fileName) {
     }
   }
 
-  return Preset(
+  return finalizeImportedPreset(Preset(
     id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
     name: (json['name'] as String?) ?? fileName.replaceAll('.json', ''),
     blocks: blocks,
     regexes: regexes,
     reasoningEnabled: json['reasoning'] as bool? ?? json['reasoning_enabled'] as bool? ?? false,
     createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-  );
+  ));
 }

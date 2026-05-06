@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/state/active_selection_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import 'tokenizer_sheet.dart';
 
 class MagicDrawerPanel extends StatelessWidget {
   final String charId;
@@ -87,6 +87,14 @@ class MagicDrawerPanel extends StatelessWidget {
                   label: 'Raw Prompt',
                   onTap: () {
                     Navigator.pop(context);
+                  },
+                ),
+                _MagicItem(
+                  icon: Icons.pie_chart_outline,
+                  label: 'Tokenizer',
+                  onTap: () {
+                    Navigator.pop(context);
+                    showTokenizerSheet(context, charId);
                   },
                 ),
                 _MagicItem(

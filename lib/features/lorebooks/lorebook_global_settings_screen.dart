@@ -38,6 +38,16 @@ class _LorebookGlobalSettingsScreenState extends ConsumerState<LorebookGlobalSet
               children: [
                 _SectionHeader('Search'),
                 _DropdownField<String>(
+                  label: 'Key Search Mode',
+                  value: settings.keySearchMode,
+                  items: const [
+                    DropdownMenuItem(value: 'tavern', child: Text('Tavern (substring)')),
+                    DropdownMenuItem(value: 'glaze', child: Text('Glaze (word boundary)')),
+                  ],
+                  onChanged: (v) => _update(settings.copyWith(keySearchMode: v)),
+                ),
+                const SizedBox(height: 12),
+                _DropdownField<String>(
                   label: 'Search Type',
                   value: settings.searchType,
                   items: const [

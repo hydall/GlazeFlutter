@@ -17,8 +17,8 @@ class LorebookEntry with _$LorebookEntry {
     @Default('worldInfoBefore') String position,
     @Default(100) int order,
     int? scanDepth,
-    @Default(false) bool caseSensitive,
-    @Default(false) bool matchWholeWords,
+    bool? caseSensitive,
+    bool? matchWholeWords,
     @Default(100) int probability,
     @Default(false) bool preventRecursion,
     @Default(0) int sticky,
@@ -67,6 +67,7 @@ class Lorebook with _$Lorebook {
 class LorebookGlobalSettings with _$LorebookGlobalSettings {
   const factory LorebookGlobalSettings({
     @Default('keyword') String searchType,
+    @Default('tavern') String keySearchMode,
     @Default(false) bool caseSensitive,
     @Default(false) bool matchWholeWords,
     @Default(true) bool recursiveScan,
