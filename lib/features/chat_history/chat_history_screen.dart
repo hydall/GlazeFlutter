@@ -78,11 +78,18 @@ class ChatSessionInfo {
   });
 }
 
-class ChatHistoryScreen extends ConsumerWidget {
+class ChatHistoryScreen extends ConsumerStatefulWidget {
   const ChatHistoryScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatHistoryScreen> createState() => _ChatHistoryScreenState();
+}
+
+class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
+  String _searchQuery = '';
+
+  @override
+  Widget build(BuildContext context) {
     final sessions = ref.watch(chatHistoryProvider);
 
     return Scaffold(
@@ -93,9 +100,41 @@ class ChatHistoryScreen extends ConsumerWidget {
             bottom: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: GlazeAppBar(title: 'Chats'),
+              child: GlazeAppBar(
+                title: 'Chats',
+                actions: [
+                  SizedBox(
+                    width: 44, height: 44,
+                    child: IconButton(
+                      icon: const Icon(Icons.search_rounded, size: 22),
+                      color: AppColors.accent,
+                      onPressed: () async {
+                        final query = await showSearch<String>(
+                          context: context,
+                          delegate: _ChatSearchDelegate(ref),
+                        );
+                        if (query != null) setState(() => _searchQuery = query);
+                      },
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
+          if (_searchQuery.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Row(
+                children: [
+                  Text('Filter: "$_searchQuery"', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () => setState(() => _searchQuery = ''),
+                    child: const Icon(Icons.close, size: 16, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: sessions.when(
               loading: () => const Center(
@@ -103,7 +142,15 @@ class ChatHistoryScreen extends ConsumerWidget {
               ),
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (list) {
-                if (list.isEmpty) {
+                var filtered = list;
+                if (_searchQuery.isNotEmpty) {
+                  final q = _searchQuery.toLowerCase();
+                  filtered = list.where((s) =>
+                    s.characterName.toLowerCase().contains(q) ||
+                    s.lastMessage.toLowerCase().contains(q),
+                  ).toList();
+                }
+                if (filtered.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -125,14 +172,70 @@ class ChatHistoryScreen extends ConsumerWidget {
                   );
                 }
                 return ListView.builder(
-                  itemCount: list.length,
-                  itemBuilder: (_, i) => _SessionTile(info: list[i]),
+                  itemCount: filtered.length,
+                  itemBuilder: (_, i) => _SessionTile(info: filtered[i]),
                 );
               },
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _ChatSearchDelegate extends SearchDelegate<String> {
+  final WidgetRef ref;
+  _ChatSearchDelegate(this.ref);
+
+  @override
+  ThemeData appBarTheme(BuildContext context) =>
+      Theme.of(context).copyWith(appBarTheme: const AppBarTheme(backgroundColor: AppColors.background));
+
+  @override
+  List<Widget> buildActions(BuildContext context) => [
+    IconButton(icon: const Icon(Icons.clear), onPressed: () => query = ''),
+  ];
+
+  @override
+  Widget buildLeading(BuildContext context) => IconButton(
+    icon: const Icon(Icons.arrow_back), onPressed: () => close(context, ''),
+  );
+
+  @override
+  Widget buildResults(BuildContext context) => _buildList();
+
+  @override
+  Widget buildSuggestions(BuildContext context) => _buildList();
+
+  Widget _buildList() {
+    final sessions = ref.read(chatHistoryProvider).valueOrNull ?? [];
+    final q = query.toLowerCase();
+    final filtered = sessions.where((s) =>
+      s.characterName.toLowerCase().contains(q) ||
+      s.lastMessage.toLowerCase().contains(q),
+    ).toList();
+
+    if (filtered.isEmpty) {
+      return const Center(child: Text('No chats found', style: TextStyle(color: AppColors.textSecondary)));
+    }
+
+    return ListView.builder(
+      itemCount: filtered.length,
+      itemBuilder: (ctx, i) {
+        final s = filtered[i];
+        return ListTile(
+          leading: s.avatarPath != null && s.avatarPath!.isNotEmpty
+              ? CircleAvatar(backgroundImage: FileImage(File(s.avatarPath!)))
+              : CircleAvatar(
+                  backgroundColor: AppColors.accent,
+                  child: Text(s.characterName.isNotEmpty ? s.characterName[0].toUpperCase() : '?', style: const TextStyle(color: Colors.black)),
+                ),
+          title: Text(s.characterName, style: const TextStyle(color: AppColors.textPrimary)),
+          subtitle: Text(s.lastMessage, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          onTap: () => close(ctx, s.characterName),
+        );
+      },
     );
   }
 }

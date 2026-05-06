@@ -1,4 +1,6 @@
-﻿import 'package:file_picker/file_picker.dart';
+﻿import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -24,6 +26,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   SortType _sortBy = SortType.date;
   SortDir _sortDir = SortDir.desc;
   bool _showCatalog = false;
+  String _searchQuery = '';
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +49,13 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                     child: IconButton(
                       icon: const Icon(Icons.search_rounded, size: 22),
                       color: AppColors.accent,
-                      onPressed: () {},
+                      onPressed: () async {
+                        final query = await showSearch<String>(
+                          context: context,
+                          delegate: _CharacterSearchDelegate(ref),
+                        );
+                        if (query != null) setState(() => _searchQuery = query);
+                      },
                     ),
                   ),
                 ],
@@ -84,7 +93,17 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                           onImport: () => _importCharacter(context, ref),
                         );
                       }
-                      final sorted = _sortChars(chars);
+                      var filtered = chars;
+                      if (_searchQuery.isNotEmpty) {
+                        final q = _searchQuery.toLowerCase();
+                        filtered = chars.where((c) =>
+                          c.name.toLowerCase().contains(q) ||
+                          (c.description ?? '').toLowerCase().contains(q) ||
+                          (c.creator ?? '').toLowerCase().contains(q) ||
+                          c.tags.any((t) => t.toLowerCase().contains(q)),
+                        ).toList();
+                      }
+                      final sorted = _sortChars(filtered);
                       return CharacterGrid(
                         characters: sorted,
                         sortBy: _sortBy,
@@ -168,6 +187,63 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Import failed: $e')));
     }
+  }
+}
+
+class _CharacterSearchDelegate extends SearchDelegate<String> {
+  final WidgetRef ref;
+  _CharacterSearchDelegate(this.ref);
+
+  @override
+  ThemeData appBarTheme(BuildContext context) =>
+      Theme.of(context).copyWith(appBarTheme: const AppBarTheme(backgroundColor: AppColors.background));
+
+  @override
+  List<Widget> buildActions(BuildContext context) => [
+    IconButton(icon: const Icon(Icons.clear), onPressed: () => query = ''),
+  ];
+
+  @override
+  Widget buildLeading(BuildContext context) => IconButton(
+    icon: const Icon(Icons.arrow_back), onPressed: () => close(context, ''),
+  );
+
+  @override
+  Widget buildResults(BuildContext context) => _buildList();
+
+  @override
+  Widget buildSuggestions(BuildContext context) => _buildList();
+
+  Widget _buildList() {
+    final chars = ref.read(charactersProvider).valueOrNull ?? [];
+    final q = query.toLowerCase();
+    final filtered = chars.where((c) =>
+      c.name.toLowerCase().contains(q) ||
+      (c.description ?? '').toLowerCase().contains(q) ||
+      (c.creator ?? '').toLowerCase().contains(q) ||
+      c.tags.any((t) => t.toLowerCase().contains(q)),
+    ).toList();
+
+    if (filtered.isEmpty) {
+      return const Center(child: Text('No characters found', style: TextStyle(color: AppColors.textSecondary)));
+    }
+
+    return ListView.builder(
+      itemCount: filtered.length,
+      itemBuilder: (ctx, i) {
+        final c = filtered[i];
+        return ListTile(
+          leading: CircleAvatar(
+            backgroundColor: AppColors.accent.withValues(alpha: 0.15),
+            backgroundImage: c.avatarPath != null ? FileImage(File(c.avatarPath!)) : null,
+            child: c.avatarPath == null ? Text(c.name[0].toUpperCase(), style: const TextStyle(color: AppColors.accent)) : null,
+          ),
+          title: Text(c.name, style: const TextStyle(color: AppColors.textPrimary)),
+          subtitle: c.description != null ? Text(c.description!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)) : null,
+          onTap: () => close(ctx, c.name),
+        );
+      },
+    );
   }
 }
 
