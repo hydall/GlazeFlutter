@@ -1,6 +1,6 @@
 # Glaze Flutter Migration — Full Plan
 
-## Current Status (updated 2025-05-06)
+## Current Status (updated 2026-05-06)
 
 **Go/No-Go: PASSED.** Chat streams on all platforms. MVP core is production-quality.
 
@@ -29,6 +29,8 @@
 | Phase 11: Persona Avatar Picker | Done | Image picker for persona avatar |
 | Phase 12: Character Export | Done | PNG with tEXt chunk + JSON V2 spec export |
 | Phase 13: Theme + Polish | Done | Theme engine (dark/light/system + custom accent), search, crash recovery, onboarding |
+| Phase 14: Character Catalog | Done | 4 providers (JanitorAI/Hampter, DataCat, JannyAI, Chub.ai), search, filters, infinite scroll, preview sheet, import, Import by URL — see below |
+| Phase 14b: Import by URL | Done | DataCat extract-and-poll API, phase tracking, dialog UI |
 
 ### UI Refactoring (2025-05-05 → 2025-05-06)
 
@@ -271,12 +273,70 @@ Chat session management.
 - Session deletion with confirmation
 - Session index display and message count
 
+### Phase 14: Character Catalog (2026-05-06)
+
+Full character discovery and import system ported from Glaze JS.
+
+**Data layer:**
+- `CatalogItem` — id, name, avatarUrl, description, tags, tokens, chatCount, creator, creatorId, nsfw, source, fullPath, slug
+- `CatalogFilters` — sort, nsfw, nsfl, tagIds, tagNames, minTokens, maxTokens
+- `CatalogTag` — id, name, type (category/nsfw/other)
+- `CatalogProvider` enum — janitor, janny, datacat, chub
+- `CharacterData` — name, description, personality, scenario, firstMes, mesExample, creatorNotes, systemPrompt, postHistoryInstructions, alternateGreetings, tags, creator, creatorId, characterBook
+- `DownloadedCharacter` — charData + avatarUrl
+- `CatalogSearchResult` — characters, total, hasMore
+
+**Provider services (4 providers):**
+- `janitor_provider.dart` — Hampter API search/tags/fetch, with DataCat UUID fallback chain
+- `datacat_provider.dart` — session auth, browse/search, Saucepan extraction, tags
+- `janny_provider.dart` — MeiliSearch API, token management, Astro scraping
+- `chub_provider.dart` — REST search, tag aggregation, character download
+- `catalog_http.dart` — shared Dio-based HTTP client with GET/POST/list helpers
+
+**State management:**
+- `CatalogNotifier` (Riverpod StateNotifier) — provider switching, pagination, search, filter persistence (SharedPreferences), import pipeline
+- Per-provider sort defaults persisted to SharedPreferences
+- Filter state (NSFW/NSFL/token range/tag selections) persisted
+
+**UI:**
+- `CatalogCard` — avatar via CachedNetworkImage, token badge, NSFW badge, tag chips
+- `CatalogGrid` — infinite scroll, provider/sort/filter controls, results count, loading/empty states
+- Provider selector — bottom sheet with JanitorAI/DataCat/JannyAI/Chub.ai options
+- Sort selector — per-provider sort options (trending, popular, latest, etc.)
+- Filter sheet — NSFW/NSFL toggles, min/max token range, reset/apply
+- Preview sheet — draggable sheet with full character info (avatar, name, creator, tags, creator notes, description, scenario, first message) + Import button
+- Import pipeline — download avatar → save via ImageStorage → create character + lorebook entries in DB
+- Wired into character_list_screen Discover tab (replaces "coming soon" placeholder)
+
+**Import by URL (Phase 14b):**
+- `ImportUrlDialog` — paste JanitorAI/Saucepan/Chub URL
+- `datacatExtractAndPoll` — submit URL to DataCat, poll for completion with phase tracking
+- Phase callback updates UI during extraction
+- On success: import character via same pipeline as catalog import
+- Import URL FAB shown on Discover tab
+
+**Directory structure:**
+```
+features/catalog/
+  catalog_models.dart
+  catalog_provider.dart
+  services/
+    catalog_http.dart
+    janitor_provider.dart
+    datacat_provider.dart
+    janny_provider.dart
+    chub_provider.dart
+  widgets/
+    catalog_card.dart
+    catalog_grid.dart
+    import_url_dialog.dart
+    widgets.dart
+```
+
 ### Remaining phases (in priority order)
 
 | Phase | Priority | What's Missing |
 |-------|----------|----------------|
-| Character Catalog / Discover | High | 4 providers (JanitorAI/Hampter, DataCat, JannyAI, Chub.ai), filters, preview sheet, infinite scroll, import from catalog |
-| Import by URL | High | DataCat extraction API — paste JanitorAI URL → get character data + avatar |
 | Image Generation | Medium | 4 API types (OpenAI, Gemini, Naistera, RoutMy + RU bridge), auto-gen from `[IMG:GEN:...]` tags, per-message manual gen, reference images |
 | Cloud Sync | Medium | Dropbox + GDrive adapters, manifest, engine, conflict resolution UI (no encryption for now) |
 | Backup Export/Import | Medium | .glz backup export, ST backup ZIP import, backup/restore UI in menu |
@@ -294,7 +354,6 @@ Chat session management.
 ### Known stubs in current codebase
 
 - `chat_screen.dart` → `input_bar.dart` — 3 input bar buttons (image gen, fullscreen, auto) are decorative
-- `character_list_screen.dart` — Catalog tab "coming soon"
 - `menu_screen.dart` — Cloud Sync, Backups "coming soon"
 - `tokenizer.dart` — heuristic (chars/3.35), no real BPE
 
