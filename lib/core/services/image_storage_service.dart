@@ -7,9 +7,9 @@ import 'package:path/path.dart' as p;
 import '../utils/platform_paths.dart';
 
 class ImageStorageService {
-  final String _baseDir;
+  final String baseDir;
 
-  ImageStorageService(this._baseDir);
+  ImageStorageService(this.baseDir);
 
   static Future<ImageStorageService> create() async {
     final baseDir = await getAppDataDir();
@@ -17,7 +17,7 @@ class ImageStorageService {
   }
 
   Future<String> saveAvatar(String characterId, Uint8List imageBytes) async {
-    final dir = Directory(p.join(_baseDir, 'avatars'));
+    final dir = Directory(p.join(baseDir, 'avatars'));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -35,7 +35,7 @@ class ImageStorageService {
 
   Future<String?> saveThumbnail(
       String characterId, Uint8List imageBytes) async {
-    final dir = Directory(p.join(_baseDir, 'thumbnails'));
+    final dir = Directory(p.join(baseDir, 'thumbnails'));
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
@@ -47,10 +47,10 @@ class ImageStorageService {
   }
 
   Future<void> deleteAvatar(String characterId) async {
-    final avatarPath = p.join(_baseDir, 'avatars', '$characterId.png');
+    final avatarPath = p.join(baseDir, 'avatars', '$characterId.png');
     final file = File(avatarPath);
     if (await file.exists()) await file.delete();
-    final thumbPath = p.join(_baseDir, 'thumbnails', '$characterId.jpg');
+    final thumbPath = p.join(baseDir, 'thumbnails', '$characterId.jpg');
     final thumbFile = File(thumbPath);
     if (await thumbFile.exists()) await thumbFile.delete();
   }

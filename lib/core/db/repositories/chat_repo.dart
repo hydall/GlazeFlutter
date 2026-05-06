@@ -1,9 +1,30 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
 import '../app_db.dart';
 import '../../models/chat_message.dart';
+
+class SessionMetadata {
+  final String sessionId;
+  final String characterId;
+  final int sessionIndex;
+  final int updatedAt;
+  final int messageCount;
+  final String lastMessageContent;
+  final int lastMessageTimestamp;
+
+  const SessionMetadata({
+    required this.sessionId,
+    required this.characterId,
+    required this.sessionIndex,
+    required this.updatedAt,
+    required this.messageCount,
+    required this.lastMessageContent,
+    required this.lastMessageTimestamp,
+  });
+}
 
 class ChatRepo {
   final AppDatabase _db;
@@ -23,6 +44,20 @@ class ChatRepo {
     return rows.map(_toModel).toList();
   }
 
+  Future<List<SessionMetadata>> getAllSessionMetadata() async {
+    final rows = await (_db.select(_db.chatSessions)
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+        .get();
+    return rows.map(_toMetadata).toList();
+  }
+
+  Stream<List<SessionMetadata>> watchAllSessionMetadata() {
+    return (_db.select(_db.chatSessions)
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+        .watch()
+        .map((rows) => rows.map(_toMetadata).toList());
+  }
+
   Future<ChatSession?> getById(String sessionId) async {
     final row = await (_db.select(_db.chatSessions)
           ..where((t) => t.sessionId.equals(sessionId)))
@@ -36,6 +71,20 @@ class ChatRepo {
 
   Future<void> delete(String sessionId) async {
     await (_db.delete(_db.chatSessions)..where((t) => t.sessionId.equals(sessionId))).go();
+  }
+
+  SessionMetadata _toMetadata(ChatSessionRow c) {
+    final msgs = jsonDecode(c.messagesJson) as List;
+    final lastRaw = msgs.isNotEmpty ? msgs.last as Map<String, dynamic> : null;
+    return SessionMetadata(
+      sessionId: c.sessionId,
+      characterId: c.characterId,
+      sessionIndex: c.sessionIndex,
+      updatedAt: c.updatedAt,
+      messageCount: msgs.length,
+      lastMessageContent: (lastRaw?['content'] as String?) ?? '',
+      lastMessageTimestamp: (lastRaw?['timestamp'] as int?) ?? 0,
+    );
   }
 
   ChatSession _toModel(ChatSessionRow c) => ChatSession(

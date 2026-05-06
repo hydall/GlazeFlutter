@@ -1,6 +1,6 @@
 # Glaze Flutter Migration — Full Plan
 
-## Current Status (updated 2025-05-06)
+## Current Status (updated 2026-05-06)
 
 **Go/No-Go: PASSED.** Chat streams on all platforms. MVP core is production-quality.
 
@@ -29,6 +29,8 @@
 | Phase 11: Persona Avatar Picker | Done | Image picker for persona avatar |
 | Phase 12: Character Export | Done | PNG with tEXt chunk + JSON V2 spec export |
 | Phase 13: Theme + Polish | Done | Theme engine (dark/light/system + custom accent), search, crash recovery, onboarding |
+| Phase 14: Character Catalog | Done | 4 providers (JanitorAI/Hampter, DataCat, JannyAI, Chub.ai), search, filters, infinite scroll, preview sheet, import, Import by URL — see below |
+| Phase 14b: Import by URL | Done | DataCat extract-and-poll API, phase tracking, dialog UI |
 
 ### UI Refactoring (2025-05-05 → 2025-05-06)
 
@@ -271,22 +273,146 @@ Chat session management.
 - Session deletion with confirmation
 - Session index display and message count
 
+### Phase 14: Character Catalog (2026-05-06)
+
+Full character discovery and import system ported from Glaze JS.
+
+**Data layer:**
+- `CatalogItem` — id, name, avatarUrl, description, tags, tokens, chatCount, creator, creatorId, nsfw, source, fullPath, slug
+- `CatalogFilters` — sort, nsfw, nsfl, tagIds, tagNames, minTokens, maxTokens
+- `CatalogTag` — id, name, type (category/nsfw/other)
+- `CatalogProvider` enum — janitor, janny, datacat, chub
+- `CharacterData` — name, description, personality, scenario, firstMes, mesExample, creatorNotes, systemPrompt, postHistoryInstructions, alternateGreetings, tags, creator, creatorId, characterBook
+- `DownloadedCharacter` — charData + avatarUrl
+- `CatalogSearchResult` — characters, total, hasMore
+
+**Provider services (4 providers):**
+- `janitor_provider.dart` — Hampter API search/tags/fetch, with DataCat UUID fallback chain
+- `datacat_provider.dart` — session auth, browse/search, Saucepan extraction, tags
+- `janny_provider.dart` — MeiliSearch API, token management, Astro scraping
+- `chub_provider.dart` — REST search, tag aggregation, character download
+- `catalog_http.dart` — shared Dio-based HTTP client with GET/POST/list helpers
+
+**State management:**
+- `CatalogNotifier` (Riverpod StateNotifier) — provider switching, pagination, search, filter persistence (SharedPreferences), import pipeline
+- Per-provider sort defaults persisted to SharedPreferences
+- Filter state (NSFW/NSFL/token range/tag selections) persisted
+
+**UI:**
+- `CatalogCard` — avatar via CachedNetworkImage, token badge, NSFW badge, tag chips
+- `CatalogGrid` — infinite scroll, provider/sort/filter controls, results count, loading/empty states
+- Provider selector — bottom sheet with JanitorAI/DataCat/JannyAI/Chub.ai options
+- Sort selector — per-provider sort options (trending, popular, latest, etc.)
+- Filter sheet — NSFW/NSFL toggles, min/max token range, reset/apply
+- Preview sheet — draggable sheet with full character info (avatar, name, creator, tags, creator notes, description, scenario, first message) + Import button
+- Import pipeline — download avatar → save via ImageStorage → create character + lorebook entries in DB
+- Wired into character_list_screen Discover tab (replaces "coming soon" placeholder)
+
+**Import by URL (Phase 14b):**
+- `ImportUrlDialog` — paste JanitorAI/Saucepan/Chub URL
+- `datacatExtractAndPoll` — submit URL to DataCat, poll for completion with phase tracking
+- Phase callback updates UI during extraction
+- On success: import character via same pipeline as catalog import
+- Import URL FAB shown on Discover tab
+
+**Directory structure:**
+```
+features/catalog/
+  catalog_models.dart
+  catalog_provider.dart
+  services/
+    catalog_http.dart
+    janitor_provider.dart
+    datacat_provider.dart
+    janny_provider.dart
+    chub_provider.dart
+  widgets/
+    catalog_card.dart
+    catalog_grid.dart
+    import_url_dialog.dart
+    widgets.dart
+```
+
+### Phase 6: Image Generation (2026-05-06)
+
+Full image generation system with 4 providers, auto-gen, and settings UI.
+
+**Data layer:**
+- `ImageGenSettings` — Freezed model with per-provider settings, reference images, image context
+- `ReferenceImage` — name, imageData (base64), matchMode (match/always)
+- `ImageGenApiType` enum — openai, gemini, naistera, routmy
+- `RoutMyConstants`, `NaisteraConstants`, `OpenAIConstants`, `GeminiConstants` — static options
+- Settings persisted via SharedPreferences key `gz_imggen_settings`
+
+**Provider services (4 providers):**
+- `openai_image_provider.dart` — DALL-E API (b64_json response format)
+- `gemini_image_provider.dart` — Imagen API (predictions response)
+- `naistera_image_provider.dart` — Naistera API (hardcoded endpoint, reference images)
+- `routmy_image_provider.dart` — RoutMy API + RU Bridge (two-step: LLM description → image gen)
+- `image_gen_http.dart` — shared Dio-based HTTP client with POST/base64 extraction helpers
+
+**Orchestrator:**
+- `image_gen_service.dart` — `processMessageImages()` scans for `[IMG:GEN:...]` tags, generates images, replaces with `[IMG:RESULT:path]` or `[IMG:ERROR:...]`
+- `generateImage()` dispatches to provider based on settings
+- Reference images built from character/persona avatars, additional refs, and image context
+- Generated images saved to `generated/` subdirectory via `ImageStorageService`
+- `_buildReferences()` handles match mode (keyword/always) per provider
+
+**State management:**
+- `ImageGenSettingsNotifier` (Riverpod AsyncNotifier) — load/save from SharedPreferences, JSON serialization
+- `getService()` factory for ImageGenService (reuses ImageStorageService from db_provider)
+
+**UI:**
+- `ImageGenSheet` — draggable settings panel: enabled toggle, provider selector (4 providers), per-provider fields, image context settings, tip about `[IMG:GEN:...]` tag format
+- `ImageContentRenderer` — parses message content for `[IMG:GEN:...]`, `[IMG:RESULT:path]`, `[IMG:ERROR:...]` markers, renders MarkdownBody for text spans and Image.file/loading/error widgets for image spans
+- `MessageBubble` updated — uses `ImageContentRenderer` when image markers detected, else MarkdownBody
+- `ChatInputBar` updated — image button now wired (`onImageGen` callback → opens ImageGenSheet)
+- `MagicDrawerPanel` updated — added "ImgGen On/Off" item that opens ImageGenSheet
+
+**Integration:**
+- `ChatGenerationService.processImageTags()` — post-generation hook that processes `[IMG:GEN:...]` tags after LLM response is saved
+- `ChatNotifier.sendMessage()` and `regenerateLastAssistant()` call `processImageTags()` after generation completes
+- `ImageStorageService.baseDir` changed from private to public for image gen save path
+- `image_gen_provider.dart` imports added to `db_provider.dart` dependency chain
+
+**Directory structure:**
+```
+features/image_gen/
+  image_gen_models.dart
+  image_gen_provider.dart
+  services/
+    image_gen_http.dart
+    openai_image_provider.dart
+    gemini_image_provider.dart
+    naistera_image_provider.dart
+    routmy_image_provider.dart
+    image_gen_service.dart
+  widgets/
+    image_gen_sheet.dart
+    image_content_renderer.dart
+    widgets.dart
+```
+
 ### Remaining phases (in priority order)
 
 | Phase | Priority | What's Missing |
 |-------|----------|----------------|
-| Image Generation | Low | Service, config, gallery, UI |
-| Cloud Sync | Low | Crypto, adapters, manifest, engine, UI |
-| Background Gen Notification | Low | Notification on generation complete |
-| iOS Keyboard Handling | Low | Keyboard avoidance, accessory view |
-| Android Back Button | Low | Intent system, back navigation |
-| App Icons + Splash | Low | All platforms |
-| CI/CD | Low | GitHub Actions, code signing |
+| Cloud Sync | Medium | Dropbox + GDrive adapters, manifest, engine, conflict resolution UI (no encryption for now) |
+| Backup Export/Import | Medium | .glz backup export, ST backup ZIP import, backup/restore UI in menu |
+| Character Gallery | Medium | Per-character image gallery, add/delete, full-screen viewer, sync support |
+| Persona Connections | Medium | Per-character and per-chat persona bindings (currently global only) |
+| Memory Coverage/Preview | Medium | Coverage analysis (which memories activate), prompt template editor, prompt preview, text preview |
+| Glossary / Help | Low | Categorized help articles, inline HelpTip components |
+| Stats Dashboard | Low | Per-chat/char/global stats (tokens, messages, time) |
+| Notifications | Low | In-app notification center + native push for background gen |
+| Character Color Picker | Low | Color picker with presets, custom hex, auto — used for theme accent |
+| Drag-and-Drop Import | Low | Desktop: drag PNG/JSON/ZIP onto app |
+| ST Backup Import | Low | Import SillyTavern backup ZIP format |
+| Enhanced Onboarding | Low | Replay from menu, more steps |
 
 ### Known stubs in current codebase
 
-- `chat_screen.dart` → `input_bar.dart` — 3 input bar buttons (image gen, fullscreen, auto) are decorative
-- `character_list_screen.dart` — Catalog tab "coming soon"
+- `chat_screen.dart` → `input_bar.dart` — 2 input bar buttons (fullscreen, auto) are decorative
 - `menu_screen.dart` — Cloud Sync, Backups "coming soon"
 - `tokenizer.dart` — heuristic (chars/3.35), no real BPE
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/chat_message.dart';
+import '../../core/db/repositories/chat_repo.dart' show SessionMetadata;
+import '../../core/db/repositories/character_repo.dart' show CharacterRepo;
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -14,47 +17,72 @@ final chatHistoryProvider =
         ChatHistoryNotifier.new);
 
 class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
+  StreamSubscription? _sub;
+
   @override
   Future<List<ChatSessionInfo>> build() async {
+    _sub?.cancel();
     final chatRepo = ref.read(chatRepoProvider);
     final charRepo = ref.read(characterRepoProvider);
-    final allSessions = await chatRepo.getAllSessions();
-    final result = <ChatSessionInfo>[];
 
-    for (final session in allSessions) {
-      final char = await charRepo.getById(session.characterId);
-      final lastMsg =
-          session.messages.isNotEmpty ? session.messages.last : null;
-      result.add(ChatSessionInfo(
-        sessionId: session.id,
-        characterId: session.characterId,
+    _sub = chatRepo.watchAllSessionMetadata().listen((allMeta) {
+      _updateFromMetadata(allMeta, charRepo);
+    });
+    ref.onDispose(() => _sub?.cancel());
+
+    final allMeta = await chatRepo.getAllSessionMetadata();
+    return _buildFromMetadata(allMeta, charRepo);
+  }
+
+  Future<List<ChatSessionInfo>> _buildFromMetadata(
+    List<SessionMetadata> allMeta,
+    CharacterRepo charRepo,
+  ) async {
+    final charIds = allMeta.map((m) => m.characterId).toSet();
+    final charMap = await charRepo.getByIds(charIds);
+
+    final result = allMeta.map((m) {
+      final char = charMap[m.characterId];
+      return ChatSessionInfo(
+        sessionId: m.sessionId,
+        characterId: m.characterId,
         characterName: char?.name ?? 'Unknown',
         avatarPath: char?.avatarPath,
-        lastMessage: lastMsg?.content ?? '',
-        lastMessageTime: lastMsg?.timestamp ?? 0,
-        messageCount: session.messages.length,
-      ));
-    }
+        lastMessage: m.lastMessageContent,
+        lastMessageTime: m.lastMessageTimestamp,
+        messageCount: m.messageCount,
+      );
+    }).toList();
 
     result.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
     return result;
   }
 
+  Future<void> _updateFromMetadata(
+    List<SessionMetadata> allMeta,
+    CharacterRepo charRepo,
+  ) async {
+    final data = await _buildFromMetadata(allMeta, charRepo);
+    state = AsyncData(data);
+  }
+
   Future<void> deleteSession(String sessionId) async {
     await ref.read(chatRepoProvider).delete(sessionId);
-    ref.invalidateSelf();
   }
 
   Future<void> clearChat(String sessionId) async {
     final chatRepo = ref.read(chatRepoProvider);
-    final sessions = await chatRepo.getAllSessions();
-    final session =
-        sessions.firstWhere((s) => s.id == sessionId,
-            orElse: () => ChatSession(
-                id: sessionId, characterId: '', sessionIndex: 0));
-    final cleared = session.copyWith(messages: []);
-    await chatRepo.put(cleared);
-    ref.invalidateSelf();
+    final sessions = await chatRepo.getAllSessionMetadata();
+    final meta = sessions.where((s) => s.sessionId == sessionId).firstOrNull;
+    if (meta == null) return;
+
+    final clearedSession = ChatSession(
+      id: sessionId,
+      characterId: meta.characterId,
+      sessionIndex: meta.sessionIndex,
+      messages: [],
+    );
+    await chatRepo.put(clearedSession);
   }
 }
 
