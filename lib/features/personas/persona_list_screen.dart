@@ -289,6 +289,8 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
       name: name,
       prompt: _promptCtrl.text.trim().isEmpty ? null : _promptCtrl.text.trim(),
       avatarPath: _avatarPath,
+      createdAt: widget.existing?.createdAt ??
+          DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
 
     await ref.read(personaRepoProvider).put(persona);

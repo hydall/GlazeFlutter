@@ -8,7 +8,9 @@ class PersonaRepo {
   PersonaRepo(this._db);
 
   Future<List<Persona>> getAll() async {
-    final rows = await _db.select(_db.personas).get();
+    final rows = await (_db.select(_db.personas)
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .get();
     return rows.map(_toModel).toList();
   }
 
@@ -32,6 +34,7 @@ class PersonaRepo {
         name: c.name,
         prompt: c.prompt,
         avatarPath: c.avatarPath,
+        createdAt: c.createdAt,
       );
 
   PersonasCompanion _toCompanion(Persona m) => PersonasCompanion(
@@ -39,5 +42,6 @@ class PersonaRepo {
         name: Value(m.name),
         prompt: Value(m.prompt),
         avatarPath: Value(m.avatarPath),
+        createdAt: Value(m.createdAt),
       );
 }

@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/state/active_selection_provider.dart';
+import '../../core/state/db_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -12,6 +16,8 @@ class ToolsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bottomPad = ref.watch(navHeightProvider) + 20;
+    final activePersonaId = ref.watch(activePersonaIdProvider);
+    final activePresetId = ref.watch(activePresetIdProvider);
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
@@ -27,22 +33,16 @@ class ToolsScreen extends ConsumerWidget {
             child: ListView(
               padding: EdgeInsets.fromLTRB(16, 16, 16, bottomPad),
               children: [
-                _HeroCard(
-                  icon: Icons.face,
-                  title: 'Personas',
-                  subtitle: 'user',
-                  isAvatar: true,
+                _PersonaHeroCard(
+                  activePersonaId: activePersonaId,
                   onTap: () => context.go('/tools/personas'),
                 ),
                 const SizedBox(height: 12),
-                _HeroCard(
-                  icon: Icons.tune,
-                  title: 'Presets',
-                  subtitle: 'Default',
+                _PresetHeroCard(
+                  activePresetId: activePresetId,
                   onTap: () => context.go('/tools/presets'),
                 ),
                 const SizedBox(height: 16),
-                // Row 1: API + Lorebooks
                 IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -68,7 +68,6 @@ class ToolsScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Row 2: Regex (left half only)
                 Row(
                   children: [
                     Expanded(
@@ -92,11 +91,79 @@ class ToolsScreen extends ConsumerWidget {
   }
 }
 
+class _PersonaHeroCard extends ConsumerWidget {
+  final String? activePersonaId;
+  final VoidCallback onTap;
+
+  const _PersonaHeroCard({required this.activePersonaId, required this.onTap});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<_PersonaInfo?>(
+      future: _getPersonaInfo(ref),
+      builder: (context, snap) {
+        final info = snap.data;
+        return _HeroCard(
+          icon: Icons.face,
+          title: 'Personas',
+          subtitle: info?.name ?? 'user',
+          avatarPath: info?.avatarPath,
+          isAvatar: true,
+          onTap: onTap,
+        );
+      },
+    );
+  }
+
+  Future<_PersonaInfo?> _getPersonaInfo(WidgetRef ref) async {
+    if (activePersonaId == null) return null;
+    final persona = await ref.read(personaRepoProvider).getById(activePersonaId!);
+    if (persona == null) return null;
+    return _PersonaInfo(name: persona.name, avatarPath: persona.avatarPath);
+  }
+}
+
+class _PersonaInfo {
+  final String name;
+  final String? avatarPath;
+  _PersonaInfo({required this.name, this.avatarPath});
+}
+
+class _PresetHeroCard extends ConsumerWidget {
+  final String? activePresetId;
+  final VoidCallback onTap;
+
+  const _PresetHeroCard({required this.activePresetId, required this.onTap});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<String?>(
+      future: _getPresetName(ref),
+      builder: (context, snap) {
+        final subtitle = snap.data ?? 'Default';
+        return _HeroCard(
+          icon: Icons.tune,
+          title: 'Presets',
+          subtitle: subtitle,
+          onTap: onTap,
+        );
+      },
+    );
+  }
+
+  Future<String?> _getPresetName(WidgetRef ref) async {
+    if (activePresetId == null) return 'Default';
+    final preset = await ref.read(presetRepoProvider).getById(activePresetId!);
+    return preset?.name ?? 'Default';
+  }
+}
+
 class _HeroCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
   final bool isAvatar;
+  final String? avatarPath;
   final VoidCallback onTap;
 
   const _HeroCard({
@@ -104,6 +171,7 @@ class _HeroCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.isAvatar = false,
+    this.avatarPath,
     required this.onTap,
   });
 
@@ -123,25 +191,13 @@ class _HeroCard extends StatelessWidget {
           children: [
             if (isAvatar) ...[
               Positioned.fill(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF66CCFF), Color(0xFF7996CE)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      subtitle.isNotEmpty ? subtitle[0].toUpperCase() : '?',
-                      style: const TextStyle(
-                        fontSize: 80,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white60,
-                      ),
-                    ),
-                  ),
-                ),
+                child: avatarPath != null && avatarPath!.isNotEmpty
+                    ? Image.file(
+                        File(avatarPath!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _AvatarGradientPlaceholder(subtitle: subtitle),
+                      )
+                    : _AvatarGradientPlaceholder(subtitle: subtitle),
               ),
               Positioned.fill(
                 child: Container(
@@ -211,6 +267,34 @@ class _HeroCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AvatarGradientPlaceholder extends StatelessWidget {
+  final String subtitle;
+  const _AvatarGradientPlaceholder({required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF66CCFF), Color(0xFF7996CE)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          subtitle.isNotEmpty ? subtitle[0].toUpperCase() : '?',
+          style: const TextStyle(
+            fontSize: 80,
+            fontWeight: FontWeight.w800,
+            color: Colors.white60,
+          ),
         ),
       ),
     );

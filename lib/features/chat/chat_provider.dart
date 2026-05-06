@@ -338,6 +338,40 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     state = AsyncData(ChatState(session: newSession));
   }
 
+  Future<void> newSession() async {
+    final repo = ref.read(chatRepoProvider);
+    final sessions = await repo.getByCharacterId(arg);
+
+    int maxIdx = 0;
+    for (final s in sessions) {
+      if (s.sessionIndex > maxIdx) maxIdx = s.sessionIndex;
+    }
+
+    final charRepo = ref.read(characterRepoProvider);
+    final character = await charRepo.getById(arg);
+    final persona = await _resolvePersona();
+
+    final newIdx = maxIdx + 1;
+    final sessionId = '${arg}_$newIdx';
+    final initialMessages = InitialMessageBuilder.build(
+      character: character,
+      persona: persona,
+      sessionId: sessionId,
+    );
+
+    final newSession = ChatSession(
+      id: sessionId,
+      characterId: arg,
+      sessionIndex: newIdx,
+      messages: initialMessages,
+      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    );
+
+    await repo.put(newSession);
+    _invalidateHistory();
+    state = AsyncData(ChatState(session: newSession));
+  }
+
   Future<Persona?> _resolvePersona() async {
     final personaRepo = ref.read(personaRepoProvider);
     final personas = await personaRepo.getAll();

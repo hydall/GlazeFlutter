@@ -208,6 +208,7 @@ class BackupService {
     await _importJsCharacters(data['characters']);
     await _importJsPersonas(data['personas']);
     await _importJsLorebooks(kv);
+    await _importJsCharacterBooks(data['characters']);
     await _importJsApiConfigs(kv);
     await _importJsChats(kv);
     await _importJsPresets(kv, ls);
@@ -273,6 +274,8 @@ class BackupService {
                   char['alternate_greetings'] != null
                       ? jsonEncode(char['alternate_greetings'])
                       : null),
+              updatedAt: Value(_toInt(char['updatedAt'] ?? char['updated_at']) ??
+                  DateTime.now().millisecondsSinceEpoch ~/ 1000),
             ),
           );
     }
@@ -298,6 +301,8 @@ class BackupService {
               prompt:
                   Value(per['prompt'] as String? ?? per['description'] as String?),
               avatarPath: Value(avatarPath),
+              createdAt: Value(_toInt(per['createdAt'] ?? per['created_at']) ??
+                  DateTime.now().millisecondsSinceEpoch ~/ 1000),
             ),
           );
     }
@@ -305,14 +310,56 @@ class BackupService {
 
   Future<void> _importJsLorebooks(Map<String, dynamic> kv) async {
     final lorebooksRaw = kv['gz_lorebooks'];
-    if (lorebooksRaw == null) return;
-    final lb = lorebooksRaw as Map<String, dynamic>;
-    final lorebooks = lb['lorebooks'] as List<dynamic>?;
-    if (lorebooks == null) return;
+    if (lorebooksRaw != null) {
+      final lb = lorebooksRaw as Map<String, dynamic>;
+      final lorebooks = lb['lorebooks'] as List<dynamic>?;
+      if (lorebooks != null) {
+        for (final l in lorebooks) {
+          final lbJson = l as Map<String, dynamic>;
+          final rawEntries = lbJson['entries'];
+          final mappedEntries = <Map<String, dynamic>>[];
 
-    for (final l in lorebooks) {
-      final lbJson = l as Map<String, dynamic>;
-      final rawEntries = lbJson['entries'];
+          if (rawEntries is List) {
+            for (final e in rawEntries) {
+              if (e is Map<String, dynamic>) mappedEntries.add(_mapJsLorebookEntry(e));
+            }
+          } else if (rawEntries is Map) {
+            for (final e in rawEntries.values) {
+              if (e is Map<String, dynamic>) mappedEntries.add(_mapJsLorebookEntry(e));
+            }
+          }
+
+          await _db.into(_db.lorebooks).insertOnConflictUpdate(
+                LorebooksCompanion.insert(
+                  lorebookId: lbJson['id'] as String? ?? '',
+                  name: lbJson['name'] as String? ?? '',
+                  enabled: Value(lbJson['enabled'] as bool? ?? true),
+                  activationScope: Value(
+                      lbJson['activationScope'] as String? ??
+                          lbJson['scope'] as String? ??
+                          'global'),
+                  activationTargetId: Value(
+                      lbJson['activationTargetId'] as String? ??
+                          lbJson['targetId'] as String?),
+                  entriesJson: jsonEncode(mappedEntries),
+                ),
+              );
+        }
+      }
+    }
+  }
+
+  Future<void> _importJsCharacterBooks(dynamic charData) async {
+    if (charData is! List) return;
+    for (final c in charData) {
+      final char = c as Map<String, dynamic>;
+      final charId = char['id'] as String?;
+      if (charId == null) continue;
+
+      final cbRaw = char['character_book'] ?? char['data']?['character_book'];
+      if (cbRaw is! Map<String, dynamic>) continue;
+
+      final rawEntries = cbRaw['entries'];
       final mappedEntries = <Map<String, dynamic>>[];
 
       if (rawEntries is List) {
@@ -325,18 +372,21 @@ class BackupService {
         }
       }
 
+      if (mappedEntries.isEmpty) continue;
+
+      final cbId = cbRaw['id'] as String? ?? 'cb_$charId';
+      final existing = (_db.select(_db.lorebooks)
+            ..where((t) => t.lorebookId.equals(cbId)));
+      final existingRow = await existing.getSingleOrNull();
+      if (existingRow != null) continue;
+
       await _db.into(_db.lorebooks).insertOnConflictUpdate(
             LorebooksCompanion.insert(
-              lorebookId: lbJson['id'] as String? ?? '',
-              name: lbJson['name'] as String? ?? '',
-              enabled: Value(lbJson['enabled'] as bool? ?? true),
-              activationScope: Value(
-                  lbJson['activationScope'] as String? ??
-                      lbJson['scope'] as String? ??
-                      'global'),
-              activationTargetId: Value(
-                  lbJson['activationTargetId'] as String? ??
-                      lbJson['targetId'] as String?),
+              lorebookId: cbId,
+              name: cbRaw['name'] as String? ?? '${char['name'] ?? 'Char'} Lorebook',
+              enabled: Value(cbRaw['enabled'] as bool? ?? true),
+              activationScope: Value('character'),
+              activationTargetId: Value(charId),
               entriesJson: jsonEncode(mappedEntries),
             ),
           );
@@ -439,7 +489,9 @@ class BackupService {
               apiKey: Value(
                   preset['apiKey'] as String? ?? preset['key'] as String?),
               model: Value(preset['model'] as String?),
-              mode: Value(preset['mode'] as String? ?? 'chat'),
+              mode: Value(
+                  preset['mode'] as String? ??
+                  ((preset['isEmbedding'] as bool?) == true ? 'embedding' : 'chat')),
               maxTokens: Value(_toInt(preset['max_tokens']) ?? 8000),
               contextSize: Value(_toInt(preset['context']) ?? 32000),
               temperature: Value(_toDouble(preset['temp']) ?? 0.7),
@@ -607,7 +659,7 @@ class BackupService {
     final activePresetId =
         ls['silly_cradle_current_preset_id'] ?? kv['gz_active_preset'];
     if (activePresetId is String && activePresetId.isNotEmpty) {
-      await prefs.setString('active_preset_id', activePresetId);
+      await prefs.setString('activePresetId', activePresetId);
     }
 
     final activePersonaRaw = ls['gz_active_persona'] ?? kv['gz_active_persona'];

@@ -105,6 +105,7 @@ class Personas extends Table {
   TextColumn get name => text()();
   TextColumn get prompt => text().nullable()();
   TextColumn get avatarPath => text().nullable()();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {personaId};

@@ -409,8 +409,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         if (mounted) context.go('/character/${widget.charId}');
         return;
       case 'lorebooks':
-        Navigator.of(context).pop();
-        if (mounted) context.go('/tools/lorebooks');
+        await _showLorebooksSheet();
         return;
       case 'memory-books':
         await _showMemoryBooks();
@@ -521,6 +520,36 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     );
   }
 
+  Future<void> _showLorebooksSheet() async {
+    final lorebooks = await ref.read(lorebookRepoProvider).getAll();
+    if (!mounted) return;
+    if (lorebooks.isEmpty) {
+      GlazeBottomSheet.show(
+        context,
+        title: 'Lorebooks',
+        bigInfo: const BottomSheetBigInfo(
+          icon: Icons.menu_book_outlined,
+          description: 'No lorebooks yet. Import a backup or create one in Tools.',
+        ),
+      );
+      return;
+    }
+    GlazeBottomSheet.show(
+      context,
+      title: 'Lorebooks',
+      items: lorebooks.map((lb) => BottomSheetItem(
+        icon: lb.enabled ? Icons.menu_book : Icons.menu_book_outlined,
+        label: lb.name,
+        hint: '${lb.entries.length} entries · ${lb.activationScope}',
+        onTap: () {
+          Navigator.pop(context);
+          Navigator.of(context).pop();
+          context.go('/tools/lorebooks');
+        },
+      )).toList(),
+    );
+  }
+
   Future<void> _showStatsSheet() async {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
     if (session == null) return;
@@ -577,15 +606,13 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     await GlazeBottomSheet.show(
       context,
       title: 'Sessions',
-      headerAction: currentSession.messages.isEmpty
-          ? null
-          : IconButton(
+      headerAction: IconButton(
               icon: const Icon(Icons.add, color: AppColors.accent),
               onPressed: () async {
                 Navigator.of(context).pop();
                 await ref
                     .read(chatProvider(widget.charId).notifier)
-                    .branchSession(currentSession.messages.length - 1);
+                    .newSession();
               },
             ),
       sessionItems: sessions
