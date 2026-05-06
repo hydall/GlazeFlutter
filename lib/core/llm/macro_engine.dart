@@ -16,6 +16,7 @@ class MacroContext {
   final String sessionId;
   final String? summaryContent;
   final String? lorebooksContent;
+  final String? guidanceText;
 
   const MacroContext({
     required this.charName,
@@ -33,6 +34,7 @@ class MacroContext {
     required this.sessionId,
     this.summaryContent,
     this.lorebooksContent,
+    this.guidanceText,
   });
 
   MacroContext copyWith({
@@ -40,6 +42,7 @@ class MacroContext {
     Map<String, String>? globalVars,
     String? summaryContent,
     String? lorebooksContent,
+    String? guidanceText,
   }) {
     return MacroContext(
       charName: charName,
@@ -57,6 +60,7 @@ class MacroContext {
       sessionId: sessionId,
       summaryContent: summaryContent ?? this.summaryContent,
       lorebooksContent: lorebooksContent ?? this.lorebooksContent,
+      guidanceText: guidanceText ?? this.guidanceText,
     );
   }
 }
@@ -153,6 +157,11 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
   result = result.replaceAllMapped(
     RegExp(r'\{\{lorebooks\}\}', caseSensitive: false),
     (_) => ctx.lorebooksContent ?? '',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{guidance\}\}', caseSensitive: false),
+    (_) => ctx.guidanceText ?? '',
   );
 
   result = _replaceSetVar(result, 'setvar', sessionVars, () => varsChanged = true);
