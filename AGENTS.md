@@ -8,6 +8,7 @@
 
 ## Branching Strategy
 
+<!-- TEMPORARILY DISABLED — working branch-from-branch until feature parity with Vue/Capacitor
 ### Feature Branches
 
 Each feature = isolated branch from `main`.
@@ -26,7 +27,15 @@ Urgent fixes branch from `main`, merge back to `main`.
 ## Rules
 
 - **No direct commits to `main`** — always use feature branches
-- **Delete merged branches** — both local and remote
+END TEMPORARY DISABLE -->
+
+### Current mode: branch-from-branch
+
+Until feature parity with the Vue/Capacitor branch, all work stacks on `feat/lorebook-regex-ui`. New features/fixes branch from it and PR back to it.
+
+## Rules
+
+- **Branch from `feat/lorebook-regex-ui`** — stack PRs on it
 - **Run `flutter analyze && flutter build windows`** before committing
 - **Run `dart run build_runner build`** after changing freezed/drift models
 - **Every sub-screen must have a back button** — use `leading: BackButton(onPressed: () => context.go('/parent'))` in AppBar since GoRouter `go()` replaces the stack and doesn't auto-provide one
