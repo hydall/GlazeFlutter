@@ -85,7 +85,6 @@ ChatImportResult importChatFromJsonlString(String content) {
   final lines = content.split('\n');
   final messages = <ChatMessage>[];
   String? userName;
-  int lastTimestamp = 0;
 
   for (final line in lines) {
     final trimmed = line.trim();
@@ -106,11 +105,6 @@ ChatImportResult importChatFromJsonlString(String content) {
     final msg = _convertStMessage(obj, messages.length);
     if (msg == null) continue;
 
-    final ts = msg.timestamp ?? 0;
-    if (ts <= lastTimestamp) {
-      continue;
-    }
-    lastTimestamp = ts;
     messages.add(msg);
   }
 

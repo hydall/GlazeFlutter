@@ -12,6 +12,7 @@ import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
+import '../catalog/widgets/widgets.dart';
 import 'widgets/widgets.dart';
 
 class CharacterListScreen extends ConsumerStatefulWidget {
@@ -75,10 +76,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
           ),
           Expanded(
             child: _showCatalog
-                ? const Center(
-                    child: Text('Catalog — coming soon',
-                        style: TextStyle(color: AppColors.textSecondary)),
-                  )
+                ? const CatalogGrid()
                 : characters.when(
                     loading: () => const Center(
                       child: CircularProgressIndicator(color: AppColors.accent),
@@ -120,7 +118,12 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
         ],
       ),
       floatingActionButton: _showCatalog
-          ? null
+          ? _ImportUrlFAB(onTap: () {
+              showDialog(
+                context: context,
+                builder: (_) => const ImportUrlDialog(),
+              );
+            })
           : _AddButton(onTap: () => _importCharacter(context, ref)),
     );
   }
@@ -275,6 +278,43 @@ class _AddButton extends StatelessWidget {
             Icon(Icons.add_rounded, color: Colors.white, size: 24),
             SizedBox(width: 8),
             Text('Add',
+                style: TextStyle(
+                    color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ImportUrlFAB extends StatelessWidget {
+  final VoidCallback onTap;
+  const _ImportUrlFAB({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: AppColors.accent,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.link_rounded, color: Colors.white, size: 22),
+            SizedBox(width: 8),
+            Text('Import URL',
                 style: TextStyle(
                     color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
           ],

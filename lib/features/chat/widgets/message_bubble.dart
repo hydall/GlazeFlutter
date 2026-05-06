@@ -5,12 +5,10 @@ import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/regex_service.dart';
-import '../../../core/models/character.dart';
-import '../../../core/models/persona.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
-import '../../../core/state/db_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
+import '../../image_gen/widgets/image_content_renderer.dart';
 import '../../settings/app_settings_provider.dart';
 import '../chat_provider.dart';
 import 'message_actions.dart';
@@ -119,6 +117,8 @@ class MessageBubble extends ConsumerWidget {
               _ReasoningBlock(reasoning: reasoning!, scheme: scheme),
             if (isTyping && content.isEmpty)
               _TypingIndicator(textColor: textColor, scheme: scheme)
+            else if (ImageContentRenderer.hasImageMarkers(displayContent))
+              ImageContentRenderer(content: displayContent, textColor: textColor)
             else
               MarkdownBody(data: displayContent, styleSheet: MarkdownStyleSheet(p: TextStyle(color: textColor))),
             if (isStreaming)
