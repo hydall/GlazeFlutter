@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/theme_provider.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import 'app_settings_provider.dart';
 
@@ -81,7 +82,25 @@ class AppSettingsScreen extends ConsumerWidget {
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(hideTokenCount: v)),
             ),
-            _SectionHeader('Interface'),
+            _SectionHeader('Theme'),
+            ListTile(
+              title: const Text('Theme Mode'),
+              subtitle: Text(_themeModeLabel(ref.watch(themeProvider).mode)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _showThemeModePicker(context, ref),
+            ),
+            ListTile(
+              title: const Text('Accent Color'),
+              trailing: Container(
+                width: 24, height: 24,
+                decoration: BoxDecoration(
+                  color: ref.watch(themeProvider).accentColor,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24),
+                ),
+              ),
+              onTap: () => _showAccentPicker(context, ref),
+            ),
             SwitchListTile(
               title: const Text('Battery Saver UI'),
               subtitle: const Text('Reduce animations and effects'),
@@ -106,6 +125,70 @@ class AppSettingsScreen extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  String _themeModeLabel(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.dark: return 'Dark';
+      case ThemeMode.light: return 'Light';
+      case ThemeMode.system: return 'System';
+    }
+  }
+
+  void _showThemeModePicker(BuildContext context, WidgetRef ref) {
+    final current = ref.read(themeProvider).mode;
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Theme Mode'),
+        children: ThemeMode.values.map((mode) => SimpleDialogOption(
+          onPressed: () {
+            Navigator.pop(ctx);
+            ref.read(themeProvider.notifier).setMode(mode);
+          },
+          child: Row(children: [
+            if (mode == current) const Icon(Icons.check, size: 18, color: AppColors.accent),
+            if (mode == current) const SizedBox(width: 8),
+            Text(_themeModeLabel(mode)),
+          ]),
+        )).toList(),
+      ),
+    );
+  }
+
+  void _showAccentPicker(BuildContext context, WidgetRef ref) {
+    const presets = [
+      Color(0xFF7996CE), Color(0xFFCE7979), Color(0xFF79CE96),
+      Color(0xFFCEB479), Color(0xFFB479CE), Color(0xFF79CECE),
+      Color(0xFF96CE79), Color(0xFFCE79B4), Color(0xFFFF9F43),
+    ];
+    final current = ref.read(themeProvider).accentColor;
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Accent Color'),
+        children: [
+          Wrap(
+            spacing: 12, runSpacing: 12,
+            alignment: WrapAlignment.center,
+            children: presets.map((c) => GestureDetector(
+              onTap: () {
+                Navigator.pop(ctx);
+                ref.read(themeProvider.notifier).setAccentColor(c);
+              },
+              child: Container(
+                width: 40, height: 40,
+                decoration: BoxDecoration(
+                  color: c,
+                  shape: BoxShape.circle,
+                  border: c == current ? Border.all(color: Colors.white, width: 3) : null,
+                ),
+              ),
+            )).toList(),
+          ),
+        ],
       ),
     );
   }

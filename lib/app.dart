@@ -20,6 +20,7 @@ import 'features/settings/app_settings_screen.dart';
 import 'features/tools/tools_screen.dart';
 import 'shared/shell/shell_screen.dart';
 import 'shared/theme/app_theme.dart';
+import 'shared/theme/theme_provider.dart';
 
 final routerProvider = Provider<GoRouter>(
   (ref) => GoRouter(
@@ -123,9 +124,12 @@ class _GlazeAppState extends ConsumerState<GlazeApp> {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
+    final themeSettings = ref.watch(themeProvider);
     return MaterialApp.router(
       title: 'Glaze',
-      theme: AppTheme.dark(),
+      theme: AppTheme.light(accent: themeSettings.accentColor),
+      darkTheme: AppTheme.dark(accent: themeSettings.accentColor),
+      themeMode: themeSettings.mode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
     );
