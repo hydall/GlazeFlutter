@@ -1,11 +1,6 @@
 name: Build Branch
 
 on:
-  push:
-    branches:
-      - 'fix/**'
-      - 'feat/**'
-      - 'ci/**'
   workflow_dispatch:
 
 jobs:
