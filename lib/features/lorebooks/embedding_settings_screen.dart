@@ -135,7 +135,7 @@ class _EmbeddingSettingsScreenState
       }
     } catch (e) {
       if (mounted) {
-        GlazeToast.show(context, 'Failed: $e');
+        GlazeToast.error(context, 'Failed: ', e);
       }
     } finally {
       if (mounted) setState(() => _isTesting = false);

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/services/file_export_service.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import 'backup_provider.dart';
 
 class BackupScreen extends ConsumerStatefulWidget {
@@ -139,9 +140,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
-        );
+        GlazeToast.error(context, 'Export failed: ', e);
       }
     } finally {
       if (mounted) setState(() => _exporting = false);
@@ -215,19 +214,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Import failed'),
-            content: SelectableText('$e'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
+        GlazeToast.error(context, 'Import failed: ', e);
       }
     } finally {
       if (mounted) setState(() => _importing = false);

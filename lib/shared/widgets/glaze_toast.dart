@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../app.dart' show rootNavigatorKey;
 
@@ -51,6 +52,33 @@ class GlazeToast {
   }
 
   static void hide() => _current?.cancel();
+
+  static void error(BuildContext context, String prefix, Object error) {
+    final text = '$prefix$error';
+    final ctx = rootNavigatorKey.currentContext ?? context;
+    showDialog(
+      context: ctx,
+      builder: (d) => AlertDialog(
+        title: const Text('Error'),
+        content: SingleChildScrollView(
+          child: SelectableText(text),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: text));
+              Navigator.pop(d);
+            },
+            child: const Text('Copy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(d),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Internal state tracker ────────────────────────────────────────────────────

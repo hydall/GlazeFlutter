@@ -358,7 +358,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
         GlazeToast.show(context, exists ? 'Connection successful! Model "$model" found.' : 'Connected, but "$model" not found.');
       }
     } catch (e) {
-      if (mounted) GlazeToast.show(context, 'Connection failed: $e');
+      if (mounted) GlazeToast.error(context, 'Connection failed: ', e);
     } finally {
       if (mounted) setState(() => _isTestingLlm = false);
     }
@@ -388,7 +388,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
         GlazeToast.show(context, 'Connection failed: empty response');
       }
     } catch (e) {
-      if (mounted) GlazeToast.show(context, 'Connection failed: $e');
+      if (mounted) GlazeToast.error(context, 'Connection failed: ', e);
     } finally {
       if (mounted) setState(() => _isTestingEmb = false);
     }

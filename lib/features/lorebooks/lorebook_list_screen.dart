@@ -157,7 +157,7 @@ class LorebookListScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        GlazeToast.show(context, 'Import failed: $e');
+        GlazeToast.error(context, 'Import failed: ', e);
       }
     }
   }

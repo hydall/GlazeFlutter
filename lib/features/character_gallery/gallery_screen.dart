@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/gallery_entry.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import 'gallery_provider.dart';
 
 class GalleryScreen extends ConsumerWidget {
@@ -107,9 +108,7 @@ class GalleryScreen extends ConsumerWidget {
       ref.invalidate(galleryProvider(charId));
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to add image: $e')),
-        );
+        GlazeToast.error(context, 'Failed to add image: ', e);
       }
     }
   }
@@ -204,9 +203,7 @@ class _GalleryTile extends ConsumerWidget {
                   }
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed: $e')),
-                    );
+                    GlazeToast.error(context, 'Failed: ', e);
                   }
                 }
               },
@@ -225,9 +222,7 @@ class _GalleryTile extends ConsumerWidget {
                   ref.invalidate(galleryProvider(charId));
                 } catch (e) {
                   if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed: $e')),
-                    );
+                    GlazeToast.error(context, 'Failed: ', e);
                   }
                 }
               },
@@ -300,9 +295,7 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed: $e')),
-                  );
+                  GlazeToast.error(context, 'Failed: ', e);
                 }
               }
             },
@@ -339,9 +332,7 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
                 if (mounted) Navigator.pop(context);
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed: $e')),
-                  );
+                  GlazeToast.error(context, 'Failed: ', e);
                 }
               }
             },

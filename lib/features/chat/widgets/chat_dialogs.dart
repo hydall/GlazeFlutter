@@ -45,7 +45,7 @@ void showRawPromptDialog(
     builder: (ctx) => _CopyableDialog(title: 'Raw Prompt', content: rawJson),
   );
   } catch (e) {
-    if (context.mounted) GlazeToast.show(context, 'Failed to build prompt: $e');
+    if (context.mounted) GlazeToast.error(context, 'Failed to build prompt: ', e);
   }
 }
 

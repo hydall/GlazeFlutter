@@ -320,7 +320,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _importing = false);
-        GlazeToast.show(context, 'Import failed: $e');
+        GlazeToast.error(context, 'Import failed: ', e);
       }
     }
   }

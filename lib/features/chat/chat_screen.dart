@@ -373,7 +373,7 @@ Future<void> _generateSummary(
     }
   } catch (e) {
     if (context.mounted) {
-      GlazeToast.show(context, 'Summary failed: $e');
+      GlazeToast.error(context, 'Summary failed: ', e);
     }
   }
 }
@@ -417,7 +417,7 @@ Future<void> _exportChat(
     }
   } catch (e) {
     if (context.mounted) {
-      GlazeToast.show(context, 'Export failed: $e');
+      GlazeToast.error(context, 'Export failed: ', e);
     }
   }
 }
@@ -474,7 +474,7 @@ Future<void> _importChat(
     }
   } catch (e) {
     if (context.mounted) {
-      GlazeToast.show(context, 'Import failed: $e');
+        GlazeToast.error(context, 'Import failed: ', e);
     }
   }
 }

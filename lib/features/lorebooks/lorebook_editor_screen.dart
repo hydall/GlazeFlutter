@@ -181,7 +181,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           _indexStatus = '';
         });
         _loadEmbeddingStatuses();
-        GlazeToast.show(context, 'Indexing failed: $e');
+        GlazeToast.error(context, 'Indexing failed: ', e);
       }
     }
   }
