@@ -310,6 +310,7 @@ class BackupService {
                   DateTime.now().millisecondsSinceEpoch),
               fav: Value(char['fav'] as bool? ?? false),
               extensionsJson: Value(_extractExtensionsJson(char)),
+              characterVersion: Value(char['character_version'] is String ? char['character_version'] as String : '1'),
             ),
           );
     }
@@ -411,6 +412,7 @@ class BackupService {
                       lbJson['targetId'] as String?),
               entriesJson: jsonEncode(mappedEntries),
               settingsJson: Value(settingsJsonStr),
+              description: Value(lbJson['description'] is String ? lbJson['description'] as String : ''),
               updatedAt: Value(_toInt(lbJson['updatedAt']) ?? DateTime.now().millisecondsSinceEpoch ~/ 1000),
             ),
           );
@@ -951,6 +953,9 @@ class BackupService {
         final anRaw = authorsNotesRaw?[sessionEntry.key];
         final authorsNoteJson = _encodeAuthorsNote(anRaw);
         final draft = chatData['draft'] is String ? chatData['draft'] as String : null;
+        final scrollAnchor = chatData['lastScrollAnchor'] is num
+            ? (chatData['lastScrollAnchor'] as num).toDouble()
+            : -1.0;
         await _db.into(_db.chatSessions).insertOnConflictUpdate(
               ChatSessionsCompanion.insert(
                 sessionId: sessionId,
@@ -960,6 +965,7 @@ class BackupService {
                 updatedAt: Value(chatUpdatedAt ?? DateTime.now().millisecondsSinceEpoch ~/ 1000),
                 authorsNoteJson: Value(authorsNoteJson),
                 draft: Value(draft),
+                lastScrollAnchor: Value<double>(scrollAnchor),
               ),
             );
       }
@@ -1145,6 +1151,31 @@ class BackupService {
     final activeLlmId = ls['gz_active_llm_profile_id'] ?? kv['gz_active_llm_profile_id'];
     if (activeLlmId is String && activeLlmId.isNotEmpty) {
       await prefs.setString('activeApiConfigId', activeLlmId);
+    }
+
+    final globalVars = ls['gz_global_vars'];
+    if (globalVars is String) {
+      await prefs.setString('globalVars', globalVars);
+    } else if (globalVars is Map<String, dynamic>) {
+      await prefs.setString('globalVars', jsonEncode(globalVars));
+    }
+
+    for (final entry in ls.entries) {
+      if (!entry.key.startsWith('gz_vars_')) continue;
+      final parts = entry.key.substring('gz_vars_'.length).split('_');
+      if (parts.length < 2) continue;
+      final charId = parts[0];
+      final sessionIdx = int.tryParse(parts[1]);
+      if (sessionIdx == null) continue;
+      final sessionId = '${charId}_$sessionIdx';
+      final varsJson = entry.value is String
+          ? entry.value as String
+          : (entry.value is Map ? jsonEncode(entry.value) : null);
+      if (varsJson != null) {
+        await (_db.update(_db.chatSessions)
+              ..where((t) => t.sessionId.equals(sessionId)))
+            .write(ChatSessionsCompanion(sessionVarsJson: Value(varsJson)));
+      }
     }
   }
 

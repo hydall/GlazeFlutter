@@ -87,6 +87,7 @@ class LorebookRepo {
         activationTargetId: r.activationTargetId,
         entries: _parseEntries(r.entriesJson),
         settings: _parseSettings(r.settingsJson),
+        description: r.description,
         updatedAt: r.updatedAt,
       );
 
@@ -98,6 +99,7 @@ class LorebookRepo {
         activationTargetId: Value(m.activationTargetId),
         entriesJson: Value(jsonEncode(m.entries.map((e) => e.toJson()).toList())),
         settingsJson: Value(m.settings != null ? jsonEncode(m.settings!.toJson()) : ''),
+        description: Value(m.description),
         updatedAt: Value(m.updatedAt),
       );
 

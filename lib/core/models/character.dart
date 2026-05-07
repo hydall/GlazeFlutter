@@ -28,6 +28,7 @@ class Character with _$Character {
     @Default(0) int currentSessionIndex,
     @Default(false) bool fav,
     @Default({}) Map<String, dynamic> extensions,
+    @Default('1') String characterVersion,
   }) = _Character;
 
   factory Character.fromJson(Map<String, dynamic> json) =>

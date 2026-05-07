@@ -59,6 +59,7 @@ class Lorebook with _$Lorebook {
     String? activationTargetId,
     @Default([]) List<LorebookEntry> entries,
     LorebookSettings? settings,
+    @Default('') String description,
     @Default(0) int updatedAt,
   }) = _Lorebook;
 

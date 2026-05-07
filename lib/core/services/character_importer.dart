@@ -183,6 +183,7 @@ class CharacterImporter {
       updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       fav: data['fav'] as bool? ?? false,
       extensions: _extractExtensions(data),
+      characterVersion: data['character_version'] is String ? data['character_version'] as String : '1',
     );
   }
 

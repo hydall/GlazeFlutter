@@ -101,6 +101,7 @@ class ChatRepo {
             : {},
         authorsNote: _parseAuthorsNote(c.authorsNoteJson),
         draft: c.draft,
+        lastScrollAnchor: c.lastScrollAnchor,
       );
 
   ChatSessionsCompanion _toCompanion(ChatSession m) => ChatSessionsCompanion(
@@ -116,6 +117,7 @@ class ChatRepo {
             ? jsonEncode(m.authorsNote!.toJson())
             : null),
         draft: Value(m.draft),
+        lastScrollAnchor: Value(m.lastScrollAnchor),
       );
 
   AuthorsNote? _parseAuthorsNote(String? json) {

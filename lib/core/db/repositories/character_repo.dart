@@ -117,6 +117,7 @@ class CharacterRepo {
         extensions: c.extensionsJson != null
             ? Map<String, dynamic>.from(jsonDecode(c.extensionsJson!) as Map)
             : {},
+        characterVersion: c.characterVersion,
       );
 
   CharactersCompanion _toCompanion(Character m) => CharactersCompanion(
@@ -140,5 +141,6 @@ class CharacterRepo {
         currentSessionIndex: Value(m.currentSessionIndex),
         fav: Value(m.fav),
         extensionsJson: Value(m.extensions.isNotEmpty ? jsonEncode(m.extensions) : null),
+        characterVersion: Value(m.characterVersion),
       );
 }

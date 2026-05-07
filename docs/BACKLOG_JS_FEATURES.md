@@ -49,26 +49,29 @@ Features present in Glaze JS backups but not yet implemented in Flutter.
   - `ChatSession.draft` field
   - Backup import reads draft from chatData
 
+- [x] **Scroll position** — `gz_chat_{id}.lastScrollAnchor`
+  - `lastScrollAnchor` column in `chat_sessions` (migration v14, RealColumn)
+  - `ChatSession.lastScrollAnchor` field
+  - Backup import reads lastScrollAnchor from chatData
+
+- [x] **character_version** — `characters[].character_version`
+  - `characterVersion` column in `characters` (migration v14)
+  - `Character.characterVersion` field
+  - CharacterImporter and CharacterExporter round-trip it
+  - Backup import reads character_version
+
+- [x] **Lorebook description** — `gz_lorebooks[].description`
+  - `description` column in `lorebooks` (migration v14)
+  - `Lorebook.description` field
+  - LorebookRepo round-trips it
+  - Backup import reads description
+
+- [x] **Global variables** — `gz_global_vars`, `gz_vars_{chatId}_{sessionIdx}`
+  - Backup import writes gz_global_vars to SharedPreferences (key: 'globalVars')
+  - Per-session vars (gz_vars_{charId}_{sessionIdx}) written to sessionVarsJson
+  - Macro engine already supports {{var::}}, {{globalvar::}}, {{setvar::}}, {{setglobalvar::}}
+
 ## High Priority (core functionality)
-
-- [ ] **Scroll position** — `gz_chat_{id}.lastScrollAnchor`
-  - Remember scroll position per chat
-  - Need: column in `chat_sessions`, scroll controller persistence
-
-- [ ] **character_version** — `characters[].character_version`
-  - Version string for the character card format
-  - Need: column in `characters`
-
-- [ ] **thumbnail / mini_thumbnail** — `characters[].thumbnail`
-  - Optimized thumbnails for character lists
-  - Need: image storage, lazy generation
-
-- [ ] **Lorebook description** — `gz_lorebooks[].description`
-  - Need: column in `lorebooks`
-
-- [ ] **Global variables** — `gz_global_vars`, `gz_vars_{chatId}_{sessionIdx}`
-  - Macro system variables ({{var::name}})
-  - Need: variable storage, macro engine support
 
 - [ ] **Memory settings (global)** — `gz_memory_settings`
   - Imported to SharedPreferences but no UI/provider reads it yet

@@ -55,6 +55,7 @@ class ChatSession with _$ChatSession {
     @Default({}) Map<String, String> sessionVars,
     AuthorsNote? authorsNote,
     String? draft,
+    @Default(-1) double lastScrollAnchor,
   }) = _ChatSession;
 
   factory ChatSession.fromJson(Map<String, dynamic> json) =>
