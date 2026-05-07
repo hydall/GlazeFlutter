@@ -531,13 +531,27 @@ class BackupService {
 
       Map<String, dynamic>? embProfile;
       bool embUseSame = true;
+      String? llmProfileId;
+      final skipIds = <String>{};
+
       if (serviceProfileMap != null) {
+        llmProfileId = (serviceProfileMap['llm'] as Map<String, dynamic>?)?['profileId'] as String?;
+
         final embConfig = serviceProfileMap['embedding'] as Map<String, dynamic>?;
         embUseSame = embConfig?['useSameAsLLM'] as bool? ?? true;
         final embProfileId = embConfig?['profileId'] as String?;
-        if (embProfileId != null) {
+        if (embProfileId != null && embProfileId != llmProfileId) {
+          skipIds.add(embProfileId);
           embProfile = allProfiles.cast<Map<String, dynamic>?>().firstWhere(
             (p) => p?['id'] == embProfileId, orElse: () => null);
+        }
+
+        for (final svc in ['image_gen', 'memory_books']) {
+          final svcConfig = serviceProfileMap[svc] as Map<String, dynamic>?;
+          final svcProfileId = svcConfig?['profileId'] as String?;
+          if (svcProfileId != null && svcProfileId != llmProfileId) {
+            skipIds.add(svcProfileId);
+          }
         }
       }
 
@@ -547,6 +561,8 @@ class BackupService {
         if (seenIds.contains(pid)) continue;
         seenIds.add(pid);
 
+        if (skipIds.contains(pid)) continue;
+
         String embEndpoint = '';
         String embApiKey = '';
         String embModel = '';
@@ -554,13 +570,13 @@ class BackupService {
         bool embEnabled = false;
         int embMaxChunk = 512;
 
-        if (embProfile != null && pid == embProfile['id'] && !embUseSame) {
+        if (embProfile != null && pid == llmProfileId && !embUseSame) {
           embEndpoint = embProfile['endpoint'] as String? ?? '';
           embApiKey = embProfile['apiKey'] as String? ?? embProfile['key'] as String? ?? '';
           embModel = embProfile['model'] as String? ?? '';
           embSame = false;
           embEnabled = true;
-        } else if (embUseSame && pid == (serviceProfileMap?['llm'] as Map<String, dynamic>?)?['profileId']) {
+        } else if (embUseSame && pid == llmProfileId) {
           embSame = true;
           embEnabled = true;
         }
