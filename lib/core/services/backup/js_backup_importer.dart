@@ -1,0 +1,223 @@
+import 'dart:convert';
+
+import 'package:drift/drift.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../db/app_db.dart';
+import '../image_storage_service.dart';
+import 'backup_helpers.dart';
+import 'js_api_config_importer.dart';
+import 'js_character_importer.dart';
+import 'js_chat_importer.dart';
+import 'js_lorebook_importer.dart';
+import 'js_preset_importer.dart';
+
+class JsBackupImporter with BackupHelpers {
+  @override
+  final AppDatabase db;
+  @override
+  final ImageStorageService imageStorage;
+
+  JsBackupImporter(this.db, this.imageStorage);
+
+  Future<void> import(Map<String, dynamic> data) async {
+    await _ensureSchema();
+    await _clearAllTables();
+
+    final kv = Map<String, dynamic>.from(data['keyvalue'] ?? {});
+    final ls = Map<String, dynamic>.from(data['localStorage'] ?? {});
+
+    final characterImporter = JsCharacterImporter(db, imageStorage);
+    final lorebookImporter = JsLorebookImporter(db, imageStorage);
+    final apiConfigImporter = JsApiConfigImporter(db, imageStorage);
+    final chatImporter = JsChatImporter(db, imageStorage);
+    final presetImporter = JsPresetImporter(db, imageStorage);
+
+    await characterImporter.importCharacters(data['characters']);
+    await characterImporter.importPersonas(data['personas']);
+    await lorebookImporter.importLorebooks(kv);
+    await lorebookImporter.importCharacterBooks(data['characters']);
+    await apiConfigImporter.importApiConfigs(kv, ls, data);
+    await lorebookImporter.importLorebookSettings(kv, ls);
+    await chatImporter.importChats(kv);
+    await presetImporter.importPresets(kv, ls);
+    await _importJsActiveSelections(kv, ls);
+    await characterImporter.importGalleryFromCharacters(data['characters']);
+    await presetImporter.importDeletedEntries(ls, kv);
+    await presetImporter.importTheme(ls);
+  }
+
+  Future<void> _clearAllTables() async {
+    await db.customStatement('PRAGMA foreign_keys = OFF');
+    await db.transaction(() async {
+      const tables = [
+        'characters',
+        'chat_sessions',
+        'presets',
+        'api_configs',
+        'personas',
+        'lorebooks',
+        'embeddings',
+        'chat_summaries',
+        'memory_book_rows',
+      ];
+      for (final table in tables) {
+        try {
+          await db.customStatement('DELETE FROM $table');
+        } catch (_) {}
+      }
+    });
+    await db.customStatement('PRAGMA foreign_keys = ON');
+  }
+
+  Future<void> _ensureSchema() async {
+    final tableColumns = <String, Set<String>>{};
+    for (final table in [
+      'api_configs',
+      'chat_sessions',
+      'characters',
+      'lorebooks',
+      'personas',
+    ]) {
+      final cols = await db.customSelect("PRAGMA table_info('$table')").get();
+      tableColumns[table] = cols.map((c) => c.read<String>('name')).toSet();
+    }
+
+    const additions = <String, Map<String, String>>{
+      'api_configs': {
+        'embedding_use_same': 'BOOLEAN NOT NULL DEFAULT 1',
+        'embedding_enabled': 'BOOLEAN NOT NULL DEFAULT 0',
+        'embedding_endpoint': 'TEXT',
+        'embedding_api_key': 'TEXT',
+        'embedding_model': 'TEXT',
+        'embedding_max_chunk_tokens': 'INTEGER NOT NULL DEFAULT 512',
+        'omit_temperature': 'BOOLEAN NOT NULL DEFAULT 0',
+        'omit_top_p': 'BOOLEAN NOT NULL DEFAULT 0',
+        'omit_reasoning': 'BOOLEAN NOT NULL DEFAULT 0',
+        'omit_reasoning_effort': 'BOOLEAN NOT NULL DEFAULT 0',
+      },
+      'chat_sessions': {
+        'authors_note_json': 'TEXT',
+        'draft': 'TEXT',
+        'last_scroll_anchor_json': 'TEXT',
+      },
+      'characters': {
+        'current_session_index': 'INTEGER NOT NULL DEFAULT 0',
+        'fav': 'BOOLEAN NOT NULL DEFAULT 0',
+        'extensions_json': 'TEXT',
+        'gallery_json': 'TEXT',
+        'character_version': 'TEXT',
+      },
+      'lorebooks': {
+        'settings_json': 'TEXT',
+        'description': 'TEXT',
+      },
+      'personas': {
+        'created_at': 'INTEGER',
+      },
+    };
+
+    for (final entry in additions.entries) {
+      final existing = tableColumns[entry.key] ?? {};
+      for (final col in entry.value.entries) {
+        if (!existing.contains(col.key)) {
+          await db.customStatement(
+            'ALTER TABLE ${entry.key} ADD COLUMN ${col.key} ${col.value}',
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _importJsActiveSelections(
+      Map<String, dynamic> kv, Map<String, dynamic> ls) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final activePresetId =
+        ls['silly_cradle_current_preset_id'] ?? kv['gz_active_preset'];
+    if (activePresetId is String && activePresetId.isNotEmpty) {
+      await prefs.setString('activePresetId', activePresetId);
+    }
+
+    final activePersonaRaw = ls['gz_active_persona'] ?? kv['gz_active_persona'];
+    if (activePersonaRaw is String) {
+      try {
+        final persona = jsonDecode(activePersonaRaw) as Map<String, dynamic>;
+        final id = persona['id'] as String?;
+        if (id != null) await prefs.setString('activePersonaId', id);
+      } catch (_) {}
+    } else if (activePersonaRaw is Map) {
+      final id = activePersonaRaw['id'] as String?;
+      if (id != null) await prefs.setString('activePersonaId', id);
+    }
+
+    final presetConnections =
+        ls['gz_preset_connections'] ?? kv['gz_preset_connections'];
+    if (presetConnections is String) {
+      try {
+        await prefs.setString('presetConnections', presetConnections);
+      } catch (_) {}
+    } else if (presetConnections is Map) {
+      await prefs.setString(
+          'presetConnections', jsonEncode(presetConnections));
+    }
+
+    final personaConnections =
+        ls['gz_persona_connections'] ?? kv['gz_persona_connections'];
+    if (personaConnections is String) {
+      try {
+        await prefs.setString('personaConnections', personaConnections);
+      } catch (_) {}
+    } else if (personaConnections is Map) {
+      await prefs.setString(
+          'personaConnections', jsonEncode(personaConnections));
+    }
+
+    for (final entry in ls.entries) {
+      if (entry.key.startsWith('gz_imggen_') && entry.value is String) {
+        await prefs.setString(entry.key, entry.value as String);
+      }
+    }
+
+    final memSettingsRaw =
+        ls['gz_memory_settings'] ?? kv['gz_memory_settings'];
+    if (memSettingsRaw is String) {
+      try {
+        await prefs.setString('memorySettings', memSettingsRaw);
+      } catch (_) {}
+    } else if (memSettingsRaw is Map<String, dynamic>) {
+      await prefs.setString('memorySettings', jsonEncode(memSettingsRaw));
+    }
+
+    final activeLlmId =
+        ls['gz_active_llm_profile_id'] ?? kv['gz_active_llm_profile_id'];
+    if (activeLlmId is String && activeLlmId.isNotEmpty) {
+      await prefs.setString('activeApiConfigId', activeLlmId);
+    }
+
+    final globalVars = ls['gz_global_vars'];
+    if (globalVars is String) {
+      await prefs.setString('globalVars', globalVars);
+    } else if (globalVars is Map<String, dynamic>) {
+      await prefs.setString('globalVars', jsonEncode(globalVars));
+    }
+
+    for (final entry in ls.entries) {
+      if (!entry.key.startsWith('gz_vars_')) continue;
+      final parts = entry.key.substring('gz_vars_'.length).split('_');
+      if (parts.length < 2) continue;
+      final charId = parts[0];
+      final sessionIdx = int.tryParse(parts[1]);
+      if (sessionIdx == null) continue;
+      final sessionId = '${charId}_$sessionIdx';
+      final varsJson = entry.value is String
+          ? entry.value as String
+          : (entry.value is Map ? jsonEncode(entry.value) : null);
+      if (varsJson != null) {
+        await (db.update(db.chatSessions)
+              ..where((t) => t.sessionId.equals(sessionId)))
+            .write(ChatSessionsCompanion(sessionVarsJson: Value(varsJson)));
+      }
+    }
+  }
+}
