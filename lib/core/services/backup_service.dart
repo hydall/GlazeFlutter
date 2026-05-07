@@ -485,8 +485,62 @@ class BackupService {
   Future<void> _importJsApiConfigs(
       Map<String, dynamic> kv, Map<String, dynamic> ls,
       [Map<String, dynamic>? topLevel]) async {
-    final presets = <Map<String, dynamic>>[];
+    final profilesRaw = ls['gz_provider_profiles'];
+    Map<String, dynamic>? serviceProfileMap;
+    final spmRaw = ls['gz_service_profile_map'];
+    if (spmRaw is String) {
+      try { serviceProfileMap = jsonDecode(spmRaw); } catch (_) {}
+    } else if (spmRaw is Map<String, dynamic>) {
+      serviceProfileMap = spmRaw;
+    }
 
+    if (profilesRaw != null) {
+      final allProfiles = <Map<String, dynamic>>[];
+      _extractPresetsFromRaw(profilesRaw, allProfiles);
+
+      Map<String, dynamic>? embProfile;
+      bool embUseSame = true;
+      if (serviceProfileMap != null) {
+        final embConfig = serviceProfileMap['embedding'] as Map<String, dynamic>?;
+        embUseSame = embConfig?['useSameAsLLM'] as bool? ?? true;
+        final embProfileId = embConfig?['profileId'] as String?;
+        if (embProfileId != null) {
+          embProfile = allProfiles.cast<Map<String, dynamic>?>().firstWhere(
+            (p) => p?['id'] == embProfileId, orElse: () => null);
+        }
+      }
+
+      final seenIds = <String>{};
+      for (final p in allProfiles) {
+        final pid = p['id'] as String? ?? '';
+        if (seenIds.contains(pid)) continue;
+        seenIds.add(pid);
+
+        String embEndpoint = '';
+        String embApiKey = '';
+        String embModel = '';
+        bool embSame = true;
+
+        if (embProfile != null && pid == embProfile['id'] && !embUseSame) {
+          embEndpoint = embProfile['endpoint'] as String? ?? '';
+          embApiKey = embProfile['apiKey'] as String? ?? embProfile['key'] as String? ?? '';
+          embModel = embProfile['model'] as String? ?? '';
+          embSame = false;
+        } else if (embUseSame && pid == (serviceProfileMap?['llm'] as Map<String, dynamic>?)?['profileId']) {
+          embSame = true;
+        }
+
+        await _insertApiConfig(p, 'chat',
+          embeddingUseSame: embSame,
+          embeddingEndpoint: embEndpoint,
+          embeddingApiKey: embApiKey,
+          embeddingModel: embModel,
+        );
+      }
+      return;
+    }
+
+    final presets = <Map<String, dynamic>>[];
     for (final source in [kv, ls]) {
       for (final key in [
         'gz_api_connection_presets',
@@ -498,73 +552,6 @@ class BackupService {
         if (raw == null) continue;
         _extractPresetsFromRaw(raw, presets);
       }
-    }
-
-    final profilesRaw = ls['gz_provider_profiles'];
-    Map<String, dynamic>? serviceProfileMap;
-    final spmRaw = ls['gz_service_profile_map'];
-    if (spmRaw is String) {
-      try { serviceProfileMap = jsonDecode(spmRaw); } catch (_) {}
-    } else if (spmRaw is Map<String, dynamic>) {
-      serviceProfileMap = spmRaw;
-    }
-
-    if (profilesRaw != null && serviceProfileMap != null) {
-      final allProfiles = <Map<String, dynamic>>[];
-      _extractPresetsFromRaw(profilesRaw, allProfiles);
-
-      final llmConfig = serviceProfileMap['llm'] as Map<String, dynamic>?;
-      final embConfig = serviceProfileMap['embedding'] as Map<String, dynamic>?;
-
-      final llmProfileId = llmConfig?['profileId'] as String?;
-      final embProfileId = embConfig?['profileId'] as String?;
-      final embUseSame = embConfig?['useSameAsLLM'] as bool? ?? true;
-
-      final seenIds = <String>{};
-      for (final p in allProfiles) {
-        final pid = p['id'] as String? ?? '';
-        if (seenIds.contains(pid)) continue;
-        seenIds.add(pid);
-
-        String mode = 'chat';
-        if (pid == embProfileId && !embUseSame) {
-          mode = 'embedding';
-        }
-
-        await _insertApiConfig(p, mode);
-      }
-
-      if (embUseSame && llmProfileId != null) {
-        final existing = await (_db.select(_db.apiConfigs)
-              ..where((t) => t.configId.equals(llmProfileId)))
-            .getSingleOrNull();
-        if (existing != null) {
-          await (_db.update(_db.apiConfigs)
-                ..where((t) => t.configId.equals('${llmProfileId}_emb')))
-              .write(ApiConfigsCompanion(
-            configId: Value('${llmProfileId}_emb'),
-            mode: const Value('embedding'),
-          ));
-          await _db.into(_db.apiConfigs).insertOnConflictUpdate(
-                ApiConfigsCompanion.insert(
-                  configId: '${llmProfileId}_emb',
-                  name: '${existing.name} (Embedding)',
-                  providerId: Value(existing.providerId),
-                  endpoint: Value(existing.endpoint),
-                  apiKey: Value(existing.apiKey),
-                  model: Value(existing.model),
-                  mode: const Value('embedding'),
-                  maxTokens: Value(existing.maxTokens),
-                  contextSize: Value(existing.contextSize),
-                  temperature: Value(existing.temperature),
-                  topP: Value(existing.topP),
-                  stream: Value(existing.stream),
-                ),
-              );
-        }
-      }
-    } else if (profilesRaw != null) {
-      _extractPresetsFromRaw(profilesRaw, presets);
     }
 
     if (presets.isEmpty) {
@@ -592,13 +579,16 @@ class BackupService {
     }
 
     for (final preset in presets) {
-      await _insertApiConfig(preset,
-          preset['mode'] as String? ??
-          ((preset['isEmbedding'] as bool?) == true ? 'embedding' : 'chat'));
+      await _insertApiConfig(preset, preset['mode'] as String? ?? 'chat');
     }
   }
 
-  Future<void> _insertApiConfig(Map<String, dynamic> preset, String mode) async {
+  Future<void> _insertApiConfig(Map<String, dynamic> preset, String mode, {
+    bool embeddingUseSame = true,
+    String embeddingEndpoint = '',
+    String embeddingApiKey = '',
+    String embeddingModel = '',
+  }) async {
     await _db.into(_db.apiConfigs).insertOnConflictUpdate(
           ApiConfigsCompanion.insert(
             configId: preset['id'] as String? ?? '',
@@ -642,6 +632,10 @@ class BackupService {
                 preset['omit_reasoning'] as bool? ?? false),
             omitReasoningEffort: Value(
                 preset['omit_reasoning_effort'] as bool? ?? false),
+            embeddingUseSame: Value(embeddingUseSame),
+            embeddingEndpoint: Value(embeddingEndpoint),
+            embeddingApiKey: Value(embeddingApiKey),
+            embeddingModel: Value(embeddingModel),
           ),
         );
   }

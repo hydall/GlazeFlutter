@@ -45,6 +45,16 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
   late bool _omitTopP = widget.config?.omitTopP ?? false;
   late bool _omitReasoning = widget.config?.omitReasoning ?? false;
   late bool _omitReasoningEffort = widget.config?.omitReasoningEffort ?? false;
+  late bool _embeddingUseSame = widget.config?.embeddingUseSame ?? true;
+  late final _embEndpointCtrl = TextEditingController(
+    text: widget.config?.embeddingEndpoint ?? '',
+  );
+  late final _embApiKeyCtrl = TextEditingController(
+    text: widget.config?.embeddingApiKey ?? '',
+  );
+  late final _embModelCtrl = TextEditingController(
+    text: widget.config?.embeddingModel ?? '',
+  );
   bool _isTesting = false;
 
   @override
@@ -60,13 +70,14 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
     _keyCtrl.dispose();
     _maxTokensCtrl.dispose();
     _contextSizeCtrl.dispose();
+    _embEndpointCtrl.dispose();
+    _embApiKeyCtrl.dispose();
+    _embModelCtrl.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isChat = _mode == 'chat';
-
     return GlazeScaffold(
       title: widget.config != null ? 'Edit API Config' : 'New API Config',
       onBack: () => Navigator.of(context).pop(),
@@ -86,11 +97,6 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
               hintText: 'My OpenAI',
               prefixIcon: Icon(Icons.label),
             ),
-          ),
-          const SizedBox(height: 16),
-          ModeSelector(
-            mode: _mode,
-            onChanged: (m) => setState(() => _mode = m),
           ),
           const SizedBox(height: 16),
           TextField(
@@ -118,7 +124,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
           ),
           const SizedBox(height: 16),
           _buildModelSelector(),
-          if (isChat) ...[
+          ...[
             const SizedBox(height: 12),
             Row(
               children: [
@@ -223,6 +229,43 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
               onChanged: (v) => setState(() => _omitReasoningEffort = v),
             ),
           ],
+          const SizedBox(height: 24),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+            child: Text('Embedding', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+          ),
+          SwitchListTile(
+            title: const Text('Use same endpoint for embeddings'),
+            value: _embeddingUseSame,
+            onChanged: (v) => setState(() => _embeddingUseSame = v),
+          ),
+          if (!_embeddingUseSame) ...[
+            TextField(
+              controller: _embEndpointCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Embedding Endpoint',
+                hintText: 'https://api.openai.com/v1',
+                prefixIcon: Icon(Icons.link),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _embApiKeyCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Embedding API Key',
+                prefixIcon: Icon(Icons.key),
+              ),
+              obscureText: true,
+            ),
+          ],
+          TextField(
+            controller: _embModelCtrl,
+            decoration: InputDecoration(
+              labelText: 'Embedding Model',
+              hintText: 'text-embedding-3-small',
+              prefixIcon: const Icon(Icons.hub),
+            ),
+          ),
           const SizedBox(height: 16),
           OutlinedButton.icon(
             onPressed: _isTesting ? null : _testConnection,
@@ -360,7 +403,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
       endpoint: _endpointCtrl.text.trim(),
       apiKey: _keyCtrl.text.trim(),
       model: _selectedModel.trim(),
-      mode: _mode,
+      mode: 'chat',
       maxTokens: int.tryParse(_maxTokensCtrl.text) ?? 8000,
       contextSize: int.tryParse(_contextSizeCtrl.text) ?? 32000,
       temperature: _temperature,
@@ -372,6 +415,10 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
       omitTopP: _omitTopP,
       omitReasoning: _omitReasoning,
       omitReasoningEffort: _omitReasoningEffort,
+      embeddingUseSame: _embeddingUseSame,
+      embeddingEndpoint: _embEndpointCtrl.text.trim(),
+      embeddingApiKey: _embApiKeyCtrl.text.trim(),
+      embeddingModel: _embModelCtrl.text.trim(),
     );
     await ref.read(apiListProvider.notifier).put(config);
     if (mounted) Navigator.of(context).pop();

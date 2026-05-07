@@ -95,6 +95,10 @@ class ApiConfigs extends Table {
   BoolColumn get omitTopP => boolean().withDefault(const Constant(false))();
   BoolColumn get omitReasoning => boolean().withDefault(const Constant(false))();
   BoolColumn get omitReasoningEffort => boolean().withDefault(const Constant(false))();
+  BoolColumn get embeddingUseSame => boolean().withDefault(const Constant(true))();
+  TextColumn get embeddingEndpoint => text().nullable()();
+  TextColumn get embeddingApiKey => text().nullable()();
+  TextColumn get embeddingModel => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {configId};

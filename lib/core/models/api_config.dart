@@ -26,6 +26,10 @@ class ApiConfig with _$ApiConfig {
     @Default(false) bool omitTopP,
     @Default(false) bool omitReasoning,
     @Default(false) bool omitReasoningEffort,
+    @Default(true) bool embeddingUseSame,
+    @Default('') String embeddingEndpoint,
+    @Default('') String embeddingApiKey,
+    @Default('') String embeddingModel,
   }) = _ApiConfig;
 
   factory ApiConfig.fromJson(Map<String, dynamic> json) =>

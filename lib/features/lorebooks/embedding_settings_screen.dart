@@ -55,17 +55,27 @@ class _EmbeddingSettingsScreenState
 
   Future<void> _initFromDb() async {
     final apiConfigs = await ref.read(apiConfigRepoProvider).getAll();
-    final embConfig = apiConfigs.where((c) => c.mode == 'embedding').firstOrNull;
-    if (embConfig != null && mounted) {
+    final chatConfig = apiConfigs.where((c) => c.mode != 'embedding').firstOrNull;
+    if (chatConfig != null && mounted) {
+      String ep, ak, md;
+      if (chatConfig.embeddingUseSame || chatConfig.embeddingEndpoint.isEmpty) {
+        ep = chatConfig.endpoint;
+        ak = chatConfig.apiKey;
+        md = chatConfig.embeddingModel.isNotEmpty ? chatConfig.embeddingModel : chatConfig.model;
+      } else {
+        ep = chatConfig.embeddingEndpoint;
+        ak = chatConfig.embeddingApiKey;
+        md = chatConfig.embeddingModel;
+      }
       ref.read(embeddingConfigProvider.notifier).state = EmbeddingConfig(
-        endpoint: embConfig.endpoint,
-        apiKey: embConfig.apiKey,
-        model: embConfig.model,
+        endpoint: ep,
+        apiKey: ak,
+        model: md,
       );
       setState(() {
-        _endpointCtrl.text = embConfig.endpoint;
-        _apiKeyCtrl.text = embConfig.apiKey;
-        _modelCtrl.text = embConfig.model;
+        _endpointCtrl.text = ep;
+        _apiKeyCtrl.text = ak;
+        _modelCtrl.text = md;
       });
     }
   }
