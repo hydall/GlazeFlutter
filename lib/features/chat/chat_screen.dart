@@ -1,22 +1,18 @@
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/llm/summary_service.dart';
 import '../../core/models/chat_message.dart';
-import '../../core/services/chat_import_export.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
-import '../../core/utils/time_helpers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../chat_history/chat_history_screen.dart' show chatHistoryProvider;
 import '../image_gen/widgets/image_gen_sheet.dart';
+import 'chat_actions_service.dart';
 import 'chat_provider.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
@@ -411,31 +407,15 @@ Future<void> _generateSummary(
   WidgetRef ref,
   String charId,
 ) async {
-  final chatState = ref.read(chatProvider(charId)).value;
-  if (chatState == null || chatState.session == null) return;
-
-  final apiConfigs = await ref.read(apiConfigRepoProvider).getAll();
-  if (apiConfigs.isEmpty) {
-    GlazeToast.show(context, 'No API config — set one up first');
-    return;
-  }
-
-  GlazeToast.show(context, 'Generating summary...');
-
   try {
-    final summaryService = ref.read(summaryServiceProvider);
-    final summary = await summaryService.generateSummary(
-      sessionId: chatState.session!.id,
-      history: chatState.session!.messages,
-      apiConfig: apiConfigs.first,
-    );
+    final summary = await ChatActionsService(ref).generateSummary(charId);
     if (context.mounted) {
       GlazeToast.show(context, 'Summary generated (${summary.length} chars)');
     }
+  } on StateError catch (e) {
+    if (context.mounted) GlazeToast.show(context, e.message);
   } catch (e) {
-    if (context.mounted) {
-      GlazeToast.error(context, 'Summary failed: ', e);
-    }
+    if (context.mounted) GlazeToast.error(context, 'Summary failed: ', e);
   }
 }
 
@@ -454,32 +434,15 @@ Future<void> _exportChat(
   WidgetRef ref,
   String charId,
 ) async {
-  final chatState = ref.read(chatProvider(charId)).value;
-  if (chatState == null || chatState.session == null) return;
-
-  final charRepo = ref.read(characterRepoProvider);
-  final character = await charRepo.getById(charId);
-  if (character == null) return;
-
   try {
-    final desktop =
-        Platform.environment['USERPROFILE'] ??
-        Platform.environment['HOME'] ??
-        '.';
-    final outputDir = '${desktop}\\Desktop';
-
-    final result = await exportChatAsJsonl(
-      session: chatState.session!,
-      character: character,
-      outputDir: outputDir,
-    );
+    final filePath = await ChatActionsService(ref).exportChat(charId);
     if (context.mounted) {
-      GlazeToast.show(context, 'Chat exported to ${result.filePath}');
+      GlazeToast.show(context, 'Chat exported to $filePath');
     }
+  } on StateError catch (e) {
+    if (context.mounted) GlazeToast.show(context, e.message);
   } catch (e) {
-    if (context.mounted) {
-      GlazeToast.error(context, 'Export failed: ', e);
-    }
+    if (context.mounted) GlazeToast.error(context, 'Export failed: ', e);
   }
 }
 
@@ -499,39 +462,13 @@ Future<void> _importChat(
   if (filePath == null) return;
 
   try {
-    final importResult = await importChatFromJsonl(filePath);
-    if (importResult.messages.isEmpty) {
-      if (context.mounted) {
-        GlazeToast.show(context, 'No messages found in file');
-      }
-      return;
-    }
-
-    final repo = ref.read(chatRepoProvider);
-    final existingSessions = await repo.getByCharacterId(charId);
-
-    int maxIdx = 0;
-    for (final s in existingSessions) {
-      if (s.sessionIndex > maxIdx) maxIdx = s.sessionIndex;
-    }
-
-    final newSession = ChatSession(
-      id: '${charId}_${maxIdx + 1}',
-      characterId: charId,
-      sessionIndex: maxIdx + 1,
-      messages: importResult.messages,
-      updatedAt: currentTimestampSeconds(),
-    );
-
-    await repo.put(newSession);
-    ref.invalidate(chatProvider(charId));
-    ref.invalidate(chatHistoryProvider);
-
+    final count = await ChatActionsService(ref).importChat(charId, filePath);
     if (context.mounted) {
-      GlazeToast.show(
-        context,
-        'Imported ${importResult.messages.length} messages',
-      );
+      if (count == 0) {
+        GlazeToast.show(context, 'No messages found in file');
+      } else {
+        GlazeToast.show(context, 'Imported $count messages');
+      }
     }
   } catch (e) {
     if (context.mounted) {
