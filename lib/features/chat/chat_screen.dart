@@ -20,6 +20,7 @@ import 'chat_provider.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/chat_dialogs.dart';
+import 'widgets/generation_overrides_sheet.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/memory_books_sheet.dart';
 import 'widgets/message_list.dart';
@@ -28,12 +29,48 @@ import 'widgets/prompt_preview_screen.dart';
 import 'widgets/session_lifecycle_tracker.dart';
 import 'widgets/tokenizer_sheet.dart';
 
-class ChatScreen extends ConsumerWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   final String charId;
-  const ChatScreen({super.key, required this.charId});
+  final int? initialSessionIndex;
+  final bool forceNewSession;
+  const ChatScreen({
+    super.key,
+    required this.charId,
+    this.initialSessionIndex,
+    this.forceNewSession = false,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends ConsumerState<ChatScreen> {
+  bool _sessionApplied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.forceNewSession || widget.initialSessionIndex != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _applySessionPreference();
+      });
+    }
+  }
+
+  Future<void> _applySessionPreference() async {
+    if (_sessionApplied) return;
+    _sessionApplied = true;
+    final notifier = ref.read(chatProvider(widget.charId).notifier);
+    if (widget.forceNewSession) {
+      await notifier.createNewSession();
+    } else if (widget.initialSessionIndex != null) {
+      await notifier.switchSession(widget.initialSessionIndex!);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final charId = widget.charId;
     final chatStateAsync = ref.watch(chatProvider(charId));
     final chatState = chatStateAsync.value;
 
@@ -296,6 +333,10 @@ class ChatScreen extends ConsumerWidget {
                       onImageGen: () => GlazeBottomSheet.show(
                         context,
                         child: const ImageGenSheet(),
+                      ),
+                      onOverrides: () => GlazeBottomSheet.show(
+                        context,
+                        child: const GenerationOverridesSheet(),
                       ),
                     ),
                   ],

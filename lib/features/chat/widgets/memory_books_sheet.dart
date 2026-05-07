@@ -348,18 +348,42 @@ class _MemorySettingsDialog extends StatefulWidget {
 class _MemorySettingsDialogState extends State<_MemorySettingsDialog> {
   late bool _enabled;
   late bool _autoCreate;
+  late bool _autoGenerate;
   late int _maxInjected;
+  late int _autoCreateInterval;
+  late int _batchSize;
+  late bool _useDelayedAutomation;
   late String _injectionTarget;
   late String _keyMatchMode;
+  late bool _vectorSearchEnabled;
+  late TextEditingController _genModelCtrl;
+  late TextEditingController _genEndpointCtrl;
+  late TextEditingController _genApiKeyCtrl;
 
   @override
   void initState() {
     super.initState();
     _enabled = widget.settings.enabled;
     _autoCreate = widget.settings.autoCreateEnabled;
+    _autoGenerate = widget.settings.autoGenerateEnabled;
     _maxInjected = widget.settings.maxInjectedEntries;
+    _autoCreateInterval = widget.settings.autoCreateInterval;
+    _batchSize = widget.settings.batchSize;
+    _useDelayedAutomation = widget.settings.useDelayedAutomation;
     _injectionTarget = widget.settings.injectionTarget;
     _keyMatchMode = widget.settings.keyMatchMode;
+    _vectorSearchEnabled = widget.settings.vectorSearchEnabled;
+    _genModelCtrl = TextEditingController(text: widget.settings.generationModel);
+    _genEndpointCtrl = TextEditingController(text: widget.settings.generationEndpoint);
+    _genApiKeyCtrl = TextEditingController(text: widget.settings.generationApiKey);
+  }
+
+  @override
+  void dispose() {
+    _genModelCtrl.dispose();
+    _genEndpointCtrl.dispose();
+    _genApiKeyCtrl.dispose();
+    super.dispose();
   }
 
   @override
@@ -388,6 +412,58 @@ class _MemorySettingsDialogState extends State<_MemorySettingsDialog> {
                 activeColor: AppColors.accent,
                 dense: true,
               ),
+              SwitchListTile(
+                title: Text('Auto-generate', style: TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+                subtitle: Text('Use LLM to generate memory entries', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                value: _autoGenerate,
+                onChanged: (v) => setState(() => _autoGenerate = v),
+                activeColor: AppColors.accent,
+                dense: true,
+              ),
+              if (_autoCreate) ...[
+                SwitchListTile(
+                  title: Text('Delayed automation', style: TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+                  subtitle: Text('Wait before auto-processing', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                  value: _useDelayedAutomation,
+                  onChanged: (v) => setState(() => _useDelayedAutomation = v),
+                  activeColor: AppColors.accent,
+                  dense: true,
+                ),
+                Row(
+                  children: [
+                    Text('Auto-create interval', style: TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+                    const Spacer(),
+                    SizedBox(
+                      width: 60,
+                      child: DropdownButton<int>(
+                        value: _autoCreateInterval.clamp(5, 50),
+                        items: [5, 10, 15, 20, 25, 30, 40, 50]
+                            .map((v) => DropdownMenuItem(value: v, child: Text('$v')))
+                            .toList(),
+                        onChanged: (v) => setState(() => _autoCreateInterval = v ?? 15),
+                        underline: const SizedBox.shrink(),
+                        style: TextStyle(fontSize: 14, color: AppColors.accent),
+                      ),
+                    ),
+                  ],
+                ),
+                Row(
+                  children: [
+                    Text('Batch size', style: TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+                    const Spacer(),
+                    SizedBox(
+                      width: 60,
+                      child: DropdownButton<int>(
+                        value: _batchSize.clamp(1, 10),
+                        items: List.generate(10, (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}'))),
+                        onChanged: (v) => setState(() => _batchSize = v ?? 3),
+                        underline: const SizedBox.shrink(),
+                        style: TextStyle(fontSize: 14, color: AppColors.accent),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -438,6 +514,58 @@ class _MemorySettingsDialogState extends State<_MemorySettingsDialog> {
                   ),
                 ],
               ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                title: Text('Vector search', style: TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+                value: _vectorSearchEnabled,
+                onChanged: (v) => setState(() => _vectorSearchEnabled = v),
+                activeColor: AppColors.accent,
+                dense: true,
+              ),
+              if (_autoGenerate) ...[
+                const Divider(height: 24),
+                Text('Generation Model', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _genModelCtrl,
+                  style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Model name',
+                    hintStyle: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _genEndpointCtrl,
+                  style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Endpoint URL',
+                    hintStyle: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _genApiKeyCtrl,
+                  style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'API Key',
+                    hintStyle: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  ),
+                  obscureText: true,
+                ),
+              ],
             ],
           ),
         ),
@@ -450,9 +578,17 @@ class _MemorySettingsDialogState extends State<_MemorySettingsDialog> {
             final settings = widget.settings.copyWith(
               enabled: _enabled,
               autoCreateEnabled: _autoCreate,
+              autoGenerateEnabled: _autoGenerate,
               maxInjectedEntries: _maxInjected,
+              autoCreateInterval: _autoCreateInterval,
+              batchSize: _batchSize,
+              useDelayedAutomation: _useDelayedAutomation,
               injectionTarget: _injectionTarget,
               keyMatchMode: _keyMatchMode,
+              vectorSearchEnabled: _vectorSearchEnabled,
+              generationModel: _genModelCtrl.text.trim(),
+              generationEndpoint: _genEndpointCtrl.text.trim(),
+              generationApiKey: _genApiKeyCtrl.text.trim(),
             );
             Navigator.pop(context, settings);
           },

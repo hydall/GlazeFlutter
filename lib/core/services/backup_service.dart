@@ -209,7 +209,9 @@ class BackupService {
     await _importJsPersonas(data['personas']);
     await _importJsLorebooks(kv);
     await _importJsCharacterBooks(data['characters']);
-    await _importJsApiConfigs(kv);
+    await _importJsApiConfigs(kv, ls);
+    await _importJsMemoryBooks(kv, ls, data['characters']);
+    await _importJsLorebookSettings(kv, ls);
     await _importJsChats(kv);
     await _importJsPresets(kv, ls);
     await _importJsActiveSelections(kv, ls);
@@ -470,13 +472,38 @@ class BackupService {
     return [];
   }
 
-  Future<void> _importJsApiConfigs(Map<String, dynamic> kv) async {
-    final apiPresetsRaw = kv['gz_api_connection_presets'];
-    if (apiPresetsRaw == null) return;
-    final presets = apiPresetsRaw as List<dynamic>;
+  Future<void> _importJsApiConfigs(
+      Map<String, dynamic> kv, Map<String, dynamic> ls) async {
+    final presets = <Map<String, dynamic>>[];
 
-    for (final p in presets) {
-      final preset = p as Map<String, dynamic>;
+    for (final source in [kv, ls]) {
+      for (final key in [
+        'gz_api_connection_presets',
+        'silly_cradle_api_presets',
+        'api_connection_presets',
+      ]) {
+        final raw = source[key];
+        if (raw == null) continue;
+        if (raw is List) {
+          for (final p in raw) {
+            if (p is Map<String, dynamic>) presets.add(p);
+          }
+        } else if (raw is String) {
+          try {
+            final decoded = jsonDecode(raw);
+            if (decoded is List) {
+              for (final p in decoded) {
+                if (p is Map<String, dynamic>) presets.add(p);
+              }
+            }
+          } catch (_) {}
+        }
+      }
+    }
+
+    if (presets.isEmpty) return;
+
+    for (final preset in presets) {
       await _db.into(_db.apiConfigs).insertOnConflictUpdate(
             ApiConfigsCompanion.insert(
               configId: preset['id'] as String? ?? '',
@@ -513,6 +540,90 @@ class BackupService {
                           ?['end'] as String?),
             ),
           );
+    }
+  }
+
+  Future<void> _importJsMemoryBooks(
+      Map<String, dynamic> kv, Map<String, dynamic> ls, dynamic charData) async {
+    final memoryPrefix = 'gz_memory_book_';
+    final memoryKeys = kv.keys.where((k) => k.startsWith(memoryPrefix));
+
+    for (final key in memoryKeys) {
+      final sessionId = key.substring(memoryPrefix.length);
+      final raw = kv[key];
+      if (raw is! Map<String, dynamic>) continue;
+
+      final entries = <Map<String, dynamic>>[];
+      final rawEntries = raw['entries'];
+      if (rawEntries is List) {
+        for (final e in rawEntries) {
+          if (e is Map<String, dynamic>) {
+            entries.add({
+              'id': e['id']?.toString() ?? '',
+              'title': e['title'] as String? ?? e['name'] as String? ?? '',
+              'keys': e['keys'] is List
+                  ? List<String>.from(e['keys'])
+                  : <String>[],
+              'content': e['content'] as String? ?? '',
+              'status': e['status'] as String? ?? 'active',
+              'vectorSearch': e['vectorSearch'] as bool? ?? false,
+              'messageIds': e['messageIds'] is List
+                  ? List<String>.from(e['messageIds'])
+                  : <String>[],
+              'createdAt': e['createdAt']?.toString(),
+            });
+          }
+        }
+      }
+
+      final rawSettings = raw['settings'] as Map<String, dynamic>? ?? {};
+      final settings = <String, dynamic>{
+        'enabled': rawSettings['enabled'] as bool? ?? true,
+        'autoCreateEnabled': rawSettings['autoCreateEnabled'] as bool? ?? true,
+        'autoGenerateEnabled': rawSettings['autoGenerateEnabled'] as bool? ?? false,
+        'maxInjectedEntries': _toInt(rawSettings['maxInjectedEntries']) ?? 7,
+        'autoCreateInterval': _toInt(rawSettings['autoCreateInterval']) ?? 15,
+        'useDelayedAutomation': rawSettings['useDelayedAutomation'] as bool? ?? true,
+        'injectionTarget': rawSettings['injectionTarget'] as String? ?? 'summary_block',
+        'batchSize': _toInt(rawSettings['batchSize']) ?? 3,
+        'vectorSearchEnabled': rawSettings['vectorSearchEnabled'] as bool? ?? false,
+        'keyMatchMode': rawSettings['keyMatchMode'] as String? ?? 'plain',
+        'generationModel': rawSettings['generationModel'] as String? ?? '',
+        'generationEndpoint': rawSettings['generationEndpoint'] as String? ?? '',
+        'generationApiKey': rawSettings['generationApiKey'] as String? ?? '',
+      };
+
+      await _db.into(_db.memoryBookRows).insertOnConflictUpdate(
+            MemoryBookRowsCompanion.insert(
+              sessionId: sessionId,
+              entriesJson: Value(jsonEncode(entries)),
+              settingsJson: Value(jsonEncode(settings)),
+              lastProcessedMessageCount: Value(
+                  _toInt(raw['lastProcessedMessageCount']) ?? 0),
+              updatedAt: Value(
+                  _toInt(raw['updatedAt']) ??
+                  DateTime.now().millisecondsSinceEpoch ~/ 1000),
+            ),
+          );
+    }
+  }
+
+  Future<void> _importJsLorebookSettings(
+      Map<String, dynamic> kv, Map<String, dynamic> ls) async {
+    final prefs = await SharedPreferences.getInstance();
+    for (final source in [kv, ls]) {
+      final raw = source['gz_lorebook_settings'] ?? source['lorebook_settings'];
+      if (raw == null) continue;
+      Map<String, dynamic> settings;
+      if (raw is String) {
+        try {
+          settings = jsonDecode(raw) as Map<String, dynamic>;
+        } catch (_) { continue; }
+      } else if (raw is Map<String, dynamic>) {
+        settings = raw;
+      } else { continue; }
+      await prefs.setString('lorebookSettings', jsonEncode(settings));
+      break;
     }
   }
 

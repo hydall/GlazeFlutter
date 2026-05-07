@@ -175,3 +175,15 @@ void updateGlobalVarsWidgetRef(WidgetRef ref, Map<String, String> vars) {
   ref.read(globalVarsProvider.notifier).state = vars;
   _persistGlobalVars(vars);
 }
+
+class GenerationOverrides {
+  final double? temperature;
+  final double? topP;
+  final bool? requestReasoning;
+  final String? reasoningEffort;
+  const GenerationOverrides({this.temperature, this.topP, this.requestReasoning, this.reasoningEffort});
+  const GenerationOverrides.empty() : temperature = null, topP = null, requestReasoning = null, reasoningEffort = null;
+  bool get isEmpty => temperature == null && topP == null && requestReasoning == null && reasoningEffort == null;
+}
+
+final generationOverridesProvider = StateProvider<GenerationOverrides>((ref) => const GenerationOverrides.empty());

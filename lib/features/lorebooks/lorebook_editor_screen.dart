@@ -6,8 +6,10 @@ import '../../core/llm/lorebook_vector_search.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_toast.dart';
+import 'lorebook_connections_sheet.dart';
 import 'widgets/entry_editor_dialog.dart';
 
 class LorebookEditorScreen extends ConsumerStatefulWidget {
@@ -345,6 +347,17 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                           selected: _scope == 'chat',
                           color: Colors.orange,
                           onTap: () { setState(() => _scope = 'chat'); _save(); },
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.link, size: 18),
+                          tooltip: 'Connections',
+                          onPressed: () {
+                            GlazeBottomSheet.show(
+                              context,
+                              child: LorebookConnectionsSheet(lorebookId: widget.lorebookId),
+                            );
+                          },
                         ),
                       ],
                     ),

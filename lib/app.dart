@@ -97,8 +97,17 @@ final routerProvider = Provider<GoRouter>(
       ),
       GoRoute(
         path: '/chat/:charId',
-        builder: (_, state) =>
-            ChatScreen(charId: state.pathParameters['charId']!),
+        builder: (_, state) {
+          final charId = state.pathParameters['charId']!;
+          final sessionIdx = int.tryParse(
+              state.uri.queryParameters['session'] ?? '');
+          final isNew = state.uri.queryParameters['new'] == '1';
+          return ChatScreen(
+            charId: charId,
+            initialSessionIndex: sessionIdx,
+            forceNewSession: isNew,
+          );
+        },
       ),
       GoRoute(
         path: '/character/:charId',

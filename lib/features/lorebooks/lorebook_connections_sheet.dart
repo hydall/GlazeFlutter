@@ -59,16 +59,52 @@ class _LorebookConnectionsSheetState
           ),
         ),
         const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Row(
+            children: [
+              const Text('Scope:', style: TextStyle(color: AppColors.textSecondary)),
+              const SizedBox(width: 8),
+              _ScopeChip(
+                label: 'global',
+                selected: lb.activationScope == 'global',
+                color: Colors.green,
+                onTap: () => ref.read(lorebooksProvider.notifier)
+                    .updateLorebook(lb.copyWith(activationScope: 'global', enabled: true)),
+              ),
+              const SizedBox(width: 6),
+              _ScopeChip(
+                label: 'character',
+                selected: lb.activationScope == 'character',
+                color: Colors.purple,
+                onTap: () => ref.read(lorebooksProvider.notifier)
+                    .updateLorebook(lb.copyWith(activationScope: 'character')),
+              ),
+              const SizedBox(width: 6),
+              _ScopeChip(
+                label: 'chat',
+                selected: lb.activationScope == 'chat',
+                color: Colors.orange,
+                onTap: () => ref.read(lorebooksProvider.notifier)
+                    .updateLorebook(lb.copyWith(activationScope: 'chat')),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
 
         _Section(
           icon: Icons.public,
           title: 'Global',
           child: _ToggleRow(
             label: 'Enabled for all chats',
-            value: lb.enabled,
+            value: lb.enabled && lb.activationScope == 'global',
             onChanged: (v) {
               final notifier = ref.read(lorebooksProvider.notifier);
-              notifier.updateLorebook(lb.copyWith(enabled: v));
+              notifier.updateLorebook(lb.copyWith(
+                enabled: v,
+                activationScope: v ? 'global' : lb.activationScope,
+              ));
             },
           ),
         ),
@@ -312,6 +348,47 @@ class _EmptyHint extends StatelessWidget {
         fontSize: 12,
         color: AppColors.textSecondary.withValues(alpha: 0.6),
         fontStyle: FontStyle.italic,
+      ),
+    );
+  }
+}
+
+class _ScopeChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ScopeChip({
+    required this.label,
+    required this.selected,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.3)
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: selected ? color : Colors.white.withValues(alpha: 0.1),
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: selected ? color : AppColors.textSecondary,
+          ),
+        ),
       ),
     );
   }
