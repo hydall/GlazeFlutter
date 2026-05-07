@@ -6,9 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/persona.dart';
 import '../models/preset.dart';
 import 'db_provider.dart';
+import 'memory_settings_provider.dart';
 
 final activePresetIdProvider = StateProvider<String?>((ref) => null);
 final activePersonaIdProvider = StateProvider<String?>((ref) => null);
+
 final globalVarsProvider = StateProvider<Map<String, String>>((ref) => {});
 
 final personaConnectionsProvider = StateProvider<PersonaConnections>((ref) {
@@ -47,6 +49,7 @@ Future<void> loadActiveSelections(WidgetRef ref) async {
           PersonaConnections.fromJson(jsonDecode(pcJson) as Map<String, dynamic>);
     } catch (_) {}
   }
+  ref.read(memoryGlobalSettingsProvider.notifier).load();
 }
 
 Future<void> setActivePreset(WidgetRef ref, String? id) async {

@@ -71,11 +71,11 @@ Features present in Glaze JS backups but not yet implemented in Flutter.
   - Per-session vars (gz_vars_{charId}_{sessionIdx}) written to sessionVarsJson
   - Macro engine already supports {{var::}}, {{globalvar::}}, {{setvar::}}, {{setglobalvar::}}
 
-## High Priority (core functionality)
-
-- [ ] **Memory settings (global)** — `gz_memory_settings`
-  - Imported to SharedPreferences but no UI/provider reads it yet
-  - Fields: enabled, autoCreateEnabled, autoGenerateEnabled, maxInjectedEntries, autoCreateInterval, useDelayedAutomation, injectionTarget, batchSize, vectorSearchEnabled, keyMatchMode, generationSource, generationModel, generationEndpoint, generationApiKey, generationTemperature, generationMaxTokens, promptPreset, customPrompts
+- [x] **Memory settings (global)** — `gz_memory_settings`
+  - `MemoryGlobalSettings` model with all JS fields
+  - `memoryGlobalSettingsProvider` (StateNotifier) with load/save from SharedPreferences
+  - Loaded on app startup via `loadActiveSelections()`
+  - Backup import already writes to SharedPreferences key 'memorySettings'
 
 ## Low Priority (nice to have)
 
