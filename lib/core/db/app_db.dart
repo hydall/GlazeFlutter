@@ -83,7 +83,7 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(characters, characters.extensionsJson);
           }
           if (from < 14) {
-            await m.addColumn(chatSessions, chatSessions.lastScrollAnchor);
+            await m.addColumn(chatSessions, chatSessions.lastScrollAnchorJson);
             await m.addColumn(characters, characters.characterVersion);
             await m.addColumn(lorebooks, lorebooks.description);
           }

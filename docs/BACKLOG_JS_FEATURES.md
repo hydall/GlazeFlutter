@@ -77,6 +77,34 @@ Features present in Glaze JS backups but not yet implemented in Flutter.
   - Loaded on app startup via `loadActiveSelections()`
   - Backup import already writes to SharedPreferences key 'memorySettings'
 
+- [x] **Scroll position (fixed)** — `gz_chat_{id}.lastScrollAnchor`
+  - Fixed: lastScrollAnchor is `{index: int, offset: double}` object, not a number
+  - `lastScrollAnchorJson` TextColumn in `chat_sessions` (stores JSON object)
+  - `ChatSession.lastScrollAnchor` is `Map<String, dynamic>` now
+  - Backup import encodes the anchor object as JSON
+
+- [x] **Message extended metadata** — in chat messages
+  - Added: `isTyping`, `guidanceText`, `guidanceType`, `triggeredLorebooks`, `triggeredMemories`, `swipesMeta`, `memoryCoverage`, `time`
+  - All imported with defensive type checks
+
+- [x] **Chat memoryBooks (fixed)** — per-session memory book import
+  - Fixed sessionId: uses `{charId}_{sessionIdx}` instead of just the session index
+  - Added fields: `rawContent`, `messageRange`, `updatedAt`, `generatedAt`
+  - Fixed all unsafe casts with defensive type checks
+
+- [x] **Character depth_prompt** — `extensions.depth_prompt`
+  - `depthPrompt`, `depthPromptDepth`, `depthPromptRole` fields on Character model
+  - Extracted from extensions JSON during import
+  - Included in extensions on export
+
+- [x] **Character world** — `extensions.world`
+  - `world` field on Character model (links to lorebook by name)
+  - Extracted from extensions JSON during import
+  - Included in extensions on export
+
+- [x] **Skip gz_chat_undefined** — invalid charId
+  - Backup import skips chat data with charId "undefined" or empty
+
 ## Low Priority (nice to have)
 
 - [ ] **Chat stats** — `gz_stat_*`

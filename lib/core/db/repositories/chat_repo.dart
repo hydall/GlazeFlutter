@@ -101,7 +101,9 @@ class ChatRepo {
             : {},
         authorsNote: _parseAuthorsNote(c.authorsNoteJson),
         draft: c.draft,
-        lastScrollAnchor: c.lastScrollAnchor,
+        lastScrollAnchor: c.lastScrollAnchorJson != null && c.lastScrollAnchorJson!.isNotEmpty
+            ? Map<String, dynamic>.from(jsonDecode(c.lastScrollAnchorJson!) as Map)
+            : {},
       );
 
   ChatSessionsCompanion _toCompanion(ChatSession m) => ChatSessionsCompanion(
@@ -117,7 +119,7 @@ class ChatRepo {
             ? jsonEncode(m.authorsNote!.toJson())
             : null),
         draft: Value(m.draft),
-        lastScrollAnchor: Value(m.lastScrollAnchor),
+        lastScrollAnchorJson: Value(m.lastScrollAnchor.isNotEmpty ? jsonEncode(m.lastScrollAnchor) : null),
       );
 
   AuthorsNote? _parseAuthorsNote(String? json) {

@@ -29,6 +29,10 @@ class Character with _$Character {
     @Default(false) bool fav,
     @Default({}) Map<String, dynamic> extensions,
     @Default('1') String characterVersion,
+    @Default('') String depthPrompt,
+    @Default(4) int depthPromptDepth,
+    @Default('system') String depthPromptRole,
+    String? world,
   }) = _Character;
 
   factory Character.fromJson(Map<String, dynamic> json) =>

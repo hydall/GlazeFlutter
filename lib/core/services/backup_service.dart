@@ -308,7 +308,7 @@ class BackupService {
                       : null),
               updatedAt: Value(_toInt(char['updatedAt'] ?? char['updated_at']) ??
                   DateTime.now().millisecondsSinceEpoch),
-              fav: Value(char['fav'] as bool? ?? false),
+              fav: Value(char['fav'] == true),
               extensionsJson: Value(_extractExtensionsJson(char)),
               characterVersion: Value(char['character_version'] is String ? char['character_version'] as String : '1'),
             ),
@@ -879,6 +879,7 @@ class BackupService {
   }
 
   Future<void> _importJsChatData(String charId, Map<String, dynamic> chatData) async {
+    if (charId == 'undefined' || charId.isEmpty) return;
     final sessions = chatData['sessions'] as Map<String, dynamic>?;
     if (sessions == null) return;
 
@@ -945,6 +946,14 @@ class BackupService {
             'contextRefs': msg['contextRefs'] is List ? List<String>.from(msg['contextRefs'].whereType<String>()) : <String>[],
             'swipeDirection': msg['swipeDirection'] is String ? msg['swipeDirection'] : (msg['swipe_direction'] is String ? msg['swipe_direction'] as String : 'none'),
             'isEditing': msg['isEditing'] == true || msg['is_editing'] == true,
+            'isTyping': msg['isTyping'] == true || msg['is_typing'] == true,
+            'guidanceText': msg['guidanceText'] is String ? msg['guidanceText'] as String : null,
+            'guidanceType': msg['guidanceType'] is String ? msg['guidanceType'] as String : 'GENERATION',
+            'triggeredLorebooks': msg['triggeredLorebooks'] is List ? List<String>.from(msg['triggeredLorebooks'].whereType<String>()) : <String>[],
+            'triggeredMemories': msg['triggeredMemories'] is List ? List<String>.from(msg['triggeredMemories'].whereType<String>()) : <String>[],
+            'swipesMeta': msg['swipesMeta'] is List ? (msg['swipesMeta'] as List).whereType<Map<String, dynamic>>().toList() : <Map<String, dynamic>>[],
+            'memoryCoverage': msg['memoryCoverage'] is Map ? Map<String, dynamic>.from(msg['memoryCoverage']) : <String, dynamic>{},
+            'time': msg['time'] is String ? msg['time'] as String : null,
           };
         }).toList();
 
@@ -953,9 +962,9 @@ class BackupService {
         final anRaw = authorsNotesRaw?[sessionEntry.key];
         final authorsNoteJson = _encodeAuthorsNote(anRaw);
         final draft = chatData['draft'] is String ? chatData['draft'] as String : null;
-        final scrollAnchor = chatData['lastScrollAnchor'] is num
-            ? (chatData['lastScrollAnchor'] as num).toDouble()
-            : -1.0;
+        final scrollAnchor = chatData['lastScrollAnchor'] is Map
+            ? jsonEncode(chatData['lastScrollAnchor'])
+            : null;
         await _db.into(_db.chatSessions).insertOnConflictUpdate(
               ChatSessionsCompanion.insert(
                 sessionId: sessionId,
@@ -965,7 +974,7 @@ class BackupService {
                 updatedAt: Value(chatUpdatedAt ?? DateTime.now().millisecondsSinceEpoch ~/ 1000),
                 authorsNoteJson: Value(authorsNoteJson),
                 draft: Value(draft),
-                lastScrollAnchor: Value<double>(scrollAnchor),
+                lastScrollAnchorJson: Value(scrollAnchor),
               ),
             );
       }
@@ -979,60 +988,66 @@ class BackupService {
         ));
       }
 
-      final memoryBooksRaw = chatData['memoryBooks'] as Map<String, dynamic>?;
-      if (memoryBooksRaw != null) {
+      final memoryBooksRaw = chatData['memoryBooks'];
+      if (memoryBooksRaw is Map) {
         for (final mbEntry in memoryBooksRaw.entries) {
-          final mbSessionId = mbEntry.key;
-          final mbData = mbEntry.value as Map<String, dynamic>?;
+          final mbSessionIdx = mbEntry.key;
+          final mbData = mbEntry.value;
+          if (mbData is! Map) continue;
+
+          final mbFullSessionId = '${charId}_$mbSessionIdx';
 
           final entries = <Map<String, dynamic>>[];
-          final rawEntries = mbData?['entries'];
+          final rawEntries = mbData['entries'];
           if (rawEntries is List) {
             for (final e in rawEntries) {
-              if (e is Map<String, dynamic>) {
-                entries.add({
-                  'id': e['id']?.toString() ?? '',
-                  'title': e['title'] as String? ?? e['name'] as String? ?? '',
-                  'keys': e['keys'] is List ? List<String>.from(e['keys']) : <String>[],
-                  'glazeKeys': e['glazeKeys'] is List ? List<String>.from(e['glazeKeys']) : <String>[],
-                  'content': e['content'] as String? ?? '',
-                  'status': e['status'] as String? ?? 'active',
-                  'vectorSearch': e['vectorSearch'] as bool? ?? false,
-                  'messageIds': e['messageIds'] is List ? List<String>.from(e['messageIds']) : <String>[],
-                  'source': e['source'] as String? ?? 'manual',
-                  'createdAt': e['createdAt']?.toString(),
-                });
-              }
+              if (e is! Map) continue;
+              entries.add({
+                'id': e['id']?.toString() ?? '',
+                'title': e['title'] is String ? e['title'] as String : (e['name'] is String ? e['name'] as String : ''),
+                'keys': e['keys'] is List ? List<String>.from(e['keys'].whereType<String>()) : <String>[],
+                'glazeKeys': e['glazeKeys'] is List ? List<String>.from(e['glazeKeys'].whereType<String>()) : <String>[],
+                'content': e['content'] is String ? e['content'] as String : '',
+                'rawContent': e['rawContent'] is String ? e['rawContent'] as String : null,
+                'status': e['status'] is String ? e['status'] as String : 'active',
+                'vectorSearch': e['vectorSearch'] == true,
+                'messageIds': e['messageIds'] is List ? List<String>.from(e['messageIds'].whereType<String>()) : <String>[],
+                'messageRange': e['messageRange'] is Map ? Map<String, dynamic>.from(e['messageRange'] as Map) : null,
+                'source': e['source'] is String ? e['source'] as String : 'manual',
+                'createdAt': e['createdAt']?.toString(),
+                'updatedAt': e['updatedAt']?.toString(),
+                'generatedAt': e['generatedAt']?.toString(),
+              });
             }
           }
 
-          final rawSettings = mbData?['settings'] as Map<String, dynamic>? ?? {};
+          final rawSettings = mbData['settings'] is Map ? mbData['settings'] as Map : {};
           final settings = <String, dynamic>{
-            'enabled': rawSettings['enabled'] as bool? ?? true,
-            'autoCreateEnabled': rawSettings['autoCreateEnabled'] as bool? ?? true,
-            'autoGenerateEnabled': rawSettings['autoGenerateEnabled'] as bool? ?? false,
+            'enabled': rawSettings['enabled'] == true,
+            'autoCreateEnabled': rawSettings['autoCreateEnabled'] == true,
+            'autoGenerateEnabled': rawSettings['autoGenerateEnabled'] == true,
             'maxInjectedEntries': _toInt(rawSettings['maxInjectedEntries']) ?? 7,
             'autoCreateInterval': _toInt(rawSettings['autoCreateInterval']) ?? 15,
-            'useDelayedAutomation': rawSettings['useDelayedAutomation'] as bool? ?? true,
-            'injectionTarget': rawSettings['injectionTarget'] as String? ?? 'summary_block',
+            'useDelayedAutomation': rawSettings['useDelayedAutomation'] == true,
+            'injectionTarget': rawSettings['injectionTarget'] is String ? rawSettings['injectionTarget'] as String : 'summary_block',
             'batchSize': _toInt(rawSettings['batchSize']) ?? 3,
-            'vectorSearchEnabled': rawSettings['vectorSearchEnabled'] as bool? ?? false,
-            'keyMatchMode': rawSettings['keyMatchMode'] as String? ?? 'glaze',
-            'generationSource': rawSettings['generationSource'] as String? ?? 'current',
-            'generationModel': rawSettings['generationModel'] as String? ?? '',
-            'generationEndpoint': rawSettings['generationEndpoint'] as String? ?? '',
-            'generationApiKey': rawSettings['generationApiKey'] as String? ?? '',
+            'vectorSearchEnabled': rawSettings['vectorSearchEnabled'] == true,
+            'keyMatchMode': rawSettings['keyMatchMode'] is String ? rawSettings['keyMatchMode'] as String : 'glaze',
+            'generationSource': rawSettings['generationSource'] is String ? rawSettings['generationSource'] as String : 'current',
+            'generationModel': rawSettings['generationModel'] is String ? rawSettings['generationModel'] as String : '',
+            'generationEndpoint': rawSettings['generationEndpoint'] is String ? rawSettings['generationEndpoint'] as String : '',
+            'generationApiKey': rawSettings['generationApiKey'] is String ? rawSettings['generationApiKey'] as String : '',
           };
 
           await _db.into(_db.memoryBookRows).insertOnConflictUpdate(
                 MemoryBookRowsCompanion.insert(
-                  sessionId: mbSessionId,
+                  sessionId: mbFullSessionId,
                   entriesJson: Value(jsonEncode(entries)),
                   settingsJson: Value(jsonEncode(settings)),
                   lastProcessedMessageCount: Value(
-                      _toInt(mbData?['automation']?['lastProcessedMessageCount']) ?? 0),
+                      _toInt(mbData['automation'] is Map ? (mbData['automation'] as Map)['lastProcessedMessageCount'] : null) ?? 0),
                   updatedAt: Value(
-                      _toInt(mbData?['updatedAt']) ??
+                      _toInt(mbData['updatedAt']) ??
                       DateTime.now().millisecondsSinceEpoch ~/ 1000),
                 ),
               );

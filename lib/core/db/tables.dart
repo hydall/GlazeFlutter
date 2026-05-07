@@ -44,7 +44,7 @@ class ChatSessions extends Table {
   TextColumn get sessionVarsJson => text().nullable()();
   TextColumn get authorsNoteJson => text().nullable()();
   TextColumn get draft => text().nullable()();
-  RealColumn get lastScrollAnchor => real().withDefault(const Constant(-1))();
+  TextColumn get lastScrollAnchorJson => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {sessionId};

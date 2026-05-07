@@ -24,6 +24,14 @@ class ChatMessage with _$ChatMessage {
     @Default([]) List<String> contextRefs,
     @Default('none') String swipeDirection,
     @Default(false) bool isEditing,
+    @Default(false) bool isTyping,
+    String? guidanceText,
+    @Default('GENERATION') String guidanceType,
+    @Default([]) List<String> triggeredLorebooks,
+    @Default([]) List<String> triggeredMemories,
+    @Default([]) List<Map<String, dynamic>> swipesMeta,
+    @Default({}) Map<String, dynamic> memoryCoverage,
+    String? time,
   }) = _ChatMessage;
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) =>
@@ -55,7 +63,7 @@ class ChatSession with _$ChatSession {
     @Default({}) Map<String, String> sessionVars,
     AuthorsNote? authorsNote,
     String? draft,
-    @Default(-1) double lastScrollAnchor,
+    @Default({}) Map<String, dynamic> lastScrollAnchor,
   }) = _ChatSession;
 
   factory ChatSession.fromJson(Map<String, dynamic> json) =>

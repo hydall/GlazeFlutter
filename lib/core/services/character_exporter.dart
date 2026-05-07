@@ -101,7 +101,28 @@ Map<String, dynamic> _buildV2Data(Character character, {Map<String, dynamic>? ch
   }
 
   if (character.extensions.isNotEmpty) {
-    data['extensions'] = character.extensions;
+    final extCopy = Map<String, dynamic>.from(character.extensions);
+    if (character.depthPrompt.isNotEmpty || character.depthPromptDepth != 4 || character.depthPromptRole != 'system') {
+      extCopy['depth_prompt'] = {
+        'prompt': character.depthPrompt,
+        'depth': character.depthPromptDepth,
+        'role': character.depthPromptRole,
+      };
+    }
+    if (character.world != null) {
+      extCopy['world'] = character.world;
+    }
+    data['extensions'] = extCopy;
+  } else {
+    if (character.depthPrompt.isNotEmpty || character.depthPromptDepth != 4 || character.depthPromptRole != 'system') {
+      data['extensions'] = {
+        'depth_prompt': {
+          'prompt': character.depthPrompt,
+          'depth': character.depthPromptDepth,
+          'role': character.depthPromptRole,
+        },
+      };
+    }
   }
 
   data['character_version'] = character.characterVersion;

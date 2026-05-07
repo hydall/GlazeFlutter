@@ -184,6 +184,10 @@ class CharacterImporter {
       fav: data['fav'] as bool? ?? false,
       extensions: _extractExtensions(data),
       characterVersion: data['character_version'] is String ? data['character_version'] as String : '1',
+      depthPrompt: _extractDepthPrompt(data),
+      depthPromptDepth: _extractDepthPromptDepth(data),
+      depthPromptRole: _extractDepthPromptRole(data),
+      world: _extractWorld(data),
     );
   }
 
@@ -199,11 +203,41 @@ class CharacterImporter {
   }
 
   Map<String, dynamic> _extractExtensions(Map<String, dynamic> data) {
-    final ext = data['extensions'] as Map<String, dynamic>?;
+    final ext = data['extensions'] is Map ? data['extensions'] as Map : null;
     if (ext == null || ext.isEmpty) return {};
     final copy = Map<String, dynamic>.from(ext);
     copy.remove('gallery');
     return copy;
+  }
+
+  String _extractDepthPrompt(Map<String, dynamic> data) {
+    final ext = data['extensions'] is Map ? data['extensions'] as Map : null;
+    final dp = ext?['depth_prompt'] is Map ? ext!['depth_prompt'] as Map : null;
+    if (dp == null) return '';
+    return dp['prompt'] is String ? dp['prompt'] as String : '';
+  }
+
+  int _extractDepthPromptDepth(Map<String, dynamic> data) {
+    final ext = data['extensions'] is Map ? data['extensions'] as Map : null;
+    final dp = ext?['depth_prompt'] is Map ? ext!['depth_prompt'] as Map : null;
+    if (dp == null) return 4;
+    final d = dp['depth'];
+    if (d is int) return d;
+    if (d is num) return d.toInt();
+    return 4;
+  }
+
+  String _extractDepthPromptRole(Map<String, dynamic> data) {
+    final ext = data['extensions'] is Map ? data['extensions'] as Map : null;
+    final dp = ext?['depth_prompt'] is Map ? ext!['depth_prompt'] as Map : null;
+    if (dp == null) return 'system';
+    return dp['role'] is String ? dp['role'] as String : 'system';
+  }
+
+  String? _extractWorld(Map<String, dynamic> data) {
+    final ext = data['extensions'] is Map ? data['extensions'] as Map : null;
+    final world = ext?['world'];
+    return world is String && world.isNotEmpty ? world : null;
   }
 
   Uint8List? _dataUrlToBytes(String dataUrl) {
