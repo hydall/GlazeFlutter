@@ -80,6 +80,25 @@ UI (screens/widgets)
 
 A component may only import from layers at its level or below. Never upward.
 
+## UI Files — Only Extract Logic
+
+Large UI files are acceptable. A 800-line screen with private widgets (`_HeroSection`, `_TabsRow`, etc.) is fine — these widgets share context and are read as a whole.
+
+**What to extract from UI files:**
+- Business logic (LLM calls, repo access, file I/O, data transformation) → move to a service or provider
+- State that belongs in a provider (computed stats, persisted preferences) → move to a Riverpod provider
+
+**When splitting UI into separate files IS justified:**
+- The widget is reused across multiple screens → move to `shared/widgets/`
+- The section is a distinct sub-screen with its own state and navigation (e.g. a complex dialog or sheet)
+
+**What NOT to extract:**
+- Private helper widgets — they belong with their screen
+- Layout helpers, color constants, text styles — these are UI concerns
+- Callback handlers that only call `ref.read(someProvider.notifier).action()` — these are already thin
+
+Rule of thumb: if removing the business logic leaves a file with only `build()` methods and `Widget` returns, it's done. Don't split further.
+
 ## Code Rules (lazy-loaded)
 
 Detailed rules are split into topic files. When in doubt, read all that apply before editing:
