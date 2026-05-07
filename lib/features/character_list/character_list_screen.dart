@@ -38,122 +38,137 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
 
     final navHeight = ref.watch(navHeightProvider);
 
+    final topPad = MediaQuery.of(context).padding.top + 66.0;
+    final headerHeight = topPad + 52.0;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
-          Column(
-            children: [
-              SafeArea(
-                bottom: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                  child: GlazeAppBar(
-                    title: 'Characters',
-                    actions: [
-                      SizedBox(
-                        width: 44,
-                        height: 44,
-                        child: IconButton(
-                          icon: Icon(
-                            _favOnly ? Icons.star : Icons.star_border,
-                            size: 22,
-                            color: _favOnly ? Colors.amber : AppColors.accent,
-                          ),
-                          onPressed: () => setState(() => _favOnly = !_favOnly),
-                        ),
+          Positioned.fill(
+            child: _showCatalog
+                ? CatalogGrid(
+                    topPadding: headerHeight,
+                    bottomPadding: navHeight + 20,
+                  )
+                : characters.when(
+                    loading: () => const Center(
+                      child: CircularProgressIndicator(color: AppColors.accent),
+                    ),
+                    error: (e, _) => Center(
+                      child: Text(
+                        'Error: $e',
+                        style: const TextStyle(color: AppColors.textSecondary),
                       ),
-                      SizedBox(
-                        width: 44,
-                        height: 44,
-                        child: IconButton(
-                          icon: const Icon(Icons.search_rounded, size: 22),
-                          color: AppColors.accent,
-                          onPressed: () async {
-                            final query = await showSearch<String>(
-                              context: context,
-                              delegate: _CharacterSearchDelegate(ref),
-                            );
-                            if (query != null) setState(() => _searchQuery = query);
-                          },
+                    ),
+                    data: (chars) {
+                      if (chars.isEmpty) {
+                        return EmptyCharacterState(
+                          onImport: () => _importCharacter(context, ref),
+                        );
+                      }
+                      var filtered = chars;
+                      if (_favOnly) {
+                        filtered = filtered.where((c) => c.fav).toList();
+                      }
+                      if (_searchQuery.isNotEmpty) {
+                        final q = _searchQuery.toLowerCase();
+                        filtered = filtered
+                            .where(
+                              (c) =>
+                                  c.name.toLowerCase().contains(q) ||
+                                  (c.description ?? '').toLowerCase().contains(
+                                    q,
+                                  ) ||
+                                  (c.creator ?? '').toLowerCase().contains(q) ||
+                                  c.tags.any(
+                                    (t) => t.toLowerCase().contains(q),
+                                  ),
+                            )
+                            .toList();
+                      }
+                      final sorted = _sortChars(filtered);
+                      return CharacterGrid(
+                        characters: sorted,
+                        sortBy: _sortBy,
+                        sortDir: _sortDir,
+                        topPadding: headerHeight,
+                        bottomPadding: navHeight + 20,
+                        onSortDirToggle: () => setState(() {
+                          _sortDir = _sortDir == SortDir.asc
+                              ? SortDir.desc
+                              : SortDir.asc;
+                        }),
+                        onSortTypeChanged: (t) => setState(() => _sortBy = t),
+                      );
+                    },
+                  ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Column(
+              children: [
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    child: GlazeAppBar(
+                      title: 'Characters',
+                      actions: [
+                        SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: IconButton(
+                            icon: Icon(
+                              _favOnly ? Icons.star : Icons.star_border,
+                              size: 22,
+                              color: _favOnly ? Colors.amber : AppColors.accent,
+                            ),
+                            onPressed: () =>
+                                setState(() => _favOnly = !_favOnly),
+                          ),
                         ),
+                        SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: IconButton(
+                            icon: const Icon(Icons.search_rounded, size: 22),
+                            color: AppColors.accent,
+                            onPressed: () async {
+                              final query = await showSearch<String>(
+                                context: context,
+                                delegate: _CharacterSearchDelegate(ref),
+                              );
+                              if (query != null)
+                                setState(() => _searchQuery = query);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  child: GlazeTabBar(
+                    tabs: const [
+                      GlazeTabItem(
+                        label: 'My Characters',
+                        icon: Icons.person_rounded,
+                      ),
+                      GlazeTabItem(
+                        label: 'Discover',
+                        icon: Icons.public_rounded,
                       ),
                     ],
+                    activeIndex: _showCatalog ? 1 : 0,
+                    onChanged: (i) => setState(() => _showCatalog = i == 1),
                   ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: GlazeTabBar(
-                  tabs: const [
-                    GlazeTabItem(
-                      label: 'My Characters',
-                      icon: Icons.person_rounded,
-                    ),
-                    GlazeTabItem(label: 'Discover', icon: Icons.public_rounded),
-                  ],
-                  activeIndex: _showCatalog ? 1 : 0,
-                  onChanged: (i) => setState(() => _showCatalog = i == 1),
-                ),
-              ),
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(bottom: navHeight + 20),
-                  child: _showCatalog
-                      ? const CatalogGrid()
-                      : characters.when(
-                        loading: () => const Center(
-                          child: CircularProgressIndicator(color: AppColors.accent),
-                        ),
-                        error: (e, _) => Center(
-                          child: Text(
-                            'Error: $e',
-                            style: const TextStyle(color: AppColors.textSecondary),
-                          ),
-                        ),
-                        data: (chars) {
-                          if (chars.isEmpty) {
-                            return EmptyCharacterState(
-                              onImport: () => _importCharacter(context, ref),
-                            );
-                          }
-                          var filtered = chars;
-                          if (_favOnly) {
-                            filtered = filtered.where((c) => c.fav).toList();
-                          }
-                          if (_searchQuery.isNotEmpty) {
-                            final q = _searchQuery.toLowerCase();
-                            filtered = chars
-                                .where(
-                                  (c) =>
-                                      c.name.toLowerCase().contains(q) ||
-                                      (c.description ?? '').toLowerCase().contains(
-                                        q,
-                                      ) ||
-                                      (c.creator ?? '').toLowerCase().contains(q) ||
-                                      c.tags.any(
-                                        (t) => t.toLowerCase().contains(q),
-                                      ),
-                                )
-                                .toList();
-                          }
-                          final sorted = _sortChars(filtered);
-                          return CharacterGrid(
-                            characters: sorted,
-                            sortBy: _sortBy,
-                            sortDir: _sortDir,
-                            onSortDirToggle: () => setState(() {
-                              _sortDir = _sortDir == SortDir.asc
-                                  ? SortDir.desc
-                                  : SortDir.asc;
-                            }),
-                            onSortTypeChanged: (t) => setState(() => _sortBy = t),
-                          );
-                        },
-                  ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
           Positioned(
             right: 16,

@@ -121,8 +121,14 @@ jobs:
         run: |
           flutter build ios --release --no-codesign --no-pub
 
+      - name: Create IPA Structure
+        run: |
+          mkdir -p Payload
+          cp -r build/ios/iphoneos/*.app Payload/
+          zip -r Glaze.ipa Payload
+
       - name: Upload iOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: Glaze-iOS
-          path: build/ios/iphoneos/*.app
+          path: Glaze.ipa

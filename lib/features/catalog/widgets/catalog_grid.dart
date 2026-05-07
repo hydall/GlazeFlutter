@@ -10,7 +10,10 @@ import 'catalog_controls.dart';
 import 'catalog_preview_sheet.dart';
 
 class CatalogGrid extends ConsumerWidget {
-  const CatalogGrid({super.key});
+  final double topPadding;
+  final double bottomPadding;
+
+  const CatalogGrid({super.key, this.topPadding = 0, this.bottomPadding = 16});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,6 +32,8 @@ class CatalogGrid extends ConsumerWidget {
       },
       child: CustomScrollView(
         slivers: [
+          if (topPadding > 0)
+            SliverToBoxAdapter(child: SizedBox(height: topPadding)),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -80,7 +85,7 @@ class CatalogGrid extends ConsumerWidget {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
               sliver: SliverGrid(
                 delegate: SliverChildBuilderDelegate(
                   (_, i) => CatalogCard(

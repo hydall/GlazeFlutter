@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
-import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_scaffold.dart' show GlazeAppBar;
 import '../../shared/widgets/menu_group.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import 'about_overlay.dart';
@@ -14,24 +14,18 @@ class MenuScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final navHeight = ref.watch(navHeightProvider);
+    final topPad = MediaQuery.of(context).padding.top + 66.0;
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Column(
+      body: Stack(
         children: [
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: const GlazeAppBar(title: 'Menu'),
+          ListView(
+            padding: EdgeInsets.only(
+              top: topPad + 8,
+              bottom: navHeight + 20,
             ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.only(
-                top: 8,
-                bottom: ref.watch(navHeightProvider) + 20,
-              ),
-              children: [
+            children: [
                 MenuGroup(
                   header: 'Settings',
                   items: [
@@ -70,6 +64,17 @@ class MenuScreen extends ConsumerWidget {
                   ],
                 ),
               ],
+            ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: const GlazeAppBar(title: 'Menu'),
+              ),
             ),
           ),
         ],

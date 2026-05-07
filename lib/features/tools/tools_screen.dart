@@ -8,7 +8,7 @@ import '../../core/state/active_selection_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
-import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_scaffold.dart' show GlazeAppBar;
 
 class PersonaInfo {
   final String name;
@@ -39,21 +39,14 @@ class ToolsScreen extends ConsumerWidget {
     final bottomPad = ref.watch(navHeightProvider) + 20;
     final personaInfo = ref.watch(_activePersonaInfoProvider).value;
     final presetName = ref.watch(_activePresetNameProvider).value ?? 'Default';
+    final topPad = MediaQuery.of(context).padding.top + 66.0;
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Column(
+      body: Stack(
         children: [
-          const SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: GlazeAppBar(title: 'Tools'),
-            ),
-          ),
-          Expanded(
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, bottomPad),
-              children: [
+          ListView(
+            padding: EdgeInsets.fromLTRB(16, topPad + 16, 16, bottomPad),
+            children: [
                 _HeroCard(
                   icon: Icons.face,
                   title: 'Personas',
@@ -110,6 +103,17 @@ class ToolsScreen extends ConsumerWidget {
                   ],
                 ),
               ],
+            ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: const GlazeAppBar(title: 'Tools'),
+              ),
             ),
           ),
         ],

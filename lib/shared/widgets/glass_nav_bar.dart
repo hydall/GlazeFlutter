@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../shell/nav_height_provider.dart';
 import '../theme/app_colors.dart';
+import 'glow_ripple.dart';
 
 String _iconSvg(String path) =>
     '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="$path"/></svg>';
@@ -80,29 +81,31 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: AppColors.glassBorder),
             ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: Opacity(
-                    opacity: 0.03,
-                    child: CustomPaint(painter: _NoisePainter()),
+            child: GlowRippleOverlay(
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: 0.03,
+                      child: CustomPaint(painter: _NoisePainter()),
+                    ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 7),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: List.generate(
-                      _items.length,
-                      (i) => _NavButton(
-                        item: _items[i],
-                        isActive: i == widget.currentIndex,
-                        onTap: () => widget.onTap(i),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 7),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: List.generate(
+                        _items.length,
+                        (i) => _NavButton(
+                          item: _items[i],
+                          isActive: i == widget.currentIndex,
+                          onTap: () => widget.onTap(i),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -147,32 +150,41 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isActive ? AppColors.activeTab : AppColors.inactiveTab;
+    final target = isActive ? 1.0 : 0.0;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SvgPicture.string(
-              _iconSvg(item.svgPath),
-              width: 28,
-              height: 28,
-              colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: target, end: target),
+        duration: const Duration(milliseconds: 125),
+        curve: Curves.easeInOut,
+        builder: (context, t, _) {
+          final color =
+              Color.lerp(AppColors.inactiveTab, AppColors.activeTab, t)!;
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SvgPicture.string(
+                  _iconSvg(item.svgPath),
+                  width: 28,
+                  height: 28,
+                  colorFilter: ColorFilter.mode(color, BlendMode.srcIn),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  item.label,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: color,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 2),
-            Text(
-              item.label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: color,
-              ),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

@@ -15,6 +15,8 @@ class CharacterGrid extends StatelessWidget {
   final SortDir sortDir;
   final VoidCallback onSortDirToggle;
   final ValueChanged<SortType> onSortTypeChanged;
+  final double topPadding;
+  final double bottomPadding;
 
   const CharacterGrid({
     super.key,
@@ -23,12 +25,16 @@ class CharacterGrid extends StatelessWidget {
     required this.sortDir,
     required this.onSortDirToggle,
     required this.onSortTypeChanged,
+    this.topPadding = 0,
+    this.bottomPadding = 16,
   });
 
   @override
   Widget build(BuildContext context) {
     return CustomScrollView(
       slivers: [
+        if (topPadding > 0)
+          SliverToBoxAdapter(child: SizedBox(height: topPadding)),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -61,14 +67,14 @@ class CharacterGrid extends StatelessWidget {
           ),
         ),
         SliverPadding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
           sliver: SliverGrid(
             delegate: SliverChildBuilderDelegate(
               (_, i) => CharacterCard(character: characters[i]),
               childCount: characters.length,
             ),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 180,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
               childAspectRatio: 2 / 3,
               crossAxisSpacing: 10,
               mainAxisSpacing: 10,

@@ -47,8 +47,8 @@ class CharacterCard extends ConsumerWidget {
               child: _TokenBadge(character: character),
             ),
             Positioned(
-              top: 6,
-              right: 6,
+              top: 8,
+              right: 8,
               child: _CardMenuButton(
                 character: character,
                 onTap: () => _showActions(context, ref),
@@ -233,7 +233,7 @@ class _CardInfo extends StatelessWidget {
         : character.description;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
