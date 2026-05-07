@@ -171,6 +171,22 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
           _ToggleRow(label: 'Send character avatar', value: _settings.routmySendCharAvatar, onChanged: (v) { _settings = _settings.copyWith(routmySendCharAvatar: v); _save(); }),
           _ToggleRow(label: 'Send persona avatar', value: _settings.routmySendUserAvatar, onChanged: (v) { _settings = _settings.copyWith(routmySendUserAvatar: v); _save(); }),
         ];
+      case ImageGenApiType.ruRoutmy:
+        return [
+          _TextFieldRow(label: 'API Key', value: _settings.ruRoutmyApiKey, obscure: true, onChanged: (v) { _settings = _settings.copyWith(ruRoutmyApiKey: v); _save(); }),
+          _DropdownRow(
+            label: 'Model',
+            value: _settings.ruRoutmyModel,
+            items: RuRoutMyConstants.models.map((e) => e.$1).toList(),
+            labels: RuRoutMyConstants.models.map((e) => e.$2).toList(),
+            onChanged: (v) { _settings = _settings.copyWith(ruRoutmyModel: v); _save(); },
+          ),
+          _DropdownRow(label: 'Aspect Ratio', value: _settings.ruRoutmyAspectRatio, items: RuRoutMyConstants.aspectRatios, onChanged: (v) { _settings = _settings.copyWith(ruRoutmyAspectRatio: v); _save(); }),
+          _DropdownRow(label: 'Image Size', value: _settings.ruRoutmyImageSize, items: RuRoutMyConstants.imageSizes, onChanged: (v) { _settings = _settings.copyWith(ruRoutmyImageSize: v); _save(); }),
+          _DropdownRow(label: 'Quality', value: _settings.ruRoutmyQuality, items: ['standard', 'hd'], onChanged: (v) { _settings = _settings.copyWith(ruRoutmyQuality: v); _save(); }),
+          _ToggleRow(label: 'Send character avatar', value: _settings.ruRoutmySendCharAvatar, onChanged: (v) { _settings = _settings.copyWith(ruRoutmySendCharAvatar: v); _save(); }),
+          _ToggleRow(label: 'Send persona avatar', value: _settings.ruRoutmySendUserAvatar, onChanged: (v) { _settings = _settings.copyWith(ruRoutmySendUserAvatar: v); _save(); }),
+        ];
     }
   }
 }
@@ -288,6 +304,7 @@ class _ProviderSelector extends StatelessWidget {
       (ImageGenApiType.gemini, 'Gemini', Icons.auto_awesome),
       (ImageGenApiType.naistera, 'Naistera', Icons.palette),
       (ImageGenApiType.routmy, 'RoutMy', Icons.route),
+      (ImageGenApiType.ruRoutmy, 'RU-RoutMy', Icons.public),
     ];
     return Wrap(
       spacing: 8,

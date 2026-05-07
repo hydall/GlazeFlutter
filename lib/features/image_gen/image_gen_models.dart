@@ -2,7 +2,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'image_gen_models.freezed.dart';
 
-enum ImageGenApiType { openai, gemini, naistera, routmy }
+enum ImageGenApiType { openai, gemini, naistera, routmy, ruRoutmy }
 
 @freezed
 class ReferenceImage with _$ReferenceImage {
@@ -32,7 +32,7 @@ class ImageGenSettings with _$ImageGenSettings {
     @Default(false) bool naisteraSendCharAvatar,
     @Default(false) bool naisteraSendUserAvatar,
     @Default('') String routmyApiKey,
-    @Default('flux-1.1-pro') String routmyModel,
+    @Default('google/gemini-3.1-flash-image-preview') String routmyModel,
     @Default('1:1') String routmyAspectRatio,
     @Default('1K') String routmyImageSize,
     @Default('standard') String routmyQuality,
@@ -42,28 +42,40 @@ class ImageGenSettings with _$ImageGenSettings {
     @Default([]) List<ReferenceImage> routmyAdditionalRefs,
     @Default(false) bool imageContextEnabled,
     @Default(1) int imageContextCount,
+    @Default('') String ruRoutmyApiKey,
+    @Default('google/gemini-3.1-flash-image-preview') String ruRoutmyModel,
+    @Default('1:1') String ruRoutmyAspectRatio,
+    @Default('1K') String ruRoutmyImageSize,
+    @Default('standard') String ruRoutmyQuality,
+    @Default(false) bool ruRoutmySendCharAvatar,
+    @Default(false) bool ruRoutmySendUserAvatar,
   }) = _ImageGenSettings;
 }
 
 class RoutMyConstants {
+  static const String baseUrl = 'https://api.rout.my';
+
   static const models = [
-    ('flux-1.1-pro', 'Flux 1.1 Pro'),
-    ('flux-1.1-pro-ultra', 'Flux 1.1 Pro Ultra'),
-    ('flux-1-schnell', 'Flux 1 Schnell'),
-    ('flux-1-dev', 'Flux 1 Dev'),
-    ('ideogram-2', 'Ideogram 2'),
-    ('recraft-v3', 'Recraft V3'),
-    ('recraft-v3-svg', 'Recraft V3 SVG'),
-    ('sdxl', 'SDXL'),
-    ('stable-diffusion-3', 'Stable Diffusion 3'),
-    ('playground-v2.5', 'Playground V2.5'),
+    ('google/gemini-3.1-flash-image-preview', 'Gemini 3.1 Flash Image'),
+    ('openai/gpt-image-1.5', 'GPT Image 1.5'),
+    ('openai/gpt-image-2', 'GPT Image 2'),
+    ('x-ai/grok-imagine-image', 'Grok Imagine Image'),
+    ('x-ai/grok-imagine-image-pro', 'Grok Imagine Image Pro'),
   ];
 
   static const aspectRatios = [
-    '1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3', '21:9', '9:21',
+    '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9',
   ];
 
   static const imageSizes = ['1K', '2K', '4K'];
+}
+
+class RuRoutMyConstants {
+  static const String baseUrl = 'https://ru-api.rout.my';
+
+  static const models = RoutMyConstants.models;
+  static const aspectRatios = RoutMyConstants.aspectRatios;
+  static const imageSizes = RoutMyConstants.imageSizes;
 }
 
 class NaisteraConstants {
