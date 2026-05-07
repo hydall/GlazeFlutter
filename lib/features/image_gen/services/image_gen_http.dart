@@ -47,6 +47,13 @@ class ImageGenHttp {
     return base64Decode(b64);
   }
 
+  Future<Response<Uint8List>> getRaw(String url) async {
+    return _dio.get<Uint8List>(
+      url,
+      options: Options(responseType: ResponseType.bytes),
+    );
+  }
+
   static String bytesToDataUrl(Uint8List bytes, {String mime = 'image/png'}) {
     return 'data:$mime;base64,${base64Encode(bytes)}';
   }

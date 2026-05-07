@@ -1,10 +1,35 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/state/active_selection_provider.dart';
+import '../../core/state/db_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+
+class PersonaInfo {
+  final String name;
+  final String? avatarPath;
+  const PersonaInfo({required this.name, this.avatarPath});
+}
+
+final _activePersonaInfoProvider = FutureProvider<PersonaInfo?>((ref) async {
+  final activeId = ref.watch(activePersonaIdProvider);
+  if (activeId == null) return null;
+  final persona = await ref.read(personaRepoProvider).getById(activeId);
+  if (persona == null) return null;
+  return PersonaInfo(name: persona.name, avatarPath: persona.avatarPath);
+});
+
+final _activePresetNameProvider = FutureProvider<String>((ref) async {
+  final activeId = ref.watch(activePresetIdProvider);
+  if (activeId == null) return 'Default';
+  final preset = await ref.read(presetRepoProvider).getById(activeId);
+  return preset?.name ?? 'Default';
+});
 
 class ToolsScreen extends ConsumerWidget {
   const ToolsScreen({super.key});
@@ -12,6 +37,8 @@ class ToolsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bottomPad = ref.watch(navHeightProvider) + 20;
+    final personaInfo = ref.watch(_activePersonaInfoProvider).value;
+    final presetName = ref.watch(_activePresetNameProvider).value ?? 'Default';
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
@@ -30,7 +57,8 @@ class ToolsScreen extends ConsumerWidget {
                 _HeroCard(
                   icon: Icons.face,
                   title: 'Personas',
-                  subtitle: 'user',
+                  subtitle: personaInfo?.name ?? 'user',
+                  avatarPath: personaInfo?.avatarPath,
                   isAvatar: true,
                   onTap: () => context.go('/tools/personas'),
                 ),
@@ -38,11 +66,10 @@ class ToolsScreen extends ConsumerWidget {
                 _HeroCard(
                   icon: Icons.tune,
                   title: 'Presets',
-                  subtitle: 'Default',
+                  subtitle: presetName,
                   onTap: () => context.go('/tools/presets'),
                 ),
                 const SizedBox(height: 16),
-                // Row 1: API + Lorebooks
                 IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -68,7 +95,6 @@ class ToolsScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                // Row 2: Regex (left half only)
                 Row(
                   children: [
                     Expanded(
@@ -97,6 +123,7 @@ class _HeroCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final bool isAvatar;
+  final String? avatarPath;
   final VoidCallback onTap;
 
   const _HeroCard({
@@ -104,6 +131,7 @@ class _HeroCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.isAvatar = false,
+    this.avatarPath,
     required this.onTap,
   });
 
@@ -123,25 +151,13 @@ class _HeroCard extends StatelessWidget {
           children: [
             if (isAvatar) ...[
               Positioned.fill(
-                child: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFF66CCFF), Color(0xFF7996CE)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      subtitle.isNotEmpty ? subtitle[0].toUpperCase() : '?',
-                      style: const TextStyle(
-                        fontSize: 80,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white60,
-                      ),
-                    ),
-                  ),
-                ),
+                child: avatarPath != null && avatarPath!.isNotEmpty
+                    ? Image.file(
+                        File(avatarPath!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _AvatarGradientPlaceholder(subtitle: subtitle),
+                      )
+                    : _AvatarGradientPlaceholder(subtitle: subtitle),
               ),
               Positioned.fill(
                 child: Container(
@@ -211,6 +227,34 @@ class _HeroCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AvatarGradientPlaceholder extends StatelessWidget {
+  final String subtitle;
+  const _AvatarGradientPlaceholder({required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFF66CCFF), Color(0xFF7996CE)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          subtitle.isNotEmpty ? subtitle[0].toUpperCase() : '?',
+          style: const TextStyle(
+            fontSize: 80,
+            fontWeight: FontWeight.w800,
+            color: Colors.white60,
+          ),
         ),
       ),
     );

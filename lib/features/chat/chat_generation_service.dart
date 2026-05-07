@@ -89,6 +89,11 @@ class ChatGenerationService {
         stream: apiConfig.stream,
         cancelToken: cancelToken,
         requestReasoning: apiConfig.requestReasoning,
+        reasoningEffort: apiConfig.reasoningEffort,
+        omitTemperature: apiConfig.omitTemperature,
+        omitTopP: apiConfig.omitTopP,
+        omitReasoning: apiConfig.omitReasoning,
+        omitReasoningEffort: apiConfig.omitReasoningEffort,
         onUpdate: (delta, reasoningDelta) {
           accumulator.consumeDelta(delta, reasoningDelta: reasoningDelta);
           onStateUpdate(ChatState(

@@ -12,12 +12,17 @@ class CharacterRepo {
   CharacterRepo(this._db);
 
   Future<List<Character>> getAll() async {
-    final rows = await _db.select(_db.characters).get();
+    final rows = await (_db.select(_db.characters)
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+        .get();
     return rows.map(_toModel).toList();
   }
 
   Stream<List<Character>> watchAll() {
-    return _db.select(_db.characters).watch().map((rows) => rows.map(_toModel).toList());
+    return (_db.select(_db.characters)
+          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+        .watch()
+        .map((rows) => rows.map(_toModel).toList());
   }
 
   Future<Character?> getById(String id) async {
@@ -74,7 +79,7 @@ class CharacterRepo {
             postHistoryInstructions: Value(postHistoryInstructions),
             creator: Value(creator),
             creatorNotes: Value(creatorNotes),
-            updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+            updatedAt: Value(DateTime.now().millisecondsSinceEpoch ~/ 1000),
             tagsJson: Value(jsonEncode(tags)),
             alternateGreetingsJson: Value(jsonEncode(alternateGreetings)),
           ),

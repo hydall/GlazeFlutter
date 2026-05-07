@@ -30,6 +30,8 @@ class LorebookEntry with _$LorebookEntry {
     @Default(false) bool ignoreBudget,
     @Default(false) bool vectorSearch,
     @Default(true) bool useKeywordSearch,
+    @Default(false) bool delayUntilRecursion,
+    @Default(false) bool useGroupScoring,
   }) = _LorebookEntry;
 
   factory LorebookEntry.fromJson(Map<String, dynamic> json) =>
@@ -56,6 +58,7 @@ class Lorebook with _$Lorebook {
     @Default('global') String activationScope,
     String? activationTargetId,
     @Default([]) List<LorebookEntry> entries,
+    LorebookSettings? settings,
     @Default(0) int updatedAt,
   }) = _Lorebook;
 
@@ -83,6 +86,40 @@ class LorebookGlobalSettings with _$LorebookGlobalSettings {
 
   factory LorebookGlobalSettings.fromJson(Map<String, dynamic> json) =>
       _$LorebookGlobalSettingsFromJson(json);
+}
+
+@freezed
+class LorebookSettings with _$LorebookSettings {
+  const factory LorebookSettings({
+    int? scanDepth,
+    int? maxInjectedEntries,
+    @Default(100) int contextPercent,
+    @Default(0) int budgetCap,
+    @Default('tokens') String reserveMode,
+    @Default(10000) int reserveValue,
+    @Default(0) int minActivations,
+    @Default(0) int maxDepth,
+    @Default(0) int maxRecursionSteps,
+    @Default('character_first') String insertionStrategy,
+    @Default('lorebooksMacro') String injectionPosition,
+    @Default(true) bool includeNames,
+    @Default(false) bool recursiveScan,
+    @Default(false) bool caseSensitive,
+    String? matchWholeWords,
+    @Default(false) bool useGroupScoring,
+    @Default(false) bool alertOnOverflow,
+    @Default('both') String searchType,
+    @Default('content') String embeddingTarget,
+    @Default(0.45) double vectorThreshold,
+    @Default(10) int vectorTopK,
+    @Default(65) int keywordVectorSplit,
+    @Default(5) int vectorScanDepth,
+    @Default(true) bool vectorSearchEnabled,
+    @Default(true) bool keySearchEnabled,
+  }) = _LorebookSettings;
+
+  factory LorebookSettings.fromJson(Map<String, dynamic> json) =>
+      _$LorebookSettingsFromJson(json);
 }
 
 @freezed

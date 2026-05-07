@@ -88,7 +88,7 @@ class _ApiConfigTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isEmbedding = config.mode == 'embedding';
+    final isEmbedding = config.embeddingModel.isNotEmpty && !config.embeddingUseSame;
     return ListTile(
       leading: Icon(
         isEmbedding ? Icons.hub : Icons.smart_toy,
@@ -97,7 +97,7 @@ class _ApiConfigTile extends ConsumerWidget {
       ),
       title: Text(config.name.isNotEmpty ? config.name : config.model),
       subtitle: Text(
-        '${config.endpoint.replaceAll(RegExp(r'https?://'), '').split('/').first} · ${config.model} · ${isEmbedding ? 'Embedding' : 'Chat'}',
+        '${config.endpoint.replaceAll(RegExp(r'https?://'), '').split('/').first} · ${config.model}',
         style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
         maxLines: 1,
         overflow: TextOverflow.ellipsis,

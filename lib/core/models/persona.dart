@@ -10,6 +10,7 @@ class Persona with _$Persona {
     required String name,
     String? prompt,
     String? avatarPath,
+    @Default(0) int createdAt,
   }) = _Persona;
 
   factory Persona.fromJson(Map<String, dynamic> json) =>

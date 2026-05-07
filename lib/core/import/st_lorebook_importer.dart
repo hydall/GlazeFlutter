@@ -76,8 +76,8 @@ LorebookEntry _convertSTEntry(dynamic rawEntry, int index) {
     groupProminence: (e['groupProminence'] as int?) ?? 100,
     characterFilter: charFilter,
     ignoreBudget: (e['ignoreBudget'] as bool?) ?? false,
-    vectorSearch: false,
-    useKeywordSearch: true,
+    vectorSearch: (e['vectorSearch'] as bool?) ?? (e['vector_search'] as bool?) ?? false,
+    useKeywordSearch: (e['useKeywordSearch'] as bool?) ?? (e['use_keyword_search'] as bool?) ?? true,
   );
 }
 

@@ -335,7 +335,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
       }
     } catch (e) {
       if (mounted) {
-        GlazeToast.show(context, 'Save failed: $e');
+        GlazeToast.error(context, 'Save failed: ', e);
       }
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -380,7 +380,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
       }
     } catch (e) {
       if (mounted) {
-        GlazeToast.show(context, 'Export failed: $e');
+        GlazeToast.error(context, 'Export failed: ', e);
       }
     }
   }

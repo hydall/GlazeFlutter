@@ -5,15 +5,16 @@ import '../models/character.dart';
 import '../../features/cloud_sync/services/sync_deletion_tracker.dart';
 import 'db_provider.dart';
 
-final charactersProvider =
-    AsyncNotifierProvider<CharactersNotifier, List<Character>>(
-        CharactersNotifier.new);
+final charactersProvider = AsyncNotifierProvider<CharactersNotifier, List<Character>>(
+  CharactersNotifier.new,
+);
 
 class CharactersNotifier extends AsyncNotifier<List<Character>> {
   StreamSubscription<List<Character>>? _sub;
 
   @override
   Future<List<Character>> build() async {
+    ref.keepAlive();
     _sub?.cancel();
     final repo = ref.read(characterRepoProvider);
     _sub = repo.watchAll().listen((data) {

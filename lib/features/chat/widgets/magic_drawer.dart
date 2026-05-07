@@ -7,11 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/llm/lorebook_scanner.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/summary_service.dart';
+import '../../../core/models/lorebook.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../image_gen/image_gen_provider.dart';
@@ -154,6 +157,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _loadStats() async {
+    if (!mounted) return;
     final chatState = ref.read(chatProvider(widget.charId)).value;
     final session = chatState?.session;
     final charRepo = ref.read(characterRepoProvider);
@@ -164,10 +168,15 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     final memoryRepo = ref.read(memoryBookRepoProvider);
 
     final character = await charRepo.getById(widget.charId);
+    if (!mounted) return;
     final presets = await presetRepo.getAll();
+    if (!mounted) return;
     final personas = await personaRepo.getAll();
+    if (!mounted) return;
     final apiConfigs = await apiRepo.getAll();
+    if (!mounted) return;
     final lorebooks = await lorebookRepo.getAll();
+    if (!mounted) return;
     final activePresetId = ref.read(activePresetIdProvider);
     final activePersonaId = ref.read(activePersonaIdProvider);
     final activePreset = activePresetId != null
@@ -180,6 +189,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         .where((cfg) => cfg.mode != 'embedding')
         .firstOrNull;
     final regexes = await ref.read(activeRegexesProvider.future);
+    if (!mounted) return;
 
     var summaryChars = 0;
     var memoryEntries = 0;
@@ -196,19 +206,23 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       final summary = await ref
           .read(summaryServiceProvider)
           .getSummary(session.id);
+      if (!mounted) return;
       summaryChars = summary?.length ?? 0;
       final memoryBook = await memoryRepo.getBySessionId(session.id);
       memoryEntries = memoryBook?.entries.length ?? 0;
       sessionCount =
           (await ref.read(chatRepoProvider).getByCharacterId(widget.charId))
               .length;
+      if (!mounted) return;
       messageCount = session.messages.length;
 
       if (character != null && chatApi != null) {
         try {
           final builder = ref.read(promptPayloadBuilderProvider);
           final payload = await builder.buildFromSession(charId: widget.charId, session: session);
+          if (!mounted) return;
           final promptResult = await buildPromptInIsolate(payload);
+          if (!mounted) return;
           final sourceTokens = promptResult.breakdown.sourceTokens;
           promptTokens = promptResult.breakdown.totalTokens;
           contextSize = chatApi.contextSize;
@@ -220,10 +234,28 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       }
     }
 
-    final lorebookEntryCount = lorebooks.fold<int>(
-      0,
-      (sum, lorebook) => sum + lorebook.entries.length,
-    );
+    final lorebookActivations = ref.read(lorebookActivationsProvider);
+    final lorebookSettings = ref.read(lorebookSettingsProvider);
+    final triggeredEntries = session != null
+        ? scanLorebooks(
+            history: session.messages,
+            char: character,
+            textToScan: session.messages.isNotEmpty
+                ? session.messages.last.content
+                : '',
+            chatId: session.id,
+            lorebooks: lorebooks,
+            globalSettings: lorebookSettings,
+            activations: lorebookActivations,
+          )
+        : <ScannedEntry>[];
+
+    final lorebookEntryCount = triggeredEntries.length;
+
+    bool imageGenEnabled = false;
+    try {
+      imageGenEnabled = ref.read(imageGenSettingsProvider).value?.enabled == true;
+    } catch (_) {}
 
     _stats = MagicDrawerStats(
       character: character,
@@ -243,8 +275,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       presetTokens: presetTokens,
       personaTokens: personaTokens,
       summaryTokens: summaryTokens,
-      imageGenEnabled:
-          ref.read(imageGenSettingsProvider).value?.enabled == true,
+      imageGenEnabled: imageGenEnabled,
     );
   }
 
@@ -394,8 +425,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         if (mounted) context.go('/character/${widget.charId}');
         return;
       case 'lorebooks':
-        Navigator.of(context).pop();
-        if (mounted) context.go('/tools/lorebooks');
+        await _showLorebooksSheet();
         return;
       case 'memory-books':
         await _showMemoryBooks();
@@ -506,6 +536,66 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     );
   }
 
+  Future<void> _showLorebooksSheet() async {
+    final lorebooks = await ref.read(lorebookRepoProvider).getAll();
+    if (!mounted) return;
+    if (lorebooks.isEmpty) {
+      GlazeBottomSheet.show(
+        context,
+        title: 'Lorebooks',
+        bigInfo: const BottomSheetBigInfo(
+          icon: Icons.menu_book_outlined,
+          description: 'No lorebooks yet. Import a backup or create one in Tools.',
+        ),
+      );
+      return;
+    }
+    GlazeBottomSheet.show(
+      context,
+      title: 'Lorebooks',
+      items: lorebooks.map((lb) => BottomSheetItem(
+        icon: lb.enabled ? Icons.menu_book : Icons.menu_book_outlined,
+        label: lb.name,
+        hint: '${lb.entries.length} entries · ${lb.activationScope}',
+        onTap: () {
+          Navigator.pop(context);
+          _showLorebookEntries(lb);
+        },
+      )).toList(),
+    );
+  }
+
+  void _showLorebookEntries(Lorebook lb) {
+    final entries = lb.entries;
+    if (entries.isEmpty) {
+      GlazeBottomSheet.show(
+        context,
+        title: lb.name,
+        bigInfo: BottomSheetBigInfo(
+          icon: Icons.menu_book_outlined,
+          description: 'No entries in ${lb.name}',
+          buttonText: 'Open Editor',
+          onButtonTap: () {
+            Navigator.of(context).pop();
+            Navigator.of(context).pop();
+            context.go('/tools/lorebooks');
+          },
+        ),
+      );
+      return;
+    }
+    GlazeBottomSheet.show(
+      context,
+      title: lb.name,
+      items: entries.take(20).map((e) => BottomSheetItem(
+        icon: e.enabled ? Icons.description : Icons.description_outlined,
+        label: e.comment.isNotEmpty ? e.comment : e.keys.join(', '),
+        hint: e.constant ? 'constant' : (e.keys.isNotEmpty ? e.keys.first : ''),
+        onTap: () {},
+      )).toList(),
+    );
+  }
+
   Future<void> _showStatsSheet() async {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
     if (session == null) return;
@@ -562,15 +652,13 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     await GlazeBottomSheet.show(
       context,
       title: 'Sessions',
-      headerAction: currentSession.messages.isEmpty
-          ? null
-          : IconButton(
+      headerAction: IconButton(
               icon: const Icon(Icons.add, color: AppColors.accent),
               onPressed: () async {
                 Navigator.of(context).pop();
                 await ref
                     .read(chatProvider(widget.charId).notifier)
-                    .branchSession(currentSession.messages.length - 1);
+                    .newSession();
               },
             ),
       sessionItems: sessions

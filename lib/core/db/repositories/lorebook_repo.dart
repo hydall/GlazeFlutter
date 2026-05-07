@@ -86,6 +86,7 @@ class LorebookRepo {
         activationScope: r.activationScope,
         activationTargetId: r.activationTargetId,
         entries: _parseEntries(r.entriesJson),
+        settings: _parseSettings(r.settingsJson),
         updatedAt: r.updatedAt,
       );
 
@@ -96,6 +97,7 @@ class LorebookRepo {
         activationScope: Value(m.activationScope),
         activationTargetId: Value(m.activationTargetId),
         entriesJson: Value(jsonEncode(m.entries.map((e) => e.toJson()).toList())),
+        settingsJson: Value(m.settings != null ? jsonEncode(m.settings!.toJson()) : ''),
         updatedAt: Value(m.updatedAt),
       );
 
@@ -105,6 +107,15 @@ class LorebookRepo {
       return list.map((e) => LorebookEntry.fromJson(e as Map<String, dynamic>)).toList();
     } catch (_) {
       return [];
+    }
+  }
+
+  LorebookSettings? _parseSettings(String json) {
+    if (json.isEmpty) return null;
+    try {
+      return LorebookSettings.fromJson(jsonDecode(json) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
     }
   }
 }

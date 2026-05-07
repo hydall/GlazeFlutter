@@ -80,6 +80,11 @@ CoverageResult computeLorebookCoverage({
   final candidates = <String, _Candidate>{};
 
   for (final lb in activeLorebooks) {
+    final lbSettings = lb.settings;
+    final lbScanDepth = lbSettings?.scanDepth ?? globalSettings.scanDepth;
+    final lbCaseSensitive = lbSettings?.caseSensitive ?? globalSettings.caseSensitive;
+    final lbMatchWholeWords = lbSettings?.matchWholeWords;
+
     for (final entry in lb.entries) {
       final isVectorOnly = entry.vectorSearch && !entry.useKeywordSearch;
       if (!entry.enabled || isVectorOnly) continue;
@@ -94,6 +99,14 @@ CoverageResult computeLorebookCoverage({
         }
       }
 
+      final effectiveCaseSensitive = entry.caseSensitive ?? lbCaseSensitive;
+      final effectiveWholeWords = _resolveWholeWords(
+        entry.matchWholeWords,
+        lbMatchWholeWords != null ? (lbMatchWholeWords == 'true') : globalSettings.matchWholeWords,
+        globalSettings.keySearchMode,
+      );
+      final effectiveScanDepth = entry.scanDepth ?? lbScanDepth;
+
       candidates[entry.id] = _Candidate(
         entry: entry,
         lorebookName: lb.name,
@@ -102,26 +115,30 @@ CoverageResult computeLorebookCoverage({
         matchedKeys: [],
         matchedSecondaryKeys: [],
         matchMessageIndex: entry.constant ? null : null,
+        caseSensitive: effectiveCaseSensitive,
+        wholeWords: effectiveWholeWords,
+        scanDepth: effectiveScanDepth,
       );
     }
   }
 
-  final caseSensitive = globalSettings.caseSensitive;
-  final wholeWords = _resolveWholeWords(null, globalSettings.matchWholeWords, globalSettings.keySearchMode);
-  final scanDepth = globalSettings.scanDepth;
-
   final nonHidden = history.where((m) => !m.isHidden).toList();
-  final scanMessages = nonHidden.length > scanDepth
-      ? nonHidden.sublist(nonHidden.length - scanDepth)
-      : nonHidden;
-
-  final scanText = caseSensitive
-      ? '$textToScan\n${scanMessages.map((m) => m.content).join('\n')}'
-      : '${textToScan.toLowerCase()}\n${scanMessages.map((m) => m.content).join('\n').toLowerCase()}';
 
   for (final c in candidates.values) {
     final entry = c.entry;
     if (entry.constant) continue;
+
+    final caseSensitive = c.caseSensitive;
+    final wholeWords = c.wholeWords;
+    final scanDepth = c.scanDepth;
+
+    final scanMessages = nonHidden.length > scanDepth
+        ? nonHidden.sublist(nonHidden.length - scanDepth)
+        : nonHidden;
+
+    final scanText = caseSensitive
+        ? '$textToScan\n${scanMessages.map((m) => m.content).join('\n')}'
+        : '${textToScan.toLowerCase()}\n${scanMessages.map((m) => m.content).join('\n').toLowerCase()}';
 
     final matchedPrimary = <String>[];
     for (final key in entry.keys) {
@@ -314,6 +331,9 @@ class _Candidate {
   List<String> matchedSecondaryKeys;
   int? matchMessageIndex;
   bool cutOffByBudget = false;
+  final bool caseSensitive;
+  final _WholeWordMode wholeWords;
+  final int scanDepth;
 
   _Candidate({
     required this.entry,
@@ -323,5 +343,8 @@ class _Candidate {
     required this.matchedKeys,
     required this.matchedSecondaryKeys,
     required this.matchMessageIndex,
+    required this.caseSensitive,
+    required this.wholeWords,
+    required this.scanDepth,
   });
 }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/widgets/glaze_toast.dart';
 import '../sync_provider.dart';
 import '../sync_models.dart';
 import '../services/sync_conflict.dart';
@@ -93,9 +94,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       ref.read(syncConnectedProvider.notifier).state = true;
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Connection failed: $e')),
-        );
+        GlazeToast.error(context, 'Connection failed: ', e);
       }
     }
   }

@@ -30,7 +30,6 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
   Future<void> save(ImageGenSettings settings) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(_toJson(settings)));
-    state = AsyncData(settings);
   }
 
   Future<void> updateEnabled(bool enabled) async {
@@ -83,6 +82,13 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
     'routmyAdditionalRefs': s.routmyAdditionalRefs.map((r) => {
       'name': r.name, 'imageData': r.imageData, 'matchMode': r.matchMode,
     }).toList(),
+    'ruRoutmyApiKey': s.ruRoutmyApiKey,
+    'ruRoutmyModel': s.ruRoutmyModel,
+    'ruRoutmyAspectRatio': s.ruRoutmyAspectRatio,
+    'ruRoutmyImageSize': s.ruRoutmyImageSize,
+    'ruRoutmyQuality': s.ruRoutmyQuality,
+    'ruRoutmySendCharAvatar': s.ruRoutmySendCharAvatar,
+    'ruRoutmySendUserAvatar': s.ruRoutmySendUserAvatar,
   };
 
   ImageGenSettings _fromJson(Map<String, dynamic> m) => ImageGenSettings(
@@ -102,7 +108,7 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
     naisteraSendCharAvatar: m['naisteraSendCharAvatar'] as bool? ?? false,
     naisteraSendUserAvatar: m['naisteraSendUserAvatar'] as bool? ?? false,
     routmyApiKey: m['routmyApiKey'] as String? ?? '',
-    routmyModel: m['routmyModel'] as String? ?? 'flux-1.1-pro',
+    routmyModel: m['routmyModel'] as String? ?? 'google/gemini-3.1-flash-image-preview',
     routmyAspectRatio: m['routmyAspectRatio'] as String? ?? '1:1',
     routmyImageSize: m['routmyImageSize'] as String? ?? '1K',
     routmyQuality: m['routmyQuality'] as String? ?? 'standard',
@@ -112,6 +118,13 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
     imageContextCount: m['imageContextCount'] as int? ?? 1,
     additionalReferences: _parseRefs(m['additionalReferences']),
     routmyAdditionalRefs: _parseRefs(m['routmyAdditionalRefs']),
+    ruRoutmyApiKey: m['ruRoutmyApiKey'] as String? ?? '',
+    ruRoutmyModel: m['ruRoutmyModel'] as String? ?? 'google/gemini-3.1-flash-image-preview',
+    ruRoutmyAspectRatio: m['ruRoutmyAspectRatio'] as String? ?? '1:1',
+    ruRoutmyImageSize: m['ruRoutmyImageSize'] as String? ?? '1K',
+    ruRoutmyQuality: m['ruRoutmyQuality'] as String? ?? 'standard',
+    ruRoutmySendCharAvatar: m['ruRoutmySendCharAvatar'] as bool? ?? false,
+    ruRoutmySendUserAvatar: m['ruRoutmySendUserAvatar'] as bool? ?? false,
   );
 
   static ImageGenApiType _parseApiType(String? v) {
@@ -119,6 +132,7 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
       case 'gemini': return ImageGenApiType.gemini;
       case 'naistera': return ImageGenApiType.naistera;
       case 'routmy': return ImageGenApiType.routmy;
+      case 'ruRoutmy': return ImageGenApiType.ruRoutmy;
       default: return ImageGenApiType.openai;
     }
   }

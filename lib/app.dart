@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'core/services/generation_notification_service.dart';
 import 'core/state/active_selection_provider.dart';
+import 'core/state/lorebook_provider.dart';
 import 'core/services/preset_seeder.dart';
 import 'core/services/crash_recovery_service.dart';
 import 'core/services/onboarding_service.dart';
@@ -97,8 +98,17 @@ final routerProvider = Provider<GoRouter>(
       ),
       GoRoute(
         path: '/chat/:charId',
-        builder: (_, state) =>
-            ChatScreen(charId: state.pathParameters['charId']!),
+        builder: (_, state) {
+          final charId = state.pathParameters['charId']!;
+          final sessionIdx = int.tryParse(
+              state.uri.queryParameters['session'] ?? '');
+          final isNew = state.uri.queryParameters['new'] == '1';
+          return ChatScreen(
+            charId: charId,
+            initialSessionIndex: sessionIdx,
+            forceNewSession: isNew,
+          );
+        },
       ),
       GoRoute(
         path: '/character/:charId',
@@ -140,6 +150,8 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     loadActiveSelections(ref);
+    loadLorebookActivations(ref);
+    loadLorebookSettings(ref);
     seedDefaultPresets(ref);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAndOfferCrashRecovery(context, ref);

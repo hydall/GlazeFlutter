@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -6,11 +7,6 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../shell/nav_height_provider.dart';
 import '../theme/app_colors.dart';
-
-const _noiseSvg =
-    '<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">'
-    '<filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/></filter>'
-    '<rect width="100%" height="100%" filter="url(#n)"/></svg>';
 
 String _iconSvg(String path) =>
     '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="$path"/></svg>';
@@ -89,7 +85,7 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
                 Positioned.fill(
                   child: Opacity(
                     opacity: 0.03,
-                    child: SvgPicture.string(_noiseSvg, fit: BoxFit.fill),
+                    child: CustomPaint(painter: _NoisePainter()),
                   ),
                 ),
                 Padding(
@@ -113,6 +109,22 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
       ),
     );
   }
+}
+
+class _NoisePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final random = Random(42);
+    final paint = Paint()..color = Colors.white;
+    for (int i = 0; i < 800; i++) {
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height;
+      canvas.drawRect(Rect.fromLTWH(x, y, 1, 1), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _NavItem {

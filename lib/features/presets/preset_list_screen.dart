@@ -236,7 +236,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
         );
       }
     } catch (e) {
-      if (context.mounted) GlazeToast.show(context, 'Import failed: $e');
+      if (context.mounted) GlazeToast.error(context, 'Import failed: ', e);
     }
   }
 }

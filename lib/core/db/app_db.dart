@@ -26,7 +26,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -54,6 +54,26 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 8) {
             await m.addColumn(characters, characters.galleryJson);
+          }
+          if (from < 9) {
+            await m.addColumn(personas, personas.createdAt);
+          }
+          if (from < 10) {
+            await m.addColumn(apiConfigs, apiConfigs.omitTemperature);
+            await m.addColumn(apiConfigs, apiConfigs.omitTopP);
+            await m.addColumn(apiConfigs, apiConfigs.omitReasoning);
+            await m.addColumn(apiConfigs, apiConfigs.omitReasoningEffort);
+          }
+          if (from < 11) {
+            await m.addColumn(apiConfigs, apiConfigs.embeddingUseSame);
+            await m.addColumn(apiConfigs, apiConfigs.embeddingEndpoint);
+            await m.addColumn(apiConfigs, apiConfigs.embeddingApiKey);
+            await m.addColumn(apiConfigs, apiConfigs.embeddingModel);
+            await m.addColumn(apiConfigs, apiConfigs.embeddingEnabled);
+            await m.addColumn(apiConfigs, apiConfigs.embeddingMaxChunkTokens);
+          }
+          if (from < 12) {
+            await m.addColumn(lorebooks, lorebooks.settingsJson);
           }
         },
       );

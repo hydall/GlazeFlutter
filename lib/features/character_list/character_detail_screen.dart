@@ -108,7 +108,7 @@ class _CharacterDetailScreenState
 
 // ─── Body ──────────────────────────────────────────────────────────────────
 
-class _CharacterDetailBody extends StatelessWidget {
+class _CharacterDetailBody extends ConsumerWidget {
   final Character character;
   final String charId;
   final int activeTab;
@@ -127,8 +127,37 @@ class _CharacterDetailBody extends StatelessWidget {
     Icons.description_outlined,
   ];
 
+  Future<void> _openChat(BuildContext context, WidgetRef ref, String cId) async {
+    final sessions = await ref.read(chatRepoProvider).getByCharacterId(cId);
+    if (!context.mounted) return;
+
+    GlazeBottomSheet.show(
+      context,
+      title: 'Open Chat',
+      items: [
+        BottomSheetItem(
+          icon: Icons.add,
+          label: 'New Chat',
+          onTap: () {
+            Navigator.pop(context);
+            context.go('/chat/$cId?new=1');
+          },
+        ),
+        ...sessions.map((s) => BottomSheetItem(
+          icon: Icons.chat_bubble_outline,
+          label: 'Session ${s.sessionIndex + 1}',
+          hint: '${s.messages.length} messages',
+          onTap: () {
+            Navigator.pop(context);
+            context.go('/chat/$cId?session=${s.sessionIndex}');
+          },
+        )),
+      ],
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final sab = MediaQuery.of(context).padding.bottom;
     return Stack(
       children: [
@@ -160,7 +189,7 @@ class _CharacterDetailBody extends StatelessWidget {
         Positioned(
           right: 16,
           bottom: 16 + sab,
-          child: _ChatFab(onTap: () => context.go('/chat/$charId')),
+          child: _ChatFab(onTap: () => _openChat(context, ref, charId)),
         ),
       ],
     );

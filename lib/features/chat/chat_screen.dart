@@ -28,12 +28,48 @@ import 'widgets/prompt_preview_screen.dart';
 import 'widgets/session_lifecycle_tracker.dart';
 import 'widgets/tokenizer_sheet.dart';
 
-class ChatScreen extends ConsumerWidget {
+class ChatScreen extends ConsumerStatefulWidget {
   final String charId;
-  const ChatScreen({super.key, required this.charId});
+  final int? initialSessionIndex;
+  final bool forceNewSession;
+  const ChatScreen({
+    super.key,
+    required this.charId,
+    this.initialSessionIndex,
+    this.forceNewSession = false,
+  });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends ConsumerState<ChatScreen> {
+  bool _sessionApplied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.forceNewSession || widget.initialSessionIndex != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _applySessionPreference();
+      });
+    }
+  }
+
+  Future<void> _applySessionPreference() async {
+    if (_sessionApplied) return;
+    _sessionApplied = true;
+    final notifier = ref.read(chatProvider(widget.charId).notifier);
+    if (widget.forceNewSession) {
+      await notifier.createNewSession();
+    } else if (widget.initialSessionIndex != null) {
+      await notifier.switchSession(widget.initialSessionIndex!);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final charId = widget.charId;
     final chatStateAsync = ref.watch(chatProvider(charId));
     final chatState = chatStateAsync.value;
 
@@ -337,7 +373,7 @@ Future<void> _generateSummary(
     }
   } catch (e) {
     if (context.mounted) {
-      GlazeToast.show(context, 'Summary failed: $e');
+      GlazeToast.error(context, 'Summary failed: ', e);
     }
   }
 }
@@ -381,7 +417,7 @@ Future<void> _exportChat(
     }
   } catch (e) {
     if (context.mounted) {
-      GlazeToast.show(context, 'Export failed: $e');
+      GlazeToast.error(context, 'Export failed: ', e);
     }
   }
 }
@@ -438,7 +474,7 @@ Future<void> _importChat(
     }
   } catch (e) {
     if (context.mounted) {
-      GlazeToast.show(context, 'Import failed: $e');
+        GlazeToast.error(context, 'Import failed: ', e);
     }
   }
 }

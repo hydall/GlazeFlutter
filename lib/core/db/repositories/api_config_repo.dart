@@ -49,6 +49,12 @@ class ApiConfigRepo {
         requestReasoning: c.requestReasoning,
         reasoningTagStart: c.reasoningTagStart,
         reasoningTagEnd: c.reasoningTagEnd,
+        embeddingUseSame: c.embeddingUseSame,
+        embeddingEnabled: c.embeddingEnabled,
+        embeddingEndpoint: c.embeddingEndpoint ?? '',
+        embeddingApiKey: c.embeddingApiKey ?? '',
+        embeddingModel: c.embeddingModel ?? '',
+        embeddingMaxChunkTokens: c.embeddingMaxChunkTokens,
       );
 
   ApiConfigsCompanion _toCompanion(ApiConfig m) => ApiConfigsCompanion(
@@ -68,5 +74,11 @@ class ApiConfigRepo {
         requestReasoning: Value(m.requestReasoning),
         reasoningTagStart: Value(m.reasoningTagStart),
         reasoningTagEnd: Value(m.reasoningTagEnd),
+        embeddingUseSame: Value(m.embeddingUseSame),
+        embeddingEnabled: Value(m.embeddingEnabled),
+        embeddingEndpoint: Value(m.embeddingEndpoint),
+        embeddingApiKey: Value(m.embeddingApiKey),
+        embeddingModel: Value(m.embeddingModel),
+        embeddingMaxChunkTokens: Value(m.embeddingMaxChunkTokens),
       );
 }

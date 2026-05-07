@@ -143,8 +143,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     _CircleBtn(icon: Icons.auto_awesome, onTap: widget.onMagicDrawer),
                     const SizedBox(width: 8),
                     _CircleBtn(icon: Icons.image_outlined, onTap: widget.onImageGen),
-                    const SizedBox(width: 8),
-                    _CircleBtn(icon: Icons.fullscreen_rounded),
                   ],
                 ),
                 GestureDetector(

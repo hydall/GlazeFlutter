@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/lorebook.dart';
 import '../state/db_provider.dart';
@@ -35,7 +36,26 @@ class LorebookVectorSearch {
   ) async {
     if (settings.searchType == 'keys') return [];
 
-    final activeLorebooks = lorebooks.where((lb) => lb.enabled).toList();
+    final activeLorebooks = lorebooks.where((lb) {
+      if (!lb.enabled) return false;
+      final lbSettings = lb.settings;
+      if (lbSettings != null && !lbSettings.vectorSearchEnabled) return false;
+      return true;
+    }).toList();
+
+    var effectiveThreshold = settings.vectorThreshold;
+    var effectiveTopK = settings.vectorTopK;
+    for (final lb in activeLorebooks) {
+      final lbSettings = lb.settings;
+      if (lbSettings != null) {
+        if (lbSettings.vectorThreshold < effectiveThreshold) {
+          effectiveThreshold = lbSettings.vectorThreshold;
+        }
+        if (lbSettings.vectorTopK > effectiveTopK) {
+          effectiveTopK = lbSettings.vectorTopK;
+        }
+      }
+    }
 
     final vectorEntries = <(LorebookEntry, String)>[];
     for (final lb in activeLorebooks) {
@@ -111,8 +131,8 @@ class LorebookVectorSearch {
       }
     }
 
-    final threshold = settings.vectorThreshold;
-    final topK = settings.vectorTopK;
+    final threshold = effectiveThreshold;
+    final topK = effectiveTopK;
 
     final sorted = allResults.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
@@ -214,6 +234,30 @@ class ChatMessageForSearch {
 final embeddingConfigProvider = StateProvider<EmbeddingConfig>((ref) {
   return const EmbeddingConfig(endpoint: '', model: '');
 });
+
+Future<void> initEmbeddingConfigFromDb(WidgetRef ref) async {
+  final apiConfigs = await ref.read(apiConfigRepoProvider).getAll();
+  final chatConfig = apiConfigs.where((c) => c.mode != 'embedding').firstOrNull;
+  if (chatConfig != null) {
+    if (chatConfig.embeddingUseSame || chatConfig.embeddingEndpoint.isEmpty) {
+      ref.read(embeddingConfigProvider.notifier).state = EmbeddingConfig(
+        endpoint: chatConfig.endpoint,
+        apiKey: chatConfig.apiKey,
+        model: chatConfig.embeddingModel.isNotEmpty
+            ? chatConfig.embeddingModel
+            : chatConfig.model,
+        maxChunkTokens: chatConfig.embeddingMaxChunkTokens,
+      );
+    } else {
+      ref.read(embeddingConfigProvider.notifier).state = EmbeddingConfig(
+        endpoint: chatConfig.embeddingEndpoint,
+        apiKey: chatConfig.embeddingApiKey,
+        model: chatConfig.embeddingModel,
+        maxChunkTokens: chatConfig.embeddingMaxChunkTokens,
+      );
+    }
+  }
+}
 
 final lorebookVectorSearchProvider = Provider<LorebookVectorSearch>((ref) {
   return LorebookVectorSearch(

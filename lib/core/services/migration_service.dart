@@ -134,6 +134,8 @@ class MigrationService {
           name: (json['name'] as String?) ?? 'User',
           prompt: json['prompt'] as String?,
           avatarPath: avatarPath,
+          createdAt: _toInt(json['createdAt'] ?? json['created_at']) ??
+              DateTime.now().millisecondsSinceEpoch ~/ 1000,
         );
         await _personaRepo.put(persona);
         result.personas++;

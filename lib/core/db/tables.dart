@@ -91,6 +91,16 @@ class ApiConfigs extends Table {
   BoolColumn get requestReasoning => boolean().withDefault(const Constant(false))();
   TextColumn get reasoningTagStart => text().nullable()();
   TextColumn get reasoningTagEnd => text().nullable()();
+  BoolColumn get omitTemperature => boolean().withDefault(const Constant(false))();
+  BoolColumn get omitTopP => boolean().withDefault(const Constant(false))();
+  BoolColumn get omitReasoning => boolean().withDefault(const Constant(false))();
+  BoolColumn get omitReasoningEffort => boolean().withDefault(const Constant(false))();
+  BoolColumn get embeddingUseSame => boolean().withDefault(const Constant(true))();
+  BoolColumn get embeddingEnabled => boolean().withDefault(const Constant(false))();
+  TextColumn get embeddingEndpoint => text().nullable()();
+  TextColumn get embeddingApiKey => text().nullable()();
+  TextColumn get embeddingModel => text().nullable()();
+  IntColumn get embeddingMaxChunkTokens => integer().withDefault(const Constant(512))();
 
   @override
   Set<Column> get primaryKey => {configId};
@@ -105,6 +115,7 @@ class Personas extends Table {
   TextColumn get name => text()();
   TextColumn get prompt => text().nullable()();
   TextColumn get avatarPath => text().nullable()();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {personaId};
@@ -121,6 +132,7 @@ class Lorebooks extends Table {
   TextColumn get activationScope => text().withDefault(const Constant('global'))();
   TextColumn get activationTargetId => text().nullable()();
   TextColumn get entriesJson => text()();
+  TextColumn get settingsJson => text().withDefault(const Constant(''))();
   IntColumn get updatedAt => integer().withDefault(const Constant(0))();
 
   @override

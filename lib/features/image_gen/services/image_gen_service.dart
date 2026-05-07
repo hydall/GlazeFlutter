@@ -134,7 +134,9 @@ class ImageGenService {
       case ImageGenApiType.naistera:
         return _generateNaistera(settings, prompt, refs);
       case ImageGenApiType.routmy:
-        return _generateRoutmy(settings, prompt, llmEndpoint, llmApiKey, llmModel, refs);
+        return _generateRoutmy(settings, prompt, refs);
+      case ImageGenApiType.ruRoutmy:
+        return _generateRuRoutmy(settings, prompt, refs);
     }
   }
 
@@ -186,31 +188,31 @@ class ImageGenService {
 
   Future<Uint8List> _generateRoutmy(
     ImageGenSettings settings, String prompt,
-    String llmEndpoint, String llmApiKey, String llmModel,
     List<Map<String, String>> refs,
   ) async {
-    String finalPrompt = prompt;
-
-    try {
-      final bridgeDesc = await RoutmyImageProvider().runRuBridge(
-        llmEndpoint: llmEndpoint,
-        llmApiKey: llmApiKey,
-        llmModel: llmModel,
-        conversationContext: prompt,
-      );
-      if (bridgeDesc.isNotEmpty) finalPrompt = bridgeDesc;
-    } catch (e) {
-      debugPrint('IMAGE GEN: RU Bridge failed, using raw prompt: $e');
-    }
-
-    return RoutmyImageProvider().generate(
+    return RoutmyImageProvider(baseUrl: RoutMyConstants.baseUrl).generate(
       apiKey: settings.routmyApiKey,
       model: settings.routmyModel,
-      prompt: finalPrompt,
+      prompt: prompt,
       aspectRatio: settings.routmyAspectRatio,
       imageSize: settings.routmyImageSize,
       quality: settings.routmyQuality,
-      references: refs.isNotEmpty ? refs : null,
+      referenceImages: refs.isNotEmpty ? refs.map((r) => r['image']!).where((s) => s.isNotEmpty).toList() : null,
+    );
+  }
+
+  Future<Uint8List> _generateRuRoutmy(
+    ImageGenSettings settings, String prompt,
+    List<Map<String, String>> refs,
+  ) async {
+    return RoutmyImageProvider(baseUrl: RuRoutMyConstants.baseUrl).generate(
+      apiKey: settings.ruRoutmyApiKey,
+      model: settings.ruRoutmyModel,
+      prompt: prompt,
+      aspectRatio: settings.ruRoutmyAspectRatio,
+      imageSize: settings.ruRoutmyImageSize,
+      quality: settings.ruRoutmyQuality,
+      referenceImages: refs.isNotEmpty ? refs.map((r) => r['image']!).where((s) => s.isNotEmpty).toList() : null,
     );
   }
 
@@ -249,6 +251,15 @@ class ImageGenService {
         if (ref.matchMode == 'always' || promptLower.contains(ref.name.toLowerCase())) {
           refs.add({'name': ref.name, 'image': _extractBase64FromDataUrl(ref.imageData)});
         }
+      }
+    }
+
+    if (settings.apiType == ImageGenApiType.ruRoutmy) {
+      if (settings.ruRoutmySendCharAvatar && character?.avatarPath != null) {
+        refs.add({'name': character!.name, 'image': _fileToBase64(character.avatarPath!)});
+      }
+      if (settings.ruRoutmySendUserAvatar && persona?.avatarPath != null) {
+        refs.add({'name': persona!.name, 'image': _fileToBase64(persona.avatarPath!)});
       }
     }
 

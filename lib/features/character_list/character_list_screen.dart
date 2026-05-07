@@ -220,7 +220,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
       }
     } catch (e) {
       if (!context.mounted) return;
-      GlazeToast.show(context, 'Import failed: $e');
+      GlazeToast.error(context, 'Import failed: ', e);
     }
   }
 }

@@ -280,28 +280,33 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
                   padding: EdgeInsets.only(
                     bottom: bottomInset + bottomPadding + 10,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const SizedBox(height: 4),
-                      if (widget.child != null) widget.child!,
-                      if (widget.bigInfo != null)
-                        _BigInfo(info: widget.bigInfo!),
-                      if (widget.items != null && widget.items!.isNotEmpty)
-                        _ItemsList(items: widget.items!),
-                      if (widget.sessionItems != null &&
-                          widget.sessionItems!.isNotEmpty)
-                        _SessionList(items: widget.sessionItems!),
-                      if (widget.cardItems != null &&
-                          widget.cardItems!.isNotEmpty)
-                        _CardList(items: widget.cardItems!),
-                      if (widget.input != null)
-                        _InputSection(
-                          input: widget.input!,
-                          controller: _inputController,
-                          focusNode: _inputFocus,
-                        ),
-                    ],
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: MediaQuery.of(context).size.height * 0.3,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const SizedBox(height: 4),
+                        if (widget.child != null) widget.child!,
+                        if (widget.bigInfo != null)
+                          _BigInfo(info: widget.bigInfo!),
+                        if (widget.items != null && widget.items!.isNotEmpty)
+                          _ItemsList(items: widget.items!),
+                        if (widget.sessionItems != null &&
+                            widget.sessionItems!.isNotEmpty)
+                          _SessionList(items: widget.sessionItems!),
+                        if (widget.cardItems != null &&
+                            widget.cardItems!.isNotEmpty)
+                          _CardList(items: widget.cardItems!),
+                        if (widget.input != null)
+                          _InputSection(
+                            input: widget.input!,
+                            controller: _inputController,
+                            focusNode: _inputFocus,
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),

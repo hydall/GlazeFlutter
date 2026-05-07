@@ -306,6 +306,30 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     }
   }
 
+  Future<void> createNewSession() async {
+    final repo = ref.read(chatRepoProvider);
+    final sessions = await repo.getByCharacterId(arg);
+    final nextIndex = sessions.isEmpty ? 0 : (sessions.map((s) => s.sessionIndex).reduce((a, b) => a > b ? a : b) + 1);
+    final charRepo = ref.read(characterRepoProvider);
+    final character = await charRepo.getById(arg);
+    final persona = await _resolvePersona();
+    final sessionId = '${arg}_$nextIndex';
+    final initialMessages = InitialMessageBuilder.build(
+      character: character,
+      persona: persona,
+      sessionId: sessionId,
+    );
+    final newSession = ChatSession(
+      id: sessionId,
+      characterId: arg,
+      sessionIndex: nextIndex,
+      messages: initialMessages,
+    );
+    await repo.put(newSession);
+    _invalidateHistory();
+    state = AsyncData(ChatState(session: newSession));
+  }
+
   Future<List<ChatSession>> getSessions() async {
     final repo = ref.read(chatRepoProvider);
     return repo.getByCharacterId(arg);
@@ -330,6 +354,40 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       sessionIndex: maxIdx + 1,
       messages: current.messages.sublist(0, index + 1),
       sessionVars: current.session!.sessionVars,
+      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    );
+
+    await repo.put(newSession);
+    _invalidateHistory();
+    state = AsyncData(ChatState(session: newSession));
+  }
+
+  Future<void> newSession() async {
+    final repo = ref.read(chatRepoProvider);
+    final sessions = await repo.getByCharacterId(arg);
+
+    int maxIdx = 0;
+    for (final s in sessions) {
+      if (s.sessionIndex > maxIdx) maxIdx = s.sessionIndex;
+    }
+
+    final charRepo = ref.read(characterRepoProvider);
+    final character = await charRepo.getById(arg);
+    final persona = await _resolvePersona();
+
+    final newIdx = maxIdx + 1;
+    final sessionId = '${arg}_$newIdx';
+    final initialMessages = InitialMessageBuilder.build(
+      character: character,
+      persona: persona,
+      sessionId: sessionId,
+    );
+
+    final newSession = ChatSession(
+      id: sessionId,
+      characterId: arg,
+      sessionIndex: newIdx,
+      messages: initialMessages,
       updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
 
