@@ -105,6 +105,43 @@ Features present in Glaze JS backups but not yet implemented in Flutter.
 - [x] **Skip gz_chat_undefined** — invalid charId
   - Backup import skips chat data with charId "undefined" or empty
 
+## Still Missing (discovered from backup analysis)
+
+- [ ] **Character thumbnail / mini_thumbnail** — `characters[].thumbnail`
+  - Optimized thumbnails for character list
+  - Need: image storage, lazy generation
+
+- [ ] **Character extensions talkativeness** — `extensions.talkativeness`
+  - Random reply probability (0-1)
+  - Need: provider read from extensions, random skip logic in generation
+
+- [ ] **Depth prompt injection** — `extensions.depth_prompt`
+  - Model fields exist but prompt builder doesn't inject it yet
+  - Need: PromptPayloadBuilder reads depthPrompt/depth/role from character, injects at depth
+
+- [ ] **World lorebook linking** — `extensions.world`
+  - Model field exists but no UI/logic to link character to lorebook by name
+  - Need: auto-activate lorebook where name matches character.world
+
+- [ ] **Message memoryCoverage persistence** — `msg.memoryCoverage`
+  - Model field exists but no engine writes it yet
+  - Need: memory engine updates coverage after each generation
+
+- [ ] **Message swipesMeta persistence** — `msg.swipesMeta`
+  - Model field exists but generation service doesn't populate it yet
+  - Need: each swipe stores genTime/reasoning/tokens/guidanceText/guidanceType
+
+- [ ] **Backup import: deleted entries** — `gz_deleted_*`
+  - Currently ignored; needed for sync conflict resolution
+  - Need: deleted entries tracking table
+
+- [ ] **Backup import: preset order** — `gz_preset_order`
+  - Custom preset ordering not imported
+
+- [ ] **Backup import: embedding settings** — `gz_embedding_*`
+  - Embedding settings in localStorage (endpoint, key, model, threshold, top_k, scan_depth, enabled, use_same)
+  - Need: import to ApiConfig embedding fields
+
 ## Low Priority (nice to have)
 
 - [ ] **Chat stats** — `gz_stat_*`
