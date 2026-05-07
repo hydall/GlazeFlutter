@@ -1,13 +1,24 @@
 # JS Backup Import — Missing Features
 
 Features present in Glaze JS backups but not yet implemented in Flutter.
-Data from these fields is lost on import.
 
-## High Priority (core functionality)
+## Completed
 
 - [x] **Lorebook per-book settings** — `gz_lorebooks[].settings`
-  - 25+ fields: scanDepth, maxInjectedEntries, contextPercent, budgetCap, reserveMode, reserveValue, insertionStrategy, injectionPosition, vectorSearchEnabled, vectorThreshold, vectorTopK, keywordVectorSplit, vectorScanDepth, keySearchEnabled, etc.
-  - Done: `settingsJson` column in `lorebooks` table, `LorebookSettings` model, per-book settings UI, scanner/vector/coverage engine support
+  - `settingsJson` column in `lorebooks` table (migration v12), `LorebookSettings` model, per-book settings UI, scanner/vector/coverage engine support
+
+- [x] **Backup import audit fixes** (earlier commit)
+  - gz_lorebooks handles both array and Map formats
+  - genTime uses ?.toString() instead of as String?
+  - Message text checks 'text' before 'content'
+  - Chat sessions import updatedAt
+  - Lorebook entries include delayUntilRecursion, useGroupScoring
+  - Lorebook probability uses double
+  - Standalone embedding/memory/imggen/connections keys imported
+  - Fallback API config includes temp/topp/stream/reasoning
+  - loadLorebookSettings() fixed (was broken)
+
+## High Priority (core functionality)
 
 - [ ] **Authors Notes** — `gz_chat_{id}.authorsNotes`
   - Per-chat author notes injected into prompt

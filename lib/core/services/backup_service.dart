@@ -381,7 +381,19 @@ class BackupService {
 
 
       final lbSettingsRaw = lbJson['settings'] as Map<String, dynamic>? ?? globalSettings;
-      final settingsJsonStr = lbSettingsRaw != null ? jsonEncode(lbSettingsRaw) : '';
+      final String settingsJsonStr;
+      if (lbSettingsRaw != null) {
+        final normalized = Map<String, dynamic>.from(lbSettingsRaw);
+        final mww = normalized['matchWholeWords'];
+        if (mww is bool) {
+          normalized['matchWholeWords'] = mww ? 'true' : 'false';
+        } else if (mww == null) {
+          normalized.remove('matchWholeWords');
+        }
+        settingsJsonStr = jsonEncode(normalized);
+      } else {
+        settingsJsonStr = '';
+      }
 
       await _db.into(_db.lorebooks).insertOnConflictUpdate(
             LorebooksCompanion.insert(
