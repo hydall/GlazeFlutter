@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -16,6 +18,44 @@ final lorebookSettingsProvider = StateProvider<LorebookGlobalSettings>((ref) {
 final lorebookActivationsProvider = StateProvider<LorebookActivations>((ref) {
   return const LorebookActivations();
 });
+
+Future<void> loadLorebookActivations(WidgetRef ref) async {
+  final prefs = await SharedPreferences.getInstance();
+  final raw = prefs.getString('lorebookActivations');
+  if (raw != null) {
+    try {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      final charMap = <String, List<String>>{};
+      final chatMap = <String, List<String>>{};
+
+      final char = decoded['character'] as Map<String, dynamic>?;
+      if (char != null) {
+        for (final e in char.entries) {
+          if (e.value is List) {
+            charMap[e.key] = (e.value as List).map((v) => v.toString()).toList();
+          }
+        }
+      }
+
+      final chat = decoded['chat'] as Map<String, dynamic>?;
+      if (chat != null) {
+        for (final e in chat.entries) {
+          if (e.value is List) {
+            chatMap[e.key] = (e.value as List).map((v) => v.toString()).toList();
+          }
+        }
+      }
+
+      ref.read(lorebookActivationsProvider.notifier).state =
+          LorebookActivations(character: charMap, chat: chatMap);
+    } catch (_) {}
+  }
+}
+
+Future<void> saveLorebookActivations(LorebookActivations activations) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('lorebookActivations', jsonEncode(activations.toJson()));
+}
 
 Future<void> loadLorebookSettings() async {
   final prefs = await SharedPreferences.getInstance();

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/llm/embedding_service.dart';
 import '../../../core/llm/lorebook_vector_search.dart';
@@ -81,14 +82,17 @@ class _EmbeddingSettingsScreenState
     super.dispose();
   }
 
-  void _save() {
+  void _save() async {
     final config = EmbeddingConfig(
       endpoint: _endpointCtrl.text.trim(),
       apiKey: _apiKeyCtrl.text.trim(),
       model: _modelCtrl.text.trim(),
-      maxChunkTokens: int.tryParse(_maxChunkTokensCtrl.text) ?? 512,
+      maxChunkTokens: int.tryParse(_maxChunkTokensCtrl.text) ?? 8192,
     );
     ref.read(embeddingConfigProvider.notifier).state = config;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('gz_embedding_max_chunk_tokens', config.maxChunkTokens);
 
     final current = ref.read(lorebookSettingsProvider);
     ref.read(lorebookSettingsProvider.notifier).state = current.copyWith(
@@ -196,7 +200,7 @@ class _EmbeddingSettingsScreenState
                 const SizedBox(height: 8),
                 _field('Model', _modelCtrl, hint: 'text-embedding-3-small'),
                 const SizedBox(height: 8),
-                _field('Max Chunk Tokens', _maxChunkTokensCtrl, hint: '512'),
+                _field('Max Chunk Tokens', _maxChunkTokensCtrl, hint: '8192'),
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,

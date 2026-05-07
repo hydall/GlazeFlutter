@@ -208,8 +208,9 @@ class BackupService {
     await _importJsCharacters(data['characters']);
     await _importJsPersonas(data['personas']);
     await _importJsLorebooks(kv);
+    await _importJsLorebookActivations(kv);
     await _importJsCharacterBooks(data['characters']);
-    await _importJsApiConfigs(kv, ls);
+    await _importJsApiConfigs(kv, ls, data);
     await _importJsLorebookSettings(kv, ls);
     await _importJsChats(kv);
     await _importJsPresets(kv, ls);
@@ -350,6 +351,16 @@ class BackupService {
     }
   }
 
+  Future<void> _importJsLorebookActivations(Map<String, dynamic> kv) async {
+    final lorebooksRaw = kv['gz_lorebooks'];
+    if (lorebooksRaw is! Map<String, dynamic>) return;
+    final activationsRaw = lorebooksRaw['activations'];
+    if (activationsRaw is! Map<String, dynamic>) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('lorebookActivations', jsonEncode(activationsRaw));
+  }
+
   Future<void> _importJsCharacterBooks(dynamic charData) async {
     if (charData is! List) return;
     for (final c in charData) {
@@ -472,32 +483,26 @@ class BackupService {
   }
 
   Future<void> _importJsApiConfigs(
-      Map<String, dynamic> kv, Map<String, dynamic> ls) async {
+      Map<String, dynamic> kv, Map<String, dynamic> ls,
+      [Map<String, dynamic>? topLevel]) async {
     final presets = <Map<String, dynamic>>[];
 
     for (final source in [kv, ls]) {
       for (final key in [
         'gz_api_connection_presets',
+        'sc_api_connection_presets',
         'silly_cradle_api_presets',
         'api_connection_presets',
       ]) {
         final raw = source[key];
         if (raw == null) continue;
-        if (raw is List) {
-          for (final p in raw) {
-            if (p is Map<String, dynamic>) presets.add(p);
-          }
-        } else if (raw is String) {
-          try {
-            final decoded = jsonDecode(raw);
-            if (decoded is List) {
-              for (final p in decoded) {
-                if (p is Map<String, dynamic>) presets.add(p);
-              }
-            }
-          } catch (_) {}
-        }
+        _extractPresetsFromRaw(raw, presets);
       }
+    }
+
+    if (topLevel != null) {
+      final raw = topLevel['apiPresets'];
+      if (raw != null) _extractPresetsFromRaw(raw, presets);
     }
 
     if (presets.isEmpty) return;
@@ -550,6 +555,27 @@ class BackupService {
     }
   }
 
+  void _extractPresetsFromRaw(dynamic raw, List<Map<String, dynamic>> presets) {
+    if (raw is List) {
+      for (final p in raw) {
+        if (p is Map<String, dynamic>) presets.add(p);
+      }
+    } else if (raw is Map<String, dynamic>) {
+      if (raw.containsKey('id') && raw.containsKey('endpoint')) {
+        presets.add(raw);
+      } else {
+        for (final p in raw.values) {
+          if (p is Map<String, dynamic>) presets.add(p);
+        }
+      }
+    } else if (raw is String) {
+      try {
+        final decoded = jsonDecode(raw);
+        _extractPresetsFromRaw(decoded, presets);
+      } catch (_) {}
+    }
+  }
+
   Future<void> _importJsLorebookSettings(
       Map<String, dynamic> kv, Map<String, dynamic> ls) async {
     final prefs = await SharedPreferences.getInstance();
@@ -570,20 +596,37 @@ class BackupService {
   }
 
   Future<void> _importJsChats(Map<String, dynamic> kv) async {
-    const chatPrefix = 'gz_chat_';
-    final chatKeys = kv.keys.where((k) => k.startsWith(chatPrefix));
+    await _importJsChatsFromMap(kv, 'gz_chat_');
+
+    final topLevelChats = kv['chats'];
+    if (topLevelChats is Map<String, dynamic>) {
+      for (final entry in topLevelChats.entries) {
+        final charId = entry.key;
+        final chatData = entry.value as Map<String, dynamic>?;
+        if (chatData == null) continue;
+        await _importJsChatData(charId, chatData);
+      }
+    }
+  }
+
+  Future<void> _importJsChatsFromMap(Map<String, dynamic> kv, String prefix) async {
+    final chatKeys = kv.keys.where((k) => k.startsWith(prefix));
 
     for (final key in chatKeys) {
-      final charId = key.substring(chatPrefix.length);
+      final charId = key.substring(prefix.length);
       final chatData = kv[key] as Map<String, dynamic>?;
       if (chatData == null) continue;
+      await _importJsChatData(charId, chatData);
+    }
+  }
 
-      final sessions = chatData['sessions'] as Map<String, dynamic>?;
-      if (sessions == null) continue;
+  Future<void> _importJsChatData(String charId, Map<String, dynamic> chatData) async {
+    final sessions = chatData['sessions'] as Map<String, dynamic>?;
+    if (sessions == null) return;
 
-      for (final sessionEntry in sessions.entries) {
-        final sessionIdx = int.tryParse(sessionEntry.key) ?? 0;
-        final rawMessages = sessionEntry.value as List<dynamic>;
+    for (final sessionEntry in sessions.entries) {
+      final sessionIdx = int.tryParse(sessionEntry.key) ?? 0;
+      final rawMessages = sessionEntry.value as List<dynamic>;
 
         final messages = rawMessages.map((m) {
           final msg = m as Map<String, dynamic>;
@@ -706,7 +749,6 @@ class BackupService {
               );
         }
       }
-    }
   }
 
   Future<void> _importJsPresets(

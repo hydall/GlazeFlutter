@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'core/services/generation_notification_service.dart';
 import 'core/state/active_selection_provider.dart';
+import 'core/state/lorebook_provider.dart';
 import 'core/services/preset_seeder.dart';
 import 'core/services/crash_recovery_service.dart';
 import 'core/services/onboarding_service.dart';
@@ -149,6 +150,7 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     loadActiveSelections(ref);
+    loadLorebookActivations(ref);
     seedDefaultPresets(ref);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAndOfferCrashRecovery(context, ref);

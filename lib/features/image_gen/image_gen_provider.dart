@@ -30,7 +30,9 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
   Future<void> save(ImageGenSettings settings) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(_toJson(settings)));
-    state = AsyncData(settings);
+    if (state.value != settings) {
+      state = AsyncData(settings);
+    }
   }
 
   Future<void> updateEnabled(bool enabled) async {

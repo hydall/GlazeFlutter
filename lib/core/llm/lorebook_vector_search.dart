@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/lorebook.dart';
 import '../state/db_provider.dart';
@@ -217,12 +218,16 @@ final embeddingConfigProvider = StateProvider<EmbeddingConfig>((ref) {
 
 Future<void> initEmbeddingConfigFromDb(WidgetRef ref) async {
   final apiConfigs = await ref.read(apiConfigRepoProvider).getAll();
+  final prefs = await SharedPreferences.getInstance();
+  final maxChunkTokens = prefs.getInt('gz_embedding_max_chunk_tokens') ?? 8192;
+
   final embConfig = apiConfigs.where((c) => c.mode == 'embedding').firstOrNull;
   if (embConfig != null) {
     ref.read(embeddingConfigProvider.notifier).state = EmbeddingConfig(
       endpoint: embConfig.endpoint,
       apiKey: embConfig.apiKey,
       model: embConfig.model,
+      maxChunkTokens: maxChunkTokens,
     );
   } else {
     final chatConfig = apiConfigs.where((c) => c.mode != 'embedding').firstOrNull;
@@ -231,6 +236,7 @@ Future<void> initEmbeddingConfigFromDb(WidgetRef ref) async {
         endpoint: chatConfig.endpoint,
         apiKey: chatConfig.apiKey,
         model: chatConfig.model,
+        maxChunkTokens: maxChunkTokens,
       );
     }
   }

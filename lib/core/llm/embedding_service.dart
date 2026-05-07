@@ -10,7 +10,7 @@ class EmbeddingConfig {
     required this.endpoint,
     this.apiKey = '',
     this.model = '',
-    this.maxChunkTokens = 512,
+    this.maxChunkTokens = 8192,
   });
 }
 

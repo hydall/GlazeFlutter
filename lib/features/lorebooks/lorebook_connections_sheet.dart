@@ -172,9 +172,11 @@ class _LorebookConnectionsSheetState
       map[targetId] = list;
     }
 
-    ref.read(lorebookActivationsProvider.notifier).state = scope == 'character'
+    final updated = scope == 'character'
         ? current.copyWith(character: map)
         : current.copyWith(chat: map);
+    ref.read(lorebookActivationsProvider.notifier).state = updated;
+    saveLorebookActivations(updated);
   }
 
   void _addCharacterConnection(Lorebook lb) async {

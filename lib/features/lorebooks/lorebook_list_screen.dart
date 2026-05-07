@@ -186,7 +186,7 @@ class LorebookListScreen extends ConsumerWidget {
   }
 }
 
-class _LorebookTile extends StatelessWidget {
+class _LorebookTile extends ConsumerWidget {
   final Lorebook lorebook;
   final VoidCallback onTap;
   final VoidCallback onDelete;
@@ -200,13 +200,26 @@ class _LorebookTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    final scopeColor = switch (lorebook.activationScope) {
-      'global' => Colors.green,
-      'character' => Colors.purple,
-      'chat' => Colors.orange,
-      _ => Colors.grey,
-    };
+  Widget build(BuildContext context, WidgetRef ref) {
+    final activations = ref.watch(lorebookActivationsProvider);
+    final hasCharBinding = activations.character.values.any((list) => list.contains(lorebook.id));
+    final hasChatBinding = activations.chat.values.any((list) => list.contains(lorebook.id));
+
+    final scopeColor = lorebook.enabled
+        ? Colors.green
+        : hasCharBinding
+            ? Colors.purple
+            : hasChatBinding
+                ? Colors.orange
+                : Colors.grey;
+
+    final scopeLabel = lorebook.enabled
+        ? 'global'
+        : hasCharBinding
+            ? 'character'
+            : hasChatBinding
+                ? 'chat'
+                : 'none';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -230,7 +243,7 @@ class _LorebookTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                lorebook.activationScope,
+                scopeLabel,
                 style: TextStyle(
                   fontSize: 10,
                   color: scopeColor,
