@@ -380,6 +380,9 @@ class BackupService {
       }
 
 
+      final lbSettingsRaw = lbJson['settings'] as Map<String, dynamic>? ?? globalSettings;
+      final settingsJsonStr = lbSettingsRaw != null ? jsonEncode(lbSettingsRaw) : '';
+
       await _db.into(_db.lorebooks).insertOnConflictUpdate(
             LorebooksCompanion.insert(
               lorebookId: lbJson['id'] as String? ?? '',
@@ -393,6 +396,7 @@ class BackupService {
                   lbJson['activationTargetId'] as String? ??
                       lbJson['targetId'] as String?),
               entriesJson: jsonEncode(mappedEntries),
+              settingsJson: Value(settingsJsonStr),
               updatedAt: Value(_toInt(lbJson['updatedAt']) ?? DateTime.now().millisecondsSinceEpoch ~/ 1000),
             ),
           );

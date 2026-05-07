@@ -10,6 +10,7 @@ import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import 'lorebook_connections_sheet.dart';
+import 'lorebook_per_book_settings_screen.dart';
 import 'widgets/entry_editor_dialog.dart';
 
 class LorebookEditorScreen extends ConsumerStatefulWidget {
@@ -26,6 +27,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   late TextEditingController _nameController;
   late TextEditingController _searchController;
   List<LorebookEntry> _entries = [];
+  LorebookSettings? _settings;
   Map<String, String> _embeddingStatuses = {};
   bool _loaded = false;
   bool _isIndexing = false;
@@ -57,6 +59,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     _loaded = true;
     _nameController.text = lb.name;
     _entries = List.from(lb.entries);
+    _settings = lb.settings;
     _loadEmbeddingStatuses();
   }
 
@@ -91,6 +94,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
       activationScope: existing?.activationScope ?? 'global',
       activationTargetId: existing?.activationTargetId,
       entries: _entries,
+      settings: _settings,
       updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     await ref.read(lorebooksProvider.notifier).updateLorebook(lb);
@@ -325,6 +329,34 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                     Row(
                       children: [
                         const Spacer(),
+                        if (_settings != null)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: _Badge(
+                              label: 'custom',
+                              color: Colors.purple,
+                            ),
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.settings_outlined, size: 18),
+                          tooltip: 'Lorebook Settings',
+                          onPressed: () async {
+                            final result = await Navigator.push<Map<String, dynamic>>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => LorebookPerBookSettingsScreen(
+                                  settings: _settings,
+                                ),
+                              ),
+                            );
+                            if (result != null) {
+                              setState(() {
+                                _settings = LorebookSettings.fromJson(result);
+                              });
+                              _save();
+                            }
+                          },
+                        ),
                         IconButton(
                           icon: const Icon(Icons.link, size: 18),
                           tooltip: 'Connections',

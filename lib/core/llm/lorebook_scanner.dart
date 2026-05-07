@@ -48,11 +48,17 @@ List<ScannedEntry> scanLorebooks({
 
   if (activeLorebooks.isEmpty) return [];
 
-  final maxInjectedEntries = (globalSettings.maxInjectedEntries).clamp(1, 100);
+  final globalMaxInjected = (globalSettings.maxInjectedEntries).clamp(1, 100);
   final allRelevantEntries = <ScannedEntry>[];
   final candidateEntries = <_CandidateEntry>[];
 
   for (final lb in activeLorebooks) {
+    final lbSettings = lb.settings;
+    final lbScanDepth = lbSettings?.scanDepth;
+    final lbRecursiveScan = lbSettings?.recursiveScan;
+    final lbCaseSensitive = lbSettings?.caseSensitive;
+    final lbMatchWholeWords = lbSettings?.matchWholeWords;
+
     for (final entry in lb.entries) {
       final isVectorOnly = entry.vectorSearch && !entry.useKeywordSearch;
       if (!entry.enabled || isVectorOnly) continue;
@@ -71,6 +77,11 @@ List<ScannedEntry> scanLorebooks({
         entry: entry,
         lorebookName: lb.name,
         lorebookId: lb.id,
+        scanDepth: lbScanDepth,
+        recursiveScan: lbRecursiveScan,
+        caseSensitive: lbCaseSensitive,
+        matchWholeWords: lbMatchWholeWords,
+        maxInjectedEntries: lbSettings?.maxInjectedEntries,
       ));
     }
   }
@@ -85,7 +96,7 @@ List<ScannedEntry> scanLorebooks({
 
   var changed = true;
   var iteration = 0;
-  final maxIterations = globalSettings.recursiveScan ? 5 : 1;
+  final maxIterations = (candidateEntries.firstOrNull?.recursiveScan ?? globalSettings.recursiveScan) ? 5 : 1;
   var scanText = textToScan;
 
   while (changed && iteration < maxIterations) {
@@ -101,10 +112,14 @@ List<ScannedEntry> scanLorebooks({
       final secondaryKeys = entry.secondaryKeys;
       final logic = entry.selectiveLogic;
 
-      final caseSensitive = entry.caseSensitive ?? globalSettings.caseSensitive;
-      final wholeWords = _resolveWholeWords(entry.matchWholeWords, globalSettings.matchWholeWords, globalSettings.keySearchMode);
+      final caseSensitive = entry.caseSensitive ?? c.caseSensitive ?? globalSettings.caseSensitive;
+      final wholeWords = _resolveWholeWords(
+        entry.matchWholeWords,
+        c.matchWholeWords != null ? (c.matchWholeWords == 'true') : globalSettings.matchWholeWords,
+        globalSettings.keySearchMode,
+      );
 
-      final scanDepth = entry.scanDepth ?? globalSettings.scanDepth;
+      final scanDepth = entry.scanDepth ?? c.scanDepth ?? globalSettings.scanDepth;
       final temporalDepth = entry.sticky > entry.cooldown ? entry.sticky : entry.cooldown;
       final effectiveScanDepth = temporalDepth > 0
           ? scanDepth < temporalDepth ? scanDepth : temporalDepth
@@ -178,7 +193,32 @@ List<ScannedEntry> scanLorebooks({
   }
 
   allRelevantEntries.sort((a, b) => a.order.compareTo(b.order));
-  return allRelevantEntries.take(maxInjectedEntries).toList();
+
+  var result = allRelevantEntries;
+
+  final perBookLimits = <String, int>{};
+  for (final c in candidateEntries) {
+    if (c.maxInjectedEntries != null && c.maxInjectedEntries! > 0) {
+      perBookLimits[c.lorebookId] = c.maxInjectedEntries!;
+    }
+  }
+
+  if (perBookLimits.isNotEmpty) {
+    final lorebookCounts = <String, int>{};
+    final filtered = <ScannedEntry>[];
+    for (final entry in result) {
+      final limit = perBookLimits[entry.lorebookId];
+      if (limit != null) {
+        final count = lorebookCounts[entry.lorebookId] ?? 0;
+        if (count >= limit) continue;
+        lorebookCounts[entry.lorebookId] = count + 1;
+      }
+      filtered.add(entry);
+    }
+    result = filtered;
+  }
+
+  return result.take(globalMaxInjected).toList();
 }
 
 bool _checkMatch(String key, String text, bool caseSensitive, _WholeWordMode wholeWords) {
@@ -256,10 +296,20 @@ class _CandidateEntry {
   final LorebookEntry entry;
   final String lorebookName;
   final String lorebookId;
+  final int? scanDepth;
+  final bool? recursiveScan;
+  final bool? caseSensitive;
+  final String? matchWholeWords;
+  final int? maxInjectedEntries;
 
   const _CandidateEntry({
     required this.entry,
     required this.lorebookName,
     required this.lorebookId,
+    this.scanDepth,
+    this.recursiveScan,
+    this.caseSensitive,
+    this.matchWholeWords,
+    this.maxInjectedEntries,
   });
 }

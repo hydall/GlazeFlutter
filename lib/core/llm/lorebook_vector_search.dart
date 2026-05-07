@@ -36,7 +36,26 @@ class LorebookVectorSearch {
   ) async {
     if (settings.searchType == 'keys') return [];
 
-    final activeLorebooks = lorebooks.where((lb) => lb.enabled).toList();
+    final activeLorebooks = lorebooks.where((lb) {
+      if (!lb.enabled) return false;
+      final lbSettings = lb.settings;
+      if (lbSettings != null && !lbSettings.vectorSearchEnabled) return false;
+      return true;
+    }).toList();
+
+    var effectiveThreshold = settings.vectorThreshold;
+    var effectiveTopK = settings.vectorTopK;
+    for (final lb in activeLorebooks) {
+      final lbSettings = lb.settings;
+      if (lbSettings != null) {
+        if (lbSettings.vectorThreshold < effectiveThreshold) {
+          effectiveThreshold = lbSettings.vectorThreshold;
+        }
+        if (lbSettings.vectorTopK > effectiveTopK) {
+          effectiveTopK = lbSettings.vectorTopK;
+        }
+      }
+    }
 
     final vectorEntries = <(LorebookEntry, String)>[];
     for (final lb in activeLorebooks) {
@@ -112,8 +131,8 @@ class LorebookVectorSearch {
       }
     }
 
-    final threshold = settings.vectorThreshold;
-    final topK = settings.vectorTopK;
+    final threshold = effectiveThreshold;
+    final topK = effectiveTopK;
 
     final sorted = allResults.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));

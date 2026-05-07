@@ -132,6 +132,7 @@ class Lorebooks extends Table {
   TextColumn get activationScope => text().withDefault(const Constant('global'))();
   TextColumn get activationTargetId => text().nullable()();
   TextColumn get entriesJson => text()();
+  TextColumn get settingsJson => text().withDefault(const Constant(''))();
   IntColumn get updatedAt => integer().withDefault(const Constant(0))();
 
   @override

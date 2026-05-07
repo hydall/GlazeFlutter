@@ -26,7 +26,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -71,6 +71,9 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(apiConfigs, apiConfigs.embeddingModel);
             await m.addColumn(apiConfigs, apiConfigs.embeddingEnabled);
             await m.addColumn(apiConfigs, apiConfigs.embeddingMaxChunkTokens);
+          }
+          if (from < 12) {
+            await m.addColumn(lorebooks, lorebooks.settingsJson);
           }
         },
       );

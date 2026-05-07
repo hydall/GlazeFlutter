@@ -151,6 +151,7 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
     WidgetsBinding.instance.addObserver(this);
     loadActiveSelections(ref);
     loadLorebookActivations(ref);
+    loadLorebookSettings(ref);
     seedDefaultPresets(ref);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkAndOfferCrashRecovery(context, ref);

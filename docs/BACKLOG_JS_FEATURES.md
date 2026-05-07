@@ -5,10 +5,9 @@ Data from these fields is lost on import.
 
 ## High Priority (core functionality)
 
-- [ ] **Lorebook per-book settings** — `gz_lorebooks[].settings`
+- [x] **Lorebook per-book settings** — `gz_lorebooks[].settings`
   - 25+ fields: scanDepth, maxInjectedEntries, contextPercent, budgetCap, reserveMode, reserveValue, insertionStrategy, injectionPosition, vectorSearchEnabled, vectorThreshold, vectorTopK, keywordVectorSplit, vectorScanDepth, keySearchEnabled, etc.
-  - Need: `settingsJson` column in `lorebooks` table, UI to edit, engine to read
-  - Import already extracts global settings, but per-book overrides are lost
+  - Done: `settingsJson` column in `lorebooks` table, `LorebookSettings` model, per-book settings UI, scanner/vector/coverage engine support
 
 - [ ] **Authors Notes** — `gz_chat_{id}.authorsNotes`
   - Per-chat author notes injected into prompt

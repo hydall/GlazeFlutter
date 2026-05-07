@@ -57,12 +57,14 @@ Future<void> saveLorebookActivations(LorebookActivations activations) async {
   await prefs.setString('lorebookActivations', jsonEncode(activations.toJson()));
 }
 
-Future<void> loadLorebookSettings() async {
+Future<void> loadLorebookSettings(WidgetRef ref) async {
   final prefs = await SharedPreferences.getInstance();
   final settingsJson = prefs.getString('lorebookSettings');
   if (settingsJson != null) {
     try {
-      return;
+      final settings = LorebookGlobalSettings.fromJson(
+          jsonDecode(settingsJson) as Map<String, dynamic>);
+      ref.read(lorebookSettingsProvider.notifier).state = settings;
     } catch (_) {}
   }
 }
