@@ -157,6 +157,7 @@ class BackupService {
   }
 
   Future<void> _importFlutterBackup(Map<String, dynamic> data) async {
+    await _ensureSchema();
     final tables = data['tables'] as Map<String, dynamic>?;
     if (tables == null) return;
 
@@ -200,6 +201,7 @@ class BackupService {
   }
 
   Future<void> _importJsBackup(Map<String, dynamic> data) async {
+    await _ensureSchema();
     await _clearAllTables();
 
     final kv = Map<String, dynamic>.from(data['keyvalue'] ?? {});
@@ -239,6 +241,35 @@ class BackupService {
       }
     });
     await _db.customStatement('PRAGMA foreign_keys = ON');
+  }
+
+  Future<void> _ensureSchema() async {
+    final existing = <String>{};
+    final cols = await _db.customSelect(
+      "PRAGMA table_info('api_configs')",
+    ).get();
+    for (final c in cols) {
+      existing.add(c.read<String>('name'));
+    }
+    const additions = <String, String>{
+      'embedding_use_same': 'BOOLEAN NOT NULL DEFAULT 1',
+      'embedding_enabled': 'BOOLEAN NOT NULL DEFAULT 0',
+      'embedding_endpoint': 'TEXT',
+      'embedding_api_key': 'TEXT',
+      'embedding_model': 'TEXT',
+      'embedding_max_chunk_tokens': 'INTEGER NOT NULL DEFAULT 512',
+      'omit_temperature': 'BOOLEAN NOT NULL DEFAULT 0',
+      'omit_top_p': 'BOOLEAN NOT NULL DEFAULT 0',
+      'omit_reasoning': 'BOOLEAN NOT NULL DEFAULT 0',
+      'omit_reasoning_effort': 'BOOLEAN NOT NULL DEFAULT 0',
+    };
+    for (final e in additions.entries) {
+      if (!existing.contains(e.key)) {
+        await _db.customStatement(
+          'ALTER TABLE api_configs ADD COLUMN ${e.key} ${e.value}',
+        );
+      }
+    }
   }
 
   Future<void> _importJsCharacters(dynamic data) async {
