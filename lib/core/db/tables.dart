@@ -57,6 +57,7 @@ class MemoryBookRows extends Table {
 
   TextColumn get sessionId => text()();
   TextColumn get entriesJson => text().withDefault(const Constant('[]'))();
+  TextColumn get pendingDraftsJson => text().withDefault(const Constant('[]'))();
   TextColumn get settingsJson => text().withDefault(const Constant('{}'))();
   IntColumn get lastProcessedMessageCount => integer().withDefault(const Constant(0))();
   IntColumn get updatedAt => integer().withDefault(const Constant(0))();

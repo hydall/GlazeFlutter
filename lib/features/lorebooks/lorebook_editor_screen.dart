@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/lorebook.dart';
+import '../../core/llm/embedding_error_labels.dart';
 import '../../core/llm/lorebook_vector_search.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/state/lorebook_provider.dart';
@@ -30,9 +31,11 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   List<LorebookEntry> _entries = [];
   LorebookSettings? _settings;
   Map<String, String> _embeddingStatuses = {};
+  Map<String, String> _embeddingErrorLabels = {};
   bool _loaded = false;
   bool _isIndexing = false;
   String _indexStatus = '';
+  int _rateLimitCooldown = 0;
 
   @override
   void initState() {
@@ -67,6 +70,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   Future<void> _loadEmbeddingStatuses() async {
     final repo = ref.read(embeddingRepoProvider);
     final statuses = <String, String>{};
+    final errorLabels = <String, String>{};
     for (final entry in _entries) {
       if (!entry.vectorSearch || !entry.enabled || entry.constant) continue;
       final record = await repo.getByEntryId(entry.id);
@@ -74,13 +78,18 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         statuses[entry.id] = 'none';
       } else if (record.errorJson != null) {
         statuses[entry.id] = 'error';
+        final error = repo.decodeError(record);
+        errorLabels[entry.id] = EmbeddingErrorLabel.classify(error).label;
       } else if (record.vectorsBlob != null) {
         statuses[entry.id] = 'indexed';
       } else {
         statuses[entry.id] = 'none';
       }
     }
-    if (mounted) setState(() => _embeddingStatuses = statuses);
+    if (mounted) setState(() {
+      _embeddingStatuses = statuses;
+      _embeddingErrorLabels = errorLabels;
+    });
   }
 
   Future<void> _save() async {
@@ -107,7 +116,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   void _addEntry() async {
     final entry = await showDialog<LorebookEntry>(
       context: context,
-      builder: (_) => EntryEditorDialog(lorebookId: widget.lorebookId),
+      builder: (_) => EntryEditorDialog(lorebookId: widget.lorebookId, embeddingTarget: _settings?.embeddingTarget ?? 'content'),
     );
     if (entry != null) {
       setState(() => _entries.add(entry));
@@ -121,6 +130,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
       builder: (_) => EntryEditorDialog(
         entry: _entries[index],
         lorebookId: widget.lorebookId,
+        embeddingTarget: _settings?.embeddingTarget ?? 'content',
       ),
     );
     if (entry != null) {
@@ -163,6 +173,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         widget.lorebookId,
         _entries,
         config,
+        embeddingTarget: _settings?.embeddingTarget ?? 'content',
         onProgress: (current, total, name) {
           setState(() => _indexStatus = 'Indexing $current/$total...');
         },
@@ -172,11 +183,15 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         setState(() {
           _isIndexing = false;
           _indexStatus = '';
+          if (result.rateLimited && result.retryAfter > 0) {
+            _rateLimitCooldown = result.retryAfter;
+            _startCooldownTimer();
+          }
         });
         _loadEmbeddingStatuses();
         GlazeToast.show(
           context,
-          'Indexed: ${result.indexed}, Skipped: ${result.skipped}, Failed: ${result.failed}',
+          'Indexed: ${result.indexed}, Skipped: ${result.skipped}, Failed: ${result.failed}${result.rateLimited ? ' (Rate limited)' : ''}',
         );
       }
     } catch (e) {
@@ -189,6 +204,86 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         GlazeToast.error(context, 'Indexing failed: ', e);
       }
     }
+  }
+
+  void _retryFailed() async {
+    final config = ref.read(embeddingConfigProvider);
+    if (config.endpoint.isEmpty) {
+      GlazeToast.show(context, 'Set up embedding API in Embedding Settings first');
+      return;
+    }
+
+    setState(() {
+      _isIndexing = true;
+      _indexStatus = 'Retrying failed...';
+    });
+
+    try {
+      final service = ref.read(lorebookEmbeddingServiceProvider);
+      final result = await service.indexLorebookEntries(
+        widget.lorebookId,
+        _entries,
+        config,
+        retryFailedOnly: true,
+        embeddingTarget: _settings?.embeddingTarget ?? 'content',
+        onProgress: (current, total, name) {
+          setState(() => _indexStatus = 'Indexing $current/$total...');
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _isIndexing = false;
+          _indexStatus = '';
+          if (result.rateLimited && result.retryAfter > 0) {
+            _rateLimitCooldown = result.retryAfter;
+            _startCooldownTimer();
+          }
+        });
+        _loadEmbeddingStatuses();
+        GlazeToast.show(context, 'Retried: ${result.indexed}, Skipped: ${result.skipped}, Failed: ${result.failed}${result.rateLimited ? ' (Rate limited)' : ''}');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isIndexing = false;
+          _indexStatus = '';
+        });
+        _loadEmbeddingStatuses();
+        GlazeToast.error(context, 'Retry failed: ', e);
+      }
+    }
+  }
+
+  void _startCooldownTimer() {
+    Future.doWhile(() async {
+      await Future.delayed(const Duration(seconds: 1));
+      if (!mounted) return false;
+      setState(() {
+        _rateLimitCooldown--;
+        if (_rateLimitCooldown <= 0) _rateLimitCooldown = 0;
+      });
+      return _rateLimitCooldown > 0;
+    });
+  }
+
+  void _deleteAllIndexes() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete All Indexes'),
+        content: const Text('This will remove all stored embeddings for this lorebook. You will need to re-index entries after.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete All')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await ref.read(embeddingRepoProvider).deleteBySourceType('lorebook_entry');
+    _loadEmbeddingStatuses();
+    if (mounted) GlazeToast.show(context, 'All indexes deleted');
   }
 
   void _toggleEntry(int index) {
@@ -379,15 +474,17 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                         tooltip: 'Reset Entry Settings to Global',
                         onPressed: _resetEntriesToGlobal,
                       ),
-                      if (_isIndexing)
+                      if (_isIndexing || _rateLimitCooldown > 0)
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           child: Center(
                             child: Text(
-                              _indexStatus,
-                              style: const TextStyle(
+                              _rateLimitCooldown > 0
+                                  ? 'Rate limited ($_rateLimitCooldown s)'
+                                  : _indexStatus,
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: AppColors.accent,
+                                color: _rateLimitCooldown > 0 ? Colors.orangeAccent : AppColors.accent,
                               ),
                             ),
                           ),
@@ -553,6 +650,26 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                             style: const TextStyle(fontSize: 12),
                           ),
                         ),
+                        const SizedBox(width: 6),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.textSecondary,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                          ),
+                          onPressed: _isIndexing ? null : _retryFailed,
+                          child: const Text('Retry Failed', style: TextStyle(fontSize: 12)),
+                        ),
+                        const SizedBox(width: 6),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.redAccent,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),
+                          ),
+                          onPressed: _isIndexing ? null : _deleteAllIndexes,
+                          child: const Text('Delete Indexes', style: TextStyle(fontSize: 12)),
+                        ),
                       ],
                     ),
                   ),
@@ -593,6 +710,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                           return _EntryTile(
                             entry: entry,
                             embeddingStatus: _embeddingStatuses[entry.id],
+                            embeddingError: _embeddingErrorLabels[entry.id],
                             onToggle: () => _toggleEntry(realIndex),
                             onEdit: () => _editEntry(realIndex),
                             onDelete: () => _deleteEntry(realIndex),
@@ -638,7 +756,8 @@ class _Badge extends StatelessWidget {
 
 class _EntryTile extends StatelessWidget {
   final LorebookEntry entry;
-  final String? embeddingStatus; // 'indexed', 'error', 'none', null
+  final String? embeddingStatus;
+  final String? embeddingError;
   final VoidCallback onToggle;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -646,6 +765,7 @@ class _EntryTile extends StatelessWidget {
   const _EntryTile({
     required this.entry,
     this.embeddingStatus,
+    this.embeddingError,
     required this.onToggle,
     required this.onEdit,
     required this.onDelete,
@@ -691,7 +811,10 @@ class _EntryTile extends StatelessWidget {
               if (embeddingStatus == 'indexed')
                 _Badge(label: 'idx', color: Colors.green),
               if (embeddingStatus == 'error')
-                _Badge(label: 'err', color: Colors.orange),
+                Tooltip(
+                  message: embeddingError ?? 'Error',
+                  child: _Badge(label: embeddingError ?? 'err', color: Colors.orange),
+                ),
             ],
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 18),

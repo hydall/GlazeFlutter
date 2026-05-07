@@ -425,7 +425,7 @@ void _showMemoryBooks(BuildContext context, WidgetRef ref, String charId) {
 
   GlazeBottomSheet.show(
     context,
-    child: MemoryBooksSheet(sessionId: chatState.session!.id),
+    child: MemoryBooksSheet(sessionId: chatState.session!.id, charId: charId),
   );
 }
 

@@ -4,6 +4,40 @@ part 'memory_book.freezed.dart';
 part 'memory_book.g.dart';
 
 @freezed
+class MemoryDraft with _$MemoryDraft {
+  const factory MemoryDraft({
+    required String id,
+    @Default('') String title,
+    @Default('') String content,
+    @Default([]) List<String> keys,
+    @Default([]) List<String> glazeKeys,
+    @Default(false) bool vectorSearch,
+    @Default([]) List<String> messageIds,
+    MessageRange? messageRange,
+    @Default('pending_generation') String status,
+    @Default('') String source,
+    @Default(0) int createdAt,
+    @Default(0) int updatedAt,
+    int? generatedAt,
+    String? error,
+  }) = _MemoryDraft;
+
+  factory MemoryDraft.fromJson(Map<String, dynamic> json) =>
+      _$MemoryDraftFromJson(json);
+}
+
+@freezed
+class MessageRange with _$MessageRange {
+  const factory MessageRange({
+    required int start,
+    required int end,
+  }) = _MessageRange;
+
+  factory MessageRange.fromJson(Map<String, dynamic> json) =>
+      _$MessageRangeFromJson(json);
+}
+
+@freezed
 class MemoryEntry with _$MemoryEntry {
   const factory MemoryEntry({
     required String id,
@@ -13,7 +47,7 @@ class MemoryEntry with _$MemoryEntry {
     @Default('active') String status,
     @Default(false) bool vectorSearch,
     @Default([]) List<String> messageIds,
-    String? createdAt,
+    int? createdAt,
   }) = _MemoryEntry;
 
   factory MemoryEntry.fromJson(Map<String, dynamic> json) =>
@@ -32,10 +66,14 @@ class MemoryBookSettings with _$MemoryBookSettings {
     @Default('summary_block') String injectionTarget,
     @Default(3) int batchSize,
     @Default(false) bool vectorSearchEnabled,
-    @Default('plain') String keyMatchMode,
+    @Default('glaze') String keyMatchMode,
+    @Default('current') String generationSource,
     @Default('') String generationModel,
     @Default('') String generationEndpoint,
     @Default('') String generationApiKey,
+    @Default(null) double? generationTemperature,
+    @Default(null) int? generationMaxTokens,
+    @Default('detailed_beats') String promptPreset,
   }) = _MemoryBookSettings;
 
   factory MemoryBookSettings.fromJson(Map<String, dynamic> json) =>
@@ -48,6 +86,7 @@ class MemoryBook with _$MemoryBook {
     required String id,
     required String sessionId,
     @Default([]) List<MemoryEntry> entries,
+    @Default([]) List<MemoryDraft> pendingDrafts,
     @Default(MemoryBookSettings()) MemoryBookSettings settings,
     @Default(0) int lastProcessedMessageCount,
     @Default(0) int updatedAt,

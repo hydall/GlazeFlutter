@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/lorebook.dart';
@@ -65,6 +68,7 @@ class LorebookVectorSearch {
     for (final lb in activeLorebooks) {
       for (final entry in lb.entries) {
         if (entry.vectorSearch && entry.enabled && !entry.constant) {
+          if (_isFilteredByCharacter(entry)) continue;
           vectorEntries.add((entry, lb.id));
         }
       }
@@ -82,6 +86,11 @@ class LorebookVectorSearch {
     for (final (entry, lbId) in vectorEntries) {
       final row = embeddingMap[entry.id];
       if (row == null || row.vectorsBlob == null) continue;
+
+      final text = _getEmbeddingText(entry, lorebooks, lbId);
+      final fingerprint = LorebookEmbeddingService.buildEmbeddingFingerprint(entry, text);
+      final currentHash = _computeHash(fingerprint);
+      if (row.textHash != currentHash) continue;
 
       final vectors = _repo.decodeVectors(row);
       if (vectors == null || vectors.isEmpty) continue;
@@ -225,6 +234,26 @@ class LorebookVectorSearch {
 
   List<String> _tokenize(String text) {
     return text.split(RegExp(r'[\s,.;:!?]+')).where((t) => t.length > 2).toList();
+  }
+
+  String _getEmbeddingText(LorebookEntry entry, List<Lorebook> lorebooks, String lbId) {
+    final lb = lorebooks.where((l) => l.id == lbId).firstOrNull;
+    final target = lb?.settings?.embeddingTarget ?? 'content';
+    if (target == 'keys') {
+      return entry.keys.join(', ');
+    }
+    return entry.content;
+  }
+
+  String _computeHash(String input) {
+    return sha256.convert(utf8.encode(input)).toString();
+  }
+
+  bool _isFilteredByCharacter(LorebookEntry entry) {
+    final filter = entry.characterFilter;
+    if (filter == null) return false;
+    if (filter.names.isEmpty) return false;
+    return false;
   }
 }
 

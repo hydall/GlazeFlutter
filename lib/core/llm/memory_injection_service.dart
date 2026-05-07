@@ -1,8 +1,17 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../db/app_db.dart';
+import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
 import '../models/memory_book.dart';
 import '../state/db_provider.dart';
+import 'embedding_service.dart';
+import 'lorebook_vector_search.dart';
+import 'memory_embedding_service.dart';
+import 'vector_math.dart';
 
 class MemoryInjectionResult {
   final List<MemoryEntry> entries;
@@ -20,14 +29,19 @@ class MemoryInjectionResult {
 
 class MemoryInjectionService {
   final MemoryBookRepo _repo;
+  final EmbeddingRepo _embeddingRepo;
+  final EmbeddingService _embeddingService;
 
-  MemoryInjectionService(this._repo);
+  MemoryInjectionService(this._repo, this._embeddingRepo, this._embeddingService);
 
   Future<MemoryInjectionResult> buildInjection({
     required String sessionId,
     required String historyText,
     required int messageCount,
     String? summaryExcerpt,
+    List<ChatMessageForSearch>? history,
+    String? currentText,
+    EmbeddingConfig? embeddingConfig,
   }) async {
     final book = await _repo.getBySessionId(sessionId);
     if (book == null) return const MemoryInjectionResult();
@@ -59,9 +73,15 @@ class MemoryInjectionService {
       }
     }
 
+    final vectorScores = <String, double>{};
+    if (settings.vectorSearchEnabled && embeddingConfig != null && embeddingConfig.endpoint.isNotEmpty && history != null) {
+      vectorScores.addAll(await _vectorSearchMemory(activeEntries, history, currentText ?? '', embeddingConfig, settings));
+    }
+
     final scoredEntries = activeEntries.map((entry) {
       var score = 0.0;
       if (keywordMatched.contains(entry.id)) score += 6;
+      if (vectorScores.containsKey(entry.id)) score += (vectorScores[entry.id]! * 5);
       if (entry.messageIds.isNotEmpty) score += 2;
       score += entry.content.length > 20 ? 1 : 0;
       return (entry: entry, score: score);
@@ -101,6 +121,79 @@ class MemoryInjectionService {
     );
   }
 
+  Future<Map<String, double>> _vectorSearchMemory(
+    List<MemoryEntry> entries,
+    List<ChatMessageForSearch> history,
+    String currentText,
+    EmbeddingConfig config,
+    MemoryBookSettings settings,
+  ) async {
+    try {
+      final vectorEntries = entries.where((e) => e.vectorSearch).toList();
+      if (vectorEntries.isEmpty) return {};
+
+      final embeddingRows = await _embeddingRepo.getBySourceType('memory_entry');
+      final embeddingMap = <String, EmbeddingRow>{};
+      for (final row in embeddingRows) {
+        embeddingMap[row.entryId] = row;
+      }
+
+      final candidates = <VectorCandidate>[];
+      for (final entry in vectorEntries) {
+        final row = embeddingMap[entry.id];
+        if (row == null || row.vectorsBlob == null) continue;
+
+        final text = entry.content;
+        final hints = MemoryEmbeddingService.extractMemoryRetrievalHints(entry);
+        final fingerprint = jsonEncode({'text': text, 'retrievalHints': hints});
+        final currentHash = sha256.convert(utf8.encode(fingerprint)).toString();
+        if (row.textHash != currentHash) continue;
+
+        final vectors = _embeddingRepo.decodeVectors(row);
+        if (vectors == null || vectors.isEmpty) continue;
+
+        candidates.add(VectorCandidate(
+          id: entry.id,
+          vectors: vectors.map((v) => VectorChunk(text: '', vector: v)).toList(),
+          metadata: {
+            'hints': _embeddingRepo.decodeHints(row) ?? [],
+          },
+        ));
+      }
+
+      if (candidates.isEmpty) return {};
+
+      final userMessages = history.where((m) => m.role == 'user').toList().reversed;
+      final maxChars = (config.maxChunkTokens * 2).clamp(0, 1024) * 4;
+      final buffer = StringBuffer();
+      buffer.write(currentText);
+      for (final msg in userMessages) {
+        final toAdd = '\n${msg.content}';
+        if (buffer.length + toAdd.length > maxChars.clamp(0, 6000)) break;
+        buffer.write(toAdd);
+      }
+      final queryText = buffer.toString().trim();
+      if (queryText.isEmpty) return {};
+
+      final queryChunks = await _embeddingService.getEmbeddingsWithChunks([queryText], config);
+      if (queryChunks.isEmpty) return {};
+
+      final queryVecChunks = queryChunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
+      final results = findTopKMulti(queryVecChunks, candidates, candidates.length, 0);
+
+      final threshold = 0.6;
+      final topK = 5;
+      return Map.fromEntries(
+        results
+            .where((r) => r.score >= threshold)
+            .take(topK)
+            .map((r) => MapEntry(r.id, r.score)),
+      );
+    } catch (_) {
+      return {};
+    }
+  }
+
   bool _glazeMatch(String key, String text) {
     final pattern = r'[\s.,!?;:"\u201C\u201D\u2018\u2019\u00AB\u00BB(){}\[\]\u2014\u2013*]';
     final regex = '(?<=^|$pattern)${RegExp.escape(key)}(?=\$|$pattern)';
@@ -113,5 +206,16 @@ class MemoryInjectionService {
 }
 
 final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
-  return MemoryInjectionService(ref.watch(memoryBookRepoProvider));
+  return MemoryInjectionService(
+    ref.watch(memoryBookRepoProvider),
+    ref.watch(embeddingRepoProvider),
+    EmbeddingService(),
+  );
+});
+
+final memoryEmbeddingServiceProvider = Provider<MemoryEmbeddingService>((ref) {
+  return MemoryEmbeddingService(
+    ref.watch(embeddingRepoProvider),
+    EmbeddingService(),
+  );
 });

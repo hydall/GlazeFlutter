@@ -11,8 +11,9 @@ import '../../../shared/widgets/glaze_toast.dart';
 class EntryEditorDialog extends ConsumerStatefulWidget {
   final LorebookEntry? entry;
   final String? lorebookId;
+  final String embeddingTarget;
 
-  const EntryEditorDialog({super.key, this.entry, this.lorebookId});
+  const EntryEditorDialog({super.key, this.entry, this.lorebookId, this.embeddingTarget = 'content'});
 
   @override
   ConsumerState<EntryEditorDialog> createState() => _EntryEditorDialogState();
@@ -113,7 +114,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
       final service = ref.read(lorebookEmbeddingServiceProvider);
       final result = await service.indexLorebookEntries(widget.lorebookId!, [
         widget.entry!,
-      ], config);
+      ], config, embeddingTarget: widget.embeddingTarget);
       if (mounted) {
         setState(() {
           _isIndexing = false;

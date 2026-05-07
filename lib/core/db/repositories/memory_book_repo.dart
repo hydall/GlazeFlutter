@@ -33,6 +33,8 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         sessionId: book.sessionId,
         entriesJson: Value(jsonEncode(
             book.entries.map((e) => e.toJson()).toList())),
+        pendingDraftsJson: Value(jsonEncode(
+            book.pendingDrafts.map((d) => d.toJson()).toList())),
         settingsJson: Value(jsonEncode(book.settings.toJson())),
         lastProcessedMessageCount:
             Value(book.lastProcessedMessageCount),
@@ -67,6 +69,14 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
       entries = [];
     }
 
+    List<MemoryDraft> pendingDrafts;
+    try {
+      final list = jsonDecode(row.pendingDraftsJson) as List<dynamic>;
+      pendingDrafts = list.map((e) => MemoryDraft.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (_) {
+      pendingDrafts = [];
+    }
+
     MemoryBookSettings settings;
     try {
       settings = MemoryBookSettings.fromJson(
@@ -79,6 +89,7 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
       id: 'memorybook_${row.sessionId}',
       sessionId: row.sessionId,
       entries: entries,
+      pendingDrafts: pendingDrafts,
       settings: settings,
       lastProcessedMessageCount: row.lastProcessedMessageCount,
       updatedAt: row.updatedAt,

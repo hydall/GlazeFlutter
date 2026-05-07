@@ -380,7 +380,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     if (session == null) return;
     GlazeBottomSheet.show(
       context,
-      child: MemoryBooksSheet(sessionId: session.id),
+      child: MemoryBooksSheet(sessionId: session.id, charId: widget.charId),
     );
   }
 

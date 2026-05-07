@@ -67,11 +67,19 @@ class PromptPayloadBuilder {
 
       final memoryService = _ref.read(memoryInjectionServiceProvider);
       final historyText = session.historyText;
+      final embeddingConfig = _ref.read(embeddingConfigProvider);
+      final memoryHistory = session.messages
+          .where((m) => !m.isHidden && !m.isTyping)
+          .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
+          .toList();
       final memoryResult = await memoryService.buildInjection(
         sessionId: session.id,
         historyText: historyText,
         messageCount: session.messages.length,
         summaryExcerpt: summaryContent,
+        history: memoryHistory,
+        currentText: session.messages.lastOrNull?.content ?? '',
+        embeddingConfig: embeddingConfig,
       );
       memoryContent = memoryResult.content.isNotEmpty ? memoryResult.content : null;
       memoryInjectionTarget = memoryResult.injectionTarget;

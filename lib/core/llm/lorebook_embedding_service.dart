@@ -9,8 +9,9 @@ import 'embedding_service.dart';
 class LorebookEmbeddingService {
   final EmbeddingRepo _repo;
   final EmbeddingService _embeddingService;
+  final String _embeddingTarget;
 
-  LorebookEmbeddingService(this._repo, this._embeddingService);
+  LorebookEmbeddingService(this._repo, this._embeddingService, [this._embeddingTarget = 'content']);
 
   Future<IndexResult> indexLorebookEntries(
     String lorebookId,
@@ -18,6 +19,7 @@ class LorebookEmbeddingService {
     EmbeddingConfig config, {
     void Function(int current, int total, String entryName)? onProgress,
     bool retryFailedOnly = false,
+    String embeddingTarget = 'content',
   }) async {
     int indexed = 0;
     int skipped = 0;
@@ -120,6 +122,9 @@ class LorebookEmbeddingService {
   }
 
   String _getEmbeddingText(LorebookEntry entry, EmbeddingConfig config) {
+    if (_embeddingTarget == 'keys') {
+      return entry.keys.join(', ');
+    }
     return entry.content;
   }
 

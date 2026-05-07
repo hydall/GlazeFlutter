@@ -171,7 +171,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     setState(() => _importing = true);
     try {
       final result = await FilePicker.pickFiles(
-        type: FileType.any,
+        type: FileType.custom,
         allowMultiple: false,
         allowedExtensions: ['glz', 'json'],
       );
