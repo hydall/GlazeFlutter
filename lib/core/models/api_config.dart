@@ -22,6 +22,10 @@ class ApiConfig with _$ApiConfig {
     @Default(false) bool requestReasoning,
     String? reasoningTagStart,
     String? reasoningTagEnd,
+    @Default(false) bool omitTemperature,
+    @Default(false) bool omitTopP,
+    @Default(false) bool omitReasoning,
+    @Default(false) bool omitReasoningEffort,
   }) = _ApiConfig;
 
   factory ApiConfig.fromJson(Map<String, dynamic> json) =>

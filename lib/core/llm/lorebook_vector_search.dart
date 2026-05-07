@@ -224,6 +224,15 @@ Future<void> initEmbeddingConfigFromDb(WidgetRef ref) async {
       apiKey: embConfig.apiKey,
       model: embConfig.model,
     );
+  } else {
+    final chatConfig = apiConfigs.where((c) => c.mode != 'embedding').firstOrNull;
+    if (chatConfig != null) {
+      ref.read(embeddingConfigProvider.notifier).state = EmbeddingConfig(
+        endpoint: chatConfig.endpoint,
+        apiKey: chatConfig.apiKey,
+        model: chatConfig.model,
+      );
+    }
   }
 }
 

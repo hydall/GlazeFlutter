@@ -20,7 +20,6 @@ import 'chat_provider.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/chat_dialogs.dart';
-import 'widgets/generation_overrides_sheet.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/memory_books_sheet.dart';
 import 'widgets/message_list.dart';
@@ -333,10 +332,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       onImageGen: () => GlazeBottomSheet.show(
                         context,
                         child: const ImageGenSheet(),
-                      ),
-                      onOverrides: () => GlazeBottomSheet.show(
-                        context,
-                        child: const GenerationOverridesSheet(),
                       ),
                     ),
                   ],

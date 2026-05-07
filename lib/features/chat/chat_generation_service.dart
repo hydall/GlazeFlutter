@@ -76,7 +76,6 @@ class ChatGenerationService {
 
       final startGenTime = DateTime.now();
       final sseClient = SseClient();
-      final overrides = _ref.read(generationOverridesProvider);
       ChatState? finalState;
 
       await sseClient.streamChatCompletion(
@@ -85,12 +84,16 @@ class ChatGenerationService {
         model: apiConfig.model,
         messages: apiMessages,
         maxTokens: apiConfig.maxTokens,
-        temperature: overrides.temperature ?? apiConfig.temperature,
-        topP: overrides.topP ?? apiConfig.topP,
+        temperature: apiConfig.temperature,
+        topP: apiConfig.topP,
         stream: apiConfig.stream,
         cancelToken: cancelToken,
-        requestReasoning: overrides.requestReasoning ?? apiConfig.requestReasoning,
-        reasoningEffort: overrides.reasoningEffort ?? apiConfig.reasoningEffort,
+        requestReasoning: apiConfig.requestReasoning,
+        reasoningEffort: apiConfig.reasoningEffort,
+        omitTemperature: apiConfig.omitTemperature,
+        omitTopP: apiConfig.omitTopP,
+        omitReasoning: apiConfig.omitReasoning,
+        omitReasoningEffort: apiConfig.omitReasoningEffort,
         onUpdate: (delta, reasoningDelta) {
           accumulator.consumeDelta(delta, reasoningDelta: reasoningDelta);
           onStateUpdate(ChatState(

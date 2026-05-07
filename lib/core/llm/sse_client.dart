@@ -44,6 +44,10 @@ class SseClient {
     SseOnError? onError,
     bool requestReasoning = false,
     String? reasoningEffort,
+    bool omitTemperature = false,
+    bool omitTopP = false,
+    bool omitReasoning = false,
+    bool omitReasoningEffort = false,
   }) async {
     final base = normalizeEndpoint(endpoint);
     final url = '$base/chat/completions';
@@ -57,13 +61,14 @@ class SseClient {
     if (maxTokens > 0) {
       body['max_tokens'] = maxTokens;
     }
-    if (temperature > 0) {
+    if (!omitTemperature && temperature > 0) {
       body['temperature'] = temperature;
     }
-    if (topP > 0 && topP < 1) {
+    if (!omitTopP && topP > 0 && topP < 1) {
       body['top_p'] = topP;
     }
-    if (requestReasoning &&
+    if (!omitReasoning && requestReasoning &&
+        !omitReasoningEffort &&
         reasoningEffort != null &&
         reasoningEffort != 'auto') {
       body['reasoning_effort'] = reasoningEffort;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/sse_client.dart';
 import '../../../core/models/api_config.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import 'api_settings_screen.dart';
@@ -38,6 +39,12 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
   late double _temperature = widget.config?.temperature ?? 0.7;
   late double _topP = widget.config?.topP ?? 0.9;
   late bool _stream = widget.config?.stream ?? true;
+  late bool _requestReasoning = widget.config?.requestReasoning ?? false;
+  late String _reasoningEffort = widget.config?.reasoningEffort ?? 'medium';
+  late bool _omitTemperature = widget.config?.omitTemperature ?? false;
+  late bool _omitTopP = widget.config?.omitTopP ?? false;
+  late bool _omitReasoning = widget.config?.omitReasoning ?? false;
+  late bool _omitReasoningEffort = widget.config?.omitReasoningEffort ?? false;
   bool _isTesting = false;
 
   @override
@@ -157,6 +164,63 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
               title: const Text('Stream'),
               value: _stream,
               onChanged: (v) => setState(() => _stream = v),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              title: const Text('Show Native Reasoning'),
+              subtitle: const Text("Shows reasoning_content. Doesn't affect model's reasoning."),
+              value: _requestReasoning,
+              onChanged: (v) => setState(() => _requestReasoning = v),
+            ),
+            if (_requestReasoning) ...[
+              const SizedBox(height: 4),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    const Text('Reasoning Effort:', style: TextStyle(fontSize: 13)),
+                    const SizedBox(width: 8),
+                    ...['auto', 'low', 'medium', 'high'].map((e) => Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ChoiceChip(
+                        label: Text(e[0].toUpperCase() + e.substring(1), style: const TextStyle(fontSize: 12)),
+                        selected: _reasoningEffort == e,
+                        onSelected: (_) => setState(() => _reasoningEffort = e),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    )),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text('Omit Parameters', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+            ),
+            SwitchListTile(
+              title: const Text('Omit Temperature'),
+              subtitle: const Text("Don't send temperature to API"),
+              value: _omitTemperature,
+              onChanged: (v) => setState(() => _omitTemperature = v),
+            ),
+            SwitchListTile(
+              title: const Text('Omit Top P'),
+              subtitle: const Text("Don't send top_p to API"),
+              value: _omitTopP,
+              onChanged: (v) => setState(() => _omitTopP = v),
+            ),
+            SwitchListTile(
+              title: const Text('Omit Reasoning'),
+              subtitle: const Text("Don't send reasoning params to API"),
+              value: _omitReasoning,
+              onChanged: (v) => setState(() => _omitReasoning = v),
+            ),
+            SwitchListTile(
+              title: const Text('Omit Reasoning Effort'),
+              subtitle: const Text("Don't send reasoning_effort to API"),
+              value: _omitReasoningEffort,
+              onChanged: (v) => setState(() => _omitReasoningEffort = v),
             ),
           ],
           const SizedBox(height: 16),
@@ -302,6 +366,12 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen> {
       temperature: _temperature,
       topP: _topP,
       stream: _stream,
+      requestReasoning: _requestReasoning,
+      reasoningEffort: _reasoningEffort,
+      omitTemperature: _omitTemperature,
+      omitTopP: _omitTopP,
+      omitReasoning: _omitReasoning,
+      omitReasoningEffort: _omitReasoningEffort,
     );
     await ref.read(apiListProvider.notifier).put(config);
     if (mounted) Navigator.of(context).pop();

@@ -91,6 +91,10 @@ class ApiConfigs extends Table {
   BoolColumn get requestReasoning => boolean().withDefault(const Constant(false))();
   TextColumn get reasoningTagStart => text().nullable()();
   TextColumn get reasoningTagEnd => text().nullable()();
+  BoolColumn get omitTemperature => boolean().withDefault(const Constant(false))();
+  BoolColumn get omitTopP => boolean().withDefault(const Constant(false))();
+  BoolColumn get omitReasoning => boolean().withDefault(const Constant(false))();
+  BoolColumn get omitReasoningEffort => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {configId};

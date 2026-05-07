@@ -131,16 +131,6 @@ class _CharacterDetailBody extends ConsumerWidget {
     final sessions = await ref.read(chatRepoProvider).getByCharacterId(cId);
     if (!context.mounted) return;
 
-    if (sessions.isEmpty) {
-      context.go('/chat/$cId');
-      return;
-    }
-
-    if (sessions.length == 1) {
-      context.go('/chat/$cId');
-      return;
-    }
-
     GlazeBottomSheet.show(
       context,
       title: 'Open Chat',
