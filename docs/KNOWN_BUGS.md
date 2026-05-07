@@ -1,8 +1,20 @@
 # Known Bugs
 
-## Memory Books
+## Memory Books — major feature gap vs Glaze JS
 
-- **No UI for manual memory creation.** The "Add Memory" action may be hidden when there's no draft, but manual creation should always be available.
+Flutter's MemoryBooksSheet is a minimal stub. Glaze JS has a full draft-based workflow with 7 sheets and 8 composables. Missing features:
+
+- **Draft system entirely missing.** JS has `pendingDrafts[]` with statuses `pending_generation` → `needs_regeneration` → approved. Flutter has no draft concept at all.
+- **Scan Chat (auto-split into drafts).** JS splits uncovered messages into segments of N, creates draft placeholders per segment. Flutter has no scan/split UI.
+- **Batch generation.** JS generates multiple drafts in parallel (configurable batch size). Flutter has no generation UI — only manual entry creation.
+- **Single draft generation / regeneration.** Each draft can be generated individually or regenerated if `needs_regeneration`. Flutter has nothing.
+- **Approve / delete draft.** JS lets you review draft content before approving into an active entry. Flutter only has raw add/edit/delete.
+- **Model selection for memory generation.** JS has quick model selector (fetches models from API), plus "Use LLM API" toggle with separate endpoint/model/key fields. Flutter has these fields in settings but no model selector and no provider integration.
+- **Generation prompt presets.** JS has `MemoryPromptManagerSheet` with custom prompt templates (detailed_beats, etc.) + preview. Flutter has no prompt management.
+- **Search type selector.** JS has vector / keys / combined selector with cycle. Flutter only has settings toggle.
+- **Maintenance / reindex.** JS has dedicated maintenance sheet + reindex-all. Flutter has neither.
+- **Coverage / stale tracking.** JS tracks `staleCoverageCount`, `needs_rebuild` status, uncovered segments. Flutter has no coverage tracking.
+- **Draft progress.** JS shows generating state with elapsed time, cancel button. Flutter has no progress UI.
 
 ## Backup Import
 
