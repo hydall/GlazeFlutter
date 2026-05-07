@@ -17,6 +17,7 @@ class CharacterGrid extends StatelessWidget {
   final ValueChanged<SortType> onSortTypeChanged;
   final double topPadding;
   final double bottomPadding;
+  final Widget? tabBar;
 
   const CharacterGrid({
     super.key,
@@ -27,6 +28,7 @@ class CharacterGrid extends StatelessWidget {
     required this.onSortTypeChanged,
     this.topPadding = 0,
     this.bottomPadding = 16,
+    this.tabBar,
   });
 
   @override
@@ -35,6 +37,7 @@ class CharacterGrid extends StatelessWidget {
       slivers: [
         if (topPadding > 0)
           SliverToBoxAdapter(child: SizedBox(height: topPadding)),
+        if (tabBar != null) SliverToBoxAdapter(child: tabBar!),
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -46,10 +49,7 @@ class CharacterGrid extends StatelessWidget {
                   onTap: onSortDirToggle,
                 ),
                 const SizedBox(width: 10),
-                _SortTypePill(
-                  sortBy: sortBy,
-                  onChanged: onSortTypeChanged,
-                ),
+                _SortTypePill(sortBy: sortBy, onChanged: onSortTypeChanged),
               ],
             ),
           ),
@@ -102,8 +102,7 @@ class _SortDirButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.accent.withValues(alpha: 0.15),
           shape: BoxShape.circle,
-          border: Border.all(
-              color: AppColors.accent.withValues(alpha: 0.2)),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
         ),
         child: AnimatedRotation(
           turns: isAsc ? 0.5 : 0,
@@ -136,8 +135,7 @@ class _SortTypePill extends StatelessWidget {
         decoration: BoxDecoration(
           color: AppColors.accent.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: AppColors.accent.withValues(alpha: 0.2)),
+          border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -151,8 +149,11 @@ class _SortTypePill extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            const Icon(Icons.keyboard_arrow_down_rounded,
-                size: 18, color: AppColors.accent),
+            const Icon(
+              Icons.keyboard_arrow_down_rounded,
+              size: 18,
+              color: AppColors.accent,
+            ),
           ],
         ),
       ),
@@ -169,7 +170,7 @@ class _SortTypePill extends StatelessWidget {
           iconColor: AppColors.accent,
           label: 'Sort by Name',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             onChanged(SortType.name);
           },
         ),
@@ -178,7 +179,7 @@ class _SortTypePill extends StatelessWidget {
           iconColor: AppColors.accent,
           label: 'Sort by Date',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             onChanged(SortType.date);
           },
         ),

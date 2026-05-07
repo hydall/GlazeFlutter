@@ -62,7 +62,7 @@ final routerProvider = Provider<GoRouter>(
                 routes: [
                   GoRoute(
                     path: 'api',
-                    builder: (_, __) => const ApiSettingsScreen(),
+                    builder: (_, __) => const ApiSettingsScreen(startExpanded: true),
                   ),
                   GoRoute(
                     path: 'personas',

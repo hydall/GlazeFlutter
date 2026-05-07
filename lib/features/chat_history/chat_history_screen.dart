@@ -5,8 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/models/chat_message.dart';
-import '../../core/state/db_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -26,55 +24,17 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
   Widget build(BuildContext context) {
     final sessions = ref.watch(chatHistoryProvider);
 
+    final topPad =
+        MediaQuery.of(context).padding.top +
+        66.0 +
+        (_searchQuery.isNotEmpty ? 32.0 : 0.0);
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Column(
+      body: Stack(
         children: [
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: GlazeAppBar(
-                title: 'Chats',
-                actions: [
-                  SizedBox(
-                    width: 44, height: 44,
-                    child: IconButton(
-                      icon: const Icon(Icons.search_rounded, size: 22),
-                      color: AppColors.accent,
-                      onPressed: () async {
-                        final query = await showSearch<String>(
-                          context: context,
-                          delegate: _ChatSearchDelegate(ref),
-                        );
-                        if (query != null) setState(() => _searchQuery = query);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_searchQuery.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-              child: Row(
-                children: [
-                  Text('Filter: "$_searchQuery"', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => setState(() => _searchQuery = ''),
-                    child: const Icon(Icons.close, size: 16, color: AppColors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          Expanded(
-            child: Padding(
-              padding: EdgeInsets.only(
-                bottom: ref.watch(navHeightProvider) + 20,
-              ),
-              child: sessions.when(
+          Positioned.fill(
+            child: sessions.when(
               loading: () => const Center(
                 child: CircularProgressIndicator(color: AppColors.accent),
               ),
@@ -83,22 +43,29 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                 var filtered = list;
                 if (_searchQuery.isNotEmpty) {
                   final q = _searchQuery.toLowerCase();
-                  filtered = list.where((s) =>
-                    s.characterName.toLowerCase().contains(q) ||
-                    s.lastMessage.toLowerCase().contains(q),
-                  ).toList();
+                  filtered = list
+                      .where(
+                        (s) =>
+                            s.characterName.toLowerCase().contains(q) ||
+                            s.lastMessage.toLowerCase().contains(q),
+                      )
+                      .toList();
                 }
                 if (filtered.isEmpty) {
                   return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.chat_bubble_outline,
-                            size: 64,
-                            color: AppColors.textSecondary.withValues(alpha: 0.5)),
+                        Icon(
+                          Icons.chat_bubble_outline,
+                          size: 64,
+                          color: AppColors.textSecondary.withValues(alpha: 0.5),
+                        ),
                         const SizedBox(height: 16),
-                        const Text('No chats yet',
-                            style: TextStyle(color: AppColors.textSecondary)),
+                        const Text(
+                          'No chats yet',
+                          style: TextStyle(color: AppColors.textSecondary),
+                        ),
                         const SizedBox(height: 20),
                         GlazePillButton(
                           icon: Icons.person_search_rounded,
@@ -110,11 +77,75 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                   );
                 }
                 return ListView.builder(
+                  padding: EdgeInsets.only(
+                    top: topPad,
+                    bottom: ref.watch(navHeightProvider) + 20,
+                  ),
                   itemCount: filtered.length,
                   itemBuilder: (_, i) => _SessionTile(info: filtered[i]),
                 );
               },
-              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    child: GlazeAppBar(
+                      title: 'Chats',
+                      actions: [
+                        SizedBox(
+                          width: 44,
+                          height: 44,
+                          child: IconButton(
+                            icon: const Icon(Icons.search_rounded, size: 22),
+                            color: AppColors.accent,
+                            onPressed: () async {
+                              final query = await showSearch<String>(
+                                context: context,
+                                delegate: _ChatSearchDelegate(ref),
+                              );
+                              if (query != null)
+                                setState(() => _searchQuery = query);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_searchQuery.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Filter: "$_searchQuery"',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () => setState(() => _searchQuery = ''),
+                          child: const Icon(
+                            Icons.close,
+                            size: 16,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -128,8 +159,9 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
   _ChatSearchDelegate(this.ref);
 
   @override
-  ThemeData appBarTheme(BuildContext context) =>
-      Theme.of(context).copyWith(appBarTheme: const AppBarTheme(backgroundColor: AppColors.background));
+  ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
+    appBarTheme: const AppBarTheme(backgroundColor: AppColors.background),
+  );
 
   @override
   List<Widget> buildActions(BuildContext context) => [
@@ -138,7 +170,8 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
 
   @override
   Widget buildLeading(BuildContext context) => IconButton(
-    icon: const Icon(Icons.arrow_back), onPressed: () => close(context, ''),
+    icon: const Icon(Icons.arrow_back),
+    onPressed: () => close(context, ''),
   );
 
   @override
@@ -150,13 +183,21 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
   Widget _buildList() {
     final sessions = ref.read(chatHistoryProvider).valueOrNull ?? [];
     final q = query.toLowerCase();
-    final filtered = sessions.where((s) =>
-      s.characterName.toLowerCase().contains(q) ||
-      s.lastMessage.toLowerCase().contains(q),
-    ).toList();
+    final filtered = sessions
+        .where(
+          (s) =>
+              s.characterName.toLowerCase().contains(q) ||
+              s.lastMessage.toLowerCase().contains(q),
+        )
+        .toList();
 
     if (filtered.isEmpty) {
-      return const Center(child: Text('No chats found', style: TextStyle(color: AppColors.textSecondary)));
+      return const Center(
+        child: Text(
+          'No chats found',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+      );
     }
 
     return ListView.builder(
@@ -168,10 +209,26 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
               ? CircleAvatar(backgroundImage: FileImage(File(s.avatarPath!)))
               : CircleAvatar(
                   backgroundColor: AppColors.accent,
-                  child: Text(s.characterName.isNotEmpty ? s.characterName[0].toUpperCase() : '?', style: const TextStyle(color: Colors.black)),
+                  child: Text(
+                    s.characterName.isNotEmpty
+                        ? s.characterName[0].toUpperCase()
+                        : '?',
+                    style: const TextStyle(color: Colors.black),
+                  ),
                 ),
-          title: Text(s.characterName, style: const TextStyle(color: AppColors.textPrimary)),
-          subtitle: Text(s.lastMessage, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+          title: Text(
+            s.characterName,
+            style: const TextStyle(color: AppColors.textPrimary),
+          ),
+          subtitle: Text(
+            s.lastMessage,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
           onTap: () => close(ctx, s.characterName),
         );
       },
@@ -199,11 +256,56 @@ class _SessionTile extends ConsumerWidget {
           ref.read(chatHistoryProvider.notifier).deleteSession(info.sessionId),
       child: ListTile(
         leading: _buildAvatar(),
-        title: Text(info.characterName),
-        subtitle: Text(
-          info.lastMessage,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+        title: Row(
+          children: [
+            Flexible(
+              child: Text(
+                info.characterName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chat_bubble_rounded,
+              size: 14,
+              color: AppColors.textSecondary,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${info.messageCount}',
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 2),
+            Text(
+              info.sessionName?.isNotEmpty == true
+                  ? info.sessionName!
+                  : 'Session #${info.sessionIndex}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              info.lastMessage,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13),
+            ),
+          ],
         ),
         trailing: _buildTrailing(context),
         onTap: () => context.go('/chat/${info.characterId}'),
@@ -217,14 +319,17 @@ class _SessionTile extends ConsumerWidget {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Chat'),
         content: Text(
-            'Delete chat with ${info.characterName}? This cannot be undone.'),
+          'Delete chat with ${info.characterName}? This cannot be undone.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete')),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -268,22 +373,9 @@ class _SessionTile extends ConsumerWidget {
       text = '${dt.day}/${dt.month}';
     }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(text,
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-        const SizedBox(height: 2),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-          decoration: BoxDecoration(
-            color: AppColors.accent.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text('${info.messageCount}',
-              style: const TextStyle(fontSize: 10, color: AppColors.accent)),
-        ),
-      ],
+    return Text(
+      text,
+      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
     );
   }
 }

@@ -10,7 +10,11 @@ import '../../../shared/widgets/glaze_filter_chip_bar.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
 
-void showLorebookCoverageSheet(BuildContext context, WidgetRef ref, String charId) {
+void showLorebookCoverageSheet(
+  BuildContext context,
+  WidgetRef ref,
+  String charId,
+) {
   showModalBottomSheet(
     context: context,
     useRootNavigator: true,
@@ -57,7 +61,10 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
     final nonHidden = session.messages.where((m) => !m.isHidden).toList();
     String lastUserMsg = '';
     for (final m in nonHidden.reversed) {
-      if (m.role == 'user') { lastUserMsg = m.content; break; }
+      if (m.role == 'user') {
+        lastUserMsg = m.content;
+        break;
+      }
     }
 
     final result = computeLorebookCoverage(
@@ -70,7 +77,11 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
       activations: activations,
     );
 
-    if (mounted) setState(() { _result = result; _loading = false; });
+    if (mounted)
+      setState(() {
+        _result = result;
+        _loading = false;
+      });
   }
 
   @override
@@ -87,26 +98,41 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _result == null
-              ? const Center(child: Text('No data', style: TextStyle(color: AppColors.textSecondary)))
-              : Column(
-                  children: [
-                    _SummaryBar(result: _result!),
-                    GlazeFilterChipBar<_FilterMode>(
-                      current: _filter,
-                      options: _FilterMode.values.toList(),
-                      labelBuilder: _labelForFilter,
-                      onSelected: (f) => setState(() => _filter = f),
-                    ),
-                    Expanded(child: _EntryList(entries: _filteredEntries, result: _result!)),
-                  ],
+          ? const Center(
+              child: Text(
+                'No data',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            )
+          : Column(
+              children: [
+                Builder(
+                  builder: (context) =>
+                      SizedBox(height: MediaQuery.paddingOf(context).top),
                 ),
+                _SummaryBar(result: _result!),
+                GlazeFilterChipBar<_FilterMode>(
+                  current: _filter,
+                  options: _FilterMode.values.toList(),
+                  labelBuilder: _labelForFilter,
+                  onSelected: (f) => setState(() => _filter = f),
+                ),
+                Expanded(
+                  child: _EntryList(
+                    entries: _filteredEntries,
+                    result: _result!,
+                  ),
+                ),
+              ],
+            ),
     );
   }
 
   List<CoverageEntry> get _filteredEntries {
     final entries = _result?.entries ?? [];
     return switch (_filter) {
-      _FilterMode.activated => entries.where((e) => e.activated && !e.cutOffByBudget).toList(),
+      _FilterMode.activated =>
+        entries.where((e) => e.activated && !e.cutOffByBudget).toList(),
       _FilterMode.cutOff => entries.where((e) => e.cutOffByBudget).toList(),
       _FilterMode.notTriggered => entries.where((e) => !e.activated).toList(),
       _FilterMode.all => entries,
@@ -124,15 +150,31 @@ class _SummaryBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          _StatChip(label: 'Active', value: '${result.activatedCount - result.cutOffCount}', color: Colors.green),
+          _StatChip(
+            label: 'Active',
+            value: '${result.activatedCount - result.cutOffCount}',
+            color: Colors.green,
+          ),
           const SizedBox(width: 8),
           if (result.cutOffCount > 0) ...[
-            _StatChip(label: 'Cut off', value: '${result.cutOffCount}', color: Colors.orange),
+            _StatChip(
+              label: 'Cut off',
+              value: '${result.cutOffCount}',
+              color: Colors.orange,
+            ),
             const SizedBox(width: 8),
           ],
-          _StatChip(label: 'Inactive', value: '${result.totalCandidates - result.activatedCount}', color: AppColors.textSecondary),
+          _StatChip(
+            label: 'Inactive',
+            value: '${result.totalCandidates - result.activatedCount}',
+            color: AppColors.textSecondary,
+          ),
           const SizedBox(width: 8),
-          _StatChip(label: 'Total', value: '${result.totalCandidates}', color: Colors.cyan),
+          _StatChip(
+            label: 'Total',
+            value: '${result.totalCandidates}',
+            color: Colors.cyan,
+          ),
         ],
       ),
     );
@@ -143,7 +185,11 @@ class _StatChip extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-  const _StatChip({required this.label, required this.value, required this.color});
+  const _StatChip({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -156,9 +202,19 @@ class _StatChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
           const SizedBox(width: 3),
-          Text(label, style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8))),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: color.withValues(alpha: 0.8)),
+          ),
         ],
       ),
     );
@@ -184,7 +240,10 @@ class _EntryList extends StatelessWidget {
     if (entries.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(24),
-        child: Text('No entries in this category', style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
+        child: Text(
+          'No entries in this category',
+          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
       );
     }
 
@@ -215,8 +274,8 @@ class _CoverageTileState extends State<_CoverageTile> {
     final statusColor = e.cutOffByBudget
         ? Colors.orange
         : e.activated
-            ? Colors.green
-            : AppColors.textSecondary;
+        ? Colors.green
+        : AppColors.textSecondary;
 
     final tokenCount = estimateTokens(e.content);
 
@@ -225,7 +284,9 @@ class _CoverageTileState extends State<_CoverageTile> {
       margin: const EdgeInsets.symmetric(vertical: 3),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: statusColor.withValues(alpha: e.activated ? 0.25 : 0.06)),
+        side: BorderSide(
+          color: statusColor.withValues(alpha: e.activated ? 0.25 : 0.06),
+        ),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
@@ -238,7 +299,9 @@ class _CoverageTileState extends State<_CoverageTile> {
               Row(
                 children: [
                   Icon(
-                    e.activated ? Icons.check_circle : Icons.radio_button_unchecked,
+                    e.activated
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
                     size: 16,
                     color: statusColor,
                   ),
@@ -249,7 +312,9 @@ class _CoverageTileState extends State<_CoverageTile> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: e.activated ? AppColors.textPrimary : AppColors.textSecondary,
+                        color: e.activated
+                            ? AppColors.textPrimary
+                            : AppColors.textSecondary,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -257,28 +322,70 @@ class _CoverageTileState extends State<_CoverageTile> {
                   ),
                   _PositionBadge(position: e.position),
                   const SizedBox(width: 4),
-                  Text('$tokenCount t', style: TextStyle(fontSize: 10, color: AppColors.textSecondary)),
-                  Icon(_expanded ? Icons.expand_less : Icons.expand_more, size: 16, color: AppColors.textSecondary),
+                  Text(
+                    '$tokenCount t',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: AppColors.textSecondary,
+                  ),
                 ],
               ),
               const SizedBox(height: 4),
               Row(
                 children: [
-                  Text(e.lorebookName, style: TextStyle(fontSize: 11, color: Colors.cyan.withValues(alpha: 0.8))),
+                  Text(
+                    e.lorebookName,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.cyan.withValues(alpha: 0.8),
+                    ),
+                  ),
                   if (e.constant) ...[
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(color: Colors.purple.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                      child: const Text('CONST', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.purple)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'CONST',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.purple,
+                        ),
+                      ),
                     ),
                   ],
                   if (e.cutOffByBudget) ...[
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                      child: const Text('BUDGET', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: Colors.orange)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'BUDGET',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.orange,
+                        ),
+                      ),
                     ),
                   ],
                 ],
@@ -288,15 +395,30 @@ class _CoverageTileState extends State<_CoverageTile> {
                 Wrap(
                   spacing: 4,
                   runSpacing: 3,
-                  children: e.matchedKeys.map((k) => Chip(
-                    label: Text(k, style: const TextStyle(fontSize: 10, color: Colors.green)),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: EdgeInsets.zero,
-                    labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                    backgroundColor: Colors.green.withValues(alpha: 0.1),
-                    side: BorderSide(color: Colors.green.withValues(alpha: 0.25)),
-                    visualDensity: VisualDensity.compact,
-                  )).toList(),
+                  children: e.matchedKeys
+                      .map(
+                        (k) => Chip(
+                          label: Text(
+                            k,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.green,
+                            ),
+                          ),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.zero,
+                          labelPadding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                          ),
+                          backgroundColor: Colors.green.withValues(alpha: 0.1),
+                          side: BorderSide(
+                            color: Colors.green.withValues(alpha: 0.25),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      )
+                      .toList(),
                 ),
               ],
               if (e.matchedSecondaryKeys.isNotEmpty) ...[
@@ -304,22 +426,40 @@ class _CoverageTileState extends State<_CoverageTile> {
                 Wrap(
                   spacing: 4,
                   runSpacing: 3,
-                  children: e.matchedSecondaryKeys.map((k) => Chip(
-                    label: Text(k, style: const TextStyle(fontSize: 10, color: Colors.teal)),
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    padding: EdgeInsets.zero,
-                    labelPadding: const EdgeInsets.symmetric(horizontal: 6),
-                    backgroundColor: Colors.teal.withValues(alpha: 0.1),
-                    side: BorderSide(color: Colors.teal.withValues(alpha: 0.25)),
-                    visualDensity: VisualDensity.compact,
-                  )).toList(),
+                  children: e.matchedSecondaryKeys
+                      .map(
+                        (k) => Chip(
+                          label: Text(
+                            k,
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Colors.teal,
+                            ),
+                          ),
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.zero,
+                          labelPadding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                          ),
+                          backgroundColor: Colors.teal.withValues(alpha: 0.1),
+                          side: BorderSide(
+                            color: Colors.teal.withValues(alpha: 0.25),
+                          ),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      )
+                      .toList(),
                 ),
               ],
               if (e.matchMessageIndex != null) ...[
                 const SizedBox(height: 4),
                 Text(
                   'Matched in message #${e.matchMessageIndex! + 1}',
-                  style: TextStyle(fontSize: 11, color: Colors.blue.withValues(alpha: 0.7)),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.blue.withValues(alpha: 0.7),
+                  ),
                 ),
               ],
               if (_expanded) ...[
@@ -335,7 +475,11 @@ class _CoverageTileState extends State<_CoverageTile> {
                   child: SingleChildScrollView(
                     child: Text(
                       e.content,
-                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontFamily: 'monospace'),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                        fontFamily: 'monospace',
+                      ),
                     ),
                   ),
                 ),
@@ -367,7 +511,14 @@ class _PositionBadge extends StatelessWidget {
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(4),
       ),
-      child: Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: color)),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
     );
   }
 }

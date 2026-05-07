@@ -61,9 +61,9 @@ class _MenuItemState extends State<MenuItem> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         child: Row(
           children: [
-            Icon(widget.icon, size: 22, color: AppColors.accent),
+            Icon(widget.icon, size: 22, color: const Color(0xFF99A2AD)),
             const SizedBox(width: 16),
-            Text(widget.label, style: const TextStyle(color: AppColors.textPrimary, fontSize: 15, fontWeight: FontWeight.w400)),
+            Text(widget.label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 15, fontWeight: FontWeight.w400)),
           ],
         ),
       ),

@@ -81,8 +81,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
               onDeleted: _closeEditor,
             )
           : presets.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator()),
+              loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (list) => _buildBody(context, ref, list, activeId),
             ),
@@ -95,35 +94,45 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
     List<Preset> list,
     String? activeId,
   ) {
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      itemCount: list.length + 1,
-      itemBuilder: (_, i) {
-        if (i == list.length) return _buildAddButton(context, ref);
-        final preset = list[i];
-        final isActive = activeId == preset.id;
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
-          child: _PsCard(
-            preset: preset,
-            isActive: isActive,
-            onActivate: () =>
-                setActivePreset(ref, isActive ? null : preset.id),
-            onEdit: () => _openEditor(preset),
-            onDuplicate: () => ref.read(presetListProvider.notifier).add(
-                  preset.copyWith(
-                    id: DateTime.now().millisecondsSinceEpoch
-                        .toRadixString(36),
-                    name: '${preset.name} (copy)',
+    return Builder(
+      builder: (context) => ListView.builder(
+        padding: const EdgeInsets.fromLTRB(
+          16,
+          12,
+          16,
+          24,
+        ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+        itemCount: list.length + 1,
+        itemBuilder: (_, i) {
+          if (i == list.length) return _buildAddButton(context, ref);
+          final preset = list[i];
+          final isActive = activeId == preset.id;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _PsCard(
+              preset: preset,
+              isActive: isActive,
+              onActivate: () =>
+                  setActivePreset(ref, isActive ? null : preset.id),
+              onEdit: () => _openEditor(preset),
+              onDuplicate: () => ref
+                  .read(presetListProvider.notifier)
+                  .add(
+                    preset.copyWith(
+                      id: DateTime.now().millisecondsSinceEpoch.toRadixString(
+                        36,
+                      ),
+                      name: '${preset.name} (copy)',
+                    ),
                   ),
-                ),
-            onDelete: () {
-              if (isActive) setActivePreset(ref, null);
-              ref.read(presetListProvider.notifier).remove(preset.id);
-            },
-          ),
-        );
-      },
+              onDelete: () {
+                if (isActive) setActivePreset(ref, null);
+                ref.read(presetListProvider.notifier).remove(preset.id);
+              },
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -383,30 +392,45 @@ class _PsCard extends StatelessWidget {
           children: [
             const SizedBox(height: 8),
             ListTile(
-              leading: const Icon(Icons.edit_outlined,
-                  size: 20, color: AppColors.textPrimary),
-              title: const Text('Edit',
-                  style: TextStyle(color: AppColors.textPrimary)),
+              leading: const Icon(
+                Icons.edit_outlined,
+                size: 20,
+                color: AppColors.textPrimary,
+              ),
+              title: const Text(
+                'Edit',
+                style: TextStyle(color: AppColors.textPrimary),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 onEdit();
               },
             ),
             ListTile(
-              leading: const Icon(Icons.copy_outlined,
-                  size: 20, color: AppColors.textPrimary),
-              title: const Text('Duplicate',
-                  style: TextStyle(color: AppColors.textPrimary)),
+              leading: const Icon(
+                Icons.copy_outlined,
+                size: 20,
+                color: AppColors.textPrimary,
+              ),
+              title: const Text(
+                'Duplicate',
+                style: TextStyle(color: AppColors.textPrimary),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 onDuplicate();
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outlined,
-                  size: 20, color: Color(0xFFFF4444)),
-              title: const Text('Delete',
-                  style: TextStyle(color: Color(0xFFFF4444))),
+              leading: const Icon(
+                Icons.delete_outlined,
+                size: 20,
+                color: Color(0xFFFF4444),
+              ),
+              title: const Text(
+                'Delete',
+                style: TextStyle(color: Color(0xFFFF4444)),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 onDelete();
@@ -484,8 +508,11 @@ class _AddSheetOption extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  const _AddSheetOption(
-      {required this.icon, required this.label, required this.onTap});
+  const _AddSheetOption({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {

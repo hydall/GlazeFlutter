@@ -60,7 +60,11 @@ class CharacterCard extends ConsumerWidget {
                 left: 8,
                 child: Padding(
                   padding: const EdgeInsets.only(top: 22),
-                  child: Icon(Icons.star, size: 14, color: Colors.amber.withValues(alpha: 0.9)),
+                  child: Icon(
+                    Icons.star,
+                    size: 14,
+                    color: Colors.amber.withValues(alpha: 0.9),
+                  ),
                 ),
               ),
             Positioned.fill(
@@ -137,15 +141,17 @@ class CharacterCard extends ConsumerWidget {
           icon: character.fav ? Icons.star : Icons.star_border,
           label: character.fav ? 'Unfavorite' : 'Favorite',
           onTap: () {
-            Navigator.pop(context);
-            ref.read(charactersProvider.notifier).add(character.copyWith(fav: !character.fav));
+            Navigator.of(context, rootNavigator: true).pop();
+            ref
+                .read(charactersProvider.notifier)
+                .add(character.copyWith(fav: !character.fav));
           },
         ),
         BottomSheetItem(
           icon: Icons.info_outline_rounded,
           label: 'View Info',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             _showDetailSheet(context);
           },
         ),
@@ -153,7 +159,7 @@ class CharacterCard extends ConsumerWidget {
           icon: Icons.edit_rounded,
           label: 'Edit',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             context.go('/character/${character.id}/edit');
           },
         ),
@@ -162,7 +168,7 @@ class CharacterCard extends ConsumerWidget {
           label: 'Delete',
           isDestructive: true,
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             _confirmDelete(context, ref);
           },
         ),
@@ -175,23 +181,31 @@ class CharacterCard extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceHigh,
-        title: const Text('Delete Character',
-            style: TextStyle(color: AppColors.textPrimary)),
-        content: Text('Delete ${character.name}? This cannot be undone.',
-            style: const TextStyle(color: AppColors.textSecondary)),
+        title: const Text(
+          'Delete Character',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        content: Text(
+          'Delete ${character.name}? This cannot be undone.',
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textSecondary)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               ref.read(charactersProvider.notifier).remove(character.id);
             },
-            child: const Text('Delete',
-                style: TextStyle(color: Color(0xFFFF4444))),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Color(0xFFFF4444)),
+            ),
           ),
         ],
       ),
@@ -209,11 +223,7 @@ class _BottomGradient extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
-          colors: [
-            Color(0xF2000000),
-            Color(0x99000000),
-            Colors.transparent,
-          ],
+          colors: [Color(0xF2000000), Color(0x99000000), Colors.transparent],
           stops: [0.0, 0.5, 1.0],
         ),
       ),
@@ -259,9 +269,7 @@ class _CardInfo extends StatelessWidget {
                 fontSize: 11,
                 color: Colors.white.withValues(alpha: 0.75),
                 height: 1.3,
-                shadows: const [
-                  Shadow(blurRadius: 4, color: Colors.black87),
-                ],
+                shadows: const [Shadow(blurRadius: 4, color: Colors.black87)],
               ),
             ),
           ],
@@ -291,8 +299,11 @@ class _TokenBadge extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.description_outlined,
-                  size: 11, color: Colors.white70),
+              const Icon(
+                Icons.description_outlined,
+                size: 11,
+                color: Colors.white70,
+              ),
               const SizedBox(width: 4),
               Text(
                 '${estimateTokens([character.name, character.description, character.personality, character.scenario, character.firstMes, character.mesExample].whereType<String>().join('\n'))}',

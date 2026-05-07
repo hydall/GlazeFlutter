@@ -51,19 +51,26 @@ class RegexListScreen extends ConsumerWidget {
             );
           }
 
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            itemCount: allRegexes.length,
-            itemBuilder: (_, i) {
-              final entry = allRegexes[i];
-              final regex = entry.value;
-              final presetId = entry.key;
-              return _EditableRegexItem(
-                regex: regex,
-                presetId: presetId,
-                presets: presets,
-              );
-            },
+          return Builder(
+            builder: (context) => ListView.builder(
+              padding: const EdgeInsets.fromLTRB(
+                16,
+                0,
+                16,
+                24,
+              ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+              itemCount: allRegexes.length,
+              itemBuilder: (_, i) {
+                final entry = allRegexes[i];
+                final regex = entry.value;
+                final presetId = entry.key;
+                return _EditableRegexItem(
+                  regex: regex,
+                  presetId: presetId,
+                  presets: presets,
+                );
+              },
+            ),
           );
         },
       ),
@@ -105,13 +112,24 @@ class _EditableRegexItem extends ConsumerWidget {
                   Icon(
                     regex.disabled ? Icons.code_off : Icons.code,
                     size: 16,
-                    color: regex.disabled ? AppColors.textSecondary : AppColors.accent,
+                    color: regex.disabled
+                        ? AppColors.textSecondary
+                        : AppColors.accent,
                   ),
                   const SizedBox(width: 6),
-                  Expanded(child: Text('From: $presetName', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary))),
+                  Expanded(
+                    child: Text(
+                      'From: $presetName',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
                   Switch(
                     value: !regex.disabled,
-                    onChanged: (v) => _updateRegex(ref, regex.copyWith(disabled: !v)),
+                    onChanged: (v) =>
+                        _updateRegex(ref, regex.copyWith(disabled: !v)),
                     activeColor: AppColors.accent,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
@@ -134,7 +152,9 @@ class _EditableRegexItem extends ConsumerWidget {
       if (r.id == regex.id) return updated;
       return r;
     }).toList();
-    await ref.read(presetRepoProvider).put(preset.copyWith(regexes: updatedRegexes));
+    await ref
+        .read(presetRepoProvider)
+        .put(preset.copyWith(regexes: updatedRegexes));
     ref.invalidate(presetRepoProvider);
   }
 }

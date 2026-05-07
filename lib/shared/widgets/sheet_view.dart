@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:gradient_blur/gradient_blur.dart';
@@ -49,6 +50,7 @@ class SheetView extends StatefulWidget {
   final bool showHandle;
   final EdgeInsetsGeometry? bodyPadding;
   final bool startExpanded;
+  final ScrollController? scrollController;
 
   const SheetView({
     super.key,
@@ -67,6 +69,7 @@ class SheetView extends StatefulWidget {
     this.showHandle = true,
     this.bodyPadding,
     this.startExpanded = false,
+    this.scrollController,
   });
 
   @override
@@ -81,6 +84,9 @@ class _SheetViewState extends State<SheetView>
 
   late AnimationController _ctrl;
   Animation<double>? _anim;
+
+  final _headerKey = GlobalKey();
+  double _headerH = 0;
 
   double _dragStartY = 0;
   double _dragStartH = 0;
@@ -97,14 +103,55 @@ class _SheetViewState extends State<SheetView>
       vsync: this,
       duration: const Duration(milliseconds: 350),
     );
+    _headerH = _estimateHeaderHeight();
+  }
+
+  double _estimateHeaderHeight() {
+    if (!_hasHeader) {
+      return 0;
+    }
+    double h = 0;
+    if (widget.showHandle) {
+      h += 24;
+    }
+    if (widget.title != null ||
+        widget.titleWidget != null ||
+        widget.showBack ||
+        widget.actions.isNotEmpty) {
+      h += 52;
+    }
+    if (widget.tabs.isNotEmpty) {
+      h += 46;
+    }
+    if (widget.headerBottom != null) {
+      h += 52;
+    }
+    return h;
+  }
+
+  void _measureHeader() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final box = _headerKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) {
+        return;
+      }
+      final h = box.size.height;
+      if (h != _headerH) {
+        setState(() => _headerH = h);
+      }
+    });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_heightInit) {
-      _currentHeight =
-          widget.startExpanded ? _full(context) : _collapsed(context);
+      _currentHeight = widget.startExpanded
+          ? _full(context)
+          : _collapsed(context);
       _expanded = widget.startExpanded;
       _heightInit = true;
     }
@@ -187,52 +234,125 @@ class _SheetViewState extends State<SheetView>
     final radius = 20.0 * (1.0 - t);
     final topPad = MediaQuery.of(context).padding.top * t;
 
+    if (_hasHeader) {
+      _measureHeader();
+    }
+
     return SizedBox(
       height: _currentHeight,
       child: ClipRRect(
         borderRadius: BorderRadius.vertical(top: Radius.circular(radius)),
-        child: Container(
-          color: AppColors.background,
-          child: Stack(
-            children: [
-              Column(
-                children: [
-                  if (_hasHeader)
-                    _SheetViewHeader(
-                      title: widget.title,
-                      titleWidget: widget.titleWidget,
-                      showBack: widget.showBack,
-                      onBack: widget.onBack,
-                      actions: widget.actions,
-                      tabs: widget.tabs,
-                      activeTabId: widget.activeTabId,
-                      onTabSelected: widget.onTabSelected,
-                      headerBottom: widget.headerBottom,
-                      showHandle: widget.showHandle,
-                      expanded: _expanded,
-                      topPad: topPad,
-                      onHandleTap: _toggle,
-                      onDragStart: _onDragStart,
-                      onDragUpdate: _onDragUpdate,
-                      onDragEnd: _onDragEnd,
-                    ),
-                  Expanded(
-                    child: Padding(
-                      padding: widget.bodyPadding ?? EdgeInsets.zero,
-                      child: widget.body,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            color: AppColors.background.withValues(alpha: 0.8),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(
+                      context,
+                    ).copyWith(scrollbars: false),
+                    child: Builder(
+                      builder: (context) {
+                        final mediaQuery = MediaQuery.of(context);
+                        final extraTop = _hasHeader ? _headerH : topPad;
+                        final newPadding = mediaQuery.padding.copyWith(
+                          top: extraTop,
+                        );
+
+                        final innerChild = Padding(
+                          padding: widget.bodyPadding ?? EdgeInsets.zero,
+                          child: widget.body,
+                        );
+
+                        return MediaQuery(
+                          data: mediaQuery.copyWith(padding: newPadding),
+                          child: widget.scrollController != null
+                              ? RawScrollbar(
+                                  controller: widget.scrollController,
+                                  thumbColor: Colors.white.withValues(
+                                    alpha: 0.15,
+                                  ),
+                                  radius: const Radius.circular(3),
+                                  thickness: 4,
+                                  padding: EdgeInsets.only(
+                                    top: extraTop,
+                                    right: 3,
+                                  ),
+                                  child: innerChild,
+                                )
+                              : innerChild,
+                        );
+                      },
                     ),
                   ),
-                ],
-              ),
-              if (widget.floating != null)
-                Positioned.fill(child: widget.floating!),
-              if (widget.floatingActionButton != null)
-                Positioned(
-                  right: 16,
-                  bottom: 16 + MediaQuery.of(context).padding.bottom,
-                  child: widget.floatingActionButton!,
                 ),
-            ],
+                // Gradient blur overlay — IgnorePointer so touches pass through
+                // to the header layer above. Extends slightly past the header to
+                // fade body content in as the user scrolls.
+                if (_hasHeader)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: IgnorePointer(
+                      child: GradientBlur(
+                        maxBlur: 8,
+                        curve: Curves.easeIn,
+                        gradient: const LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Color(0xEB141416),
+                            Color(0x88141416),
+                            Color(0x00141416),
+                          ],
+                          stops: [0.0, 0.4, 0.85],
+                        ),
+                        child: SizedBox(height: _headerH + 8),
+                      ),
+                    ),
+                  ),
+                // Interactive header — rendered above the gradient so buttons
+                // and drag handle are unobscured and fully hittable.
+                if (_hasHeader)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: KeyedSubtree(
+                      key: _headerKey,
+                      child: _SheetViewHeader(
+                        title: widget.title,
+                        titleWidget: widget.titleWidget,
+                        showBack: widget.showBack,
+                        onBack: widget.onBack,
+                        actions: widget.actions,
+                        tabs: widget.tabs,
+                        activeTabId: widget.activeTabId,
+                        onTabSelected: widget.onTabSelected,
+                        headerBottom: widget.headerBottom,
+                        showHandle: widget.showHandle,
+                        expanded: _expanded,
+                        topPad: topPad,
+                        onHandleTap: _toggle,
+                        onDragStart: _onDragStart,
+                        onDragUpdate: _onDragUpdate,
+                        onDragEnd: _onDragEnd,
+                      ),
+                    ),
+                  ),
+                if (widget.floating != null)
+                  Positioned.fill(child: widget.floating!),
+                if (widget.floatingActionButton != null)
+                  Positioned(
+                    right: 16,
+                    bottom: 16 + MediaQuery.of(context).padding.bottom,
+                    child: widget.floatingActionButton!,
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -279,140 +399,125 @@ class _SheetViewHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GradientBlur(
-      maxBlur: 8,
-      curve: Curves.easeIn,
-      gradient: const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Color(0xEB141416),
-          Color(0x88141416),
-          Color(0x00141416),
-        ],
-        stops: [0.0, 0.55, 1.0],
-      ),
-      child: Padding(
-        padding: EdgeInsets.only(top: topPad),
-        child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (showHandle)
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onHandleTap,
-                  onVerticalDragStart: onDragStart,
-                  onVerticalDragUpdate: onDragUpdate,
-                  onVerticalDragEnd: onDragEnd,
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      child: Center(
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOutCubic,
-                          width: expanded ? 24.0 : 36.0,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(
-                              alpha: expanded ? 0.6 : 0.35,
-                            ),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+    return Padding(
+      padding: EdgeInsets.only(top: topPad),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showHandle)
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onHandleTap,
+              onVerticalDragStart: onDragStart,
+              onVerticalDragUpdate: onDragUpdate,
+              onVerticalDragEnd: onDragEnd,
+              child: SizedBox(
+                width: double.infinity,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Center(
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                      width: expanded ? 24.0 : 36.0,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(
+                          alpha: expanded ? 0.6 : 0.35,
                         ),
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
                 ),
-              if (title != null ||
-                  titleWidget != null ||
-                  showBack ||
-                  actions.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Row(
-                    children: [
-                      if (showBack)
-                        _HeaderIconButton(
-                          onPressed:
-                              onBack ?? () => Navigator.of(context).maybePop(),
-                          child: const Icon(
-                            Icons.arrow_back,
-                            size: 20,
-                            color: AppColors.accent,
-                          ),
-                        )
-                      else
-                        const SizedBox(width: 40),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: titleWidget ??
-                            (title != null
-                                ? Text(
-                                    title!,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppColors.textPrimary,
-                                    ),
-                                  )
-                                : const SizedBox.shrink()),
+              ),
+            ),
+          if (title != null ||
+              titleWidget != null ||
+              showBack ||
+              actions.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                children: [
+                  if (showBack)
+                    _HeaderIconButton(
+                      onPressed:
+                          onBack ?? () => Navigator.of(context).maybePop(),
+                      child: const Icon(
+                        Icons.arrow_back,
+                        size: 20,
+                        color: AppColors.accent,
                       ),
-                      const SizedBox(width: 8),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: actions
-                            .map(
-                              (action) => Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: _HeaderIconButton(
-                                  tooltip: action.tooltip,
-                                  onPressed: action.onPressed,
-                                  foregroundColor:
-                                      action.color ?? AppColors.accent,
-                                  child: action.icon,
+                    )
+                  else
+                    const SizedBox(width: 40),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child:
+                        titleWidget ??
+                        (title != null
+                            ? Text(
+                                title!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textPrimary,
                                 ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ],
+                              )
+                            : const SizedBox.shrink()),
                   ),
-                ),
-              if (tabs.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: Row(
-                    children: tabs
+                  const SizedBox(width: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: actions
                         .map(
-                          (tab) => Expanded(
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 4),
-                              child: _SheetTabButton(
-                                tab: tab,
-                                active: activeTabId == tab.id,
-                                onTap: onTabSelected == null
-                                    ? null
-                                    : () => onTabSelected!(tab.id),
-                              ),
+                          (action) => Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: _HeaderIconButton(
+                              tooltip: action.tooltip,
+                              onPressed: action.onPressed,
+                              foregroundColor: action.color ?? AppColors.accent,
+                              child: action.icon,
                             ),
                           ),
                         )
                         .toList(),
                   ),
-                ),
-              if (headerBottom != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                  child: headerBottom!,
-                ),
-            ],
-          ),
-        ),
+                ],
+              ),
+            ),
+          if (tabs.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Row(
+                children: tabs
+                    .map(
+                      (tab) => Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: _SheetTabButton(
+                            tab: tab,
+                            active: activeTabId == tab.id,
+                            onTap: onTabSelected == null
+                                ? null
+                                : () => onTabSelected!(tab.id),
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          if (headerBottom != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: headerBottom!,
+            ),
+        ],
+      ),
     );
   }
 }
@@ -462,11 +567,7 @@ class _SheetTabButton extends StatelessWidget {
   final bool active;
   final VoidCallback? onTap;
 
-  const _SheetTabButton({
-    required this.tab,
-    required this.active,
-    this.onTap,
-  });
+  const _SheetTabButton({required this.tab, required this.active, this.onTap});
 
   @override
   Widget build(BuildContext context) {

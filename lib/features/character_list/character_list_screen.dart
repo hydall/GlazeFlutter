@@ -39,7 +39,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     final navHeight = ref.watch(navHeightProvider);
 
     final topPad = MediaQuery.of(context).padding.top + 66.0;
-    final headerHeight = topPad + 52.0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -48,8 +47,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
           Positioned.fill(
             child: _showCatalog
                 ? CatalogGrid(
-                    topPadding: headerHeight,
+                    topPadding: topPad,
                     bottomPadding: navHeight + 20,
+                    tabBar: _buildTabBar(),
                   )
                 : characters.when(
                     loading: () => const Center(
@@ -63,8 +63,16 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                     ),
                     data: (chars) {
                       if (chars.isEmpty) {
-                        return EmptyCharacterState(
-                          onImport: () => _importCharacter(context, ref),
+                        return CustomScrollView(
+                          slivers: [
+                            SliverToBoxAdapter(child: SizedBox(height: topPad)),
+                            SliverToBoxAdapter(child: _buildTabBar()),
+                            SliverFillRemaining(
+                              child: EmptyCharacterState(
+                                onImport: () => _importCharacter(context, ref),
+                              ),
+                            ),
+                          ],
                         );
                       }
                       var filtered = chars;
@@ -92,8 +100,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                         characters: sorted,
                         sortBy: _sortBy,
                         sortDir: _sortDir,
-                        topPadding: headerHeight,
+                        topPadding: topPad,
                         bottomPadding: navHeight + 20,
+                        tabBar: _buildTabBar(),
                         onSortDirToggle: () => setState(() {
                           _sortDir = _sortDir == SortDir.asc
                               ? SortDir.desc
@@ -150,23 +159,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                  child: GlazeTabBar(
-                    tabs: const [
-                      GlazeTabItem(
-                        label: 'My Characters',
-                        icon: Icons.person_rounded,
-                      ),
-                      GlazeTabItem(
-                        label: 'Discover',
-                        icon: Icons.public_rounded,
-                      ),
-                    ],
-                    activeIndex: _showCatalog ? 1 : 0,
-                    onChanged: (i) => setState(() => _showCatalog = i == 1),
-                  ),
-                ),
               ],
             ),
           ),
@@ -185,6 +177,20 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                 : _AddButton(onTap: () => _importCharacter(context, ref)),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTabBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: GlazeTabBar(
+        tabs: const [
+          GlazeTabItem(label: 'My Characters', icon: Icons.person_rounded),
+          GlazeTabItem(label: 'Discover', icon: Icons.public_rounded),
+        ],
+        activeIndex: _showCatalog ? 1 : 0,
+        onChanged: (i) => setState(() => _showCatalog = i == 1),
       ),
     );
   }

@@ -51,9 +51,7 @@ class LorebookListScreen extends ConsumerWidget {
           icon: const Icon(Icons.search, size: 20),
           tooltip: 'Embedding Settings',
           onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (_) => const EmbeddingSettingsScreen(),
-            ),
+            MaterialPageRoute(builder: (_) => const EmbeddingSettingsScreen()),
           ),
         ),
       ],
@@ -89,23 +87,30 @@ class LorebookListScreen extends ConsumerWidget {
               ),
             );
           }
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-            itemCount: lorebooks.length,
-            itemBuilder: (_, i) => _LorebookTile(
-              lorebook: lorebooks[i],
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      LorebookEditorScreen(lorebookId: lorebooks[i].id),
-                ),
-              ),
-              onDelete: () => _deleteLorebook(context, ref, lorebooks[i]),
-              onToggle: () => ref
-                  .read(lorebooksProvider.notifier)
-                  .updateLorebook(
-                    lorebooks[i].copyWith(enabled: !lorebooks[i].enabled),
+          return Builder(
+            builder: (context) => ListView.builder(
+              padding: const EdgeInsets.fromLTRB(
+                16,
+                0,
+                16,
+                100,
+              ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+              itemCount: lorebooks.length,
+              itemBuilder: (_, i) => _LorebookTile(
+                lorebook: lorebooks[i],
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        LorebookEditorScreen(lorebookId: lorebooks[i].id),
                   ),
+                ),
+                onDelete: () => _deleteLorebook(context, ref, lorebooks[i]),
+                onToggle: () => ref
+                    .read(lorebooksProvider.notifier)
+                    .updateLorebook(
+                      lorebooks[i].copyWith(enabled: !lorebooks[i].enabled),
+                    ),
+              ),
             ),
           );
         },
@@ -204,24 +209,28 @@ class _LorebookTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activations = ref.watch(lorebookActivationsProvider);
-    final hasCharBinding = activations.character.values.any((list) => list.contains(lorebook.id));
-    final hasChatBinding = activations.chat.values.any((list) => list.contains(lorebook.id));
+    final hasCharBinding = activations.character.values.any(
+      (list) => list.contains(lorebook.id),
+    );
+    final hasChatBinding = activations.chat.values.any(
+      (list) => list.contains(lorebook.id),
+    );
 
     final scopeColor = lorebook.enabled
         ? Colors.green
         : hasCharBinding
-            ? Colors.purple
-            : hasChatBinding
-                ? Colors.orange
-                : Colors.grey;
+        ? Colors.purple
+        : hasChatBinding
+        ? Colors.orange
+        : Colors.grey;
 
     final scopeLabel = lorebook.enabled
         ? 'global'
         : hasCharBinding
-            ? 'character'
-            : hasChatBinding
-                ? 'chat'
-                : 'none';
+        ? 'character'
+        : hasChatBinding
+        ? 'chat'
+        : 'none';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),

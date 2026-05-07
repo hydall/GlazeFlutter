@@ -50,10 +50,14 @@ class PersonaListScreen extends ConsumerWidget {
                   ],
                 ),
               )
-            : ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                itemCount: list.length,
-                itemBuilder: (_, i) => _PersonaTile(persona: list[i]),
+            : Builder(
+                builder: (context) => ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 24).add(
+                    EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+                  ),
+                  itemCount: list.length,
+                  itemBuilder: (_, i) => _PersonaTile(persona: list[i]),
+                ),
               ),
       ),
     );
@@ -102,7 +106,11 @@ class _PersonaTile extends ConsumerWidget {
         ),
         title: Text(persona.name),
         subtitle: persona.prompt != null && persona.prompt!.isNotEmpty
-            ? Text(persona.prompt!, maxLines: 1, overflow: TextOverflow.ellipsis)
+            ? Text(
+                persona.prompt!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              )
             : const Text(
                 'No prompt',
                 style: TextStyle(color: AppColors.textSecondary),
@@ -213,19 +221,31 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
                         ? FileImage(File(_avatarPath!))
                         : null,
                     child: _avatarPath == null
-                        ? Icon(Icons.person, size: 40, color: AppColors.accent.withValues(alpha: 0.5))
+                        ? Icon(
+                            Icons.person,
+                            size: 40,
+                            color: AppColors.accent.withValues(alpha: 0.5),
+                          )
                         : null,
                   ),
                   Positioned(
-                    bottom: 0, right: 0,
+                    bottom: 0,
+                    right: 0,
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
                         color: AppColors.accent,
                         shape: BoxShape.circle,
-                        border: Border.all(color: AppColors.background, width: 2),
+                        border: Border.all(
+                          color: AppColors.background,
+                          width: 2,
+                        ),
                       ),
-                      child: const Icon(Icons.camera_alt, size: 14, color: Colors.black),
+                      child: const Icon(
+                        Icons.camera_alt,
+                        size: 14,
+                        color: Colors.black,
+                      ),
                     ),
                   ),
                 ],
@@ -262,14 +282,11 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
     if (name.isEmpty) return;
 
     final persona = Persona(
-      id:
-          widget.existing?.id ??
-          generateId(),
+      id: widget.existing?.id ?? generateId(),
       name: name,
       prompt: _promptCtrl.text.trim().isEmpty ? null : _promptCtrl.text.trim(),
       avatarPath: _avatarPath,
-      createdAt: widget.existing?.createdAt ??
-          currentTimestampSeconds(),
+      createdAt: widget.existing?.createdAt ?? currentTimestampSeconds(),
     );
 
     await ref.read(personaRepoProvider).put(persona);

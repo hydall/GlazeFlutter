@@ -12,8 +12,14 @@ import 'catalog_preview_sheet.dart';
 class CatalogGrid extends ConsumerWidget {
   final double topPadding;
   final double bottomPadding;
+  final Widget? tabBar;
 
-  const CatalogGrid({super.key, this.topPadding = 0, this.bottomPadding = 16});
+  const CatalogGrid({
+    super.key,
+    this.topPadding = 0,
+    this.bottomPadding = 16,
+    this.tabBar,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -34,6 +40,7 @@ class CatalogGrid extends ConsumerWidget {
         slivers: [
           if (topPadding > 0)
             SliverToBoxAdapter(child: SizedBox(height: topPadding)),
+          if (tabBar != null) SliverToBoxAdapter(child: tabBar!),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),

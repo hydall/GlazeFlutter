@@ -321,58 +321,76 @@ class _MetadataRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        if (swipeCount > 1) ...[
-          _swipeBtn(Icons.chevron_left, onSwipeLeft),
-          if (swipeCount <= 10)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: List.generate(swipeCount, (i) => Container(
-                width: 6,
-                height: 6,
-                margin: const EdgeInsets.symmetric(horizontal: 2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: i == swipeId ? textColor : textColor.withValues(alpha: 0.3),
-                ),
-              )),
-            )
-          else
-            Text('${swipeId + 1}/$swipeCount', style: TextStyle(fontSize: 11, color: textColor)),
-          _swipeBtn(Icons.chevron_right, onSwipeRight),
-          const SizedBox(width: 6),
-        ],
-        if (!isStandard && messageIndex >= 0) ...[
-          Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.55))),
-          const SizedBox(width: 8),
-        ],
-        if (genTime != null) ...[
-          Icon(Icons.access_time, size: 12, color: textColor),
-          const SizedBox(width: 4),
-          Text(genTime!, style: TextStyle(fontSize: 12, color: textColor)),
-          const SizedBox(width: 12),
-        ],
-        if (tokens != null && tokens! > 0) ...[
-          Icon(Icons.description_outlined, size: 12, color: textColor),
-          const SizedBox(width: 4),
-          Text('${tokens}t', style: TextStyle(fontSize: 12, color: textColor)),
-        ],
-        if (memoryEntryCount > 0) ...[
-          const SizedBox(width: 8),
-          Icon(Icons.auto_stories, size: 12, color: textColor.withValues(alpha: 0.7)),
-          const SizedBox(width: 4),
-          Text('$memoryEntryCount mem', style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.7))),
-        ],
-        const Spacer(),
-        InkWell(
-          onTap: onMenuTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.all(4),
+        // Left: metadata stats
+        Expanded(
+          child: Row(
+            children: [
+              if (!isStandard && messageIndex >= 0) ...[
+                Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.55))),
+                const SizedBox(width: 8),
+              ],
+              if (genTime != null) ...[
+                Icon(Icons.access_time, size: 12, color: textColor),
+                const SizedBox(width: 4),
+                Text(genTime!, style: TextStyle(fontSize: 12, color: textColor)),
+                const SizedBox(width: 12),
+              ],
+              if (tokens != null && tokens! > 0) ...[
+                Icon(Icons.description_outlined, size: 12, color: textColor),
+                const SizedBox(width: 4),
+                Text('${tokens}t', style: TextStyle(fontSize: 12, color: textColor)),
+              ],
+              if (memoryEntryCount > 0) ...[
+                const SizedBox(width: 8),
+                Icon(Icons.auto_stories, size: 12, color: textColor.withValues(alpha: 0.7)),
+                const SizedBox(width: 4),
+                Text('$memoryEntryCount mem', style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.7))),
+              ],
+            ],
+          ),
+        ),
+        // Center: swipe switcher
+        if (swipeCount > 1)
+          Container(
+            height: 22,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
-              color: isStandard ? scheme.surfaceContainerHighest : (isUser ? Colors.transparent : scheme.surfaceContainerHighest),
-              shape: BoxShape.circle,
+              color: scheme.surfaceContainerHighest.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.15)),
             ),
-            child: Icon(Icons.menu, size: 16, color: textColor),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _swipeBtn(Icons.chevron_left, onSwipeLeft),
+                SizedBox(
+                  width: 28,
+                  child: Text(
+                    '${swipeId + 1}/$swipeCount',
+                    style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.8)),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                _swipeBtn(Icons.chevron_right, onSwipeRight),
+              ],
+            ),
+          ),
+        // Right: action button
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: InkWell(
+              onTap: onMenuTap,
+              borderRadius: BorderRadius.circular(16),
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: isStandard ? scheme.surfaceContainerHighest : (isUser ? Colors.transparent : scheme.surfaceContainerHighest),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.menu, size: 16, color: textColor),
+              ),
+            ),
           ),
         ),
       ],
@@ -380,12 +398,14 @@ class _MetadataRow extends StatelessWidget {
   }
 
   Widget _swipeBtn(IconData icon, VoidCallback? onTap) {
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Icon(icon, size: 18, color: onTap != null ? textColor : textColor.withValues(alpha: 0.3)),
+      child: SizedBox(
+        width: 20,
+        height: 20,
+        child: Center(
+          child: Icon(icon, size: 16, color: textColor.withValues(alpha: onTap != null ? 0.7 : 0.25)),
+        ),
       ),
     );
   }

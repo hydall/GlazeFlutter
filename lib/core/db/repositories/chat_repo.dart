@@ -14,6 +14,7 @@ class SessionMetadata {
   final int messageCount;
   final String lastMessageContent;
   final int lastMessageTimestamp;
+  final String? sessionName;
 
   const SessionMetadata({
     required this.sessionId,
@@ -23,6 +24,7 @@ class SessionMetadata {
     required this.messageCount,
     required this.lastMessageContent,
     required this.lastMessageTimestamp,
+    this.sessionName,
   });
 }
 
@@ -31,23 +33,23 @@ class ChatRepo {
   ChatRepo(this._db);
 
   Future<List<ChatSession>> getByCharacterId(String charId) async {
-    final rows = await (_db.select(_db.chatSessions)
-          ..where((t) => t.characterId.equals(charId)))
-        .get();
+    final rows = await (_db.select(
+      _db.chatSessions,
+    )..where((t) => t.characterId.equals(charId))).get();
     return rows.map(_toModel).toList();
   }
 
   Future<List<ChatSession>> getAllSessions() async {
-    final rows = await (_db.select(_db.chatSessions)
-          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
-        .get();
+    final rows = await (_db.select(
+      _db.chatSessions,
+    )..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])).get();
     return rows.map(_toModel).toList();
   }
 
   Future<List<SessionMetadata>> getAllSessionMetadata() async {
-    final rows = await (_db.select(_db.chatSessions)
-          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
-        .get();
+    final rows = await (_db.select(
+      _db.chatSessions,
+    )..orderBy([(t) => OrderingTerm.desc(t.updatedAt)])).get();
     return rows.map(_toMetadata).toList();
   }
 
@@ -59,23 +61,36 @@ class ChatRepo {
   }
 
   Future<ChatSession?> getById(String sessionId) async {
-    final row = await (_db.select(_db.chatSessions)
-          ..where((t) => t.sessionId.equals(sessionId)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.chatSessions,
+    )..where((t) => t.sessionId.equals(sessionId))).getSingleOrNull();
     return row != null ? _toModel(row) : null;
   }
 
   Future<void> put(ChatSession session) async {
-    await _db.into(_db.chatSessions).insertOnConflictUpdate(_toCompanion(session));
+    await _db
+        .into(_db.chatSessions)
+        .insertOnConflictUpdate(_toCompanion(session));
   }
 
   Future<void> delete(String sessionId) async {
-    await (_db.delete(_db.chatSessions)..where((t) => t.sessionId.equals(sessionId))).go();
+    await (_db.delete(
+      _db.chatSessions,
+    )..where((t) => t.sessionId.equals(sessionId))).go();
   }
 
   SessionMetadata _toMetadata(ChatSessionRow c) {
     final msgs = jsonDecode(c.messagesJson) as List;
     final lastRaw = msgs.isNotEmpty ? msgs.last as Map<String, dynamic> : null;
+
+    String? sessionName;
+    if (c.sessionVarsJson != null && c.sessionVarsJson!.isNotEmpty) {
+      try {
+        final vars = jsonDecode(c.sessionVarsJson!) as Map;
+        sessionName = vars['sessionName'] as String?;
+      } catch (_) {}
+    }
+
     return SessionMetadata(
       sessionId: c.sessionId,
       characterId: c.characterId,
@@ -84,43 +99,46 @@ class ChatRepo {
       messageCount: msgs.length,
       lastMessageContent: (lastRaw?['content'] as String?) ?? '',
       lastMessageTimestamp: (lastRaw?['timestamp'] as int?) ?? 0,
+      sessionName: sessionName,
     );
   }
 
   ChatSession _toModel(ChatSessionRow c) => ChatSession(
-        id: c.sessionId,
-        characterId: c.characterId,
-        sessionIndex: c.sessionIndex,
-        messages: (jsonDecode(c.messagesJson) as List)
-            .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        updatedAt: c.updatedAt,
-        sessionVars: c.sessionVarsJson != null
-            ? Map<String, String>.from(
-                jsonDecode(c.sessionVarsJson!) as Map)
-            : {},
-        authorsNote: _parseAuthorsNote(c.authorsNoteJson),
-        draft: c.draft,
-        lastScrollAnchor: c.lastScrollAnchorJson != null && c.lastScrollAnchorJson!.isNotEmpty
-            ? Map<String, dynamic>.from(jsonDecode(c.lastScrollAnchorJson!) as Map)
-            : {},
-      );
+    id: c.sessionId,
+    characterId: c.characterId,
+    sessionIndex: c.sessionIndex,
+    messages: (jsonDecode(c.messagesJson) as List)
+        .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    updatedAt: c.updatedAt,
+    sessionVars: c.sessionVarsJson != null
+        ? Map<String, String>.from(jsonDecode(c.sessionVarsJson!) as Map)
+        : {},
+    authorsNote: _parseAuthorsNote(c.authorsNoteJson),
+    draft: c.draft,
+    lastScrollAnchor:
+        c.lastScrollAnchorJson != null && c.lastScrollAnchorJson!.isNotEmpty
+        ? Map<String, dynamic>.from(jsonDecode(c.lastScrollAnchorJson!) as Map)
+        : {},
+  );
 
   ChatSessionsCompanion _toCompanion(ChatSession m) => ChatSessionsCompanion(
-        sessionId: Value(m.id),
-        characterId: Value(m.characterId),
-        sessionIndex: Value(m.sessionIndex),
-        messagesJson: Value(jsonEncode(m.messages.map((e) => e.toJson()).toList())),
-        updatedAt: Value(m.updatedAt),
-        sessionVarsJson: Value(m.sessionVars.isNotEmpty
-            ? jsonEncode(m.sessionVars)
-            : null),
-        authorsNoteJson: Value(m.authorsNote != null
-            ? jsonEncode(m.authorsNote!.toJson())
-            : null),
-        draft: Value(m.draft),
-        lastScrollAnchorJson: Value(m.lastScrollAnchor.isNotEmpty ? jsonEncode(m.lastScrollAnchor) : null),
-      );
+    sessionId: Value(m.id),
+    characterId: Value(m.characterId),
+    sessionIndex: Value(m.sessionIndex),
+    messagesJson: Value(jsonEncode(m.messages.map((e) => e.toJson()).toList())),
+    updatedAt: Value(m.updatedAt),
+    sessionVarsJson: Value(
+      m.sessionVars.isNotEmpty ? jsonEncode(m.sessionVars) : null,
+    ),
+    authorsNoteJson: Value(
+      m.authorsNote != null ? jsonEncode(m.authorsNote!.toJson()) : null,
+    ),
+    draft: Value(m.draft),
+    lastScrollAnchorJson: Value(
+      m.lastScrollAnchor.isNotEmpty ? jsonEncode(m.lastScrollAnchor) : null,
+    ),
+  );
 
   AuthorsNote? _parseAuthorsNote(String? json) {
     if (json == null || json.isEmpty) return null;

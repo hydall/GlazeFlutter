@@ -16,6 +16,8 @@ class ChatSessionInfo {
   final String lastMessage;
   final int lastMessageTime;
   final int messageCount;
+  final int sessionIndex;
+  final String? sessionName;
 
   const ChatSessionInfo({
     required this.sessionId,
@@ -25,12 +27,15 @@ class ChatSessionInfo {
     required this.lastMessage,
     required this.lastMessageTime,
     required this.messageCount,
+    required this.sessionIndex,
+    this.sessionName,
   });
 }
 
 final chatHistoryProvider =
     AsyncNotifierProvider<ChatHistoryNotifier, List<ChatSessionInfo>>(
-        ChatHistoryNotifier.new);
+      ChatHistoryNotifier.new,
+    );
 
 class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
   StreamSubscription? _sub;
@@ -67,6 +72,8 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
         lastMessage: m.lastMessageContent,
         lastMessageTime: m.lastMessageTimestamp,
         messageCount: m.messageCount,
+        sessionIndex: m.sessionIndex,
+        sessionName: m.sessionName,
       );
     }).toList();
 

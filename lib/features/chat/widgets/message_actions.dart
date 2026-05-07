@@ -27,69 +27,110 @@ void showMessageContextMenu({
         icon: Icons.stop_circle,
         iconColor: Colors.orange,
         label: 'Stop Generating',
-        onTap: () { Navigator.pop(context); notifier.abortGeneration(); },
+        onTap: () {
+          Navigator.of(context, rootNavigator: true).pop();
+          notifier.abortGeneration();
+        },
       )
     else ...[
       if (!(isGenerating && isLast))
         BottomSheetItem(
           icon: Icons.copy,
           label: 'Copy',
-          onTap: () { Clipboard.setData(ClipboardData(text: content)); Navigator.pop(context); },
+          onTap: () {
+            Clipboard.setData(ClipboardData(text: content));
+            Navigator.of(context, rootNavigator: true).pop();
+          },
         ),
       if (!isError && !(isGenerating && isLast))
         BottomSheetItem(
           icon: Icons.edit,
           label: 'Edit',
-          onTap: () { Navigator.pop(context); showMessageEditDialog(context: context, ref: ref, charId: charId, content: content, messageIndex: messageIndex); },
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            showMessageEditDialog(
+              context: context,
+              ref: ref,
+              charId: charId,
+              content: content,
+              messageIndex: messageIndex,
+            );
+          },
         ),
       if ((!isUser && isLast && !isGenerating) || isError)
         BottomSheetItem(
           icon: Icons.refresh,
           label: 'Regenerate',
-          onTap: () { Navigator.pop(context); notifier.regenerateLastAssistant(); },
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            notifier.regenerateLastAssistant();
+          },
         ),
       if (!isUser && isLast && !isGenerating)
         BottomSheetItem(
           icon: Icons.keyboard_double_arrow_right,
           label: 'Continue',
-          onTap: () { Navigator.pop(context); notifier.continueMessage(); },
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            notifier.continueMessage();
+          },
         ),
       if (isGenerating && isLast)
         BottomSheetItem(
           icon: Icons.stop_circle,
           iconColor: Colors.orange,
           label: 'Stop Generating',
-          onTap: () { Navigator.pop(context); notifier.abortGeneration(); },
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            notifier.abortGeneration();
+          },
         ),
       if (!isError && !(isGenerating && isLast))
         BottomSheetItem(
           icon: Icons.call_split,
           label: 'Branch',
-          onTap: () { Navigator.pop(context); notifier.branchSession(messageIndex); },
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            notifier.branchSession(messageIndex);
+          },
         ),
       if (messageIndex > 0 && !(isGenerating && isLast))
         BottomSheetItem(
           icon: Icons.arrow_upward,
           label: 'Move Up',
-          onTap: () { Navigator.pop(context); notifier.moveMessage(messageIndex, messageIndex - 1); },
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            notifier.moveMessage(messageIndex, messageIndex - 1);
+          },
         ),
-      if (!isLast && !(isGenerating && isLast) && messageIndex < totalMessages - 1)
+      if (!isLast &&
+          !(isGenerating && isLast) &&
+          messageIndex < totalMessages - 1)
         BottomSheetItem(
           icon: Icons.arrow_downward,
           label: 'Move Down',
-          onTap: () { Navigator.pop(context); notifier.moveMessage(messageIndex, messageIndex + 1); },
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            notifier.moveMessage(messageIndex, messageIndex + 1);
+          },
         ),
       BottomSheetItem(
         icon: isHidden ? Icons.visibility : Icons.visibility_off,
         label: isHidden ? 'Unhide' : 'Hide',
-        onTap: () { Navigator.pop(context); notifier.toggleMessageHidden(messageIndex); },
+        onTap: () {
+          Navigator.of(context, rootNavigator: true).pop();
+          notifier.toggleMessageHidden(messageIndex);
+        },
       ),
       if (isLast && !isGenerating)
         BottomSheetItem(
           icon: Icons.delete,
           label: 'Delete',
           isDestructive: true,
-          onTap: () { Navigator.pop(context); notifier.deleteMessage(messageIndex); },
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            notifier.deleteMessage(messageIndex);
+          },
         ),
     ],
   ];
@@ -109,13 +150,24 @@ void showMessageEditDialog({
     context: context,
     builder: (ctx) => AlertDialog(
       title: const Text('Edit Message'),
-      content: TextField(controller: controller, maxLines: 8, minLines: 3, autofocus: true),
+      content: TextField(
+        controller: controller,
+        maxLines: 8,
+        minLines: 3,
+        autofocus: true,
+      ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
         TextButton(
           onPressed: () {
             final newText = controller.text.trim();
-            if (newText.isNotEmpty) ref.read(chatProvider(charId).notifier).editMessage(messageIndex, newText);
+            if (newText.isNotEmpty)
+              ref
+                  .read(chatProvider(charId).notifier)
+                  .editMessage(messageIndex, newText);
             Navigator.pop(ctx);
           },
           child: const Text('Save'),

@@ -15,7 +15,11 @@ class CatalogControls extends StatelessWidget {
   final CatalogState state;
   final CatalogNotifier notifier;
 
-  const CatalogControls({super.key, required this.state, required this.notifier});
+  const CatalogControls({
+    super.key,
+    required this.state,
+    required this.notifier,
+  });
 
   static String providerLabel(CatalogProvider p) => switch (p) {
     CatalogProvider.janitor => 'JanitorAI',
@@ -150,7 +154,7 @@ class CatalogControls extends StatelessWidget {
               iconColor: AppColors.accent,
               label: item.label,
               onTap: () {
-                Navigator.pop(context);
+                Navigator.of(context, rootNavigator: true).pop();
                 onSelect(item.value);
               },
             ),

@@ -39,13 +39,19 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     try {
       final chatState = ref.read(chatProvider(widget.charId)).value;
       final session = chatState?.session;
-      if (session == null) { setState(() => _loading = false); return; }
+      if (session == null) {
+        setState(() => _loading = false);
+        return;
+      }
 
       _visibleCount = session.messages.where((m) => !m.isHidden).length;
       _hiddenCount = session.messages.where((m) => m.isHidden).length;
 
       final builder = ref.read(promptPayloadBuilderProvider);
-      final payload = await builder.buildFromSession(charId: widget.charId, session: session);
+      final payload = await builder.buildFromSession(
+        charId: widget.charId,
+        session: session,
+      );
       _contextSize = payload.apiConfig.contextSize;
 
       final result = await buildPromptInIsolate(payload);
@@ -76,86 +82,121 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : bd == null
-              ? Center(child: Text('No data', style: TextStyle(color: AppColors.textSecondary)))
-              : _showSettings
-                  ? _buildSettings()
-                  : _buildMainView(bd, contextSize, used, remaining, usedPercent, historyFill, nearLimit),
+          ? Center(
+              child: Text(
+                'No data',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            )
+          : _showSettings
+          ? _buildSettings()
+          : _buildMainView(
+              bd,
+              contextSize,
+              used,
+              remaining,
+              usedPercent,
+              historyFill,
+              nearLimit,
+            ),
     );
   }
 
-  Widget _buildMainView(TokenBreakdown bd, int contextSize, int used, int remaining, double usedPercent, double historyFill, bool nearLimit) {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        HeroCard(used: used, contextSize: contextSize, remaining: remaining, usedPercent: usedPercent, historyFill: historyFill),
-        const SizedBox(height: 20),
-        ContextVerticalBar(breakdown: bd, contextSize: contextSize),
-        const SizedBox(height: 20),
-        BreakdownRows(breakdown: bd),
-        if (bd.cutoffIndex > 0) ...[
-          const SizedBox(height: 12),
-          CutoffWarning(cutoffCount: bd.cutoffIndex),
-        ],
-        if (nearLimit) ...[
-          const SizedBox(height: 12),
-          NearLimitWarning(historyFill: historyFill),
-        ],
-        const SizedBox(height: 16),
-        TokenizerActionButtons(
-          charId: widget.charId,
-          visibleCount: _visibleCount,
-          hiddenCount: _hiddenCount,
-          hidePercent: _hidePercent,
-          onRefresh: _calculate,
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _calculate,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Recalculate'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => setState(() => _showSettings = true),
-                icon: const Icon(Icons.settings, size: 16),
-                label: const Text('Settings'),
-              ),
-            ),
+  Widget _buildMainView(
+    TokenBreakdown bd,
+    int contextSize,
+    int used,
+    int remaining,
+    double usedPercent,
+    double historyFill,
+    bool nearLimit,
+  ) {
+    return Builder(
+      builder: (context) => ListView(
+        padding: const EdgeInsets.all(
+          16,
+        ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+        children: [
+          HeroCard(
+            used: used,
+            contextSize: contextSize,
+            remaining: remaining,
+            usedPercent: usedPercent,
+            historyFill: historyFill,
+          ),
+          const SizedBox(height: 20),
+          ContextVerticalBar(breakdown: bd, contextSize: contextSize),
+          const SizedBox(height: 20),
+          BreakdownRows(breakdown: bd),
+          if (bd.cutoffIndex > 0) ...[
+            const SizedBox(height: 12),
+            CutoffWarning(cutoffCount: bd.cutoffIndex),
           ],
-        ),
-      ],
+          if (nearLimit) ...[
+            const SizedBox(height: 12),
+            NearLimitWarning(historyFill: historyFill),
+          ],
+          const SizedBox(height: 16),
+          TokenizerActionButtons(
+            charId: widget.charId,
+            visibleCount: _visibleCount,
+            hiddenCount: _hiddenCount,
+            hidePercent: _hidePercent,
+            onRefresh: _calculate,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _calculate,
+                  icon: const Icon(Icons.refresh, size: 16),
+                  label: const Text('Recalculate'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => setState(() => _showSettings = true),
+                  icon: const Icon(Icons.settings, size: 16),
+                  label: const Text('Settings'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildSettings() {
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        SettingsSlider(
-          label: 'History fill threshold',
-          value: _historyFillThreshold,
-          min: 1,
-          max: 100,
-          unit: '%',
-          description: 'Warn when history fills this % of its budget',
-          onChanged: (v) => setState(() => _historyFillThreshold = v),
-        ),
-        const SizedBox(height: 16),
-        SettingsSlider(
-          label: 'Hide top messages',
-          value: _hidePercent,
-          min: 1,
-          max: 95,
-          unit: '%',
-          description: 'What % of visible messages the Hide button will hide',
-          onChanged: (v) => setState(() => _hidePercent = v),
-        ),
-      ],
+    return Builder(
+      builder: (context) => ListView(
+        padding: const EdgeInsets.all(
+          16,
+        ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+        children: [
+          SettingsSlider(
+            label: 'History fill threshold',
+            value: _historyFillThreshold,
+            min: 1,
+            max: 100,
+            unit: '%',
+            description: 'Warn when history fills this % of its budget',
+            onChanged: (v) => setState(() => _historyFillThreshold = v),
+          ),
+          const SizedBox(height: 16),
+          SettingsSlider(
+            label: 'Hide top messages',
+            value: _hidePercent,
+            min: 1,
+            max: 95,
+            unit: '%',
+            description: 'What % of visible messages the Hide button will hide',
+            onChanged: (v) => setState(() => _hidePercent = v),
+          ),
+        ],
+      ),
     );
   }
 }

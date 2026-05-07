@@ -54,8 +54,7 @@ class CharacterDetailScreen extends ConsumerStatefulWidget {
       _CharacterDetailScreenState();
 }
 
-class _CharacterDetailScreenState
-    extends ConsumerState<CharacterDetailScreen> {
+class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
   late final Future<Character?> _charFuture;
   int _activeTabIndex = 0;
   final _sheetController = DraggableScrollableController();
@@ -99,7 +98,7 @@ class _CharacterDetailScreenState
           icon: Icons.edit_outlined,
           label: 'Edit',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             context.go('/character/${widget.charId}/edit');
           },
         ),
@@ -107,7 +106,7 @@ class _CharacterDetailScreenState
           icon: Icons.photo_library_outlined,
           label: 'Gallery',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             context.go('/character/${widget.charId}/gallery');
           },
         ),
@@ -115,7 +114,7 @@ class _CharacterDetailScreenState
           icon: Icons.delete_outline,
           label: 'Delete',
           isDestructive: true,
-          onTap: () => Navigator.pop(context),
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(),
         ),
       ],
     );
@@ -133,19 +132,21 @@ class _CharacterDetailScreenState
           icon: Icons.add,
           label: 'New Chat',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             context.go('/chat/$cId?new=1');
           },
         ),
-        ...sessions.map((s) => BottomSheetItem(
-              icon: Icons.chat_bubble_outline,
-              label: 'Session ${s.sessionIndex + 1}',
-              hint: '${s.messages.length} messages',
-              onTap: () {
-                Navigator.pop(context);
-                context.go('/chat/$cId?session=${s.sessionIndex}');
-              },
-            )),
+        ...sessions.map(
+          (s) => BottomSheetItem(
+            icon: Icons.chat_bubble_outline,
+            label: 'Session ${s.sessionIndex + 1}',
+            hint: '${s.messages.length} messages',
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              context.go('/chat/$cId?session=${s.sessionIndex}');
+            },
+          ),
+        ),
       ],
     );
   }
@@ -173,8 +174,9 @@ class _CharacterDetailScreenState
             ? ((_sheetController.size - 0.78) / 0.22).clamp(0.0, 1.0)
             : 0.0;
         return ClipRRect(
-          borderRadius:
-              BorderRadius.vertical(top: Radius.circular(24.0 * (1.0 - t))),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(24.0 * (1.0 - t)),
+          ),
           child: child!,
         );
       },
@@ -197,7 +199,12 @@ class _CharacterDetailScreenState
             return Stack(
               children: [
                 Positioned.fill(
-                  child: _buildScrollBody(context, snap, scrollController, safeBottom),
+                  child: _buildScrollBody(
+                    context,
+                    snap,
+                    scrollController,
+                    safeBottom,
+                  ),
                 ),
                 Positioned(
                   top: 0,
@@ -243,9 +250,10 @@ class _CharacterDetailScreenState
                     child: Row(
                       children: [
                         _HeaderBtn(
-                          onTap: () =>
-                              Navigator.of(context, rootNavigator: true)
-                                  .maybePop(),
+                          onTap: () => Navigator.of(
+                            context,
+                            rootNavigator: true,
+                          ).maybePop(),
                           child: const Icon(
                             Icons.arrow_back,
                             size: 20,
@@ -270,9 +278,7 @@ class _CharacterDetailScreenState
                   Positioned(
                     right: 16,
                     bottom: 16 + safeBottom,
-                    child: _ChatFab(
-                      onTap: () => _openChat(context, char.id),
-                    ),
+                    child: _ChatFab(onTap: () => _openChat(context, char.id)),
                   ),
               ],
             );
@@ -305,32 +311,33 @@ class _CharacterDetailScreenState
       child: SingleChildScrollView(
         controller: scrollController,
         child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _HeroSection(character: char),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: GlazeTabBar(
-              tabs: _kTabs,
-              activeIndex: _activeTabIndex,
-              onChanged: (i) => setState(() => _activeTabIndex = i),
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _HeroSection(character: char),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: GlazeTabBar(
+                tabs: _kTabs,
+                activeIndex: _activeTabIndex,
+                onChanged: (i) => setState(() => _activeTabIndex = i),
+              ),
             ),
-          ),
-          AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            switchInCurve: Curves.easeOut,
-            switchOutCurve: Curves.easeIn,
-            child: _activeTabIndex == 0
-                ? _InfoTab(key: const ValueKey('info'), character: char)
-                : _PromptsTab(
-                    key: const ValueKey('prompts'),
-                    character: char,
-                  ),
-          ),
-          SizedBox(height: 100 + safeBottom),
-        ],
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              child: _activeTabIndex == 0
+                  ? _InfoTab(key: const ValueKey('info'), character: char)
+                  : _PromptsTab(
+                      key: const ValueKey('prompts'),
+                      character: char,
+                    ),
+            ),
+            SizedBox(height: 100 + safeBottom),
+          ],
+        ),
       ),
-    ));
+    );
   }
 }
 
@@ -373,9 +380,7 @@ class _HeaderBtn extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: const Color(0xCC1E1E1E),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.10),
-              ),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
             ),
             child: Center(child: child),
           ),
@@ -468,20 +473,17 @@ class _HeroSection extends StatelessWidget {
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
-                    shadows: [
-                      Shadow(blurRadius: 6, color: Color(0xCC000000))
-                    ],
+                    shadows: [Shadow(blurRadius: 6, color: Color(0xCC000000))],
                   ),
                 ),
-                if (character.creator != null &&
-                    character.creator!.isNotEmpty)
+                if (character.creator != null && character.creator!.isNotEmpty)
                   Text(
                     '@${character.creator}',
                     style: const TextStyle(
                       fontSize: 13,
                       color: _kText50,
                       shadows: [
-                        Shadow(blurRadius: 3, color: Color(0xCC000000))
+                        Shadow(blurRadius: 3, color: Color(0xCC000000)),
                       ],
                     ),
                   ),
@@ -625,11 +627,7 @@ class _TagChip extends StatelessWidget {
       ),
       child: Text(
         tag,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: fg,
-        ),
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: fg),
       ),
     );
   }
@@ -655,11 +653,7 @@ class _PromptsTabState extends State<_PromptsTab> {
       (key: 'personality', label: 'Personality', text: c.personality ?? ''),
       (key: 'scenario', label: 'Scenario', text: c.scenario ?? ''),
       (key: 'mesExample', label: 'Example Dialogue', text: c.mesExample ?? ''),
-      (
-        key: 'systemPrompt',
-        label: 'System Prompt',
-        text: c.systemPrompt ?? '',
-      ),
+      (key: 'systemPrompt', label: 'System Prompt', text: c.systemPrompt ?? ''),
       (
         key: 'postHistory',
         label: 'Post-History Instructions',
@@ -681,9 +675,8 @@ class _PromptsTabState extends State<_PromptsTab> {
             label: s.label,
             text: s.text,
             expanded: _expanded[s.key] ?? false,
-            onToggle: () => setState(
-              () => _expanded[s.key] = !(_expanded[s.key] ?? false),
-            ),
+            onToggle: () =>
+                setState(() => _expanded[s.key] = !(_expanded[s.key] ?? false)),
           ),
         ),
         if (firstMes.isNotEmpty)
@@ -693,8 +686,7 @@ class _PromptsTabState extends State<_PromptsTab> {
             text: firstMes,
             expanded: _expanded['firstMes'] ?? false,
             onToggle: () => setState(
-              () =>
-                  _expanded['firstMes'] = !(_expanded['firstMes'] ?? false),
+              () => _expanded['firstMes'] = !(_expanded['firstMes'] ?? false),
             ),
           ),
         const SizedBox(height: 16),
