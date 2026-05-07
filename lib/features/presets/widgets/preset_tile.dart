@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import '../../../core/models/preset.dart';
+import '../../../core/utils/id_generator.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../preset_editor_screen.dart';
@@ -43,7 +44,7 @@ class PresetTile extends ConsumerWidget {
               if (value == 'edit') {
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => PresetEditorScreen(preset: preset)));
               } else if (value == 'duplicate') {
-                final dup = preset.copyWith(id: DateTime.now().millisecondsSinceEpoch.toRadixString(36), name: '${preset.name} (copy)');
+                final dup = preset.copyWith(id: generateId(), name: '${preset.name} (copy)');
                 ref.read(presetListProvider.notifier).add(dup);
               } else if (value == 'export') {
                 _exportPreset(ref, context, preset);

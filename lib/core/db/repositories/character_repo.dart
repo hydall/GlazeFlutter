@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import '../app_db.dart';
 import '../../models/character.dart';
 import '../../models/gallery_entry.dart';
+import '../../utils/time_helpers.dart';
 
 class CharacterRepo {
   final AppDatabase _db;
@@ -79,7 +80,7 @@ class CharacterRepo {
             postHistoryInstructions: Value(postHistoryInstructions),
             creator: Value(creator),
             creatorNotes: Value(creatorNotes),
-            updatedAt: Value(DateTime.now().millisecondsSinceEpoch ~/ 1000),
+            updatedAt: Value(currentTimestampSeconds()),
             tagsJson: Value(jsonEncode(tags)),
             alternateGreetingsJson: Value(jsonEncode(alternateGreetings)),
           ),

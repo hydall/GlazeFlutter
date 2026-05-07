@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../app_db.dart';
 import '../tables.dart';
 import '../../models/memory_book.dart';
+import '../../utils/time_helpers.dart';
 
 part 'memory_book_repo.g.dart';
 
@@ -35,7 +36,7 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         settingsJson: Value(jsonEncode(book.settings.toJson())),
         lastProcessedMessageCount:
             Value(book.lastProcessedMessageCount),
-        updatedAt: Value(DateTime.now().millisecondsSinceEpoch ~/ 1000),
+        updatedAt: Value(currentTimestampSeconds()),
       ),
     );
   }

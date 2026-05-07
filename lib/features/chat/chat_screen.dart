@@ -10,6 +10,7 @@ import '../../core/models/chat_message.dart';
 import '../../core/services/chat_import_export.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
+import '../../core/utils/time_helpers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -519,7 +520,7 @@ Future<void> _importChat(
       characterId: charId,
       sessionIndex: maxIdx + 1,
       messages: importResult.messages,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
 
     await repo.put(newSession);

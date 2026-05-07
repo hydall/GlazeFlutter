@@ -5,6 +5,8 @@ import '../../core/models/chat_message.dart';
 import '../../core/models/persona.dart';
 import '../../core/services/generation_notification_service.dart';
 import '../../core/state/active_selection_provider.dart';
+import '../../core/utils/id_generator.dart';
+import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../cloud_sync/sync_provider.dart';
 import '../chat_history/chat_history_screen.dart' show chatHistoryProvider;
@@ -61,14 +63,14 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     if (current == null || current.isGenerating) return;
 
     final userMsg = ChatMessage(
-      id: _generateId(),
+      id: generateId(),
       role: 'user',
       content: text,
       timestamp: DateTime.now().millisecondsSinceEpoch,
     );
 
     final updatedMessages = [...current.messages, userMsg];
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final now = currentTimestampSeconds();
     final updatedSession = current.session!.copyWith(
       messages: updatedMessages,
       updatedAt: now,
@@ -134,7 +136,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     final trimmedSession = current.session!.copyWith(
       messages: baseMessages,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
     await ref.read(chatRepoProvider).put(trimmedSession);
     _invalidateHistory();
@@ -204,7 +206,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       final updatedMessages = [...result.messages.sublist(0, result.messages.length - 1), appendedMsg];
       final finalSession = result.session!.copyWith(
         messages: updatedMessages,
-        updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        updatedAt: currentTimestampSeconds(),
       );
       await ref.read(chatRepoProvider).put(finalSession);
       _invalidateHistory();
@@ -250,7 +252,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     final newSession = current.session!.copyWith(
       messages: newMessages,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
     await ref.read(chatRepoProvider).put(newSession);
     _invalidateHistory();
@@ -271,7 +273,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     final newSession = current.session!.copyWith(
       messages: newMessages,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
     await ref.read(chatRepoProvider).put(newSession);
     _invalidateHistory();
@@ -286,7 +288,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final newMessages = List<ChatMessage>.from(current.messages)..removeAt(index);
     final newSession = current.session!.copyWith(
       messages: newMessages,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
     await ref.read(chatRepoProvider).put(newSession);
     _invalidateHistory();
@@ -303,7 +305,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     final newSession = current.session!.copyWith(
       messages: newMessages,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
     await ref.read(chatRepoProvider).put(newSession);
     _invalidateHistory();
@@ -324,7 +326,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     final newSession = current.session!.copyWith(
       messages: newMessages,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
     await ref.read(chatRepoProvider).put(newSession);
     _invalidateHistory();
@@ -350,7 +352,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     final newSession = current.session!.copyWith(
       messages: newMessages,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
     await ref.read(chatRepoProvider).put(newSession);
     _invalidateHistory();
@@ -380,7 +382,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     final newSession = current.session!.copyWith(
       messages: newMessages,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
     ref.read(chatRepoProvider).put(newSession);
     _invalidateHistory();
@@ -446,7 +448,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       sessionIndex: maxIdx + 1,
       messages: current.messages.sublist(0, index + 1),
       sessionVars: current.session!.sessionVars,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
 
     await repo.put(newSession);
@@ -481,7 +483,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       characterId: arg,
       sessionIndex: newIdx,
       messages: initialMessages,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
 
     await repo.put(newSession);
@@ -508,8 +510,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     }
   }
 
-  String _generateId() => DateTime.now().millisecondsSinceEpoch.toRadixString(36);
-
   void _invalidateHistory() => ref.invalidate(chatHistoryProvider);
 
   void abortGeneration() {
@@ -523,14 +523,14 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     if (current.streamingText.isNotEmpty) {
       final assistantMsg = ChatMessage(
-        id: _generateId(),
+        id: generateId(),
         role: 'assistant',
         content: current.streamingText,
         reasoning: current.streamingReasoning,
         timestamp: DateTime.now().millisecondsSinceEpoch,
       );
       final finalMessages = [...current.messages, assistantMsg];
-      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      final now = currentTimestampSeconds();
       final finalSession = current.session!.copyWith(messages: finalMessages, updatedAt: now);
       ref.read(chatRepoProvider).put(finalSession);
       _invalidateHistory();

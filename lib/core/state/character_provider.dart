@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/character.dart';
-import '../../features/cloud_sync/services/sync_deletion_tracker.dart';
+import '../utils/sync_deletion_tracker.dart';
 import 'db_provider.dart';
 
 final charactersProvider = AsyncNotifierProvider<CharactersNotifier, List<Character>>(

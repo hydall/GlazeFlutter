@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/preset.dart';
 import '../state/db_provider.dart';
+import '../utils/time_helpers.dart';
 import 'preset_defaults.dart';
 
 const _seededKey = 'defaultPresetsSeeded';
@@ -12,7 +13,7 @@ Future<void> seedDefaultPresets(WidgetRef ref) async {
   if (prefs.getBool(_seededKey) == true) return;
 
   final repo = ref.read(presetRepoProvider);
-  final ts = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  final ts = currentTimestampSeconds();
 
   await repo.put(Preset(
     id: 'default_chat',

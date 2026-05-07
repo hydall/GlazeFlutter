@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../app_db.dart';
 import '../tables.dart';
+import '../../utils/time_helpers.dart';
 
 part 'summary_repo.g.dart';
 
@@ -27,7 +28,7 @@ class SummaryRepo extends DatabaseAccessor<AppDatabase>
         content: content,
         messageCount: Value(messageCount),
         prompt: Value(prompt),
-        updatedAt: Value(DateTime.now().millisecondsSinceEpoch ~/ 1000),
+        updatedAt: Value(currentTimestampSeconds()),
       ),
     );
   }

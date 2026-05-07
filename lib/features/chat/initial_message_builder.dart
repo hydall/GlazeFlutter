@@ -1,6 +1,7 @@
 import '../../core/llm/macro_engine.dart';
 import '../../core/models/character.dart';
 import '../../core/models/chat_message.dart';
+import '../../core/utils/id_generator.dart';
 import '../../core/models/persona.dart';
 
 class InitialMessageBuilder {
@@ -25,7 +26,7 @@ class InitialMessageBuilder {
     final resolved = replaceMacros(character.firstMes!, macroCtx);
     return [
       ChatMessage(
-        id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+        id: generateId(),
         role: 'assistant',
         content: resolved.text,
         timestamp: DateTime.now().millisecondsSinceEpoch,

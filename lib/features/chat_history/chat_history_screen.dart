@@ -10,7 +10,7 @@ import '../../core/db/repositories/chat_repo.dart' show SessionMetadata;
 import '../../core/db/repositories/character_repo.dart' show CharacterRepo;
 import '../../core/state/db_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
-import '../cloud_sync/services/sync_deletion_tracker.dart';
+import '../../core/utils/sync_deletion_tracker.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 

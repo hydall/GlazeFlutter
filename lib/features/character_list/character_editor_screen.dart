@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 import '../../core/models/character.dart';
 import '../../core/services/character_exporter.dart';
 import '../../core/state/db_provider.dart';
+import '../../core/utils/time_helpers.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -422,7 +423,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         tags: tags,
         alternateGreetings: _original?.alternateGreetings ?? [],
         color: _original?.color,
-        updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        updatedAt: currentTimestampSeconds(),
         extensions: {
           ...?_original?.extensions,
           'talkativeness': _talkativeness,

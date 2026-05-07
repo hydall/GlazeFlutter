@@ -6,6 +6,8 @@ import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/character.dart';
+import '../utils/id_generator.dart';
+import '../utils/time_helpers.dart';
 import 'image_storage_service.dart';
 import 'png_text_extractor.dart';
 
@@ -151,7 +153,7 @@ class CharacterImporter {
 
   Future<Character> _saveCharacterWithAvatar(
       Map<String, dynamic> data, Uint8List? avatarBytes) async {
-    final id = _generateId();
+    final id = generateId();
     String? avatarPath;
 
     if (avatarBytes != null) {
@@ -180,7 +182,7 @@ class CharacterImporter {
       color: data['color'] as String?,
       tags: _toStringList(data['tags']),
       alternateGreetings: _toStringList(data['alternate_greetings']),
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
       fav: data['fav'] as bool? ?? false,
       extensions: _extractExtensions(data),
       characterVersion: data['character_version'] is String ? data['character_version'] as String : '1',
@@ -189,10 +191,6 @@ class CharacterImporter {
       depthPromptRole: _extractDepthPromptRole(data),
       world: _extractWorld(data),
     );
-  }
-
-  String _generateId() {
-    return DateTime.now().millisecondsSinceEpoch.toRadixString(36);
   }
 
   List<String> _toStringList(dynamic value) {

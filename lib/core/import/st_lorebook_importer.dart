@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../utils/id_generator.dart';
+import '../utils/time_helpers.dart';
 import '../models/lorebook.dart';
 
 class STLorebookImportResult {
@@ -105,14 +107,14 @@ STLorebookImportResult importSTLorebook(Map<String, dynamic> json, {String nameO
     entries.add(_convertSTEntry(normalizedEntries[i], i));
   }
 
-  final id = '${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}${DateTime.now().microsecond.toRadixString(36)}';
+  final id = generateId();
   final lb = Lorebook(
     id: id,
     name: (json['name'] as String?) ?? nameOverride.replaceAll('.json', ''),
     enabled: true,
     activationScope: 'global',
     entries: entries,
-    updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    updatedAt: currentTimestampSeconds(),
   );
 
   return STLorebookImportResult(lorebook: lb, entryCount: entries.length);

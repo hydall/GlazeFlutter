@@ -4,6 +4,8 @@ import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/id_generator.dart';
+import '../utils/time_helpers.dart';
 import 'preset_defaults.dart';
 
 import '../models/api_config.dart';
@@ -107,7 +109,7 @@ class MigrationService {
           color: json['color'] as String?,
           tags: _toStringList(json['tags']),
           alternateGreetings: _toStringList(json['alternate_greetings']),
-          updatedAt: _toInt(json['updatedAt']) ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          updatedAt: _toInt(json['updatedAt']) ?? currentTimestampSeconds(),
         );
         await _charRepo.put(char);
         result.characters++;
@@ -135,7 +137,7 @@ class MigrationService {
           prompt: json['prompt'] as String?,
           avatarPath: avatarPath,
           createdAt: _toInt(json['createdAt'] ?? json['created_at']) ??
-              DateTime.now().millisecondsSinceEpoch ~/ 1000,
+              currentTimestampSeconds(),
         );
         await _personaRepo.put(persona);
         result.personas++;
@@ -402,7 +404,7 @@ class MigrationService {
   }
 
   String _generateId() {
-    return DateTime.now().millisecondsSinceEpoch.toRadixString(36) +
+    return generateId() +
         Random().nextInt(9999).toRadixString(36);
   }
 

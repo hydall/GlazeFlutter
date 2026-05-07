@@ -5,6 +5,7 @@ import '../../core/models/lorebook.dart';
 import '../../core/llm/lorebook_vector_search.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/state/lorebook_provider.dart';
+import '../../core/utils/time_helpers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -95,7 +96,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
       activationTargetId: existing?.activationTargetId,
       entries: _entries,
       settings: _settings,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
     await ref.read(lorebooksProvider.notifier).updateLorebook(lb);
     if (mounted) {

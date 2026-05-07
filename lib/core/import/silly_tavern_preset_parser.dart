@@ -1,4 +1,6 @@
 import '../../core/models/preset.dart';
+import '../utils/id_generator.dart';
+import '../utils/time_helpers.dart';
 import '../services/preset_defaults.dart';
 
 const _stBlockIds = <String, String>{
@@ -174,11 +176,11 @@ Preset parseSillyTavernPreset(Map<String, dynamic> json, String fileName) {
   }
 
   return finalizeImportedPreset(Preset(
-    id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+    id: generateId(),
     name: (json['name'] as String?) ?? fileName.replaceAll('.json', ''),
     blocks: blocks,
     regexes: regexes,
     reasoningEnabled: json['reasoning'] as bool? ?? json['reasoning_enabled'] as bool? ?? false,
-    createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    createdAt: currentTimestampSeconds(),
   ));
 }

@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/models/preset.dart';
 import '../../core/state/db_provider.dart';
-import '../cloud_sync/services/sync_deletion_tracker.dart';
+import '../../core/utils/sync_deletion_tracker.dart';
 
 final presetListProvider =
     AsyncNotifierProvider<PresetListNotifier, List<Preset>>(

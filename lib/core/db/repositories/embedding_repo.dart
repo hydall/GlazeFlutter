@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../app_db.dart';
 import '../tables.dart';
 import '../../llm/vector_math.dart';
+import '../../utils/time_helpers.dart';
 
 part 'embedding_repo.g.dart';
 
@@ -55,7 +56,7 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase> with _$EmbeddingRepoMi
       textHash: Value(textHash),
       retrievalHintsJson: Value(hintsJson),
       errorJson: const Value(null),
-      updatedAt: Value(DateTime.now().millisecondsSinceEpoch ~/ 1000),
+      updatedAt: Value(currentTimestampSeconds()),
     ));
   }
 
@@ -77,7 +78,7 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase> with _$EmbeddingRepoMi
       textHash: Value(textHash),
       retrievalHintsJson: Value(hintsJson),
       errorJson: Value(jsonEncode(error)),
-      updatedAt: Value(DateTime.now().millisecondsSinceEpoch ~/ 1000),
+      updatedAt: Value(currentTimestampSeconds()),
     ));
   }
 

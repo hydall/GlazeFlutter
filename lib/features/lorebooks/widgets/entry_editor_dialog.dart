@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/lorebook_vector_search.dart';
 import '../../../core/models/lorebook.dart';
+import '../../../core/utils/id_generator.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_toast.dart';
@@ -152,7 +153,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
     return LorebookEntry(
       id:
           widget.entry?.id ??
-          DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+          generateId(),
       comment: _commentController.text.trim(),
       enabled: _enabled,
       constant: _constant,

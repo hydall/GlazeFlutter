@@ -10,6 +10,8 @@ import '../db/app_db.dart';
 import '../models/lorebook.dart';
 import '../models/preset.dart';
 import 'image_storage_service.dart';
+import '../utils/id_generator.dart';
+import '../utils/time_helpers.dart';
 import 'preset_defaults.dart';
 
 class BackupService {
@@ -371,7 +373,7 @@ class BackupService {
                   Value(per['prompt'] as String? ?? per['description'] as String?),
               avatarPath: Value(avatarPath),
               createdAt: Value(_toInt(per['createdAt'] ?? per['created_at']) ??
-                  DateTime.now().millisecondsSinceEpoch ~/ 1000),
+                  currentTimestampSeconds()),
             ),
           );
     }
@@ -447,7 +449,7 @@ class BackupService {
               entriesJson: jsonEncode(mappedEntries),
               settingsJson: Value(settingsJsonStr),
               description: Value(lbJson['description'] is String ? lbJson['description'] as String : ''),
-              updatedAt: Value(_toInt(lbJson['updatedAt']) ?? DateTime.now().millisecondsSinceEpoch ~/ 1000),
+              updatedAt: Value(_toInt(lbJson['updatedAt']) ?? currentTimestampSeconds()),
             ),
           );
     }
@@ -1044,7 +1046,7 @@ class BackupService {
                 characterId: charId,
                 sessionIndex: sessionIdx,
                 messagesJson: jsonEncode(messages),
-                updatedAt: Value(chatUpdatedAt ?? DateTime.now().millisecondsSinceEpoch ~/ 1000),
+                updatedAt: Value(chatUpdatedAt ?? currentTimestampSeconds()),
                 authorsNoteJson: Value(authorsNoteJson),
                 draft: Value(draft),
                 lastScrollAnchorJson: Value(scrollAnchor),
@@ -1121,7 +1123,7 @@ class BackupService {
                       _toInt(mbData['automation'] is Map ? (mbData['automation'] as Map)['lastProcessedMessageCount'] : null) ?? 0),
                   updatedAt: Value(
                       _toInt(mbData['updatedAt']) ??
-                      DateTime.now().millisecondsSinceEpoch ~/ 1000),
+                      currentTimestampSeconds()),
                 ),
               );
         }
@@ -1466,7 +1468,7 @@ class BackupService {
   }
 
   String _generateId() {
-    return DateTime.now().millisecondsSinceEpoch.toRadixString(36) +
+    return generateId() +
         Random().nextInt(9999).toRadixString(36);
   }
 

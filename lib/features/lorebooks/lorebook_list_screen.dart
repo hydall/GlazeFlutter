@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/import/st_lorebook_importer.dart';
 import '../../core/models/lorebook.dart';
+import '../../core/utils/id_generator.dart';
+import '../../core/utils/time_helpers.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/sheet_view.dart';
@@ -114,12 +116,12 @@ class LorebookListScreen extends ConsumerWidget {
   }
 
   void _createLorebook(BuildContext context, WidgetRef ref) {
-    final id = DateTime.now().millisecondsSinceEpoch.toRadixString(36);
+    final id = generateId();
     final lorebook = Lorebook(
       id: id,
       name: 'New Lorebook',
       entries: [],
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
     ref.read(lorebooksProvider.notifier).addLorebook(lorebook).then((_) {
       Navigator.of(context).push(

@@ -8,6 +8,8 @@ import '../../core/llm/sse_client.dart';
 import '../../core/llm/stream_accumulator.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/active_selection_provider.dart';
+import '../../core/utils/id_generator.dart';
+import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../image_gen/image_gen_provider.dart';
 import '../image_gen/services/image_gen_service.dart';
@@ -191,7 +193,7 @@ class ChatGenerationService {
         newMessages[lastIdx] = lastMsg.copyWith(content: updatedText);
         final updatedSession = session.copyWith(
           messages: newMessages,
-          updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          updatedAt: currentTimestampSeconds(),
         );
         onStateUpdate(ChatState(session: updatedSession));
       },
@@ -201,7 +203,7 @@ class ChatGenerationService {
     newMessages[lastIdx] = lastMsg.copyWith(content: updatedContent);
     final finalSession = session.copyWith(
       messages: newMessages,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      updatedAt: currentTimestampSeconds(),
     );
     _ref.read(chatRepoProvider).put(finalSession);
     onStateUpdate(ChatState(session: finalSession));
@@ -269,7 +271,7 @@ class ChatGenerationService {
     }
 
     final assistantMsg = ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+      id: generateId(),
       role: 'assistant',
       content: text,
       reasoning: reasoning,
@@ -282,7 +284,7 @@ class ChatGenerationService {
       memoryCoverage: memoryCoverage,
     );
     final finalMessages = [...currentSession.messages, assistantMsg];
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final now = currentTimestampSeconds();
     final sessionVars = pendingSessionVars ?? currentSession.sessionVars;
     final finalSession = currentSession.copyWith(
       messages: finalMessages,

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/preset.dart';
 import '../../core/services/preset_defaults.dart';
+import '../../core/utils/id_generator.dart';
+import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -338,7 +340,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   void _addBlock() {
     setState(() {
       _blocks.add(PresetBlock(
-        id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+        id: generateId(),
         name: 'Block ${_blocks.length + 1}',
         role: 'system',
         content: '',
@@ -487,7 +489,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
     }
     final preset = Preset(
       id: widget.preset?.id ??
-          DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+          generateId(),
       name: name,
       author: _author.trim().isEmpty ? null : _author.trim(),
       blocks: _blocks,
@@ -501,7 +503,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
       guidedImpersonationPrompt: widget.preset?.guidedImpersonationPrompt,
       summaryPrompt: widget.preset?.summaryPrompt,
       createdAt: widget.preset?.createdAt ??
-          DateTime.now().millisecondsSinceEpoch ~/ 1000,
+          currentTimestampSeconds(),
     );
     await ref.read(presetRepoProvider).put(preset);
     ref.invalidate(presetListProvider);
@@ -1258,7 +1260,7 @@ class _RegexSheetState extends State<_RegexSheet> {
   void _addRegex() {
     setState(() {
       _regexes.add(PresetRegex(
-        id: DateTime.now().millisecondsSinceEpoch.toRadixString(36),
+        id: generateId(),
         name: 'Regex ${_regexes.length + 1}',
         regex: '',
       ));
