@@ -7,7 +7,7 @@ import '../../core/services/chat_import_export.dart';
 import '../../core/llm/summary_service.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/utils/time_helpers.dart';
-import '../chat_history/chat_history_screen.dart' show chatHistoryProvider;
+import '../chat_history/chat_history_provider.dart';
 import 'chat_provider.dart';
 
 class ChatActionsService {

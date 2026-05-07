@@ -8,7 +8,7 @@ import '../../../core/models/api_config.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/glaze_toast.dart';
-import 'api_settings_screen.dart';
+import 'api_list_provider.dart';
 import 'widgets/widgets.dart';
 
 class ApiEditorScreen extends ConsumerStatefulWidget {

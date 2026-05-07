@@ -10,7 +10,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_toast.dart';
-import '../chat_history/chat_history_screen.dart' show chatHistoryProvider;
+import '../chat_history/chat_history_provider.dart';
 import '../image_gen/widgets/image_gen_sheet.dart';
 import 'chat_actions_service.dart';
 import 'chat_provider.dart';

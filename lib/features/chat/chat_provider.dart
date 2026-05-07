@@ -7,7 +7,7 @@ import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../cloud_sync/sync_provider.dart';
-import '../chat_history/chat_history_screen.dart' show chatHistoryProvider;
+import '../chat_history/chat_history_provider.dart';
 import 'chat_generation_service.dart';
 import 'chat_message_service.dart';
 import 'chat_session_service.dart';
