@@ -245,8 +245,8 @@ Future<DownloadedCharacter> jannyFetchCharacter(String characterId, String? slug
   return DownloadedCharacter(
     charData: CharacterData(
       name: (character['name'] ?? 'Unnamed') as String,
-      description: (character['personality'] ?? '') as String,
-      personality: '',
+      description: '',
+      personality: (character['personality'] ?? '') as String,
       scenario: (character['scenario'] ?? '') as String,
       firstMes: (character['firstMessage'] ?? '') as String,
       mesExample: (character['exampleDialogs'] ?? '') as String,

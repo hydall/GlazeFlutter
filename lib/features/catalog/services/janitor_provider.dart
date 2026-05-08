@@ -254,8 +254,8 @@ DownloadedCharacter _convertToGlaze(Map<String, dynamic> m) {
   return DownloadedCharacter(
     charData: CharacterData(
       name: (m['name'] ?? m['chat_name'] ?? 'Unknown') as String,
-      description: (m['personality'] ?? m['description'] ?? '') as String,
-      personality: '',
+      description: '',
+      personality: (m['personality'] ?? m['description'] ?? '') as String,
       scenario: (m['scenario'] ?? '') as String,
       firstMes: (m['first_message'] ?? m['first_mes'] ?? '') as String,
       mesExample:
