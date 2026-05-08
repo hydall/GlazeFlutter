@@ -175,7 +175,14 @@ class JsBackupImporter with BackupHelpers {
 
     for (final entry in ls.entries) {
       if (entry.key.startsWith('gz_imggen_') && entry.value is String) {
-        await prefs.setString(entry.key, entry.value as String);
+        final value = entry.value as String;
+        if (value == 'true' || value == 'false') {
+          await prefs.setBool(entry.key, value == 'true');
+        } else if (int.tryParse(value) != null) {
+          await prefs.setInt(entry.key, int.parse(value));
+        } else {
+          await prefs.setString(entry.key, value);
+        }
       }
     }
     await prefs.remove('gz_imggen_settings');

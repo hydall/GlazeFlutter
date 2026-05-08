@@ -33,9 +33,9 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
     final apiType = prefs.getString('gz_imggen_api_type');
     if (apiType == null) return null;
     final settings = ImageGenSettings(
-      enabled: prefs.getBool('gz_imggen_enabled') ?? false,
+      enabled: _safeBool(prefs, 'gz_imggen_enabled', false),
       apiType: _parseApiType(apiType),
-      useSameEndpoint: prefs.getBool('gz_imggen_use_same') ?? true,
+      useSameEndpoint: _safeBool(prefs, 'gz_imggen_use_same', true),
       customEndpoint: prefs.getString('gz_imggen_endpoint') ?? '',
       customApiKey: prefs.getString('gz_imggen_api_key') ?? '',
       customModel: prefs.getString('gz_imggen_model') ?? '',
@@ -48,19 +48,34 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
       routmyAspectRatio: prefs.getString('gz_imggen_routmy_aspect_ratio') ?? '1:1',
       routmyImageSize: prefs.getString('gz_imggen_routmy_image_size') ?? '1K',
       routmyQuality: prefs.getString('gz_imggen_routmy_quality') ?? 'standard',
-      routmySendCharAvatar: prefs.getBool('gz_imggen_routmy_send_char_avatar') ?? false,
-      routmySendUserAvatar: prefs.getBool('gz_imggen_routmy_send_user_avatar') ?? false,
+      routmySendCharAvatar: _safeBool(prefs, 'gz_imggen_routmy_send_char_avatar', false),
+      routmySendUserAvatar: _safeBool(prefs, 'gz_imggen_routmy_send_user_avatar', false),
       naisteraApiKey: prefs.getString('gz_imggen_naistera_api_key') ?? '',
       naisteraModel: prefs.getString('gz_imggen_naistera_model') ?? 'grok',
       naisteraAspectRatio: prefs.getString('gz_imggen_naistera_aspect_ratio') ?? '1:1',
-      naisteraSendCharAvatar: prefs.getBool('gz_imggen_naistera_send_char_avatar') ?? false,
-      naisteraSendUserAvatar: prefs.getBool('gz_imggen_naistera_send_user_avatar') ?? false,
+      naisteraSendCharAvatar: _safeBool(prefs, 'gz_imggen_naistera_send_char_avatar', false),
+      naisteraSendUserAvatar: _safeBool(prefs, 'gz_imggen_naistera_send_user_avatar', false),
       ruRoutmyApiKey: prefs.getString('gz_imggen_ru_routmy_api_key') ?? '',
-      imageContextEnabled: prefs.getBool('gz_imggen_image_context_enabled') ?? false,
-      imageContextCount: prefs.getInt('gz_imggen_image_context_count') ?? 1,
+      imageContextEnabled: _safeBool(prefs, 'gz_imggen_image_context_enabled', false),
+      imageContextCount: _safeInt(prefs, 'gz_imggen_image_context_count', 1),
     );
     await prefs.setString(_key, jsonEncode(_toJson(settings)));
     return settings;
+  }
+
+  bool _safeBool(SharedPreferences prefs, String key, bool defaultValue) {
+    final raw = prefs.get(key);
+    if (raw is bool) return raw;
+    if (raw == 'true') return true;
+    if (raw == 'false') return false;
+    return defaultValue;
+  }
+
+  int _safeInt(SharedPreferences prefs, String key, int defaultValue) {
+    final raw = prefs.get(key);
+    if (raw is int) return raw;
+    if (raw is String) return int.tryParse(raw) ?? defaultValue;
+    return defaultValue;
   }
 
   Future<void> save(ImageGenSettings settings) async {
@@ -128,9 +143,9 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
   };
 
   ImageGenSettings _fromJson(Map<String, dynamic> m) => ImageGenSettings(
-    enabled: m['enabled'] as bool? ?? false,
+    enabled: _castBool(m['enabled'], false),
     apiType: _parseApiType(m['apiType'] as String?),
-    useSameEndpoint: m['useSameEndpoint'] as bool? ?? true,
+    useSameEndpoint: _castBool(m['useSameEndpoint'], true),
     customEndpoint: m['customEndpoint'] as String? ?? '',
     customApiKey: m['customApiKey'] as String? ?? '',
     customModel: m['customModel'] as String? ?? '',
@@ -141,17 +156,17 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
     naisteraApiKey: m['naisteraApiKey'] as String? ?? '',
     naisteraModel: m['naisteraModel'] as String? ?? 'grok',
     naisteraAspectRatio: m['naisteraAspectRatio'] as String? ?? '1:1',
-    naisteraSendCharAvatar: m['naisteraSendCharAvatar'] as bool? ?? false,
-    naisteraSendUserAvatar: m['naisteraSendUserAvatar'] as bool? ?? false,
+    naisteraSendCharAvatar: _castBool(m['naisteraSendCharAvatar'], false),
+    naisteraSendUserAvatar: _castBool(m['naisteraSendUserAvatar'], false),
     routmyApiKey: m['routmyApiKey'] as String? ?? '',
     routmyModel: m['routmyModel'] as String? ?? 'google/gemini-3.1-flash-image-preview',
     routmyAspectRatio: m['routmyAspectRatio'] as String? ?? '1:1',
     routmyImageSize: m['routmyImageSize'] as String? ?? '1K',
     routmyQuality: m['routmyQuality'] as String? ?? 'standard',
-    routmySendCharAvatar: m['routmySendCharAvatar'] as bool? ?? false,
-    routmySendUserAvatar: m['routmySendUserAvatar'] as bool? ?? false,
-    imageContextEnabled: m['imageContextEnabled'] as bool? ?? false,
-    imageContextCount: m['imageContextCount'] as int? ?? 1,
+    routmySendCharAvatar: _castBool(m['routmySendCharAvatar'], false),
+    routmySendUserAvatar: _castBool(m['routmySendUserAvatar'], false),
+    imageContextEnabled: _castBool(m['imageContextEnabled'], false),
+    imageContextCount: _castInt(m['imageContextCount'], 1),
     additionalReferences: _parseRefs(m['additionalReferences']),
     routmyAdditionalRefs: _parseRefs(m['routmyAdditionalRefs']),
     ruRoutmyApiKey: m['ruRoutmyApiKey'] as String? ?? '',
@@ -159,9 +174,22 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
     ruRoutmyAspectRatio: m['ruRoutmyAspectRatio'] as String? ?? '1:1',
     ruRoutmyImageSize: m['ruRoutmyImageSize'] as String? ?? '1K',
     ruRoutmyQuality: m['ruRoutmyQuality'] as String? ?? 'standard',
-    ruRoutmySendCharAvatar: m['ruRoutmySendCharAvatar'] as bool? ?? false,
-    ruRoutmySendUserAvatar: m['ruRoutmySendUserAvatar'] as bool? ?? false,
+    ruRoutmySendCharAvatar: _castBool(m['ruRoutmySendCharAvatar'], false),
+    ruRoutmySendUserAvatar: _castBool(m['ruRoutmySendUserAvatar'], false),
   );
+
+  static bool _castBool(dynamic v, bool defaultValue) {
+    if (v is bool) return v;
+    if (v == 'true') return true;
+    if (v == 'false') return false;
+    return defaultValue;
+  }
+
+  static int _castInt(dynamic v, int defaultValue) {
+    if (v is int) return v;
+    if (v is String) return int.tryParse(v) ?? defaultValue;
+    return defaultValue;
+  }
 
   static ImageGenApiType _parseApiType(String? v) {
     switch (v) {

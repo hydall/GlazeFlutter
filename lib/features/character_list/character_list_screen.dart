@@ -210,8 +210,8 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   Future<void> _importCharacter(BuildContext context, WidgetRef ref) async {
     try {
       final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['png', 'json', 'charx', 'zip'],
+        type: Platform.isIOS ? FileType.any : FileType.custom,
+        allowedExtensions: Platform.isIOS ? null : ['png', 'json', 'charx', 'zip'],
         allowMultiple: true,
       );
       if (result == null || result.files.isEmpty) return;

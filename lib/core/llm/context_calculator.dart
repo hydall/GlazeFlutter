@@ -35,7 +35,12 @@ class ContextCalculator {
       staticTotal += tokens;
     }
 
-    final historyBudget = safeContext - staticTotal - lorebookReserveTokens - memoryTokens;
+    final actualLorebook = sourceTokens['lorebook'] ?? 0;
+    final effectiveReserve = lorebookReserveTokens > actualLorebook
+        ? lorebookReserveTokens - actualLorebook
+        : 0;
+
+    final historyBudget = safeContext - staticTotal - effectiveReserve - memoryTokens;
 
     final (trimmedHistory, cutoffIndex) = _trimHistory(
       historyMessages,
@@ -52,7 +57,7 @@ class ContextCalculator {
       sourceTokens['vectorLore'] = vectorLoreTokens;
     }
 
-    final fixedTotal = staticTotal + lorebookReserveTokens + memoryTokens + vectorLoreTokens;
+    final fixedTotal = staticTotal + effectiveReserve + memoryTokens + vectorLoreTokens;
     final remaining = safeContext - fixedTotal - historyTokens;
 
     return TokenBreakdown(

@@ -228,6 +228,15 @@ PromptResult buildPrompt(PromptPayload payload) {
   );
 }
 
+int _calculateLorebookReserve(PromptPayload payload) {
+  final settings = payload.lorebookSettings;
+  if (settings.reserveValue <= 0) return 0;
+  if (settings.reserveMode == 'percent') {
+    return (payload.apiConfig.contextSize * settings.reserveValue / 100).round();
+  }
+  return settings.reserveValue;
+}
+
 (List<PromptMessage> loreBefore, List<PromptMessage> loreAfter, List<String> loreMacroBuffer) _classifyLorebooks(
   List<LorebookEntry> entries,
   MacroContext macroCtx,
@@ -270,6 +279,7 @@ PromptResult _assembleMessages({
   Persona? persona,
 }) {
   final messages = <PromptMessage>[];
+  final attributionBlocks = <StaticBlock>[];
   String? mergeBuffer;
   String? mergeRole;
 
@@ -279,11 +289,23 @@ PromptResult _assembleMessages({
   bool loreAfterInjected = false;
 
   for (final block in relativeBlocks) {
-    if (!loreBeforeInjected) { messages.addAll(loreBefore); loreBeforeInjected = true; }
+    if (!loreBeforeInjected) {
+      messages.addAll(loreBefore);
+      for (final lb in loreBefore) {
+        attributionBlocks.add(StaticBlock(id: lb.blockId ?? 'lorebook', content: lb.content));
+      }
+      loreBeforeInjected = true;
+    }
 
     if (block.id == 'chat_history') {
       if (mergeBuffer != null) { messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer)); mergeBuffer = null; }
-      if (!loreAfterInjected) { messages.addAll(loreAfter); loreAfterInjected = true; }
+      if (!loreAfterInjected) {
+        messages.addAll(loreAfter);
+        for (final la in loreAfter) {
+          attributionBlocks.add(StaticBlock(id: la.blockId ?? 'lorebook', content: la.content));
+        }
+        loreAfterInjected = true;
+      }
 
       final historyMacroCtx = MacroContext(
         charName: macroCtx.charName, charDescription: macroCtx.charDescription,
@@ -295,11 +317,16 @@ PromptResult _assembleMessages({
       );
       final historyMsgs = HistoryAssembler(historyMacroCtx).assemble(history);
       messages.addAll(interleaveDepthWithHistory(historyMsgs, resolvedDepthMsgs));
+      for (final db in resolvedDepthMsgs) {
+        attributionBlocks.add(StaticBlock(id: db.blockId ?? 'preset', content: db.content));
+      }
     } else {
       var content = block.content.trim();
       if (content.isEmpty) continue;
       content = content.replaceAll('{{lorebooks}}', macroLoreContent);
       if (content.trim().isEmpty) continue;
+
+      attributionBlocks.add(StaticBlock(id: block.id, content: content));
 
       if (preset.mergePrompts && block.role != 'assistant') {
         if (mergeBuffer != null) { mergeBuffer = '$mergeBuffer\n\n$content'; } else { mergeBuffer = content; mergeRole = preset.mergeRole; }
@@ -310,16 +337,32 @@ PromptResult _assembleMessages({
     }
   }
 
-  if (!loreBeforeInjected) messages.addAll(loreBefore);
-  if (!loreAfterInjected) messages.addAll(loreAfter);
+  if (!loreBeforeInjected) {
+    messages.addAll(loreBefore);
+    for (final lb in loreBefore) {
+      attributionBlocks.add(StaticBlock(id: lb.blockId ?? 'lorebook', content: lb.content));
+    }
+  }
+  if (!loreAfterInjected) {
+    messages.addAll(loreAfter);
+    for (final la in loreAfter) {
+      attributionBlocks.add(StaticBlock(id: la.blockId ?? 'lorebook', content: la.content));
+    }
+  }
   if (mergeBuffer != null) messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer));
 
   if (payload.memoryContent != null && payload.memoryContent!.isNotEmpty) {
     if (payload.memoryInjectionTarget == 'summary_macro') {
-      final summaryIdx = messages.indexWhere((m) => m.blockName == 'Summary');
-      if (summaryIdx >= 0) {
-        final existing = messages[summaryIdx];
-        messages[summaryIdx] = PromptMessage(
+      final attrSummaryIdx = attributionBlocks.indexWhere((b) => b.id == 'summary');
+      if (attrSummaryIdx >= 0) {
+        attributionBlocks[attrSummaryIdx] = StaticBlock(id: 'summary', content: '${attributionBlocks[attrSummaryIdx].content}\n\n${payload.memoryContent}');
+      } else {
+        attributionBlocks.add(StaticBlock(id: 'memory', content: payload.memoryContent!));
+      }
+      final msgSummaryIdx = messages.indexWhere((m) => m.blockId == 'summary');
+      if (msgSummaryIdx >= 0) {
+        final existing = messages[msgSummaryIdx];
+        messages[msgSummaryIdx] = PromptMessage(
           role: existing.role,
           content: '${existing.content}\n\n${payload.memoryContent}',
           blockName: existing.blockName,
@@ -330,6 +373,7 @@ PromptResult _assembleMessages({
         );
       }
     } else {
+      attributionBlocks.add(StaticBlock(id: 'memory', content: payload.memoryContent!));
       final memMsg = PromptMessage(
         role: 'system',
         content: payload.memoryContent!,
@@ -345,13 +389,15 @@ PromptResult _assembleMessages({
     }
   }
 
+  final lorebookReserve = _calculateLorebookReserve(payload);
+
   final calculator = ContextCalculator(contextSize: payload.apiConfig.contextSize, maxTokens: payload.apiConfig.maxTokens);
-  final allStatic = messages.where((m) => !m.isHistory).toList();
   final historyOnly = messages.where((m) => m.isHistory).toList();
 
   final breakdown = calculator.calculate(
-    staticBlocks: allStatic.map((m) => StaticBlock(id: m.blockId ?? 'preset', content: m.content)).toList(),
+    staticBlocks: attributionBlocks,
     historyMessages: historyOnly,
+    lorebookReserveTokens: lorebookReserve,
   );
 
   final finalMessages = <PromptMessage>[];
