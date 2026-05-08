@@ -2,6 +2,15 @@ name: Build Branch
 
 on:
   workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+          - release
+          - debug
 
 jobs:
   build-android:
@@ -46,12 +55,16 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Build APK (arm64 only)
-        run: flutter build apk --release --no-pub --target-platform android-arm64
+        run: flutter build apk --${{ inputs.build_type }} --no-pub --target-platform android-arm64
+
+      - name: Rename APK
+        if: inputs.build_type == 'debug'
+        run: mv build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/Glaze-debug.apk || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Glaze-APK
+          name: Glaze-APK-${{ inputs.build_type }}
           path: build/app/outputs/flutter-apk/*.apk
 
   build-windows:
@@ -81,13 +94,13 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Build Windows
-        run: flutter build windows --release --no-pub
+        run: flutter build windows --${{ inputs.build_type }} --no-pub
 
       - name: Upload Windows
         uses: actions/upload-artifact@v4
         with:
-          name: Glaze-Windows
-          path: build/windows/x64/runner/Release/**
+          name: Glaze-Windows-${{ inputs.build_type }}
+          path: build/windows/x64/runner/${{ inputs.build_type == 'debug' && 'Debug' || 'Release' }}/**
 
   build-ios:
     runs-on: macos-latest
@@ -119,7 +132,7 @@ jobs:
 
       - name: Build iOS (no signing)
         run: |
-          flutter build ios --release --no-codesign --no-pub
+          flutter build ios --${{ inputs.build_type }} --no-codesign --no-pub
 
       - name: Create IPA Structure
         run: |
@@ -130,5 +143,5 @@ jobs:
       - name: Upload iOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Glaze-iOS
+          name: Glaze-iOS-${{ inputs.build_type }}
           path: Glaze.ipa
