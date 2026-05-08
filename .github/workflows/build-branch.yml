@@ -164,8 +164,8 @@ jobs:
       - name: Install CocoaPods
         run: cd ios && pod install && cd ..
 
-      - name: Build iOS (debug, no signing)
-        run: flutter build ios --debug --no-codesign --no-pub
+      - name: Build iOS (release, no signing)
+        run: flutter build ios --release --no-codesign --no-pub
 
       - name: Create IPA
         run: |
