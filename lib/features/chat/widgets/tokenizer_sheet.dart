@@ -5,6 +5,7 @@ import '../../../core/llm/context_calculator.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
 import 'tokenizer_widgets.dart';
@@ -210,11 +211,8 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
 }
 
 void showTokenizerSheet(BuildContext context, String charId) {
-  showModalBottomSheet(
-    context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => TokenizerSheet(charId: charId),
+  GlazeBottomSheet.show(
+    context,
+    child: TokenizerSheet(charId: charId),
   );
 }

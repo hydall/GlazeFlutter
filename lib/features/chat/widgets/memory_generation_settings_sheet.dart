@@ -7,6 +7,7 @@ import '../../../core/models/memory_book.dart';
 import '../../../core/services/memory_prompt_presets.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../settings/api_list_provider.dart';
 import 'custom_prompt_manager_sheet.dart';
@@ -291,40 +292,15 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
       }
       if (!mounted) return;
       final ids = models.map((m) => m['id'] as String?).where((id) => id != null).cast<String>().toList()..sort();
-      final selected = await showModalBottomSheet<String>(
-        context: context,
-        backgroundColor: AppColors.surface,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-        builder: (ctx) => SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Select Model', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                    Text('${ids.length} available', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                  ],
-                ),
-              ),
-              const Divider(height: 1),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: ids.length,
-                  itemBuilder: (ctx, i) => ListTile(
-                    dense: true,
-                    title: Text(ids[i], style: TextStyle(fontSize: 13, color: AppColors.textPrimary)),
-                    trailing: ids[i] == _generationModelCtrl.text ? Icon(Icons.check, color: AppColors.accent, size: 18) : null,
-                    onTap: () => Navigator.pop(ctx, ids[i]),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      final selected = await GlazeBottomSheet.show<String>(
+        context,
+        title: 'Select Model',
+        items: ids.map((id) => BottomSheetItem(
+          label: id,
+          icon: id == _generationModelCtrl.text ? Icons.check : null,
+          iconColor: AppColors.accent,
+          onTap: () => Navigator.pop(context, id),
+        )).toList(),
       );
       if (selected != null) {
         _generationModelCtrl.text = selected;
@@ -342,48 +318,29 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
       children: [
         GestureDetector(
           onTap: () async {
-            final result = await showModalBottomSheet<String>(
-              context: context,
-              backgroundColor: AppColors.surface,
-              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-              builder: (ctx) => SafeArea(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (MemoryPromptPresets.builtIn.isNotEmpty) ...[
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text('Built-in', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
-                        ),
-                      ),
-                      ...MemoryPromptPresets.builtIn.map((p) => ListTile(
-                        dense: true,
-                        title: Text(p.label, style: TextStyle(fontSize: 14, color: AppColors.textPrimary)),
-                        trailing: p.key == _promptPreset ? Icon(Icons.check, color: AppColors.accent, size: 20) : null,
-                        onTap: () => Navigator.pop(ctx, p.key),
-                      )),
-                    ],
-                    if (custom.isNotEmpty) ...[
-                      const Divider(height: 1, indent: 12, endIndent: 12),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text('Custom', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
-                        ),
-                      ),
-                      ...custom.map((p) => ListTile(
-                        dense: true,
-                        title: Text(p.label, style: TextStyle(fontSize: 14, color: AppColors.textPrimary)),
-                        trailing: p.key == _promptPreset ? Icon(Icons.check, color: AppColors.accent, size: 20) : null,
-                        onTap: () => Navigator.pop(ctx, p.key),
-                      )),
-                    ],
-                  ],
-                ),
-              ),
+            final result = await GlazeBottomSheet.show<String>(
+              context,
+              title: 'Prompt Preset',
+              items: [
+                ...MemoryPromptPresets.builtIn.map((p) => BottomSheetItem(
+                  label: p.label,
+                  icon: p.key == _promptPreset ? Icons.check : null,
+                  iconColor: AppColors.accent,
+                  onTap: () => Navigator.pop(context, p.key),
+                )),
+                if (custom.isNotEmpty)
+                  BottomSheetItem(
+                    label: '── Custom ──',
+                    centered: true,
+                    onTap: () {},
+                  ),
+                ...custom.map((p) => BottomSheetItem(
+                  label: p.label,
+                  icon: p.key == _promptPreset ? Icons.check : null,
+                  iconColor: AppColors.accent,
+                  onTap: () => Navigator.pop(context, p.key),
+                )),
+              ],
             );
             if (result != null) setState(() => _promptPreset = result);
           },
@@ -421,12 +378,10 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
 
   void _openPromptManager() async {
     final custom = _customPrompts;
-    final result = await showModalBottomSheet<List<MemoryPromptPreset>>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => CustomPromptManagerSheet(
+    final result = await GlazeBottomSheet.show<List<MemoryPromptPreset>>(
+      context,
+      title: 'Custom Prompts',
+      child: CustomPromptManagerSheet(
         customPrompts: custom,
         onChanged: (_) {},
       ),

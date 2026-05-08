@@ -8,6 +8,7 @@ import '../../core/state/db_provider.dart';
 import '../../core/state/global_regex_provider.dart';
 import '../../core/utils/id_generator.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/sheet_view.dart';
 import '../presets/widgets/regex_tile.dart';
 
@@ -117,32 +118,29 @@ class RegexListScreen extends ConsumerWidget {
   }
 
   void _showAddMenu(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.label, color: AppColors.accent),
-              title: const Text('Add to Active Preset'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _addPresetRegex(ref);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.public, color: AppColors.accent),
-              title: const Text('Add Globally'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _addGlobalRegex(ref);
-              },
-            ),
-          ],
+    GlazeBottomSheet.show(
+      context,
+      title: 'Add Regex',
+      items: [
+        BottomSheetItem(
+          icon: Icons.label,
+          iconColor: AppColors.accent,
+          label: 'Add to Active Preset',
+          onTap: () {
+            Navigator.pop(context);
+            _addPresetRegex(ref);
+          },
         ),
-      ),
+        BottomSheetItem(
+          icon: Icons.public,
+          iconColor: AppColors.accent,
+          label: 'Add Globally',
+          onTap: () {
+            Navigator.pop(context);
+            _addGlobalRegex(ref);
+          },
+        ),
+      ],
     );
   }
 

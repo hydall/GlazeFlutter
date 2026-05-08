@@ -102,7 +102,17 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
   );
 
   result = result.replaceAllMapped(
+    RegExp(r'\{char\}', caseSensitive: false),
+    (_) => ctx.charName,
+  );
+
+  result = result.replaceAllMapped(
     RegExp(r'\{\{description\}\}', caseSensitive: false),
+    (_) => ctx.charDescription ?? '',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{description\}', caseSensitive: false),
     (_) => ctx.charDescription ?? '',
   );
 
@@ -112,7 +122,17 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
   );
 
   result = result.replaceAllMapped(
+    RegExp(r'\{scenario\}', caseSensitive: false),
+    (_) => ctx.charScenario ?? '',
+  );
+
+  result = result.replaceAllMapped(
     RegExp(r'\{\{personality\}\}', caseSensitive: false),
+    (_) => ctx.charPersonality ?? '',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{personality\}', caseSensitive: false),
     (_) => ctx.charPersonality ?? '',
   );
 
@@ -122,12 +142,27 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
   );
 
   result = result.replaceAllMapped(
+    RegExp(r'\{mesExamples\}', caseSensitive: false),
+    (_) => ctx.charMesExample ?? '',
+  );
+
+  result = result.replaceAllMapped(
     RegExp(r'\{\{user\}\}', caseSensitive: false),
     (_) => ctx.userName,
   );
 
   result = result.replaceAllMapped(
+    RegExp(r'\{user\}', caseSensitive: false),
+    (_) => ctx.userName,
+  );
+
+  result = result.replaceAllMapped(
     RegExp(r'\{\{persona\}\}', caseSensitive: false),
+    (_) => ctx.personaPrompt ?? '',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{persona\}', caseSensitive: false),
     (_) => ctx.personaPrompt ?? '',
   );
 

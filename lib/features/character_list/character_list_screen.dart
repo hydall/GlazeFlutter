@@ -12,6 +12,7 @@ import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/glaze_toast.dart';
@@ -211,25 +212,21 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   Future<void> _importCharacter(BuildContext context, WidgetRef ref) async {
     try {
       if (Platform.isIOS) {
-        final source = await showModalBottomSheet<_ImportSource>(
-          context: context,
-          builder: (ctx) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.photo_library),
-                  title: const Text('From Gallery'),
-                  onTap: () => Navigator.pop(ctx, _ImportSource.gallery),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.folder_open),
-                  title: const Text('From Files'),
-                  onTap: () => Navigator.pop(ctx, _ImportSource.files),
-                ),
-              ],
+        final source = await GlazeBottomSheet.show<_ImportSource>(
+          context,
+          title: 'Import',
+          items: [
+            BottomSheetItem(
+              icon: Icons.photo_library,
+              label: 'From Gallery',
+              onTap: () => Navigator.pop(context, _ImportSource.gallery),
             ),
-          ),
+            BottomSheetItem(
+              icon: Icons.folder_open,
+              label: 'From Files',
+              onTap: () => Navigator.pop(context, _ImportSource.files),
+            ),
+          ],
         );
         if (source == null) return;
         if (source == _ImportSource.gallery) {

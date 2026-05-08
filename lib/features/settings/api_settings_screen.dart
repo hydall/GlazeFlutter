@@ -8,6 +8,7 @@ import '../../core/llm/embedding_service.dart';
 import '../../core/llm/sse_client.dart';
 import '../../core/models/api_config.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/sheet_view.dart';
@@ -618,31 +619,66 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     final activeId =
         ref.read(activeApiPresetIdProvider) ??
         (list.isNotEmpty ? list.first.id : null);
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _PresetSheet(
-        configs: list,
-        activeId: activeId,
-        onSelect: (config) {
-          _saveTimer?.cancel();
-          ref.read(activeApiPresetIdProvider.notifier).state = config.id;
-          _loadedPresetId = null;
-          _loadFromConfig(config);
-        },
-        onNew: () => _createNewPreset(list),
-        onDelete: (id) async {
-          await ref.read(apiListProvider.notifier).remove(id);
-          if (activeId == id) {
-            ref.read(activeApiPresetIdProvider.notifier).state = null;
-            _loadedPresetId = null;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) _loadActivePreset();
-            });
-          }
+    await GlazeBottomSheet.show(
+      context,
+      title: 'API Configs',
+      headerAction: IconButton(
+        icon: const Icon(
+          Icons.add_circle_outline_rounded,
+          color: AppColors.accent,
+        ),
+        tooltip: 'New config',
+        onPressed: () {
+          Navigator.pop(context);
+          _createNewPreset(list);
         },
       ),
+      cardItems: list.map((config) {
+        final isActive = config.id == activeId;
+        final name = config.name.isNotEmpty
+            ? config.name
+            : config.model.isNotEmpty
+            ? config.model
+            : 'Unnamed';
+        return BottomSheetCardItem(
+          label: name,
+          sublabel: config.endpoint.isNotEmpty
+              ? config.endpoint
+                  .replaceAll(RegExp(r'https?://'), '')
+                  .split('/')
+                  .first
+              : null,
+          icon: isActive
+              ? Icons.radio_button_checked_rounded
+              : Icons.radio_button_unchecked_rounded,
+          isActive: isActive,
+          actions: [
+            if (list.length > 1)
+              BottomSheetAction(
+                icon: Icons.delete_outline_rounded,
+                color: AppColors.textSecondary,
+                onTap: () async {
+                  Navigator.pop(context);
+                  await ref.read(apiListProvider.notifier).remove(config.id);
+                  if (activeId == config.id) {
+                    ref.read(activeApiPresetIdProvider.notifier).state = null;
+                    _loadedPresetId = null;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _loadActivePreset();
+                    });
+                  }
+                },
+              ),
+          ],
+          onTap: () {
+            Navigator.pop(context);
+            _saveTimer?.cancel();
+            ref.read(activeApiPresetIdProvider.notifier).state = config.id;
+            _loadedPresetId = null;
+            _loadFromConfig(config);
+          },
+        );
+      }).toList(),
     );
   }
 
@@ -724,34 +760,40 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     if (current.isNotEmpty && !models.contains(current)) {
       models.insert(0, current);
     }
-    await showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (_) => _ListSheet(
-        title: 'Select Model',
-        items: models,
-        activeItem: current,
-        onSelect: (m) => _modelCtrl.text = m,
-      ),
+    await GlazeBottomSheet.show(
+      context,
+      title: 'Select Model',
+      items: models.map((m) => BottomSheetItem(
+        label: m,
+        icon: m == current ? Icons.check : null,
+        iconColor: AppColors.accent,
+        onTap: () {
+          Navigator.pop(context);
+          _modelCtrl.text = m;
+        },
+      )).toList(),
     );
   }
 
   void _openReasoningEffortSelector() {
     const options = ['auto', 'low', 'medium', 'high'];
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _ListSheet(
-        title: 'Reasoning Effort',
-        items: options.map((e) => e[0].toUpperCase() + e.substring(1)).toList(),
-        activeItem:
-            _reasoningEffort[0].toUpperCase() + _reasoningEffort.substring(1),
-        onSelect: (label) {
-          setState(() => _reasoningEffort = label.toLowerCase());
-          _scheduleSave();
-        },
-      ),
+    GlazeBottomSheet.show(
+      context,
+      title: 'Reasoning Effort',
+      items: options.map((e) {
+        final label = e[0].toUpperCase() + e.substring(1);
+        final active = e == _reasoningEffort;
+        return BottomSheetItem(
+          label: label,
+          icon: active ? Icons.check : null,
+          iconColor: AppColors.accent,
+          onTap: () {
+            Navigator.pop(context);
+            setState(() => _reasoningEffort = e);
+            _scheduleSave();
+          },
+        );
+      }).toList(),
     );
   }
 
@@ -899,250 +941,5 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         GlazeToast.error(context, 'Connection failed: ', e);
       }
     }
-  }
-}
-
-// ── Preset selector bottom sheet ──────────────────────────────────────────────
-
-class _PresetSheet extends StatelessWidget {
-  final List<ApiConfig> configs;
-  final String? activeId;
-  final ValueChanged<ApiConfig> onSelect;
-  final VoidCallback onNew;
-  final ValueChanged<String> onDelete;
-
-  const _PresetSheet({
-    required this.configs,
-    this.activeId,
-    required this.onSelect,
-    required this.onNew,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.7,
-      ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        border: Border(
-          top: BorderSide(color: AppColors.glassBorder),
-          left: BorderSide(color: AppColors.glassBorder),
-          right: BorderSide(color: AppColors.glassBorder),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 10),
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 12, 12),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'API Configs',
-                    style: TextStyle(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 18,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.add_circle_outline_rounded,
-                    color: AppColors.accent,
-                  ),
-                  tooltip: 'New config',
-                  onPressed: () {
-                    Navigator.pop(context);
-                    onNew();
-                  },
-                ),
-              ],
-            ),
-          ),
-          Flexible(
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: configs.length,
-              itemBuilder: (_, i) {
-                final config = configs[i];
-                final isActive = config.id == activeId;
-                final name = config.name.isNotEmpty
-                    ? config.name
-                    : config.model.isNotEmpty
-                    ? config.model
-                    : 'Unnamed';
-                return ListTile(
-                  leading: Icon(
-                    isActive
-                        ? Icons.radio_button_checked_rounded
-                        : Icons.radio_button_unchecked_rounded,
-                    color: isActive
-                        ? AppColors.accent
-                        : AppColors.textSecondary,
-                    size: 20,
-                  ),
-                  title: Text(
-                    name,
-                    style: TextStyle(
-                      color: isActive
-                          ? AppColors.accent
-                          : AppColors.textPrimary,
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                    ),
-                  ),
-                  subtitle: config.endpoint.isNotEmpty
-                      ? Text(
-                          config.endpoint
-                              .replaceAll(RegExp(r'https?://'), '')
-                              .split('/')
-                              .first,
-                          style: const TextStyle(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        )
-                      : null,
-                  trailing: configs.length > 1
-                      ? IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline_rounded,
-                            color: AppColors.textSecondary,
-                            size: 20,
-                          ),
-                          onPressed: () {
-                            Navigator.pop(context);
-                            onDelete(config.id);
-                          },
-                        )
-                      : null,
-                  onTap: () {
-                    Navigator.pop(context);
-                    onSelect(config);
-                  },
-                );
-              },
-            ),
-          ),
-          SizedBox(height: MediaQuery.of(context).padding.bottom + 12),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Generic list selector sheet ───────────────────────────────────────────────
-
-class _ListSheet extends StatelessWidget {
-  final String title;
-  final List<String> items;
-  final String activeItem;
-  final ValueChanged<String> onSelect;
-
-  const _ListSheet({
-    required this.title,
-    required this.items,
-    required this.activeItem,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.65,
-      ),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        border: Border(
-          top: BorderSide(color: AppColors.glassBorder),
-          left: BorderSide(color: AppColors.glassBorder),
-          right: BorderSide(color: AppColors.glassBorder),
-        ),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(height: 10),
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                title,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 18,
-                ),
-              ),
-            ),
-          ),
-          Flexible(
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: items.length,
-              itemBuilder: (_, i) {
-                final item = items[i];
-                final isActive = item == activeItem;
-                return ListTile(
-                  leading: isActive
-                      ? const Icon(
-                          Icons.check_rounded,
-                          color: AppColors.accent,
-                          size: 20,
-                        )
-                      : const SizedBox(width: 20),
-                  title: Text(
-                    item,
-                    style: TextStyle(
-                      color: isActive
-                          ? AppColors.accent
-                          : AppColors.textPrimary,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    onSelect(item);
-                  },
-                );
-              },
-            ),
-          ),
-          SizedBox(height: MediaQuery.of(context).padding.bottom + 12),
-        ],
-      ),
-    );
   }
 }

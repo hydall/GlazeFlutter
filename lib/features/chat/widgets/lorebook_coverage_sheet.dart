@@ -6,6 +6,7 @@ import '../../../core/llm/tokenizer.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_filter_chip_bar.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
@@ -15,12 +16,9 @@ void showLorebookCoverageSheet(
   WidgetRef ref,
   String charId,
 ) {
-  showModalBottomSheet(
-    context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => _CoveragePanel(charId: charId),
+  GlazeBottomSheet.show(
+    context,
+    child: _CoveragePanel(charId: charId),
   );
 }
 

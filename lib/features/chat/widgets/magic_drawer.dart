@@ -27,13 +27,9 @@ import 'prompt_preview_screen.dart';
 import 'tokenizer_sheet.dart';
 
 void showMagicDrawer(BuildContext context, String charId) {
-  showModalBottomSheet(
-    context: context,
-    useRootNavigator: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: Colors.black54,
-    isScrollControlled: true,
-    builder: (_) => MagicDrawerPanel(charId: charId),
+  GlazeBottomSheet.show(
+    context,
+    child: MagicDrawerPanel(charId: charId),
   );
 }
 
@@ -324,26 +320,18 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       case 'api':
         Navigator.of(context).pop();
         if (mounted) {
-          showModalBottomSheet(
-            context: context,
-            useRootNavigator: true,
-            backgroundColor: Colors.transparent,
-            barrierColor: Colors.black54,
-            isScrollControlled: true,
-            builder: (_) => const ApiSettingsScreen(),
+          GlazeBottomSheet.show(
+            context,
+            child: const ApiSettingsScreen(),
           );
         }
         return;
       case 'presets':
         Navigator.of(context).pop();
         if (mounted) {
-          showModalBottomSheet(
-            context: context,
-            useRootNavigator: true,
-            backgroundColor: Colors.transparent,
-            barrierColor: Colors.black54,
-            isScrollControlled: true,
-            builder: (_) => const PresetListScreen(),
+          GlazeBottomSheet.show(
+            context,
+            child: const PresetListScreen(),
           );
         }
         return;
@@ -447,28 +435,17 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     String role = currentAn?.role ?? 'system';
     bool enabled = currentAn?.enabled ?? true;
 
-    await showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black54,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => Container(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.7),
-          decoration: const BoxDecoration(
-            color: Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border(top: BorderSide(color: AppColors.glassBorder)),
-          ),
-          child: Column(
+    await GlazeBottomSheet.show(
+      context,
+      title: "Author's Note",
+      child: StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
+                padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
                 child: Row(
                   children: [
-                    const Text("Author's Note", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                     const Spacer(),
                     Switch(
                       value: enabled,
@@ -590,7 +567,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             ],
           ),
         ),
-      ),
     );
   }
 

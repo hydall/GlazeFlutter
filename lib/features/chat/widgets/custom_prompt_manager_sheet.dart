@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/services/memory_prompt_presets.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/theme/app_colors.dart';
 
 class CustomPromptManagerSheet extends StatefulWidget {
@@ -129,14 +130,10 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
   }
 
   void _addPrompt() async {
-    final result = await showModalBottomSheet<MemoryPromptPreset>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => _PromptEditor(
+    final result = await GlazeBottomSheet.show<MemoryPromptPreset>(
+      context,
+      title: 'New Prompt',
+      child: _PromptEditor(
         existingKeys: {...MemoryPromptPresets.builtIn.map((p) => p.key), ..._prompts.map((p) => p.key)},
       ),
     );
@@ -146,14 +143,10 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
   }
 
   void _editPrompt(int index) async {
-    final result = await showModalBottomSheet<MemoryPromptPreset>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => _PromptEditor(
+    final result = await GlazeBottomSheet.show<MemoryPromptPreset>(
+      context,
+      title: 'Edit Prompt',
+      child: _PromptEditor(
         existingKeys: {...MemoryPromptPresets.builtIn.map((p) => p.key), ..._prompts.map((p) => p.key).where((k) => k != _prompts[index].key)},
         initial: _prompts[index],
       ),

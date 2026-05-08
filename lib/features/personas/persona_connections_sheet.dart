@@ -5,6 +5,7 @@ import '../../../core/models/persona.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/theme/app_colors.dart';
 
 class PersonaConnectionsSheet extends ConsumerStatefulWidget {
@@ -330,9 +331,8 @@ class _EmptyHint extends StatelessWidget {
 }
 
 void showPersonaConnections(BuildContext context, String personaId) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    builder: (_) => PersonaConnectionsSheet(personaId: personaId),
+  GlazeBottomSheet.show(
+    context,
+    child: PersonaConnectionsSheet(personaId: personaId),
   );
 }

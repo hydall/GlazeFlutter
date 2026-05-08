@@ -261,8 +261,8 @@ Future<DownloadedCharacter> datacatGetCharacter(String uuid) async {
   return DownloadedCharacter(
     charData: CharacterData(
       name: raw['name'] ?? raw['chatName'] ?? raw['chat_name'] ?? 'Unknown',
-      description: raw['personality'] ?? raw['description'] ?? '',
-      personality: '',
+      description: raw['description'] ?? '',
+      personality: raw['personality'] ?? '',
       scenario: raw['scenario'] ?? '',
       firstMes: raw['first_mes'] ?? raw['first_message'] ?? '',
       mesExample: raw['mes_example'] ?? '',
