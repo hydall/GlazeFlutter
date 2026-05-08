@@ -50,8 +50,7 @@ class JsCharacterImporter with BackupHelpers {
                   char['alternate_greetings'] != null
                       ? jsonEncode(char['alternate_greetings'])
                       : null),
-              updatedAt: Value(toInt(char['updatedAt'] ?? char['updated_at']) ??
-                  DateTime.now().millisecondsSinceEpoch),
+              updatedAt: Value(_importTimestamp(char)),
               fav: Value(char['fav'] == true),
               extensionsJson: Value(extractExtensionsJson(char)),
               characterVersion: Value(
@@ -61,6 +60,14 @@ class JsCharacterImporter with BackupHelpers {
             ),
           );
     }
+  }
+
+  int _importTimestamp(Map<String, dynamic> char) {
+    final raw = toInt(char['updatedAt'] ?? char['updated_at'] ??
+        char['creation_date'] ?? char['created_at']);
+    if (raw == null) return currentTimestampSeconds();
+    if (raw > 1e12) return raw ~/ 1000;
+    return raw;
   }
 
   Future<void> importPersonas(dynamic data) async {
