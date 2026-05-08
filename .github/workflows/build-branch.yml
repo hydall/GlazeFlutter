@@ -63,7 +63,7 @@ jobs:
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: android
-          KEY_ALIAS: ci-debug
+          KEY_ALIAS: debug-key
           KEY_PASSWORD: android
         run: flutter build apk --debug --no-pub --target-platform android-arm64
 

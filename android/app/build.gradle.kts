@@ -25,13 +25,13 @@ android {
         create("ci") {
             val ks = System.getenv("KEYSTORE_BASE64")
             if (ks != null) {
-                val ksFile = rootProject.file("ci-debug.keystore")
+                val ksFile = rootProject.file("debug-key.keystore")
                 if (!ksFile.exists()) {
                     ksFile.writeBytes(Base64.getDecoder().decode(ks))
                 }
                 storeFile = ksFile
                 storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android"
-                keyAlias = System.getenv("KEY_ALIAS") ?: "ci-debug"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "debug-key"
                 keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
             }
         }
