@@ -70,8 +70,13 @@
 
 ## UI
 
-- **Android: magic drawer takes forever to load (first and subsequent opens).** Unresolved — likely infinite/retry loop in token counting or provider rebuild storm when magic drawer opens.
-- **Android: fresh APK only installs clean (uninstall first), update over existing install fails.** Unresolved — likely DB schema migration issue or signing key mismatch between debug builds.
+- **Android: magic drawer slow token recalculation.** Partially fixed — drawer opens immediately with fast DB-only stats; token counting runs in background isolate after drawer is visible. Still recalculates from scratch on every open with no caching.
+
+- **~~Android: fresh APK only installs clean (uninstall first), update over existing install fails.~~** Fixed — CI builds now decode `DEBUG_KEYSTORE_BASE64` secret into a persistent `debug-key.keystore`, so all CI APKs are signed with the same key. DB `createTable`/`addColumn` collision on migration from early schemas still possible but rare.
+
+- **No HTML rendering in chat.** Unresolved — need to research if HTML support was implemented. Messages containing HTML are displayed as raw text.
+
+- **iOS (possibly global): black screen on character import after prior successful imports.** Unresolved — after importing several characters successfully, importing another one causes a black screen. Requires multiple app restarts (~10) before it works. Needs investigation.
 
 - **~~Character menu scrolls with lag.~~** Fixed — removed expensive `BackdropFilter` from every card (2 per card × N cards); simplified token badge background; kept token estimation but cleaned up expression.
 

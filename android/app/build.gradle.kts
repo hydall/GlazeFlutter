@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -19,6 +21,22 @@ android {
         jvmTarget = "17"
     }
 
+    signingConfigs {
+        create("ci") {
+            val ks = System.getenv("KEYSTORE_BASE64")
+            if (ks != null) {
+                val ksFile = rootProject.file("debug-key.keystore")
+                if (!ksFile.exists()) {
+                    ksFile.writeBytes(Base64.getDecoder().decode(ks))
+                }
+                storeFile = ksFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "debug-key"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "app.glaze.flutter"
         minSdk = flutter.minSdkVersion
@@ -28,8 +46,19 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig = if (System.getenv("KEYSTORE_BASE64") != null) {
+                signingConfigs.getByName("ci")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+        }
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (System.getenv("KEYSTORE_BASE64") != null) {
+                signingConfigs.getByName("ci")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
