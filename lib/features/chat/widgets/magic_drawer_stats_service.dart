@@ -48,12 +48,6 @@ class MagicDrawerStatsService {
     var memoryEntries = 0;
     var sessionCount = 0;
     var messageCount = 0;
-    var promptTokens = 0;
-    var contextSize = 0;
-    var characterTokens = 0;
-    var presetTokens = 0;
-    var personaTokens = 0;
-    var summaryTokens = 0;
 
     if (session != null) {
       final summary = await _ref
@@ -65,21 +59,6 @@ class MagicDrawerStatsService {
       sessionCount =
           (await _ref.read(chatRepoProvider).getByCharacterId(charId)).length;
       messageCount = session.messages.length;
-
-      if (character != null && chatApi != null) {
-        try {
-          final builder = _ref.read(promptPayloadBuilderProvider);
-          final payload = await builder.buildFromSession(charId: charId, session: session);
-          final promptResult = await buildPromptInIsolate(payload);
-          final sourceTokens = promptResult.breakdown.sourceTokens;
-          promptTokens = promptResult.breakdown.totalTokens;
-          contextSize = chatApi.contextSize;
-          characterTokens = sourceTokens['character'] ?? 0;
-          presetTokens = sourceTokens['preset'] ?? 0;
-          personaTokens = sourceTokens['persona'] ?? 0;
-          summaryTokens = sourceTokens['summary'] ?? 0;
-        } catch (_) {}
-      }
     }
 
     final lorebookActivations = _ref.read(lorebookActivationsProvider);
@@ -115,13 +94,38 @@ class MagicDrawerStatsService {
       memoryEntryCount: memoryEntries,
       regexCount: regexes.length,
       summaryChars: summaryChars,
-      promptTokens: promptTokens,
-      contextSize: contextSize,
-      characterTokens: characterTokens,
-      presetTokens: presetTokens,
-      personaTokens: personaTokens,
-      summaryTokens: summaryTokens,
+      promptTokens: 0,
+      contextSize: chatApi?.contextSize ?? 0,
+      characterTokens: 0,
+      presetTokens: 0,
+      personaTokens: 0,
+      summaryTokens: 0,
       imageGenEnabled: imageGenEnabled,
     );
+  }
+
+  Future<MagicDrawerStats> computeTokenStats(String charId, MagicDrawerStats base) async {
+    final chatState = _ref.read(chatProvider(charId)).value;
+    final session = chatState?.session;
+    final character = base.character;
+    final chatApi = base.apiConfig;
+
+    if (session == null || character == null || chatApi == null) return base;
+
+    try {
+      final builder = _ref.read(promptPayloadBuilderProvider);
+      final payload = await builder.buildFromSession(charId: charId, session: session);
+      final promptResult = await buildPromptInIsolate(payload);
+      final sourceTokens = promptResult.breakdown.sourceTokens;
+      return base.copyWith(
+        promptTokens: promptResult.breakdown.totalTokens,
+        characterTokens: sourceTokens['character'] ?? 0,
+        presetTokens: sourceTokens['preset'] ?? 0,
+        personaTokens: sourceTokens['persona'] ?? 0,
+        summaryTokens: sourceTokens['summary'] ?? 0,
+      );
+    } catch (_) {
+      return base;
+    }
   }
 }

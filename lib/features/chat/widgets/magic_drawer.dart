@@ -11,12 +11,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/llm/summary_service.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../core/models/chat_message.dart';
-import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
-import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
-import '../../image_gen/image_gen_provider.dart';
 import '../../image_gen/widgets/image_gen_sheet.dart';
 import '../chat_provider.dart';
 import '../../presets/preset_list_screen.dart';
@@ -103,6 +100,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   final Set<String> _deletedIds = {};
   bool _editing = false;
   bool _loading = true;
+  bool _loadingTokens = false;
   int? _draggingIndex;
   int? _hoverIndex;
   MagicDrawerStats _stats = const MagicDrawerStats();
@@ -119,6 +117,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     if (mounted) {
       setState(() => _loading = false);
     }
+    _loadTokenStats();
   }
 
   Future<void> _loadLayout() async {
@@ -158,6 +157,17 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     _stats = await MagicDrawerStatsService(ref).computeStats(widget.charId);
   }
 
+  Future<void> _loadTokenStats() async {
+    if (!mounted) return;
+    setState(() => _loadingTokens = true);
+    final updated = await MagicDrawerStatsService(ref).computeTokenStats(widget.charId, _stats);
+    if (!mounted) return;
+    setState(() {
+      _stats = updated;
+      _loadingTokens = false;
+    });
+  }
+
   bool _isKnownItem(String id) => _allItems.any((item) => item.id == id);
 
   List<MagicDrawerCardItem> get _displayItems {
@@ -184,7 +194,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       'context' =>
         _stats.promptTokens > 0 && _stats.contextSize > 0
             ? '${_stats.promptTokens}/${_stats.contextSize} tokens'
-            : null,
+            : _loadingTokens ? 'Calculating...' : null,
       'summary' =>
         _stats.summaryChars > 0
             ? '${_stats.summaryChars} chars'
@@ -209,7 +219,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             ? '${_stats.activePreset!.name} • ${_stats.presetTokens} tokens'
             : _stats.activePreset!.name,
       'preview' =>
-        _stats.promptTokens > 0 ? '${_stats.promptTokens} tokens' : null,
+        _stats.promptTokens > 0 ? '${_stats.promptTokens} tokens' : _loadingTokens ? 'Calculating...' : null,
       'coverage' =>
         _stats.lorebookEntryCount > 0
             ? '${_stats.lorebookEntryCount} entries'
@@ -788,8 +798,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     ref.listen(chatProvider(widget.charId), (prev, next) {
       final prevSession = prev?.value?.session;
       final nextSession = next.value?.session;
-      if (prevSession != nextSession) {
-        _loadStats();
+      if (prevSession?.id != nextSession?.id ||
+          prevSession?.messages.length != nextSession?.messages.length) {
+        _loadDrawer();
       }
     });
 

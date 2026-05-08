@@ -57,4 +57,7 @@
 
 ## UI
 
+- **Android: magic drawer takes forever to load (first and subsequent opens).** Unresolved — likely infinite/retry loop in token counting or provider rebuild storm when magic drawer opens.
+- **Android: fresh APK only installs clean (uninstall first), update over existing install fails.** Unresolved — likely DB schema migration issue or signing key mismatch between debug builds.
+
 - **~~Character menu scrolls with lag.~~** Fixed — removed expensive `BackdropFilter` from every card (2 per card × N cards); simplified token badge background; kept token estimation but cleaned up expression.
