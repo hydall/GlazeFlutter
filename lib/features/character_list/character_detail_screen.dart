@@ -153,15 +153,18 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      expand: false,
-      initialChildSize: 0.78,
-      minChildSize: 0.3,
-      maxChildSize: 1.0,
-      snap: true,
-      snapSizes: const [0.78, 1.0],
-      controller: _sheetController,
-      builder: (_, scrollController) => _buildSheet(scrollController),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.78,
+        minChildSize: 0.3,
+        maxChildSize: 1.0,
+        snap: true,
+        snapSizes: const [0.78, 1.0],
+        controller: _sheetController,
+        builder: (_, scrollController) => _buildSheet(scrollController),
+      ),
     );
   }
 
