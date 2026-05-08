@@ -219,12 +219,14 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
             BottomSheetItem(
               icon: Icons.photo_library,
               label: 'From Gallery',
-              onTap: () => Navigator.pop(context, _ImportSource.gallery),
+              onTap: () =>
+                  Navigator.of(context, rootNavigator: true).pop(_ImportSource.gallery),
             ),
             BottomSheetItem(
               icon: Icons.folder_open,
               label: 'From Files',
-              onTap: () => Navigator.pop(context, _ImportSource.files),
+              onTap: () =>
+                  Navigator.of(context, rootNavigator: true).pop(_ImportSource.files),
             ),
           ],
         );
@@ -246,6 +248,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   Future<void> _importFromGallery(BuildContext context, WidgetRef ref) async {
     final picker = ImagePicker();
     final images = await picker.pickMultiImage();
+    if (!context.mounted) return;
     if (images.isEmpty) return;
 
     final importer = await ref.read(characterImporterProvider.future);
@@ -289,6 +292,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
       allowedExtensions: Platform.isIOS ? null : ['png', 'json', 'charx', 'zip'],
       allowMultiple: true,
     );
+    if (!context.mounted) return;
     if (result == null || result.files.isEmpty) return;
 
     final importer = await ref.read(characterImporterProvider.future);

@@ -36,6 +36,7 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 final routerProvider = Provider<GoRouter>(
   (ref) => GoRouter(
     navigatorKey: rootNavigatorKey,
+    onException: (_, __, router) => router.go('/'),
     routes: [
       StatefulShellRoute.indexedStack(
         builder: (_, __, navigationShell) =>

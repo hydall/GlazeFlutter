@@ -63,19 +63,27 @@ class _CharacterDetailSheetLauncherState
   }
 
   Future<void> _show() async {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => CharacterDetailScreen(charId: widget.charId),
-    );
+    final location = GoRouterState.of(context).uri.path;
+    final isSubRoute = location.endsWith('/edit') || location.endsWith('/gallery');
+    if (isSubRoute) return;
+    try {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => CharacterDetailScreen(charId: widget.charId),
+      );
+    } catch (_) {}
     if (mounted) context.go('/characters');
   }
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox.shrink();
+    return const Scaffold(
+      backgroundColor: Colors.transparent,
+      body: Center(child: CircularProgressIndicator()),
+    );
   }
 }
 
