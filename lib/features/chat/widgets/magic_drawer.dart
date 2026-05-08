@@ -1,4 +1,5 @@
-﻿import 'dart:math' as math;
+﻿import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -100,11 +101,18 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   int? _draggingIndex;
   int? _hoverIndex;
   MagicDrawerStats _stats = const MagicDrawerStats();
+  Timer? _debounceTimer;
 
   @override
   void initState() {
     super.initState();
     _loadDrawer();
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadDrawer() async {
@@ -776,7 +784,8 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       final nextSession = next.value?.session;
       if (prevSession?.id != nextSession?.id ||
           prevSession?.messages.length != nextSession?.messages.length) {
-        _loadDrawer();
+        _debounceTimer?.cancel();
+        _debounceTimer = Timer(const Duration(milliseconds: 300), _loadDrawer);
       }
     });
 

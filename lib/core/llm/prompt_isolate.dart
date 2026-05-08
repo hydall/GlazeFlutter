@@ -1,11 +1,7 @@
-import 'package:flutter/foundation.dart';
+import 'dart:isolate';
 
 import 'prompt_builder.dart';
 
 Future<PromptResult> buildPromptInIsolate(PromptPayload payload) {
-  return compute(_buildPromptEntry, payload);
-}
-
-PromptResult _buildPromptEntry(PromptPayload payload) {
-  return buildPrompt(payload);
+  return Isolate.run(() => buildPrompt(payload));
 }

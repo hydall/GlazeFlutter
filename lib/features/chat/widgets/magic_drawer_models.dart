@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/models/api_config.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../core/models/lorebook.dart';
 import '../../../core/models/persona.dart';
 import '../../../core/models/preset.dart';
 
@@ -49,6 +50,11 @@ class MagicDrawerStats {
   final int personaTokens;
   final int summaryTokens;
   final bool imageGenEnabled;
+  final List<Lorebook> lorebooks;
+  final String? summaryContent;
+  final String? memoryContent;
+  final String memoryInjectionTarget;
+  final Map<String, dynamic> memoryCoverage;
 
   const MagicDrawerStats({
     this.character,
@@ -69,6 +75,11 @@ class MagicDrawerStats {
     this.personaTokens = 0,
     this.summaryTokens = 0,
     this.imageGenEnabled = false,
+    this.lorebooks = const [],
+    this.summaryContent,
+    this.memoryContent,
+    this.memoryInjectionTarget = 'summary_block',
+    this.memoryCoverage = const {},
   });
 
   MagicDrawerStats copyWith({
@@ -98,6 +109,11 @@ class MagicDrawerStats {
       personaTokens: personaTokens ?? this.personaTokens,
       summaryTokens: summaryTokens ?? this.summaryTokens,
       imageGenEnabled: imageGenEnabled,
+      lorebooks: lorebooks,
+      summaryContent: summaryContent,
+      memoryContent: memoryContent,
+      memoryInjectionTarget: memoryInjectionTarget,
+      memoryCoverage: memoryCoverage,
     );
   }
 }
