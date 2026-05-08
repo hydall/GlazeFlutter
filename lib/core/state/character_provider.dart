@@ -17,20 +17,25 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
     ref.keepAlive();
     _sub?.cancel();
     final repo = ref.read(characterRepoProvider);
-    _sub = repo.watchAll().listen((data) {
-      if (state.hasValue && state.value!.length == data.length) {
-        bool same = true;
-        for (int i = 0; i < data.length; i++) {
-          if (data[i].id != state.value![i].id ||
-              data[i].updatedAt != state.value![i].updatedAt) {
-            same = false;
-            break;
+    _sub = repo.watchAll().listen(
+      (data) {
+        if (state.hasValue && state.value!.length == data.length) {
+          bool same = true;
+          for (int i = 0; i < data.length; i++) {
+            if (data[i].id != state.value![i].id ||
+                data[i].updatedAt != state.value![i].updatedAt) {
+              same = false;
+              break;
+            }
           }
+          if (same) return;
         }
-        if (same) return;
-      }
-      state = AsyncData(data);
-    });
+        state = AsyncData(data);
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        state = AsyncError(error, stackTrace);
+      },
+    );
     ref.onDispose(() => _sub?.cancel());
     return repo.getAll();
   }

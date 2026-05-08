@@ -76,7 +76,7 @@
 
 - **No HTML rendering in chat.** Unresolved — need to research if HTML support was implemented. Messages containing HTML are displayed as raw text.
 
-- **iOS (possibly global): black screen on character import after prior successful imports.** Unresolved — after importing several characters successfully, importing another one causes a black screen. Requires multiple app restarts (~10) before it works. Needs investigation.
+- **~~iOS: black screen on character import after prior successful imports.~~** Fixed — root cause was `Navigator.pop(context, result)` targeting the branch navigator instead of root navigator when dismissing `GlazeBottomSheet` (which uses `useRootNavigator: true`). After several imports the navigation state would corrupt, sticking a modal on the root navigator and leaving `CharacterDetailSheetLauncher` as `SizedBox.shrink()` = black screen. Additional fixes: `CharacterDetailSheetLauncher` now shows loading spinner instead of `SizedBox.shrink`, has try-catch around modal, skips firing on sub-routes (`/edit`, `/gallery`), and returns to `/characters` on failure; added `context.mounted` checks after native iOS pickers return; added `onError` handler to `charactersProvider` stream; added `onException` fallback to GoRouter.
 
 - **~~Character menu scrolls with lag.~~** Fixed — removed expensive `BackdropFilter` from every card (2 per card × N cards); simplified token badge background; kept token estimation but cleaned up expression.
 
