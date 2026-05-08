@@ -48,6 +48,7 @@ class PromptPayload {
   final String characterDepthPromptRole;
   final Map<String, dynamic> memoryCoverage;
   final List<PresetRegex> globalRegexes;
+  final List<ScannedEntry>? preScannedEntries;
 
   const PromptPayload({
     required this.character,
@@ -72,6 +73,7 @@ class PromptPayload {
     this.characterDepthPromptRole = 'system',
     this.memoryCoverage = const {},
     this.globalRegexes = const [],
+    this.preScannedEntries,
   });
 }
 
@@ -135,7 +137,7 @@ PromptResult buildPrompt(PromptPayload payload) {
   final depthBlocks = <_ResolvedDepthBlock>[];
   final relativeBlocks = <_ResolvedRelativeBlock>[];
 
-  final loreEntries = scanLorebooks(
+  final loreEntries = payload.preScannedEntries ?? scanLorebooks(
     history: payload.history,
     char: char,
     textToScan: payload.history.where((m) => m.role == 'user').lastOrNull?.content ?? '',

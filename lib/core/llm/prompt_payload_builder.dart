@@ -1,8 +1,12 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/api_config.dart';
+import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/lorebook.dart';
+import '../models/persona.dart';
+import '../models/preset.dart';
 import '../state/active_selection_provider.dart';
 import '../state/db_provider.dart';
 import '../state/global_regex_provider.dart';
@@ -21,6 +25,7 @@ class PromptPayloadBuilder {
     required String charId,
     required ChatSession? session,
     String? guidanceText,
+    bool skipVectorSearch = false,
   }) async {
     final charRepo = _ref.read(characterRepoProvider);
     final presetRepo = _ref.read(presetRepoProvider);
@@ -90,7 +95,9 @@ class PromptPayloadBuilder {
         };
       }
 
-      vectorEntries = await _runVectorSearch(session.messages, session.messages.lastOrNull?.content ?? '', character.world);
+      if (!skipVectorSearch) {
+        vectorEntries = await _runVectorSearch(session.messages, session.messages.lastOrNull?.content ?? '', character.world);
+      }
     }
 
     return PromptPayload(
@@ -100,6 +107,58 @@ class PromptPayloadBuilder {
       history: history,
       apiConfig: chatApi,
       sessionVars: sessionVars,
+      globalVars: _ref.read(globalVarsProvider),
+      lorebooks: lorebooks,
+      lorebookSettings: lorebookSettings,
+      lorebookActivations: lorebookActivations,
+      vectorEntries: vectorEntries,
+      summaryContent: summaryContent,
+      memoryContent: memoryContent,
+      memoryInjectionTarget: memoryInjectionTarget,
+      memoryCoverage: memoryCoverage,
+      guidanceText: guidanceText,
+      authorsNote: session?.authorsNote,
+      characterDepthPrompt: character.depthPrompt,
+      characterDepthPromptDepth: character.depthPromptDepth,
+      characterDepthPromptRole: character.depthPromptRole,
+      globalRegexes: _ref.read(globalRegexProvider).valueOrNull ?? [],
+    );
+  }
+
+  Future<PromptPayload> buildFromPreFetched({
+    required String charId,
+    required ChatSession? session,
+    required Character character,
+    required ApiConfig chatApi,
+    required Preset? preset,
+    required Persona? persona,
+    required List<Lorebook> lorebooks,
+    String? summaryContent,
+    String? memoryContent,
+    String memoryInjectionTarget = 'summary_block',
+    Map<String, dynamic> memoryCoverage = const {},
+    String? guidanceText,
+    bool skipVectorSearch = true,
+  }) async {
+    final lorebookSettings = _ref.read(lorebookSettingsProvider);
+    final lorebookActivations = _ref.read(lorebookActivationsProvider);
+
+    List<LorebookEntry> vectorEntries = [];
+    if (!skipVectorSearch && session != null) {
+      vectorEntries = await _runVectorSearch(
+        session.messages,
+        session.messages.lastOrNull?.content ?? '',
+        character.world,
+      );
+    }
+
+    return PromptPayload(
+      character: character,
+      persona: persona,
+      preset: preset,
+      history: session?.messages ?? [],
+      apiConfig: chatApi,
+      sessionVars: session?.sessionVars ?? {},
       globalVars: _ref.read(globalVarsProvider),
       lorebooks: lorebooks,
       lorebookSettings: lorebookSettings,

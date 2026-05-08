@@ -70,7 +70,15 @@
 
 ## UI
 
-- **Android: magic drawer slow token recalculation.** Partially fixed — drawer opens immediately with fast DB-only stats; token counting runs in background isolate after drawer is visible. Still recalculates from scratch on every open with no caching.
+- **Android: magic drawer slow token recalculation.** Partially fixed — multiple optimizations applied:
+  - Token breakdown cached in provider after each generation (drawer shows instantly if tokens already computed)
+  - Eliminated 9-10 duplicate DB queries in `computeTokenStats` by reusing data from `computeStats` via `buildFromPreFetched`
+  - Skip vector search (2-3 network calls) for drawer token counting; only used in tokenizer sheet
+  - Reuse lorebook scan results from `computeStats` in `buildPrompt` via `preScannedEntries` field
+  - Replaced `Flutter.compute()` with `Isolate.run()` for lighter isolate management
+  - Added per-text token count cache (LRU, 2048 entries) in `tokenizer.dart`
+  - Debounced `ref.listen` callback (300ms) to prevent rapid re-computation
+  - Still recalculates from scratch on first open with no cached breakdown; no cross-session caching
 
 - **~~Android: fresh APK only installs clean (uninstall first), update over existing install fails.~~** Fixed — CI builds now decode `DEBUG_KEYSTORE_BASE64` secret into a persistent `debug-key.keystore`, so all CI APKs are signed with the same key. DB `createTable`/`addColumn` collision on migration from early schemas still possible but rare.
 

@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/lorebook_scanner.dart';
+import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/summary_service.dart';
@@ -9,12 +10,20 @@ import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../chat_provider.dart';
+import 'cached_token_breakdown.dart';
 import 'magic_drawer_models.dart';
+
+class _StatsContext {
+  final List<ScannedEntry> scannedEntries;
+  const _StatsContext({required this.scannedEntries});
+}
 
 class MagicDrawerStatsService {
   final WidgetRef _ref;
 
   MagicDrawerStatsService(this._ref);
+
+  _StatsContext? _lastStatsContext;
 
   Future<MagicDrawerStats> computeStats(String charId) async {
     final chatState = _ref.read(chatProvider(charId)).value;
@@ -48,11 +57,16 @@ class MagicDrawerStatsService {
     var memoryEntries = 0;
     var sessionCount = 0;
     var messageCount = 0;
+    String? summaryContent;
+    String? memoryContent;
+    String memoryInjectionTarget = 'summary_block';
+    Map<String, dynamic> memoryCoverage = {};
 
     if (session != null) {
       final summary = await _ref
           .read(summaryServiceProvider)
           .getSummary(session.id);
+      summaryContent = summary;
       summaryChars = summary?.length ?? 0;
       final memoryBook = await memoryRepo.getBySessionId(session.id);
       memoryEntries = memoryBook?.entries.length ?? 0;
@@ -77,10 +91,14 @@ class MagicDrawerStatsService {
           )
         : <ScannedEntry>[];
 
+    _lastStatsContext = _StatsContext(scannedEntries: triggeredEntries);
+
     bool imageGenEnabled = false;
     try {
       imageGenEnabled = _ref.read(imageGenSettingsProvider).value?.enabled == true;
     } catch (_) {}
+
+    final cached = _ref.read(cachedTokenBreakdownProvider(charId));
 
     return MagicDrawerStats(
       character: character,
@@ -94,19 +112,23 @@ class MagicDrawerStatsService {
       memoryEntryCount: memoryEntries,
       regexCount: regexes.length,
       summaryChars: summaryChars,
-      promptTokens: 0,
+      promptTokens: cached?.totalTokens ?? 0,
       contextSize: chatApi?.contextSize ?? 0,
-      characterTokens: 0,
-      presetTokens: 0,
-      personaTokens: 0,
-      summaryTokens: 0,
+      characterTokens: cached?.sourceTokens['character'] ?? 0,
+      presetTokens: cached?.sourceTokens['preset'] ?? 0,
+      personaTokens: cached?.sourceTokens['persona'] ?? 0,
+      summaryTokens: cached?.sourceTokens['summary'] ?? 0,
       imageGenEnabled: imageGenEnabled,
+      lorebooks: lorebooks,
+      summaryContent: summaryContent,
+      memoryContent: memoryContent,
+      memoryInjectionTarget: memoryInjectionTarget,
+      memoryCoverage: memoryCoverage,
     );
   }
 
   Future<MagicDrawerStats> computeTokenStats(String charId, MagicDrawerStats base) async {
-    final chatState = _ref.read(chatProvider(charId)).value;
-    final session = chatState?.session;
+    final session = base.session;
     final character = base.character;
     final chatApi = base.apiConfig;
 
@@ -114,9 +136,50 @@ class MagicDrawerStatsService {
 
     try {
       final builder = _ref.read(promptPayloadBuilderProvider);
-      final payload = await builder.buildFromSession(charId: charId, session: session);
-      final promptResult = await buildPromptInIsolate(payload);
+      final payload = await builder.buildFromPreFetched(
+        charId: charId,
+        session: session,
+        character: character,
+        chatApi: chatApi,
+        preset: base.activePreset,
+        persona: base.activePersona,
+        lorebooks: base.lorebooks,
+        summaryContent: base.summaryContent,
+        memoryContent: base.memoryContent,
+        memoryInjectionTarget: base.memoryInjectionTarget,
+        memoryCoverage: base.memoryCoverage,
+        skipVectorSearch: true,
+      );
+      final payloadWithScan = PromptPayload(
+        character: payload.character,
+        persona: payload.persona,
+        preset: payload.preset,
+        history: payload.history,
+        apiConfig: payload.apiConfig,
+        sessionVars: payload.sessionVars,
+        globalVars: payload.globalVars,
+        lorebooks: payload.lorebooks,
+        lorebookSettings: payload.lorebookSettings,
+        lorebookActivations: payload.lorebookActivations,
+        vectorEntries: payload.vectorEntries,
+        summaryContent: payload.summaryContent,
+        memoryContent: payload.memoryContent,
+        memoryInjectionTarget: payload.memoryInjectionTarget,
+        memoryCoverage: payload.memoryCoverage,
+        guidanceText: payload.guidanceText,
+        authorsNote: payload.authorsNote,
+        characterDepthPrompt: payload.characterDepthPrompt,
+        characterDepthPromptDepth: payload.characterDepthPromptDepth,
+        characterDepthPromptRole: payload.characterDepthPromptRole,
+        globalRegexes: payload.globalRegexes,
+        preScannedEntries: _lastStatsContext?.scannedEntries,
+      );
+      final promptResult = await buildPromptInIsolate(payloadWithScan);
       final sourceTokens = promptResult.breakdown.sourceTokens;
+
+      _ref.read(cachedTokenBreakdownProvider(charId).notifier).state =
+          promptResult.breakdown;
+
       return base.copyWith(
         promptTokens: promptResult.breakdown.totalTokens,
         characterTokens: sourceTokens['character'] ?? 0,

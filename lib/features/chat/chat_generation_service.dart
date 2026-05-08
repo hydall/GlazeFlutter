@@ -15,6 +15,7 @@ import '../image_gen/image_gen_provider.dart';
 import '../image_gen/services/image_gen_service.dart';
 import 'chat_provider.dart';
 import 'chat_state.dart';
+import 'widgets/cached_token_breakdown.dart';
 
 class ChatGenerationService {
   final Ref _ref;
@@ -48,6 +49,9 @@ class ChatGenerationService {
 
       final promptResult = await buildPromptInIsolate(payload);
       debugPrint('CHAT: prompt built, ${promptResult.messages.length} messages');
+
+      _ref.read(cachedTokenBreakdownProvider(charId).notifier).state =
+          promptResult.breakdown;
 
       Map<String, String>? pendingSessionVars;
       if (promptResult.sessionVars.isNotEmpty || promptResult.globalVars.isNotEmpty) {
