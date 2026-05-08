@@ -22,13 +22,15 @@ class MemoryPromptPresets {
     ),
   ];
 
-  static String resolve(String? presetKey) {
-    final match = builtIn.where((p) => p.key == presetKey).firstOrNull;
+  static String resolve(String? presetKey, [List<MemoryPromptPreset>? custom]) {
+    final all = [...builtIn, ...?custom];
+    final match = all.where((p) => p.key == presetKey).firstOrNull;
     return match?.prompt ?? _detailedBeats;
   }
 
-  static String label(String? presetKey) {
-    final match = builtIn.where((p) => p.key == presetKey).firstOrNull;
+  static String label(String? presetKey, [List<MemoryPromptPreset>? custom]) {
+    final all = [...builtIn, ...?custom];
+    final match = all.where((p) => p.key == presetKey).firstOrNull;
     return match?.label ?? builtIn.first.label;
   }
 
@@ -126,4 +128,22 @@ class MemoryPromptPreset {
     required this.label,
     required this.prompt,
   });
+
+  Map<String, dynamic> toJson() => {'key': key, 'label': label, 'prompt': prompt};
+
+  factory MemoryPromptPreset.fromJson(Map<String, dynamic> json) {
+    return MemoryPromptPreset(
+      key: json['key'] as String? ?? '',
+      label: json['label'] as String? ?? '',
+      prompt: json['prompt'] as String? ?? '',
+    );
+  }
+
+  static List<MemoryPromptPreset> fromJsonList(List<Map<String, dynamic>> list) {
+    return list.map((m) => MemoryPromptPreset.fromJson(m)).toList();
+  }
+
+  static List<Map<String, dynamic>> toJsonList(List<MemoryPromptPreset> presets) {
+    return presets.map((p) => p.toJson()).toList();
+  }
 }

@@ -68,6 +68,13 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(chatProvider(widget.charId), (prev, next) {
+      final prevSession = prev?.value?.session;
+      final nextSession = next.value?.session;
+      if (prevSession != nextSession && !_loading) {
+        _build();
+      }
+    });
     return SheetView(
       title: 'Prompt Preview',
       showBack: true,

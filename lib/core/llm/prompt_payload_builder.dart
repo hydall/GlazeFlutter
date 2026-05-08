@@ -5,6 +5,7 @@ import '../models/chat_message.dart';
 import '../models/lorebook.dart';
 import '../state/active_selection_provider.dart';
 import '../state/db_provider.dart';
+import '../state/global_regex_provider.dart';
 import '../state/lorebook_provider.dart';
 import 'lorebook_vector_search.dart';
 import 'memory_injection_service.dart';
@@ -113,6 +114,7 @@ class PromptPayloadBuilder {
       characterDepthPrompt: character.depthPrompt,
       characterDepthPromptDepth: character.depthPromptDepth,
       characterDepthPromptRole: character.depthPromptRole,
+      globalRegexes: _ref.read(globalRegexProvider).valueOrNull ?? [],
     );
   }
 

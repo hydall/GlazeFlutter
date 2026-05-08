@@ -6,7 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/llm/sse_client.dart';
 import '../../core/models/memory_book.dart';
 import '../../core/services/memory_prompt_presets.dart';
-import '../../core/state/db_provider.dart';
+import '../../core/state/memory_settings_provider.dart';
+import '../settings/api_list_provider.dart';
 
 class MemoryDraftGenerator {
   final WidgetRef _ref;
@@ -20,7 +21,10 @@ class MemoryDraftGenerator {
     required String historyText,
     CancelToken? cancelToken,
   }) async {
-    final template = MemoryPromptPresets.resolve(settings.promptPreset);
+    final customPrompts = MemoryPromptPreset.fromJsonList(
+      _ref.read(memoryGlobalSettingsProvider).customPrompts,
+    );
+    final template = MemoryPromptPresets.resolve(settings.promptPreset, customPrompts);
     var prompt = template.replaceAll('{{history}}', historyText);
     if (!template.contains('{{history}}')) {
       prompt = '$prompt\n\n$historyText';
@@ -36,8 +40,7 @@ class MemoryDraftGenerator {
       apiKey = settings.generationApiKey;
       model = settings.generationModel;
     } else {
-      final configs = await _ref.read(apiConfigRepoProvider).getAll();
-      final chatConfig = configs.where((c) => c.mode != 'embedding').firstOrNull;
+      final chatConfig = _ref.read(activeApiConfigProvider);
       if (chatConfig == null) {
         throw Exception('No chat API config available');
       }

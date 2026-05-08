@@ -34,11 +34,16 @@ class BarRow {
 
 int tokensForKey(TokenBreakdown bd, String key) {
   return switch (key) {
-    'lorebookReserve' => bd.lorebookReserveTokens,
+    'lorebookReserve' => _unusedLorebookReserve(bd),
     'memory'          => bd.memoryTokens,
     'vectorLore'      => bd.vectorLoreTokens,
     _                 => bd.sourceTokens[key] ?? 0,
   };
+}
+
+int _unusedLorebookReserve(TokenBreakdown bd) {
+  final actual = bd.sourceTokens['lorebook'] ?? 0;
+  return bd.lorebookReserveTokens > actual ? bd.lorebookReserveTokens - actual : 0;
 }
 
 List<BarRow> buildOrderedRows(TokenBreakdown bd, List<String> keys) {
@@ -257,7 +262,7 @@ class BreakdownRows extends StatelessWidget {
               leading: Container(width: 8, height: 8, decoration: BoxDecoration(color: rows[i].color, shape: BoxShape.circle)),
               title: Text(rows[i].label, style: const TextStyle(fontSize: 14, color: AppColors.textPrimary)),
               trailing: Text(
-                '~${rows[i].tokens} tok',
+                _rowTokenText(breakdown, rows[i]),
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: rows[i].key == 'lorebookTotal' ? FontWeight.w700 : FontWeight.w500,
@@ -276,6 +281,13 @@ class BreakdownRows extends StatelessWidget {
       ),
     );
   }
+}
+
+String _rowTokenText(TokenBreakdown bd, BarRow row) {
+  if (row.key == 'lorebook' && bd.lorebookReserveTokens > 0) {
+    return '~${row.tokens} / ${bd.lorebookReserveTokens} tok';
+  }
+  return '~${row.tokens} tok';
 }
 
 class TokenizerActionButtons extends ConsumerWidget {

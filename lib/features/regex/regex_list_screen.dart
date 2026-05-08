@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/preset.dart';
+import '../../core/state/active_selection_provider.dart';
 import '../../core/state/db_provider.dart';
+import '../../core/state/global_regex_provider.dart';
+import '../../core/utils/id_generator.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/sheet_view.dart';
 import '../presets/widgets/regex_tile.dart';
@@ -13,27 +16,27 @@ class RegexListScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final presetsAsync = ref.watch(presetRepoProvider);
+    final presetsAsync = ref.watch(presetsListProvider);
+    final globalAsync = ref.watch(globalRegexProvider);
+    final activePresetId = ref.watch(activePresetIdProvider);
 
     return SheetView(
       title: 'Regex Scripts',
       showBack: true,
       onBack: () => context.go('/tools'),
-      body: FutureBuilder<List<Preset>>(
-        future: presetsAsync.getAll(),
-        builder: (context, snap) {
-          if (snap.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final presets = snap.data ?? [];
-          final allRegexes = <MapEntry<String, PresetRegex>>[];
-          for (final p in presets) {
-            for (final r in p.regexes) {
-              allRegexes.add(MapEntry(p.id, r));
-            }
-          }
+      body: presetsAsync.when(
+        skipLoadingOnReload: true,
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Error: $e')),
+        data: (presets) {
+          final activePreset = activePresetId != null
+              ? presets.where((p) => p.id == activePresetId).firstOrNull
+              : (presets.isNotEmpty ? presets.first : null);
 
-          if (allRegexes.isEmpty) {
+          final presetRegexes = activePreset?.regexes ?? <PresetRegex>[];
+          final globalRegexes = globalAsync.valueOrNull ?? <PresetRegex>[];
+
+          if (presetRegexes.isEmpty && globalRegexes.isEmpty) {
             return Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -43,7 +46,7 @@ class RegexListScreen extends ConsumerWidget {
                   const Text('No regex scripts yet'),
                   const SizedBox(height: 8),
                   const Text(
-                    'Add regex scripts inside presets',
+                    'Add regex scripts from presets or globally',
                     style: TextStyle(fontSize: 12),
                   ),
                 ],
@@ -52,47 +55,137 @@ class RegexListScreen extends ConsumerWidget {
           }
 
           return Builder(
-            builder: (context) => ListView.builder(
-              padding: const EdgeInsets.fromLTRB(
-                16,
-                0,
-                16,
-                24,
-              ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
-              itemCount: allRegexes.length,
-              itemBuilder: (_, i) {
-                final entry = allRegexes[i];
-                final regex = entry.value;
-                final presetId = entry.key;
-                return _EditableRegexItem(
-                  regex: regex,
-                  presetId: presetId,
-                  presets: presets,
-                );
-              },
+            builder: (context) => ListView(
+              key: const PageStorageKey('regex_list'),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24)
+                  .add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+              children: [
+                if (presetRegexes.isNotEmpty) ...[
+                  _sectionHeader(
+                    'Preset Regexes',
+                    activePreset?.name ?? 'Default',
+                    Icons.label,
+                  ),
+                  for (final r in presetRegexes)
+                    _PresetRegexItem(
+                      regex: r,
+                      presetId: activePreset!.id,
+                      preset: activePreset,
+                    ),
+                  const SizedBox(height: 16),
+                ],
+                if (globalRegexes.isNotEmpty) ...[
+                  _sectionHeader('Global Regexes', 'Always active', Icons.public),
+                  for (final r in globalRegexes)
+                    _GlobalRegexItem(regex: r),
+                ],
+                const SizedBox(height: 80),
+              ],
             ),
           );
         },
       ),
+      floatingActionButton: FloatingActionButton.small(
+        onPressed: () => _showAddMenu(context, ref),
+        backgroundColor: AppColors.accent,
+        foregroundColor: Colors.black,
+        child: const Icon(Icons.add),
+      ),
     );
+  }
+
+  Widget _sectionHeader(String title, String subtitle, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 8),
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: AppColors.accent),
+          const SizedBox(width: 6),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.accent.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.accent)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAddMenu(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.label, color: AppColors.accent),
+              title: const Text('Add to Active Preset'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _addPresetRegex(ref);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.public, color: AppColors.accent),
+              title: const Text('Add Globally'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _addGlobalRegex(ref);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _addPresetRegex(WidgetRef ref) {
+    final activePresetId = ref.read(activePresetIdProvider);
+    if (activePresetId == null) return;
+    final repo = ref.read(presetRepoProvider);
+    repo.getAll().then((presets) {
+      final preset = presets.where((p) => p.id == activePresetId).firstOrNull;
+      if (preset == null) return;
+      final newRegex = PresetRegex(
+        id: generateId(),
+        name: 'New Script',
+        regex: '',
+      );
+      repo.put(preset.copyWith(regexes: [...preset.regexes, newRegex])).then((_) {
+        ref.invalidate(presetsListProvider);
+      });
+    });
+  }
+
+  void _addGlobalRegex(WidgetRef ref) {
+    ref.read(globalRegexProvider.notifier).addRegex(PresetRegex(
+      id: generateId(),
+      name: 'New Global Script',
+      regex: '',
+    ));
   }
 }
 
-class _EditableRegexItem extends ConsumerWidget {
+class _PresetRegexItem extends ConsumerWidget {
   final PresetRegex regex;
   final String presetId;
-  final List<Preset> presets;
+  final Preset preset;
 
-  const _EditableRegexItem({
+  const _PresetRegexItem({
     required this.regex,
     required this.presetId,
-    required this.presets,
+    required this.preset,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final presetName = presets.firstWhere((p) => p.id == presetId).name;
-
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       color: Colors.white.withValues(alpha: 0.03),
@@ -112,24 +205,18 @@ class _EditableRegexItem extends ConsumerWidget {
                   Icon(
                     regex.disabled ? Icons.code_off : Icons.code,
                     size: 16,
-                    color: regex.disabled
-                        ? AppColors.textSecondary
-                        : AppColors.accent,
+                    color: regex.disabled ? AppColors.textSecondary : AppColors.accent,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
-                      'From: $presetName',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                      ),
+                      'From: ${preset.name}',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                     ),
                   ),
                   Switch(
                     value: !regex.disabled,
-                    onChanged: (v) =>
-                        _updateRegex(ref, regex.copyWith(disabled: !v)),
+                    onChanged: (v) => _updateRegex(ref, regex.copyWith(disabled: !v)),
                     activeColor: AppColors.accent,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
@@ -147,14 +234,65 @@ class _EditableRegexItem extends ConsumerWidget {
   }
 
   void _updateRegex(WidgetRef ref, PresetRegex updated) async {
-    final preset = presets.firstWhere((p) => p.id == presetId);
     final updatedRegexes = preset.regexes.map((r) {
       if (r.id == regex.id) return updated;
       return r;
     }).toList();
-    await ref
-        .read(presetRepoProvider)
-        .put(preset.copyWith(regexes: updatedRegexes));
-    ref.invalidate(presetRepoProvider);
+    await ref.read(presetRepoProvider).put(preset.copyWith(regexes: updatedRegexes));
+    ref.invalidate(presetsListProvider);
+  }
+}
+
+class _GlobalRegexItem extends ConsumerWidget {
+  final PresetRegex regex;
+
+  const _GlobalRegexItem({required this.regex});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: Colors.white.withValues(alpha: 0.03),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: AppColors.accent.withValues(alpha: 0.15)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              child: Row(
+                children: [
+                  Icon(
+                    regex.disabled ? Icons.public_off : Icons.public,
+                    size: 16,
+                    color: regex.disabled ? AppColors.textSecondary : AppColors.accent,
+                  ),
+                  const SizedBox(width: 6),
+                  const Expanded(child: Text('Global', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))),
+                  Switch(
+                    value: !regex.disabled,
+                    onChanged: (v) => ref.read(globalRegexProvider.notifier).updateRegex(regex.copyWith(disabled: !v)),
+                    activeColor: AppColors.accent,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.delete_outline, size: 18, color: Colors.redAccent.withValues(alpha: 0.7)),
+                    onPressed: () => ref.read(globalRegexProvider.notifier).removeRegex(regex.id),
+                  ),
+                ],
+              ),
+            ),
+            RegexTile(
+              regex: regex,
+              onChanged: (updated) => ref.read(globalRegexProvider.notifier).updateRegex(updated),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -8,6 +8,8 @@ import '../models/preset.dart';
 import 'db_provider.dart';
 import 'memory_settings_provider.dart';
 
+import 'global_regex_provider.dart';
+
 final activePresetIdProvider = StateProvider<String?>((ref) => null);
 final activePersonaIdProvider = StateProvider<String?>((ref) => null);
 
@@ -24,8 +26,9 @@ final activeRegexesProvider = FutureProvider<List<PresetRegex>>((ref) async {
   final preset = activeId != null
       ? presets.where((p) => p.id == activeId).firstOrNull
       : (presets.isNotEmpty ? presets.first : null);
-  if (preset == null) return [];
-  return preset.regexes.where((r) => !r.disabled).toList();
+  final presetRegexes = preset?.regexes.where((r) => !r.disabled).toList() ?? <PresetRegex>[];
+  final globalRegexes = ref.watch(globalRegexProvider).valueOrNull?.where((r) => !r.disabled).toList() ?? <PresetRegex>[];
+  return [...presetRegexes, ...globalRegexes];
 });
 
 Future<void> loadActiveSelections(WidgetRef ref) async {

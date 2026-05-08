@@ -308,7 +308,7 @@ class _SessionTile extends ConsumerWidget {
           ],
         ),
         trailing: _buildTrailing(context),
-        onTap: () => context.go('/chat/${info.characterId}'),
+        onTap: () => context.go('/chat/${info.characterId}?session=${info.sessionIndex}'),
       ),
     );
   }

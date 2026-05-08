@@ -4,6 +4,7 @@ import '../db/app_db.dart';
 import '../db/repositories/character_repo.dart';
 import '../db/repositories/chat_repo.dart';
 import '../db/repositories/preset_repo.dart';
+import '../models/preset.dart';
 import '../db/repositories/api_config_repo.dart';
 import '../db/repositories/persona_repo.dart';
 import '../db/repositories/lorebook_repo.dart';
@@ -47,6 +48,10 @@ final chatRepoProvider = Provider<ChatRepo>((ref) {
 
 final presetRepoProvider = Provider<PresetRepo>((ref) {
   return PresetRepo(ref.watch(appDbProvider));
+});
+
+final presetsListProvider = FutureProvider<List<Preset>>((ref) {
+  return ref.watch(presetRepoProvider).getAll();
 });
 
 final apiConfigRepoProvider = Provider<ApiConfigRepo>((ref) {

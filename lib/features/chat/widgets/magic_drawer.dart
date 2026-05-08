@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/llm/summary_service.dart';
 import '../../../core/models/lorebook.dart';
+import '../../../core/models/chat_message.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
@@ -91,6 +92,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       icon: Icons.manage_accounts,
     ),
     MagicDrawerItemDef(id: 'image-gen', label: 'Image Gen', icon: Icons.image),
+    MagicDrawerItemDef(
+      id: 'authors-note',
+      label: "Author's Note",
+      icon: Icons.edit_note,
+    ),
   ];
 
   final List<String> _itemIds = [];
@@ -210,6 +216,10 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             : null,
       'personas' => _stats.activePersona?.name ?? 'Default',
       'image-gen' => _stats.imageGenEnabled ? 'On' : 'Off',
+      'authors-note' =>
+        _stats.session?.authorsNote != null && _stats.session!.authorsNote!.content.isNotEmpty
+            ? '${_stats.session!.authorsNote!.content.length} chars'
+            : 'Empty',
       _ => null,
     };
   }
@@ -341,6 +351,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         Navigator.of(context).pop();
         GlazeBottomSheet.show(context, child: const ImageGenSheet());
         return;
+      case 'authors-note':
+        await _showAuthorsNoteEditor();
+        return;
     }
   }
 
@@ -409,6 +422,165 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     GlazeBottomSheet.show(
       context,
       child: MemoryBooksSheet(sessionId: session.id, charId: widget.charId),
+    );
+  }
+
+  Future<void> _showAuthorsNoteEditor() async {
+    final chatState = ref.read(chatProvider(widget.charId)).value;
+    final session = chatState?.session;
+    if (session == null) return;
+
+    final controller = TextEditingController(text: session.authorsNote?.content ?? '');
+    final currentAn = session.authorsNote;
+    String insertionMode = currentAn?.insertionMode ?? 'depth';
+    int depth = currentAn?.depth ?? 4;
+    String role = currentAn?.role ?? 'system';
+    bool enabled = currentAn?.enabled ?? true;
+
+    await showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Container(
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.7),
+          decoration: const BoxDecoration(
+            color: Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border(top: BorderSide(color: AppColors.glassBorder)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
+                child: Row(
+                  children: [
+                    const Text("Author's Note", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    const Spacer(),
+                    Switch(
+                      value: enabled,
+                      onChanged: (v) => setSheetState(() => enabled = v),
+                      activeColor: AppColors.accent,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: AppColors.textSecondary),
+                      onPressed: () => Navigator.of(sheetContext).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: TextField(
+                  controller: controller,
+                  maxLines: 6,
+                  style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    hintText: 'Enter author\'s note...',
+                    hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: insertionMode,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Colors.white.withValues(alpha: 0.05),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                          labelText: 'Insertion',
+                          labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                        dropdownColor: const Color(0xFF2A2A2A),
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                        items: const [
+                          DropdownMenuItem(value: 'depth', child: Text('Depth')),
+                          DropdownMenuItem(value: 'relative', child: Text('Relative')),
+                        ],
+                        onChanged: (v) { if (v != null) setSheetState(() => insertionMode = v); },
+                      ),
+                    ),
+                    if (insertionMode == 'depth') ...[
+                      const SizedBox(width: 12),
+                      SizedBox(
+                        width: 80,
+                        child: DropdownButtonFormField<int>(
+                          value: depth,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white.withValues(alpha: 0.05),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                            labelText: 'Depth',
+                            labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                          ),
+                          dropdownColor: const Color(0xFF2A2A2A),
+                          style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                          items: List.generate(20, (i) => DropdownMenuItem(value: i + 1, child: Text('${i + 1}'))),
+                          onChanged: (v) { if (v != null) setSheetState(() => depth = v); },
+                        ),
+                      ),
+                    ],
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 100,
+                      child: DropdownButtonFormField<String>(
+                        value: role,
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: Colors.white.withValues(alpha: 0.05),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                          labelText: 'Role',
+                          labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                        ),
+                        dropdownColor: const Color(0xFF2A2A2A),
+                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                        items: const [
+                          DropdownMenuItem(value: 'system', child: Text('System')),
+                          DropdownMenuItem(value: 'user', child: Text('User')),
+                          DropdownMenuItem(value: 'assistant', child: Text('Assistant')),
+                        ],
+                        onChanged: (v) { if (v != null) setSheetState(() => role = v); },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: FilledButton(
+                  onPressed: () async {
+                    final content = controller.text.trim();
+                    final note = content.isNotEmpty
+                        ? AuthorsNote(content: content, role: role, insertionMode: insertionMode, depth: depth, enabled: enabled)
+                        : null;
+                    final updated = session.copyWith(authorsNote: note, updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000);
+                    await ref.read(chatRepoProvider).put(updated);
+                    ref.invalidate(chatProvider(widget.charId));
+                    if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    minimumSize: const Size.fromHeight(44),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              SizedBox(height: MediaQuery.of(sheetContext).padding.bottom + 8),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -613,6 +785,14 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(chatProvider(widget.charId), (prev, next) {
+      final prevSession = prev?.value?.session;
+      final nextSession = next.value?.session;
+      if (prevSession != nextSession) {
+        _loadStats();
+      }
+    });
+
     final panelHeight = math.min(
       MediaQuery.of(context).size.height * 0.54,
       430.0,

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -452,8 +454,8 @@ Future<void> _importChat(
   String charId,
 ) async {
   final result = await FilePicker.pickFiles(
-    type: FileType.custom,
-    allowedExtensions: ['jsonl', 'json'],
+    type: Platform.isIOS ? FileType.any : FileType.custom,
+    allowedExtensions: Platform.isIOS ? null : ['jsonl', 'json'],
     allowMultiple: false,
   );
   if (result == null || result.files.isEmpty) return;

@@ -72,7 +72,7 @@ class ChatSession with _$ChatSession {
 
 extension ChatSessionX on ChatSession {
   String get historyText => messages
-      .where((m) => m.role == 'user' || m.role == 'assistant')
+      .where((m) => (m.role == 'user' || m.role == 'assistant') && !m.isHidden)
       .map((m) => m.content)
       .join('\n');
 }

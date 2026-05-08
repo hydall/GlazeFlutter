@@ -35,7 +35,12 @@ class ContextCalculator {
       staticTotal += tokens;
     }
 
-    final historyBudget = safeContext - staticTotal - lorebookReserveTokens - memoryTokens;
+    final actualLorebook = sourceTokens['lorebook'] ?? 0;
+    final effectiveReserve = lorebookReserveTokens > actualLorebook
+        ? lorebookReserveTokens - actualLorebook
+        : 0;
+
+    final historyBudget = safeContext - staticTotal - effectiveReserve - memoryTokens;
 
     final (trimmedHistory, cutoffIndex) = _trimHistory(
       historyMessages,
@@ -52,7 +57,7 @@ class ContextCalculator {
       sourceTokens['vectorLore'] = vectorLoreTokens;
     }
 
-    final fixedTotal = staticTotal + lorebookReserveTokens + memoryTokens + vectorLoreTokens;
+    final fixedTotal = staticTotal + effectiveReserve + memoryTokens + vectorLoreTokens;
     final remaining = safeContext - fixedTotal - historyTokens;
 
     return TokenBreakdown(
@@ -73,12 +78,13 @@ class ContextCalculator {
 
   String _sourceForBlock(String blockId) {
     return switch (blockId) {
-      'char_card' || 'char_personality' || 'scenario' || 'example_dialogue' => 'character',
+      'char_card' || 'char_personality' || 'scenario' || 'example_dialogue' || 'char_depth_prompt' => 'character',
       'user_persona' => 'persona',
       'summary' => 'summary',
       'authors_note' => 'authorsNote',
       'chat_history' => 'history',
       'worldInfoBefore' || 'worldInfoAfter' => 'lorebook',
+      'memory' => 'memory',
       _ => 'preset',
     };
   }

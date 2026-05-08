@@ -3,6 +3,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../core/models/character.dart';
 import '../../core/services/character_book_converter.dart';
@@ -209,55 +210,100 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
 
   Future<void> _importCharacter(BuildContext context, WidgetRef ref) async {
     try {
-      final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['png', 'json', 'charx', 'zip'],
-        allowMultiple: true,
-      );
-      if (result == null || result.files.isEmpty) return;
-
-      final importer = await ref.read(characterImporterProvider.future);
-      final notifier = ref.read(charactersProvider.notifier);
-      final lorebookRepo = ref.read(lorebookRepoProvider);
-      int imported = 0;
-      String? lastError;
-
-      for (final file in result.files) {
-        try {
-          CharacterImportResult r;
-          if (file.bytes != null) {
-            r = await importer.importFromBytes(file.bytes!, file.name);
-          } else if (file.path != null) {
-            r = await importer.importFromFile(file.path!);
-          } else {
-            continue;
-          }
-          await notifier.add(r.character);
-          if (r.characterBookData != null) {
-            final lorebook = convertCharacterBook(
-              r.characterBookData!,
-              r.character.id,
-            );
-            await lorebookRepo.put(lorebook);
-          }
-          imported++;
-        } catch (e) {
-          lastError = 'Failed to import ${file.name}: $e';
-        }
-      }
-
-      if (!context.mounted) return;
-      if (imported > 0) {
-        GlazeToast.show(
-          context,
-          'Imported $imported character${imported > 1 ? 's' : ''}',
-        );
-      } else if (lastError != null) {
-        GlazeToast.show(context, lastError);
+      if (Platform.isIOS) {
+        await _importFromGallery(context, ref);
+      } else {
+        await _importFromFiles(context, ref);
       }
     } catch (e) {
       if (!context.mounted) return;
       GlazeToast.error(context, 'Import failed: ', e);
+    }
+  }
+
+  Future<void> _importFromGallery(BuildContext context, WidgetRef ref) async {
+    final picker = ImagePicker();
+    final images = await picker.pickMultiImage();
+    if (images.isEmpty) return;
+
+    final importer = await ref.read(characterImporterProvider.future);
+    final notifier = ref.read(charactersProvider.notifier);
+    final lorebookRepo = ref.read(lorebookRepoProvider);
+    int imported = 0;
+    String? lastError;
+
+    for (final image in images) {
+      try {
+        final bytes = await image.readAsBytes();
+        final r = await importer.importFromBytes(bytes, image.name);
+        await notifier.add(r.character);
+        if (r.characterBookData != null) {
+          final lorebook = convertCharacterBook(
+            r.characterBookData!,
+            r.character.id,
+          );
+          await lorebookRepo.put(lorebook);
+        }
+        imported++;
+      } catch (e) {
+        lastError = 'Failed to import ${image.name}: $e';
+      }
+    }
+
+    if (!context.mounted) return;
+    if (imported > 0) {
+      GlazeToast.show(context, 'Imported $imported character${imported > 1 ? "s" : ""}');
+    } else if (lastError != null) {
+      GlazeToast.show(context, lastError);
+    }
+  }
+
+  Future<void> _importFromFiles(BuildContext context, WidgetRef ref) async {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['png', 'json', 'charx', 'zip'],
+      allowMultiple: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final importer = await ref.read(characterImporterProvider.future);
+    final notifier = ref.read(charactersProvider.notifier);
+    final lorebookRepo = ref.read(lorebookRepoProvider);
+    int imported = 0;
+    String? lastError;
+
+    for (final file in result.files) {
+      try {
+        CharacterImportResult r;
+        if (file.bytes != null) {
+          r = await importer.importFromBytes(file.bytes!, file.name);
+        } else if (file.path != null) {
+          r = await importer.importFromFile(file.path!);
+        } else {
+          continue;
+        }
+        await notifier.add(r.character);
+        if (r.characterBookData != null) {
+          final lorebook = convertCharacterBook(
+            r.characterBookData!,
+            r.character.id,
+          );
+          await lorebookRepo.put(lorebook);
+        }
+        imported++;
+      } catch (e) {
+        lastError = 'Failed to import ${file.name}: $e';
+      }
+    }
+
+    if (!context.mounted) return;
+    if (imported > 0) {
+      GlazeToast.show(
+        context,
+        'Imported $imported character${imported > 1 ? "s" : ""}',
+      );
+    } else if (lastError != null) {
+      GlazeToast.show(context, lastError);
     }
   }
 }

@@ -58,6 +58,7 @@ List<PromptMessage> interleaveDepthWithHistory(
 class PromptMessage {
   final String role;
   final String content;
+  final String? blockId;
   final int? depth;
   final bool isHistory;
   final bool isDepth;
@@ -67,6 +68,7 @@ class PromptMessage {
   const PromptMessage({
     required this.role,
     required this.content,
+    this.blockId,
     this.depth,
     this.isHistory = false,
     this.isDepth = false,

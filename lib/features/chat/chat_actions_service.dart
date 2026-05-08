@@ -73,15 +73,23 @@ class ChatActionsService {
       if (s.sessionIndex > maxIdx) maxIdx = s.sessionIndex;
     }
 
+    final newIdx = maxIdx + 1;
     final newSession = ChatSession(
-      id: '${charId}_${maxIdx + 1}',
+      id: '${charId}_$newIdx',
       characterId: charId,
-      sessionIndex: maxIdx + 1,
+      sessionIndex: newIdx,
       messages: importResult.messages,
       updatedAt: currentTimestampSeconds(),
     );
 
     await repo.put(newSession);
+
+    final charRepo = _ref.read(characterRepoProvider);
+    final character = await charRepo.getById(charId);
+    if (character != null) {
+      await charRepo.put(character.copyWith(currentSessionIndex: newIdx));
+    }
+
     _ref.invalidate(chatProvider(charId));
     _ref.invalidate(chatHistoryProvider);
 

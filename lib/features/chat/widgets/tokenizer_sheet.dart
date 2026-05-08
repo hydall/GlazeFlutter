@@ -65,6 +65,14 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(chatProvider(widget.charId), (prev, next) {
+      final prevSession = prev?.value?.session;
+      final nextSession = next.value?.session;
+      if (prevSession != nextSession && !_loading) {
+        _calculate();
+      }
+    });
+
     final contextSize = _contextSize ?? 4096;
     final bd = _breakdown;
     final used = bd?.totalTokens ?? 0;

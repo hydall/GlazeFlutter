@@ -164,6 +164,11 @@ class JsApiConfigImporter with BackupHelpers {
       }
     }
 
+    if (topLevel != null) {
+      final raw = topLevel['apiPresets'];
+      if (raw != null) extractPresetsFromRaw(raw, presets);
+    }
+
     if (presets.isEmpty) {
       final endpoint = ls['api-endpoint'] as String? ??
           kv['api-endpoint'] as String?;
@@ -198,11 +203,6 @@ class JsApiConfigImporter with BackupHelpers {
               kv['gz_api_omit_reasoning_effort'],
         });
       }
-    }
-
-    if (topLevel != null) {
-      final raw = topLevel['apiPresets'];
-      if (raw != null) extractPresetsFromRaw(raw, presets);
     }
 
     for (final preset in presets) {

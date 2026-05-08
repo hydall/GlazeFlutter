@@ -1,19 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/sse_client.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../core/services/memory_prompt_presets.dart';
+import '../../../core/state/memory_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_toast.dart';
+import '../../settings/api_list_provider.dart';
+import 'custom_prompt_manager_sheet.dart';
 
-class MemoryGenerationSettingsSheet extends StatefulWidget {
+class MemoryGenerationSettingsSheet extends ConsumerStatefulWidget {
   final MemoryBookSettings settings;
 
   const MemoryGenerationSettingsSheet({super.key, required this.settings});
 
   @override
-  State<MemoryGenerationSettingsSheet> createState() => _MemoryGenerationSettingsSheetState();
+  ConsumerState<MemoryGenerationSettingsSheet> createState() => _MemoryGenerationSettingsSheetState();
 }
 
-class _MemoryGenerationSettingsSheetState extends State<MemoryGenerationSettingsSheet> {
+class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGenerationSettingsSheet> {
   late bool _enabled;
   late bool _autoCreate;
   late bool _autoGenerate;
@@ -23,14 +30,15 @@ class _MemoryGenerationSettingsSheetState extends State<MemoryGenerationSettings
   late bool _useDelayedAutomation;
   late String _injectionTarget;
   late String _generationSource;
-  late String _generationModel;
-  late String _generationEndpoint;
-  late String _generationApiKey;
-  late double _generationTemperature;
-  late int _generationMaxTokens;
   late String _promptPreset;
   late String _keyMatchMode;
   late bool _vectorSearchEnabled;
+
+  late final TextEditingController _generationModelCtrl;
+  late final TextEditingController _generationEndpointCtrl;
+  late final TextEditingController _generationApiKeyCtrl;
+  late final TextEditingController _temperatureCtrl;
+  late final TextEditingController _maxTokensCtrl;
 
   @override
   void initState() {
@@ -45,17 +53,33 @@ class _MemoryGenerationSettingsSheetState extends State<MemoryGenerationSettings
     _useDelayedAutomation = s.useDelayedAutomation;
     _injectionTarget = s.injectionTarget;
     _generationSource = s.generationSource;
-    _generationModel = s.generationModel;
-    _generationEndpoint = s.generationEndpoint;
-    _generationApiKey = s.generationApiKey;
-    _generationTemperature = s.generationTemperature ?? 0.0;
-    _generationMaxTokens = s.generationMaxTokens ?? 0;
     _promptPreset = s.promptPreset;
     _keyMatchMode = s.keyMatchMode;
     _vectorSearchEnabled = s.vectorSearchEnabled;
+
+    _generationModelCtrl = TextEditingController(text: s.generationModel);
+    _generationEndpointCtrl = TextEditingController(text: s.generationEndpoint);
+    _generationApiKeyCtrl = TextEditingController(text: s.generationApiKey);
+    _temperatureCtrl = TextEditingController(text: s.generationTemperature != null && s.generationTemperature! > 0 ? s.generationTemperature!.round().toString() : '');
+    _maxTokensCtrl = TextEditingController(text: s.generationMaxTokens != null && s.generationMaxTokens! > 0 ? s.generationMaxTokens.toString() : '');
   }
 
+  @override
+  void dispose() {
+    _generationModelCtrl.dispose();
+    _generationEndpointCtrl.dispose();
+    _generationApiKeyCtrl.dispose();
+    _temperatureCtrl.dispose();
+    _maxTokensCtrl.dispose();
+    super.dispose();
+  }
+
+  List<MemoryPromptPreset> get _customPrompts =>
+      MemoryPromptPreset.fromJsonList(ref.read(memoryGlobalSettingsProvider).customPrompts);
+
   void _save() {
+    final temp = int.tryParse(_temperatureCtrl.text);
+    final tokens = int.tryParse(_maxTokensCtrl.text);
     final settings = widget.settings.copyWith(
       enabled: _enabled,
       autoCreateEnabled: _autoCreate,
@@ -66,11 +90,11 @@ class _MemoryGenerationSettingsSheetState extends State<MemoryGenerationSettings
       useDelayedAutomation: _useDelayedAutomation,
       injectionTarget: _injectionTarget,
       generationSource: _generationSource,
-      generationModel: _generationModel,
-      generationEndpoint: _generationEndpoint,
-      generationApiKey: _generationApiKey,
-      generationTemperature: _generationTemperature > 0 ? _generationTemperature : null,
-      generationMaxTokens: _generationMaxTokens > 0 ? _generationMaxTokens : null,
+      generationModel: _generationModelCtrl.text,
+      generationEndpoint: _generationEndpointCtrl.text,
+      generationApiKey: _generationApiKeyCtrl.text,
+      generationTemperature: temp != null && temp > 0 ? temp.toDouble() : null,
+      generationMaxTokens: tokens != null && tokens > 0 ? tokens : null,
       promptPreset: _promptPreset,
       keyMatchMode: _keyMatchMode,
       vectorSearchEnabled: _vectorSearchEnabled,
@@ -117,20 +141,18 @@ class _MemoryGenerationSettingsSheetState extends State<MemoryGenerationSettings
               subtitle: 'Use the same endpoint as LLM for memory generation'),
           if (_generationSource == 'custom') ...[
             const SizedBox(height: 8),
-            _textField('Endpoint', _generationEndpoint, (v) => setState(() => _generationEndpoint = v), hint: 'https://...'),
+            _labeledField('Endpoint', _generationEndpointCtrl, hint: 'https://...'),
             const SizedBox(height: 8),
-            _textField('Model', _generationModel, (v) => setState(() => _generationModel = v), hint: 'gpt-4o-mini'),
+            _modelField(_generationModelCtrl, hint: 'gpt-4o-mini', isCustom: true),
             const SizedBox(height: 8),
-            _textField('API Key', _generationApiKey, (v) => setState(() => _generationApiKey = v), hint: 'sk-...', obscure: true),
+            _labeledField('API Key', _generationApiKeyCtrl, hint: 'sk-...', obscure: true),
           ] else ...[
             const SizedBox(height: 8),
-            _textField('Model Override (optional)', _generationModel, (v) => setState(() => _generationModel = v), hint: 'Leave blank for current LLM model'),
+            _modelField(_generationModelCtrl, hint: 'Leave blank for current LLM model', isCustom: false),
           ],
           const SizedBox(height: 8),
-          _numberField('Temperature Override', _generationTemperature.round(), (v) => setState(() => _generationTemperature = v.toDouble()), min: 0, max: 200,
-              hint: '0 = use API default'),
-          _numberField('Output Token Limit', _generationMaxTokens, (v) => setState(() => _generationMaxTokens = v), min: 0, max: 32000,
-              hint: '0 = auto (recommended 2000-4000)'),
+          _labeledField('Temperature Override', _temperatureCtrl, hint: '0 = use API default', inputType: TextInputType.number),
+          _labeledField('Output Token Limit', _maxTokensCtrl, hint: '0 = auto (recommended 2000-4000)', inputType: TextInputType.number),
           const SizedBox(height: 12),
           _sectionLabel('Search'),
           _switchTile('Vector Search', _vectorSearchEnabled, (v) => setState(() => _vectorSearchEnabled = v)),
@@ -177,7 +199,7 @@ class _MemoryGenerationSettingsSheetState extends State<MemoryGenerationSettings
     );
   }
 
-  Widget _numberField(String label, int value, ValueChanged<int> onChanged, {int min = 0, int max = 99999, String? hint}) {
+  Widget _numberField(String label, int value, ValueChanged<int> onChanged, {int min = 0, int max = 99999}) {
     return Row(
       children: [
         Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: AppColors.textPrimary))),
@@ -195,11 +217,12 @@ class _MemoryGenerationSettingsSheetState extends State<MemoryGenerationSettings
     );
   }
 
-  Widget _textField(String label, String value, ValueChanged<String> onChanged, {String? hint, bool obscure = false}) {
+  Widget _labeledField(String label, TextEditingController controller, {String? hint, bool obscure = false, TextInputType? inputType}) {
     return TextField(
-      onChanged: onChanged,
-      controller: TextEditingController(text: value)..selection = TextSelection.collapsed(offset: value.length),
+      controller: controller,
       obscureText: obscure,
+      keyboardType: inputType,
+      inputFormatters: inputType == TextInputType.number ? [FilteringTextInputFormatter.digitsOnly] : null,
       style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
@@ -214,42 +237,227 @@ class _MemoryGenerationSettingsSheetState extends State<MemoryGenerationSettings
     );
   }
 
-  Widget _promptPresetSelector() {
-    final presets = MemoryPromptPresets.builtIn;
-    return GestureDetector(
-      onTap: () async {
-        final result = await showModalBottomSheet<String>(
-          context: context,
-          backgroundColor: AppColors.surface,
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-          builder: (ctx) => SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: presets.map((p) => ListTile(
-                title: Text(p.label, style: TextStyle(fontSize: 14, color: AppColors.textPrimary)),
-                trailing: p.key == _promptPreset ? Icon(Icons.check, color: AppColors.accent, size: 20) : null,
-                onTap: () => Navigator.pop(ctx, p.key),
-              )).toList(),
-            ),
-          ),
-        );
-        if (result != null) setState(() => _promptPreset = result);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(MemoryPromptPresets.label(_promptPreset), style: TextStyle(fontSize: 13, color: AppColors.textPrimary)),
-            Icon(Icons.arrow_drop_down, size: 20, color: AppColors.textSecondary),
-          ],
+  Widget _modelField(TextEditingController controller, {String? hint, required bool isCustom}) {
+    return TextField(
+      controller: controller,
+      style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+      decoration: InputDecoration(
+        labelText: isCustom ? 'Model' : 'Model Override (optional)',
+        labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        hintText: hint,
+        hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.4)),
+        filled: true,
+        fillColor: Colors.white.withValues(alpha: 0.05),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        suffixIcon: IconButton(
+          icon: _fetchingModels
+              ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent))
+              : Icon(Icons.download_rounded, size: 20, color: AppColors.textSecondary),
+          tooltip: 'Fetch models from API',
+          onPressed: _fetchingModels ? null : _fetchAndPickModel,
         ),
       ),
     );
+  }
+
+  bool _fetchingModels = false;
+
+  void _fetchAndPickModel() async {
+    setState(() => _fetchingModels = true);
+    try {
+      String endpoint;
+      String apiKey;
+      if (_generationSource == 'custom') {
+        endpoint = _generationEndpointCtrl.text.trim();
+        apiKey = _generationApiKeyCtrl.text.trim();
+      } else {
+        final config = ref.read(activeApiConfigProvider);
+        if (config == null) {
+          if (mounted) GlazeToast.show(context, 'No API config available');
+          return;
+        }
+        endpoint = config.endpoint;
+        apiKey = config.apiKey;
+      }
+      if (endpoint.isEmpty) {
+        if (mounted) GlazeToast.show(context, 'Endpoint is empty');
+        return;
+      }
+      final models = await SseClient().fetchModels(endpoint: endpoint, apiKey: apiKey);
+      if (models.isEmpty) {
+        if (mounted) GlazeToast.show(context, 'No models found');
+        return;
+      }
+      if (!mounted) return;
+      final ids = models.map((m) => m['id'] as String?).where((id) => id != null).cast<String>().toList()..sort();
+      final selected = await showModalBottomSheet<String>(
+        context: context,
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+        builder: (ctx) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Select Model', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                    Text('${ids.length} available', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: ids.length,
+                  itemBuilder: (ctx, i) => ListTile(
+                    dense: true,
+                    title: Text(ids[i], style: TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+                    trailing: ids[i] == _generationModelCtrl.text ? Icon(Icons.check, color: AppColors.accent, size: 18) : null,
+                    onTap: () => Navigator.pop(ctx, ids[i]),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (selected != null) {
+        _generationModelCtrl.text = selected;
+      }
+    } catch (e) {
+      if (mounted) GlazeToast.show(context, 'Failed to fetch models: $e');
+    } finally {
+      if (mounted) setState(() => _fetchingModels = false);
+    }
+  }
+
+  Widget _promptPresetSelector() {
+    final custom = _customPrompts;
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: () async {
+            final result = await showModalBottomSheet<String>(
+              context: context,
+              backgroundColor: AppColors.surface,
+              shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+              builder: (ctx) => SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (MemoryPromptPresets.builtIn.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('Built-in', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                        ),
+                      ),
+                      ...MemoryPromptPresets.builtIn.map((p) => ListTile(
+                        dense: true,
+                        title: Text(p.label, style: TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+                        trailing: p.key == _promptPreset ? Icon(Icons.check, color: AppColors.accent, size: 20) : null,
+                        onTap: () => Navigator.pop(ctx, p.key),
+                      )),
+                    ],
+                    if (custom.isNotEmpty) ...[
+                      const Divider(height: 1, indent: 12, endIndent: 12),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text('Custom', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                        ),
+                      ),
+                      ...custom.map((p) => ListTile(
+                        dense: true,
+                        title: Text(p.label, style: TextStyle(fontSize: 14, color: AppColors.textPrimary)),
+                        trailing: p.key == _promptPreset ? Icon(Icons.check, color: AppColors.accent, size: 20) : null,
+                        onTap: () => Navigator.pop(ctx, p.key),
+                      )),
+                    ],
+                  ],
+                ),
+              ),
+            );
+            if (result != null) setState(() => _promptPreset = result);
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(MemoryPromptPresets.label(_promptPreset, custom), style: TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+                Icon(Icons.arrow_drop_down, size: 20, color: AppColors.textSecondary),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton.icon(
+            onPressed: _openPromptManager,
+            icon: const Icon(Icons.manage_accounts_rounded, size: 16),
+            label: const Text('Manage prompts'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.accent,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _openPromptManager() async {
+    final custom = _customPrompts;
+    final result = await showModalBottomSheet<List<MemoryPromptPreset>>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => CustomPromptManagerSheet(
+        customPrompts: custom,
+        onChanged: (_) {},
+      ),
+    );
+    if (result != null) {
+      final notifier = ref.read(memoryGlobalSettingsProvider.notifier);
+      final current = ref.read(memoryGlobalSettingsProvider);
+      await notifier.save(MemoryGlobalSettings(
+        enabled: current.enabled,
+        autoCreateEnabled: current.autoCreateEnabled,
+        autoGenerateEnabled: current.autoGenerateEnabled,
+        maxInjectedEntries: current.maxInjectedEntries,
+        autoCreateInterval: current.autoCreateInterval,
+        useDelayedAutomation: current.useDelayedAutomation,
+        injectionTarget: current.injectionTarget,
+        batchSize: current.batchSize,
+        parallelJobs: current.parallelJobs,
+        vectorSearchEnabled: current.vectorSearchEnabled,
+        keyMatchMode: current.keyMatchMode,
+        generationSource: current.generationSource,
+        generationModel: current.generationModel,
+        generationUseCurrentModelOverride: current.generationUseCurrentModelOverride,
+        generationEndpoint: current.generationEndpoint,
+        generationApiKey: current.generationApiKey,
+        generationTemperature: current.generationTemperature,
+        generationMaxTokens: current.generationMaxTokens,
+        promptPreset: current.promptPreset,
+        customPrompts: MemoryPromptPreset.toJsonList(result),
+      ));
+      setState(() {});
+    }
   }
 
   Widget _sectionLabel(String text) {

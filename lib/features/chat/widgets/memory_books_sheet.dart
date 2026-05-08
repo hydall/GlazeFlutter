@@ -115,12 +115,13 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
     final interval = _book!.settings.autoCreateInterval;
     final segments = <List<ChatMessage>>[];
-    for (int i = 0; i + interval <= uncovered.length; i += interval) {
-      segments.add(uncovered.sublist(i, i + interval));
+    for (int i = 0; i < uncovered.length; i += interval) {
+      final end = (i + interval > uncovered.length) ? uncovered.length : i + interval;
+      segments.add(uncovered.sublist(i, end));
     }
 
     if (segments.isEmpty) {
-      if (mounted) GlazeToast.show(context, 'Need $interval uncovered messages before creating a draft');
+      if (mounted) GlazeToast.show(context, 'Need more uncovered messages before creating a draft');
       return;
     }
 
@@ -132,7 +133,6 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       final lastIdx = messages.indexOf(segment.last);
 
       final alreadyExists = _book!.pendingDrafts.any((d) =>
-          d.messageIds.length == segmentIds.length &&
           d.messageIds.toSet().containsAll(segmentIds.toSet()));
       if (alreadyExists) continue;
 
