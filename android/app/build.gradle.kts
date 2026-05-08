@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -17,7 +19,7 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17"
     }
 
     signingConfigs {
@@ -27,7 +29,7 @@ android {
                 val ksFile = rootProject.file("ci-debug.keystore")
                 if (!ksFile.exists()) {
                     ksFile.writeBytes(
-                        java.util.Base64.getDecoder().decode(ks)
+                        Base64.getDecoder().decode(ks)
                     )
                 }
                 storeFile = ksFile
