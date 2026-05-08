@@ -91,6 +91,7 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
   Future<void> deleteLorebook(String id) async {
     final repo = ref.read(lorebookRepoProvider);
     await repo.delete(id);
+    await ref.read(embeddingRepoProvider).deleteBySourceId(id);
     await SyncDeletionTracker.record('lorebooks', id);
     ref.invalidateSelf();
   }

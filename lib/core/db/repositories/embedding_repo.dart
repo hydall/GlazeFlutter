@@ -37,6 +37,10 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase> with _$EmbeddingRepoMi
     return (delete(embeddings)..where((e) => e.sourceType.equals(sourceType))).go();
   }
 
+  Future<void> deleteBySourceId(String sourceId) {
+    return (delete(embeddings)..where((e) => e.sourceId.equals(sourceId))).go();
+  }
+
   Future<void> putEmbeddingVector({
     required String entryId,
     required String sourceType,
