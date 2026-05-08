@@ -61,7 +61,7 @@ jobs:
 
       - name: Build APK (arm64 only)
         env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: android
           KEY_ALIAS: debug-key
           KEY_PASSWORD: android
