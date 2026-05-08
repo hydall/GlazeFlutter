@@ -156,7 +156,7 @@ ChatMessage? _convertStMessage(Map<String, dynamic> obj, int index) {
 int _parseSTDate(String? dateStr) {
   if (dateStr == null) return DateTime.now().millisecondsSinceEpoch;
   try {
-    final parts = dateStr.split(RegExp(r'[\s/:]'));
+    final parts = dateStr.split(RegExp(r'[\s/:T]'));
     if (parts.length >= 6) {
       final dt = DateTime(
         int.parse(parts[0]),

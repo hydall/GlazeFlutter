@@ -49,6 +49,18 @@
 
 - **~~Imported chat doesn't open automatically.~~** Fixed — `ChatActionsService.importChat()` now updates `character.currentSessionIndex` so the provider navigates to the imported session.
 - **~~Chat history screen opens wrong session.~~** Fixed — `_SessionTile.onTap` now passes `?session=sessionIndex` query param so `ChatScreen` switches to the correct session.
+- **~~JSONL import ignores ISO-8601 timestamps.~~** Fixed — `_parseSTDate` now splits on `T` separator (e.g. `2026-04-27T01:23:00.000`), not just spaces/colons. Previously all imported messages got `DateTime.now()` as timestamp.
+
+## Chat Export
+
+- **~~Chat export crashes on iOS (PathNotFoundException).~~** Fixed — was writing to `~/Desktop` which doesn't exist on iOS. Now writes to temp dir and opens share sheet (`Share.shareXFiles`) so user can save/share the file.
+
+## Sort / Timestamps
+
+- **~~Backup import: characters in reverse order.~~** Fixed — `js_character_importer` now sorts characters by original timestamp (oldest first), then assigns fresh sequential `updatedAt` values preserving relative order.
+- **~~Backup import: updatedAt fallback used milliseconds.~~** Fixed — `DateTime.now().millisecondsSinceEpoch` replaced with `currentTimestampSeconds()`. Also detects ms timestamps (>1e12) and converts to seconds.
+- **~~New character import appears at bottom of list.~~** Fixed — `character_importer.dart` uses `currentTimestampSeconds()` for `updatedAt` so newly imported characters sort to top under "Newest".
+- **~~Sort direction arrow unclear.~~** Fixed — replaced `AnimatedRotation` arrow icon with text labels "Newest" / "Oldest".
 
 ## Regex
 

@@ -182,7 +182,7 @@ class CharacterImporter {
       color: data['color'] as String?,
       tags: _toStringList(data['tags']),
       alternateGreetings: _toStringList(data['alternate_greetings']),
-      updatedAt: _importTimestamp(data),
+      updatedAt: currentTimestampSeconds(),
       fav: data['fav'] as bool? ?? false,
       extensions: _extractExtensions(data),
       characterVersion: data['character_version'] is String ? data['character_version'] as String : '1',
@@ -198,21 +198,6 @@ class CharacterImporter {
       return value.map((e) => e.toString()).toList();
     }
     return [];
-  }
-
-  int _importTimestamp(Map<String, dynamic> data) {
-    final raw = _toInt(data['creation_date'] ?? data['modification_date'] ??
-        data['updated_at'] ?? data['updatedAt']);
-    if (raw == null) return currentTimestampSeconds();
-    if (raw > 1e12) return raw ~/ 1000;
-    return raw;
-  }
-
-  int? _toInt(dynamic v) {
-    if (v is int) return v;
-    if (v is num) return v.toInt();
-    if (v is String) return int.tryParse(v);
-    return null;
   }
 
   Map<String, dynamic> _extractExtensions(Map<String, dynamic> data) {
