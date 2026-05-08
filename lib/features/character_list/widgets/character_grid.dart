@@ -97,21 +97,25 @@ class _SortDirButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 32,
         height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
           color: AppColors.accent.withValues(alpha: 0.15),
-          shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
         ),
-        child: AnimatedRotation(
-          turns: isAsc ? 0.5 : 0,
-          duration: const Duration(milliseconds: 300),
-          curve: Curves.easeOutBack,
-          child: const Icon(
-            Icons.arrow_downward_rounded,
-            size: 18,
-            color: AppColors.accent,
+        child: Center(
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: Text(
+              isAsc ? 'Oldest' : 'Newest',
+              key: ValueKey(isAsc),
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.accent,
+              ),
+            ),
           ),
         ),
       ),

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -5,20 +6,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/models/chat_message.dart';
+import '../../core/services/chat_import_export.dart';
 import '../../core/state/character_provider.dart';
-import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_toast.dart';
-import '../chat_history/chat_history_provider.dart';
-import '../image_gen/widgets/image_gen_sheet.dart';
 import 'chat_actions_service.dart';
 import 'chat_provider.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/chat_dialogs.dart';
+import '../image_gen/widgets/image_gen_sheet.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/memory_books_sheet.dart';
 import 'widgets/message_list.dart';
@@ -460,11 +459,22 @@ Future<void> _importChat(
   );
   if (result == null || result.files.isEmpty) return;
 
-  final filePath = result.files.first.path;
-  if (filePath == null) return;
+  final file = result.files.first;
+  final String? filePath = file.path;
 
   try {
-    final count = await ChatActionsService(ref).importChat(charId, filePath);
+    int count;
+    if (file.bytes != null) {
+      final importResult = importChatFromJsonlString(
+        utf8.decode(file.bytes!),
+      );
+      count = await ChatActionsService(ref)
+          .importChatFromResult(charId, importResult);
+    } else if (filePath != null) {
+      count = await ChatActionsService(ref).importChat(charId, filePath);
+    } else {
+      return;
+    }
     if (context.mounted) {
       if (count == 0) {
         GlazeToast.show(context, 'No messages found in file');

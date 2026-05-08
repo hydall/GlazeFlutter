@@ -77,7 +77,14 @@ Future<ChatExportResult> exportChatAsJsonl({
 }
 
 Future<ChatImportResult> importChatFromJsonl(String filePath) async {
-  final content = await File(filePath).readAsString();
+  final file = File(filePath);
+  if (!await file.exists()) {
+    throw FileSystemException('File not found', filePath);
+  }
+  final content = await file.readAsString();
+  if (content.trim().isEmpty) {
+    throw StateError('File is empty: $filePath');
+  }
   return importChatFromJsonlString(content);
 }
 
@@ -156,7 +163,7 @@ ChatMessage? _convertStMessage(Map<String, dynamic> obj, int index) {
 int _parseSTDate(String? dateStr) {
   if (dateStr == null) return DateTime.now().millisecondsSinceEpoch;
   try {
-    final parts = dateStr.split(RegExp(r'[\s/:]'));
+    final parts = dateStr.split(RegExp(r'[\s/:T]'));
     if (parts.length >= 6) {
       final dt = DateTime(
         int.parse(parts[0]),

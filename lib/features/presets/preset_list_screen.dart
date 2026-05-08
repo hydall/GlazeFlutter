@@ -10,6 +10,7 @@ import '../../core/import/silly_tavern_preset_parser.dart';
 import '../../core/models/preset.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/sheet_view.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import 'preset_editor_screen.dart';
@@ -170,49 +171,27 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
   }
 
   void _showAddSheet(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E1E1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 36,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              _AddSheetOption(
-                icon: Icons.add_circle_outline,
-                label: 'Create New Preset',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _openEditor(null);
-                },
-              ),
-              const SizedBox(height: 10),
-              _AddSheetOption(
-                icon: Icons.file_upload_outlined,
-                label: 'Import from File',
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _importPreset(context, ref);
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
+    GlazeBottomSheet.show(
+      context,
+      title: 'Add Preset',
+      items: [
+        BottomSheetItem(
+          icon: Icons.add_circle_outline,
+          label: 'Create New Preset',
+          onTap: () {
+            Navigator.pop(context);
+            _openEditor(null);
+          },
         ),
-      ),
+        BottomSheetItem(
+          icon: Icons.file_upload_outlined,
+          label: 'Import from File',
+          onTap: () {
+            Navigator.pop(context);
+            _importPreset(context, ref);
+          },
+        ),
+      ],
     );
   }
 
@@ -380,66 +359,37 @@ class _PsCard extends StatelessWidget {
   }
 
   void _showContextMenu(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E1E1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(
-                Icons.edit_outlined,
-                size: 20,
-                color: AppColors.textPrimary,
-              ),
-              title: const Text(
-                'Edit',
-                style: TextStyle(color: AppColors.textPrimary),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                onEdit();
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.copy_outlined,
-                size: 20,
-                color: AppColors.textPrimary,
-              ),
-              title: const Text(
-                'Duplicate',
-                style: TextStyle(color: AppColors.textPrimary),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                onDuplicate();
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.delete_outlined,
-                size: 20,
-                color: Color(0xFFFF4444),
-              ),
-              title: const Text(
-                'Delete',
-                style: TextStyle(color: Color(0xFFFF4444)),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                onDelete();
-              },
-            ),
-            const SizedBox(height: 8),
-          ],
+    GlazeBottomSheet.show(
+      context,
+      title: preset.name,
+      items: [
+        BottomSheetItem(
+          icon: Icons.edit_outlined,
+          label: 'Edit',
+          onTap: () {
+            Navigator.pop(context);
+            onEdit();
+          },
         ),
-      ),
+        BottomSheetItem(
+          icon: Icons.copy_outlined,
+          label: 'Duplicate',
+          onTap: () {
+            Navigator.pop(context);
+            onDuplicate();
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.delete_outlined,
+          iconColor: const Color(0xFFFF4444),
+          label: 'Delete',
+          isDestructive: true,
+          onTap: () {
+            Navigator.pop(context);
+            onDelete();
+          },
+        ),
+      ],
     );
   }
 }
@@ -499,46 +449,6 @@ class _ConnBadge extends StatelessWidget {
         color: isActive
             ? const Color(0xFF34C759)
             : AppColors.textSecondary.withValues(alpha: 0.5),
-      ),
-    );
-  }
-}
-
-class _AddSheetOption extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  const _AddSheetOption({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.04),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Icon(icon, size: 20, color: AppColors.accent),
-              const SizedBox(width: 12),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

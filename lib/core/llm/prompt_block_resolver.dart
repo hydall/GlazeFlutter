@@ -34,7 +34,7 @@ ResolvedContent? resolveBlockContent({
 
   switch (id) {
     case 'char_card':
-      content = _charCardContent(char);
+      content = rawContent.isNotEmpty ? rawContent : (char.description ?? '');
     case 'char_personality':
       content = char.personality ?? '';
     case 'scenario':
@@ -79,15 +79,6 @@ ResolvedContent? resolveBlockContent({
   if (macroResult.text.trim().isEmpty) return null;
 
   return ResolvedContent(role: resolvedRole, content: macroResult.text);
-}
-
-String _charCardContent(Character char) {
-  final buf = StringBuffer();
-  buf.writeln('Character Name: ${char.name}');
-  if (char.description != null && char.description!.isNotEmpty) {
-    buf.writeln('Description: ${char.description}');
-  }
-  return buf.toString().trimRight();
 }
 
 String _userPersonaContent(Persona? persona) {

@@ -9,6 +9,7 @@ import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/api_config.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_filter_chip_bar.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../../shared/widgets/sheet_view.dart';
@@ -458,11 +459,8 @@ class _SectionScheme {
 }
 
 void showPromptPreviewScreen(BuildContext context, String charId) {
-  showModalBottomSheet(
-    context: context,
-    useRootNavigator: true,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (_) => PromptPreviewScreen(charId: charId),
+  GlazeBottomSheet.show(
+    context,
+    child: PromptPreviewScreen(charId: charId),
   );
 }

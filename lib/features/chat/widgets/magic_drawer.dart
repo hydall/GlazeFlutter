@@ -11,12 +11,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/llm/summary_service.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../core/models/chat_message.dart';
-import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
-import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
-import '../../image_gen/image_gen_provider.dart';
 import '../../image_gen/widgets/image_gen_sheet.dart';
 import '../chat_provider.dart';
 import '../../presets/preset_list_screen.dart';
@@ -30,13 +27,9 @@ import 'prompt_preview_screen.dart';
 import 'tokenizer_sheet.dart';
 
 void showMagicDrawer(BuildContext context, String charId) {
-  showModalBottomSheet(
-    context: context,
-    useRootNavigator: true,
-    backgroundColor: Colors.transparent,
-    barrierColor: Colors.black54,
-    isScrollControlled: true,
-    builder: (_) => MagicDrawerPanel(charId: charId),
+  GlazeBottomSheet.show(
+    context,
+    child: MagicDrawerPanel(charId: charId),
   );
 }
 
@@ -103,6 +96,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   final Set<String> _deletedIds = {};
   bool _editing = false;
   bool _loading = true;
+  bool _loadingTokens = false;
   int? _draggingIndex;
   int? _hoverIndex;
   MagicDrawerStats _stats = const MagicDrawerStats();
@@ -119,6 +113,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     if (mounted) {
       setState(() => _loading = false);
     }
+    _loadTokenStats();
   }
 
   Future<void> _loadLayout() async {
@@ -158,6 +153,17 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     _stats = await MagicDrawerStatsService(ref).computeStats(widget.charId);
   }
 
+  Future<void> _loadTokenStats() async {
+    if (!mounted) return;
+    setState(() => _loadingTokens = true);
+    final updated = await MagicDrawerStatsService(ref).computeTokenStats(widget.charId, _stats);
+    if (!mounted) return;
+    setState(() {
+      _stats = updated;
+      _loadingTokens = false;
+    });
+  }
+
   bool _isKnownItem(String id) => _allItems.any((item) => item.id == id);
 
   List<MagicDrawerCardItem> get _displayItems {
@@ -184,7 +190,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       'context' =>
         _stats.promptTokens > 0 && _stats.contextSize > 0
             ? '${_stats.promptTokens}/${_stats.contextSize} tokens'
-            : null,
+            : _loadingTokens ? 'Calculating...' : null,
       'summary' =>
         _stats.summaryChars > 0
             ? '${_stats.summaryChars} chars'
@@ -209,7 +215,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             ? '${_stats.activePreset!.name} • ${_stats.presetTokens} tokens'
             : _stats.activePreset!.name,
       'preview' =>
-        _stats.promptTokens > 0 ? '${_stats.promptTokens} tokens' : null,
+        _stats.promptTokens > 0 ? '${_stats.promptTokens} tokens' : _loadingTokens ? 'Calculating...' : null,
       'coverage' =>
         _stats.lorebookEntryCount > 0
             ? '${_stats.lorebookEntryCount} entries'
@@ -314,26 +320,18 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       case 'api':
         Navigator.of(context).pop();
         if (mounted) {
-          showModalBottomSheet(
-            context: context,
-            useRootNavigator: true,
-            backgroundColor: Colors.transparent,
-            barrierColor: Colors.black54,
-            isScrollControlled: true,
-            builder: (_) => const ApiSettingsScreen(),
+          GlazeBottomSheet.show(
+            context,
+            child: const ApiSettingsScreen(),
           );
         }
         return;
       case 'presets':
         Navigator.of(context).pop();
         if (mounted) {
-          showModalBottomSheet(
-            context: context,
-            useRootNavigator: true,
-            backgroundColor: Colors.transparent,
-            barrierColor: Colors.black54,
-            isScrollControlled: true,
-            builder: (_) => const PresetListScreen(),
+          GlazeBottomSheet.show(
+            context,
+            child: const PresetListScreen(),
           );
         }
         return;
@@ -437,28 +435,17 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     String role = currentAn?.role ?? 'system';
     bool enabled = currentAn?.enabled ?? true;
 
-    await showModalBottomSheet(
-      context: context,
-      useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black54,
-      isScrollControlled: true,
-      builder: (sheetContext) => StatefulBuilder(
-        builder: (sheetContext, setSheetState) => Container(
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(sheetContext).size.height * 0.7),
-          decoration: const BoxDecoration(
-            color: Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border(top: BorderSide(color: AppColors.glassBorder)),
-          ),
-          child: Column(
+    await GlazeBottomSheet.show(
+      context,
+      title: "Author's Note",
+      child: StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 8, 0),
+                padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
                 child: Row(
                   children: [
-                    const Text("Author's Note", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
                     const Spacer(),
                     Switch(
                       value: enabled,
@@ -580,7 +567,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             ],
           ),
         ),
-      ),
     );
   }
 
@@ -788,8 +774,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     ref.listen(chatProvider(widget.charId), (prev, next) {
       final prevSession = prev?.value?.session;
       final nextSession = next.value?.session;
-      if (prevSession != nextSession) {
-        _loadStats();
+      if (prevSession?.id != nextSession?.id ||
+          prevSession?.messages.length != nextSession?.messages.length) {
+        _loadDrawer();
       }
     });
 

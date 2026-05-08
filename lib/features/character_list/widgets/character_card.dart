@@ -123,11 +123,9 @@ class CharacterCard extends ConsumerWidget {
   void _showDetailSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      useRootNavigator: true,
       isScrollControlled: true,
-      enableDrag: false,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black54,
       builder: (_) => CharacterDetailScreen(charId: character.id),
     );
   }

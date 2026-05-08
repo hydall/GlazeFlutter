@@ -7,6 +7,7 @@ import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import 'preset_list_provider.dart';
 import 'widgets/widgets.dart';
@@ -349,14 +350,10 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   }
 
   void _editBlockAt(int index) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E1E1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
+    GlazeBottomSheet.show(
+      context,
+      title: _blocks[index].name,
+      child: DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.65,
         maxChildSize: 0.92,
@@ -365,11 +362,11 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
           scrollController: scrollCtrl,
           onSave: (updated) {
             setState(() => _blocks[index] = updated);
-            Navigator.pop(ctx);
+            Navigator.pop(context);
           },
           onDelete: () {
             setState(() => _blocks.removeAt(index));
-            Navigator.pop(ctx);
+            Navigator.pop(context);
           },
         ),
       ),
@@ -416,57 +413,41 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   }
 
   void _showOptionsMenu() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E1E1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(Icons.drive_file_rename_outline,
-                  size: 20, color: AppColors.textPrimary),
-              title: const Text('Rename',
-                  style: TextStyle(color: AppColors.textPrimary)),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showRenameDialog();
-              },
-            ),
-            if (widget.preset != null)
-              ListTile(
-                leading: const Icon(Icons.delete_outlined,
-                    size: 20, color: Color(0xFFFF4444)),
-                title: const Text('Delete',
-                    style: TextStyle(color: Color(0xFFFF4444))),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  await ref
-                      .read(presetListProvider.notifier)
-                      .remove(widget.preset!.id);
-                  widget.onDeleted?.call();
-                },
-              ),
-            const SizedBox(height: 8),
-          ],
+    GlazeBottomSheet.show(
+      context,
+      title: 'Options',
+      items: [
+        BottomSheetItem(
+          icon: Icons.drive_file_rename_outline,
+          label: 'Rename',
+          onTap: () {
+            Navigator.pop(context);
+            _showRenameDialog();
+          },
         ),
-      ),
+        if (widget.preset != null)
+          BottomSheetItem(
+            icon: Icons.delete_outlined,
+            iconColor: const Color(0xFFFF4444),
+            label: 'Delete',
+            isDestructive: true,
+            onTap: () async {
+              Navigator.pop(context);
+              await ref
+                  .read(presetListProvider.notifier)
+                  .remove(widget.preset!.id);
+              widget.onDeleted?.call();
+            },
+          ),
+      ],
     );
   }
 
   void _showRegexSheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E1E1E),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => DraggableScrollableSheet(
+    GlazeBottomSheet.show(
+      context,
+      title: 'Regex Scripts',
+      child: DraggableScrollableSheet(
         expand: false,
         initialChildSize: 0.6,
         maxChildSize: 0.92,

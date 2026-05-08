@@ -112,8 +112,8 @@ final routerProvider = Provider<GoRouter>(
       ),
       GoRoute(
         path: '/character/:charId',
-        builder: (_, state) =>
-            CharacterDetailScreen(charId: state.pathParameters['charId']!),
+        builder: (_, state) => CharacterDetailSheetLauncher(
+            charId: state.pathParameters['charId']!),
         routes: [
           GoRoute(
             path: 'edit',

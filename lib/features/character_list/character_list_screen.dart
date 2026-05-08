@@ -12,6 +12,7 @@ import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/glaze_toast.dart';
@@ -211,7 +212,28 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   Future<void> _importCharacter(BuildContext context, WidgetRef ref) async {
     try {
       if (Platform.isIOS) {
-        await _importFromGallery(context, ref);
+        final source = await GlazeBottomSheet.show<_ImportSource>(
+          context,
+          title: 'Import',
+          items: [
+            BottomSheetItem(
+              icon: Icons.photo_library,
+              label: 'From Gallery',
+              onTap: () => Navigator.pop(context, _ImportSource.gallery),
+            ),
+            BottomSheetItem(
+              icon: Icons.folder_open,
+              label: 'From Files',
+              onTap: () => Navigator.pop(context, _ImportSource.files),
+            ),
+          ],
+        );
+        if (source == null) return;
+        if (source == _ImportSource.gallery) {
+          await _importFromGallery(context, ref);
+        } else {
+          await _importFromFiles(context, ref);
+        }
       } else {
         await _importFromFiles(context, ref);
       }
@@ -234,7 +256,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
 
     for (final image in images) {
       try {
-        final bytes = await image.readAsBytes();
+        final bytes = await File(image.path).readAsBytes();
         final r = await importer.importFromBytes(bytes, image.name);
         await notifier.add(r.character);
         if (r.characterBookData != null) {
@@ -252,7 +274,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
 
     if (!context.mounted) return;
     if (imported > 0) {
-      GlazeToast.show(context, 'Imported $imported character${imported > 1 ? "s" : ""}');
+      GlazeToast.show(
+        context,
+        'Imported $imported character${imported > 1 ? "s" : ""}',
+      );
     } else if (lastError != null) {
       GlazeToast.show(context, lastError);
     }
@@ -260,8 +285,8 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
 
   Future<void> _importFromFiles(BuildContext context, WidgetRef ref) async {
     final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['png', 'json', 'charx', 'zip'],
+      type: Platform.isIOS ? FileType.any : FileType.custom,
+      allowedExtensions: Platform.isIOS ? null : ['png', 'json', 'charx', 'zip'],
       allowMultiple: true,
     );
     if (result == null || result.files.isEmpty) return;
@@ -478,3 +503,5 @@ class _ImportUrlFAB extends StatelessWidget {
     );
   }
 }
+
+enum _ImportSource { gallery, files }

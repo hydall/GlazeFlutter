@@ -45,6 +45,40 @@ const _kHeaderH = 80.0;
 
 // ─── Screen ────────────────────────────────────────────────────────────────
 
+class CharacterDetailSheetLauncher extends StatefulWidget {
+  final String charId;
+  const CharacterDetailSheetLauncher({super.key, required this.charId});
+
+  @override
+  State<CharacterDetailSheetLauncher> createState() =>
+      _CharacterDetailSheetLauncherState();
+}
+
+class _CharacterDetailSheetLauncherState
+    extends State<CharacterDetailSheetLauncher> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _show());
+  }
+
+  Future<void> _show() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CharacterDetailScreen(charId: widget.charId),
+    );
+    if (mounted) context.go('/characters');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.shrink();
+  }
+}
+
 class CharacterDetailScreen extends ConsumerStatefulWidget {
   final String charId;
   const CharacterDetailScreen({super.key, required this.charId});
@@ -558,7 +592,7 @@ class _InfoTab extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
             child: Text(
-              'CREATOR NOTES',
+              'SHORT DESCRIPTION',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,

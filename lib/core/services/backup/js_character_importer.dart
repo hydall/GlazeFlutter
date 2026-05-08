@@ -17,8 +17,17 @@ class JsCharacterImporter with BackupHelpers {
 
   Future<void> importCharacters(dynamic data) async {
     if (data is! List) return;
-    for (final c in data) {
-      final char = c as Map<String, dynamic>;
+    final chars = data.cast<Map<String, dynamic>>();
+
+    chars.sort((a, b) {
+      final ta = _originalTimestamp(a);
+      final tb = _originalTimestamp(b);
+      return ta.compareTo(tb);
+    });
+
+    final base = currentTimestampSeconds() - chars.length + 1;
+    for (int i = 0; i < chars.length; i++) {
+      final char = chars[i];
       String? avatarPath;
       final avatar = char['avatar'] as String?;
       if (avatar != null && avatar.startsWith('data:')) {
@@ -50,8 +59,7 @@ class JsCharacterImporter with BackupHelpers {
                   char['alternate_greetings'] != null
                       ? jsonEncode(char['alternate_greetings'])
                       : null),
-              updatedAt: Value(toInt(char['updatedAt'] ?? char['updated_at']) ??
-                  DateTime.now().millisecondsSinceEpoch),
+              updatedAt: Value(base + i),
               fav: Value(char['fav'] == true),
               extensionsJson: Value(extractExtensionsJson(char)),
               characterVersion: Value(
@@ -61,6 +69,14 @@ class JsCharacterImporter with BackupHelpers {
             ),
           );
     }
+  }
+
+  int _originalTimestamp(Map<String, dynamic> char) {
+    final raw = toInt(char['updatedAt'] ?? char['updated_at'] ??
+        char['creation_date'] ?? char['created_at']);
+    if (raw == null) return 0;
+    if (raw > 1e12) return raw ~/ 1000;
+    return raw;
   }
 
   Future<void> importPersonas(dynamic data) async {

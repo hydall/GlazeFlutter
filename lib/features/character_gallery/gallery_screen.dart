@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/models/gallery_entry.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import 'gallery_provider.dart';
@@ -181,55 +182,51 @@ class _GalleryTile extends ConsumerWidget {
   }
 
   void _showActions(BuildContext context, WidgetRef ref) {
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.face),
-              title: const Text('Set as avatar'),
-              onTap: () async {
-                Navigator.pop(ctx);
-                try {
-                  final service =
-                      await ref.read(galleryServiceProvider.future);
-                  await service.setAsAvatar(entry.characterId, entry.id);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Avatar updated')),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    GlazeToast.error(context, 'Failed: ', e);
-                  }
-                }
-              },
-            ),
-            ListTile(
-              leading:
-                  const Icon(Icons.delete, color: Colors.red),
-              title: const Text('Delete',
-                  style: TextStyle(color: Colors.red)),
-              onTap: () async {
-                Navigator.pop(ctx);
-                try {
-                  final service =
-                      await ref.read(galleryServiceProvider.future);
-                  await service.deleteImage(entry.characterId, entry.id);
-                  ref.invalidate(galleryProvider(charId));
-                } catch (e) {
-                  if (context.mounted) {
-                    GlazeToast.error(context, 'Failed: ', e);
-                  }
-                }
-              },
-            ),
-          ],
+    GlazeBottomSheet.show(
+      context,
+      title: 'Image',
+      items: [
+        BottomSheetItem(
+          icon: Icons.face,
+          label: 'Set as avatar',
+          onTap: () async {
+            Navigator.pop(context);
+            try {
+              final service =
+                  await ref.read(galleryServiceProvider.future);
+              await service.setAsAvatar(entry.characterId, entry.id);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Avatar updated')),
+                );
+              }
+            } catch (e) {
+              if (context.mounted) {
+                GlazeToast.error(context, 'Failed: ', e);
+              }
+            }
+          },
         ),
-      ),
+        BottomSheetItem(
+          icon: Icons.delete,
+          iconColor: Colors.red,
+          label: 'Delete',
+          isDestructive: true,
+          onTap: () async {
+            Navigator.pop(context);
+            try {
+              final service =
+                  await ref.read(galleryServiceProvider.future);
+              await service.deleteImage(entry.characterId, entry.id);
+              ref.invalidate(galleryProvider(charId));
+            } catch (e) {
+              if (context.mounted) {
+                GlazeToast.error(context, 'Failed: ', e);
+              }
+            }
+          },
+        ),
+      ],
     );
   }
 }

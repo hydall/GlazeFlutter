@@ -1,6 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/models/chat_message.dart';
 import '../../core/services/chat_import_export.dart';
@@ -46,21 +46,26 @@ class ChatActionsService {
       throw StateError('Character not found');
     }
 
-    final desktop = Platform.environment['USERPROFILE'] ??
-        Platform.environment['HOME'] ??
-        '.';
-    final outputDir = '${desktop}\\Desktop';
+    final outputDir = await getTemporaryDirectory();
 
     final result = await exportChatAsJsonl(
       session: chatState.session!,
       character: character,
-      outputDir: outputDir,
+      outputDir: outputDir.path,
     );
+
+    await Share.shareXFiles([XFile(result.filePath)],
+        text: 'Chat with ${character.name}');
     return result.filePath;
   }
 
   Future<int> importChat(String charId, String filePath) async {
     final importResult = await importChatFromJsonl(filePath);
+    return importChatFromResult(charId, importResult);
+  }
+
+  Future<int> importChatFromResult(
+      String charId, ChatImportResult importResult) async {
     if (importResult.messages.isEmpty) {
       return 0;
     }

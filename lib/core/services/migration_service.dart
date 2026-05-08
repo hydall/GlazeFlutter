@@ -109,7 +109,7 @@ class MigrationService {
           color: json['color'] as String?,
           tags: _toStringList(json['tags']),
           alternateGreetings: _toStringList(json['alternate_greetings']),
-          updatedAt: _toInt(json['updatedAt']) ?? currentTimestampSeconds(),
+          updatedAt: _importTimestamp(json),
         );
         await _charRepo.put(char);
         result.characters++;
@@ -418,6 +418,14 @@ class MigrationService {
     if (value is String) return int.tryParse(value);
     if (value is double) return value.toInt();
     return null;
+  }
+
+  int _importTimestamp(Map<String, dynamic> json) {
+    final raw = _toInt(json['updatedAt'] ?? json['updated_at'] ??
+        json['creation_date'] ?? json['created_at']);
+    if (raw == null) return currentTimestampSeconds();
+    if (raw > 1e12) return raw ~/ 1000;
+    return raw;
   }
 
   double? _toDouble(dynamic value) {

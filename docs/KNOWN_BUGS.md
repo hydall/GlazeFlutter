@@ -35,6 +35,7 @@
 - **~~iOS can't select .glz backup files.~~** Fixed — all file pickers now use `FileType.any` on iOS and `FileType.custom` on other platforms.
 - **~~PNG character import uses file picker instead of gallery on iOS.~~** Fixed — iOS now uses `image_picker` to open the photo gallery; other platforms keep file picker.
 - **~~JSONL chat import doesn't work on iOS.~~** Fixed — same FileType fix as .glz backups.
+- **~~iOS JSONL import shows "No messages found" for SillyTavern files.~~** Fixed — iOS `FilePicker` doesn't expose accessible `file.path` in sandbox, so `File(path).readAsString()` returned empty string. Now uses `file.bytes` directly with `utf8.decode` fallback.
 
 ## Tokenizer / Prompt Counting
 
@@ -49,6 +50,18 @@
 
 - **~~Imported chat doesn't open automatically.~~** Fixed — `ChatActionsService.importChat()` now updates `character.currentSessionIndex` so the provider navigates to the imported session.
 - **~~Chat history screen opens wrong session.~~** Fixed — `_SessionTile.onTap` now passes `?session=sessionIndex` query param so `ChatScreen` switches to the correct session.
+- **~~JSONL import ignores ISO-8601 timestamps.~~** Fixed — `_parseSTDate` now splits on `T` separator (e.g. `2026-04-27T01:23:00.000`), not just spaces/colons. Previously all imported messages got `DateTime.now()` as timestamp.
+
+## Chat Export
+
+- **~~Chat export crashes on iOS (PathNotFoundException).~~** Fixed — was writing to `~/Desktop` which doesn't exist on iOS. Now writes to temp dir and opens share sheet (`Share.shareXFiles`) so user can save/share the file.
+
+## Sort / Timestamps
+
+- **~~Backup import: characters in reverse order.~~** Fixed — `js_character_importer` now sorts characters by original timestamp (oldest first), then assigns fresh sequential `updatedAt` values preserving relative order.
+- **~~Backup import: updatedAt fallback used milliseconds.~~** Fixed — `DateTime.now().millisecondsSinceEpoch` replaced with `currentTimestampSeconds()`. Also detects ms timestamps (>1e12) and converts to seconds.
+- **~~New character import appears at bottom of list.~~** Fixed — `character_importer.dart` uses `currentTimestampSeconds()` for `updatedAt` so newly imported characters sort to top under "Newest".
+- **~~Sort direction arrow unclear.~~** Fixed — replaced `AnimatedRotation` arrow icon with text labels "Newest" / "Oldest".
 
 ## Regex
 
@@ -57,4 +70,27 @@
 
 ## UI
 
+- **Android: magic drawer takes forever to load (first and subsequent opens).** Unresolved — likely infinite/retry loop in token counting or provider rebuild storm when magic drawer opens.
+- **Android: fresh APK only installs clean (uninstall first), update over existing install fails.** Unresolved — likely DB schema migration issue or signing key mismatch between debug builds.
+
 - **~~Character menu scrolls with lag.~~** Fixed — removed expensive `BackdropFilter` from every card (2 per card × N cards); simplified token badge background; kept token estimation but cleaned up expression.
+
+- **~~Character detail screen crash (infinite height).~~** Fixed — `DraggableScrollableSheet` cannot live inside `GlazeBottomSheet` or as a route builder. Now opens via `showModalBottomSheet(isScrollControlled: true)` directly. Route `/character/:charId` uses `CharacterDetailSheetLauncher` which shows the sheet and returns to `/characters` on dismiss.
+
+- **~~Bottom sheets inconsistent styling.~~** Fixed — replaced all `showModalBottomSheet` calls with `GlazeBottomSheet.show` for consistent glass-morphism styling. Removed dead code (`_PresetSheet`, `_ListSheet`, `_AddSheetOption`).
+
+- **~~App rotates to landscape.~~** Fixed — locked to portrait orientation via `SystemChrome.setPreferredOrientations` in `main.dart`.
+
+## Macros / Prompt Building
+
+- **~~Single-brace macro aliases missing.~~** Fixed — `{char}`, `{description}`, `{scenario}`, `{personality}`, `{user}`, `{persona}`, `{mesExamples}` now resolve the same as their double-brace equivalents.
+
+- **~~char_card block uses hardcoded labels instead of character content.~~** Fixed — `char_card` block now uses `rawContent` template from preset or falls back to raw `description` field, instead of hardcoded "Character Name:/Description:" labels.
+
+## Character Import / Catalog
+
+- **~~DataCat imports personality into wrong field.~~** Fixed — DataCat `variant=janitor_core` returns V2 spec field names. Now correctly maps `raw['description']` → `description`, `raw['personality']` → `personality`, `raw['creator_notes']` → `creatorNotes`.
+
+- **~~Janitor/Janny/Chub personality mapped to description.~~** Fixed — Jai `personality` field = основное описание персонажа → our `personality` field, not `description`. `description` is only populated from V2 spec cards. Fixed in all three providers.
+
+- **~~"Creator Notes" confusing label.~~** Fixed — renamed to "Short Description" in character editor, detail screen, and catalog preview. Model field remains `creatorNotes` for V2 spec compatibility.

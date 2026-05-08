@@ -70,4 +70,34 @@ class MagicDrawerStats {
     this.summaryTokens = 0,
     this.imageGenEnabled = false,
   });
+
+  MagicDrawerStats copyWith({
+    int? promptTokens,
+    int? contextSize,
+    int? characterTokens,
+    int? presetTokens,
+    int? personaTokens,
+    int? summaryTokens,
+  }) {
+    return MagicDrawerStats(
+      character: character,
+      activePreset: activePreset,
+      activePersona: activePersona,
+      apiConfig: apiConfig,
+      session: session,
+      sessionCount: sessionCount,
+      messageCount: messageCount,
+      lorebookEntryCount: lorebookEntryCount,
+      memoryEntryCount: memoryEntryCount,
+      regexCount: regexCount,
+      summaryChars: summaryChars,
+      promptTokens: promptTokens ?? this.promptTokens,
+      contextSize: contextSize ?? this.contextSize,
+      characterTokens: characterTokens ?? this.characterTokens,
+      presetTokens: presetTokens ?? this.presetTokens,
+      personaTokens: personaTokens ?? this.personaTokens,
+      summaryTokens: summaryTokens ?? this.summaryTokens,
+      imageGenEnabled: imageGenEnabled,
+    );
+  }
 }
