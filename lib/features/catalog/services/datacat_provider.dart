@@ -266,7 +266,7 @@ Future<DownloadedCharacter> datacatGetCharacter(String uuid) async {
       scenario: raw['scenario'] ?? '',
       firstMes: raw['first_mes'] ?? raw['first_message'] ?? '',
       mesExample: raw['mes_example'] ?? '',
-      creatorNotes: meta['raw_description_html'] ?? raw['creator_notes'] ?? raw['description'] ?? '',
+      creatorNotes: raw['creator_notes'] ?? meta['raw_description_html'] ?? '',
       systemPrompt: raw['system_prompt'] ?? '',
       postHistoryInstructions: raw['post_history_instructions'] ?? '',
       alternateGreetings: raw['alternate_greetings'] is List

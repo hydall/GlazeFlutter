@@ -558,7 +558,7 @@ class _InfoTab extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
             child: Text(
-              'CREATOR NOTES',
+              'SHORT DESCRIPTION',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,

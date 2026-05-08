@@ -239,7 +239,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
             const SizedBox(height: 12),
             TextFormField(
               controller: _creatorNotesCtrl,
-              decoration: const InputDecoration(labelText: 'Creator Notes'),
+              decoration: const InputDecoration(labelText: 'Short Description'),
               maxLines: 3,
               minLines: 1,
             ),
