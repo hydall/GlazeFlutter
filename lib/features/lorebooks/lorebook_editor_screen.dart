@@ -140,8 +140,10 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   }
 
   void _deleteEntry(int index) {
+    final entryId = _entries[index].id;
     setState(() => _entries.removeAt(index));
     _save();
+    ref.read(embeddingRepoProvider).deleteByEntryId(entryId);
   }
 
   Future<void> _indexEntries() async {

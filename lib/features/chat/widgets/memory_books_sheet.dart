@@ -290,6 +290,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       );
     });
     await _save();
+    await ref.read(embeddingRepoProvider).deleteByEntryId(entryId);
   }
 
   void _openSettings() async {
