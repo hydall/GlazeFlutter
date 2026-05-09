@@ -15,7 +15,7 @@ class GlobalRegexNotifier extends AsyncNotifier<List<PresetRegex>> {
     if (raw == null || raw.isEmpty) return [];
     try {
       final list = jsonDecode(raw) as List;
-      return list.map((e) => PresetRegex.fromJson(e as Map<String, dynamic>)).toList();
+      return list.map((e) => PresetRegex.fromJson(_normalizeJsRegex(e as Map<String, dynamic>))).toList();
     } catch (_) {
       return [];
     }
@@ -87,7 +87,23 @@ class GlobalRegexNotifier extends AsyncNotifier<List<PresetRegex>> {
       final e = raw['runOnEdit'];
       map['ephemerality'] = e == true ? [1, 2] : [2];
     }
+    map['minDepth'] = _coerceToInt(map['minDepth']);
+    map['maxDepth'] = _coerceToInt(map['maxDepth']);
+    map['disabled'] = _coerceToBool(map['disabled']);
     return map;
+  }
+
+  static int? _coerceToInt(dynamic v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    if (v is String) return int.tryParse(v);
+    return null;
+  }
+
+  static bool _coerceToBool(dynamic v) {
+    if (v is bool) return v;
+    if (v is num) return v != 0;
+    return false;
   }
 }
 

@@ -38,8 +38,19 @@ class PresetRegex with _$PresetRegex {
     int? maxDepth,
   }) = _PresetRegex;
 
-  factory PresetRegex.fromJson(Map<String, dynamic> json) =>
-      _$PresetRegexFromJson(json);
+  factory PresetRegex.fromJson(Map<String, dynamic> json) {
+    final normalized = Map<String, dynamic>.from(json);
+    for (final key in ['minDepth', 'maxDepth']) {
+      final v = normalized[key];
+      if (v is bool) {
+        normalized[key] = null;
+      } else if (v is num) {
+        normalized[key] = v.toInt();
+      }
+    }
+    normalized['disabled'] = _coerceBool(normalized['disabled']);
+    return _$PresetRegexFromJson(normalized);
+  }
 }
 
 @freezed
@@ -62,4 +73,10 @@ class Preset with _$Preset {
   }) = _Preset;
 
   factory Preset.fromJson(Map<String, dynamic> json) => _$PresetFromJson(json);
+}
+
+bool _coerceBool(dynamic v) {
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  return false;
 }
