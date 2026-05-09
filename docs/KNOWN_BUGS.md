@@ -18,7 +18,7 @@
 
 ## Memory Books
 
-- **Memory books not imported from backup.** Bug — after restoring a backup, memory books are missing. `js_chat_importer.dart` previously handled this but may have regressed.
+- **~~Memory books not imported from backup.~~** Fixed — `js_chat_importer.dart` imports `memoryBooks` from each chat session's data, including entries, settings, and pending drafts.
 
 - **Memory badge on every message.** Bug — all chat messages show a book-with-pen icon and "3 mem" label at the bottom, regardless of whether memory was actually used for that message. The badge should only appear on messages where memory drafts were injected, and should reflect the actual count.
 - **~~Memory books lag/crash on settings open/close.~~** Fixed — replaced `DropdownButton<int>` with 32,001 items with `TextFormField`; stored `TextEditingController`s as instance fields instead of recreating per build.
@@ -86,9 +86,9 @@
 
 - **~~No HTML rendering in chat.~~** Fixed — migrated from `flutter_markdown` to `gpt_markdown`. Messages with HTML tags are converted to markdown via `htmlToMarkdown()` before rendering in `GptMarkdown`. Inline colors (`<span style="color:...">`, `<font color="...">`) are preserved using custom `==hc:#RRGGBB==text==` syntax rendered by `HtmlColorMd` (now preserves nested bold/italic). Collapsible `<details><summary>` sections rendered by `DetailsSummaryMd`. Chat session previews use `stripHtml()` to show clean text. CSS named colors, rgb(), hsl(), and hex are all supported.
 
-- **Avatars and names not working correctly.** Fixed — (1) User messages now use `getEffectivePersona()` to resolve persona name/avatar instead of hardcoded "User". (2) Bubble layout now shows avatar+name row for both user and character messages.
+- **~~Avatars and names not working correctly.~~** Fixed — (1) User messages now use `getEffectivePersona()` to resolve persona name/avatar instead of hardcoded "User". (2) Bubble layout now shows avatar+name row for both user and character messages.
 
-- **Chat layout setting (bubble/standard) not restored from backup.** Fixed — `importTheme()` now reads `chatLayout` from `gz_theme_state` and active theme preset (`gz_theme_presets`), falling back to "default" (standard layout in JS).
+- **~~Chat layout setting (bubble/standard) not restored from backup.~~** Fixed — `importTheme()` now reads `chatLayout` from `gz_theme_state` and active theme preset (`gz_theme_presets`), falling back to "default" (standard layout in JS).
 
 - **Persona not injected into chat after backup import (Android confirmed).** Bug — after restoring a backup, existing chats show persona as "user" (no avatar), even though the correct persona is selected. The persona's content is not being applied to the chat session. Likely cause: `personaId` in chat sessions or character settings is not being restored/linked correctly on import, or `activeSelectionProvider` doesn't pick up the persona for existing sessions.
 
