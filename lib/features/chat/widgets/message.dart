@@ -176,17 +176,7 @@ class _MessageState extends ConsumerState<Message> {
   }
 
   String _highlightPhrases(String content) {
-    String text = content;
-    
-    text = text.replaceAllMapped(
-      RegExp(r'(```.*?```|`[^`]*`)|«(?:(?!\n\n)[^»])*»|"(?:(?!\n\n)[^"])*"|\u201C(?:(?!\n\n)[^\u201D])*\u201D|\u2018(?:(?!\n\n)[^\u2019])*\u2019|(?<!\p{L})\x27(?:(?!\n\n)[^\x27])*\x27(?!\p{L})', unicode: true, dotAll: true), 
-      (match) {
-        if (match[1] != null) return match[1]!;
-        return '==mark==${match[0]}==';
-      },
-    );
-
-    if (widget.searchQuery.isEmpty || !widget.isSearchMatch) return text;
+    if (widget.searchQuery.isEmpty || !widget.isSearchMatch) return content;
     final lowerContent = text.toLowerCase();
     final lowerQuery = widget.searchQuery.toLowerCase();
     final buffer = StringBuffer();
