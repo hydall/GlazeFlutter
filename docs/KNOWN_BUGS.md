@@ -84,6 +84,14 @@
 
 - **No HTML rendering in chat.** Unresolved — need to research if HTML support was implemented. Messages containing HTML are displayed as raw text.
 
+- **Persona not injected into chat after backup import (Android confirmed).** Bug — after restoring a backup, existing chats show persona as "user" (no avatar), even though the correct persona is selected. The persona's content is not being applied to the chat session. Likely cause: `personaId` in chat sessions or character settings is not being restored/linked correctly on import, or `activeSelectionProvider` doesn't pick up the persona for existing sessions.
+
+- **Lorebook ghost entries after delete + recreate.** Suspected — when a lorebook imported with a character (PNG/JSON) is deleted and a new one with the same name/keys is created and linked, the old lorebook's data may still persist somewhere in the DB. In Glaze JS this manifests as stale entries appearing during generation. Need to investigate: (1) where imported lorebooks are stored in DB, (2) whether deletion fully removes all references (entries, vector embeddings, character↔lorebook links), (3) what happens when a new lorebook with overlapping keys is created after deletion. See also: cloud sync issue below.
+
+- **API settings and presets may not sync to cloud.** Suspected — after configuring API settings and presets, pushing to cloud may not include them. Needs verification of cloud sync scope: which tables/fields are included in cloud push/pull.
+
+- **Lorebooks may not appear in cloud after delete + recreate + push.** Suspected — specific case: lorebooks were imported with a PNG character, then deleted (they had truncated entries from a faulty merge script), then new lorebooks with same names/keys but corrected entries were created, formatted cloud, pushed to cloud — but lorebooks didn't appear on the cloud. Hypothesis: (1) imported lorebooks may be stored in a different table or with different ownership than manually created ones, (2) deletion may leave orphaned embedding rows that conflict with new entries, (3) cloud sync may only track changes since last sync and miss the delete+recreate pattern. Needs investigation of: lorebook storage model, cloud sync logic, and embedding cleanup on deletion.
+
 - **~~iOS: black screen on character import after prior successful imports.~~** Fixed — root cause was `Navigator.pop(context, result)` targeting the branch navigator instead of root navigator when dismissing `GlazeBottomSheet` (which uses `useRootNavigator: true`). After several imports the navigation state would corrupt, sticking a modal on the root navigator and leaving `CharacterDetailSheetLauncher` as `SizedBox.shrink()` = black screen. Additional fixes: `CharacterDetailSheetLauncher` now shows loading spinner instead of `SizedBox.shrink`, has try-catch around modal, skips firing on sub-routes (`/edit`, `/gallery`), and returns to `/characters` on failure; added `context.mounted` checks after native iOS pickers return; added `onError` handler to `charactersProvider` stream; added `onException` fallback to GoRouter.
 
 - **~~Character menu scrolls with lag.~~** Fixed — removed expensive `BackdropFilter` from every card (2 per card × N cards); simplified token badge background; kept token estimation but cleaned up expression.
@@ -99,6 +107,33 @@
 - **~~Single-brace macro aliases missing.~~** Fixed — `{char}`, `{description}`, `{scenario}`, `{personality}`, `{user}`, `{persona}`, `{mesExamples}` now resolve the same as their double-brace equivalents.
 
 - **~~char_card block uses hardcoded labels instead of character content.~~** Fixed — `char_card` block now uses `rawContent` template from preset or falls back to raw `description` field, instead of hardcoded "Character Name:/Description:" labels.
+
+## Macro Engine — Parity with Glaze JS
+
+- **`macro_name` field not supported.** JS uses `char.macro_name || char.name` so characters can have a separate display name for macro expansion. Flutter always uses `charName`.
+
+- **`{{reasoningPrefix}}`/`{{reasoningSuffix}}` no API fallback.** JS falls back to API reasoning tags (default `<think`/`</think`) when not set in session vars. Flutter falls back to empty string.
+
+- **`{{pick}}` uses match-text hash instead of counter.** JS increments `pickCount++` per pick, so two identical `{{pick::a::b}}` at different positions produce different results. Flutter hashes the macro text, so identical macros always produce the same result. JS also supports `__pick_version` session var for re-rolling all picks.
+
+- **`_simpleHash` produces different results.** JS: `|= 0` (signed 32-bit) → `Math.abs`. Flutter: `& 0x7FFFFFFF` (unsigned). Same input string yields different hash values, so `{{pick}}` selections differ between JS and Flutter.
+
+- **`{{date}}`/`{{time}}` not locale-aware.** JS uses `toLocaleDateString()`/`toLocaleTimeString()`. Flutter always produces ISO format (`2026-05-09`) and 24h time (`14:30:00`).
+
+## Upstream Merge History
+
+| Commit | Description | PR |
+|--------|-------------|----|
+| `e1e37e7` | style text | Hydall direct |
+| `1564fcc` | api selector fix | Hydall direct |
+| `5d323d4` | lord help me (onboarding, UI rework) | Hydall direct |
+| `ea0f9fd` | refactor: shared matching/utils, fix vector search & lorebook bugs | #25 |
+| `55c6403` | refactor: extract glaze_matcher, fix character filter, fix probability roll | #25 |
+| `b4558de` | UI | Hydall direct |
+| `112c420` | Merge PR #24 (perf: magic drawer token stats) | #24 |
+| `6e507c7` | Merge PR #23 (fix: iOS black screen on import) | #23 |
+| `0890f9c` | Merge PR #21 (fix: CI debug signing) | #21 |
+| `a35b252` | Merge PR #20 (fix: embedding cleanup on delete) | #20 |
 
 ## Character Import / Catalog
 
