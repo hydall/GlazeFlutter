@@ -120,6 +120,52 @@ class MemoryGlobalSettings {
 
   static int? _toInt(dynamic v) =>
       v is int ? v : (v is num ? v.toInt() : null);
+
+  MemoryGlobalSettings copyWith({
+    bool? enabled,
+    bool? autoCreateEnabled,
+    bool? autoGenerateEnabled,
+    int? maxInjectedEntries,
+    int? autoCreateInterval,
+    bool? useDelayedAutomation,
+    String? injectionTarget,
+    int? batchSize,
+    int? parallelJobs,
+    bool? vectorSearchEnabled,
+    String? keyMatchMode,
+    String? generationSource,
+    String? generationModel,
+    bool? generationUseCurrentModelOverride,
+    String? generationEndpoint,
+    String? generationApiKey,
+    double? generationTemperature,
+    int? generationMaxTokens,
+    String? promptPreset,
+    List<Map<String, dynamic>>? customPrompts,
+  }) {
+    return MemoryGlobalSettings(
+      enabled: enabled ?? this.enabled,
+      autoCreateEnabled: autoCreateEnabled ?? this.autoCreateEnabled,
+      autoGenerateEnabled: autoGenerateEnabled ?? this.autoGenerateEnabled,
+      maxInjectedEntries: maxInjectedEntries ?? this.maxInjectedEntries,
+      autoCreateInterval: autoCreateInterval ?? this.autoCreateInterval,
+      useDelayedAutomation: useDelayedAutomation ?? this.useDelayedAutomation,
+      injectionTarget: injectionTarget ?? this.injectionTarget,
+      batchSize: batchSize ?? this.batchSize,
+      parallelJobs: parallelJobs ?? this.parallelJobs,
+      vectorSearchEnabled: vectorSearchEnabled ?? this.vectorSearchEnabled,
+      keyMatchMode: keyMatchMode ?? this.keyMatchMode,
+      generationSource: generationSource ?? this.generationSource,
+      generationModel: generationModel ?? this.generationModel,
+      generationUseCurrentModelOverride: generationUseCurrentModelOverride ?? this.generationUseCurrentModelOverride,
+      generationEndpoint: generationEndpoint ?? this.generationEndpoint,
+      generationApiKey: generationApiKey ?? this.generationApiKey,
+      generationTemperature: generationTemperature ?? this.generationTemperature,
+      generationMaxTokens: generationMaxTokens ?? this.generationMaxTokens,
+      promptPreset: promptPreset ?? this.promptPreset,
+      customPrompts: customPrompts ?? this.customPrompts,
+    );
+  }
 }
 
 final memoryGlobalSettingsProvider =

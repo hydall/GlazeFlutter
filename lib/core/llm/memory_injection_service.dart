@@ -8,6 +8,7 @@ import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
 import '../models/memory_book.dart';
 import '../state/db_provider.dart';
+import '../state/memory_settings_provider.dart';
 import 'embedding_service.dart';
 import 'glaze_matcher.dart';
 import 'lorebook_vector_search.dart';
@@ -32,8 +33,9 @@ class MemoryInjectionService {
   final MemoryBookRepo _repo;
   final EmbeddingRepo _embeddingRepo;
   final EmbeddingService _embeddingService;
+  final Ref _ref;
 
-  MemoryInjectionService(this._repo, this._embeddingRepo, this._embeddingService);
+  MemoryInjectionService(this._repo, this._embeddingRepo, this._embeddingService, this._ref);
 
   Future<MemoryInjectionResult> buildInjection({
     required String sessionId,
@@ -47,8 +49,8 @@ class MemoryInjectionService {
     final book = await _repo.getBySessionId(sessionId);
     if (book == null) return const MemoryInjectionResult();
 
-    final settings = book.settings;
-    if (!settings.enabled) return const MemoryInjectionResult();
+    final gs = _ref.read(memoryGlobalSettingsProvider);
+    if (!gs.enabled) return const MemoryInjectionResult();
 
     final activeEntries = book.entries
         .where((e) => (e.status == 'active') && e.content.trim().isNotEmpty)
@@ -62,9 +64,9 @@ class MemoryInjectionService {
     for (final entry in activeEntries) {
       for (final key in entry.keys) {
         if (key.isEmpty) continue;
-        if (settings.keyMatchMode == 'glaze') {
+        if (gs.keyMatchMode == 'glaze') {
           if (_glazeMatch(key, scanText)) keywordMatched.add(entry.id);
-        } else if (settings.keyMatchMode == 'both') {
+        } else if (gs.keyMatchMode == 'both') {
           if (scanText.contains(key.toLowerCase()) || _glazeMatch(key, scanText)) {
             keywordMatched.add(entry.id);
           }
@@ -75,8 +77,8 @@ class MemoryInjectionService {
     }
 
     final vectorScores = <String, double>{};
-    if (settings.vectorSearchEnabled && embeddingConfig != null && embeddingConfig.endpoint.isNotEmpty && history != null) {
-      vectorScores.addAll(await _vectorSearchMemory(activeEntries, history, currentText ?? '', embeddingConfig, settings));
+    if (gs.vectorSearchEnabled && embeddingConfig != null && embeddingConfig.endpoint.isNotEmpty && history != null) {
+      vectorScores.addAll(await _vectorSearchMemory(activeEntries, history, currentText ?? '', embeddingConfig, gs));
     }
 
     final scoredEntries = activeEntries.map((entry) {
@@ -91,7 +93,7 @@ class MemoryInjectionService {
 
     final topEntries = scoredEntries
         .where((item) => item.score > 0)
-        .take(settings.maxInjectedEntries)
+        .take(gs.maxInjectedEntries)
         .map((item) => item.entry)
         .toList();
 
@@ -112,7 +114,7 @@ class MemoryInjectionService {
     }
 
     final injectionTarget =
-        settings.injectionTarget == 'summary_macro' ? 'summary_macro' : 'summary_block';
+        gs.injectionTarget == 'summary_macro' ? 'summary_macro' : 'summary_block';
 
     return MemoryInjectionResult(
       entries: topEntries,
@@ -127,7 +129,7 @@ class MemoryInjectionService {
     List<ChatMessageForSearch> history,
     String currentText,
     EmbeddingConfig config,
-    MemoryBookSettings settings,
+    MemoryGlobalSettings settings,
   ) async {
     try {
       final vectorEntries = entries.where((e) => e.vectorSearch).toList();
@@ -205,6 +207,7 @@ final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
     ref.watch(memoryBookRepoProvider),
     ref.watch(embeddingRepoProvider),
     EmbeddingService(),
+    ref,
   );
 });
 

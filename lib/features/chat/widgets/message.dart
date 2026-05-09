@@ -299,7 +299,8 @@ class _MessageState extends ConsumerState<Message> {
     final isLast = widget.isLast;
     final isGenerating = widget.isGenerating;
     final charId = widget.charId;
-    final memoryCoverage = widget.memoryCoverage;
+    final memoryEntryIds = widget.memoryCoverage['entryIds'];
+    final memoryEntryCount = memoryEntryIds is List ? memoryEntryIds.length : 0;
 
     final scheme = Theme.of(context).colorScheme;
     final appSettings = ref.watch(appSettingsProvider).value;
@@ -478,7 +479,7 @@ class _MessageState extends ConsumerState<Message> {
                 swipeId: _switcherIndex(character),
                 onSwipeLeft: isEditing ? null : _onSwitcherLeft(character),
                 onSwipeRight: isEditing ? null : _onSwitcherRight(character),
-                memoryEntryCount: memoryCoverage.length,
+                memoryEntryCount: memoryEntryCount,
                 onRegenerate: (!isEditing && ((isUser && isLast) || isError) && !isGenerating)
                     ? () => ref.read(chatProvider(charId).notifier).regenerateLastAssistant()
                     : null,
