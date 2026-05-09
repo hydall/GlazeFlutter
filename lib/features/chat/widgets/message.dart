@@ -11,6 +11,7 @@ import '../../../core/models/character.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/utils/html_to_markdown.dart';
+import '../../../features/personas/persona_list_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
 import '../../image_gen/widgets/image_content_renderer.dart';
 import '../../settings/app_settings_provider.dart';
@@ -334,11 +335,20 @@ class _MessageState extends ConsumerState<Message> {
 
     final style = _BubbleStyle.resolve(scheme: scheme, isStandard: isStandard, isUser: isUser, isSystem: isSystem);
 
-    String displayName = isUser ? 'User' : (character?.name ?? 'Character');
+    final personas = ref.watch(personaListProvider).value ?? [];
+    final activePersonaId = ref.watch(activePersonaIdProvider);
+    final personaConnections = ref.watch(personaConnectionsProvider);
+    final effectivePersona = getEffectivePersona(personas, charId, null, activePersonaId, personaConnections);
+
+    String displayName = isUser ? (effectivePersona?.name ?? 'User') : (character?.name ?? 'Character');
     String avatarLetter = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
     FileImage? avatarImage;
-    if (!isUser && character?.avatarPath != null && character!.avatarPath!.isNotEmpty) {
+    if (isUser) {
+      if (effectivePersona?.avatarPath != null && effectivePersona!.avatarPath!.isNotEmpty) {
+        avatarImage = FileImage(File(effectivePersona.avatarPath!));
+      }
+    } else if (character?.avatarPath != null && character!.avatarPath!.isNotEmpty) {
       avatarImage = FileImage(File(character.avatarPath!));
     }
 
@@ -364,25 +374,42 @@ class _MessageState extends ConsumerState<Message> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isStandard && !isSystem) ...[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 12,
-                    backgroundColor: isUser ? scheme.primary : scheme.surfaceContainerHighest,
-                    backgroundImage: avatarImage,
-                    child: avatarImage == null ? Text(avatarLetter, style: TextStyle(fontSize: 12, color: isUser ? scheme.onPrimary : scheme.onSurface, fontWeight: FontWeight.bold)) : null,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(displayName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: scheme.onSurfaceVariant)),
-                  if (messageIndex >= 0) ...[
-                    const SizedBox(width: 6),
-                    Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant.withValues(alpha: 0.55))),
+            if (!isSystem) ...[
+              if (isStandard) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
+                      backgroundImage: avatarImage,
+                      child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)) : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(displayName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: scheme.onSurfaceVariant)),
+                    if (messageIndex >= 0) ...[
+                      const SizedBox(width: 6),
+                      Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant.withValues(alpha: 0.55))),
+                    ],
                   ],
-                ],
-              ),
-              const SizedBox(height: 8),
+                ),
+                const SizedBox(height: 8),
+              ] else ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 10,
+                      backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
+                      backgroundImage: avatarImage,
+                      child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)) : null,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(displayName, style: TextStyle(fontWeight: FontWeight.w500, fontSize: 12, color: style.metaColor)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+              ],
             ],
             if (reasoning != null && reasoning.isNotEmpty && !isEditing)
               _ReasoningBlock(reasoning: reasoning, scheme: scheme),

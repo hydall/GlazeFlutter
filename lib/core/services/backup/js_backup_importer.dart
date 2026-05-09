@@ -44,7 +44,7 @@ class JsBackupImporter with BackupHelpers {
     await _importJsActiveSelections(kv, ls);
     await characterImporter.importGalleryFromCharacters(data['characters']);
     await presetImporter.importDeletedEntries(ls, kv);
-    await presetImporter.importTheme(ls);
+    await presetImporter.importTheme(ls, kv);
   }
 
   Future<void> _clearAllTables() async {

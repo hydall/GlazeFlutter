@@ -103,21 +103,62 @@ class JsPresetImporter with BackupHelpers {
     }
   }
 
-  Future<void> importTheme(Map<String, dynamic> ls) async {
+  Future<void> importTheme(Map<String, dynamic> ls, Map<String, dynamic> kv) async {
+    final prefs = await SharedPreferences.getInstance();
+
     final themeState = ls['gz_theme_state'];
-    if (themeState is! String) return;
-    try {
-      final theme = jsonDecode(themeState) as Map<String, dynamic>;
-      final prefs = await SharedPreferences.getInstance();
-      final accent = theme['accent'] as String?;
+    if (themeState is String) {
+      try {
+        final theme = jsonDecode(themeState) as Map<String, dynamic>;
+        final accent = theme['accent'] as String?;
+        if (accent != null && accent.isNotEmpty) {
+          final clean = accent.replaceFirst('#', '');
+          await prefs.setString('theme_accent', clean);
+        }
+        final isDark = theme['dark'] as bool?;
+        if (isDark != null) {
+          await prefs.setInt('theme_mode', isDark ? 2 : 0);
+        }
+        final chatLayout = theme['chatLayout'] as String?;
+        if (chatLayout != null && chatLayout.isNotEmpty) {
+          await prefs.setString('chatLayout', chatLayout);
+        }
+      } catch (_) {}
+    }
+
+    final presetsRaw = ls['gz_theme_presets'] ?? kv['gz_theme_presets'];
+    Map<String, dynamic>? activePreset;
+    if (presetsRaw is String) {
+      try {
+        final list = jsonDecode(presetsRaw) as List<dynamic>;
+        final activeId = ls['gz_theme_active_preset'] ?? 'default';
+        for (final p in list) {
+          if (p is Map<String, dynamic> && p['id']?.toString() == activeId) {
+            activePreset = p;
+            break;
+          }
+        }
+      } catch (_) {}
+    } else if (presetsRaw is List) {
+      final activeId = ls['gz_theme_active_preset'] ?? 'default';
+      for (final p in presetsRaw) {
+        if (p is Map<String, dynamic> && p['id']?.toString() == activeId) {
+          activePreset = p;
+          break;
+        }
+      }
+    }
+
+    if (activePreset != null) {
+      final chatLayout = activePreset['chatLayout'] as String?;
+      if (chatLayout != null && chatLayout.isNotEmpty) {
+        await prefs.setString('chatLayout', chatLayout);
+      }
+      final accent = activePreset['accentColor'] as String?;
       if (accent != null && accent.isNotEmpty) {
         final clean = accent.replaceFirst('#', '');
         await prefs.setString('theme_accent', clean);
       }
-      final isDark = theme['dark'] as bool?;
-      if (isDark != null) {
-        await prefs.setInt('theme_mode', isDark ? 2 : 0);
-      }
-    } catch (_) {}
+    }
   }
 }
