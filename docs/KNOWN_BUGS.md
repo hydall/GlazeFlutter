@@ -82,7 +82,7 @@
 
 - **~~Android: fresh APK only installs clean (uninstall first), update over existing install fails.~~** Fixed — CI builds now decode `DEBUG_KEYSTORE_BASE64` secret into a persistent `debug-key.keystore`, so all CI APKs are signed with the same key. DB `createTable`/`addColumn` collision on migration from early schemas still possible but rare.
 
-- **No HTML rendering in chat.** Unresolved — need to research if HTML support was implemented. Messages containing HTML are displayed as raw text.
+- **~~No HTML rendering in chat.~~** Fixed — added `flutter_html` as a hybrid renderer. Messages with HTML tags now render via `Html` widget; plain markdown messages continue using `MarkdownBody`. Detection is automatic via regex tag matching.
 
 - **Persona not injected into chat after backup import (Android confirmed).** Bug — after restoring a backup, existing chats show persona as "user" (no avatar), even though the correct persona is selected. The persona's content is not being applied to the chat session. Likely cause: `personaId` in chat sessions or character settings is not being restored/linked correctly on import, or `activeSelectionProvider` doesn't pick up the persona for existing sessions.
 

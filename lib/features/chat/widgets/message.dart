@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_html/flutter_html.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -333,6 +334,17 @@ class _MessageState extends ConsumerState<Message> {
               _TypingIndicator(textColor: textColor, scheme: scheme)
             else if (ImageContentRenderer.hasImageMarkers(displayContent))
               ImageContentRenderer(content: displayContent, textColor: textColor)
+            else if (_hasHtmlTags(displayContent))
+              Html(
+                data: _highlightPhrases(displayContent),
+                style: {
+                  'body': Style(color: textColor, margin: Margins.zero, padding: HtmlPaddings.zero),
+                  'p': Style(color: textColor, margin: Margins.zero),
+                  'em': Style(color: asteriskColor, fontStyle: FontStyle.italic),
+                  'strong': Style(color: asteriskColor, fontWeight: FontWeight.bold),
+                  'blockquote': Style(color: textColor, border: Border(left: BorderSide(color: asteriskColor, width: 3))),
+                },
+              )
             else
               MarkdownBody(
                 data: _highlightPhrases(displayContent), 
@@ -786,3 +798,10 @@ class _MetadataRow extends StatelessWidget {
     );
   }
 }
+
+final _htmlTagRegex = RegExp(
+  r'<(div|span|p|br|img|a|table|tr|td|th|ul|ol|li|h[1-6]|hr|pre|code|blockquote|style|font|center|b|i|u|s|em|strong|small|sub|sup|mark|details|summary|section|article|header|footer|nav|figure|figcaption|iframe)\b',
+  caseSensitive: false,
+);
+
+bool _hasHtmlTags(String content) => _htmlTagRegex.hasMatch(content);
