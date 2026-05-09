@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_html/flutter_html.dart';
+import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:markdown/markdown.dart' as md;
@@ -335,19 +335,15 @@ class _MessageState extends ConsumerState<Message> {
             else if (ImageContentRenderer.hasImageMarkers(displayContent))
               ImageContentRenderer(content: displayContent, textColor: textColor)
             else if (_hasHtmlTags(displayContent))
-              SizedBox(
-                width: double.infinity,
-                child: Html(
-                  data: displayContent,
-                  shrinkWrap: true,
-                  style: {
-                    'body': Style(color: textColor, margin: Margins.zero, padding: HtmlPaddings.zero, whiteSpace: WhiteSpace.pre),
-                    'p': Style(color: textColor, margin: Margins.zero),
-                    'em': Style(color: asteriskColor, fontStyle: FontStyle.italic),
-                    'strong': Style(color: asteriskColor, fontWeight: FontWeight.bold),
-                    'blockquote': Style(color: textColor, border: Border(left: BorderSide(color: asteriskColor, width: 3))),
-                  },
-                ),
+              HtmlWidget(
+                displayContent,
+                textStyle: TextStyle(color: textColor),
+                customStylesBuilder: (element) {
+                  if (element.localName == 'body' || element.localName == 'p') {
+                    return {'white-space': 'pre-line'};
+                  }
+                  return null;
+                },
               )
             else
               MarkdownBody(
