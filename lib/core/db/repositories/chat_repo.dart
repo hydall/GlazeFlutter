@@ -95,8 +95,34 @@ class ChatRepo {
   }
 
   SessionMetadata _toMetadata(ChatSessionRow c) {
-    final msgs = jsonDecode(c.messagesJson) as List;
-    final lastRaw = msgs.isNotEmpty ? msgs.last as Map<String, dynamic> : null;
+    final json = c.messagesJson;
+
+    // Lightweight scan: count top-level objects and find last object start
+    // without deserializing the entire messages array.
+    int messageCount = 0;
+    String lastContent = '';
+    int lastTimestamp = 0;
+
+    if (json.length > 2) {
+      final (count, startIdx) = _scanTopLevelObjects(json);
+      messageCount = count;
+
+      if (startIdx >= 0) {
+        final lastBrace = json.lastIndexOf('}');
+        if (lastBrace > startIdx) {
+          try {
+            final lastMsg =
+                jsonDecode(json.substring(startIdx, lastBrace + 1))
+                    as Map<String, dynamic>;
+            lastContent = (lastMsg['content'] as String?) ?? '';
+            if (lastContent.length > 250) {
+              lastContent = lastContent.substring(0, 250);
+            }
+            lastTimestamp = (lastMsg['timestamp'] as int?) ?? 0;
+          } catch (_) {}
+        }
+      }
+    }
 
     String? sessionName;
     if (c.sessionVarsJson != null && c.sessionVarsJson!.isNotEmpty) {
@@ -111,11 +137,49 @@ class ChatRepo {
       characterId: c.characterId,
       sessionIndex: c.sessionIndex,
       updatedAt: c.updatedAt,
-      messageCount: msgs.length,
-      lastMessageContent: (lastRaw?['content'] as String?) ?? '',
-      lastMessageTimestamp: (lastRaw?['timestamp'] as int?) ?? 0,
+      messageCount: messageCount,
+      lastMessageContent: lastContent,
+      lastMessageTimestamp: lastTimestamp,
       sessionName: sessionName,
     );
+  }
+
+  /// Single-pass scan of a JSON array string.
+  /// Returns (objectCount, lastObjectStartIndex) without full deserialization.
+  static (int, int) _scanTopLevelObjects(String json) {
+    int count = 0;
+    int lastStart = -1;
+    int depth = 0;
+    bool inString = false;
+
+    for (int i = 0; i < json.length; i++) {
+      final ch = json.codeUnitAt(i);
+      if (inString) {
+        if (ch == 0x5C /* \ */) {
+          i++; // skip escaped char
+        } else if (ch == 0x22 /* " */) {
+          inString = false;
+        }
+        continue;
+      }
+      switch (ch) {
+        case 0x22: // "
+          inString = true;
+        case 0x5B: // [
+          depth++;
+        case 0x5D: // ]
+          depth--;
+        case 0x7B: // {
+          depth++;
+          if (depth == 2) {
+            count++;
+            lastStart = i;
+          }
+        case 0x7D: // }
+          depth--;
+      }
+    }
+    return (count, lastStart);
   }
 
   ChatSession _toModel(ChatSessionRow c) => ChatSession(

@@ -68,17 +68,8 @@ class CharacterGrid extends StatelessWidget {
         ),
         SliverPadding(
           padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
-          sliver: SliverGrid(
-            delegate: SliverChildBuilderDelegate(
-              (_, i) => CharacterCard(character: characters[i]),
-              childCount: characters.length,
-            ),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 2 / 3,
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
-            ),
+          sliver: SliverToBoxAdapter(
+            child: _AnimatedCharacterGrid(characters: characters),
           ),
         ),
       ],
@@ -97,28 +88,73 @@ class _SortDirButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        width: 32,
         height: 32,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
           color: AppColors.accent.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(16),
+          shape: BoxShape.circle,
           border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
         ),
         child: Center(
-          child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            child: Text(
-              isAsc ? 'Oldest' : 'Newest',
-              key: ValueKey(isAsc),
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: AppColors.accent,
-              ),
+          child: AnimatedRotation(
+            turns: isAsc ? 0.5 : 0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutBack,
+            child: const Icon(
+              Icons.arrow_downward_rounded,
+              size: 18,
+              color: AppColors.accent,
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _AnimatedCharacterGrid extends StatelessWidget {
+  final List<Character> characters;
+
+  const _AnimatedCharacterGrid({required this.characters});
+
+  static const _crossAxisCount = 2;
+  static const _spacing = 10.0;
+  static const _aspectRatio = 2 / 3;
+
+  @override
+  Widget build(BuildContext context) {
+    if (characters.isEmpty) return const SizedBox.shrink();
+
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        final cellW =
+            (constraints.maxWidth - _spacing * (_crossAxisCount - 1)) /
+                _crossAxisCount;
+        final cellH = cellW / _aspectRatio;
+        final rows =
+            (characters.length + _crossAxisCount - 1) ~/ _crossAxisCount;
+        final totalH = rows * cellH + (rows - 1) * _spacing;
+
+        return SizedBox(
+          height: totalH,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              for (int i = 0; i < characters.length; i++)
+                AnimatedPositioned(
+                  key: ValueKey(characters[i].id),
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeOutCubic,
+                  left: (i % _crossAxisCount) * (cellW + _spacing),
+                  top: (i ~/ _crossAxisCount) * (cellH + _spacing),
+                  width: cellW,
+                  height: cellH,
+                  child: CharacterCard(character: characters[i]),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -145,7 +181,7 @@ class _SortTypePill extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              sortBy == SortType.name ? 'Name' : 'Date',
+              sortBy == SortType.name ? 'Name' : 'Date added',
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
@@ -165,28 +201,32 @@ class _SortTypePill extends StatelessWidget {
   }
 
   void _showPicker(BuildContext context) {
+    BottomSheetItem build(String label, SortType type) => BottomSheetItem(
+          label: label,
+          actions: sortBy == type
+              ? [
+                  BottomSheetAction(
+                    icon: Icons.check_rounded,
+                    color: AppColors.accent,
+                    onTap: () {
+                      Navigator.of(context, rootNavigator: true).pop();
+                      onChanged(type);
+                    },
+                  ),
+                ]
+              : const [],
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            onChanged(type);
+          },
+        );
+
     GlazeBottomSheet.show(
       context,
       title: 'Sort by',
       items: [
-        BottomSheetItem(
-          icon: sortBy == SortType.name ? Icons.check_rounded : null,
-          iconColor: AppColors.accent,
-          label: 'Sort by Name',
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            onChanged(SortType.name);
-          },
-        ),
-        BottomSheetItem(
-          icon: sortBy == SortType.date ? Icons.check_rounded : null,
-          iconColor: AppColors.accent,
-          label: 'Sort by Date',
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            onChanged(SortType.date);
-          },
-        ),
+        build('Name', SortType.name),
+        build('Date added', SortType.date),
       ],
     );
   }

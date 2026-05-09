@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/sheet_view.dart';
 import '../catalog_models.dart';
+import '../services/chub_provider.dart';
+import '../services/datacat_provider.dart';
+import '../services/janitor_provider.dart';
 
 class CatalogFilterSheet extends StatefulWidget {
   final CatalogFilters filters;
@@ -25,6 +29,12 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
   late int _minTokens;
   late int _maxTokens;
 
+  Set<int> _selectedTagIds = {};
+  Set<String> _selectedTagNames = {};
+
+  List<CatalogTag> _allTags = [];
+  String _tagSearch = '';
+
   @override
   void initState() {
     super.initState();
@@ -32,141 +42,284 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
     _nsfl = widget.filters.nsfl;
     _minTokens = widget.filters.minTokens;
     _maxTokens = widget.filters.maxTokens;
+    _selectedTagIds = Set.from(widget.filters.tagIds);
+    _selectedTagNames = Set.from(widget.filters.tagNames);
+
+    _loadTags();
+  }
+
+  Future<void> _loadTags() async {
+    List<CatalogTag> tags = [];
+    if (widget.provider == CatalogProvider.chub) {
+      tags = await fetchChubTags();
+    } else if (widget.provider == CatalogProvider.datacat) {
+      tags = await fetchDatacatTags();
+    } else {
+      tags = await fetchJanitorTags();
+    }
+
+    // Sort alphabetically
+    tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
+    if (mounted) {
+      setState(() {
+        _allTags = tags;
+      });
+    }
   }
 
   @override
+  void dispose() {
+    // Only apply if changed
+    final changed = _nsfw != widget.filters.nsfw ||
+        _nsfl != widget.filters.nsfl ||
+        _minTokens != widget.filters.minTokens ||
+        _maxTokens != widget.filters.maxTokens ||
+        _selectedTagIds.length != widget.filters.tagIds.length ||
+        _selectedTagNames.length != widget.filters.tagNames.length ||
+        !_selectedTagIds.containsAll(widget.filters.tagIds) ||
+        !_selectedTagNames.containsAll(widget.filters.tagNames);
+
+    if (changed) {
+      final newTagIds = _selectedTagIds.toList()..sort();
+      final newTagNames = _selectedTagNames.toList()..sort();
+      final apply = widget.onApply;
+
+      Future.microtask(() {
+        apply(
+          CatalogFilters(
+            sort: widget.filters.sort,
+            nsfw: _nsfw,
+            nsfl: _nsfl,
+            tagIds: newTagIds,
+            tagNames: newTagNames,
+            minTokens: _minTokens,
+            maxTokens: _maxTokens,
+          ),
+        );
+      });
+    }
+    super.dispose();
+  }
+
+  bool _isTagSelected(CatalogTag tag) {
+    if (tag.id != null) return _selectedTagIds.contains(tag.id);
+    return _selectedTagNames.contains(tag.name);
+  }
+
+  void _cycleTag(CatalogTag tag) {
+    setState(() {
+      if (tag.id != null) {
+        if (_selectedTagIds.contains(tag.id)) {
+          _selectedTagIds.remove(tag.id);
+        } else {
+          _selectedTagIds.add(tag.id!);
+        }
+      } else {
+        if (_selectedTagNames.contains(tag.name)) {
+          _selectedTagNames.remove(tag.name);
+        } else {
+          _selectedTagNames.add(tag.name);
+        }
+      }
+    });
+  }
+
+  void _clearTags() {
+    setState(() {
+      _selectedTagIds.clear();
+      _selectedTagNames.clear();
+    });
+  }
+
+  void _onNsflToggle(bool value) {
+    if (value) {
+      // Trying to enable — show warning
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppColors.background,
+          title: const Text('NSFL Content', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            "You don't want to see this.",
+            style: TextStyle(color: AppColors.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('I don\'t want to die', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            TextButton(
+              onPressed: () {
+                setState(() => _nsfl = true);
+                Navigator.pop(ctx);
+              },
+              child: const Text('I have nothing to lose', style: TextStyle(color: Colors.redAccent)),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // Disabling
+      setState(() => _nsfl = false);
+    }
+  }
+
+  List<CatalogTag> get _filteredTags {
+    if (_tagSearch.isEmpty) return _allTags;
+    final q = _tagSearch.toLowerCase();
+    return _allTags.where((t) => t.name.toLowerCase().contains(q)).toList();
+  }
+
+  List<CatalogTag> get _selectedTagsList {
+    return _allTags.where((t) => _isTagSelected(t)).toList();
+  }
+
+  int get _totalSelectedCount => _selectedTagIds.length + _selectedTagNames.length;
+
+  @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Filters',
+    return SheetView(
+      title: 'Filters',
+      showHandle: true,
+      bodyPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      body: ListView(
+        children: [
+          const SizedBox(height: 16),
+          // NSFW
+          _toggleTile('Show NSFW', _nsfw, (v) => setState(() => _nsfw = v)),
+
+            // NSFL
+            if (widget.provider == CatalogProvider.chub)
+              _toggleTile('Show NSFL', _nsfl, _onNsflToggle, isDanger: true),
+
+            const SizedBox(height: 20),
+
+            // Tokens
+            const Text(
+              'TOKEN RANGE',
               style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+                letterSpacing: 0.6,
               ),
             ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        _toggleTile('NSFW', _nsfw, (v) => setState(() => _nsfw = v)),
-        if (widget.provider == CatalogProvider.chub)
-          _toggleTile('NSFL', _nsfl, (v) => setState(() => _nsfl = v)),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: _tokenField(
-                  'Min tokens',
-                  _minTokens,
-                  (v) => setState(() => _minTokens = v),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _tokenField('Min', _minTokens, (v) => setState(() => _minTokens = v)),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _tokenField(
-                  'Max tokens',
-                  _maxTokens,
-                  (v) => setState(() => _maxTokens = v),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('—', style: TextStyle(color: AppColors.textSecondary, fontSize: 18)),
                 ),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: () => setState(() {
-                    _nsfw = false;
-                    _nsfl = false;
-                    _minTokens = 29;
-                    _maxTokens = 100000;
-                  }),
-                  child: Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceHigh,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Reset',
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w600,
-                        ),
+                Expanded(
+                  child: _tokenField('Max', _maxTokens, (v) => setState(() => _maxTokens = v)),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // Tags Header
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'TAGS',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                if (_totalSelectedCount > 0)
+                  GestureDetector(
+                    onTap: _clearTags,
+                    child: Text(
+                      'Clear ($_totalSelectedCount)',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.accent,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: GestureDetector(
-                  onTap: () {
-                    widget.onApply(
-                      CatalogFilters(
-                        sort: widget.filters.sort,
-                        nsfw: _nsfw,
-                        nsfl: _nsfl,
-                        tagIds: widget.filters.tagIds,
-                        tagNames: widget.filters.tagNames,
-                        minTokens: _minTokens,
-                        maxTokens: _maxTokens,
-                      ),
-                    );
-                    Navigator.pop(context);
-                  },
-                  child: Container(
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.accent,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'Apply',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
+              ],
+            ),
+            const SizedBox(height: 12),
+
+            // Selected tags preview
+            if (_selectedTagsList.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Container(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+                  ),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: _selectedTagsList.map((t) => _buildTagChip(t, active: true)).toList(),
                   ),
                 ),
               ),
-            ],
-          ),
-        ),
-      ],
+
+            // Tag Search
+            Container(
+              height: 40,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.07),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              ),
+              child: TextField(
+                style: const TextStyle(fontSize: 14, color: Colors.white),
+                decoration: const InputDecoration(
+                  hintText: 'Search tags...',
+                  hintStyle: TextStyle(color: AppColors.textSecondary),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  isDense: true,
+                ),
+                onChanged: (v) => setState(() => _tagSearch = v),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Tags grid
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: _filteredTags.map((t) => _buildTagChip(t, active: _isTagSelected(t))).toList(),
+            ),
+            const SizedBox(height: 40),
+        ],
+      ),
     );
   }
 
-  Widget _toggleTile(String label, bool value, ValueChanged<bool> onChanged) {
+  Widget _toggleTile(String label, bool value, ValueChanged<bool> onChanged, {bool isDanger = false}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
             style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
           ),
-          const Spacer(),
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: AppColors.accent,
+            activeTrackColor: isDanger ? Colors.redAccent : AppColors.accent,
+            activeColor: Colors.white,
+            inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
+            inactiveThumbColor: Colors.white,
           ),
         ],
       ),
@@ -178,24 +331,29 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          label,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+          label.toUpperCase(),
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.4),
+            fontSize: 11,
+            letterSpacing: 0.5,
+          ),
         ),
         const SizedBox(height: 4),
-        SizedBox(
-          height: 36,
+        Container(
+          height: 38,
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          ),
           child: TextField(
             controller: TextEditingController(text: '$value'),
             keyboardType: TextInputType.number,
-            style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppColors.background,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,
-              ),
+            style: const TextStyle(fontSize: 14, color: Colors.white),
+            decoration: const InputDecoration(
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              isDense: true,
             ),
             onSubmitted: (v) {
               final p = int.tryParse(v);
@@ -204,6 +362,38 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildTagChip(CatalogTag tag, {required bool active}) {
+    return GestureDetector(
+      onTap: () => _cycleTag(tag),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active ? AppColors.accent : Colors.white.withValues(alpha: 0.12),
+          ),
+          color: active ? AppColors.accent.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              tag.name,
+              style: TextStyle(
+                fontSize: 12,
+                color: active ? Colors.white : Colors.white.withValues(alpha: 0.65),
+              ),
+            ),
+            if (active) ...[
+              const SizedBox(width: 5),
+              const Icon(Icons.close, size: 10, color: Colors.white),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

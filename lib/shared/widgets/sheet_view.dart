@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:gradient_blur/gradient_blur.dart';
 
 import '../theme/app_colors.dart';
+import 'glaze_scaffold.dart';
 
 class SheetViewAction {
   final Widget icon;
@@ -135,7 +136,7 @@ class _SheetViewState extends State<SheetView>
         widget.titleWidget != null ||
         widget.showBack ||
         widget.actions.isNotEmpty) {
-      h += 52;
+      h += _inModalSheet ? 52 : 56;
     }
     if (widget.tabs.isNotEmpty) {
       h += 46;
@@ -244,6 +245,111 @@ class _SheetViewState extends State<SheetView>
 
   @override
   Widget build(BuildContext context) {
+    if (!_inModalSheet) {
+      if (_hasHeader) {
+        _measureHeader();
+      }
+
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Builder(
+                builder: (context) {
+                  final mediaQuery = MediaQuery.of(context);
+                  final extraTop = _hasHeader ? (mediaQuery.padding.top + 10 + _headerH) : mediaQuery.padding.top;
+                  final newPadding = mediaQuery.padding.copyWith(top: extraTop);
+                  
+                  final innerChild = Padding(
+                    padding: widget.bodyPadding ?? EdgeInsets.zero,
+                    child: widget.body,
+                  );
+
+                  return MediaQuery(
+                    data: mediaQuery.copyWith(padding: newPadding),
+                    child: widget.scrollController != null
+                        ? RawScrollbar(
+                            controller: widget.scrollController,
+                            thumbColor: Colors.white.withValues(alpha: 0.15),
+                            radius: const Radius.circular(3),
+                            thickness: 4,
+                            padding: EdgeInsets.only(top: extraTop, right: 3),
+                            child: innerChild,
+                          )
+                        : innerChild,
+                  );
+                },
+              ),
+            ),
+            if (_hasHeader)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                    child: KeyedSubtree(
+                      key: _headerKey,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          GlazeAppBar(
+                            title: widget.title,
+                            titleWidget: widget.titleWidget,
+                            showBack: widget.showBack,
+                            onBack: widget.onBack,
+                            actions: widget.actions.map((action) {
+                              return _HeaderIconButton(
+                                onPressed: action.onPressed,
+                                tooltip: action.tooltip,
+                                foregroundColor: action.color ?? AppColors.accent,
+                                child: action.icon,
+                              );
+                            }).toList(),
+                          ),
+                          if (widget.tabs.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Row(
+                                children: widget.tabs.map((tab) => Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                                    child: _SheetTabButton(
+                                      tab: tab,
+                                      active: widget.activeTabId == tab.id,
+                                      onTap: widget.onTabSelected == null ? null : () => widget.onTabSelected!(tab.id),
+                                    ),
+                                  ),
+                                )).toList(),
+                              ),
+                            ),
+                          if (widget.headerBottom != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: widget.headerBottom!,
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (widget.floating != null)
+              Positioned.fill(child: widget.floating!),
+            if (widget.floatingActionButton != null)
+              Positioned(
+                right: 16,
+                bottom: 16 + MediaQuery.of(context).padding.bottom,
+                child: widget.floatingActionButton!,
+              ),
+          ],
+        ),
+      );
+    }
+
     final collapsed = _collapsed(context);
     final full = _full(context);
     final t = full > collapsed

@@ -1,63 +1,85 @@
-import 'dart:ui';
-
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_colors.dart';
 import '../catalog_models.dart';
 
-class CatalogCard extends StatelessWidget {
+class CatalogCard extends StatefulWidget {
   final CatalogItem item;
   final VoidCallback onTap;
 
   const CatalogCard({super.key, required this.item, required this.onTap});
 
   @override
+  State<CatalogCard> createState() => _CatalogCardState();
+}
+
+class _CatalogCardState extends State<CatalogCard> {
+  bool _pressed = false;
+  bool _hovered = false;
+
+  CatalogItem get item => widget.item;
+
+  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildImage(),
-            const Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: 150,
-              child: _BottomGradient(),
-            ),
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: _CardInfo(item: item),
-            ),
-            if (item.tokens > 0)
-              Positioned(
-                top: 8,
-                left: 8,
-                child: _TokenBadge(tokens: item.tokens),
+    final scale = _pressed ? 0.96 : (_hovered ? 1.01 : 1.0);
+    final dy = _hovered && !_pressed ? -4.0 : 0.0;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTapCancel: () => setState(() => _pressed = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutBack,
+          transform: Matrix4.identity()
+            ..translateByDouble(0.0, dy, 0.0, 1.0)
+            ..scaleByDouble(scale, scale, 1.0, 1.0),
+          transformAlignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppColors.surfaceHigh,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(
+                  alpha: _hovered ? 0.3 : 0.1,
+                ),
+                blurRadius: _hovered ? 24 : 6,
+                offset: Offset(0, _hovered ? 12 : 4),
               ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: _NsfwBadge(nsfw: item.nsfw),
-            ),
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    width: 2,
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AspectRatio(
+                  aspectRatio: 2 / 3,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _buildImage(),
+                      const _BottomFade(),
+                      if (item.messageCount > 0)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: _MessageBadge(count: item.messageCount),
+                        ),
+                    ],
                   ),
                 ),
-              ),
+                _CardInfo(item: item),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -76,7 +98,7 @@ class CatalogCard extends StatelessWidget {
   }
 
   Widget _buildPlaceholder() {
-    return Container(
+    return ColoredBox(
       color: AppColors.accent.withValues(alpha: 0.2),
       child: Center(
         child: Text(
@@ -92,22 +114,27 @@ class CatalogCard extends StatelessWidget {
   }
 }
 
-class _BottomGradient extends StatelessWidget {
-  const _BottomGradient();
+class _BottomFade extends StatelessWidget {
+  const _BottomFade();
 
   @override
   Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [
-            Color(0xF2000000),
-            Color(0x99000000),
-            Colors.transparent,
-          ],
-          stops: [0.0, 0.5, 1.0],
+    return const Align(
+      alignment: Alignment.bottomCenter,
+      child: FractionallySizedBox(
+        heightFactor: 0.5,
+        widthFactor: 1.0,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Colors.transparent,
+                AppColors.surfaceHigh,
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -119,10 +146,27 @@ class _CardInfo extends StatelessWidget {
 
   const _CardInfo({required this.item});
 
+  String _formatNumber(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}kk';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
+    return '$n';
+  }
+
+  String _stripHtml(String s) {
+    return s.replaceAll(RegExp(r'<img[^>]*>', caseSensitive: false), '')
+        .replaceAll(RegExp(r'<[^>]+>'), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final desc = item.description != null && item.description!.isNotEmpty
+        ? _stripHtml(item.description!)
+        : '';
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -134,8 +178,8 @@ class _CardInfo extends StatelessWidget {
             style: const TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 15,
+              height: 1.2,
               color: Colors.white,
-              shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
             ),
           ),
           if (item.creator != null && item.creator!.isNotEmpty) ...[
@@ -146,14 +190,37 @@ class _CardInfo extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.white.withValues(alpha: 0.6),
-                shadows: const [Shadow(blurRadius: 4, color: Colors.black87)],
+                color: Colors.white.withValues(alpha: 0.7),
+              ),
+            ),
+          ],
+          if (item.tokens > 0) ...[
+            const SizedBox(height: 2),
+            Text(
+              '${_formatNumber(item.tokens)} tokens',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.5),
               ),
             ),
           ],
           if (item.tags.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            _TagChips(tags: item.tags.take(3).toList()),
+            const SizedBox(height: 8),
+            _TagChips(tags: item.tags),
+          ],
+          if (desc.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              desc,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                height: 1.4,
+                color: Colors.white.withValues(alpha: 0.55),
+              ),
+            ),
           ],
         ],
       ),
@@ -170,35 +237,43 @@ class _TagChips extends StatelessWidget {
   Widget build(BuildContext context) {
     return Wrap(
       spacing: 4,
-      runSpacing: 2,
+      runSpacing: 4,
       children: tags.map((tag) {
-        final isNsfw = tag.toUpperCase() == 'NSFW';
-        final isSfw = tag.toUpperCase() == 'SFW';
+        final upper = tag.toUpperCase();
+        final isNsfw = upper == 'NSFW';
+        final isSfw = upper == 'SFW';
         final isCustom = tag.startsWith('#');
+        final Color bg, fg, border;
+        if (isNsfw) {
+          bg = const Color(0x33FF4444);
+          fg = const Color(0xFFFF4444);
+          border = const Color(0x4DFF4444);
+        } else if (isSfw) {
+          bg = const Color(0x334CAF50);
+          fg = const Color(0xFF4CAF50);
+          border = const Color(0x4D4CAF50);
+        } else if (isCustom) {
+          bg = const Color(0x1A00FFFF);
+          fg = const Color(0xFF00CCCC);
+          border = const Color(0x3300FFFF);
+        } else {
+          bg = AppColors.accent.withValues(alpha: 0.15);
+          fg = AppColors.accent;
+          border = AppColors.accent.withValues(alpha: 0.2);
+        }
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
-            color: isNsfw
-                ? Colors.red.withValues(alpha: 0.3)
-                : isSfw
-                    ? Colors.green.withValues(alpha: 0.2)
-                    : isCustom
-                        ? Colors.cyan.withValues(alpha: 0.2)
-                        : AppColors.accent.withValues(alpha: 0.15),
+            color: bg,
             borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: border),
           ),
           child: Text(
             tag,
             style: TextStyle(
-              fontSize: 9,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
-              color: isNsfw
-                  ? Colors.redAccent
-                  : isSfw
-                      ? Colors.greenAccent
-                      : isCustom
-                          ? Colors.cyanAccent
-                          : AppColors.accent,
+              color: fg,
             ),
           ),
         );
@@ -207,70 +282,43 @@ class _TagChips extends StatelessWidget {
   }
 }
 
-class _TokenBadge extends StatelessWidget {
-  final int tokens;
+class _MessageBadge extends StatelessWidget {
+  final int count;
 
-  const _TokenBadge({required this.tokens});
+  const _MessageBadge({required this.count});
 
-  String _formatTokens(int t) {
-    if (t >= 1000) return '${(t / 1000).toStringAsFixed(1)}k';
-    return '$t';
+  String _format(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}kk';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
+    return '$n';
   }
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 4, sigmaY: 4),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.6),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.description_outlined, size: 11, color: Colors.white70),
-              const SizedBox(width: 4),
-              Text(
-                '${_formatTokens(tokens)} tokens',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _NsfwBadge extends StatelessWidget {
-  final bool nsfw;
-
-  const _NsfwBadge({required this.nsfw});
-
-  @override
-  Widget build(BuildContext context) {
-    if (!nsfw) return const SizedBox.shrink();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(8),
+        color: Colors.black.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: const Text(
-        'NSFW',
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.mail_outline_rounded,
+            size: 12,
+            color: Colors.white70,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            _format(count),
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+        ],
       ),
     );
   }

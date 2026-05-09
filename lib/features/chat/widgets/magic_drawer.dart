@@ -26,6 +26,7 @@ import '../chat_provider.dart';
 import '../../character_list/character_detail_screen.dart';
 import '../../personas/persona_list_screen.dart';
 import '../../presets/preset_list_screen.dart';
+import '../../regex/regex_list_screen.dart';
 import '../../settings/api_settings_screen.dart';
 import 'authors_note_sheet.dart';
 import 'lorebook_coverage_sheet.dart';
@@ -342,7 +343,16 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         return;
       case 'regex':
         widget.onClose?.call();
-        if (mounted) context.go('/tools/regex');
+        if (mounted) {
+          showModalBottomSheet(
+            context: context,
+            useRootNavigator: true,
+            backgroundColor: Colors.transparent,
+            barrierColor: Colors.black54,
+            isScrollControlled: true,
+            builder: (_) => const RegexListScreen(),
+          );
+        }
         return;
       case 'api':
         widget.onClose?.call();

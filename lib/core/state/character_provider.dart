@@ -22,8 +22,7 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
         if (state.hasValue && state.value!.length == data.length) {
           bool same = true;
           for (int i = 0; i < data.length; i++) {
-            if (data[i].id != state.value![i].id ||
-                data[i].updatedAt != state.value![i].updatedAt) {
+            if (data[i] != state.value![i]) {
               same = false;
               break;
             }

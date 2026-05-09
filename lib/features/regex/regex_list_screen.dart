@@ -13,7 +13,8 @@ import '../../shared/widgets/sheet_view.dart';
 import '../presets/widgets/regex_tile.dart';
 
 class RegexListScreen extends ConsumerWidget {
-  const RegexListScreen({super.key});
+  final bool startExpanded;
+  const RegexListScreen({super.key, this.startExpanded = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -22,9 +23,12 @@ class RegexListScreen extends ConsumerWidget {
     final activePresetId = ref.watch(activePresetIdProvider);
 
     return SheetView(
+      startExpanded: startExpanded,
       title: 'Regex Scripts',
       showBack: true,
-      onBack: () => context.go('/tools'),
+      onBack: startExpanded
+          ? () => context.go('/tools')
+          : () => Navigator.of(context).maybePop(),
       body: presetsAsync.when(
         skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),

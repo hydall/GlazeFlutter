@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:gradient_blur/gradient_blur.dart';
 
 import '../theme/app_colors.dart';
 
@@ -123,6 +124,7 @@ class GlazeBottomSheet {
     String? title,
     Widget? headerAction,
     List<BottomSheetItem>? items,
+    List<BottomSheetItem>? itemsAsCards,
     List<BottomSheetSessionItem>? sessionItems,
     List<BottomSheetCardItem>? cardItems,
     BottomSheetBigInfo? bigInfo,
@@ -141,6 +143,7 @@ class GlazeBottomSheet {
         title: title,
         headerAction: headerAction,
         items: items,
+        itemsAsCards: itemsAsCards,
         sessionItems: sessionItems,
         cardItems: cardItems,
         bigInfo: bigInfo,
@@ -158,6 +161,7 @@ class _GlazeBottomSheetContent extends StatefulWidget {
   final String? title;
   final Widget? headerAction;
   final List<BottomSheetItem>? items;
+  final List<BottomSheetItem>? itemsAsCards;
   final List<BottomSheetSessionItem>? sessionItems;
   final List<BottomSheetCardItem>? cardItems;
   final BottomSheetBigInfo? bigInfo;
@@ -169,6 +173,7 @@ class _GlazeBottomSheetContent extends StatefulWidget {
     this.title,
     this.headerAction,
     this.items,
+    this.itemsAsCards,
     this.sessionItems,
     this.cardItems,
     this.bigInfo,
@@ -185,6 +190,9 @@ class _GlazeBottomSheetContent extends StatefulWidget {
 class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
   late final TextEditingController _inputController;
   final FocusNode _inputFocus = FocusNode();
+  final ScrollController _scrollController = ScrollController();
+  final _headerKey = GlobalKey();
+  double _headerH = 52; // Estimate initial height
 
   @override
   void initState() {
@@ -197,10 +205,23 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
     }
   }
 
+  void _measureHeader() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final box = _headerKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) return;
+      final h = box.size.height;
+      if (h != _headerH) {
+        setState(() => _headerH = h);
+      }
+    });
+  }
+
   @override
   void dispose() {
     _inputController.dispose();
     _inputFocus.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -210,6 +231,8 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    _measureHeader();
 
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -224,45 +247,89 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
             borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
             border: const Border(top: BorderSide(color: AppColors.glassBorder)),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          child: Stack(
             children: [
-              Stack(
-                children: [
-                  Positioned.fill(
-                    child: ClipRect(
-                      child: ShaderMask(
-                        shaderCallback: (rect) => const LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.black, Colors.transparent],
-                          stops: [0.6, 1.0],
-                        ).createShader(rect),
-                        blendMode: BlendMode.dstIn,
-                        child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topCenter,
-                                end: Alignment.bottomCenter,
-                                colors: [
-                                  const Color(
-                                    0xFF141416,
-                                  ).withValues(alpha: 0.85),
-                                  const Color(
-                                    0xFF141416,
-                                  ).withValues(alpha: 0.0),
-                                ],
+              // Body
+              Positioned.fill(
+                child: RawScrollbar(
+                  controller: _scrollController,
+                  thumbColor: Colors.white.withValues(alpha: 0.15),
+                  radius: const Radius.circular(3),
+                  thickness: 4,
+                  padding: EdgeInsets.only(top: _headerH, right: 3),
+                  child: ScrollConfiguration(
+                    behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                    child: SingleChildScrollView(
+                      controller: _scrollController,
+                      padding: EdgeInsets.only(
+                        top: _headerH,
+                        bottom: bottomInset + bottomPadding + 10,
+                      ),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: MediaQuery.of(context).size.height * 0.3,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            const SizedBox(height: 4),
+                            if (widget.child != null) widget.child!,
+                            if (widget.bigInfo != null) _BigInfo(info: widget.bigInfo!),
+                            if (widget.items != null && widget.items!.isNotEmpty)
+                              _ItemsList(items: widget.items!),
+                            if (widget.itemsAsCards != null && widget.itemsAsCards!.isNotEmpty)
+                              _ItemsCardList(items: widget.itemsAsCards!),
+                            if (widget.sessionItems != null &&
+                                widget.sessionItems!.isNotEmpty)
+                              GlazeSessionList(items: widget.sessionItems!),
+                            if (widget.cardItems != null && widget.cardItems!.isNotEmpty)
+                              _CardList(items: widget.cardItems!),
+                            if (widget.input != null)
+                              _InputSection(
+                                input: widget.input!,
+                                controller: _inputController,
+                                focusNode: _inputFocus,
                               ),
-                            ),
-                          ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                  Column(
+                ),
+              ),
+
+              // Gradient blur overlay
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: IgnorePointer(
+                  child: GradientBlur(
+                    maxBlur: 8,
+                    curve: Curves.easeIn,
+                    gradient: const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xEB141416),
+                        Color(0x88141416),
+                        Color(0x00141416),
+                      ],
+                      stops: [0.0, 0.4, 0.85],
+                    ),
+                    child: SizedBox(height: _headerH + 8),
+                  ),
+                ),
+              ),
+
+              // Header
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: KeyedSubtree(
+                  key: _headerKey,
+                  child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _HandleBar(),
@@ -272,41 +339,6 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
                           action: widget.headerAction,
                         ),
                     ],
-                  ),
-                ],
-              ),
-              Flexible(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.only(
-                    bottom: bottomInset + bottomPadding + 10,
-                  ),
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minHeight: MediaQuery.of(context).size.height * 0.3,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const SizedBox(height: 4),
-                        if (widget.child != null) widget.child!,
-                        if (widget.bigInfo != null)
-                          _BigInfo(info: widget.bigInfo!),
-                        if (widget.items != null && widget.items!.isNotEmpty)
-                          _ItemsList(items: widget.items!),
-                        if (widget.sessionItems != null &&
-                            widget.sessionItems!.isNotEmpty)
-                          GlazeSessionList(items: widget.sessionItems!),
-                        if (widget.cardItems != null &&
-                            widget.cardItems!.isNotEmpty)
-                          _CardList(items: widget.cardItems!),
-                        if (widget.input != null)
-                          _InputSection(
-                            input: widget.input!,
-                            controller: _inputController,
-                            focusNode: _inputFocus,
-                          ),
-                      ],
-                    ),
                   ),
                 ),
               ),
@@ -330,7 +362,7 @@ class _HandleBar extends StatelessWidget {
           width: 32,
           height: 4,
           decoration: BoxDecoration(
-            color: Colors.grey[600],
+            color: Colors.white.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(2),
           ),
         ),
@@ -356,7 +388,7 @@ class _Header extends StatelessWidget {
               title ?? '',
               style: const TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.w500,
+                fontWeight: FontWeight.w700,
                 color: AppColors.textPrimary,
               ),
             ),
@@ -436,7 +468,10 @@ class _ItemRowState extends State<_ItemRow> {
               Icon(
                 item.icon,
                 size: 22,
-                color: item.iconColor ?? AppColors.textSecondary,
+                color: item.iconColor ??
+                    (item.isDestructive
+                        ? const Color(0xFFFF4444)
+                        : AppColors.textSecondary),
               ),
               const SizedBox(width: 16),
             ],
@@ -465,6 +500,105 @@ class _ItemRowState extends State<_ItemRow> {
                     .toList(),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ItemsCardList extends StatelessWidget {
+  final List<BottomSheetItem> items;
+
+  const _ItemsCardList({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        children: [
+          for (int i = 0; i < items.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _ItemCardRow(item: items[i]),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ItemCardRow extends StatefulWidget {
+  final BottomSheetItem item;
+
+  const _ItemCardRow({required this.item});
+
+  @override
+  State<_ItemCardRow> createState() => _ItemCardRowState();
+}
+
+class _ItemCardRowState extends State<_ItemCardRow> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final item = widget.item;
+    return Material(
+      color: Colors.white.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapUp: (_) {
+          setState(() => _pressed = false);
+          item.onTap();
+        },
+        onTapCancel: () => setState(() => _pressed = false),
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              if (item.icon != null) ...[
+                Icon(
+                  item.icon,
+                  size: 22,
+                  color: item.iconColor ??
+                      (item.isDestructive
+                          ? const Color(0xFFFF4444)
+                          : AppColors.textSecondary),
+                ),
+                const SizedBox(width: 16),
+              ],
+              Expanded(
+                child: item.centered
+                    ? Center(child: _ItemLabel(item: item))
+                    : _ItemLabel(item: item),
+              ),
+              if (item.actions.isNotEmpty)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: item.actions
+                      .map(
+                        (a) => GestureDetector(
+                          onTap: a.onTap,
+                          child: Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Icon(
+                              a.icon,
+                              size: 22,
+                              color: a.color ?? AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -510,26 +644,14 @@ class GlazeSessionList extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          children: [
-            for (int i = 0; i < items.length; i++) ...[
-              if (i > 0)
-                Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: Colors.white.withValues(alpha: 0.06),
-                ),
-              GlazeSessionRow(item: items[i]),
-            ],
-          ],
-        ),
+      child: Column(
+        children: [
+          for (int i = 0; i < items.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: GlazeSessionRow(item: items[i]),
+            ),
+        ],
       ),
     );
   }
@@ -542,102 +664,120 @@ class GlazeSessionRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: item.onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          item.title,
-                          style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textPrimary,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.chat_bubble_outline,
-                            size: 13,
-                            color: AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            '${item.count}',
+    return Material(
+      color: Colors.white.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: item.onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            item.title,
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Row(
+                          children: [
+                            const Icon(
+                              Icons.chat_bubble_outline,
+                              size: 13,
                               color: AppColors.textSecondary,
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    item.preview,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
+                            const SizedBox(width: 3),
+                            Text(
+                              '${item.count}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                            if (item.time.isNotEmpty) ...[
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                child: Text(
+                                  '·',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textSecondary.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                item.time,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Row(
-                  children: [
+                    const SizedBox(height: 3),
                     Text(
-                      item.time,
+                      item.preview,
                       style: const TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
+                        color: AppColors.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (item.isActive) ...[
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: AppColors.accent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  GestureDetector(
+                    onTap: item.onMore,
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.more_vert,
+                        size: 20,
                         color: AppColors.textSecondary,
                       ),
                     ),
-                    if (item.isActive) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: AppColors.accent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                GestureDetector(
-                  onTap: item.onMore,
-                  child: const Padding(
-                    padding: EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.more_vert,
-                      size: 20,
-                      color: AppColors.textSecondary,
-                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

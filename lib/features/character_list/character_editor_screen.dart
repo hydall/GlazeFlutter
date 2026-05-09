@@ -1,21 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:path/path.dart' as p;
 
 import '../../core/models/character.dart';
-import '../../core/services/character_exporter.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/theme/app_colors.dart';
-import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/sheet_view.dart';
 import '../../shared/widgets/glaze_toast.dart';
+import '../../shared/widgets/generic_editor.dart';
 
 class CharacterEditorScreen extends ConsumerStatefulWidget {
   final String charId;
@@ -27,31 +26,12 @@ class CharacterEditorScreen extends ConsumerStatefulWidget {
 }
 
 class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
-  final _formKey = GlobalKey<FormState>();
-
-  late final _nameCtrl = TextEditingController();
-  late final _descCtrl = TextEditingController();
-  late final _personalityCtrl = TextEditingController();
-  late final _scenarioCtrl = TextEditingController();
-  late final _firstMesCtrl = TextEditingController();
-  late final _mesExampleCtrl = TextEditingController();
-  late final _sysPromptCtrl = TextEditingController();
-  late final _postHistoryCtrl = TextEditingController();
-  late final _creatorCtrl = TextEditingController();
-  late final _creatorNotesCtrl = TextEditingController();
-  late final _tagsCtrl = TextEditingController();
-  late final _depthPromptCtrl = TextEditingController();
-
-  String? _avatarPath;
-  int _avatarVersion = 0;
   bool _loading = true;
-  bool _saving = false;
   Character? _original;
-  int _depthPromptDepth = 4;
-  String _depthPromptRole = 'system';
-  String? _selectedWorld;
-  double _talkativeness = 1.0;
+  Map<String, dynamic> _item = {};
   List<String> _lorebookNames = [];
+  Timer? _saveTimer;
+  late final _repo = ref.read(characterRepoProvider);
 
   @override
   void initState() {
@@ -61,19 +41,15 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _descCtrl.dispose();
-    _personalityCtrl.dispose();
-    _scenarioCtrl.dispose();
-    _firstMesCtrl.dispose();
-    _mesExampleCtrl.dispose();
-    _sysPromptCtrl.dispose();
-    _postHistoryCtrl.dispose();
-    _creatorCtrl.dispose();
-    _creatorNotesCtrl.dispose();
-    _tagsCtrl.dispose();
-    _depthPromptCtrl.dispose();
+    _flushSave();
     super.dispose();
+  }
+
+  void _flushSave() {
+    if (_saveTimer?.isActive ?? false) {
+      _saveTimer?.cancel();
+      _save();
+    }
   }
 
   Future<void> _loadLorebookNames() async {
@@ -86,27 +62,29 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
   }
 
   Future<void> _loadCharacter() async {
-    final char = await ref.read(characterRepoProvider).getById(widget.charId);
+    final char = await _repo.getById(widget.charId);
     if (char != null && mounted) {
       _original = char;
-      _nameCtrl.text = char.name;
-      _descCtrl.text = char.description ?? '';
-      _personalityCtrl.text = char.personality ?? '';
-      _scenarioCtrl.text = char.scenario ?? '';
-      _firstMesCtrl.text = char.firstMes ?? '';
-      _mesExampleCtrl.text = char.mesExample ?? '';
-      _sysPromptCtrl.text = char.systemPrompt ?? '';
-      _postHistoryCtrl.text = char.postHistoryInstructions ?? '';
-      _creatorCtrl.text = char.creator ?? '';
-      _creatorNotesCtrl.text = char.creatorNotes ?? '';
-      _tagsCtrl.text = char.tags.join(', ');
-      _avatarPath = char.avatarPath;
-      _depthPromptCtrl.text = char.depthPrompt;
-      _depthPromptDepth = char.depthPromptDepth;
-      _depthPromptRole = char.depthPromptRole;
-      _selectedWorld = char.world;
-      final talkVal = char.extensions['talkativeness'];
-      _talkativeness = talkVal is num ? talkVal.toDouble().clamp(0.0, 1.0) : 1.0;
+      _item = {
+        'name': char.name,
+        'description': char.description ?? '',
+        'personality': char.personality ?? '',
+        'scenario': char.scenario ?? '',
+        'first_mes': char.firstMes ?? '',
+        'alternate_greetings': List<String>.from(char.alternateGreetings),
+        'mes_example': char.mesExample ?? '',
+        'system_prompt': char.systemPrompt ?? '',
+        'post_history_instructions': char.postHistoryInstructions ?? '',
+        'creator': char.creator ?? '',
+        'creator_notes': char.creatorNotes ?? '',
+        'tags': List<String>.from(char.tags),
+        'avatarPath': char.avatarPath,
+        'depth_prompt': char.depthPrompt,
+        'depth_prompt_depth': char.depthPromptDepth,
+        'depth_prompt_role': char.depthPromptRole,
+        'world': char.world,
+        'talkativeness': char.extensions['talkativeness'] ?? 1.0,
+      };
       setState(() => _loading = false);
       _loadLorebookNames();
     } else if (mounted) {
@@ -114,259 +92,8 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (_loading) {
-      return const GlazeScaffold(
-        title: 'Edit Character',
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    return GlazeScaffold(
-      title: 'Edit Character',
-      onBack: _goBack,
-      actions: [
-        PopupMenuButton<String>(
-          icon: const Icon(Icons.share_outlined, color: AppColors.accent),
-          onSelected: (value) => _export(value),
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'png', child: Text('Export as PNG')),
-            const PopupMenuItem(value: 'json', child: Text('Export as JSON')),
-          ],
-        ),
-        if (_saving)
-          const Padding(
-            padding: EdgeInsets.all(16),
-            child: SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-          )
-        else
-          TextButton(
-            onPressed: _save,
-            child: const Text('Save', style: TextStyle(color: Colors.white)),
-          ),
-      ],
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Center(child: _buildAvatarPicker()),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Name',
-                prefixIcon: Icon(Icons.label),
-              ),
-              validator: (v) =>
-                  v == null || v.trim().isEmpty ? 'Required' : null,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _creatorCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Creator',
-                prefixIcon: Icon(Icons.person_outline),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _tagsCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Tags',
-                hintText: 'tag1, tag2, tag3',
-                prefixIcon: Icon(Icons.tag),
-              ),
-            ),
-            const SizedBox(height: 20),
-            _SectionHeader('Character'),
-            TextFormField(
-              controller: _descCtrl,
-              decoration: const InputDecoration(labelText: 'Description'),
-              maxLines: 4,
-              minLines: 2,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _personalityCtrl,
-              decoration: const InputDecoration(labelText: 'Personality'),
-              maxLines: 4,
-              minLines: 2,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _scenarioCtrl,
-              decoration: const InputDecoration(labelText: 'Scenario'),
-              maxLines: 4,
-              minLines: 2,
-            ),
-            const SizedBox(height: 20),
-            _SectionHeader('First Message & Examples'),
-            TextFormField(
-              controller: _firstMesCtrl,
-              decoration: const InputDecoration(labelText: 'First Message'),
-              maxLines: 6,
-              minLines: 2,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _mesExampleCtrl,
-              decoration: const InputDecoration(labelText: 'Example Messages'),
-              maxLines: 6,
-              minLines: 2,
-            ),
-            const SizedBox(height: 20),
-            _SectionHeader('Prompts'),
-            TextFormField(
-              controller: _sysPromptCtrl,
-              decoration: const InputDecoration(labelText: 'System Prompt'),
-              maxLines: 6,
-              minLines: 2,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _postHistoryCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Post-History Instructions',
-              ),
-              maxLines: 4,
-              minLines: 2,
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _creatorNotesCtrl,
-              decoration: const InputDecoration(labelText: 'Short Description'),
-              maxLines: 3,
-              minLines: 1,
-            ),
-            const SizedBox(height: 20),
-            _SectionHeader('Advanced'),
-            TextFormField(
-              controller: _depthPromptCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Depth Prompt',
-                hintText: 'Injected at a specific depth in the prompt',
-              ),
-              maxLines: 4,
-              minLines: 2,
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    value: _depthPromptRole,
-                    decoration: const InputDecoration(labelText: 'Depth Role'),
-                    items: const [
-                      DropdownMenuItem(value: 'system', child: Text('System')),
-                      DropdownMenuItem(value: 'user', child: Text('User')),
-                      DropdownMenuItem(value: 'assistant', child: Text('Assistant')),
-                    ],
-                    onChanged: (v) => setState(() => _depthPromptRole = v ?? 'system'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                SizedBox(
-                  width: 100,
-                  child: DropdownButtonFormField<int>(
-                    value: _depthPromptDepth,
-                    decoration: const InputDecoration(labelText: 'Depth'),
-                    items: List.generate(20, (i) => i + 1)
-                        .map((d) => DropdownMenuItem(value: d, child: Text('$d')))
-                        .toList(),
-                    onChanged: (v) => setState(() => _depthPromptDepth = v ?? 4),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String?>(
-              value: _selectedWorld,
-              decoration: const InputDecoration(
-                labelText: 'World Lorebook',
-                hintText: 'Auto-activate lorebook by name',
-              ),
-              items: [
-                const DropdownMenuItem<String?>(value: null, child: Text('None')),
-                ..._lorebookNames.map((name) => DropdownMenuItem<String?>(value: name, child: Text(name))),
-              ],
-              onChanged: (v) => setState(() => _selectedWorld = v),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Text('Talkativeness'),
-                Expanded(
-                  child: Slider(
-                    value: _talkativeness,
-                    min: 0,
-                    max: 1,
-                    divisions: 20,
-                    label: (_talkativeness * 100).round().toString(),
-                    onChanged: (v) => setState(() => _talkativeness = v),
-                  ),
-                ),
-                SizedBox(
-                  width: 48,
-                  child: Text('${(_talkativeness * 100).round()}%'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 40),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAvatarPicker() {
-    return GestureDetector(
-      onTap: _pickAvatar,
-      child: Stack(
-        children: [
-          CircleAvatar(
-            key: ValueKey(_avatarVersion),
-            radius: 56,
-            backgroundImage: _avatarPath != null && _avatarPath!.isNotEmpty
-                ? FileImage(File(_avatarPath!))
-                : null,
-            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-            child: _avatarPath == null || _avatarPath!.isEmpty
-                ? Text(
-                    _nameCtrl.text.isNotEmpty
-                        ? _nameCtrl.text[0].toUpperCase()
-                        : '?',
-                    style: const TextStyle(fontSize: 36),
-                  )
-                : null,
-          ),
-          Positioned(
-            bottom: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.camera_alt,
-                size: 20,
-                color: Theme.of(context).colorScheme.onPrimary,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _goBack() {
+    _flushSave();
     if (context.canPop()) {
       context.pop();
     } else {
@@ -387,214 +114,193 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
     await FileImage(File(savedPath)).evict();
     if (mounted) {
       setState(() {
-        _avatarPath = savedPath;
-        _avatarVersion++;
+        _item['avatarPath'] = savedPath;
+        _item = Map.from(_item); // Force update
       });
+      _scheduleSave();
     }
   }
 
+  void _scheduleSave() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted) _save();
+    });
+  }
+
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _saving = true);
+    if ((_item['name'] as String?)?.trim().isEmpty ?? true) {
+      return; // Do not auto-save if name is invalid
+    }
 
     try {
-      final tags = _tagsCtrl.text
-          .split(',')
-          .map((t) => t.trim())
-          .where((t) => t.isNotEmpty)
-          .toList();
+      final tags = (_item['tags'] as List<dynamic>?)
+              ?.map((t) => t.toString())
+              .toList() ??
+          [];
+      final alternateGreetings = (_item['alternate_greetings'] as List<dynamic>?)
+              ?.map((t) => t.toString())
+              .toList() ??
+          [];
 
       final updated = Character(
         id: widget.charId,
-        name: _nameCtrl.text.trim(),
-        avatarPath: _avatarPath,
-        description: _descCtrl.text.trim().isEmpty
+        name: (_item['name'] as String).trim(),
+        avatarPath: _item['avatarPath'] as String?,
+        description: (_item['description'] as String?)?.trim().isEmpty ?? true
             ? null
-            : _descCtrl.text.trim(),
-        personality: _personalityCtrl.text.trim().isEmpty
+            : (_item['description'] as String).trim(),
+        personality: (_item['personality'] as String?)?.trim().isEmpty ?? true
             ? null
-            : _personalityCtrl.text.trim(),
-        scenario: _scenarioCtrl.text.trim().isEmpty
+            : (_item['personality'] as String).trim(),
+        scenario: (_item['scenario'] as String?)?.trim().isEmpty ?? true
             ? null
-            : _scenarioCtrl.text.trim(),
-        firstMes: _firstMesCtrl.text.trim().isEmpty
+            : (_item['scenario'] as String).trim(),
+        firstMes: (_item['first_mes'] as String?)?.trim().isEmpty ?? true
             ? null
-            : _firstMesCtrl.text.trim(),
-        mesExample: _mesExampleCtrl.text.trim().isEmpty
+            : (_item['first_mes'] as String).trim(),
+        mesExample: (_item['mes_example'] as String?)?.trim().isEmpty ?? true
             ? null
-            : _mesExampleCtrl.text.trim(),
-        systemPrompt: _sysPromptCtrl.text.trim().isEmpty
+            : (_item['mes_example'] as String).trim(),
+        systemPrompt: (_item['system_prompt'] as String?)?.trim().isEmpty ?? true
             ? null
-            : _sysPromptCtrl.text.trim(),
-        postHistoryInstructions: _postHistoryCtrl.text.trim().isEmpty
+            : (_item['system_prompt'] as String).trim(),
+        postHistoryInstructions:
+            (_item['post_history_instructions'] as String?)?.trim().isEmpty ?? true
+                ? null
+                : (_item['post_history_instructions'] as String).trim(),
+        creator: (_item['creator'] as String?)?.trim().isEmpty ?? true
             ? null
-            : _postHistoryCtrl.text.trim(),
-        creator: _creatorCtrl.text.trim().isEmpty
+            : (_item['creator'] as String).trim(),
+        creatorNotes: (_item['creator_notes'] as String?)?.trim().isEmpty ?? true
             ? null
-            : _creatorCtrl.text.trim(),
-        creatorNotes: _creatorNotesCtrl.text.trim().isEmpty
-            ? null
-            : _creatorNotesCtrl.text.trim(),
+            : (_item['creator_notes'] as String).trim(),
         tags: tags,
-        alternateGreetings: _original?.alternateGreetings ?? [],
+        alternateGreetings: alternateGreetings,
         color: _original?.color,
         updatedAt: currentTimestampSeconds(),
         extensions: {
           ...?_original?.extensions,
-          'talkativeness': _talkativeness,
+          'talkativeness': _item['talkativeness'] is num ? (_item['talkativeness'] as num).toDouble() : 1.0,
         },
         fav: _original?.fav ?? false,
-        depthPrompt: _depthPromptCtrl.text.trim(),
-        depthPromptDepth: _depthPromptDepth,
-        depthPromptRole: _depthPromptRole,
-        world: _selectedWorld,
+        depthPrompt: (_item['depth_prompt'] as String?)?.trim() ?? '',
+        depthPromptDepth: _item['depth_prompt_depth'] as int? ?? 4,
+        depthPromptRole: _item['depth_prompt_role'] as String? ?? 'system',
+        world: _item['world'] as String?,
         characterVersion: _original?.characterVersion ?? '1',
       );
 
-      await ref.read(characterRepoProvider).put(updated);
-      if (_avatarPath != null && _avatarPath!.isNotEmpty) {
-        await FileImage(File(_avatarPath!)).evict();
-      }
-      if (mounted) {
-        GlazeToast.show(context, 'Character saved');
-        _goBack();
+      await _repo.put(updated);
+      final avatarPath = _item['avatarPath'] as String?;
+      if (avatarPath != null && avatarPath.isNotEmpty) {
+        await FileImage(File(avatarPath)).evict();
       }
     } catch (e) {
       if (mounted) {
         GlazeToast.error(context, 'Save failed: ', e);
       }
-    } finally {
-      if (mounted) setState(() => _saving = false);
     }
   }
 
-  Future<void> _export(String format) async {
-    final char = _original;
-    if (char == null) return;
-
-    try {
-      final desktop =
-          Platform.environment['USERPROFILE'] ??
-          Platform.environment['HOME'] ??
-          '.';
-      final outputDir = p.join(desktop, 'Desktop');
-
-      if (format == 'png') {
-        Uint8List? avatarBytes;
-        if (char.avatarPath != null && File(char.avatarPath!).existsSync()) {
-          avatarBytes = await File(char.avatarPath!).readAsBytes();
-        } else {
-          avatarBytes = _generatePlaceholderAvatar(char.name);
-        }
-
-        final result = await exportCharacterAsPng(
-          character: char,
-          avatarBytes: avatarBytes,
-          outputDir: outputDir,
-        );
-        if (mounted) {
-          GlazeToast.show(context, 'Exported PNG to ${result.filePath}');
-        }
-      } else {
-        final result = await exportCharacterAsJson(
-          character: char,
-          outputDir: outputDir,
-        );
-        if (mounted) {
-          GlazeToast.show(context, 'Exported JSON to ${result.filePath}');
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        GlazeToast.error(context, 'Export failed: ', e);
-      }
-    }
+  void _onOpenFsEditor(String field, int index) {
+    // Left empty for now. Can be connected to a full-screen editor if needed.
   }
-
-  Uint8List _generatePlaceholderAvatar(String name) {
-    final width = 400, height = 600;
-
-    final pngHeader = <int>[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-
-    final ihdrData = ByteData(13);
-    ihdrData.setUint32(0, width, Endian.big);
-    ihdrData.setUint32(4, height, Endian.big);
-    ihdrData.setUint8(8, 8);
-    ihdrData.setUint8(9, 2);
-    ihdrData.setUint8(10, 0);
-    ihdrData.setUint8(11, 0);
-    ihdrData.setUint8(12, 0);
-
-    final ihdrChunk = _buildPngChunk('IHDR', ihdrData.buffer.asUint8List());
-
-    final rawRow = Uint8List(1 + width * 3);
-    for (int x = 0; x < width; x++) {
-      rawRow[1 + x * 3] = 0x40;
-      rawRow[1 + x * 3 + 1] = 0xCC;
-      rawRow[1 + x * 3 + 2] = 0xFF;
-    }
-
-    final rawData = Uint8List(height * rawRow.length);
-    for (int y = 0; y < height; y++) {
-      rawData.setRange(y * rawRow.length, (y + 1) * rawRow.length, rawRow);
-    }
-
-    final iendChunk = _buildPngChunk('IEND', Uint8List(0));
-
-    final result = BytesBuilder();
-    result.add(pngHeader);
-    result.add(ihdrChunk);
-    result.add(iendChunk);
-    return result.toBytes();
-  }
-
-  Uint8List _buildPngChunk(String type, Uint8List data) {
-    final typeBytes = Uint8List.fromList(utf8.encode(type));
-    final chunk = ByteData(4 + 4 + data.length + 4);
-    chunk.setUint32(0, data.length, Endian.big);
-    for (int i = 0; i < 4; i++) chunk.setUint8(4 + i, typeBytes[i]);
-    for (int i = 0; i < data.length; i++) chunk.setUint8(8 + i, data[i]);
-
-    final crcInput = Uint8List(4 + data.length);
-    for (int i = 0; i < 4; i++) crcInput[i] = typeBytes[i];
-    crcInput.setRange(4, crcInput.length, data);
-    final crc = _crc32(crcInput);
-    chunk.setUint32(8 + data.length, crc, Endian.big);
-
-    return chunk.buffer.asUint8List();
-  }
-}
-
-int _crc32(Uint8List data) {
-  int crc = 0xFFFFFFFF;
-  for (int i = 0; i < data.length; i++) {
-    crc ^= data[i];
-    for (int j = 0; j < 8; j++) {
-      if ((crc & 1) != 0) {
-        crc = (crc >> 1) ^ 0xEDB88320;
-      } else {
-        crc >>= 1;
-      }
-    }
-  }
-  return (crc ^ 0xFFFFFFFF) & 0xFFFFFFFF;
-}
-
-class _SectionHeader extends StatelessWidget {
-  final String text;
-  const _SectionHeader(this.text);
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.w600,
-        ),
+    if (_loading) {
+      return const SheetView(
+        title: 'Edit Character',
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final config = [
+      GenericEditorSection(
+        title: null,
+        fields: [
+          const GenericEditorField(key: 'name', label: 'Name', type: 'text'),
+          const GenericEditorField(key: 'creator', label: 'Creator', type: 'text'),
+          const GenericEditorField(key: 'tags', label: 'Tags', type: 'tags', placeholder: 'tag1, tag2, tag3'),
+        ],
+      ),
+      GenericEditorSection(
+        title: 'Character',
+        fields: [
+          const GenericEditorField(key: 'description', label: 'Description', type: 'textarea', rows: 4, expandable: true),
+          const GenericEditorField(key: 'personality', label: 'Personality', type: 'textarea', rows: 4, expandable: true),
+          const GenericEditorField(key: 'scenario', label: 'Scenario', type: 'textarea', rows: 4, expandable: true),
+        ],
+      ),
+      GenericEditorSection(
+        title: 'First Message & Examples',
+        fields: [
+          const GenericEditorField(key: 'first_mes', label: 'First Message', type: 'greeting_list'),
+          const GenericEditorField(key: 'mes_example', label: 'Example Messages', type: 'textarea', rows: 6, expandable: true),
+        ],
+      ),
+      GenericEditorSection(
+        title: 'Prompts',
+        fields: [
+          const GenericEditorField(key: 'system_prompt', label: 'System Prompt', type: 'textarea', rows: 6, expandable: true),
+          const GenericEditorField(key: 'post_history_instructions', label: 'Post-History Instructions', type: 'textarea', rows: 4, expandable: true),
+          const GenericEditorField(key: 'creator_notes', label: 'Short Description', type: 'textarea', rows: 3),
+        ],
+      ),
+      GenericEditorSection(
+        title: 'Advanced',
+        fields: [
+          const GenericEditorField(key: 'depth_prompt', label: 'Depth Prompt', type: 'textarea', rows: 4, placeholder: 'Injected at a specific depth in the prompt'),
+          const GenericEditorField(
+            key: 'depth_prompt_role',
+            label: 'Depth Role',
+            type: 'select',
+            options: [
+              {'label': 'System', 'value': 'system'},
+              {'label': 'User', 'value': 'user'},
+              {'label': 'Assistant', 'value': 'assistant'},
+            ],
+          ),
+          GenericEditorField(
+            key: 'depth_prompt_depth',
+            label: 'Depth',
+            type: 'select',
+            options: List.generate(20, (i) => {'label': '${i + 1}', 'value': i + 1}),
+          ),
+          GenericEditorField(
+            key: 'world',
+            label: 'World Lorebook',
+            type: 'select',
+            options: [
+              {'label': 'None', 'value': null},
+              ..._lorebookNames.map((name) => {'label': name, 'value': name}),
+            ],
+          ),
+          const GenericEditorField(key: 'talkativeness', label: 'Talkativeness (0.0 to 1.0)', type: 'number'),
+        ],
+      ),
+    ];
+
+    return SheetView(
+      title: 'Edit Character',
+      showBack: true,
+      onBack: _goBack,
+      body: GenericEditor(
+        item: _item,
+        config: config,
+        showAvatar: true,
+        avatarField: 'avatarPath',
+        avatarHint: 'Tap to change avatar',
+        avatarPlaceholder: (_item['name']?.toString().isNotEmpty ?? false) ? _item['name'].toString()[0].toUpperCase() : '?',
+        onAvatarTap: _pickAvatar,
+        onChanged: (values) {
+          _item = values;
+          _scheduleSave();
+        },
+        onOpenFsEditor: _onOpenFsEditor,
       ),
     );
   }
 }
+

@@ -67,6 +67,7 @@ const _fallbackTagMap = <int, String>{
 List<CatalogTag> _cachedJanitorTags = [];
 Map<int, String> _janitorTagMap = Map.from(_fallbackTagMap);
 bool _tagsFetched = false;
+List<CatalogTag> getCachedJanitorTags() => _cachedJanitorTags;
 
 Future<List<CatalogTag>> fetchJanitorTags() async {
   if (_tagsFetched) return _cachedJanitorTags;

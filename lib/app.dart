@@ -76,7 +76,8 @@ final routerProvider = Provider<GoRouter>(
                   ),
                   GoRoute(
                     path: 'regex',
-                    builder: (_, __) => const RegexListScreen(),
+                    builder: (_, __) =>
+                        const RegexListScreen(startExpanded: true),
                   ),
                   GoRoute(
                     path: 'lorebooks',

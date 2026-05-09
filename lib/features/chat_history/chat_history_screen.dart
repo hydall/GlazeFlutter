@@ -210,7 +210,11 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
         final s = filtered[i];
         return ListTile(
           leading: s.avatarPath != null && s.avatarPath!.isNotEmpty
-              ? CircleAvatar(backgroundImage: FileImage(File(s.avatarPath!)))
+              ? CircleAvatar(backgroundImage: ResizeImage(
+                  FileImage(File(s.avatarPath!)),
+                  width: 80,
+                  height: 80,
+                ))
               : CircleAvatar(
                   backgroundColor: AppColors.accent,
                   child: Text(
@@ -225,7 +229,7 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
             style: const TextStyle(color: AppColors.textPrimary),
           ),
           subtitle: Text(
-            s.lastMessage,
+            s.lastMessage.replaceAll('\n', ' '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -304,7 +308,7 @@ class _SessionTile extends ConsumerWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              info.lastMessage,
+              info.lastMessage.replaceAll('\n', ' '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 13),
@@ -378,7 +382,11 @@ class _SessionTile extends ConsumerWidget {
   Widget _buildAvatar() {
     if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
       return CircleAvatar(
-        backgroundImage: FileImage(File(info.avatarPath!)),
+        backgroundImage: ResizeImage(
+          FileImage(File(info.avatarPath!)),
+          width: 80,
+          height: 80,
+        ),
         onBackgroundImageError: (_, __) {},
       );
     }

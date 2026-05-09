@@ -1,0 +1,201 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/models/character.dart';
+import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_toast.dart';
+import '../../character_list/character_detail_screen.dart';
+import '../catalog_models.dart';
+import '../catalog_provider.dart';
+import '../services/chub_provider.dart';
+import '../services/datacat_provider.dart';
+import '../services/janitor_provider.dart';
+import '../services/janny_provider.dart';
+
+/// Fetches a catalog item's full character data and presents
+/// `CharacterDetailScreen` in preview mode (Import FAB, no destructive
+/// actions).
+class CatalogDetailLauncher extends ConsumerStatefulWidget {
+  final CatalogItem item;
+  final CatalogProvider provider;
+
+  const CatalogDetailLauncher({
+    super.key,
+    required this.item,
+    required this.provider,
+  });
+
+  @override
+  ConsumerState<CatalogDetailLauncher> createState() =>
+      _CatalogDetailLauncherState();
+}
+
+class _CatalogDetailLauncherState
+    extends ConsumerState<CatalogDetailLauncher> {
+  DownloadedCharacter? _downloaded;
+  String? _error;
+  bool _importing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetch();
+  }
+
+  Future<void> _fetch() async {
+    try {
+      DownloadedCharacter result;
+      switch (widget.provider) {
+        case CatalogProvider.janitor:
+          result = await janitorFetchCharacter(widget.item.id);
+        case CatalogProvider.janny:
+          result = await jannyFetchCharacter(widget.item.id, widget.item.slug);
+        case CatalogProvider.datacat:
+          result = await datacatGetCharacter(widget.item.id);
+        case CatalogProvider.chub:
+          result = await chubGetCharacter(
+            widget.item.fullPath ?? widget.item.id,
+          );
+      }
+      if (mounted) setState(() => _downloaded = result);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
+  }
+
+  Character _toCharacter(DownloadedCharacter d) {
+    final data = d.charData;
+    return Character(
+      id: 'preview:${widget.item.id}',
+      name: data.name.isEmpty ? widget.item.name : data.name,
+      description: data.description,
+      personality: data.personality,
+      scenario: data.scenario,
+      firstMes: data.firstMes,
+      mesExample: data.mesExample,
+      systemPrompt: data.systemPrompt,
+      postHistoryInstructions: data.postHistoryInstructions,
+      creator:
+          data.creator.isEmpty ? widget.item.creator : data.creator,
+      creatorNotes: data.creatorNotes,
+      tags: data.tags.isEmpty ? widget.item.tags : data.tags,
+      alternateGreetings: data.alternateGreetings,
+    );
+  }
+
+  Future<void> _doImport() async {
+    final downloaded = _downloaded;
+    if (downloaded == null || _importing) return;
+    setState(() => _importing = true);
+    try {
+      await ref.read(catalogProvider.notifier).importCharacter(downloaded);
+      if (mounted) {
+        Navigator.of(context).pop();
+        GlazeToast.show(context, 'Imported ${downloaded.charData.name}');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _importing = false);
+        GlazeToast.error(context, 'Import failed: ', e);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) {
+      return _ErrorView(message: _error!, onRetry: () {
+        setState(() => _error = null);
+        _fetch();
+      });
+    }
+    final downloaded = _downloaded;
+    if (downloaded == null) {
+      return const _LoadingView();
+    }
+    final char = _toCharacter(downloaded);
+    final avatarUrl =
+        downloaded.avatarUrl ?? widget.item.avatarUrl;
+    return CharacterDetailScreen(
+      charId: char.id,
+      previewCharacter: char,
+      previewAvatarUrl: avatarUrl,
+      onImport: _doImport,
+      importing: _importing,
+    );
+  }
+}
+
+class _LoadingView extends StatelessWidget {
+  const _LoadingView();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 360,
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceHigh,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: const Center(
+        child: CircularProgressIndicator(color: AppColors.accent),
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorView({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 360,
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceHigh,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.error_outline_rounded,
+            size: 48,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 13,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 16),
+          GestureDetector(
+            onTap: onRetry,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.accent,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Retry',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

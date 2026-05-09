@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -32,7 +32,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   SortDir _sortDir = SortDir.desc;
   bool _showCatalog = false;
   String _searchQuery = '';
-  bool _favOnly = false;
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +39,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
 
     final navHeight = ref.watch(navHeightProvider);
 
-    final topPad = MediaQuery.of(context).padding.top + 66.0;
+    final topPad = MediaQuery.of(context).padding.top + 74.0;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -78,22 +77,12 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                         );
                       }
                       var filtered = chars;
-                      if (_favOnly) {
-                        filtered = filtered.where((c) => c.fav).toList();
-                      }
                       if (_searchQuery.isNotEmpty) {
                         final q = _searchQuery.toLowerCase();
                         filtered = filtered
                             .where(
                               (c) =>
-                                  c.name.toLowerCase().contains(q) ||
-                                  (c.description ?? '').toLowerCase().contains(
-                                    q,
-                                  ) ||
-                                  (c.creator ?? '').toLowerCase().contains(q) ||
-                                  c.tags.any(
-                                    (t) => t.toLowerCase().contains(q),
-                                  ),
+                                  c.fav || c.name.toLowerCase().contains(q),
                             )
                             .toList();
                       }
@@ -132,19 +121,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                           width: 44,
                           height: 44,
                           child: IconButton(
-                            icon: Icon(
-                              _favOnly ? Icons.star : Icons.star_border,
-                              size: 22,
-                              color: _favOnly ? Colors.amber : AppColors.accent,
-                            ),
-                            onPressed: () =>
-                                setState(() => _favOnly = !_favOnly),
-                          ),
-                        ),
-                        SizedBox(
-                          width: 44,
-                          height: 44,
-                          child: IconButton(
                             icon: const Icon(Icons.search_rounded, size: 22),
                             color: AppColors.accent,
                             onPressed: () async {
@@ -164,20 +140,12 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
               ],
             ),
           ),
-          Positioned(
-            right: 16,
-            bottom: navHeight + 16,
-            child: _showCatalog
-                ? _ImportUrlFAB(
-                    onTap: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => const ImportUrlDialog(),
-                      );
-                    },
-                  )
-                : _AddButton(onTap: () => _importCharacter(context, ref)),
-          ),
+          if (!_showCatalog)
+            Positioned(
+              right: 16,
+              bottom: navHeight + 16,
+              child: _AddButton(onTap: () => _showAddSheet(context, ref)),
+            ),
         ],
       ),
     );
@@ -200,13 +168,43 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   List<Character> _sortChars(List<Character> chars) {
     final list = List<Character>.from(chars);
     list.sort((a, b) {
+      if (a.fav != b.fav) return a.fav ? -1 : 1;
       final cmp = switch (_sortBy) {
         SortType.name => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
         SortType.date => a.updatedAt.compareTo(b.updatedAt),
       };
-      return _sortDir == SortDir.desc ? -cmp : cmp;
+      if (cmp != 0) return _sortDir == SortDir.desc ? -cmp : cmp;
+      return a.id.compareTo(b.id);
     });
     return list;
+  }
+
+  Future<void> _showAddSheet(BuildContext context, WidgetRef ref) async {
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: 'Add Character',
+      items: [
+        BottomSheetItem(
+          icon: Icons.add_rounded,
+          label: 'Add new',
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _importCharacter(context, ref);
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.link_rounded,
+          label: 'Import from URL',
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            showDialog(
+              context: context,
+              builder: (_) => const ImportUrlDialog(),
+            );
+          },
+        ),
+      ],
+    );
   }
 
   Future<void> _importCharacter(BuildContext context, WidgetRef ref) async {
@@ -367,14 +365,12 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
     final chars = ref.read(charactersProvider).valueOrNull ?? [];
     final q = query.toLowerCase();
     final filtered = chars
-        .where(
-          (c) =>
-              c.name.toLowerCase().contains(q) ||
-              (c.description ?? '').toLowerCase().contains(q) ||
-              (c.creator ?? '').toLowerCase().contains(q) ||
-              c.tags.any((t) => t.toLowerCase().contains(q)),
-        )
-        .toList();
+        .where((c) => c.fav || c.name.toLowerCase().contains(q))
+        .toList()
+      ..sort((a, b) {
+        if (a.fav != b.fav) return a.fav ? -1 : 1;
+        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+      });
 
     if (filtered.isEmpty) {
       return const Center(
@@ -453,48 +449,6 @@ class _AddButton extends StatelessWidget {
             SizedBox(width: 8),
             Text(
               'Add',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ImportUrlFAB extends StatelessWidget {
-  final VoidCallback onTap;
-  const _ImportUrlFAB({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        decoration: BoxDecoration(
-          color: AppColors.accent,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.link_rounded, color: Colors.white, size: 22),
-            SizedBox(width: 8),
-            Text(
-              'Import URL',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,

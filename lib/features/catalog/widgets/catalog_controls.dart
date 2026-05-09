@@ -5,10 +5,6 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
-import '../services/datacat_provider.dart';
-import '../services/janitor_provider.dart';
-import '../services/janny_provider.dart';
-import '../services/chub_provider.dart';
 import 'catalog_filter_sheet.dart';
 
 class CatalogControls extends StatelessWidget {
@@ -73,12 +69,17 @@ class CatalogControls extends StatelessWidget {
     return count;
   }
 
+  String _currentSortLabel() {
+    final opts = sortOptionsForProvider(state.activeProvider);
+    return opts[state.filters.sort] ?? state.filters.sort;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _ProviderPill(
-          provider: state.activeProvider,
+        _LabeledChip(
+          label: providerLabel(state.activeProvider),
           onTap: () => _showPickerSheet(
             context,
             title: 'Provider',
@@ -94,19 +95,24 @@ class CatalogControls extends StatelessWidget {
             onSelect: (v) => notifier.setProvider(v as CatalogProvider),
           ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _SearchField(
-            query: state.query,
-            onSubmitted: (q) {
-              notifier.setQuery(q);
-              notifier.search(reset: true);
-            },
+        const Spacer(),
+        _FilterIconButton(
+          count: _activeFilterCount(),
+          onTap: () => showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            useSafeArea: true,
+            backgroundColor: Colors.transparent,
+            builder: (_) => CatalogFilterSheet(
+              filters: state.filters,
+              provider: state.activeProvider,
+              onApply: (f) => notifier.setFilters(f),
+            ),
           ),
         ),
         const SizedBox(width: 8),
-        _IconPill(
-          icon: Icons.sort_rounded,
+        _LabeledChip(
+          label: _currentSortLabel(),
           onTap: () => _showPickerSheet(
             context,
             title: 'Sort',
@@ -120,18 +126,6 @@ class CatalogControls extends StatelessWidget {
                 )
                 .toList(),
             onSelect: (v) => notifier.setSort(v as String),
-          ),
-        ),
-        const SizedBox(width: 6),
-        _FilterPillBadge(
-          count: _activeFilterCount(),
-          onTap: () => GlazeBottomSheet.show(
-            context,
-            child: CatalogFilterSheet(
-              filters: state.filters,
-              provider: state.activeProvider,
-              onApply: (f) => notifier.setFilters(f),
-            ),
           ),
         ),
       ],
@@ -175,23 +169,22 @@ class _PickerItem {
   });
 }
 
-class _ProviderPill extends StatelessWidget {
-  final CatalogProvider provider;
+class _LabeledChip extends StatelessWidget {
+  final String label;
   final VoidCallback onTap;
 
-  const _ProviderPill({required this.provider, required this.onTap});
+  const _LabeledChip({required this.label, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final label = CatalogControls.providerLabel(provider);
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 36,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           color: AppColors.accent.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
         ),
         child: Row(
@@ -200,15 +193,15 @@ class _ProviderPill extends StatelessWidget {
             Text(
               label,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: AppColors.accent,
               ),
             ),
-            const SizedBox(width: 2),
+            const SizedBox(width: 4),
             const Icon(
               Icons.keyboard_arrow_down_rounded,
-              size: 16,
+              size: 18,
               color: AppColors.accent,
             ),
           ],
@@ -218,55 +211,26 @@ class _ProviderPill extends StatelessWidget {
   }
 }
 
-class _IconPill extends StatelessWidget {
-  final IconData icon;
+class _FilterIconButton extends StatelessWidget {
+  final int count;
   final VoidCallback onTap;
 
-  const _IconPill({required this.icon, required this.onTap});
+  const _FilterIconButton({required this.count, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 36,
-        width: 36,
+        width: 32,
+        height: 32,
         decoration: BoxDecoration(
           color: AppColors.accent.withValues(alpha: 0.15),
           shape: BoxShape.circle,
           border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
         ),
-        child: Icon(icon, size: 18, color: AppColors.accent),
-      ),
-    );
-  }
-}
-
-class _FilterPillBadge extends StatelessWidget {
-  final int count;
-  final VoidCallback onTap;
-
-  const _FilterPillBadge({required this.count, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 36,
-        width: 36,
-        decoration: BoxDecoration(
-          color: count > 0
-              ? AppColors.accent.withValues(alpha: 0.3)
-              : AppColors.accent.withValues(alpha: 0.15),
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: count > 0
-                ? AppColors.accent.withValues(alpha: 0.4)
-                : AppColors.accent.withValues(alpha: 0.2),
-          ),
-        ),
         child: Stack(
+          clipBehavior: Clip.none,
           alignment: Alignment.center,
           children: [
             const Icon(
@@ -276,11 +240,11 @@ class _FilterPillBadge extends StatelessWidget {
             ),
             if (count > 0)
               Positioned(
-                top: 4,
-                right: 4,
+                top: -2,
+                right: -2,
                 child: Container(
-                  width: 14,
-                  height: 14,
+                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: const BoxDecoration(
                     color: AppColors.accent,
                     shape: BoxShape.circle,
@@ -289,9 +253,10 @@ class _FilterPillBadge extends StatelessWidget {
                     child: Text(
                       '$count',
                       style: const TextStyle(
-                        fontSize: 8,
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
                         color: Colors.white,
+                        height: 1.0,
                       ),
                     ),
                   ),
@@ -299,70 +264,6 @@ class _FilterPillBadge extends StatelessWidget {
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SearchField extends StatefulWidget {
-  final String query;
-  final ValueChanged<String> onSubmitted;
-
-  const _SearchField({required this.query, required this.onSubmitted});
-
-  @override
-  State<_SearchField> createState() => _SearchFieldState();
-}
-
-class _SearchFieldState extends State<_SearchField> {
-  late final _controller = TextEditingController(text: widget.query);
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 36,
-      child: TextField(
-        controller: _controller,
-        style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
-        decoration: InputDecoration(
-          hintText: 'Search characters...',
-          hintStyle: const TextStyle(
-            fontSize: 13,
-            color: AppColors.textSecondary,
-          ),
-          prefixIcon: const Icon(
-            Icons.search_rounded,
-            size: 18,
-            color: AppColors.textSecondary,
-          ),
-          suffixIcon: _controller.text.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(
-                    Icons.clear_rounded,
-                    size: 16,
-                    color: AppColors.textSecondary,
-                  ),
-                  onPressed: () {
-                    _controller.clear();
-                    widget.onSubmitted('');
-                  },
-                )
-              : null,
-          filled: true,
-          fillColor: AppColors.surfaceHigh,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(18),
-            borderSide: BorderSide.none,
-          ),
-        ),
-        onSubmitted: widget.onSubmitted,
       ),
     );
   }

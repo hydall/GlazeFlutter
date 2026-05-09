@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -87,7 +88,25 @@ class _CharacterDetailSheetLauncherState
 
 class CharacterDetailScreen extends ConsumerStatefulWidget {
   final String charId;
-  const CharacterDetailScreen({super.key, required this.charId});
+
+  /// When set, the screen runs in catalog preview mode: it skips the DB
+  /// lookup, shows an Import FAB instead of Open Chat, and hides destructive
+  /// actions like edit/delete/gallery.
+  final Character? previewCharacter;
+  final String? previewAvatarUrl;
+  final Future<void> Function()? onImport;
+  final bool importing;
+
+  const CharacterDetailScreen({
+    super.key,
+    required this.charId,
+    this.previewCharacter,
+    this.previewAvatarUrl,
+    this.onImport,
+    this.importing = false,
+  });
+
+  bool get isPreview => previewCharacter != null;
 
   @override
   ConsumerState<CharacterDetailScreen> createState() =>
@@ -101,7 +120,9 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _charFuture = ref.read(characterRepoProvider).getById(widget.charId);
+    _charFuture = widget.isPreview
+        ? Future.value(widget.previewCharacter)
+        : ref.read(characterRepoProvider).getById(widget.charId);
   }
 
   void _openActionsMenu() {
@@ -224,7 +245,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         return SheetView(
           collapsedFraction: 0.78,
           showBack: true,
-          actions: char == null
+          actions: (char == null || widget.isPreview)
               ? const []
               : [
                   SheetViewAction(
@@ -240,7 +261,12 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
           body: _buildBody(snap),
           floatingActionButton: char == null
               ? null
-              : _ChatFab(onTap: () => _openChat(context, char.id)),
+              : widget.isPreview
+                  ? _ImportFab(
+                      importing: widget.importing,
+                      onTap: () => widget.onImport?.call(),
+                    )
+                  : _ChatFab(onTap: () => _openChat(context, char.id)),
         );
       },
     );
@@ -267,7 +293,10 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _HeroSection(character: char),
+            _HeroSection(
+              character: char,
+              previewAvatarUrl: widget.previewAvatarUrl,
+            ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: GlazeTabBar(
@@ -335,11 +364,63 @@ class _ChatFab extends StatelessWidget {
   }
 }
 
+class _ImportFab extends StatelessWidget {
+  final bool importing;
+  final VoidCallback onTap;
+  const _ImportFab({required this.importing, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: importing ? null : onTap,
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: importing
+              ? _kAccent.withValues(alpha: 0.5)
+              : _kAccent,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: const [
+            BoxShadow(blurRadius: 16, color: Color(0x80000000)),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (importing)
+              const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Colors.white,
+                ),
+              )
+            else
+              const Icon(Icons.download_rounded, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            const Text(
+              'Import Character',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Hero ──────────────────────────────────────────────────────────────────
 
 class _HeroSection extends StatelessWidget {
   final Character character;
-  const _HeroSection({required this.character});
+  final String? previewAvatarUrl;
+  const _HeroSection({required this.character, this.previewAvatarUrl});
 
   @override
   Widget build(BuildContext context) {
@@ -401,6 +482,15 @@ class _HeroSection extends StatelessWidget {
   }
 
   Widget _buildImage() {
+    if (previewAvatarUrl != null && previewAvatarUrl!.isNotEmpty) {
+      return CachedNetworkImage(
+        imageUrl: previewAvatarUrl!,
+        fit: BoxFit.cover,
+        alignment: Alignment.topCenter,
+        placeholder: (_, _) => _HeroPlaceholder(name: character.name),
+        errorWidget: (_, _, _) => _HeroPlaceholder(name: character.name),
+      );
+    }
     if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
       return Image.file(
         File(character.avatarPath!),

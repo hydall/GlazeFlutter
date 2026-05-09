@@ -21,6 +21,7 @@ const _sortMap = <String, _SortEntry>{
 
 List<CatalogTag> _cachedChubTags = [];
 bool _chubTagsFetched = false;
+List<CatalogTag> getCachedChubTags() => _cachedChubTags;
 
 Future<List<CatalogTag>> fetchChubTags() async {
   if (_chubTagsFetched) return _cachedChubTags;

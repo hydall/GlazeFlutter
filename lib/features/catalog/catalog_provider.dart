@@ -93,6 +93,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       activeProvider: provider,
       filters: state.filters.copyWith(sort: savedSort, tagIds: savedFilters.tagIds, tagNames: savedFilters.tagNames),
     );
+    search(reset: true);
   }
 
   CatalogFilters _loadFilters(SharedPreferences prefs) {

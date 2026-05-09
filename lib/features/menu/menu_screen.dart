@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/services/onboarding_service.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart' show GlazeAppBar;
 import '../../shared/widgets/menu_group.dart';
-import '../../shared/widgets/glaze_toast.dart';
 import 'about_overlay.dart';
 
 class MenuScreen extends ConsumerWidget {
@@ -37,8 +37,9 @@ class MenuScreen extends ConsumerWidget {
                     MenuItem(
                       icon: Icons.replay_rounded,
                       label: 'Replay Onboarding',
-                      onTap: () {
-                        GlazeToast.show(context, 'Onboarding coming soon');
+                      onTap: () async {
+                        await resetOnboarding();
+                        if (context.mounted) showOnboarding(context);
                       },
                     ),
                     MenuItem(

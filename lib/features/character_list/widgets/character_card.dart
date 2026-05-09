@@ -1,83 +1,136 @@
 import 'dart:io';
 
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../core/llm/tokenizer.dart';
+import 'package:path/path.dart' as p;
 import 'package:go_router/go_router.dart';
 
 import '../../../core/models/character.dart';
+import '../../../core/services/character_exporter.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../character_detail_screen.dart';
 
-class CharacterCard extends ConsumerWidget {
+class CharacterCard extends ConsumerStatefulWidget {
   final Character character;
   const CharacterCard({super.key, required this.character});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return GestureDetector(
-      onTap: () => _showDetailSheet(context),
-      onLongPress: () => _showActions(context, ref),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildImage(),
-            const Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: 150,
-              child: _BottomGradient(),
-            ),
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: _CardInfo(character: character),
-            ),
-            Positioned(
-              top: 8,
-              left: 8,
-              child: _TokenBadge(character: character),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: _CardMenuButton(
-                character: character,
-                onTap: () => _showActions(context, ref),
-              ),
-            ),
-            if (character.fav)
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 22),
-                  child: Icon(
-                    Icons.star,
-                    size: 14,
-                    color: Colors.amber.withValues(alpha: 0.9),
-                  ),
+  ConsumerState<CharacterCard> createState() => _CharacterCardState();
+}
+
+class _CharacterCardState extends ConsumerState<CharacterCard> {
+  bool _pressed = false;
+  bool _hovered = false;
+
+  Character get character => widget.character;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = _pressed ? 0.96 : (_hovered ? 1.01 : 1.0);
+    final dy = _hovered && !_pressed ? -4.0 : 0.0;
+    final isFav = character.fav;
+    final shadowAlpha = _hovered
+        ? (isFav ? 0.25 : 0.3)
+        : 0.1;
+    final shadowColor = isFav && _hovered
+        ? const Color(0xFFFF6B6B).withValues(alpha: shadowAlpha)
+        : Colors.black.withValues(alpha: shadowAlpha);
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      builder: (_, t, child) => Opacity(
+        opacity: t,
+        child: Transform.scale(
+          scale: 0.9 + 0.1 * t,
+          child: child,
+        ),
+      ),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: () => _showDetailSheet(context),
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          onLongPress: () => _showActions(context, ref),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutBack,
+            transform: Matrix4.identity()
+              ..translateByDouble(0.0, dy, 0.0, 1.0)
+              ..scaleByDouble(scale, scale, 1.0, 1.0),
+            transformAlignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: shadowColor,
+                  blurRadius: _hovered ? 24 : 6,
+                  offset: Offset(0, _hovered ? 12 : 4),
                 ),
-              ),
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    width: 2,
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AnimatedScale(
+                    scale: _hovered ? 1.05 : 1.0,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                    child: _buildImage(),
                   ),
-                ),
+                  const Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 150,
+                    child: _BottomGradient(),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: _CardInfo(character: character),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: _CardMenuButton(
+                      character: character,
+                      onTap: () => _showActions(context, ref),
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isFav
+                                ? const Color(0xFFFF6B6B)
+                                : Colors.white.withValues(alpha: 0.05),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -135,21 +188,11 @@ class CharacterCard extends ConsumerWidget {
       context,
       items: [
         BottomSheetItem(
-          icon: character.fav ? Icons.star : Icons.star_border,
-          label: character.fav ? 'Unfavorite' : 'Favorite',
+          icon: Icons.share_rounded,
+          label: 'Export',
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
-            ref
-                .read(charactersProvider.notifier)
-                .add(character.copyWith(fav: !character.fav));
-          },
-        ),
-        BottomSheetItem(
-          icon: Icons.info_outline_rounded,
-          label: 'View Info',
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            _showDetailSheet(context);
+            _showExportOptions(context);
           },
         ),
         BottomSheetItem(
@@ -161,8 +204,18 @@ class CharacterCard extends ConsumerWidget {
           },
         ),
         BottomSheetItem(
-          icon: Icons.delete_outline_rounded,
-          label: 'Delete',
+          icon: Icons.favorite,
+          label: character.fav ? 'Remove from Favorites' : 'Add to Favorites',
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            ref
+                .read(charactersProvider.notifier)
+                .add(character.copyWith(fav: !character.fav));
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.delete_rounded,
+          label: 'Remove',
           isDestructive: true,
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
@@ -172,6 +225,72 @@ class CharacterCard extends ConsumerWidget {
       ],
     );
   }
+
+  void _showExportOptions(BuildContext context) {
+    GlazeBottomSheet.show(
+      context,
+      title: 'Export ${character.name}',
+      items: [
+        BottomSheetItem(
+          icon: Icons.image_outlined,
+          label: 'Export as PNG',
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _export(context, 'png');
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.code_rounded,
+          label: 'Export as JSON',
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _export(context, 'json');
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _export(BuildContext context, String format) async {
+    try {
+      final desktop = Platform.environment['USERPROFILE'] ??
+          Platform.environment['HOME'] ??
+          '.';
+      final outputDir = p.join(desktop, 'Desktop');
+
+      if (format == 'png') {
+        Uint8List? avatarBytes;
+        if (character.avatarPath != null &&
+            File(character.avatarPath!).existsSync()) {
+          avatarBytes = await File(character.avatarPath!).readAsBytes();
+        } else {
+          avatarBytes = generatePlaceholderAvatar(character.name);
+        }
+
+        final result = await exportCharacterAsPng(
+          character: character,
+          avatarBytes: avatarBytes,
+          outputDir: outputDir,
+        );
+        if (context.mounted) {
+          GlazeToast.show(context, 'Exported PNG to ${result.filePath}');
+        }
+      } else {
+        final result = await exportCharacterAsJson(
+          character: character,
+          outputDir: outputDir,
+        );
+        if (context.mounted) {
+          GlazeToast.show(context, 'Exported JSON to ${result.filePath}');
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        GlazeToast.error(context, 'Export failed: ', e);
+      }
+    }
+  }
+
 
   void _confirmDelete(BuildContext context, WidgetRef ref) {
     showDialog(
@@ -238,6 +357,8 @@ class _CardInfo extends StatelessWidget {
     final desc = character.scenario?.isNotEmpty == true
         ? character.scenario!
         : character.description;
+    final isFav = character.fav;
+    const favColor = Color(0xFFFF6B6B);
 
     return Padding(
       padding: const EdgeInsets.all(12),
@@ -245,16 +366,37 @@ class _CardInfo extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            character.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
-              color: Colors.white,
-              shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (isFav) ...[
+                const Padding(
+                  padding: EdgeInsets.only(top: 3),
+                  child: Icon(
+                    Icons.favorite,
+                    size: 14,
+                    color: favColor,
+                    shadows: [Shadow(blurRadius: 2, color: Colors.black54)],
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
+              Expanded(
+                child: Text(
+                  character.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: isFav ? favColor : Colors.white,
+                    shadows: const [
+                      Shadow(blurRadius: 4, color: Colors.black54),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
           if (desc != null && desc.isNotEmpty) ...[
             const SizedBox(height: 3),
@@ -276,52 +418,7 @@ class _CardInfo extends StatelessWidget {
   }
 }
 
-class _TokenBadge extends StatelessWidget {
-  final Character character;
 
-  const _TokenBadge({required this.character});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(
-            Icons.description_outlined,
-            size: 11,
-            color: Colors.white70,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '$_cachedTokenCount',
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  int get _cachedTokenCount {
-    return estimateTokens([
-      character.name,
-      character.description,
-      character.personality,
-      character.scenario,
-      character.firstMes,
-      character.mesExample,
-    ].whereType<String>().join('\n'));
-  }
-}
 
 class _CardMenuButton extends StatelessWidget {
   final Character character;

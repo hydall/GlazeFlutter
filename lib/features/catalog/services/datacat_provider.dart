@@ -452,6 +452,7 @@ Future<ExtractionResult> datacatExtractAndPoll(
 
 List<CatalogTag> _cachedDatacatTags = [];
 bool _datacatTagsFetched = false;
+List<CatalogTag> getCachedDatacatTags() => _cachedDatacatTags;
 
 Future<List<CatalogTag>> fetchDatacatTags() async {
   if (_datacatTagsFetched) return _cachedDatacatTags;
