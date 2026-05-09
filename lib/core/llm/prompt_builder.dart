@@ -128,6 +128,7 @@ PromptResult buildPrompt(PromptPayload payload) {
     sessionId: '',
     summaryContent: payload.summaryContent,
     guidanceText: payload.guidanceText,
+    macroName: char.macroName,
   );
 
   var currentSessionVars = Map<String, String>.from(payload.sessionVars);
@@ -316,6 +317,7 @@ PromptResult _assembleMessages({
         personaPrompt: macroCtx.personaPrompt, reasoningStart: macroCtx.reasoningStart,
         reasoningEnd: macroCtx.reasoningEnd, sessionVars: currentSessionVars,
         globalVars: currentGlobalVars, charId: macroCtx.charId, sessionId: macroCtx.sessionId,
+        macroName: macroCtx.macroName,
       );
       final historyMsgs = HistoryAssembler(historyMacroCtx).assemble(history);
       messages.addAll(interleaveDepthWithHistory(historyMsgs, resolvedDepthMsgs));

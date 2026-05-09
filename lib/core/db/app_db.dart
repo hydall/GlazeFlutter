@@ -26,7 +26,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -89,6 +89,9 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from < 15) {
             await m.addColumn(memoryBookRows, memoryBookRows.pendingDraftsJson);
+          }
+          if (from < 16) {
+            await m.addColumn(characters, characters.macroName);
           }
         },
       );

@@ -17,6 +17,7 @@ PromptResult buildFallbackPrompt(PromptPayload payload) {
     sessionId: '',
     sessionVars: payload.sessionVars,
     globalVars: payload.globalVars,
+    macroName: payload.character.macroName,
   );
 
   final messages = <PromptMessage>[];

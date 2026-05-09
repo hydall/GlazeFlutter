@@ -119,6 +119,7 @@ class CharacterRepo {
             ? Map<String, dynamic>.from(jsonDecode(c.extensionsJson!) as Map)
             : {},
         characterVersion: c.characterVersion,
+        macroName: c.macroName,
       );
 
   CharactersCompanion _toCompanion(Character m) => CharactersCompanion(
@@ -143,5 +144,6 @@ class CharacterRepo {
         fav: Value(m.fav),
         extensionsJson: Value(m.extensions.isNotEmpty ? jsonEncode(m.extensions) : null),
         characterVersion: Value(m.characterVersion),
+        macroName: Value(m.macroName),
       );
 }

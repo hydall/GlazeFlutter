@@ -26,6 +26,7 @@ class Characters extends Table {
   BoolColumn get fav => boolean().withDefault(const Constant(false))();
   TextColumn get extensionsJson => text().nullable()();
   TextColumn get characterVersion => text().withDefault(const Constant('1'))();
+  TextColumn get macroName => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {charId};

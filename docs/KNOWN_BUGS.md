@@ -110,15 +110,17 @@
 
 ## Macro Engine — Parity with Glaze JS
 
-- **`macro_name` field not supported.** JS uses `char.macro_name || char.name` so characters can have a separate display name for macro expansion. Flutter always uses `charName`.
+- **~~`macro_name` field not supported.~~** Fixed — `macroName` field added to Character model (DB v16), MacroContext, character importer/exporter, JS backup importer. `{{char}}` now resolves `macroName ?? charName` matching JS `char.macro_name || char.name`.
 
-- **`{{reasoningPrefix}}`/`{{reasoningSuffix}}` no API fallback.** JS falls back to API reasoning tags (default `<think`/`</think`) when not set in session vars. Flutter falls back to empty string.
+- **~~`{{reasoningPrefix}}`/`{{reasoningSuffix}}` no API fallback.~~** Fixed — macro engine now falls back to `<think` / `</think` (with closing `>`) matching JS `APISettings.js` defaults, instead of empty string.
 
 - **`{{pick}}` uses match-text hash instead of counter.** JS increments `pickCount++` per pick, so two identical `{{pick::a::b}}` at different positions produce different results. Flutter hashes the macro text, so identical macros always produce the same result. JS also supports `__pick_version` session var for re-rolling all picks.
 
-- **`_simpleHash` produces different results.** JS: `|= 0` (signed 32-bit) → `Math.abs`. Flutter: `& 0x7FFFFFFF` (unsigned). Same input string yields different hash values, so `{{pick}}` selections differ between JS and Flutter.
+- **~~`_simpleHash` produces different results.~~** Fixed — changed from `& 0x7FFFFFFF` to `(hash | 0).toSigned(32)` → `.abs()` matching JS `|= 0` → `Math.abs`.
 
-- **`{{date}}`/`{{time}}` not locale-aware.** JS uses `toLocaleDateString()`/`toLocaleTimeString()`. Flutter always produces ISO format (`2026-05-09`) and 24h time (`14:30:00`).
+- **`{{date}}`/`{{time}}` not locale-aware.** JS uses `toLocaleDateString()`/`toLocaleTimeString()`. Flutter always produces ISO format (`2026-05-09`) and 24h time (`14:30:00`). Low priority — ISO format is unambiguous.
+
+- **~~`{{roll}}` returns `"0"` on invalid dice expression.~~** Fixed — now returns the original dice string (e.g. `{{roll::invalid}}` → `"invalid"`), matching JS behavior.
 
 ## Upstream Merge History
 

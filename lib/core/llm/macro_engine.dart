@@ -17,6 +17,7 @@ class MacroContext {
   final String? summaryContent;
   final String? lorebooksContent;
   final String? guidanceText;
+  final String? macroName;
 
   const MacroContext({
     required this.charName,
@@ -35,6 +36,7 @@ class MacroContext {
     this.summaryContent,
     this.lorebooksContent,
     this.guidanceText,
+    this.macroName,
   });
 
   MacroContext copyWith({
@@ -61,6 +63,7 @@ class MacroContext {
       summaryContent: summaryContent ?? this.summaryContent,
       lorebooksContent: lorebooksContent ?? this.lorebooksContent,
       guidanceText: guidanceText ?? this.guidanceText,
+      macroName: macroName,
     );
   }
 }
@@ -96,14 +99,16 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
     (_) => '',
   );
 
+  final resolvedCharName = ctx.macroName ?? ctx.charName;
+
   result = result.replaceAllMapped(
     RegExp(r'\{\{char\}\}', caseSensitive: false),
-    (_) => ctx.charName,
+    (_) => resolvedCharName,
   );
 
   result = result.replaceAllMapped(
     RegExp(r'\{char\}', caseSensitive: false),
-    (_) => ctx.charName,
+    (_) => resolvedCharName,
   );
 
   result = result.replaceAllMapped(
@@ -176,12 +181,12 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
 
   result = result.replaceAllMapped(
     RegExp(r'\{\{reasoningPrefix\}\}', caseSensitive: false),
-    (_) => ctx.reasoningStart ?? '',
+    (_) => ctx.reasoningStart ?? '<think' '>',
   );
 
   result = result.replaceAllMapped(
     RegExp(r'\{\{reasoningSuffix\}\}', caseSensitive: false),
-    (_) => ctx.reasoningEnd ?? '',
+    (_) => ctx.reasoningEnd ?? '</think' '>',
   );
 
   result = result.replaceAllMapped(
@@ -250,7 +255,8 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
   result = result.replaceAllMapped(
     RegExp(r'\{\{roll::(.*?)\}\}', caseSensitive: false),
     (m) {
-      return _rollDice(m.group(1)!).toString();
+      final result = _rollDice(m.group(1)!);
+      return result != null ? result.toString() : m.group(1)!;
     },
   );
 
@@ -285,14 +291,15 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
 int _simpleHash(String input) {
   var hash = 0;
   for (var i = 0; i < input.length; i++) {
-    hash = ((hash << 5) - hash + input.codeUnitAt(i)) & 0x7FFFFFFF;
+    hash = ((hash << 5) - hash + input.codeUnitAt(i));
+    hash = (hash | 0).toSigned(32);
   }
-  return hash;
+  return hash.abs();
 }
 
-int _rollDice(String spec) {
+int? _rollDice(String spec) {
   final match = RegExp(r'(\d+)d(\d+)', caseSensitive: false).firstMatch(spec);
-  if (match == null) return 0;
+  if (match == null) return null;
   final count = int.parse(match.group(1)!);
   final sides = int.parse(match.group(2)!);
   final random = Random();

@@ -71,6 +71,7 @@ String _applySingleScript(String text, PresetRegex script, RegexApplyContext ctx
       userName: ctx.persona?.name ?? 'User',
       charId: ctx.char!.id,
       sessionId: '',
+      macroName: ctx.char!.macroName,
     );
 
     if (script.macroRules == '1') {

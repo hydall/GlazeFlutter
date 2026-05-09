@@ -92,6 +92,10 @@ Map<String, dynamic> _buildV2Data(Character character, {Map<String, dynamic>? ch
     'alternate_greetings': character.alternateGreetings,
   };
 
+  if (character.macroName != null && character.macroName!.isNotEmpty) {
+    data['macro_name'] = character.macroName;
+  }
+
   if (characterBookData != null) {
     data['character_book'] = characterBookData;
   }

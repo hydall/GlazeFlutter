@@ -66,6 +66,7 @@ class JsCharacterImporter with BackupHelpers {
                   char['character_version'] is String
                       ? char['character_version'] as String
                       : '1'),
+              macroName: Value(char['macro_name'] as String?),
             ),
           );
     }
