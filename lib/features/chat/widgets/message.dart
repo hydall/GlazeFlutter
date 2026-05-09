@@ -337,7 +337,7 @@ class _MessageState extends ConsumerState<Message> {
       alignment: style.alignment,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
-        constraints: BoxConstraints(maxWidth: isStandard ? double.infinity : MediaQuery.of(context).size.width * 0.88),
+        constraints: BoxConstraints(maxWidth: isStandard ? MediaQuery.of(context).size.width : MediaQuery.of(context).size.width * 0.88),
         margin: EdgeInsets.symmetric(horizontal: isStandard ? 16 : 12, vertical: isStandard ? 8 : 4),
         padding: isStandard ? const EdgeInsets.all(0) : const EdgeInsets.all(12),
         decoration: BoxDecoration(
