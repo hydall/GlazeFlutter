@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../utils/cast_helpers.dart';
 import '../utils/id_generator.dart';
 import '../utils/time_helpers.dart';
 import 'preset_defaults.dart';
@@ -107,8 +108,8 @@ class MigrationService {
           creator: json['creator'] as String?,
           creatorNotes: json['creator_notes'] as String?,
           color: json['color'] as String?,
-          tags: _toStringList(json['tags']),
-          alternateGreetings: _toStringList(json['alternate_greetings']),
+          tags: toStringList(json['tags']),
+          alternateGreetings: toStringList(json['alternate_greetings']),
           updatedAt: _importTimestamp(json),
         );
         await _charRepo.put(char);
@@ -406,11 +407,6 @@ class MigrationService {
   String _generateId() {
     return generateId() +
         Random().nextInt(9999).toRadixString(36);
-  }
-
-  List<String> _toStringList(dynamic value) {
-    if (value is List) return value.map((e) => e.toString()).toList();
-    return [];
   }
 
   int? _toInt(dynamic value) {

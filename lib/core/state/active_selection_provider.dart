@@ -75,14 +75,12 @@ Future<void> setActivePersona(WidgetRef ref, String? id) async {
   }
 }
 
-Future<void> setPersonaConnection(
-  WidgetRef ref,
+PersonaConnections _buildUpdatedConnections(
+  PersonaConnections current,
   String type,
   String targetId,
   String? personaId,
-) async {
-  final current = ref.read(personaConnectionsProvider);
-  PersonaConnections updated;
+) {
   if (type == 'character') {
     final map = Map<String, String>.from(current.character);
     if (personaId == null) {
@@ -90,7 +88,7 @@ Future<void> setPersonaConnection(
     } else {
       map[targetId] = personaId;
     }
-    updated = current.copyWith(character: map);
+    return current.copyWith(character: map);
   } else {
     final map = Map<String, String>.from(current.chat);
     if (personaId == null) {
@@ -98,11 +96,20 @@ Future<void> setPersonaConnection(
     } else {
       map[targetId] = personaId;
     }
-    updated = current.copyWith(chat: map);
+    return current.copyWith(chat: map);
   }
+}
+
+Future<void> setPersonaConnection(
+  WidgetRef ref,
+  String type,
+  String targetId,
+  String? personaId,
+) async {
+  final current = ref.read(personaConnectionsProvider);
+  final updated = _buildUpdatedConnections(current, type, targetId, personaId);
   ref.read(personaConnectionsProvider.notifier).state = updated;
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('personaConnections', jsonEncode(updated.toJson()));
+  await _persistPersonaConnections(updated);
 }
 
 void setPersonaConnectionRef(
@@ -112,24 +119,7 @@ void setPersonaConnectionRef(
   String? personaId,
 ) {
   final current = ref.read(personaConnectionsProvider);
-  PersonaConnections updated;
-  if (type == 'character') {
-    final map = Map<String, String>.from(current.character);
-    if (personaId == null) {
-      map.remove(targetId);
-    } else {
-      map[targetId] = personaId;
-    }
-    updated = current.copyWith(character: map);
-  } else {
-    final map = Map<String, String>.from(current.chat);
-    if (personaId == null) {
-      map.remove(targetId);
-    } else {
-      map[targetId] = personaId;
-    }
-    updated = current.copyWith(chat: map);
-  }
+  final updated = _buildUpdatedConnections(current, type, targetId, personaId);
   ref.read(personaConnectionsProvider.notifier).state = updated;
   _persistPersonaConnections(updated);
 }
@@ -173,11 +163,6 @@ Future<void> _persistGlobalVars(Map<String, String> vars) async {
 }
 
 void updateGlobalVarsRef(Ref ref, Map<String, String> vars) {
-  ref.read(globalVarsProvider.notifier).state = vars;
-  _persistGlobalVars(vars);
-}
-
-void updateGlobalVarsWidgetRef(WidgetRef ref, Map<String, String> vars) {
   ref.read(globalVarsProvider.notifier).state = vars;
   _persistGlobalVars(vars);
 }

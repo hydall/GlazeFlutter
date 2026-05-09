@@ -1,9 +1,8 @@
 import 'dart:convert';
 
-import 'package:crypto/crypto.dart';
-
 import '../models/lorebook.dart';
 import '../db/repositories/embedding_repo.dart';
+import '../utils/cast_helpers.dart';
 import 'embedding_service.dart';
 
 class LorebookEmbeddingService {
@@ -36,7 +35,7 @@ class LorebookEmbeddingService {
       final text = _getEmbeddingText(entry, config);
       final hints = extractRetrievalHints(entry);
       final fingerprint = buildEmbeddingFingerprint(entry, text);
-      final textHash = _computeHash(fingerprint);
+      final textHash = computeHash(fingerprint);
 
       final existing = await _repo.getByEntryId(entry.id);
       if (existing != null && existing.textHash == textHash && existing.vectorsBlob != null && existing.errorJson == null) {
@@ -86,7 +85,7 @@ class LorebookEmbeddingService {
         for (int j = i + 1; j < vectorEntries.length; j++) {
           final laterEntry = vectorEntries[j];
           final laterText = _getEmbeddingText(laterEntry, config);
-          final laterHash = _computeHash(buildEmbeddingFingerprint(laterEntry, laterText));
+          final laterHash = computeHash(buildEmbeddingFingerprint(laterEntry, laterText));
           await _repo.putEmbeddingError(
             entryId: laterEntry.id,
             sourceType: 'lorebook_entry',
@@ -99,7 +98,7 @@ class LorebookEmbeddingService {
         }
         break;
       } catch (e) {
-        final laterHash = _computeHash(buildEmbeddingFingerprint(entry, text));
+        final laterHash = computeHash(buildEmbeddingFingerprint(entry, text));
         await _repo.putEmbeddingError(
           entryId: entry.id,
           sourceType: 'lorebook_entry',
@@ -171,9 +170,6 @@ class LorebookEmbeddingService {
     }).take(32).toList();
   }
 
-  String _computeHash(String input) {
-    return sha256.convert(utf8.encode(input)).toString();
-  }
 }
 
 class IndexResult {

@@ -1,6 +1,7 @@
 import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/lorebook.dart';
+import 'glaze_matcher.dart';
 
 class CoverageEntry {
   final String id;
@@ -47,8 +48,6 @@ class CoverageResult {
     required this.cutOffCount,
   });
 }
-
-const _glazeBoundaries = '[\\s.,!?;:"\'\\u201C\\u201D\\u2018\\u2019\\u00AB\\u00BB(){}\\[\\]\u2014\u2013*]';
 
 CoverageResult computeLorebookCoverage({
   required List<ChatMessage> history,
@@ -100,7 +99,7 @@ CoverageResult computeLorebookCoverage({
       }
 
       final effectiveCaseSensitive = entry.caseSensitive ?? lbCaseSensitive;
-      final effectiveWholeWords = _resolveWholeWords(
+      final effectiveWholeWords = resolveWholeWords(
         entry.matchWholeWords,
         lbMatchWholeWords != null ? (lbMatchWholeWords == 'true') : globalSettings.matchWholeWords,
         globalSettings.keySearchMode,
@@ -143,7 +142,7 @@ CoverageResult computeLorebookCoverage({
     final matchedPrimary = <String>[];
     for (final key in entry.keys) {
       if (key.isEmpty) continue;
-      if (_checkMatch(key, scanText, caseSensitive, wholeWords)) {
+        if (glazeCheckMatch(key, scanText, caseSensitive, wholeWords)) {
         matchedPrimary.add(key);
       }
     }
@@ -155,7 +154,7 @@ CoverageResult computeLorebookCoverage({
             ? scanMessages[i].content
             : scanMessages[i].content.toLowerCase();
         for (final key in entry.keys) {
-          if (key.isNotEmpty && _checkMatch(key, msgText, caseSensitive, wholeWords)) {
+          if (key.isNotEmpty && glazeCheckMatch(key, msgText, caseSensitive, wholeWords)) {
             matchIdx = nonHidden.indexOf(scanMessages[i]);
             break;
           }
@@ -168,7 +167,7 @@ CoverageResult computeLorebookCoverage({
     if (matchedPrimary.isNotEmpty && entry.secondaryKeys.isNotEmpty) {
       for (final key in entry.secondaryKeys) {
         if (key.isEmpty) continue;
-        if (_checkMatch(key, scanText, caseSensitive, wholeWords)) {
+      if (glazeCheckMatch(key, scanText, caseSensitive, wholeWords)) {
           matchedSecondary.add(key);
         }
       }
@@ -185,7 +184,7 @@ CoverageResult computeLorebookCoverage({
     if (logic != 4 && entry.secondaryKeys.isNotEmpty) {
       final anyMatch = matchedSecondary.isNotEmpty;
       final allMatch = entry.secondaryKeys.every(
-          (k) => k.isEmpty || _checkMatch(k, scanText, caseSensitive, wholeWords));
+          (k) => k.isEmpty || glazeCheckMatch(k, scanText, caseSensitive, wholeWords));
 
       switch (logic) {
         case 0: secondaryPass = anyMatch;
@@ -264,64 +263,6 @@ CoverageEntry _toCoverage(_Candidate c) => CoverageEntry(
   cutOffByBudget: c.cutOffByBudget,
 );
 
-bool _checkMatch(String key, String text, bool caseSensitive, _WholeWordMode wholeWords) {
-  if (key.isEmpty) return false;
-
-  if (wholeWords == _WholeWordMode.glaze) {
-    final escaped = RegExp.escape(key);
-    final beforeBoundary = '(?:^|$_glazeBoundaries)';
-    final afterBoundary = '(?:\$|$_glazeBoundaries)';
-    final pattern = beforeBoundary + escaped + afterBoundary;
-    final regex = _tryCreateRegex(pattern, caseSensitive);
-    if (regex != null) return regex.hasMatch(text);
-    final needle = caseSensitive ? key : key.toLowerCase();
-    final haystack = caseSensitive ? text : text.toLowerCase();
-    if (needle.isEmpty) return false;
-    final fallback = _tryCreateRegex(
-      beforeBoundary + RegExp.escape(needle) + afterBoundary,
-      caseSensitive,
-    );
-    return fallback?.hasMatch(haystack) ?? false;
-  }
-
-  var pattern = key;
-  if (wholeWords == _WholeWordMode.yes) {
-    pattern = '\\b$pattern\\b';
-  }
-
-  final regex = _tryCreateRegex(pattern, caseSensitive);
-  if (regex != null) return regex.hasMatch(text);
-
-  final haystack = caseSensitive ? text : text.toLowerCase();
-  final needle = caseSensitive ? key : key.toLowerCase();
-  if (needle.isEmpty) return false;
-
-  if (wholeWords == _WholeWordMode.yes) {
-    final wordRegex = _tryCreateRegex('\\b${RegExp.escape(needle)}\\b', caseSensitive);
-    return wordRegex?.hasMatch(haystack) ?? false;
-  }
-
-  return haystack.contains(needle);
-}
-
-RegExp? _tryCreateRegex(String pattern, bool caseSensitive) {
-  try {
-    return RegExp(pattern, caseSensitive: caseSensitive);
-  } catch (_) {
-    return null;
-  }
-}
-
-enum _WholeWordMode { no, yes, glaze }
-
-_WholeWordMode _resolveWholeWords(bool? entryValue, bool globalValue, String keySearchMode) {
-  if (entryValue == true) return _WholeWordMode.yes;
-  if (entryValue == false) return _WholeWordMode.no;
-  if (keySearchMode == 'glaze') return _WholeWordMode.glaze;
-  if (globalValue) return _WholeWordMode.yes;
-  return _WholeWordMode.no;
-}
-
 class _Candidate {
   final LorebookEntry entry;
   final String lorebookName;
@@ -332,7 +273,7 @@ class _Candidate {
   int? matchMessageIndex;
   bool cutOffByBudget = false;
   final bool caseSensitive;
-  final _WholeWordMode wholeWords;
+  final WholeWordMode wholeWords;
   final int scanDepth;
 
   _Candidate({

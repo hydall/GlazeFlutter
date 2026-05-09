@@ -6,6 +6,7 @@ import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/character.dart';
+import '../utils/cast_helpers.dart';
 import '../utils/id_generator.dart';
 import '../utils/time_helpers.dart';
 import 'image_storage_service.dart';
@@ -72,7 +73,7 @@ class CharacterImporter {
     Uint8List? avatarBytes;
     final avatarSrc = data['avatar'] as String?;
     if (avatarSrc != null && avatarSrc.isNotEmpty) {
-      avatarBytes = _dataUrlToBytes(avatarSrc);
+      avatarBytes = dataUrlToBytes(avatarSrc);
     }
 
     final character = await _saveCharacterWithAvatar(data, avatarBytes);
@@ -126,7 +127,7 @@ class CharacterImporter {
     if (avatarBytes == null) {
       final avatarSrc = data['avatar'] as String?;
       if (avatarSrc != null && avatarSrc.isNotEmpty) {
-        avatarBytes = _dataUrlToBytes(avatarSrc);
+      avatarBytes = dataUrlToBytes(avatarSrc);
       }
     }
 
@@ -180,8 +181,8 @@ class CharacterImporter {
       creator: data['creator'] as String?,
       creatorNotes: data['creator_notes'] as String?,
       color: data['color'] as String?,
-      tags: _toStringList(data['tags']),
-      alternateGreetings: _toStringList(data['alternate_greetings']),
+      tags: toStringList(data['tags']),
+      alternateGreetings: toStringList(data['alternate_greetings']),
       updatedAt: currentTimestampSeconds(),
       fav: data['fav'] as bool? ?? false,
       extensions: _extractExtensions(data),
@@ -193,19 +194,8 @@ class CharacterImporter {
     );
   }
 
-  List<String> _toStringList(dynamic value) {
-    if (value is List) {
-      return value.map((e) => e.toString()).toList();
-    }
-    return [];
-  }
-
   Map<String, dynamic> _extractExtensions(Map<String, dynamic> data) {
-    final ext = data['extensions'] is Map ? data['extensions'] as Map : null;
-    if (ext == null || ext.isEmpty) return {};
-    final copy = Map<String, dynamic>.from(ext);
-    copy.remove('gallery');
-    return copy;
+    return extractExtensionsJson(data);
   }
 
   String _extractDepthPrompt(Map<String, dynamic> data) {
@@ -236,18 +226,6 @@ class CharacterImporter {
     final ext = data['extensions'] is Map ? data['extensions'] as Map : null;
     final world = ext?['world'];
     return world is String && world.isNotEmpty ? world : null;
-  }
-
-  Uint8List? _dataUrlToBytes(String dataUrl) {
-    if (!dataUrl.startsWith('data:')) return null;
-    final commaIndex = dataUrl.indexOf(',');
-    if (commaIndex == -1) return null;
-    final base64Str = dataUrl.substring(commaIndex + 1);
-    try {
-      return base64Decode(base64Str);
-    } catch (_) {
-      return null;
-    }
   }
 
   String _resolveEmbeddedUri(String uri) {

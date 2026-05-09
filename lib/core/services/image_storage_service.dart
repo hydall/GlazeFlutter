@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
+import '../utils/cast_helpers.dart';
 import '../utils/platform_paths.dart';
 
 class ImageStorageService {
@@ -28,7 +29,7 @@ class ImageStorageService {
 
   Future<String?> saveAvatarFromDataUrl(
       String characterId, String dataUrl) async {
-    final bytes = _dataUrlToBytes(dataUrl);
+    final bytes = dataUrlToBytes(dataUrl);
     if (bytes == null) return null;
     return saveAvatar(characterId, bytes);
   }
@@ -74,17 +75,6 @@ class ImageStorageService {
     if (relativePath == null) return null;
     if (File(relativePath).isAbsolute) return relativePath;
     return p.join(baseDir, relativePath);
-  }
-
-  Uint8List? _dataUrlToBytes(String dataUrl) {
-    final commaIndex = dataUrl.indexOf(',');
-    if (commaIndex == -1) return null;
-    final base64Str = dataUrl.substring(commaIndex + 1);
-    try {
-      return Uint8List.fromList(Uri.parse('data:;base64,$base64Str').data!.contentAsBytes());
-    } catch (_) {
-      return null;
-    }
   }
 
   Uint8List? _resizeImage(Uint8List imageBytes, int maxDimension) {

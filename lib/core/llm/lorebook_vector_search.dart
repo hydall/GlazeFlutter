@@ -1,12 +1,13 @@
 import 'dart:convert';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/character.dart';
 import '../models/lorebook.dart';
 import '../state/db_provider.dart';
 import '../db/app_db.dart';
 import '../db/repositories/embedding_repo.dart';
+import '../utils/cast_helpers.dart';
 import 'embedding_service.dart';
 import 'lorebook_embedding_service.dart';
 import 'vector_math.dart';
@@ -36,6 +37,7 @@ class LorebookVectorSearch {
     LorebookGlobalSettings settings,
     EmbeddingConfig config, {
     String? charWorld,
+    Character? character,
   }) async {
     if (settings.searchType == 'keys') return [];
 
@@ -68,7 +70,7 @@ class LorebookVectorSearch {
     for (final lb in activeLorebooks) {
       for (final entry in lb.entries) {
         if (entry.vectorSearch && entry.enabled && !entry.constant) {
-          if (_isFilteredByCharacter(entry)) continue;
+          if (_isFilteredByCharacter(entry, character)) continue;
           vectorEntries.add((entry, lb.id));
         }
       }
@@ -89,7 +91,7 @@ class LorebookVectorSearch {
 
       final text = _getEmbeddingText(entry, lorebooks, lbId);
       final fingerprint = LorebookEmbeddingService.buildEmbeddingFingerprint(entry, text);
-      final currentHash = _computeHash(fingerprint);
+      final currentHash = computeHash(fingerprint);
       if (row.textHash != currentHash) continue;
 
       final vectors = _repo.decodeVectors(row);
@@ -245,14 +247,15 @@ class LorebookVectorSearch {
     return entry.content;
   }
 
-  String _computeHash(String input) {
-    return sha256.convert(utf8.encode(input)).toString();
-  }
-
-  bool _isFilteredByCharacter(LorebookEntry entry) {
+  bool _isFilteredByCharacter(LorebookEntry entry, Character? character) {
+    if (character == null) return false;
     final filter = entry.characterFilter;
     if (filter == null) return false;
     if (filter.names.isEmpty) return false;
+    final charName = character.name.toLowerCase();
+    final isInCategory = filter.names.any((n) => charName.contains(n.toLowerCase()));
+    if (filter.isExclude && isInCategory) return true;
+    if (!filter.isExclude && !isInCategory) return true;
     return false;
   }
 }

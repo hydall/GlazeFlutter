@@ -96,7 +96,7 @@ class PromptPayloadBuilder {
       }
 
       if (!skipVectorSearch) {
-        vectorEntries = await _runVectorSearch(session.messages, session.messages.lastOrNull?.content ?? '', character.world);
+        vectorEntries = await _runVectorSearch(session.messages, session.messages.lastOrNull?.content ?? '', character.world, character);
       }
     }
 
@@ -149,6 +149,7 @@ class PromptPayloadBuilder {
         session.messages,
         session.messages.lastOrNull?.content ?? '',
         character.world,
+        character,
       );
     }
 
@@ -181,6 +182,7 @@ class PromptPayloadBuilder {
     List<ChatMessage> history,
     String currentText,
     String? charWorld,
+    Character? character,
   ) async {
     final settings = _ref.read(lorebookSettingsProvider);
     if (settings.searchType == 'keys') return [];
@@ -196,7 +198,7 @@ class PromptPayloadBuilder {
       final searchHistory = history
           .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
           .toList();
-      final results = await searchService.search(searchHistory, currentText, lorebooks, settings, config, charWorld: charWorld);
+      final results = await searchService.search(searchHistory, currentText, lorebooks, settings, config, charWorld: charWorld, character: character);
 
       final entryMap = <String, LorebookEntry>{};
       for (final lb in lorebooks) {

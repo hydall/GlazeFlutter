@@ -9,6 +9,7 @@ import '../db/repositories/memory_book_repo.dart';
 import '../models/memory_book.dart';
 import '../state/db_provider.dart';
 import 'embedding_service.dart';
+import 'glaze_matcher.dart';
 import 'lorebook_vector_search.dart';
 import 'memory_embedding_service.dart';
 import 'vector_math.dart';
@@ -195,13 +196,7 @@ class MemoryInjectionService {
   }
 
   bool _glazeMatch(String key, String text) {
-    final pattern = r'[\s.,!?;:"\u201C\u201D\u2018\u2019\u00AB\u00BB(){}\[\]\u2014\u2013*]';
-    final regex = '(?<=^|$pattern)${RegExp.escape(key)}(?=\$|$pattern)';
-    try {
-      return RegExp(regex, caseSensitive: false).hasMatch(text);
-    } catch (_) {
-      return text.contains(key.toLowerCase());
-    }
+    return glazeCheckMatch(key, text.toLowerCase(), false, WholeWordMode.glaze);
   }
 }
 

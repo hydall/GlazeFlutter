@@ -1,8 +1,11 @@
+import 'dart:math';
+
 import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/lorebook.dart';
+import 'glaze_matcher.dart';
 
-const _glazeBoundaries = '[\\s.,!?;:"\'\\u201C\\u201D\\u2018\\u2019\\u00AB\\u00BB(){}\\[\\]\u2014\u2013*]';
+final _rng = Random();
 
 class ScannedEntry {
   final String id;
@@ -115,7 +118,7 @@ List<ScannedEntry> scanLorebooks({
       final logic = entry.selectiveLogic;
 
       final caseSensitive = entry.caseSensitive ?? c.caseSensitive ?? globalSettings.caseSensitive;
-      final wholeWords = _resolveWholeWords(
+      final wholeWords = resolveWholeWords(
         entry.matchWholeWords,
         c.matchWholeWords != null ? (c.matchWholeWords == 'true') : globalSettings.matchWholeWords,
         globalSettings.keySearchMode,
@@ -147,7 +150,7 @@ List<ScannedEntry> scanLorebooks({
           final histSource = caseSensitive
               ? history[idx].content
               : history[idx].content.toLowerCase();
-          final wasMatched = primaryKeys.any((key) => _checkMatch(key, histSource, caseSensitive, wholeWords));
+          final wasMatched = primaryKeys.any((key) => glazeCheckMatch(key, histSource, caseSensitive, wholeWords));
           if (wasMatched) {
             if (i <= entry.sticky) isStickyActive = true;
             if (i <= entry.cooldown) isOnCooldown = true;
@@ -158,7 +161,7 @@ List<ScannedEntry> scanLorebooks({
 
       if (isOnCooldown) continue;
 
-      final matchedPrimary = isStickyActive || primaryKeys.any((key) => _checkMatch(key, scanSource, caseSensitive, wholeWords));
+      final matchedPrimary = isStickyActive || primaryKeys.any((key) => glazeCheckMatch(key, scanSource, caseSensitive, wholeWords));
 
       if (matchedPrimary) {
         bool secondaryMatches = true;
@@ -166,7 +169,7 @@ List<ScannedEntry> scanLorebooks({
         if (logic == 4 || secondaryKeys.isEmpty) {
           secondaryMatches = true;
         } else if (secondaryKeys.isNotEmpty) {
-          final matches = secondaryKeys.map((key) => _checkMatch(key, scanSource, caseSensitive, wholeWords));
+          final matches = secondaryKeys.map((key) => glazeCheckMatch(key, scanSource, caseSensitive, wholeWords));
           final anyMatch = matches.any((m) => m);
           final allMatch = matches.every((m) => m);
 
@@ -223,65 +226,7 @@ List<ScannedEntry> scanLorebooks({
   return result.take(globalMaxInjected).toList();
 }
 
-bool _checkMatch(String key, String text, bool caseSensitive, _WholeWordMode wholeWords) {
-  if (key.isEmpty) return false;
-
-  if (wholeWords == _WholeWordMode.glaze) {
-    final escaped = RegExp.escape(key);
-    final beforeBoundary = '(?:^|$_glazeBoundaries)';
-    final afterBoundary = r'(?:$|' + _glazeBoundaries + ')';
-    final pattern = beforeBoundary + escaped + afterBoundary;
-    final regex = _tryCreateRegex(pattern, caseSensitive);
-    if (regex != null) return regex.hasMatch(text);
-    final needle = caseSensitive ? key : key.toLowerCase();
-    final haystack = caseSensitive ? text : text.toLowerCase();
-    if (needle.isEmpty) return false;
-    final fallback = _tryCreateRegex(
-      beforeBoundary + RegExp.escape(needle) + afterBoundary,
-      caseSensitive,
-    );
-    return fallback?.hasMatch(haystack) ?? false;
-  }
-
-  var pattern = key;
-  if (wholeWords == _WholeWordMode.yes) {
-    pattern = '\\b$pattern\\b';
-  }
-
-  final regex = _tryCreateRegex(pattern, caseSensitive);
-  if (regex != null) return regex.hasMatch(text);
-
-  final haystack = caseSensitive ? text : text.toLowerCase();
-  final needle = caseSensitive ? key : key.toLowerCase();
-  if (needle.isEmpty) return false;
-
-  if (wholeWords == _WholeWordMode.yes) {
-    final wordRegex = _tryCreateRegex('\\b${RegExp.escape(needle)}\\b', caseSensitive);
-    return wordRegex?.hasMatch(haystack) ?? false;
-  }
-
-  return haystack.contains(needle);
-}
-
-RegExp? _tryCreateRegex(String pattern, bool caseSensitive) {
-  try {
-    return RegExp(pattern, caseSensitive: caseSensitive);
-  } catch (_) {
-    return null;
-  }
-}
-
-int _randomPercent() => DateTime.now().microsecond % 100;
-
-enum _WholeWordMode { no, yes, glaze }
-
-_WholeWordMode _resolveWholeWords(bool? entryValue, bool globalValue, String keySearchMode) {
-  if (entryValue == true) return _WholeWordMode.yes;
-  if (entryValue == false) return _WholeWordMode.no;
-  if (keySearchMode == 'glaze') return _WholeWordMode.glaze;
-  if (globalValue) return _WholeWordMode.yes;
-  return _WholeWordMode.no;
-}
+int _randomPercent() => _rng.nextInt(100);
 
 ScannedEntry _toScanned(_CandidateEntry c) => ScannedEntry(
       id: c.entry.id,

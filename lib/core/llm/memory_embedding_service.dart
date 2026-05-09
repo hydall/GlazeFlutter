@@ -1,9 +1,8 @@
 import 'dart:convert';
 
-import 'package:crypto/crypto.dart';
-
 import '../models/memory_book.dart';
 import '../db/repositories/embedding_repo.dart';
+import '../utils/cast_helpers.dart';
 import 'embedding_service.dart';
 import 'lorebook_embedding_service.dart';
 
@@ -28,7 +27,7 @@ class MemoryEmbeddingService {
 
     final hints = extractMemoryRetrievalHints(entry);
     final fingerprint = _buildFingerprint(entry, text);
-    final textHash = _computeHash(fingerprint);
+    final textHash = computeHash(fingerprint);
 
     final existing = await _repo.getByEntryId(entry.id);
     if (existing != null && existing.textHash == textHash && existing.vectorsBlob != null && existing.errorJson == null) {
@@ -92,7 +91,7 @@ class MemoryEmbeddingService {
         final text = _getEmbeddingText(entries[i], embeddingTarget);
         final hints = extractMemoryRetrievalHints(entries[i]);
         final fingerprint = _buildFingerprint(entries[i], text);
-        final textHash = _computeHash(fingerprint);
+    final textHash = computeHash(fingerprint);
 
         if (existing != null && existing.textHash == textHash && existing.vectorsBlob != null && existing.errorJson == null) {
           skipped++;
@@ -146,10 +145,6 @@ class MemoryEmbeddingService {
       'text': text,
       'retrievalHints': extractMemoryRetrievalHints(entry),
     });
-  }
-
-  String _computeHash(String input) {
-    return sha256.convert(utf8.encode(input)).toString();
   }
 
   static List<String> extractMemoryRetrievalHints(MemoryEntry entry) {
