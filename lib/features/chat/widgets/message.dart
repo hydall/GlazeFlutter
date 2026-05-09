@@ -336,7 +336,7 @@ class _MessageState extends ConsumerState<Message> {
               ImageContentRenderer(content: displayContent, textColor: textColor)
             else if (_hasHtmlTags(displayContent))
               Html(
-                data: _highlightPhrases(displayContent),
+                data: displayContent,
                 style: {
                   'body': Style(color: textColor, margin: Margins.zero, padding: HtmlPaddings.zero),
                   'p': Style(color: textColor, margin: Margins.zero),
