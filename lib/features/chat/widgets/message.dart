@@ -134,8 +134,18 @@ class _MessageState extends ConsumerState<Message> {
   }
 
   String _highlightPhrases(String content) {
-    if (widget.searchQuery.isEmpty || !widget.isSearchMatch) return content;
-    final lowerContent = content.toLowerCase();
+    String text = content;
+    
+    text = text.replaceAllMapped(
+      RegExp(r'(```.*?```|`[^`]*`)|"(?:(?!\n\n)[^"])*"|«(?:(?!\n\n)[^»])*»|“(?:(?!\n\n)[^”])*”|‘(?:(?!\n\n)[^’])*’|(?<!\p{L})\x27(?:(?!\n\n)[^\x27])*\x27(?!\p{L})', unicode: true, dotAll: true), 
+      (match) {
+        if (match[1] != null) return match[1]!;
+        return '~~${match[0]}~~';
+      }
+    );
+
+    if (widget.searchQuery.isEmpty || !widget.isSearchMatch) return text;
+    final lowerContent = text.toLowerCase();
     final lowerQuery = widget.searchQuery.toLowerCase();
     final buffer = StringBuffer();
     int startIndex = 0;
@@ -144,11 +154,11 @@ class _MessageState extends ConsumerState<Message> {
     while (true) {
       final idx = lowerContent.indexOf(lowerQuery, startIndex);
       if (idx == -1) {
-        buffer.write(content.substring(startIndex));
+        buffer.write(text.substring(startIndex));
         break;
       }
-      buffer.write(content.substring(startIndex, idx));
-      final originalText = content.substring(idx, idx + lowerQuery.length);
+      buffer.write(text.substring(startIndex, idx));
+      final originalText = text.substring(idx, idx + lowerQuery.length);
       if (currentMatchIndex == widget.activeMatchIndex) {
         buffer.write('==active==$originalText==');
       } else {
@@ -278,6 +288,9 @@ class _MessageState extends ConsumerState<Message> {
         ? tokens
         : (isUser && content.isNotEmpty ? estimateTokens(content) : null);
 
+    final quoteColor = (isUser && !isStandard) ? scheme.inversePrimary : scheme.primary;
+    final asteriskColor = textColor.withValues(alpha: 0.65);
+
     Widget bubble = Align(
       alignment: style.alignment,
       child: AnimatedContainer(
@@ -323,7 +336,12 @@ class _MessageState extends ConsumerState<Message> {
             else
               MarkdownBody(
                 data: _highlightPhrases(displayContent), 
-                styleSheet: MarkdownStyleSheet(p: TextStyle(color: textColor)),
+                styleSheet: MarkdownStyleSheet(
+                  p: TextStyle(color: textColor),
+                  em: TextStyle(color: asteriskColor, fontStyle: FontStyle.italic),
+                  strong: TextStyle(color: asteriskColor, fontWeight: FontWeight.bold),
+                  del: TextStyle(color: quoteColor, decoration: TextDecoration.none),
+                ),
                 extensionSet: md.ExtensionSet([
                   ...md.ExtensionSet.gitHubFlavored.blockSyntaxes
                 ], [
