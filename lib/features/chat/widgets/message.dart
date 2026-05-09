@@ -335,15 +335,19 @@ class _MessageState extends ConsumerState<Message> {
             else if (ImageContentRenderer.hasImageMarkers(displayContent))
               ImageContentRenderer(content: displayContent, textColor: textColor)
             else if (_hasHtmlTags(displayContent))
-              Html(
-                data: displayContent,
-                style: {
-                  'body': Style(color: textColor, margin: Margins.zero, padding: HtmlPaddings.zero),
-                  'p': Style(color: textColor, margin: Margins.zero),
-                  'em': Style(color: asteriskColor, fontStyle: FontStyle.italic),
-                  'strong': Style(color: asteriskColor, fontWeight: FontWeight.bold),
-                  'blockquote': Style(color: textColor, border: Border(left: BorderSide(color: asteriskColor, width: 3))),
-                },
+              SizedBox(
+                width: double.infinity,
+                child: Html(
+                  data: displayContent,
+                  shrinkWrap: true,
+                  style: {
+                    'body': Style(color: textColor, margin: Margins.zero, padding: HtmlPaddings.zero, whiteSpace: WhiteSpace.pre),
+                    'p': Style(color: textColor, margin: Margins.zero),
+                    'em': Style(color: asteriskColor, fontStyle: FontStyle.italic),
+                    'strong': Style(color: asteriskColor, fontWeight: FontWeight.bold),
+                    'blockquote': Style(color: textColor, border: Border(left: BorderSide(color: asteriskColor, width: 3))),
+                  },
+                ),
               )
             else
               MarkdownBody(
