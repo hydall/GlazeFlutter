@@ -1,5 +1,3 @@
-import 'dart:developer';
-
 import '../models/preset.dart';
 import '../models/character.dart';
 import '../models/persona.dart';
@@ -94,9 +92,6 @@ String _applySingleScript(String text, PresetRegex script, RegexApplyContext ctx
   try {
     final regex = RegExp(parsed.pattern, multiLine: parsed.multiLine, dotAll: parsed.dotAll, caseSensitive: parsed.caseSensitive);
     processed = processed.replaceAll(regex, replacement);
-    if (processed != text) {
-      log('[Regex] "${script.name}" changed text (placement=${script.placement}, ephemerality=${script.ephemerality})');
-    }
   } catch (_) {}
 
   return processed;

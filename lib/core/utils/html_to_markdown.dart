@@ -1,5 +1,3 @@
-import 'dart:developer';
-
 String htmlToMarkdown(String html) {
   var result = html;
 
@@ -10,8 +8,6 @@ String htmlToMarkdown(String html) {
 
   result = _convertColoredSpan(result);
   result = _convertColoredFont(result);
-
-  final afterColor = result;
 
   result = result.replaceAllMapped(
     RegExp(r'<h([1-6])[^>]*>(.*?)</h\1>', caseSensitive: false, dotAll: true),
@@ -75,10 +71,6 @@ String htmlToMarkdown(String html) {
   result = result.replaceAll(RegExp(r'&nbsp;'), ' ');
 
   result = result.replaceAll(RegExp(r'\n{3,}'), '\n\n');
-
-  if (result.contains('~~')) {
-    log('[htmlToMarkdown] ~~ found in output', error: 'BEFORE_COLOR:\n$afterColor\n\nAFTER:\n$result');
-  }
 
   return result.trim();
 }
