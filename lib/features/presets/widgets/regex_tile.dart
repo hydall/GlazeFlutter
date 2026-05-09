@@ -12,6 +12,7 @@ class RegexTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ExpansionTile(
+      key: ValueKey(regex.id),
       title: Row(
         children: [
           Switch(

@@ -110,13 +110,23 @@ String _extractColor(String styleAttr) {
   return color;
 }
 
+String _wrapColored(String color, String content) {
+  if (!color.startsWith('#')) return _inline(content);
+  final text = _inline(content);
+  return text.split('\n').map((line) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) return '';
+    return '==hc:$color==$trimmed==';
+  }).join('\n');
+}
+
 String _convertColoredSpan(String html) {
   return html.replaceAllMapped(
     RegExp(r'''<span\s+[^>]*style=(["'])([^"']*?)\1[^>]*>(.*?)</span>''', caseSensitive: false, dotAll: true),
     (m) {
       final color = _extractColor(m[2]!);
       if (color.isEmpty) return _inline(m[3]!);
-      return '==hc:$color==${_inline(m[3]!)}==';
+      return _wrapColored(color, m[3]!);
     },
   );
 }
@@ -130,8 +140,7 @@ String _convertColoredFont(String html) {
         final hex = _namedColorToHex(color.toLowerCase());
         if (hex != null) color = hex;
       }
-      if (!color.startsWith('#')) return _inline(m[3]!);
-      return '==hc:$color==${_inline(m[3]!)}==';
+      return _wrapColored(color, m[3]!);
     },
   );
 }

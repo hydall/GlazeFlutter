@@ -350,18 +350,12 @@ class MigrationService {
     if (rawBlocks is List) {
       for (final b in rawBlocks) {
         if (b is! Map<String, dynamic>) continue;
-        blocks.add(PresetBlock(
-          id: b['id'] as String? ?? _generateId(),
-          name: b['name'] as String? ?? '',
-          role: b['role'] as String? ?? 'system',
-          content: b['content'] as String? ?? '',
-          enabled: b['enabled'] as bool? ?? true,
-          isStatic: b['isStatic'] as bool? ?? false,
-          insertionMode: (b['insertion_mode'] as String?) ?? (b['insertionMode'] as String?) ?? 'relative',
-          depth: _toInt(b['depth']),
-          prefix: b['prefix'] as String?,
-          isStashed: b['isStashed'] is bool ? b['isStashed'] as bool : false,
-        ));
+        final normalized = Map<String, dynamic>.from(b);
+        if (!normalized.containsKey('id')) normalized['id'] = _generateId();
+        if (!normalized.containsKey('insertionMode')) {
+          normalized['insertionMode'] = b['insertion_mode'] ?? 'relative';
+        }
+        blocks.add(PresetBlock.fromJson(normalized));
       }
     }
 
@@ -370,19 +364,16 @@ class MigrationService {
     if (rawRegexes is List) {
       for (final r in rawRegexes) {
         if (r is! Map<String, dynamic>) continue;
-        regexes.add(PresetRegex(
-          id: r['id'] as String? ?? _generateId(),
-          name: r['name'] as String? ?? r['scriptName'] as String? ?? '',
-          regex: r['regex'] as String? ?? r['findRegex'] as String? ?? '',
-          replacement: r['replacement'] as String? ?? r['replaceString'] as String? ?? '',
-          trimOut: r['trimOut'] as String? ?? _joinTrimStrings(r['trimStrings']),
-          placement: _toIntList(r['placement']),
-          ephemerality: _toIntList(r['ephemerality']),
-          disabled: r['disabled'] is bool ? r['disabled'] as bool : !(r['isEnabled'] as bool? ?? true),
-          macroRules: (r['macroRules'] ?? r['substituteRegex'] ?? 0).toString(),
-          minDepth: _toInt(r['minDepth']),
-          maxDepth: _toInt(r['maxDepth']),
-        ));
+        final normalized = Map<String, dynamic>.from(r);
+        if (!normalized.containsKey('id')) normalized['id'] = _generateId();
+        if (!normalized.containsKey('name')) normalized['name'] = r['scriptName'] ?? '';
+        if (!normalized.containsKey('regex')) normalized['regex'] = r['findRegex'] ?? '';
+        if (!normalized.containsKey('replacement')) normalized['replacement'] = r['replaceString'] ?? '';
+        if (!normalized.containsKey('trimOut')) normalized['trimOut'] = _joinTrimStrings(r['trimStrings']);
+        if (r['isEnabled'] is bool) {
+          normalized['disabled'] = !(r['isEnabled'] as bool);
+        }
+        regexes.add(PresetRegex.fromJson(normalized));
       }
     }
 
@@ -429,17 +420,6 @@ class MigrationService {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value);
     return null;
-  }
-
-  List<int> _toIntList(dynamic value) {
-    if (value is List) {
-      return value.map((e) {
-        if (e is int) return e;
-        if (e is num) return e.toInt();
-        return int.tryParse(e.toString()) ?? 0;
-      }).toList();
-    }
-    return [1, 2];
   }
 
   String _joinTrimStrings(dynamic value) {
