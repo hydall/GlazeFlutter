@@ -628,7 +628,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         ),
         tooltip: 'New config',
         onPressed: () {
-          Navigator.pop(context);
+          Navigator.of(context, rootNavigator: true).pop();
           _createNewPreset(list);
         },
       ),
@@ -657,7 +657,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 icon: Icons.delete_outline_rounded,
                 color: AppColors.textSecondary,
                 onTap: () async {
-                  Navigator.pop(context);
+                  Navigator.of(context, rootNavigator: true).pop();
                   await ref.read(apiListProvider.notifier).remove(config.id);
                   if (activeId == config.id) {
                     ref.read(activeApiPresetIdProvider.notifier).state = null;
@@ -670,7 +670,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               ),
           ],
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             _saveTimer?.cancel();
             ref.read(activeApiPresetIdProvider.notifier).state = config.id;
             _loadedPresetId = null;
@@ -767,7 +767,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         icon: m == current ? Icons.check : null,
         iconColor: AppColors.accent,
         onTap: () {
-          Navigator.pop(context);
+          Navigator.of(context, rootNavigator: true).pop();
           _modelCtrl.text = m;
         },
       )).toList(),
@@ -787,7 +787,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           icon: active ? Icons.check : null,
           iconColor: AppColors.accent,
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             setState(() => _reasoningEffort = e);
             _scheduleSave();
           },
