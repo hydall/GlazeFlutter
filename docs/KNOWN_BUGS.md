@@ -18,7 +18,9 @@
 
 ## Memory Books
 
-- **~~Memory books not imported from backup.~~** Fixed — `js_chat_importer.dart` now handles JSON-string encoded `memoryBooks`, imports `pendingDrafts`, and supports List format entries.
+- **Memory books not imported from backup.** Bug — after restoring a backup, memory books are missing. `js_chat_importer.dart` previously handled this but may have regressed.
+
+- **Memory badge on every message.** Bug — all chat messages show a book-with-pen icon and "3 mem" label at the bottom, regardless of whether memory was actually used for that message. The badge should only appear on messages where memory drafts were injected, and should reflect the actual count.
 - **~~Memory books lag/crash on settings open/close.~~** Fixed — replaced `DropdownButton<int>` with 32,001 items with `TextFormField`; stored `TextEditingController`s as instance fields instead of recreating per build.
 - **~~Memory books scan only 3 drafts for ~150 messages.~~** Fixed — `_scanChat` now includes the last partial segment and uses looser duplicate detection.
 - **~~Memory books generation returns 401.~~** Fixed — `MemoryDraftGenerator` now uses `activeApiConfigProvider` instead of picking a random non-embedding config.
@@ -82,9 +84,9 @@
 
 - **~~Android: fresh APK only installs clean (uninstall first), update over existing install fails.~~** Fixed — CI builds now decode `DEBUG_KEYSTORE_BASE64` secret into a persistent `debug-key.keystore`, so all CI APKs are signed with the same key. DB `createTable`/`addColumn` collision on migration from early schemas still possible but rare.
 
-- **~~No HTML rendering in chat.~~** Fixed — messages with HTML tags are converted to markdown via `htmlToMarkdown()` before rendering in `MarkdownBody`. Inline colors (`<span style="color:...">`, `<font color="...">`) are preserved using custom `==hc:#RRGGBB==text==` syntax and rendered by `HtmlColorSyntax` + `_HtmlColorBuilder`. Chat session previews use `stripHtml()` to show clean text. CSS named colors, rgb(), hsl(), and hex are all supported.
+- **~~No HTML rendering in chat.~~** Fixed — migrated from `flutter_markdown` to `gpt_markdown`. Messages with HTML tags are converted to markdown via `htmlToMarkdown()` before rendering in `GptMarkdown`. Inline colors (`<span style="color:...">`, `<font color="...">`) are preserved using custom `==hc:#RRGGBB==text==` syntax rendered by `HtmlColorMd` (now preserves nested bold/italic). Collapsible `<details><summary>` sections rendered by `DetailsSummaryMd`. Chat session previews use `stripHtml()` to show clean text. CSS named colors, rgb(), hsl(), and hex are all supported.
 
-- **No user/character avatars and names in chat.** Bug — on desktop (standard layout), avatars and display names for user and character messages are not visible. In standard layout (`isStandard`), the avatar row (`CircleAvatar` + `displayName`) should render above each message, but it may be hidden or not showing. In bubble layout, there are no avatars/names at all — this is by design but may need to be reconsidered.
+- **Avatars and names not working correctly.** Bug — (1) In standard layout, user messages always show "User" with no avatar instead of the persona name/avatar from backup import. Persona data isn't being linked to chat sessions after import. (2) In bubble layout, avatar rows (CircleAvatar + displayName) are not rendered at all for either user or character messages.
 
 - **Persona not injected into chat after backup import (Android confirmed).** Bug — after restoring a backup, existing chats show persona as "user" (no avatar), even though the correct persona is selected. The persona's content is not being applied to the chat session. Likely cause: `personaId` in chat sessions or character settings is not being restored/linked correctly on import, or `activeSelectionProvider` doesn't pick up the persona for existing sessions.
 

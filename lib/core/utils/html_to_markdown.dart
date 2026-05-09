@@ -6,6 +6,16 @@ String htmlToMarkdown(String html) {
 
   result = result.replaceAll(RegExp(r'<br\s*/?>\s*', caseSensitive: false), '\n');
 
+  final detailsBlocks = <String>[];
+  result = result.replaceAllMapped(
+    RegExp(r'<details[^>]*>.*?</details>', caseSensitive: false, dotAll: true),
+    (m) {
+      final idx = detailsBlocks.length;
+      detailsBlocks.add(m[0]!);
+      return '\n\x00DETAILS$idx\x00\n';
+    },
+  );
+
   result = _convertColoredSpan(result);
   result = _convertColoredFont(result);
 
@@ -49,11 +59,24 @@ String htmlToMarkdown(String html) {
   );
 
   result = result.replaceAll(
-    RegExp(r'</?(?:div|span|section|article|header|footer|nav|main|figure|figcaption|details|summary|center|font|small|sub|sup|mark|table|tr|td|th|thead|tbody|ul|ol|li|dl|dt|dd|pre)[^>]*>', caseSensitive: false),
+    RegExp(r'</?(?:div|span|section|article|header|footer|nav|main|figure|figcaption|center|font|small|sub|sup|mark|table|tr|td|th|thead|tbody|ul|ol|li|dl|dt|dd|pre)[^>]*>', caseSensitive: false),
     '\n',
   );
 
   result = result.replaceAll(RegExp(r'<[^>]+>'), '');
+
+  for (var i = 0; i < detailsBlocks.length; i++) {
+    final block = detailsBlocks[i];
+    final summaryMatch = RegExp(r'<summary[^>]*>(.*?)</summary>', caseSensitive: false, dotAll: true).firstMatch(block);
+    final summary = summaryMatch != null ? _inline(summaryMatch[1]!) : 'Details';
+    var body = block;
+    if (summaryMatch != null) {
+      body = block.replaceFirst(summaryMatch.group(0)!, '');
+    }
+    body = body.replaceAll(RegExp(r'<[^>]+>'), '').trim();
+    final restored = '<details><summary>$summary</summary>$body</details>';
+    result = result.replaceFirst('\x00DETAILS$i\x00', restored);
+  }
 
   result = result.replaceAll('&amp;', '&');
   result = result.replaceAll('&lt;', '<');
