@@ -53,6 +53,20 @@ class AuthorsNote with _$AuthorsNote {
 }
 
 @freezed
+class ChatSummary with _$ChatSummary {
+  const factory ChatSummary({
+    @Default('') String content,
+    @Default('system') String role,
+    @Default('relative') String insertionMode,
+    @Default(4) int depth,
+    @Default('Summary: ') String prefix,
+  }) = _ChatSummary;
+
+  factory ChatSummary.fromJson(Map<String, dynamic> json) =>
+      _$ChatSummaryFromJson(json);
+}
+
+@freezed
 class ChatSession with _$ChatSession {
   const factory ChatSession({
     required String id,
@@ -62,6 +76,7 @@ class ChatSession with _$ChatSession {
     @Default(0) int updatedAt,
     @Default({}) Map<String, String> sessionVars,
     AuthorsNote? authorsNote,
+    ChatSummary? summary,
     String? draft,
     @Default({}) Map<String, dynamic> lastScrollAnchor,
   }) = _ChatSession;

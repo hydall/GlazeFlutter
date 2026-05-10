@@ -9,6 +9,7 @@ import '../../../core/models/preset.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../preset_editor_screen.dart';
 import '../preset_list_provider.dart';
 
@@ -88,27 +89,46 @@ class PresetTile extends ConsumerWidget {
       file.writeAsStringSync(encoded);
 
       if (context.mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Export Complete'),
-            content: Text('Saved to:\n${file.path}'),
-            actions: [
-              TextButton(onPressed: () { Process.run('explorer', ['/select,', file.path]); Navigator.pop(ctx); }, child: const Text('Open File Location')),
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK')),
-            ],
+        GlazeBottomSheet.show(
+          context,
+          title: 'Export Complete',
+          bigInfo: BottomSheetBigInfo(
+            icon: Icons.check_circle_outline,
+            description: 'Saved to:\n${file.path}',
           ),
+          items: [
+            BottomSheetItem(
+              label: 'Open File Location',
+              centered: true,
+              onTap: () {
+                Process.run('explorer', ['/select,', file.path]);
+                Navigator.pop(context);
+              },
+            ),
+            BottomSheetItem(
+              label: 'OK',
+              centered: true,
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
         );
       }
     } catch (e) {
       if (context.mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Export Failed'),
-            content: Text('$e'),
-            actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        GlazeBottomSheet.show(
+          context,
+          title: 'Export Failed',
+          bigInfo: BottomSheetBigInfo(
+            icon: Icons.error_outline,
+            description: '$e',
           ),
+          items: [
+            BottomSheetItem(
+              label: 'OK',
+              centered: true,
+              onTap: () => Navigator.pop(context),
+            ),
+          ],
         );
       }
     }

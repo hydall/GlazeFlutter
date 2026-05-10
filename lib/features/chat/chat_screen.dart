@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +12,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_toast.dart';
+import '../settings/app_settings_provider.dart';
 import 'chat_actions_service.dart';
 import 'chat_provider.dart';
 import 'chat_state.dart';
@@ -50,6 +52,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     with SingleTickerProviderStateMixin {
   bool _sessionApplied = false;
   bool _showSearch = false;
+  bool _isHeaderHidden = false;
   String _searchQuery = '';
   int _searchCurrentIndex = 0;
   List<SearchMatch> _searchMatches = [];
@@ -62,6 +65,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   double _lastKeyboardHeight = _kDefaultKeyboardHeight;
   late final AnimationController _drawerAnimController;
   late final Animation<double> _drawerAnim;
+
+  /// True while _toggleDrawer is intentionally switching keyboard → drawer.
+  /// Suppresses the focus-change and keyboard-dismiss guards that would
+  /// otherwise undo the drawer open.
+  bool _intentionalToggle = false;
 
   @override
   void initState() {
@@ -113,6 +121,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   void _onFocusChanged() {
     // Keyboard about to come up: drawer must yield (Telegram semantics —
     // exactly one of keyboard/drawer can occupy the bottom panel).
+    // Skip when we are intentionally opening the drawer (unfocus fires
+    // synchronously from _toggleDrawer).
+    if (_intentionalToggle) return;
     if (_inputFocus.hasFocus && _drawerOpen) {
       setState(() => _drawerOpen = false);
     }
@@ -123,12 +134,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       setState(() => _drawerOpen = false);
       _drawerAnimController.reverse();
     } else {
-      // Hide keyboard first so its slide-out and the drawer slide-in cover
-      // the same bottom region without a visible gap.
+      // Flag suppresses _onFocusChanged and the keyboardHeight > 0 guard
+      // during the keyboard dismiss animation.
+      _intentionalToggle = true;
       _inputFocus.unfocus();
       HapticFeedback.selectionClick();
       setState(() => _drawerOpen = true);
       _drawerAnimController.forward();
+      // Clear the flag after the keyboard dismiss animation has had time to
+      // finish (keyboards typically animate out in ~250ms).
+      Future.delayed(const Duration(milliseconds: 400), () {
+        if (mounted) _intentionalToggle = false;
+      });
     }
   }
 
@@ -136,6 +153,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     if (!_drawerOpen) return;
     setState(() => _drawerOpen = false);
     _drawerAnimController.reverse();
+  }
+
+  void _onScrollDirection(ScrollDirection direction) {
+    if (direction == ScrollDirection.reverse && !_isHeaderHidden) {
+      setState(() => _isHeaderHidden = true);
+    } else if (direction == ScrollDirection.forward && _isHeaderHidden) {
+      setState(() => _isHeaderHidden = false);
+    }
   }
 
   Future<void> _applySessionPreference() async {
@@ -162,6 +187,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         ? 'Session #${chatState!.session!.sessionIndex}'
         : 'Loading...';
     final sessionIndex = chatState?.session?.sessionIndex ?? 0;
+    
+    final appSettings = ref.watch(appSettingsProvider).valueOrNull;
+    final virtualKeyboardSend = appSettings?.virtualKeyboardSend ?? false;
 
     // Track the OS keyboard height so the drawer can match it exactly.
     final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
@@ -172,9 +200,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
     // If the system keyboard appears while the drawer is open (e.g. external
     // keyboard, IME race), hide the drawer — keyboard wins.
-    if (keyboardHeight > 0 && _drawerOpen) {
+    // Skip during an intentional toggle: the keyboard is still animating out
+    // so keyboardHeight lingers > 0 for a few frames.
+    if (keyboardHeight > 0 && _drawerOpen && !_intentionalToggle) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _drawerOpen) _closeDrawer();
+        if (mounted && _drawerOpen && !_intentionalToggle) _closeDrawer();
       });
     }
 
@@ -189,6 +219,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       child: GlazeScaffold(
         extendBodyBehindHeader: true,
         resizeToAvoidBottomInset: false,
+        hideHeader: _isHeaderHidden,
         title: title,
         titleWidget: _showSearch
             ? TextField(
@@ -261,19 +292,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         actions: _showSearch
             ? const []
             : [
-          chatStateAsync.when(
-            data: (state) => state.isGenerating
-                ? IconButton(
-                    icon: const Icon(Icons.stop_circle),
-                    color: AppColors.accent,
-                    onPressed: () => ref
-                        .read(chatProvider(charId).notifier)
-                        .abortGeneration(),
-                  )
-                : const SizedBox.shrink(),
-            loading: () => const SizedBox.shrink(),
-            error: (_, _) => const SizedBox.shrink(),
-          ),
           IconButton(
             icon: const Icon(Icons.search),
             color: AppColors.accent,
@@ -312,6 +330,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 : null,
             onCloseDrawer: _closeDrawer,
             onToggleDrawer: _toggleDrawer,
+            onScrollDirection: _onScrollDirection,
+            virtualKeyboardSend: virtualKeyboardSend,
           ),
         ),
       ),
@@ -343,6 +363,8 @@ class _ChatBody extends ConsumerWidget {
   final VoidCallback? onSearchNext;
   final VoidCallback onCloseDrawer;
   final VoidCallback onToggleDrawer;
+  final ValueChanged<ScrollDirection>? onScrollDirection;
+  final bool virtualKeyboardSend;
 
   const _ChatBody({
     required this.charId,
@@ -361,6 +383,8 @@ class _ChatBody extends ConsumerWidget {
     this.onSearchNext,
     required this.onCloseDrawer,
     required this.onToggleDrawer,
+    this.onScrollDirection,
+    this.virtualKeyboardSend = false,
   });
 
   static const double _inputBarApproxHeight = 130;
@@ -377,17 +401,63 @@ class _ChatBody extends ConsumerWidget {
     return Stack(
       children: [
         Positioned.fill(
-          child: MessageList(
-            messages: state.messages,
-            streamingText: state.isGenerating ? state.streamingText : null,
-            streamingReasoning:
-                state.isGenerating ? state.streamingReasoning : null,
-            isGenerating: state.isGenerating,
-            charId: charId,
-            bottomInset: messageListBottom,
-            searchQuery: searchQuery,
-            searchMatches: searchMatches,
-            searchCurrentIndex: searchCurrentIndex,
+          child: NotificationListener<UserScrollNotification>(
+            onNotification: (notification) {
+              if (onScrollDirection != null) {
+                onScrollDirection!(notification.direction);
+              }
+              return false;
+            },
+            child: MessageList(
+              messages: state.messages,
+              streamingText: state.isGenerating ? state.streamingText : null,
+              streamingReasoning:
+                  state.isGenerating ? state.streamingReasoning : null,
+              isGenerating: state.isGenerating,
+              generationStartTime: state.generationStartTime,
+              charId: charId,
+              bottomInset: messageListBottom,
+              searchQuery: searchQuery,
+              searchMatches: searchMatches,
+              searchCurrentIndex: searchCurrentIndex,
+            ),
+          ),
+        ),
+        // Top gradient for fade effect under the header
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: MediaQuery.paddingOf(context).top + 20,
+          child: IgnorePointer(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black54, Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Bottom gradient for fade effect under the input area
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: messageListBottom + 40,
+          child: IgnorePointer(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black54, Colors.transparent],
+                  stops: [0.0, 1.0],
+                ),
+              ),
+            ),
           ),
         ),
         // Animated bottom region: drawer slides up from below, the input
@@ -445,6 +515,7 @@ class _ChatBody extends ConsumerWidget {
                         onSearchNext: onSearchNext,
                         onSearchPrev: onSearchPrev,
                         isDrawerOpen: drawerOpen,
+                        virtualKeyboardSend: virtualKeyboardSend,
                         onSend: (text) {
                           if (text.trim().isEmpty) return;
                           ref
@@ -468,6 +539,9 @@ class _ChatBody extends ConsumerWidget {
                           context,
                           child: const ImageGenSheet(),
                         ),
+                        onContinue: () => ref
+                            .read(chatProvider(charId).notifier)
+                            .continueMessage(),
                       ),
                     ],
                   ),

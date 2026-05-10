@@ -239,39 +239,37 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
+        child: ConstrainedBox(
           constraints: BoxConstraints(
             maxHeight: MediaQuery.of(context).size.height * 0.95,
           ),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E).withValues(alpha: 0.8),
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-            border: const Border(top: BorderSide(color: AppColors.glassBorder)),
-          ),
-          child: Stack(
-            children: [
-              // Body
-              Positioned.fill(
-                child: RawScrollbar(
-                  controller: _scrollController,
-                  thumbColor: Colors.white.withValues(alpha: 0.15),
-                  radius: const Radius.circular(3),
-                  thickness: 4,
-                  padding: EdgeInsets.only(top: _headerH, right: 3),
-                  child: ScrollConfiguration(
-                    behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                    child: SingleChildScrollView(
-                      controller: _scrollController,
-                      padding: EdgeInsets.only(
-                        top: _headerH,
-                        bottom: bottomInset + bottomPadding + 10,
-                      ),
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minHeight: MediaQuery.of(context).size.height * 0.3,
-                        ),
+          child: Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF1E1E1E).withValues(alpha: 0.8),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              border: const Border(top: BorderSide(color: AppColors.glassBorder)),
+            ),
+            child: Stack(
+              children: [
+                // Body — scrollable, shrinks to content
+                Padding(
+                  padding: EdgeInsets.only(
+                    top: _headerH,
+                    bottom: bottomInset + 10,
+                  ),
+                  child: RawScrollbar(
+                    controller: _scrollController,
+                    thumbColor: Colors.white.withValues(alpha: 0.15),
+                    radius: const Radius.circular(3),
+                    thickness: 4,
+                    padding: const EdgeInsets.only(right: 3),
+                    child: ScrollConfiguration(
+                      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                      child: SingleChildScrollView(
+                        controller: _scrollController,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             const SizedBox(height: 4),
                             if (widget.child != null) widget.child!,
@@ -297,7 +295,7 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
                     ),
                   ),
                 ),
-              ),
+
 
               // Gradient blur overlay
               Positioned(
@@ -343,7 +341,8 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
                   ),
                 ),
               ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

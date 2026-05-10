@@ -1,4 +1,4 @@
-import 'dart:ui';
+
 
 import 'package:flutter/material.dart';
 
@@ -131,8 +131,6 @@ class _MagicCardState extends State<MagicCard> {
               : null,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(14),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
@@ -227,7 +225,6 @@ class _MagicCardState extends State<MagicCard> {
                 ),
               ),
             ),
-          ),
         ),
       ),
     );
@@ -245,8 +242,6 @@ class AddMagicCard extends StatelessWidget {
       onTap: onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
               decoration: BoxDecoration(
@@ -276,7 +271,6 @@ class AddMagicCard extends StatelessWidget {
               ],
             ),
           ),
-        ),
       ),
     );
   }

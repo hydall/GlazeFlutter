@@ -306,38 +306,41 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
           IconButton(
             icon: const Icon(Icons.delete),
             tooltip: 'Delete',
-            onPressed: () async {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Delete image?'),
-                  content: const Text('This action cannot be undone.'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('Cancel'),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Delete',
-                          style: TextStyle(color: Colors.red)),
-                    ),
-                  ],
+            onPressed: () {
+              GlazeBottomSheet.show(
+                context,
+                title: 'Delete image?',
+                bigInfo: const BottomSheetBigInfo(
+                  icon: Icons.delete_outline,
+                  description: 'This action cannot be undone.',
                 ),
+                items: [
+                  BottomSheetItem(
+                    label: 'Delete',
+                    isDestructive: true,
+                    centered: true,
+                    onTap: () async {
+                      Navigator.pop(context);
+                      try {
+                        final service =
+                            await ref.read(galleryServiceProvider.future);
+                        await service.deleteImage(entry.characterId, entry.id);
+                        ref.invalidate(galleryProvider(widget.charId));
+                        if (mounted) Navigator.pop(context);
+                      } catch (e) {
+                        if (mounted) {
+                          GlazeToast.error(context, 'Failed: ', e);
+                        }
+                      }
+                    },
+                  ),
+                  BottomSheetItem(
+                    label: 'Cancel',
+                    centered: true,
+                    onTap: () => Navigator.pop(context),
+                  ),
+                ],
               );
-              if (confirmed != true) return;
-
-              try {
-                final service =
-                    await ref.read(galleryServiceProvider.future);
-                await service.deleteImage(entry.characterId, entry.id);
-                ref.invalidate(galleryProvider(widget.charId));
-                if (mounted) Navigator.pop(context);
-              } catch (e) {
-                if (mounted) {
-                  GlazeToast.error(context, 'Failed: ', e);
-                }
-              }
             },
           ),
         ],

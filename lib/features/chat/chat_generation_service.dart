@@ -107,6 +107,7 @@ class ChatGenerationService {
           onStateUpdate(ChatState(
             session: session,
             isGenerating: true,
+            generationStartTime: currentState.generationStartTime ?? startGenTime,
             streamingText: accumulator.text,
             streamingReasoning: accumulator.reasoning.isNotEmpty ? accumulator.reasoning : null,
           ));
@@ -135,7 +136,11 @@ class ChatGenerationService {
           if (partialText.isNotEmpty) {
             finalState = _saveAssistantMessage(partialText, null, session, pendingSessionVars: pendingSessionVars);
           } else {
-            finalState = ChatState(session: session, isGenerating: false, error: error.toString());
+            String? errorMsg = error.toString();
+            if (error is DioException && error.type == DioExceptionType.cancel) {
+              errorMsg = null;
+            }
+            finalState = ChatState(session: session, isGenerating: false, error: errorMsg);
           }
         },
       );
@@ -264,12 +269,18 @@ class ChatGenerationService {
     if (previousSwipesMeta != null && previousSwipesMeta.isNotEmpty) {
       swipesMeta = [...previousSwipesMeta, currentSwipeMeta];
     } else if (previousSwipes != null && previousSwipes.isNotEmpty) {
+      // If we have previous swipes but no meta, we need to fill the meta list
+      // to maintain 1:1 alignment.
       final prevMeta = <String, dynamic>{
         'genTime': previousGenTime,
         'reasoning': previousReasoning,
         'tokens': previousTokens,
       };
-      swipesMeta = [prevMeta, currentSwipeMeta];
+      swipesMeta = List<Map<String, dynamic>>.generate(
+        previousSwipes.length,
+        (i) => i == previousSwipeId ? prevMeta : {},
+      );
+      swipesMeta.add(currentSwipeMeta);
     } else {
       swipesMeta = [currentSwipeMeta];
     }

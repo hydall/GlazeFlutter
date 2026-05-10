@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,8 @@ import '../../../core/state/character_provider.dart';
 import '../../../core/utils/html_to_markdown.dart';
 import '../../../features/personas/persona_list_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
+import '../../../shared/widgets/rolling_number.dart';
+import '../../../shared/widgets/image_viewer.dart';
 import '../../image_gen/widgets/image_content_renderer.dart';
 import '../../settings/app_settings_provider.dart';
 import '../chat_provider.dart';
@@ -131,6 +134,7 @@ class Message extends ConsumerStatefulWidget {
   final int totalMessages;
   final bool isLast;
   final bool isGenerating;
+  final DateTime? generationStartTime;
   final String charId;
   final List<String> swipes;
   final int swipeId;
@@ -139,6 +143,9 @@ class Message extends ConsumerStatefulWidget {
   final bool isSearchMatch;
   final String searchQuery;
   final int activeMatchIndex;
+  /// Callback fired when a left-swipe on the last variant of the last message
+  /// should trigger regeneration (mirrors Vue's swipe-to-regenerate).
+  final VoidCallback? onSwipeRegenerate;
 
   const Message({
     super.key,
@@ -156,6 +163,7 @@ class Message extends ConsumerStatefulWidget {
     required this.totalMessages,
     required this.isLast,
     required this.isGenerating,
+    this.generationStartTime,
     required this.charId,
     this.swipes = const [],
     this.swipeId = 0,
@@ -164,32 +172,115 @@ class Message extends ConsumerStatefulWidget {
     this.isSearchMatch = false,
     this.searchQuery = '',
     this.activeMatchIndex = -1,
+    this.onSwipeRegenerate,
   });
 
   @override
   ConsumerState<Message> createState() => _MessageState();
 }
 
-class _MessageState extends ConsumerState<Message> {
+class _MessageState extends ConsumerState<Message>
+    with TickerProviderStateMixin {
   TextEditingController? _editController;
   bool _highlighted = false;
   final GlobalKey _activePhraseKey = GlobalKey();
 
+  // --- Swipe gesture state ---
+  double _swipeDx = 0;
+  bool _swipeLocked = false; // true once vertical scroll wins
+  bool _swipeActive = false; // true once horizontal drag wins
+  late final AnimationController _swipeResetCtrl;
+  double _swipeResetFrom = 0;
+
+  // --- Animation states ---
+  late final AnimationController _appearanceCtrl;
+  late final Animation<double> _appearanceFade;
+  late final Animation<Offset> _appearanceSlide;
+
+  _SlideDirection _slideDir = _SlideDirection.none;
+  int _lastSwipeId = 0;
+  int _lastGreetingIndex = 0;
+
+  Timer? _genTimer;
+  double _elapsedGenSeconds = 0.0;
+
   @override
   void initState() {
     super.initState();
+    _lastSwipeId = widget.swipeId;
+    _lastGreetingIndex = widget.greetingIndex ?? 0;
+
+    _swipeResetCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    )..addListener(() {
+        setState(() {
+          _swipeDx = _swipeResetFrom * (1 - _swipeResetCtrl.value);
+        });
+      });
+
+    _appearanceCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _appearanceFade = CurvedAnimation(parent: _appearanceCtrl, curve: Curves.easeOut);
+    _appearanceSlide = Tween<Offset>(
+      begin: const Offset(0, 0.05),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _appearanceCtrl, curve: Curves.easeOut));
+
+    _appearanceCtrl.forward();
+
     if (widget.isSearchMatch) {
       _triggerHighlight();
+    }
+
+    _updateGenTimer();
+  }
+
+  void _updateGenTimer() {
+    if (widget.isGenerating && widget.generationStartTime != null && (widget.isStreaming || widget.isTyping)) {
+      if (_genTimer == null) {
+        _genTimer = Timer.periodic(const Duration(milliseconds: 100), (timer) {
+          if (!mounted) {
+            timer.cancel();
+            return;
+          }
+          setState(() {
+            _elapsedGenSeconds = DateTime.now().difference(widget.generationStartTime!).inMilliseconds / 1000.0;
+          });
+        });
+      }
+    } else {
+      _genTimer?.cancel();
+      _genTimer = null;
     }
   }
 
   @override
   void didUpdateWidget(Message oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (widget.swipeId != oldWidget.swipeId) {
+      setState(() {
+        _slideDir = widget.swipeId > oldWidget.swipeId ? _SlideDirection.next : _SlideDirection.prev;
+        _lastSwipeId = widget.swipeId;
+      });
+    } else if (widget.greetingIndex != oldWidget.greetingIndex) {
+      setState(() {
+        final oldIdx = oldWidget.greetingIndex ?? 0;
+        final newIdx = widget.greetingIndex ?? 0;
+        _slideDir = newIdx > oldIdx ? _SlideDirection.next : _SlideDirection.prev;
+        _lastGreetingIndex = newIdx;
+      });
+    }
+
     if ((widget.isSearchMatch && !oldWidget.isSearchMatch) ||
         (widget.activeMatchIndex != -1 && widget.activeMatchIndex != oldWidget.activeMatchIndex)) {
       _triggerHighlight();
     }
+
+    _updateGenTimer();
   }
 
   String _highlightPhrases(String content) {
@@ -257,7 +348,10 @@ class _MessageState extends ConsumerState<Message> {
 
   @override
   void dispose() {
+    _genTimer?.cancel();
     _editController?.dispose();
+    _swipeResetCtrl.dispose();
+    _appearanceCtrl.dispose();
     super.dispose();
   }
 
@@ -290,7 +384,7 @@ class _MessageState extends ConsumerState<Message> {
     final isStreaming = widget.isStreaming;
     final isTyping = widget.isTyping;
     final reasoning = widget.reasoning;
-    final genTime = widget.genTime;
+    final genTime = widget.genTime ?? (widget.generationStartTime != null && _elapsedGenSeconds > 0.0 ? '${_elapsedGenSeconds.toStringAsFixed(1)}s' : null);
     final tokens = widget.tokens;
     final isHidden = widget.isHidden;
     final isError = widget.isError;
@@ -364,27 +458,64 @@ class _MessageState extends ConsumerState<Message> {
       alignment: style.alignment,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: isStandard ? double.infinity : MediaQuery.of(context).size.width * 0.88),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          margin: EdgeInsets.symmetric(horizontal: isStandard ? 16 : 12, vertical: isStandard ? 8 : 4),
-          padding: isStandard ? const EdgeInsets.all(0) : const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: _highlighted ? const Color(0xFF7996CE).withValues(alpha: 0.15) : style.bg,
-            borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16)
-          ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: FadeTransition(
+          opacity: _appearanceFade,
+          child: SlideTransition(
+            position: _appearanceSlide,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              margin: EdgeInsets.symmetric(horizontal: isStandard ? 16 : 12, vertical: isStandard ? 8 : 4),
+              padding: isStandard ? const EdgeInsets.all(0) : const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: _highlighted ? const Color(0xFF7996CE).withValues(alpha: 0.15) : style.bg,
+                borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16)
+              ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                transitionBuilder: (Widget child, Animation<double> animation) {
+                  if (_slideDir == _SlideDirection.none) {
+                    return FadeTransition(opacity: animation, child: child);
+                  }
+                  
+                  final isOut = child.key != ValueKey('${widget.swipeId}-${widget.greetingIndex}');
+                  final offset = _slideDir == _SlideDirection.next 
+                      ? (isOut ? const Offset(-0.1, 0) : const Offset(0.1, 0))
+                      : (isOut ? const Offset(0.1, 0) : const Offset(-0.1, 0));
+
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: offset,
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  );
+                },
+                child: KeyedSubtree(
+                  key: ValueKey('${widget.swipeId}-${widget.greetingIndex}'),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
             if (!isSystem) ...[
               if (isStandard) ...[
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    CircleAvatar(
-                      radius: 12,
-                      backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
-                      backgroundImage: avatarImage,
-                      child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)) : null,
+                    GestureDetector(
+                      onTap: () {
+                        if (avatarImage != null) {
+                          ImageViewer.show(context, imageProvider: avatarImage, description: displayName);
+                        }
+                      },
+                      child: CircleAvatar(
+                        radius: 12,
+                        backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
+                        backgroundImage: avatarImage,
+                        child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)) : null,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     Text(displayName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: scheme.onSurfaceVariant)),
@@ -399,11 +530,18 @@ class _MessageState extends ConsumerState<Message> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    CircleAvatar(
-                      radius: 10,
-                      backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
-                      backgroundImage: avatarImage,
-                      child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)) : null,
+                    GestureDetector(
+                      onTap: () {
+                        if (avatarImage != null) {
+                          ImageViewer.show(context, imageProvider: avatarImage, description: displayName);
+                        }
+                      },
+                      child: CircleAvatar(
+                        radius: 10,
+                        backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
+                        backgroundImage: avatarImage,
+                        child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)) : null,
+                      ),
                     ),
                     const SizedBox(width: 6),
                     Text(displayName, style: TextStyle(fontWeight: FontWeight.w500, fontSize: 12, color: style.metaColor)),
@@ -460,7 +598,7 @@ class _MessageState extends ConsumerState<Message> {
               ),
             if (isStreaming)
               Text('...', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-            if (!isSystem && !isStreaming) ...[
+            if (!isSystem) ...[
               const SizedBox(height: 6),
               _MetadataRow(
                 genTime: genTime,
@@ -486,17 +624,31 @@ class _MessageState extends ConsumerState<Message> {
                 isEditing: isEditing,
                 onSaveEdit: isEditing ? _saveEdit : null,
                 onCancelEdit: isEditing ? _cancelEdit : null,
+                hideActions: isStreaming || isTyping,
               ),
             ],
           ],
         ),
       ),
-      ),
-    );
+    ),
+  ),
+),
+),
+),
+);
 
     Widget bubbleWidget = isHidden ? Opacity(opacity: 0.45, child: bubble) : bubble;
 
     if (isSystem || isStreaming) return bubbleWidget;
+
+    // Wrap in swipe handler for char messages (variant switching + regeneration)
+    final canSwipe = !isUser && !isSystem && !isStreaming && !isEditing && !isGenerating;
+    if (canSwipe) {
+      bubbleWidget = _SwipeableMessage(
+        dx: _swipeDx,
+        child: bubbleWidget,
+      );
+    }
 
     return GestureDetector(
       onLongPress: () => showMessageContextMenu(
@@ -504,8 +656,133 @@ class _MessageState extends ConsumerState<Message> {
         messageIndex: messageIndex, isUser: isUser, isTyping: isTyping,
         isError: isError, isLast: isLast, isGenerating: isGenerating, isHidden: isHidden,
       ),
+      // Horizontal drag for swipe variants (char messages only)
+      onHorizontalDragStart: canSwipe ? _onSwipeDragStart : null,
+      onHorizontalDragUpdate: canSwipe ? _onSwipeDragUpdate : null,
+      onHorizontalDragEnd: canSwipe ? _onSwipeDragEnd : null,
       child: bubbleWidget,
     );
+  }
+
+  // ───── Swipe gesture handlers (mirrors useMessageSwipe.js) ─────
+
+  void _onSwipeDragStart(DragStartDetails _) {
+    _swipeLocked = false;
+    _swipeActive = false;
+    _swipeResetCtrl.stop();
+    setState(() => _swipeDx = 0);
+  }
+
+  void _onSwipeDragUpdate(DragUpdateDetails details) {
+    if (_swipeLocked) return;
+    _swipeActive = true;
+
+    final character = (ref.read(charactersProvider).value ?? [])
+        .where((c) => c.id == widget.charId)
+        .firstOrNull;
+
+    double dx = _swipeDx + details.delta.dx;
+
+    // Clamp: can't drag right beyond first variant,
+    // can't drag left beyond last variant (unless last msg → regenerate)
+    final isFirstGreeting = _isFirstCharGreeting(character);
+    if (isFirstGreeting) {
+      // greeting switcher – always allow both directions
+    } else {
+      if (dx > 0 && widget.swipeId <= 0) {
+        dx = dx * 0.3; // rubber-band effect
+      }
+      if (dx < 0 && widget.swipeId >= widget.swipes.length - 1 && !widget.isLast) {
+        dx = dx * 0.3; // rubber-band effect
+      }
+    }
+
+    setState(() => _swipeDx = dx);
+  }
+
+  void _onSwipeDragEnd(DragEndDetails _) {
+    if (_swipeLocked || !_swipeActive) {
+      _resetSwipe();
+      return;
+    }
+
+    const threshold = 100.0;
+    final character = (ref.read(charactersProvider).value ?? [])
+        .where((c) => c.id == widget.charId)
+        .firstOrNull;
+    final isFirstGreeting = _isFirstCharGreeting(character);
+
+    if (isFirstGreeting) {
+      // Greeting switcher
+      if (_swipeDx < -threshold) {
+        _animateSwipeAndAct(() {
+          ref.read(chatProvider(widget.charId).notifier)
+              .setGreeting(widget.messageIndex, 1);
+        });
+      } else if (_swipeDx > threshold) {
+        _animateSwipeAndAct(() {
+          ref.read(chatProvider(widget.charId).notifier)
+              .setGreeting(widget.messageIndex, -1);
+        });
+      } else {
+        _resetSwipe();
+      }
+      return;
+    }
+
+    // Swipe variants
+    if (_swipeDx < -threshold) {
+      // Swipe left → next variant
+      if (widget.swipeId < widget.swipes.length - 1) {
+        _animateSwipeAndAct(() {
+          ref.read(chatProvider(widget.charId).notifier)
+              .setSwipe(widget.messageIndex, widget.swipeId + 1);
+        });
+      } else if (widget.isLast) {
+        // Last variant of last message → trigger regeneration
+        _animateSwipeBounce(() {
+          ref.read(chatProvider(widget.charId).notifier)
+              .regenerateLastAssistant();
+        });
+      } else {
+        _resetSwipe();
+      }
+    } else if (_swipeDx > threshold) {
+      // Swipe right → previous variant
+      if (widget.swipeId > 0) {
+        _animateSwipeAndAct(() {
+          ref.read(chatProvider(widget.charId).notifier)
+              .setSwipe(widget.messageIndex, widget.swipeId - 1);
+        });
+      } else {
+        _resetSwipe();
+      }
+    } else {
+      _resetSwipe();
+    }
+  }
+
+  /// Smoothly reset dx to 0.
+  void _resetSwipe() {
+    _swipeResetFrom = _swipeDx;
+    _swipeResetCtrl.forward(from: 0);
+  }
+
+  /// Animate the content off-screen, fire the action, then reset.
+  void _animateSwipeAndAct(VoidCallback action) {
+    action();
+    setState(() => _swipeDx = 0);
+  }
+
+  /// Small "bounce" feedback for regeneration: nudge left then reset.
+  void _animateSwipeBounce(VoidCallback action) {
+    setState(() => _swipeDx = -20);
+    Future.delayed(const Duration(milliseconds: 100), () {
+      if (!mounted) return;
+      action();
+      _swipeResetFrom = -20;
+      _swipeResetCtrl.forward(from: 0);
+    });
   }
 
   bool _isFirstCharGreeting(Character? character) {
@@ -540,9 +817,35 @@ class _MessageState extends ConsumerState<Message> {
     if (_isFirstCharGreeting(character)) {
       return () => ref.read(chatProvider(widget.charId).notifier).setGreeting(widget.messageIndex, 1);
     }
-    return widget.swipeId < widget.swipes.length - 1
-        ? () => ref.read(chatProvider(widget.charId).notifier).setSwipe(widget.messageIndex, widget.swipeId + 1)
-        : null;
+    if (widget.swipeId < widget.swipes.length - 1) {
+      return () => ref.read(chatProvider(widget.charId).notifier).setSwipe(widget.messageIndex, widget.swipeId + 1);
+    }
+    if (widget.isLast && !widget.isUser && !widget.isSystem && widget.swipes.isNotEmpty) {
+      return () => ref.read(chatProvider(widget.charId).notifier).regenerateLastAssistant();
+    }
+    return null;
+  }
+}
+
+enum _SlideDirection { next, prev, none }
+
+/// Wraps the message bubble and applies a horizontal translation
+/// for the swipe-to-switch-variant gesture.
+class _SwipeableMessage extends StatelessWidget {
+  final double dx;
+  final Widget child;
+  const _SwipeableMessage({required this.dx, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (dx == 0) return child;
+    return Transform.translate(
+      offset: Offset(dx, 0),
+      child: Opacity(
+        opacity: (1 - (dx.abs() / 300).clamp(0, 0.6)),
+        child: child,
+      ),
+    );
   }
 }
 
@@ -860,6 +1163,7 @@ class _MetadataRow extends StatelessWidget {
   final bool isEditing;
   final VoidCallback? onSaveEdit;
   final VoidCallback? onCancelEdit;
+  final bool hideActions;
 
   const _MetadataRow({
     required this.genTime,
@@ -879,6 +1183,7 @@ class _MetadataRow extends StatelessWidget {
     this.isEditing = false,
     this.onSaveEdit,
     this.onCancelEdit,
+    this.hideActions = false,
   });
 
   @override
@@ -896,7 +1201,7 @@ class _MetadataRow extends StatelessWidget {
               if (genTime != null) ...[
                 Icon(Icons.access_time, size: 12, color: metaColor),
                 const SizedBox(width: 4),
-                Text(genTime!, style: TextStyle(fontSize: 12, color: metaColor)),
+                RollingNumber(value: genTime!, style: TextStyle(fontSize: 12, color: metaColor)),
                 const SizedBox(width: 12),
               ],
               if (tokens != null && tokens! > 0) ...[
@@ -913,8 +1218,9 @@ class _MetadataRow extends StatelessWidget {
             ],
           ),
         ),
-        // Center: swipe switcher
-        if (swipeCount > 1)
+        if (!hideActions) ...[
+          // Center: swipe switcher
+          if (swipeCount > 1)
           Container(
             height: 22,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -987,6 +1293,7 @@ class _MetadataRow extends StatelessWidget {
                   ),
           ),
         ),
+        ],
       ],
     );
   }

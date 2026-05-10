@@ -27,6 +27,7 @@ class PresetListScreen extends ConsumerStatefulWidget {
 class _PresetListScreenState extends ConsumerState<PresetListScreen> {
   Preset? _editingPreset;
   bool _isCreating = false;
+  bool _isEditingBlock = false;
   final _editorKey = GlobalKey<PresetEditorBodyState>();
 
   bool get _inEditor => _isCreating || _editingPreset != null;
@@ -42,14 +43,22 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
     setState(() {
       _editingPreset = null;
       _isCreating = false;
+      _isEditingBlock = false;
     });
   }
 
-  void _goBack() {
-    if (widget.startExpanded) {
-      context.go('/tools');
+  void _handleBack() {
+    if (_inEditor) {
+      final handled = _editorKey.currentState?.handleBack() ?? false;
+      if (!handled) {
+        _closeEditor();
+      }
     } else {
-      Navigator.of(context).maybePop();
+      if (widget.startExpanded) {
+        context.go('/tools');
+      } else {
+        Navigator.of(context).maybePop();
+      }
     }
   }
 
@@ -64,22 +73,17 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
           ? (_editingPreset != null ? 'Edit Preset' : 'New Preset')
           : 'Presets',
       showBack: true,
-      onBack: _inEditor ? _closeEditor : _goBack,
-      actions: _inEditor
-          ? [
-              SheetViewAction(
-                icon: const Icon(Icons.check, size: 20),
-                tooltip: 'Save',
-                onPressed: () => _editorKey.currentState?.save(),
-              ),
-            ]
-          : [],
+      onBack: _handleBack,
       body: _inEditor
           ? PresetEditorBody(
               key: _editorKey,
               preset: _editingPreset,
-              onSaved: (_) => _closeEditor(),
               onDeleted: _closeEditor,
+              onEditingBlockChanged: (isEditing) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) setState(() => _isEditingBlock = isEditing);
+                });
+              },
             )
           : presets.when(
               loading: () => const Center(child: CircularProgressIndicator()),
@@ -113,8 +117,11 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
             child: _PsCard(
               preset: preset,
               isActive: isActive,
-              onActivate: () =>
-                  setActivePreset(ref, isActive ? null : preset.id),
+              onActivate: () {
+                if (!isActive) {
+                  setActivePreset(ref, preset.id);
+                }
+              },
               onEdit: () => _openEditor(preset),
               onDuplicate: () => ref
                   .read(presetListProvider.notifier)
@@ -127,7 +134,13 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
                     ),
                   ),
               onDelete: () {
-                if (isActive) setActivePreset(ref, null);
+                if (isActive) {
+                  final nextPreset = list.cast<Preset?>().firstWhere(
+                        (p) => p?.id != preset.id,
+                        orElse: () => null,
+                      );
+                  setActivePreset(ref, nextPreset?.id);
+                }
                 ref.read(presetListProvider.notifier).remove(preset.id);
               },
             ),

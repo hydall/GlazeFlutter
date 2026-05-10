@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -15,6 +16,7 @@ class GenericEditorField {
   final int? rows;
   final List<Map<String, dynamic>>? options; // [{'label': 'System', 'value': 'system'}]
   final String? text;
+  final bool Function(Map<String, dynamic> item)? showIf;
 
   const GenericEditorField({
     required this.key,
@@ -26,6 +28,7 @@ class GenericEditorField {
     this.rows,
     this.options,
     this.text,
+    this.showIf,
   });
 }
 
@@ -49,6 +52,11 @@ class GenericEditor extends StatefulWidget {
   final Future<void> Function()? onAvatarTap;
   final void Function(Map<String, dynamic> values) onChanged;
   final void Function(String field, int index)? onOpenFsEditor;
+  final bool useWindows;
+  final bool scrollable;
+  final void Function(Map<String, dynamic> values)? onSave;
+  final Duration debounceDuration;
+  final EdgeInsetsGeometry? padding;
 
   const GenericEditor({
     super.key,
@@ -61,6 +69,11 @@ class GenericEditor extends StatefulWidget {
     this.onAvatarTap,
     required this.onChanged,
     this.onOpenFsEditor,
+    this.useWindows = true,
+    this.scrollable = true,
+    this.onSave,
+    this.debounceDuration = const Duration(milliseconds: 1000),
+    this.padding,
   });
 
   @override
@@ -70,6 +83,8 @@ class GenericEditor extends StatefulWidget {
 class _GenericEditorState extends State<GenericEditor> {
   late Map<String, dynamic> _localItem;
   final Map<String, TextEditingController> _controllers = {};
+  Timer? _saveTimer;
+  bool _hasPendingSave = false;
 
   @override
   void initState() {
@@ -139,12 +154,27 @@ class _GenericEditorState extends State<GenericEditor> {
       _localItem[key] = text;
     }
     widget.onChanged(_localItem);
+    _scheduleSave();
+  }
+
+  void _scheduleSave() {
+    if (widget.onSave == null) return;
+    _hasPendingSave = true;
+    _saveTimer?.cancel();
+    _saveTimer = Timer(widget.debounceDuration, () {
+      _hasPendingSave = false;
+      widget.onSave!(_localItem);
+    });
   }
 
   @override
   void dispose() {
     for (final ctrl in _controllers.values) {
       ctrl.dispose();
+    }
+    if (_hasPendingSave) {
+      _saveTimer?.cancel();
+      widget.onSave?.call(_localItem);
     }
     super.dispose();
   }
@@ -168,6 +198,7 @@ class _GenericEditorState extends State<GenericEditor> {
     final alt = _localItem['alternate_greetings'] as List;
     alt.add('');
     widget.onChanged(_localItem);
+    _scheduleSave();
     setState(() {});
     if (widget.onOpenFsEditor != null) {
       widget.onOpenFsEditor!('alternate_greetings', alt.length); // index represents position
@@ -214,6 +245,7 @@ class _GenericEditorState extends State<GenericEditor> {
       }
     }
     widget.onChanged(_localItem);
+    _scheduleSave();
     setState(() {});
   }
 
@@ -230,6 +262,7 @@ class _GenericEditorState extends State<GenericEditor> {
           Navigator.pop(context);
           _localItem[field.key] = opt['value'];
           widget.onChanged(_localItem);
+          _scheduleSave();
           setState(() {});
         },
       );
@@ -252,20 +285,35 @@ class _GenericEditorState extends State<GenericEditor> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      type: MaterialType.transparency,
-      child: ListView(
-        padding: EdgeInsets.fromLTRB(
+    final children = [
+      if (widget.showAvatar) _buildAvatarCard(),
+      for (int sIdx = 0; sIdx < widget.config.length; sIdx++) _buildSection(widget.config[sIdx]),
+    ];
+
+    Widget body;
+    if (widget.scrollable) {
+      body = ListView(
+        padding: widget.padding ?? EdgeInsets.fromLTRB(
           16, 
           MediaQuery.of(context).padding.top + 16, 
           16, 
           MediaQuery.of(context).padding.bottom + 60
         ),
-        children: [
-          if (widget.showAvatar) _buildAvatarCard(),
-          for (int sIdx = 0; sIdx < widget.config.length; sIdx++) _buildSection(widget.config[sIdx]),
-        ],
-      ),
+        children: children,
+      );
+    } else {
+      body = Padding(
+        padding: widget.padding ?? EdgeInsets.zero,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
+      );
+    }
+
+    return Material(
+      type: MaterialType.transparency,
+      child: body,
     );
   }
 
@@ -360,14 +408,24 @@ class _GenericEditorState extends State<GenericEditor> {
   }
 
   Widget _buildSection(GenericEditorSection section) {
+    final visibleFields = section.fields
+        .where((f) => f.showIf == null || f.showIf!(_localItem))
+        .toList();
+
+    if (visibleFields.isEmpty && (section.title == null || section.title!.isEmpty)) {
+      return const SizedBox();
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.glassBorder),
-      ),
-      clipBehavior: Clip.antiAlias,
+      decoration: widget.useWindows
+          ? BoxDecoration(
+              color: Colors.white.withOpacity(0.03),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.glassBorder),
+            )
+          : null,
+      clipBehavior: widget.useWindows ? Clip.antiAlias : Clip.none,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -387,17 +445,22 @@ class _GenericEditorState extends State<GenericEditor> {
                 ),
               ),
             ),
-          for (int fIdx = 0; fIdx < section.fields.length; fIdx++)
-            _buildField(section.fields[fIdx], fIdx == section.fields.length - 1),
+          for (int fIdx = 0; fIdx < visibleFields.length; fIdx++)
+            _buildField(visibleFields[fIdx], fIdx == visibleFields.length - 1),
         ],
       ),
     );
   }
 
   Widget _buildField(GenericEditorField field, bool isLast) {
+    if (field.showIf != null && !field.showIf!(_localItem)) {
+      return const SizedBox.shrink();
+    }
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: isLast
+      padding: widget.useWindows 
+          ? const EdgeInsets.all(16)
+          : const EdgeInsets.symmetric(vertical: 12),
+      decoration: (isLast || !widget.useWindows)
           ? null
           : BoxDecoration(
               border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),

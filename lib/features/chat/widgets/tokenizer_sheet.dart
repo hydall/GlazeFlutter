@@ -82,7 +82,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     final nearLimit = historyFill >= _historyFillThreshold;
 
     return SheetView(
-      title: _showSettings ? 'Tokenizer Settings' : 'Context Usage',
+      title: _showSettings ? 'Context Settings' : 'Context',
       showBack: true,
       onBack: () => _showSettings
           ? setState(() => _showSettings = false)
@@ -119,6 +119,10 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     double historyFill,
     bool nearLimit,
   ) {
+    final hideCount = (_visibleCount * _hidePercent / 100).ceil().clamp(1, _visibleCount > 1 ? _visibleCount - 1 : 0);
+    final historyTokens = bd.sourceTokens['history'] ?? 0;
+    final hideTokens = _visibleCount > 0 ? ((historyTokens / _visibleCount) * hideCount).toInt() : 0;
+
     return Builder(
       builder: (context) => ListView(
         padding: const EdgeInsets.all(
@@ -129,48 +133,68 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
             used: used,
             contextSize: contextSize,
             remaining: remaining,
-            usedPercent: usedPercent,
             historyFill: historyFill,
           ),
-          const SizedBox(height: 20),
-          ContextVerticalBar(breakdown: bd, contextSize: contextSize),
-          const SizedBox(height: 20),
-          BreakdownRows(breakdown: bd),
+          const SizedBox(height: 24),
+          TokenizerLayout(breakdown: bd, contextSize: contextSize),
           if (bd.cutoffIndex > 0) ...[
             const SizedBox(height: 12),
             CutoffWarning(cutoffCount: bd.cutoffIndex),
           ],
           if (nearLimit) ...[
-            const SizedBox(height: 12),
-            NearLimitWarning(historyFill: historyFill),
+            const SizedBox(height: 24),
+            NearLimitWarning(hideCount: hideCount, hideTokens: hideTokens),
           ],
-          const SizedBox(height: 16),
-          TokenizerActionButtons(
-            charId: widget.charId,
-            visibleCount: _visibleCount,
-            hiddenCount: _hiddenCount,
-            hidePercent: _hidePercent,
-            onRefresh: _calculate,
-          ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 24),
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: _calculate,
-                  icon: const Icon(Icons.refresh, size: 16),
-                  label: const Text('Recalculate'),
+                child: FilledButton(
+                  onPressed: hideCount > 0 ? () => _confirmHide(context, hideCount) : null,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFF7996CE),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: Text(hideCount > 0 ? 'Hide top $hideCount' : 'Hide top messages', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 12),
               Expanded(
-                child: OutlinedButton.icon(
+                child: OutlinedButton(
                   onPressed: () => setState(() => _showSettings = true),
-                  icon: const Icon(Icons.settings, size: 16),
-                  label: const Text('Settings'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                    backgroundColor: AppColors.surfaceHigh.withValues(alpha: 0.5),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Settings', style: TextStyle(fontWeight: FontWeight.w600)),
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmHide(BuildContext context, int count) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hide Messages'),
+        content: Text('Hide the top $count visible message${count > 1 ? 's' : ''} from prompt? They will still be visible in chat (dimmed) but excluded from generation.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await ref.read(chatProvider(widget.charId).notifier).hideTopMessages(count);
+              _calculate();
+            },
+            child: Text('Hide $count'),
           ),
         ],
       ),

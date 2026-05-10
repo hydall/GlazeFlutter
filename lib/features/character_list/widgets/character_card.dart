@@ -173,14 +173,17 @@ class _CharacterCardState extends ConsumerState<CharacterCard> {
     return AppColors.accent;
   }
 
-  void _showDetailSheet(BuildContext context) {
-    showModalBottomSheet(
+  void _showDetailSheet(BuildContext context) async {
+    final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
-      useSafeArea: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (_) => CharacterDetailScreen(charId: character.id),
     );
+    if (result != null && result.isNotEmpty && context.mounted) {
+      context.go(result);
+    }
   }
 
   void _showActions(BuildContext context, WidgetRef ref) {
@@ -293,38 +296,29 @@ class _CharacterCardState extends ConsumerState<CharacterCard> {
 
 
   void _confirmDelete(BuildContext context, WidgetRef ref) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceHigh,
-        title: const Text(
-          'Delete Character',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        content: Text(
-          'Delete ${character.name}? This cannot be undone.',
-          style: const TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(charactersProvider.notifier).remove(character.id);
-            },
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Color(0xFFFF4444)),
-            ),
-          ),
-        ],
+    GlazeBottomSheet.show(
+      context,
+      title: 'Delete Character',
+      bigInfo: BottomSheetBigInfo(
+        icon: Icons.delete_outline,
+        description: 'Delete ${character.name}? This cannot be undone.',
       ),
+      items: [
+        BottomSheetItem(
+          label: 'Delete',
+          isDestructive: true,
+          centered: true,
+          onTap: () {
+            Navigator.pop(context);
+            ref.read(charactersProvider.notifier).remove(character.id);
+          },
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.pop(context),
+        ),
+      ],
     );
   }
 }

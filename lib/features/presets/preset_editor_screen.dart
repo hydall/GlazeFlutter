@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,6 +11,7 @@ import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/generic_editor.dart';
 import 'preset_list_provider.dart';
 import 'widgets/widgets.dart';
 
@@ -24,31 +27,32 @@ class PresetEditorScreen extends StatefulWidget {
 class _PresetEditorScreenState extends State<PresetEditorScreen> {
   final _editorKey = GlobalKey<PresetEditorBodyState>();
 
+  void _onBack() {
+    final handled = _editorKey.currentState?.handleBack() ?? false;
+    if (!handled) {
+      if (mounted) Navigator.of(context).pop();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GlazeScaffold(
-      title: widget.preset != null ? 'Edit Preset' : 'New Preset',
-      onBack: () => Navigator.of(context).pop(),
-      actions: [
-        TextButton(
-          onPressed: () => _editorKey.currentState?.save(),
-          child: const Text(
-            'Save',
-            style: TextStyle(
-              color: AppColors.accent,
-              fontWeight: FontWeight.w600,
-            ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _onBack();
+      },
+      child: GlazeScaffold(
+        title: widget.preset != null ? 'Edit Preset' : 'New Preset',
+        onBack: _onBack,
+        body: MediaQuery.removePadding(
+          context: context,
+          removeTop: true,
+          child: PresetEditorBody(
+            key: _editorKey,
+            preset: widget.preset,
+            onDeleted: () => Navigator.of(context).pop(),
           ),
-        ),
-      ],
-      body: MediaQuery.removePadding(
-        context: context,
-        removeTop: true,
-        child: PresetEditorBody(
-          key: _editorKey,
-          preset: widget.preset,
-          onSaved: (_) => Navigator.of(context).pop(),
-          onDeleted: () => Navigator.of(context).pop(),
         ),
       ),
     );
@@ -60,14 +64,14 @@ class _PresetEditorScreenState extends State<PresetEditorScreen> {
 /// from an outer widget (e.g. a [SheetView] header action).
 class PresetEditorBody extends ConsumerStatefulWidget {
   final Preset? preset;
-  final void Function(Preset) onSaved;
   final VoidCallback? onDeleted;
+  final ValueChanged<bool>? onEditingBlockChanged;
 
   const PresetEditorBody({
     super.key,
     this.preset,
-    required this.onSaved,
     this.onDeleted,
+    this.onEditingBlockChanged,
   });
 
   @override
@@ -87,25 +91,96 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
       TextEditingController(text: widget.preset?.reasoningEnd ?? '');
   late bool _mergePrompts = widget.preset?.mergePrompts ?? false;
   bool _showAdvanced = false;
+  int? _expandedBlockIndex;
+
+  Timer? _saveTimer;
+  late final String _currentId = widget.preset?.id ?? generateId();
+  late final int _createdAt = widget.preset?.createdAt ?? currentTimestampSeconds();
 
   @override
   void initState() {
     super.initState();
     _blocks = List.from(widget.preset?.blocks ?? defaultPresetBlocks());
     _regexes = List.from(widget.preset?.regexes ?? []);
+    
+    _nameCtrl.addListener(_scheduleSave);
+    _reasoningStartCtrl.addListener(_scheduleSave);
+    _reasoningEndCtrl.addListener(_scheduleSave);
   }
 
   @override
   void dispose() {
+    if (_saveTimer != null && _saveTimer!.isActive) {
+      _saveTimer!.cancel();
+      _performSave();
+    }
     _nameCtrl.dispose();
     _reasoningStartCtrl.dispose();
     _reasoningEndCtrl.dispose();
     super.dispose();
   }
 
+  void _scheduleSave() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 500), _performSave);
+  }
+
+  Future<void> _performSave() async {
+    final name = _nameCtrl.text.trim().isEmpty ? 'New Preset' : _nameCtrl.text.trim();
+    final presetToSave = Preset(
+      id: _currentId,
+      name: name,
+      author: _author.trim().isEmpty ? null : _author.trim(),
+      blocks: _blocks,
+      regexes: _regexes,
+      reasoningEnabled: _parseInlineReasoning,
+      reasoningStart: _parseInlineReasoning ? _reasoningStartCtrl.text : null,
+      reasoningEnd: _parseInlineReasoning ? _reasoningEndCtrl.text : null,
+      mergePrompts: _mergePrompts,
+      mergeRole: widget.preset?.mergeRole ?? 'system',
+      guidedGenerationPrompt: widget.preset?.guidedGenerationPrompt,
+      guidedImpersonationPrompt: widget.preset?.guidedImpersonationPrompt,
+      summaryPrompt: widget.preset?.summaryPrompt,
+      createdAt: _createdAt,
+    );
+    await ref.read(presetRepoProvider).put(presetToSave);
+    try {
+      ref.invalidate(presetListProvider);
+    } catch (_) {}
+  }
+
+  bool handleBack() {
+    if (_expandedBlockIndex != null) {
+      setState(() => _expandedBlockIndex = null);
+      widget.onEditingBlockChanged?.call(false);
+      return true;
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_expandedBlockIndex != null) {
+      return _BlockEditorInline(
+        key: ValueKey(_blocks[_expandedBlockIndex!].id),
+        block: _blocks[_expandedBlockIndex!],
+        onSave: (updated) {
+          setState(() => _blocks[_expandedBlockIndex!] = updated);
+          _scheduleSave();
+        },
+        onDelete: () {
+          setState(() {
+            _blocks.removeAt(_expandedBlockIndex!);
+            _expandedBlockIndex = null;
+          });
+          widget.onEditingBlockChanged?.call(false);
+          _scheduleSave();
+        },
+      );
+    }
+
     return SingleChildScrollView(
+      key: const ValueKey('dashboard'),
       padding: EdgeInsets.only(
         top: MediaQuery.paddingOf(context).top,
         bottom: MediaQuery.paddingOf(context).bottom +
@@ -217,16 +292,33 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
           if (newIndex > oldIndex) newIndex -= 1;
           final item = _blocks.removeAt(oldIndex);
           _blocks.insert(newIndex, item);
+          if (_expandedBlockIndex == oldIndex) {
+            _expandedBlockIndex = newIndex;
+          } else if (_expandedBlockIndex != null) {
+            if (oldIndex < _expandedBlockIndex! && newIndex >= _expandedBlockIndex!) {
+              _expandedBlockIndex = _expandedBlockIndex! - 1;
+            } else if (oldIndex > _expandedBlockIndex! && newIndex <= _expandedBlockIndex!) {
+              _expandedBlockIndex = _expandedBlockIndex! + 1;
+            }
+          }
         });
+        _scheduleSave();
       },
       itemBuilder: (_, i) => _BlockRow(
         key: ValueKey(_blocks[i].id),
         block: _blocks[i],
         index: i,
         isLast: i == _blocks.length - 1,
-        onEdit: () => _editBlockAt(i),
-        onToggle: (v) =>
-            setState(() => _blocks[i] = _blocks[i].copyWith(enabled: v)),
+        onEdit: () {
+          setState(() {
+            _expandedBlockIndex = i;
+          });
+          widget.onEditingBlockChanged?.call(true);
+        },
+        onToggle: (v) {
+          setState(() => _blocks[i] = _blocks[i].copyWith(enabled: v));
+          _scheduleSave();
+        },
       ),
     );
   }
@@ -282,32 +374,16 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _SectionLabel('Preset Name'),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _nameCtrl,
-            onChanged: (_) => setState(() {}),
-            style: const TextStyle(color: AppColors.textPrimary),
-            decoration: _inputDecoration('Name'),
-          ),
-          const SizedBox(height: 16),
-          const _SectionLabel('Author'),
-          const SizedBox(height: 6),
-          TextFormField(
-            initialValue: _author,
-            onChanged: (v) => _author = v,
-            style: const TextStyle(color: AppColors.textPrimary),
-            decoration: _inputDecoration('Author (optional)'),
-          ),
-          const SizedBox(height: 20),
           const _SectionLabel('Reasoning'),
           const SizedBox(height: 8),
           _SettingsToggle(
             label: 'Parse Inline Reasoning',
             description: 'Extract reasoning tags from model output',
             value: _parseInlineReasoning,
-            onChanged: (v) =>
-                setState(() => _parseInlineReasoning = v),
+            onChanged: (v) {
+              setState(() => _parseInlineReasoning = v);
+              _scheduleSave();
+            },
           ),
           if (_parseInlineReasoning) ...[
             const SizedBox(height: 12),
@@ -338,7 +414,10 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
             label: 'Merge Prompts',
             description: 'Combine adjacent blocks into one message',
             value: _mergePrompts,
-            onChanged: (v) => setState(() => _mergePrompts = v),
+            onChanged: (v) {
+              setState(() => _mergePrompts = v);
+              _scheduleSave();
+            },
           ),
         ],
       ),
@@ -356,60 +435,41 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
         content: '',
       ));
     });
+    _scheduleSave();
   }
 
-  void _editBlockAt(int index) {
+
+
+  void _showRenameDialog() {
     GlazeBottomSheet.show(
       context,
-      child: _BlockEditorSheet(
-        block: _blocks[index],
-        onSave: (updated) {
-          setState(() => _blocks[index] = updated);
+      title: 'Rename Preset',
+      input: BottomSheetInput(
+        placeholder: 'Preset name',
+        value: _nameCtrl.text,
+        confirmLabel: 'Rename',
+        onConfirm: (val) {
           Navigator.pop(context);
-        },
-        onDelete: () {
-          setState(() => _blocks.removeAt(index));
-          Navigator.pop(context);
+          setState(() => _nameCtrl.text = val);
+          _scheduleSave();
         },
       ),
     );
   }
 
-  void _showRenameDialog() {
-    final ctrl = TextEditingController(text: _nameCtrl.text);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
-          'Rename Preset',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          style: const TextStyle(color: AppColors.textPrimary),
-          decoration: _inputDecoration('Preset name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              setState(() => _nameCtrl.text = ctrl.text);
-              Navigator.pop(ctx);
-            },
-            child: const Text(
-              'Rename',
-              style: TextStyle(color: AppColors.accent),
-            ),
-          ),
-        ],
+  void _showAuthorDialog() {
+    GlazeBottomSheet.show(
+      context,
+      title: 'Set Author',
+      input: BottomSheetInput(
+        placeholder: 'Author (optional)',
+        value: _author,
+        confirmLabel: 'Save',
+        onConfirm: (val) {
+          Navigator.pop(context);
+          setState(() => _author = val.trim());
+          _scheduleSave();
+        },
       ),
     );
   }
@@ -425,6 +485,14 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
           onTap: () {
             Navigator.pop(context);
             _showRenameDialog();
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.person_outline,
+          label: 'Set Author',
+          onTap: () {
+            Navigator.pop(context);
+            _showAuthorDialog();
           },
         ),
         if (widget.preset != null)
@@ -450,40 +518,12 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
       context,
       child: _RegexSheet(
         regexes: _regexes,
-        onChanged: (list) => setState(() => _regexes = list),
+        onChanged: (list) {
+          setState(() => _regexes = list);
+          _scheduleSave();
+        },
       ),
     );
-  }
-
-  Future<void> save() async {
-    final name = _nameCtrl.text.trim();
-    if (name.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a preset name')),
-      );
-      return;
-    }
-    final preset = Preset(
-      id: widget.preset?.id ??
-          generateId(),
-      name: name,
-      author: _author.trim().isEmpty ? null : _author.trim(),
-      blocks: _blocks,
-      regexes: _regexes,
-      reasoningEnabled: _parseInlineReasoning,
-      reasoningStart: _parseInlineReasoning ? _reasoningStartCtrl.text : null,
-      reasoningEnd: _parseInlineReasoning ? _reasoningEndCtrl.text : null,
-      mergePrompts: _mergePrompts,
-      mergeRole: widget.preset?.mergeRole ?? 'system',
-      guidedGenerationPrompt: widget.preset?.guidedGenerationPrompt,
-      guidedImpersonationPrompt: widget.preset?.guidedImpersonationPrompt,
-      summaryPrompt: widget.preset?.summaryPrompt,
-      createdAt: widget.preset?.createdAt ??
-          currentTimestampSeconds(),
-    );
-    await ref.read(presetRepoProvider).put(preset);
-    ref.invalidate(presetListProvider);
-    if (mounted) widget.onSaved(preset);
   }
 
   InputDecoration _inputDecoration(String hint) {
@@ -881,324 +921,108 @@ class _SettingsToggle extends StatelessWidget {
   }
 }
 
-// ─── _BlockEditorSheet ───────────────────────────────────────────────────────
+// ─── _BlockEditorInline ─────────────────────────────────────────────────────────
 
-class _BlockEditorSheet extends StatefulWidget {
+class _BlockEditorInline extends StatelessWidget {
   final PresetBlock block;
   final ValueChanged<PresetBlock> onSave;
   final VoidCallback onDelete;
 
-  const _BlockEditorSheet({
+  const _BlockEditorInline({
+    super.key,
     required this.block,
     required this.onSave,
     required this.onDelete,
   });
 
   @override
-  State<_BlockEditorSheet> createState() => _BlockEditorSheetState();
-}
-
-class _BlockEditorSheetState extends State<_BlockEditorSheet> {
-  late final _nameCtrl = TextEditingController(text: widget.block.name);
-  late final _contentCtrl = TextEditingController(text: widget.block.content);
-  late String _role = widget.block.role;
-  late String _insertionMode = widget.block.insertionMode;
-  late int? _depth = widget.block.depth;
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _contentCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Edit Block',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: () => widget.onSave(widget.block.copyWith(
-                  name: _nameCtrl.text.trim().isEmpty
-                      ? widget.block.name
-                      : _nameCtrl.text.trim(),
-                  content: _contentCtrl.text,
-                  role: _role,
-                  insertionMode: _insertionMode,
-                  depth: _insertionMode == 'depth' ? _depth : null,
-                )),
-                child: const Text(
-                  'Done',
-                  style: TextStyle(
-                    color: AppColors.accent,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+    final config = [
+      GenericEditorSection(
+        title: null,
+        fields: [
+          const GenericEditorField(key: 'name', label: 'Block Name', type: 'text'),
+          const GenericEditorField(
+            key: 'role',
+            label: 'Role',
+            type: 'select',
+            options: [
+              {'label': 'System', 'value': 'system'},
+              {'label': 'User', 'value': 'user'},
+              {'label': 'Assistant', 'value': 'assistant'},
             ],
           ),
+          const GenericEditorField(
+            key: 'insertionMode',
+            label: 'Insertion',
+            type: 'select',
+            options: [
+              {'label': 'Relative', 'value': 'relative'},
+              {'label': 'Depth', 'value': 'depth'},
+            ],
+          ),
+          GenericEditorField(
+            key: 'depth',
+            label: 'Depth',
+            type: 'select',
+            options: List.generate(20, (i) => {'label': '${i + 1}', 'value': i + 1}),
+            showIf: (item) => item['insertionMode'] == 'depth',
+          ),
+          const GenericEditorField(
+            key: 'content',
+            label: 'Content',
+            type: 'textarea',
+            rows: 5,
+            expandable: true,
+          ),
+        ],
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: GenericEditor(
+            item: block.toJson(),
+            config: config,
+            scrollable: true,
+            onChanged: (values) {
+              onSave(PresetBlock.fromJson(values));
+            },
+          ),
         ),
-        Divider(color: AppColors.border, height: 1),
-        // Fields
+        // Delete button
         Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _fieldLabel('Block Name'),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _nameCtrl,
-                style: const TextStyle(color: AppColors.textPrimary),
-                decoration: _inputDecoration('Block Name'),
-              ),
-              const SizedBox(height: 16),
-              _fieldLabel('Role'),
-              const SizedBox(height: 6),
-              _RoleSelector(
-                value: _role,
-                onChanged: (v) => setState(() => _role = v),
-              ),
-              const SizedBox(height: 16),
-              _fieldLabel('Insertion'),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Expanded(
-                    child: _InsertionModeSelector(
-                      value: _insertionMode,
-                      onChanged: (v) => setState(() => _insertionMode = v),
-                    ),
-                  ),
-                  if (_insertionMode == 'depth') ...[
-                    const SizedBox(width: 12),
-                    SizedBox(
-                      width: 80,
-                      child: TextFormField(
-                        initialValue: _depth?.toString() ?? '4',
-                        decoration: _inputDecoration('Depth'),
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(color: AppColors.textPrimary),
-                        onChanged: (v) => _depth = int.tryParse(v),
+          padding: EdgeInsets.fromLTRB(16, 0, 16, MediaQuery.paddingOf(context).bottom + 16),
+          child: Material(
+            color: const Color(0xFFFF4444).withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              onTap: onDelete,
+              borderRadius: BorderRadius.circular(12),
+              child: const Padding(
+                padding: EdgeInsets.symmetric(vertical: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.delete_outlined, size: 20, color: Color(0xFFFF4444)),
+                    SizedBox(width: 8),
+                    Text(
+                      'Delete Block',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFFF4444),
                       ),
                     ),
                   ],
-                ],
-              ),
-              const SizedBox(height: 16),
-              _fieldLabel('Content'),
-              const SizedBox(height: 6),
-              TextField(
-                controller: _contentCtrl,
-                style: const TextStyle(color: AppColors.textPrimary),
-                maxLines: null,
-                minLines: 5,
-                decoration: _inputDecoration('Block content...'),
-              ),
-              const SizedBox(height: 24),
-              // Delete button
-              Material(
-                color: const Color(0xFFFF4444).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                child: InkWell(
-                  onTap: widget.onDelete,
-                  borderRadius: BorderRadius.circular(12),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.delete_outlined,
-                            size: 20, color: Color(0xFFFF4444)),
-                        SizedBox(width: 8),
-                        Text(
-                          'Delete Block',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFFFF4444),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ],
-    );
-  }
-
-  Widget _fieldLabel(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w500,
-        color: AppColors.textSecondary,
-      ),
-    );
-  }
-
-  InputDecoration _inputDecoration(String hint) {
-    return InputDecoration(
-      hintText: hint,
-      hintStyle:
-          TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
-      filled: true,
-      fillColor: Colors.white.withValues(alpha: 0.04),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppColors.border),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppColors.border),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppColors.accent),
-      ),
-      contentPadding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-    );
-  }
-}
-
-// ─── _RoleSelector ───────────────────────────────────────────────────────────
-
-class _RoleSelector extends StatelessWidget {
-  final String value;
-  final ValueChanged<String> onChanged;
-  const _RoleSelector({required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    const options = [
-      ('system', 'System'),
-      ('user', 'User'),
-      ('assistant', 'Assistant'),
-    ];
-    return Row(
-      children: options.map((opt) {
-        final (val, label) = opt;
-        final active = value == val;
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Material(
-              color: active
-                  ? AppColors.accent.withValues(alpha: 0.15)
-                  : Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(10),
-              child: InkWell(
-                onTap: () => onChanged(val),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: active
-                          ? AppColors.accent.withValues(alpha: 0.3)
-                          : Colors.transparent,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: active
-                          ? AppColors.accent
-                          : AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
-
-// ─── _InsertionModeSelector ───────────────────────────────────────────────────
-
-class _InsertionModeSelector extends StatelessWidget {
-  final String value;
-  final ValueChanged<String> onChanged;
-  const _InsertionModeSelector(
-      {required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    const options = [
-      ('relative', 'Relative'),
-      ('depth', 'Depth'),
-    ];
-    return Row(
-      children: options.map((opt) {
-        final (val, label) = opt;
-        final active = value == val;
-        return Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Material(
-              color: active
-                  ? AppColors.accent.withValues(alpha: 0.15)
-                  : Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(10),
-              child: InkWell(
-                onTap: () => onChanged(val),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: active
-                          ? AppColors.accent.withValues(alpha: 0.3)
-                          : Colors.transparent,
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    label,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: active
-                          ? AppColors.accent
-                          : AppColors.textSecondary,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      }).toList(),
     );
   }
 }

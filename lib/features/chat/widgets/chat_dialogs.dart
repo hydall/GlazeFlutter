@@ -8,6 +8,7 @@ import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../chat_provider.dart';
 
@@ -40,9 +41,23 @@ void showRawPromptDialog(
 
   if (!context.mounted) return;
 
-  showDialog(
-    context: context,
-    builder: (ctx) => _CopyableDialog(title: 'Raw Prompt', content: rawJson),
+  GlazeBottomSheet.show(
+    context,
+    title: 'Raw Prompt',
+    headerAction: IconButton(
+      icon: const Icon(Icons.copy),
+      onPressed: () {
+        Clipboard.setData(ClipboardData(text: rawJson));
+        GlazeToast.show(context, 'Copied to clipboard');
+      },
+    ),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: SelectableText(
+        rawJson,
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+      ),
+    ),
   );
   } catch (e) {
     if (context.mounted) GlazeToast.error(context, 'Failed to build prompt: ', e);
@@ -57,9 +72,23 @@ void showRawResponseDialog(BuildContext context, WidgetRef ref, String charId) {
     return;
   }
 
-  showDialog(
-    context: context,
-    builder: (ctx) => _CopyableDialog(title: 'Raw Response', content: raw),
+  GlazeBottomSheet.show(
+    context,
+    title: 'Raw Response',
+    headerAction: IconButton(
+      icon: const Icon(Icons.copy),
+      onPressed: () {
+        Clipboard.setData(ClipboardData(text: raw));
+        GlazeToast.show(context, 'Copied to clipboard');
+      },
+    ),
+    child: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+      child: SelectableText(
+        raw,
+        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+      ),
+    ),
   );
 }
 
@@ -68,41 +97,31 @@ void showPresetPickerDialog(BuildContext context, WidgetRef ref) async {
   final activeId = ref.read(activePresetIdProvider);
   if (!context.mounted) return;
 
-  showDialog(
-    context: context,
-    builder: (ctx) => SimpleDialog(
-      title: const Text('Select Preset'),
-      children: [
-        SimpleDialogOption(
-          onPressed: () {
-            setActivePreset(ref, null);
-            Navigator.pop(ctx);
+  GlazeBottomSheet.show(
+    context,
+    title: 'Select Preset',
+    items: [
+      BottomSheetItem(
+        label: 'Default (first)',
+        icon: activeId == null ? Icons.check : null,
+        iconColor: activeId == null ? const Color(0xFF7996CE) : null,
+        onTap: () {
+          setActivePreset(ref, null);
+          Navigator.pop(context);
+        },
+      ),
+      ...presets.map(
+        (p) => BottomSheetItem(
+          label: p.name,
+          icon: activeId == p.id ? Icons.check : null,
+          iconColor: activeId == p.id ? const Color(0xFF7996CE) : null,
+          onTap: () {
+            setActivePreset(ref, p.id);
+            Navigator.pop(context);
           },
-          child: Row(
-            children: [
-              if (activeId == null) const Icon(Icons.check, size: 16),
-              const SizedBox(width: 8),
-              const Text('Default (first)'),
-            ],
-          ),
         ),
-        ...presets.map(
-          (p) => SimpleDialogOption(
-            onPressed: () {
-              setActivePreset(ref, p.id);
-              Navigator.pop(ctx);
-            },
-            child: Row(
-              children: [
-                if (activeId == p.id) const Icon(Icons.check, size: 16),
-                const SizedBox(width: 8),
-                Text(p.name),
-              ],
-            ),
-          ),
-        ),
-      ],
-    ),
+      ),
+    ],
   );
 }
 
@@ -111,41 +130,31 @@ void showPersonaPickerDialog(BuildContext context, WidgetRef ref) async {
   final activeId = ref.read(activePersonaIdProvider);
   if (!context.mounted) return;
 
-  showDialog(
-    context: context,
-    builder: (ctx) => SimpleDialog(
-      title: const Text('Select Persona'),
-      children: [
-        SimpleDialogOption(
-          onPressed: () {
-            setActivePersona(ref, null);
-            Navigator.pop(ctx);
+  GlazeBottomSheet.show(
+    context,
+    title: 'Select Persona',
+    items: [
+      BottomSheetItem(
+        label: 'Default (first)',
+        icon: activeId == null ? Icons.check : null,
+        iconColor: activeId == null ? const Color(0xFF7996CE) : null,
+        onTap: () {
+          setActivePersona(ref, null);
+          Navigator.pop(context);
+        },
+      ),
+      ...personas.map(
+        (p) => BottomSheetItem(
+          label: p.name,
+          icon: activeId == p.id ? Icons.check : null,
+          iconColor: activeId == p.id ? const Color(0xFF7996CE) : null,
+          onTap: () {
+            setActivePersona(ref, p.id);
+            Navigator.pop(context);
           },
-          child: Row(
-            children: [
-              if (activeId == null) const Icon(Icons.check, size: 16),
-              const SizedBox(width: 8),
-              const Text('Default (first)'),
-            ],
-          ),
         ),
-        ...personas.map(
-          (p) => SimpleDialogOption(
-            onPressed: () {
-              setActivePersona(ref, p.id);
-              Navigator.pop(ctx);
-            },
-            child: Row(
-              children: [
-                if (activeId == p.id) const Icon(Icons.check, size: 16),
-                const SizedBox(width: 8),
-                Text(p.name),
-              ],
-            ),
-          ),
-        ),
-      ],
-    ),
+      ),
+    ],
   );
 }
 
@@ -154,65 +163,28 @@ void confirmClearChatDialog(
   WidgetRef ref,
   String charId,
 ) {
-  showDialog(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: const Text('Clear Chat'),
-      content: const Text('Delete all messages? This cannot be undone.'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(ctx),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: () {
-            Navigator.pop(ctx);
-            ref.read(chatProvider(charId).notifier).clearChat();
-          },
-          child: const Text('Clear'),
-        ),
-      ],
+  GlazeBottomSheet.show(
+    context,
+    title: 'Clear Chat',
+    bigInfo: const BottomSheetBigInfo(
+      icon: Icons.delete_outline,
+      description: 'Delete all messages? This cannot be undone.',
     ),
+    items: [
+      BottomSheetItem(
+        label: 'Clear',
+        isDestructive: true,
+        centered: true,
+        onTap: () {
+          Navigator.pop(context);
+          ref.read(chatProvider(charId).notifier).clearChat();
+        },
+      ),
+      BottomSheetItem(
+        label: 'Cancel',
+        centered: true,
+        onTap: () => Navigator.pop(context),
+      ),
+    ],
   );
-}
-
-class _CopyableDialog extends StatelessWidget {
-  final String title;
-  final String content;
-
-  const _CopyableDialog({required this.title, required this.content});
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Row(
-        children: [
-          Text(title),
-          const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.copy),
-            tooltip: 'Copy',
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: content));
-              GlazeToast.show(context, 'Copied to clipboard');
-            },
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: MediaQuery.of(context).size.width * 0.8,
-        height: MediaQuery.of(context).size.height * 0.7,
-        child: SelectableText(
-          content,
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Close'),
-        ),
-      ],
-    );
-  }
 }

@@ -15,6 +15,7 @@ class AppSettings {
   final bool disableSwipeRegeneration;
   final String chatLayout;
   final String language;
+  final bool virtualKeyboardSend;
 
   const AppSettings({
     this.enterToSend = true,
@@ -27,6 +28,7 @@ class AppSettings {
     this.disableSwipeRegeneration = false,
     this.chatLayout = 'default',
     this.language = 'en',
+    this.virtualKeyboardSend = false,
   });
 
   AppSettings copyWith({
@@ -40,6 +42,7 @@ class AppSettings {
     bool? disableSwipeRegeneration,
     String? chatLayout,
     String? language,
+    bool? virtualKeyboardSend,
   }) {
     return AppSettings(
       enterToSend: enterToSend ?? this.enterToSend,
@@ -53,6 +56,7 @@ class AppSettings {
           disableSwipeRegeneration ?? this.disableSwipeRegeneration,
       chatLayout: chatLayout ?? this.chatLayout,
       language: language ?? this.language,
+      virtualKeyboardSend: virtualKeyboardSend ?? this.virtualKeyboardSend,
     );
   }
 }
@@ -73,6 +77,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
           prefs.getBool('disableSwipeRegeneration') ?? false,
       chatLayout: prefs.getString('chatLayout') ?? 'default',
       language: prefs.getString('language') ?? 'en',
+      virtualKeyboardSend: prefs.getBool('virtualKeyboardSend') ?? false,
     );
   }
 
@@ -88,6 +93,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setBool('disableSwipeRegeneration', settings.disableSwipeRegeneration);
     await prefs.setString('chatLayout', settings.chatLayout);
     await prefs.setString('language', settings.language);
+    await prefs.setBool('virtualKeyboardSend', settings.virtualKeyboardSend);
     state = AsyncData(settings);
   }
 }

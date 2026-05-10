@@ -682,70 +682,28 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   }
 
   Future<void> _createNewPreset(List<ApiConfig> existing) async {
-    final nameCtrl = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: AppColors.glassBorder),
-        ),
-        title: const Text(
-          'New API Config',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        content: TextField(
-          controller: nameCtrl,
-          autofocus: true,
-          style: const TextStyle(color: AppColors.textPrimary),
-          decoration: InputDecoration(
-            hintText: 'My OpenAI',
-            hintStyle: TextStyle(
-              color: AppColors.textSecondary.withValues(alpha: 0.4),
-            ),
-            filled: true,
-            fillColor: const Color(0xFF252525),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 14,
-              vertical: 12,
-            ),
-          ),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, nameCtrl.text.trim()),
-            child: const Text(
-              'Create',
-              style: TextStyle(color: AppColors.accent),
-            ),
-          ),
-        ],
+    await GlazeBottomSheet.show(
+      context,
+      title: 'New API Config',
+      input: BottomSheetInput(
+        placeholder: 'My OpenAI',
+        confirmLabel: 'Create',
+        onConfirm: (name) async {
+          Navigator.of(context, rootNavigator: true).pop();
+          final trimmed = name.trim();
+          if (trimmed.isEmpty) return;
+
+          final newConfig = ApiConfig(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            name: trimmed,
+          );
+          await ref.read(apiListProvider.notifier).put(newConfig);
+          ref.read(activeApiPresetIdProvider.notifier).state = newConfig.id;
+          _loadedPresetId = null;
+          _loadFromConfig(newConfig);
+        },
       ),
     );
-    nameCtrl.dispose();
-    if (name == null || name.isEmpty) return;
-
-    final newConfig = ApiConfig(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: name,
-    );
-    await ref.read(apiListProvider.notifier).put(newConfig);
-    ref.read(activeApiPresetIdProvider.notifier).state = newConfig.id;
-    _loadedPresetId = null;
-    _loadFromConfig(newConfig);
   }
 
   Future<void> _openModelSelector() async {

@@ -30,26 +30,12 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
   Character? _original;
   Map<String, dynamic> _item = {};
   List<String> _lorebookNames = [];
-  Timer? _saveTimer;
   late final _repo = ref.read(characterRepoProvider);
 
   @override
   void initState() {
     super.initState();
     _loadCharacter();
-  }
-
-  @override
-  void dispose() {
-    _flushSave();
-    super.dispose();
-  }
-
-  void _flushSave() {
-    if (_saveTimer?.isActive ?? false) {
-      _saveTimer?.cancel();
-      _save();
-    }
   }
 
   Future<void> _loadLorebookNames() async {
@@ -93,7 +79,6 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
   }
 
   void _goBack() {
-    _flushSave();
     if (context.canPop()) {
       context.pop();
     } else {
@@ -117,82 +102,75 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         _item['avatarPath'] = savedPath;
         _item = Map.from(_item); // Force update
       });
-      _scheduleSave();
+      _save(_item);
     }
   }
 
-  void _scheduleSave() {
-    _saveTimer?.cancel();
-    _saveTimer = Timer(const Duration(milliseconds: 600), () {
-      if (mounted) _save();
-    });
-  }
-
-  Future<void> _save() async {
-    if ((_item['name'] as String?)?.trim().isEmpty ?? true) {
+  Future<void> _save(Map<String, dynamic> item) async {
+    if ((item['name'] as String?)?.trim().isEmpty ?? true) {
       return; // Do not auto-save if name is invalid
     }
 
     try {
-      final tags = (_item['tags'] as List<dynamic>?)
+      final tags = (item['tags'] as List<dynamic>?)
               ?.map((t) => t.toString())
               .toList() ??
           [];
-      final alternateGreetings = (_item['alternate_greetings'] as List<dynamic>?)
+      final alternateGreetings = (item['alternate_greetings'] as List<dynamic>?)
               ?.map((t) => t.toString())
               .toList() ??
           [];
 
       final updated = Character(
         id: widget.charId,
-        name: (_item['name'] as String).trim(),
-        avatarPath: _item['avatarPath'] as String?,
-        description: (_item['description'] as String?)?.trim().isEmpty ?? true
+        name: (item['name'] as String).trim(),
+        avatarPath: item['avatarPath'] as String?,
+        description: (item['description'] as String?)?.trim().isEmpty ?? true
             ? null
-            : (_item['description'] as String).trim(),
-        personality: (_item['personality'] as String?)?.trim().isEmpty ?? true
+            : (item['description'] as String).trim(),
+        personality: (item['personality'] as String?)?.trim().isEmpty ?? true
             ? null
-            : (_item['personality'] as String).trim(),
-        scenario: (_item['scenario'] as String?)?.trim().isEmpty ?? true
+            : (item['personality'] as String).trim(),
+        scenario: (item['scenario'] as String?)?.trim().isEmpty ?? true
             ? null
-            : (_item['scenario'] as String).trim(),
-        firstMes: (_item['first_mes'] as String?)?.trim().isEmpty ?? true
+            : (item['scenario'] as String).trim(),
+        firstMes: (item['first_mes'] as String?)?.trim().isEmpty ?? true
             ? null
-            : (_item['first_mes'] as String).trim(),
-        mesExample: (_item['mes_example'] as String?)?.trim().isEmpty ?? true
+            : (item['first_mes'] as String).trim(),
+        mesExample: (item['mes_example'] as String?)?.trim().isEmpty ?? true
             ? null
-            : (_item['mes_example'] as String).trim(),
-        systemPrompt: (_item['system_prompt'] as String?)?.trim().isEmpty ?? true
+            : (item['mes_example'] as String).trim(),
+        systemPrompt: (item['system_prompt'] as String?)?.trim().isEmpty ?? true
             ? null
-            : (_item['system_prompt'] as String).trim(),
+            : (item['system_prompt'] as String).trim(),
         postHistoryInstructions:
-            (_item['post_history_instructions'] as String?)?.trim().isEmpty ?? true
+            (item['post_history_instructions'] as String?)?.trim().isEmpty ?? true
                 ? null
-                : (_item['post_history_instructions'] as String).trim(),
-        creator: (_item['creator'] as String?)?.trim().isEmpty ?? true
+                : (item['post_history_instructions'] as String).trim(),
+        creator: (item['creator'] as String?)?.trim().isEmpty ?? true
             ? null
-            : (_item['creator'] as String).trim(),
-        creatorNotes: (_item['creator_notes'] as String?)?.trim().isEmpty ?? true
+            : (item['creator'] as String).trim(),
+        creatorNotes: (item['creator_notes'] as String?)?.trim().isEmpty ?? true
             ? null
-            : (_item['creator_notes'] as String).trim(),
+            : (item['creator_notes'] as String).trim(),
         tags: tags,
         alternateGreetings: alternateGreetings,
         color: _original?.color,
         updatedAt: currentTimestampSeconds(),
         extensions: {
           ...?_original?.extensions,
-          'talkativeness': _item['talkativeness'] is num ? (_item['talkativeness'] as num).toDouble() : 1.0,
+          'talkativeness': item['talkativeness'] is num ? (item['talkativeness'] as num).toDouble() : 1.0,
         },
         fav: _original?.fav ?? false,
-        depthPrompt: (_item['depth_prompt'] as String?)?.trim() ?? '',
-        depthPromptDepth: _item['depth_prompt_depth'] as int? ?? 4,
-        depthPromptRole: _item['depth_prompt_role'] as String? ?? 'system',
-        world: _item['world'] as String?,
+        depthPrompt: (item['depth_prompt'] as String?)?.trim() ?? '',
+        depthPromptDepth: item['depth_prompt_depth'] as int? ?? 4,
+        depthPromptRole: item['depth_prompt_role'] as String? ?? 'system',
+        world: item['world'] as String?,
         characterVersion: _original?.characterVersion ?? '1',
       );
 
       await _repo.put(updated);
-      final avatarPath = _item['avatarPath'] as String?;
+      final avatarPath = item['avatarPath'] as String?;
       if (avatarPath != null && avatarPath.isNotEmpty) {
         await FileImage(File(avatarPath)).evict();
       }
@@ -296,8 +274,8 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         onAvatarTap: _pickAvatar,
         onChanged: (values) {
           _item = values;
-          _scheduleSave();
         },
+        onSave: _save,
         onOpenFsEditor: _onOpenFsEditor,
       ),
     );

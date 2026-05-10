@@ -1,18 +1,16 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gradient_blur/gradient_blur.dart';
+
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/llm/summary_service.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../core/services/chat_import_export.dart';
 import '../../../core/models/chat_message.dart';
@@ -29,12 +27,14 @@ import '../../presets/preset_list_screen.dart';
 import '../../regex/regex_list_screen.dart';
 import '../../settings/api_settings_screen.dart';
 import 'authors_note_sheet.dart';
+import 'chat_stats_sheet.dart';
 import 'lorebook_coverage_sheet.dart';
 import 'magic_drawer_models.dart';
 import 'magic_drawer_stats_service.dart';
 import 'magic_drawer_widgets.dart';
 import 'memory_books_sheet.dart';
 import 'prompt_preview_screen.dart';
+import 'summary_sheet.dart';
 import 'tokenizer_sheet.dart';
 
 class MagicDrawerPanel extends ConsumerStatefulWidget {
@@ -184,6 +184,14 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     });
   }
 
+  /// Lightweight refresh: only stats, no layout re-read from disk.
+  /// Called by the debounce timer when messages change.
+  Future<void> _refreshStats() async {
+    await _loadStats();
+    if (mounted) setState(() {});
+    _loadTokenStats();
+  }
+
   bool _isKnownItem(String id) => _allItems.any((item) => item.id == id);
 
   List<MagicDrawerCardItem> get _displayItems {
@@ -315,7 +323,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         showTokenizerSheet(context, widget.charId);
         return;
       case 'summary':
-        await _generateSummary();
+        showSummarySheet(context, widget.charId);
         return;
       case 'sessions':
         await _showSessionsSheet();
@@ -326,13 +334,16 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       case 'char-card':
         widget.onClose?.call();
         if (mounted) {
-          showModalBottomSheet(
+          final result = await showModalBottomSheet<String>(
             context: context,
             isScrollControlled: true,
-            useSafeArea: true,
+            useRootNavigator: true,
             backgroundColor: Colors.transparent,
             builder: (_) => CharacterDetailScreen(charId: widget.charId),
           );
+          if (result != null && result.isNotEmpty && mounted) {
+            context.go(result);
+          }
         }
         return;
       case 'lorebooks':
@@ -412,64 +423,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     }
   }
 
-  Future<void> _generateSummary() async {
-    final chatState = ref.read(chatProvider(widget.charId)).value;
-    final session = chatState?.session;
-    if (session == null) return;
-    final apiConfigs = await ref.read(apiConfigRepoProvider).getAll();
-    final chatApi = apiConfigs
-        .where((cfg) => cfg.mode != 'embedding')
-        .firstOrNull;
-    if (chatApi == null) {
-      if (mounted) {
-        GlazeBottomSheet.show(
-          context,
-          title: 'Summary',
-          bigInfo: const BottomSheetBigInfo(
-            icon: Icons.api_outlined,
-            description:
-                'No chat API config found. Add one in API Settings first.',
-          ),
-        );
-      }
-      return;
-    }
 
-    if (!mounted) return;
-    widget.onClose?.call();
-    try {
-      final summary = await ref
-          .read(summaryServiceProvider)
-          .generateSummary(
-            sessionId: session.id,
-            history: session.messages,
-            apiConfig: chatApi,
-          );
-      if (!mounted) return;
-      await GlazeBottomSheet.show(
-        context,
-        title: 'Summary',
-        bigInfo: BottomSheetBigInfo(
-          icon: Icons.summarize_outlined,
-          description: 'Generated summary (${summary.length} chars).',
-          buttonText: 'OK',
-          onButtonTap: () => Navigator.of(context).pop(),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      await GlazeBottomSheet.show(
-        context,
-        title: 'Summary Failed',
-        bigInfo: BottomSheetBigInfo(
-          icon: Icons.error_outline,
-          description: e.toString(),
-          buttonText: 'Close',
-          onButtonTap: () => Navigator.of(context).pop(),
-        ),
-      );
-    }
-  }
 
   Future<void> _showMemoryBooks() async {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
@@ -553,71 +507,15 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _showStatsSheet() async {
-    final session = ref.read(chatProvider(widget.charId)).value?.session;
-    if (session == null) return;
-
-    final visibleMessages = session.messages.where((m) => !m.isHidden).length;
-    final hiddenMessages = session.messages.where((m) => m.isHidden).length;
-    final userMessages = session.messages.where((m) => m.role == 'user').length;
-    final assistantMessages = session.messages
-        .where((m) => m.role == 'assistant')
-        .length;
-
-    String timeSpent = '';
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final seconds = prefs.getInt('chat_time_${widget.charId}') ?? 0;
-      if (seconds >= 3600) {
-        timeSpent = '${seconds ~/ 3600}h ${(seconds % 3600) ~/ 60}m';
-      } else if (seconds >= 60) {
-        timeSpent = '${seconds ~/ 60}m ${seconds % 60}s';
-      } else if (seconds > 0) {
-        timeSpent = '$seconds s';
-      }
-    } catch (_) {}
-
-    final items = <BottomSheetItem>[
-      BottomSheetItem(
-        icon: Icons.chat_bubble_outline,
-        label: 'Messages',
-        hint: '${session.messages.length} total',
-        onTap: () {},
-      ),
-      BottomSheetItem(
-        icon: Icons.visibility_outlined,
-        label: 'Visible / Hidden',
-        hint: '$visibleMessages visible • $hiddenMessages hidden',
-        onTap: () {},
-      ),
-      BottomSheetItem(
-        icon: Icons.swap_vert,
-        label: 'User / Assistant',
-        hint: '$userMessages user • $assistantMessages assistant',
-        onTap: () {},
-      ),
-      BottomSheetItem(
-        icon: Icons.token,
-        label: 'Prompt Estimate',
-        hint: _stats.promptTokens > 0
-            ? '${_stats.promptTokens} tokens'
-            : 'Not calculated yet',
-        onTap: () {},
-      ),
-    ];
-
-    if (timeSpent.isNotEmpty) {
-      items.add(
-        BottomSheetItem(
-          icon: Icons.timer_outlined,
-          label: 'Time Spent',
-          hint: timeSpent,
-          onTap: () {},
-        ),
-      );
-    }
-
+    widget.onClose?.call();
     if (!mounted) return;
-    await GlazeBottomSheet.show(context, title: 'Chat Stats', items: items);
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ChatStatsSheet(initialCharId: widget.charId),
+    );
   }
 
   Future<void> _showSessionsSheet() async {
@@ -734,16 +632,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
 
-  String _formatRelativeTime(int updatedAtSeconds) {
-    final updated = DateTime.fromMillisecondsSinceEpoch(
-      updatedAtSeconds * 1000,
-    );
-    final diff = DateTime.now().difference(updated);
-    if (diff.inMinutes < 1) return 'now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m';
-    if (diff.inDays < 1) return '${diff.inHours}h';
-    return '${diff.inDays}d';
-  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -753,7 +642,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       if (prevSession?.id != nextSession?.id ||
           prevSession?.messages.length != nextSession?.messages.length) {
         _debounceTimer?.cancel();
-        _debounceTimer = Timer(const Duration(milliseconds: 300), _loadDrawer);
+        _debounceTimer = Timer(const Duration(milliseconds: 500), _refreshStats);
       }
     });
 

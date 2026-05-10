@@ -9,6 +9,8 @@ class ChatInputBar extends StatefulWidget {
   final VoidCallback? onStop;
   final VoidCallback? onMagicDrawer;
   final VoidCallback? onImageGen;
+  final VoidCallback? onContinue;
+  final bool virtualKeyboardSend;
 
   /// When true, the magic-drawer button shows the active state. The host
   /// also uses this to interpret onMagicDrawer as a toggle.
@@ -33,6 +35,8 @@ class ChatInputBar extends StatefulWidget {
     this.onStop,
     this.onMagicDrawer,
     this.onImageGen,
+    this.onContinue,
+    this.virtualKeyboardSend = false,
     this.isDrawerOpen = false,
     this.focusNode,
     this.showSearchControls = false,
@@ -179,8 +183,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     focusNode: widget.focusNode,
                     maxLines: 5,
                     minLines: 1,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _handleSend(),
+                    textInputAction: widget.virtualKeyboardSend ? TextInputAction.send : TextInputAction.newline,
+                    onSubmitted: widget.virtualKeyboardSend ? (_) => _handleSend() : null,
                     style: const TextStyle(fontSize: 16),
                     decoration: InputDecoration(
                       hintText: _guidanceMode ? 'Message with guidance...' : 'Type a message...',
@@ -220,6 +224,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     ),
                     const SizedBox(width: 8),
                     _CircleBtn(icon: Icons.image_outlined, onTap: widget.onImageGen),
+                    const SizedBox(width: 8),
+                    _CircleBtn(icon: Icons.keyboard_double_arrow_right, onTap: widget.onContinue),
                   ],
                 ),
                 GestureDetector(

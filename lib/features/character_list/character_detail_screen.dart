@@ -11,6 +11,7 @@ import '../../core/state/db_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
+import '../../shared/widgets/image_viewer.dart';
 import '../../shared/widgets/sheet_view.dart';
 
 // ─── Colour tokens ─────────────────────────────────────────────────────────
@@ -60,16 +61,21 @@ class _CharacterDetailSheetLauncherState
     final location = GoRouterState.of(context).uri.path;
     final isSubRoute = location.endsWith('/edit') || location.endsWith('/gallery');
     if (isSubRoute) return;
+    String? navTarget;
     try {
-      await showModalBottomSheet(
+      navTarget = await showModalBottomSheet<String>(
         context: context,
         isScrollControlled: true,
-        useSafeArea: true,
+        useRootNavigator: true,
         backgroundColor: Colors.transparent,
         builder: (_) => CharacterDetailScreen(charId: widget.charId),
       );
     } catch (_) {}
     if (!mounted) return;
+    if (navTarget != null && navTarget.isNotEmpty) {
+      context.go(navTarget);
+      return;
+    }
     if (context.canPop()) {
       context.pop();
     } else {
@@ -125,7 +131,16 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         : ref.read(characterRepoProvider).getById(widget.charId);
   }
 
+  /// Pops the GlazeBottomSheet, then pops this modal sheet returning [route]
+  /// so the caller (launcher / card / drawer) can navigate safely.
+  void _closeSheetAndNavigate(String route) {
+    final nav = Navigator.of(context, rootNavigator: true);
+    nav.pop();            // pop the GlazeBottomSheet
+    nav.pop<String>(route); // pop CharacterDetailScreen modal with result
+  }
+
   void _openActionsMenu() {
+    final rootNav = Navigator.of(context, rootNavigator: true);
     GlazeBottomSheet.show(
       context,
       items: [
@@ -133,7 +148,8 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
           icon: Icons.edit_outlined,
           label: 'Edit',
           onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
+            rootNav.pop();
+            if (!mounted) return;
             context.push('/character/${widget.charId}/edit');
           },
         ),
@@ -141,19 +157,21 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
           icon: Icons.photo_library_outlined,
           label: 'Gallery',
           onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
+            rootNav.pop();
+            if (!mounted) return;
             context.push('/character/${widget.charId}/gallery');
           },
         ),
-          BottomSheetItem(
-            icon: Icons.delete_outline,
-            label: 'Delete',
-            isDestructive: true,
-            onTap: () {
-              Navigator.of(context, rootNavigator: true).pop();
-              _confirmDelete(context);
-            },
-          ),
+        BottomSheetItem(
+          icon: Icons.delete_outline,
+          label: 'Delete',
+          isDestructive: true,
+          onTap: () {
+            rootNav.pop();
+            if (!mounted) return;
+            _confirmDelete(context);
+          },
+        ),
       ],
     );
   }
@@ -163,45 +181,30 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
     if (char == null) return;
     if (!context.mounted) return;
 
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceHigh,
-        title: const Text(
-          'Delete Character',
-          style: TextStyle(color: AppColors.textPrimary),
-        ),
-        content: Text(
-          'Delete ${char.name}? This cannot be undone.',
-          style: const TextStyle(color: AppColors.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: AppColors.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(charactersProvider.notifier).remove(char.id);
-              if (context.mounted) {
-                 if (context.canPop()) {
-                   context.pop();
-                 } else {
-                   context.go('/characters');
-                 }
-              }
-            },
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Color(0xFFFF4444)),
-            ),
-          ),
-        ],
+    final rootNav = Navigator.of(context, rootNavigator: true);
+    GlazeBottomSheet.show(
+      context,
+      title: 'Delete Character',
+      bigInfo: BottomSheetBigInfo(
+        icon: Icons.delete_outline,
+        description: 'Delete ${char.name}? This cannot be undone.',
       ),
+      items: [
+        BottomSheetItem(
+          label: 'Delete',
+          isDestructive: true,
+          centered: true,
+          onTap: () {
+            ref.read(charactersProvider.notifier).remove(char.id);
+            _closeSheetAndNavigate('/characters');
+          },
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => rootNav.pop(),
+        ),
+      ],
     );
   }
 
@@ -216,20 +219,16 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         BottomSheetItem(
           icon: Icons.add,
           label: 'New Chat',
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            context.go('/chat/$cId?new=1');
-          },
+          onTap: () => _closeSheetAndNavigate('/chat/$cId?new=1'),
         ),
         ...sessions.map(
           (s) => BottomSheetItem(
             icon: Icons.chat_bubble_outline,
             label: 'Session ${s.sessionIndex + 1}',
             hint: '${s.messages.length} messages',
-            onTap: () {
-              Navigator.of(context, rootNavigator: true).pop();
-              context.go('/chat/$cId?session=${s.sessionIndex}');
-            },
+            onTap: () => _closeSheetAndNavigate(
+              '/chat/$cId?session=${s.sessionIndex}',
+            ),
           ),
         ),
       ],
@@ -427,13 +426,29 @@ class _HeroSection extends StatelessWidget {
     return SizedBox(
       height: 310,
       width: double.infinity,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          _buildImage(),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
+      child: GestureDetector(
+        onTap: () {
+          ImageProvider? provider;
+          if (previewAvatarUrl != null && previewAvatarUrl!.isNotEmpty) {
+            provider = CachedNetworkImageProvider(previewAvatarUrl!);
+          } else if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
+            provider = FileImage(File(character.avatarPath!));
+          }
+          if (provider != null) {
+            ImageViewer.show(
+              context,
+              imageProvider: provider,
+              description: character.name,
+            );
+          }
+        },
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _buildImage(),
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 stops: [0.35, 0.60, 1.0],
@@ -477,6 +492,7 @@ class _HeroSection extends StatelessWidget {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -661,6 +677,7 @@ class _PromptsTabState extends State<_PromptsTab> {
   Widget build(BuildContext context) {
     final sections = _sections;
     final firstMes = widget.character.firstMes ?? '';
+    final altGreetings = widget.character.alternateGreetings;
 
     return Column(
       children: [
@@ -684,6 +701,18 @@ class _PromptsTabState extends State<_PromptsTab> {
               () => _expanded['firstMes'] = !(_expanded['firstMes'] ?? false),
             ),
           ),
+        for (int i = 0; i < altGreetings.length; i++)
+          if (altGreetings[i].isNotEmpty)
+            _AccordionCard(
+              key: ValueKey('altGreeting_$i'),
+              label: 'Greeting ${i + 2}',
+              text: altGreetings[i],
+              expanded: _expanded['altGreeting_$i'] ?? false,
+              onToggle: () => setState(
+                () => _expanded['altGreeting_$i'] =
+                    !(_expanded['altGreeting_$i'] ?? false),
+              ),
+            ),
         const SizedBox(height: 16),
       ],
     );

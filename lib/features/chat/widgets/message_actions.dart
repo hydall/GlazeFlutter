@@ -60,15 +60,6 @@ void showMessageContextMenu({
             notifier.regenerateLastAssistant();
           },
         ),
-      if (!isUser && isLast && !isGenerating)
-        BottomSheetItem(
-          icon: Icons.keyboard_double_arrow_right,
-          label: 'Continue',
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            notifier.continueMessage();
-          },
-        ),
       if (isGenerating && isLast)
         BottomSheetItem(
           icon: Icons.stop_circle,

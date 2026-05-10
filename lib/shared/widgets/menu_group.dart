@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import '../../../shared/theme/app_colors.dart';
 
 class MenuGroup extends StatelessWidget {
-  final String header;
-  final List<MenuItem> items;
+  final String? header;
+  final List<Widget> items;
 
-  const MenuGroup({super.key, required this.header, required this.items});
+  const MenuGroup({super.key, this.header, required this.items});
 
   @override
   Widget build(BuildContext context) {
@@ -21,11 +21,15 @@ class MenuGroup extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text(header,
-                  style: const TextStyle(color: AppColors.textPrimary, fontWeight: FontWeight.w700, fontSize: 16)),
-            ),
+            if (header != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Text(header!,
+                    style: const TextStyle(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16)),
+              ),
             ...items,
             const SizedBox(height: 6),
           ],
@@ -36,11 +40,22 @@ class MenuGroup extends StatelessWidget {
 }
 
 class MenuItem extends StatefulWidget {
-  final IconData icon;
+  final IconData? icon;
+  final Widget? iconWidget;
   final String label;
+  final String? value;
+  final Widget? trailing;
   final VoidCallback onTap;
 
-  const MenuItem({super.key, required this.icon, required this.label, required this.onTap});
+  const MenuItem({
+    super.key,
+    this.icon,
+    this.iconWidget,
+    required this.label,
+    this.value,
+    this.trailing,
+    required this.onTap,
+  });
 
   @override
   State<MenuItem> createState() => _MenuItemState();
@@ -53,17 +68,95 @@ class _MenuItemState extends State<MenuItem> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) { setState(() => _pressed = false); widget.onTap(); },
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
-        color: _pressed ? AppColors.accent.withValues(alpha: 0.08) : Colors.transparent,
+        color: _pressed
+            ? AppColors.accent.withValues(alpha: 0.08)
+            : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         child: Row(
           children: [
-            Icon(widget.icon, size: 22, color: const Color(0xFF99A2AD)),
+            if (widget.iconWidget != null)
+              SizedBox(width: 22, height: 22, child: widget.iconWidget)
+            else if (widget.icon != null)
+              Icon(widget.icon, size: 22, color: const Color(0xFF99A2AD)),
+            if (widget.icon != null || widget.iconWidget != null)
+              const SizedBox(width: 16),
+            Expanded(
+              child: Text(widget.label,
+                  style: const TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400)),
+            ),
+            if (widget.value != null)
+              Text(widget.value!,
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 15)),
+            if (widget.trailing != null) widget.trailing!,
+            if (widget.value != null || widget.trailing != null)
+              const SizedBox(width: 4),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class MenuSwitchItem extends StatelessWidget {
+  final String label;
+  final String? description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const MenuSwitchItem({
+    super.key,
+    required this.label,
+    this.description,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => onChanged(!value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w400)),
+                  if (description != null) ...[
+                    const SizedBox(height: 1),
+                    Text(description!,
+                        style: const TextStyle(
+                            color: Color(0xFF99A2AD),
+                            fontSize: 11,
+                            fontWeight: FontWeight.normal)),
+                  ],
+                ],
+              ),
+            ),
             const SizedBox(width: 16),
-            Text(widget.label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 15, fontWeight: FontWeight.w400)),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeThumbColor: AppColors.accent,
+              activeTrackColor: AppColors.accent.withValues(alpha: 0.5),
+            ),
           ],
         ),
       ),

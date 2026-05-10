@@ -21,6 +21,7 @@ final chatProvider =
 
 class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   CancelToken? _cancelToken;
+  ChatMessage? _restorationMessage;
 
   void setCancelToken(CancelToken token) => _cancelToken = token;
 
@@ -54,7 +55,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     await ref.read(chatRepoProvider).put(updatedSession);
     _invalidateHistory();
-    state = AsyncData(ChatState(session: updatedSession, isGenerating: true));
+    state = AsyncData(ChatState(session: updatedSession, isGenerating: true, generationStartTime: DateTime.now()));
 
     final charRepo = ref.read(characterRepoProvider);
     final character = await charRepo.getById(arg);
@@ -96,7 +97,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     );
     await ref.read(chatRepoProvider).put(trimmedSession);
     _invalidateHistory();
-    state = AsyncData(ChatState(session: trimmedSession, isGenerating: true));
+    state = AsyncData(ChatState(session: trimmedSession, isGenerating: true, generationStartTime: DateTime.now()));
+    _restorationMessage = prevAssistant;
 
     await _runGeneration(
       trimmedSession, current,
@@ -123,7 +125,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final lastMsg = current.messages[lastIdx];
     if (lastMsg.role != 'assistant') return;
 
-    state = AsyncData(ChatState(session: current.session, isGenerating: true));
+    state = AsyncData(ChatState(session: current.session, isGenerating: true, generationStartTime: DateTime.now()));
 
     final notifService = GenerationNotificationService.instance;
     await notifService.onGenerationStarted();
@@ -285,29 +287,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _cancelToken = null;
 
     GenerationNotificationService.instance.onGenerationAborted();
-
-    final current = state.value;
-    if (current == null) return;
-
-    if (current.streamingText.isNotEmpty) {
-      final assistantMsg = ChatMessage(
-        id: generateId(),
-        role: 'assistant',
-        content: current.streamingText,
-        reasoning: current.streamingReasoning,
-        timestamp: DateTime.now().millisecondsSinceEpoch,
-      );
-      final finalMessages = [...current.messages, assistantMsg];
-      final finalSession = current.session!.copyWith(
-        messages: finalMessages,
-        updatedAt: currentTimestampSeconds(),
-      );
-      ref.read(chatRepoProvider).put(finalSession);
-      _invalidateHistory();
-      state = AsyncData(ChatState(session: finalSession));
-    } else {
-      state = AsyncData(current.copyWith(isGenerating: false));
-    }
   }
 
   void _invalidateHistory() => ref.invalidate(chatHistoryProvider);
@@ -340,7 +319,29 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       previousSwipesMeta: previousSwipesMeta,
       guidanceText: guidanceText,
     );
-    state = AsyncData(result);
+
+    if (result.session?.messages.length == session.messages.length) {
+      // No new message was saved (cancelled or failed)
+      if (_restorationMessage != null) {
+        final restoredMessages = [...session.messages, _restorationMessage!];
+        final restoredSession = session.copyWith(
+          messages: restoredMessages,
+          updatedAt: currentTimestampSeconds(),
+        );
+        await ref.read(chatRepoProvider).put(restoredSession);
+        _invalidateHistory();
+        state = AsyncData(ChatState(
+          session: restoredSession, 
+          isGenerating: false, 
+          error: result.error,
+        ));
+      } else {
+        state = AsyncData(result);
+      }
+    } else {
+      state = AsyncData(result);
+    }
+    _restorationMessage = null;
 
     await service.processImageTags(
       currentState: result,

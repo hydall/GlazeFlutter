@@ -21,6 +21,7 @@ class MessageList extends StatefulWidget {
   final String? streamingText;
   final String? streamingReasoning;
   final bool isGenerating;
+  final DateTime? generationStartTime;
   final String charId;
 
   /// Extra space at the bottom of the list to keep the last message above the
@@ -38,6 +39,7 @@ class MessageList extends StatefulWidget {
     this.streamingText,
     this.streamingReasoning,
     required this.isGenerating,
+    this.generationStartTime,
     required this.charId,
     this.bottomInset = 180,
     this.searchQuery = '',
@@ -51,6 +53,8 @@ class MessageList extends StatefulWidget {
 
 class _MessageListState extends State<MessageList> {
   final _scrollController = ScrollController();
+  final _listKey = GlobalKey<SliverAnimatedListState>();
+  final List<ChatMessage> _items = [];
 
   bool _wasAtBottom = true;
   bool _showScrollButton = false;
@@ -60,6 +64,7 @@ class _MessageListState extends State<MessageList> {
   @override
   void initState() {
     super.initState();
+    _items.addAll(widget.messages);
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToBottom(smooth: false, force: true);
@@ -87,6 +92,46 @@ class _MessageListState extends State<MessageList> {
   void didUpdateWidget(covariant MessageList oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    // Structural changes (insertions/removals)
+    final newMessages = widget.messages;
+    
+    // Simple structural diffing using IDs
+    int i = 0;
+    while (i < _items.length || i < newMessages.length) {
+      if (i >= _items.length) {
+        // Insertion at end
+        _items.add(newMessages[i]);
+        _listKey.currentState?.insertItem(i);
+        i++;
+      } else if (i >= newMessages.length) {
+        // Removal at end
+        final removed = _items.removeAt(i);
+        _listKey.currentState?.removeItem(
+          i,
+          (context, animation) => _buildRemovedItem(removed, i, animation, oldWidget),
+        );
+      } else if (_items[i].id != newMessages[i].id) {
+        // Check if it's an insertion
+        if (newMessages.any((m) => m.id == _items[i].id)) {
+          // New item inserted before current one
+          _items.insert(i, newMessages[i]);
+          _listKey.currentState?.insertItem(i);
+          i++;
+        } else {
+          // Current item was removed
+          final removed = _items.removeAt(i);
+          _listKey.currentState?.removeItem(
+            i,
+            (context, animation) => _buildRemovedItem(removed, i, animation, oldWidget),
+          );
+        }
+      } else {
+        // Same ID, just update the local copy to pick up content changes (variant swipes, etc.)
+        _items[i] = newMessages[i];
+        i++;
+      }
+    }
+
     final newCount = _itemCount(widget);
     final oldCount = _itemCount(oldWidget);
     final streamingChanged =
@@ -98,8 +143,8 @@ class _MessageListState extends State<MessageList> {
     // instead we surface the scroll-to-bottom button.
     if (_wasAtBottom && (newCount > oldCount || streamingChanged)) {
       // Streaming chunks: no animation (would constantly retrigger).
-      // New full messages: smooth if close, instant if far.
-      _scrollToBottom(smooth: !streamingChanged);
+      // New full messages or finalized streaming: smooth if close, instant if far.
+      _scrollToBottom(smooth: true);
     }
 
     if (widget.bottomInset != oldWidget.bottomInset && _wasAtBottom) {
@@ -134,6 +179,55 @@ class _MessageListState extends State<MessageList> {
         }
       }
     }
+  }
+
+  Widget _buildRemovedItem(ChatMessage msg, int index, Animation<double> animation, MessageList w) {
+    return FadeTransition(
+      opacity: animation,
+      child: SizeTransition(
+        sizeFactor: animation,
+        child: SlideTransition(
+          position: Tween<Offset>(
+            begin: const Offset(0, 0.1),
+            end: Offset.zero,
+          ).animate(animation),
+          child: _buildMessageWidget(msg, index, w, isRemoved: true),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMessageWidget(ChatMessage msg, int index, MessageList w, {bool isRemoved = false}) {
+    final msgMatches = w.searchMatches.where((m) => m.messageIndex == index).toList();
+    final isMatch = msgMatches.isNotEmpty;
+    final activeMatchIndex = (w.searchMatches.isNotEmpty && 
+        w.searchMatches[w.searchCurrentIndex].messageIndex == index) 
+        ? w.searchMatches[w.searchCurrentIndex].matchIndexInMessage 
+        : -1;
+
+    return Message(
+      key: ValueKey(msg.id),
+      content: msg.content,
+      isUser: msg.role == 'user',
+      isSystem: msg.role == 'system',
+      reasoning: msg.reasoning,
+      genTime: msg.genTime,
+      tokens: msg.tokens,
+      isHidden: msg.isHidden,
+      isError: msg.isError,
+      messageIndex: index,
+      totalMessages: w.messages.length,
+      isLast: !isRemoved && index == w.messages.length - 1,
+      isGenerating: w.isGenerating,
+      charId: w.charId,
+      swipes: msg.swipes,
+      swipeId: msg.swipeId,
+      greetingIndex: msg.greetingIndex,
+      memoryCoverage: msg.memoryCoverage,
+      isSearchMatch: isMatch,
+      searchQuery: w.searchQuery,
+      activeMatchIndex: activeMatchIndex,
+    );
   }
 
   void _onScroll() {
@@ -223,69 +317,71 @@ class _MessageListState extends State<MessageList> {
 
     return Stack(
       children: [
-        ListView.builder(
+        CustomScrollView(
           controller: _scrollController,
-          padding: EdgeInsets.only(top: 80, bottom: widget.bottomInset),
-          itemCount:
-              widget.messages.length + (showStreaming || showTyping ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index < widget.messages.length) {
-              final msg = widget.messages[index];
-              final msgMatches = widget.searchMatches.where((m) => m.messageIndex == index).toList();
-              final isMatch = msgMatches.isNotEmpty;
-              final activeMatchIndex = (widget.searchMatches.isNotEmpty && 
-                  widget.searchMatches[widget.searchCurrentIndex].messageIndex == index) 
-                  ? widget.searchMatches[widget.searchCurrentIndex].matchIndexInMessage 
-                  : -1;
-              return Message(
-                content: msg.content,
-                isUser: msg.role == 'user',
-                isSystem: msg.role == 'system',
-                reasoning: msg.reasoning,
-                genTime: msg.genTime,
-                tokens: msg.tokens,
-                isHidden: msg.isHidden,
-                isError: msg.isError,
-                messageIndex: index,
-                totalMessages: widget.messages.length,
-                isLast: index == widget.messages.length - 1,
-                isGenerating: widget.isGenerating,
-                charId: widget.charId,
-                swipes: msg.swipes,
-                swipeId: msg.swipeId,
-                greetingIndex: msg.greetingIndex,
-                memoryCoverage: msg.memoryCoverage,
-                isSearchMatch: isMatch,
-                searchQuery: widget.searchQuery,
-                activeMatchIndex: activeMatchIndex,
-              );
-            }
-
-            if (showStreaming) {
-              return Message(
-                content: widget.streamingText!,
-                isUser: false,
-                isStreaming: true,
-                reasoning: widget.streamingReasoning,
-                messageIndex: -1,
-                totalMessages: widget.messages.length,
-                isLast: false,
-                isGenerating: true,
-                charId: widget.charId,
-              );
-            }
-
-            return Message(
-              content: '',
-              isUser: false,
-              isTyping: true,
-              messageIndex: -1,
-              totalMessages: widget.messages.length,
-              isLast: false,
-              isGenerating: true,
-              charId: widget.charId,
-            );
-          },
+          slivers: [
+            SliverPadding(
+              padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 80),
+              sliver: SliverAnimatedList(
+                key: _listKey,
+                initialItemCount: _items.length,
+                itemBuilder: (context, index, animation) {
+                  if (index >= _items.length) return const SizedBox.shrink();
+                  final msg = _items[index];
+                  return FadeTransition(
+                    opacity: animation,
+                    child: SizeTransition(
+                      sizeFactor: animation,
+                      child: SlideTransition(
+                        position: Tween<Offset>(
+                          begin: const Offset(0, 0.05),
+                          end: Offset.zero,
+                        ).animate(animation),
+                        child: _buildMessageWidget(msg, index, widget),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (child, anim) => FadeTransition(opacity: anim, child: child),
+                child: Column(
+                  key: ValueKey('bottom-area-${showStreaming}-${showTyping}'),
+                  children: [
+                    if (showStreaming)
+                      Message(
+                        content: widget.streamingText!,
+                        isUser: false,
+                        isStreaming: true,
+                        reasoning: widget.streamingReasoning,
+                        messageIndex: -1,
+                        totalMessages: widget.messages.length,
+                        isLast: false,
+                        isGenerating: true,
+                        generationStartTime: widget.generationStartTime,
+                        charId: widget.charId,
+                      )
+                    else if (showTyping)
+                      Message(
+                        content: '',
+                        isUser: false,
+                        isTyping: true,
+                        messageIndex: -1,
+                        totalMessages: widget.messages.length,
+                        isLast: false,
+                        isGenerating: true,
+                        generationStartTime: widget.generationStartTime,
+                        charId: widget.charId,
+                      ),
+                    SizedBox(height: widget.bottomInset),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
         Positioned(
           right: 16,

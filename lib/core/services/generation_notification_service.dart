@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -26,10 +27,16 @@ class GenerationNotificationService {
 
   Stream<String> get navigationStream => _navigationController.stream;
 
+  bool get _isMobile => Platform.isAndroid || Platform.isIOS;
+
   Future<void> init() async {
     const androidSettings =
         AndroidInitializationSettings('@mipmap/ic_launcher');
-    const iosSettings = DarwinInitializationSettings();
+    const iosSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
     const settings = InitializationSettings(
       android: androidSettings,
       iOS: iosSettings,
@@ -54,22 +61,35 @@ class GenerationNotificationService {
         );
         await androidPlugin.requestNotificationsPermission();
       }
+    } else if (Platform.isIOS) {
+      final iosPlugin = _notifications.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      await iosPlugin?.requestPermissions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
     }
 
-    FlutterForegroundTask.init(
-      androidNotificationOptions: AndroidNotificationOptions(
-        channelId: _generationChannelId,
-        channelName: _generationChannelName,
-        channelDescription: 'Shown while generating a response',
-        channelImportance: NotificationChannelImportance.LOW,
-        priority: NotificationPriority.LOW,
-      ),
-      iosNotificationOptions: const IOSNotificationOptions(),
-      foregroundTaskOptions: ForegroundTaskOptions(
-        eventAction: ForegroundTaskEventAction.nothing(),
-        allowWakeLock: true,
-      ),
-    );
+    if (_isMobile) {
+      FlutterForegroundTask.init(
+        androidNotificationOptions: AndroidNotificationOptions(
+          channelId: _generationChannelId,
+          channelName: _generationChannelName,
+          channelDescription: 'Shown while generating a response',
+          channelImportance: NotificationChannelImportance.LOW,
+          priority: NotificationPriority.LOW,
+        ),
+        iosNotificationOptions: const IOSNotificationOptions(
+          showNotification: false,
+          playSound: false,
+        ),
+        foregroundTaskOptions: ForegroundTaskOptions(
+          eventAction: ForegroundTaskEventAction.nothing(),
+          allowWakeLock: true,
+        ),
+      );
+    }
   }
 
   void updateLifecycleState(AppLifecycleState state) {
@@ -78,13 +98,17 @@ class GenerationNotificationService {
 
   Future<void> onGenerationStarted() async {
     _isGenerating = true;
-    if (Platform.isAndroid) {
-      if (!await FlutterForegroundTask.isRunningService) {
-        await FlutterForegroundTask.startService(
-          notificationTitle: 'Glaze',
-          notificationText: 'Generating response...',
-          callback: _foregroundTaskCallback,
-        );
+    if (_isMobile) {
+      try {
+        if (!await FlutterForegroundTask.isRunningService) {
+          await FlutterForegroundTask.startService(
+            notificationTitle: 'Glaze',
+            notificationText: 'Generating response...',
+            callback: _foregroundTaskCallback,
+          );
+        }
+      } catch (e) {
+        debugPrint('NOTIF: foreground task start failed: $e');
       }
     }
   }
@@ -94,11 +118,7 @@ class GenerationNotificationService {
     String charId,
   ) async {
     _isGenerating = false;
-    if (Platform.isAndroid) {
-      if (await FlutterForegroundTask.isRunningService) {
-        FlutterForegroundTask.stopService();
-      }
-    }
+    await _stopForegroundTask();
 
     if (_lifecycleState != AppLifecycleState.resumed) {
       await _showMessageNotification(charName, charId);
@@ -107,14 +127,22 @@ class GenerationNotificationService {
 
   Future<void> onGenerationAborted() async {
     _isGenerating = false;
-    if (Platform.isAndroid) {
-      if (await FlutterForegroundTask.isRunningService) {
-        FlutterForegroundTask.stopService();
-      }
-    }
+    await _stopForegroundTask();
   }
 
   bool get isGenerating => _isGenerating;
+
+  Future<void> _stopForegroundTask() async {
+    if (_isMobile) {
+      try {
+        if (await FlutterForegroundTask.isRunningService) {
+          await FlutterForegroundTask.stopService();
+        }
+      } catch (e) {
+        debugPrint('NOTIF: foreground task stop failed: $e');
+      }
+    }
+  }
 
   Future<void> _showMessageNotification(
     String charName,
@@ -128,7 +156,11 @@ class GenerationNotificationService {
       priority: Priority.high,
       autoCancel: true,
     );
-    const iosDetails = DarwinNotificationDetails();
+    const iosDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: true,
+      presentSound: true,
+    );
     const details = NotificationDetails(
       android: androidDetails,
       iOS: iosDetails,

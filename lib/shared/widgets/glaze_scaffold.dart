@@ -19,6 +19,7 @@ class GlazeScaffold extends StatelessWidget {
   final VoidCallback? onBack;
   final bool extendBodyBehindHeader;
   final bool resizeToAvoidBottomInset;
+  final bool hideHeader;
 
   const GlazeScaffold({
     super.key,
@@ -30,6 +31,7 @@ class GlazeScaffold extends StatelessWidget {
     this.onBack,
     this.extendBodyBehindHeader = false,
     this.resizeToAvoidBottomInset = true,
+    this.hideHeader = false,
   });
 
   @override
@@ -48,6 +50,18 @@ class GlazeScaffold extends StatelessWidget {
       ),
     );
 
+    final animatedHeader = AnimatedSlide(
+      offset: hideHeader ? const Offset(0, -1.5) : Offset.zero,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOutCubic,
+      child: AnimatedOpacity(
+        opacity: hideHeader ? 0.0 : 1.0,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+        child: header,
+      ),
+    );
+
     return Scaffold(
       backgroundColor: AppColors.background,
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
@@ -55,12 +69,12 @@ class GlazeScaffold extends StatelessWidget {
           ? Stack(
               children: [
                 Positioned.fill(child: body),
-                Positioned(top: 0, left: 0, right: 0, child: header),
+                Positioned(top: 0, left: 0, right: 0, child: animatedHeader),
               ],
             )
           : Column(
               children: [
-                header,
+                animatedHeader,
                 Expanded(child: body),
               ],
             ),
