@@ -37,81 +37,19 @@
 
 ## Memory Books
 
-- **~~Memory books not imported from backup.~~** Fixed — `js_chat_importer.dart` imports `memoryBooks` from each chat session's data, including entries, settings, and pending drafts.
+- **~~Memory books not imported from backup.~~** Fixed — `js_chat_importer.dart` imports `memoryBooks` from each chat session's data, including entries, settings, and pending drafts. Fixed `createdAt`/`updatedAt` type mismatch (String→int) and `messageRange` format incompatibility (JS `{startMessageId,endMessageId}` → Flutter `{start:int,end:int}`, incompatible ranges skipped).
 
 - **~~Memory badge on every message.~~** Fixed — badge was counting `memoryCoverage` map keys (`entryIds`, `needsRebuild`, `stale` = 3) instead of actual entry IDs. Now reads `memoryCoverage['entryIds'].length`. Also unified the coverage format between `prompt_payload_builder` and JS backup (`{entryIds: [...], needsRebuild, stale}`).
 - **~~Memory books lag/crash on settings open/close.~~** Fixed — replaced `DropdownButton<int>` with 32,001 items with `TextFormField`; stored `TextEditingController`s as instance fields instead of recreating per build.
-- **~~Memory books scan only 3 drafts for ~150 messages.~~** Fixed — `_scanChat` now includes the last partial segment and uses looser duplicate detection.
+- **~~Memory books scan only 3 drafts for ~150 messages.~~** Fixed — two causes: (1) `!m.isHidden` filter excluded hidden messages from scan, removed; (2) per-session `MemoryBookSettings` replaced with global `memoryGlobalSettingsProvider`.
 - **~~Memory books generation returns 401.~~** Fixed — `MemoryDraftGenerator` now uses `activeApiConfigProvider` instead of picking a random non-embedding config.
 
 - **~~No custom prompt manager.~~** Fixed — `CustomPromptManagerSheet` with add/edit/delete UI; `MemoryPromptPresets.resolve()` and `label()` now accept custom presets; settings sheet shows built-in + custom sections with "Manage prompts" button.
 - **~~No quick model selector.~~** Fixed — model text field now has a fetch button that calls `/models` endpoint and shows a picker.
 
-## Backup Import
-
-- **~~iOS backup import crashes with FileType.custom error.~~** Fixed — `backup_screen.dart` was using `FileType.any` with `allowedExtensions`, which iOS rejects. Changed to `FileType.custom`.
-- **~~Duplicate template API config created on recover.~~** Fixed — moved `topLevel['apiPresets']` extraction before the `presets.isEmpty` fallback, so the "Default" template is only created when no presets exist from any source.
-- **~~IMG-GEN API key not restored from backup.~~** Fixed — (1) remove `gz_imggen_settings` during import so migration re-runs; (2) extended `_migrateFromJsKeys()` to read 12 more fields (routmy/naistera model, aspectRatio, quality, sendAvatar, gemini size, ru-routmy key).
-
-- **~~iOS can't select .glz backup files.~~** Fixed — all file pickers now use `FileType.any` on iOS and `FileType.custom` on other platforms.
-- **~~PNG character import uses file picker instead of gallery on iOS.~~** Fixed — iOS now uses `image_picker` to open the photo gallery; other platforms keep file picker.
-- **~~JSONL chat import doesn't work on iOS.~~** Fixed — same FileType fix as .glz backups.
-- **~~iOS JSONL import shows "No messages found" for SillyTavern files.~~** Fixed — iOS `FilePicker` doesn't expose accessible `file.path` in sandbox, so `File(path).readAsString()` returned empty string. Now uses `file.bytes` directly with `utf8.decode` fallback.
-
-## Tokenizer / Prompt Counting
-
-- **~~Stale token counts after hide/unhide.~~** Fixed — added `ref.listen(chatProvider)` in TokenizerSheet, MagicDrawerPanel, ContextInfoSheet, PromptPreviewScreen to auto-recalculate when session changes. Also fixed `historyText` to exclude hidden messages.
-- **~~Preset tokens counted before macro expansion.~~** Fixed — root cause was `blockId` lost in `_assembleMessages`. All `PromptMessage` objects got `id: 'static'`, so `_sourceForBlock` defaulted everything to `'preset'`. Now each message carries its actual blockId (`char_card`, `persona`, `summary`, `lorebook`, `memory`, etc.) and token breakdown is accurate per source.
-- **~~No per-source token breakdown.~~** Fixed — same root cause as above. Now `_sourceForBlock` correctly maps block IDs including `memory` and `char_depth_prompt`.
-- **~~Tokenizer total ≠ prompt fill indicator.~~** Fixed — was a symptom of stale token counts (now auto-refreshed via `ref.listen`) and misattributed blockId (now correctly mapped per source).
-- **~~Tokenizer only shows author's note, chat history, preset.~~** Fixed — now shows character, persona, summary, memory, lorebook (with X / Y reserve), vector lorebook.
-- **~~No Author's Note button in magic drawer quick access.~~** Fixed — added "Author's Note" item with inline editor (content, role, insertion mode, depth, enabled toggle).
-
-## Chat Import
-
-- **~~Imported chat doesn't open automatically.~~** Fixed — `ChatActionsService.importChat()` now updates `character.currentSessionIndex` so the provider navigates to the imported session.
-- **~~Chat history screen opens wrong session.~~** Fixed — `_SessionTile.onTap` now passes `?session=sessionIndex` query param so `ChatScreen` switches to the correct session.
-- **~~JSONL import ignores ISO-8601 timestamps.~~** Fixed — `_parseSTDate` now splits on `T` separator (e.g. `2026-04-27T01:23:00.000`), not just spaces/colons. Previously all imported messages got `DateTime.now()` as timestamp.
-
-## Chat Export
-
-- **~~Chat export crashes on iOS (PathNotFoundException).~~** Fixed — was writing to `~/Desktop` which doesn't exist on iOS. Now writes to temp dir and opens share sheet (`Share.shareXFiles`) so user can save/share the file.
-
-## Sort / Timestamps
-
-- **~~Backup import: characters in reverse order.~~** Fixed — `js_character_importer` now sorts characters by original timestamp (oldest first), then assigns fresh sequential `updatedAt` values preserving relative order.
-- **~~Backup import: updatedAt fallback used milliseconds.~~** Fixed — `DateTime.now().millisecondsSinceEpoch` replaced with `currentTimestampSeconds()`. Also detects ms timestamps (>1e12) and converts to seconds.
-- **~~New character import appears at bottom of list.~~** Fixed — `character_importer.dart` uses `currentTimestampSeconds()` for `updatedAt` so newly imported characters sort to top under "Newest".
-- **~~Sort direction arrow unclear.~~** Fixed — replaced `AnimatedRotation` arrow icon with text labels "Newest" / "Oldest".
-
-## Regex
-
-- **~~Preset-level regexes not connected to presets.~~** Fixed — two-tier system: active preset regexes + global regexes merged at prompt-build time. Regex list now shows sections. JS backup `regex_scripts` imported to global tier.
-- **~~Scroll resets on regex toggle.~~** Fixed — replaced FutureBuilder+invalidate with `presetsListProvider` + `skipLoadingOnReload: true` + `PageStorageKey`.
-
-## UI
-
-- **Android: magic drawer slow token recalculation.** Partially fixed — multiple optimizations applied:
-  - Token breakdown cached in provider after each generation (drawer shows instantly if tokens already computed)
-  - Eliminated 9-10 duplicate DB queries in `computeTokenStats` by reusing data from `computeStats` via `buildFromPreFetched`
-  - Skip vector search (2-3 network calls) for drawer token counting; only used in tokenizer sheet
-  - Reuse lorebook scan results from `computeStats` in `buildPrompt` via `preScannedEntries` field
-  - Replaced `Flutter.compute()` with `Isolate.run()` for lighter isolate management
-  - Added per-text token count cache (LRU, 2048 entries) in `tokenizer.dart`
-  - Debounced `ref.listen` callback (300ms) to prevent rapid re-computation
-  - Still recalculates from scratch on first open with no cached breakdown; no cross-session caching
-
-- **~~Android: fresh APK only installs clean (uninstall first), update over existing install fails.~~** Fixed — CI builds now decode `DEBUG_KEYSTORE_BASE64` secret into a persistent `debug-key.keystore`, so all CI APKs are signed with the same key. DB `createTable`/`addColumn` collision on migration from early schemas still possible but rare.
-
-- **~~No HTML rendering in chat.~~** Fixed — migrated from `flutter_markdown` to `gpt_markdown`. Messages with HTML tags are converted to markdown via `htmlToMarkdown()` before rendering in `GptMarkdown`. Inline colors (`<span style="color:...">`, `<font color="...">`) are preserved using custom `==hc:#RRGGBB==text==` syntax rendered by `HtmlColorMd` (now preserves nested bold/italic). Collapsible `<details><summary>` sections rendered by `DetailsSummaryMd`. Chat session previews use `stripHtml()` to show clean text. CSS named colors, rgb(), hsl(), and hex are all supported.
-
-- **~~Avatars and names not working correctly.~~** Fixed — (1) User messages now use `getEffectivePersona()` to resolve persona name/avatar instead of hardcoded "User". (2) Bubble layout now shows avatar+name row for both user and character messages.
-
-- **~~Chat layout setting (bubble/standard) not restored from backup.~~** Fixed — `importTheme()` now reads `chatLayout` from `gz_theme_state` and active theme preset (`gz_theme_presets`), falling back to "default" (standard layout in JS).
-
-- **Persona not injected into chat after backup import (Android confirmed).** Bug — after restoring a backup, existing chats show persona as "user" (no avatar), even though the correct persona is selected. The persona's content is not being applied to the chat session. Likely cause: `personaId` in chat sessions or character settings is not being restored/linked correctly on import, or `activeSelectionProvider` doesn't pick up the persona for existing sessions.
-
 - **~~Memory book settings stored per-session instead of globally.~~** Fixed — `MemoryBooksSheet`, `MemoryInjectionService`, and `MemoryDraftGenerator` now read settings from `memoryGlobalSettingsProvider` (SharedPreferences) instead of per-session `MemoryBookSettings`. `ensureForSession` seeds new books from global settings. Settings sheet saves to global provider.
+
+- **~~Vector reindex always says "check settings".~~** Fixed — `initEmbeddingConfigFromDb` was defined but never called, so `embeddingConfigProvider` was always empty. Added call in `loadActiveSelections()`.
 
 - **Lorebook ghost entries after delete + recreate.** Suspected — when a lorebook imported with a character (PNG/JSON) is deleted and a new one with the same name/keys is created and linked, the old lorebook's data may still persist somewhere in the DB. In Glaze JS this manifests as stale entries appearing during generation. Need to investigate: (1) where imported lorebooks are stored in DB, (2) whether deletion fully removes all references (entries, vector embeddings, character↔lorebook links), (3) what happens when a new lorebook with overlapping keys is created after deletion. See also: cloud sync issue below.
 
