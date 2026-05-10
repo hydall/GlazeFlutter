@@ -213,6 +213,7 @@ void showTokenizerSheet(BuildContext context, String charId) {
   showModalBottomSheet(
     context: context,
     useRootNavigator: true,
+    useSafeArea: true,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (_) => TokenizerSheet(charId: charId),

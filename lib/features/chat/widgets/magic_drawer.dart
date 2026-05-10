@@ -347,6 +347,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
           showModalBottomSheet(
             context: context,
             useRootNavigator: true,
+            useSafeArea: true,
             backgroundColor: Colors.transparent,
             barrierColor: Colors.black54,
             isScrollControlled: true,
@@ -360,6 +361,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
           showModalBottomSheet(
             context: context,
             useRootNavigator: true,
+            useSafeArea: true,
             backgroundColor: Colors.transparent,
             barrierColor: Colors.black54,
             isScrollControlled: true,
@@ -373,6 +375,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
           showModalBottomSheet(
             context: context,
             useRootNavigator: true,
+            useSafeArea: true,
             backgroundColor: Colors.transparent,
             barrierColor: Colors.black54,
             isScrollControlled: true,
@@ -392,6 +395,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
           showModalBottomSheet(
             context: context,
             useRootNavigator: true,
+            useSafeArea: true,
             isScrollControlled: true,
             backgroundColor: Colors.transparent,
             builder: (_) => const PersonaListScreen(),

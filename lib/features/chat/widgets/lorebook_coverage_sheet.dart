@@ -18,6 +18,7 @@ void showLorebookCoverageSheet(
   showModalBottomSheet(
     context: context,
     useRootNavigator: true,
+    useSafeArea: true,
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (_) => _CoveragePanel(charId: charId),

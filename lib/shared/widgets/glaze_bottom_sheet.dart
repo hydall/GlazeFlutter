@@ -135,6 +135,7 @@ class GlazeBottomSheet {
     return showModalBottomSheet<T>(
       context: context,
       useRootNavigator: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black54,
       enableDrag: !locked,
