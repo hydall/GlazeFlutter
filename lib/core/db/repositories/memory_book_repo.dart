@@ -1,10 +1,12 @@
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_db.dart';
 import '../tables.dart';
 import '../../models/memory_book.dart';
+import '../../state/memory_settings_provider.dart';
 import '../../utils/time_helpers.dart';
 
 part 'memory_book_repo.g.dart';
@@ -12,14 +14,39 @@ part 'memory_book_repo.g.dart';
 @DriftAccessor(tables: [MemoryBookRows])
 class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     with _$MemoryBookRepoMixin {
-  MemoryBookRepo(super.db);
+  MemoryBookRepo(super.db, this._ref);
 
-  Future<MemoryBook?> getBySessionId(String sessionId) async {
-    final row = await (select(memoryBookRows)
-          ..where((t) => t.sessionId.equals(sessionId)))
-        .getSingleOrNull();
-    if (row == null) return null;
-    return _rowToModel(row);
+  final Ref _ref;
+
+  Future<MemoryBook> ensureForSession(String sessionId) async {
+    final existing = await getBySessionId(sessionId);
+    if (existing != null) return existing;
+    final global = _ref.read(memoryGlobalSettingsProvider);
+    final book = MemoryBook(
+      id: 'memorybook_$sessionId',
+      sessionId: sessionId,
+      settings: MemoryBookSettings(
+        enabled: global.enabled,
+        autoCreateEnabled: global.autoCreateEnabled,
+        autoGenerateEnabled: global.autoGenerateEnabled,
+        maxInjectedEntries: global.maxInjectedEntries,
+        autoCreateInterval: global.autoCreateInterval,
+        useDelayedAutomation: global.useDelayedAutomation,
+        injectionTarget: global.injectionTarget,
+        batchSize: global.batchSize,
+        vectorSearchEnabled: global.vectorSearchEnabled,
+        keyMatchMode: global.keyMatchMode,
+        generationSource: global.generationSource,
+        generationModel: global.generationModel,
+        generationEndpoint: global.generationEndpoint,
+        generationApiKey: global.generationApiKey,
+        generationTemperature: global.generationTemperature,
+        generationMaxTokens: global.generationMaxTokens,
+        promptPreset: global.promptPreset,
+      ),
+    );
+    await put(book);
+    return book;
   }
 
   Future<List<MemoryBook>> getAll() async {
@@ -49,15 +76,12 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         .go();
   }
 
-  Future<MemoryBook> ensureForSession(String sessionId) async {
-    final existing = await getBySessionId(sessionId);
-    if (existing != null) return existing;
-    final book = MemoryBook(
-      id: 'memorybook_$sessionId',
-      sessionId: sessionId,
-    );
-    await put(book);
-    return book;
+  Future<MemoryBook?> getBySessionId(String sessionId) async {
+    final row = await (select(memoryBookRows)
+          ..where((t) => t.sessionId.equals(sessionId)))
+        .getSingleOrNull();
+    if (row == null) return null;
+    return _rowToModel(row);
   }
 
   MemoryBook _rowToModel(MemoryBookRow row) {

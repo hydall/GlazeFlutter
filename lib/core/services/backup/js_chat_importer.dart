@@ -264,15 +264,14 @@ class JsChatImporter with BackupHelpers {
                 e['messageIds'].whereType<String>())
             : <String>[],
         'messageRange': e['messageRange'] is Map
-            ? Map<String, dynamic>.from(
-                e['messageRange'] as Map)
+            ? _convertMessageRange(e['messageRange'] as Map)
             : null,
         'source': e['source'] is String
             ? e['source'] as String
             : 'manual',
-        'createdAt': e['createdAt']?.toString(),
-        'updatedAt': e['updatedAt']?.toString(),
-        'generatedAt': e['generatedAt']?.toString(),
+        'createdAt': toInt(e['createdAt']),
+        'updatedAt': toInt(e['updatedAt']) ?? 0,
+        'generatedAt': toInt(e['generatedAt']),
       });
     }
 
@@ -363,7 +362,7 @@ class JsChatImporter with BackupHelpers {
             ? List<String>.from(d['messageIds'].whereType<String>())
             : <String>[],
         'messageRange': d['messageRange'] is Map
-            ? Map<String, dynamic>.from(d['messageRange'] as Map)
+            ? _convertMessageRange(d['messageRange'] as Map)
             : null,
         'status': d['status'] is String ? d['status'] as String : 'pending_generation',
         'source': d['source'] is String ? d['source'] as String : '',
@@ -391,5 +390,15 @@ class JsChatImporter with BackupHelpers {
             ),
           );
     }
+  }
+
+  Map<String, dynamic>? _convertMessageRange(Map raw) {
+    if (raw.containsKey('start') && raw.containsKey('end')) {
+      return {
+        'start': toInt(raw['start']) ?? 0,
+        'end': toInt(raw['end']) ?? 0,
+      };
+    }
+    return null;
   }
 }

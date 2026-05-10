@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 
 import '../../../shared/theme/app_colors.dart';
 
@@ -64,9 +64,9 @@ class ImageContentRenderer extends StatelessWidget {
   Widget _buildSpanWidget(_ContentSpan span) {
     if (span is _TextSpan) {
       if (span.text.trim().isEmpty) return const SizedBox.shrink();
-      return MarkdownBody(
-        data: span.text,
-        styleSheet: MarkdownStyleSheet(p: TextStyle(color: textColor)),
+      return GptMarkdown(
+        span.text,
+        style: TextStyle(color: textColor),
       );
     }
     if (span is _ImgResultSpan) {

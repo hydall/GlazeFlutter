@@ -131,28 +131,21 @@ Preset parseSillyTavernPreset(Map<String, dynamic> json, String fileName) {
     final blockName = (pm['name'] as String?) ?? identifier;
     final normalizedId = _normalizeImportedBlockId(identifier, blockName);
     final isMandatory = _mandatoryBlockIds.contains(normalizedId);
-    final isEnabled = pm['enabled'] as bool? ?? true;
 
-    String insertionMode;
-    int? depth;
-    if (normalizedId == 'chat_history') {
-      insertionMode = 'relative';
-    } else if (pm['injection_position'] == 1) {
-      insertionMode = 'depth';
-      depth = pm['injection_depth'] as int? ?? 4;
+    final blockJson = Map<String, dynamic>.from(pm);
+    blockJson['id'] = normalizedId;
+    blockJson['name'] = blockName;
+    blockJson['role'] = pm['role'] ?? 'system';
+    blockJson['content'] = isMandatory ? '' : (pm['content'] ?? '');
+
+    if (pm['injection_position'] == 1) {
+      blockJson['insertionMode'] = 'depth';
+      blockJson['depth'] = pm['injection_depth'] is num ? (pm['injection_depth'] as num).toInt() : 4;
     } else {
-      insertionMode = 'relative';
+      blockJson['insertionMode'] = 'relative';
     }
 
-    blocks.add(PresetBlock(
-      id: normalizedId,
-      name: blockName,
-      role: (pm['role'] as String?) ?? 'system',
-      content: isMandatory ? '' : ((pm['content'] as String?) ?? ''),
-      enabled: isEnabled,
-      insertionMode: insertionMode,
-      depth: depth,
-    ));
+    blocks.add(PresetBlock.fromJson(blockJson));
   }
 
   final stRegexes = json['regexes'] as List<dynamic>?;
@@ -161,17 +154,15 @@ Preset parseSillyTavernPreset(Map<String, dynamic> json, String fileName) {
   if (regexSource != null) {
     for (int i = 0; i < regexSource.length; i++) {
       final r = regexSource[i] as Map<String, dynamic>;
-      regexes.add(PresetRegex(
-        id: r['id'] as String? ?? 'imported_r$i',
-        name: (r['scriptName'] as String?) ?? 'Regex $i',
-        regex: (r['findRegex'] as String?) ?? '',
-        replacement: (r['replaceString'] as String?) ?? '',
-        placement: (r['placement'] as List<dynamic>?)?.map((e) => e as int).toList() ?? [1, 2],
-        disabled: !(r['isEnabled'] as bool? ?? !((r['disabled'] as bool?) ?? false)),
-        ephemerality: (r['ephemerality'] as List<dynamic>?)?.map((e) => e as int).toList() ?? [1, 2],
-        minDepth: r['minDepth'] as int?,
-        maxDepth: r['maxDepth'] as int?,
-      ));
+      final normalized = Map<String, dynamic>.from(r);
+      if (!normalized.containsKey('id')) normalized['id'] = 'imported_r$i';
+      if (!normalized.containsKey('name')) normalized['name'] = r['scriptName'] ?? 'Regex $i';
+      if (!normalized.containsKey('regex')) normalized['regex'] = r['findRegex'] ?? '';
+      if (!normalized.containsKey('replacement')) normalized['replacement'] = r['replaceString'] ?? '';
+      if (r['isEnabled'] is bool) {
+        normalized['disabled'] = !(r['isEnabled'] as bool);
+      }
+      regexes.add(PresetRegex.fromJson(normalized));
     }
   }
 

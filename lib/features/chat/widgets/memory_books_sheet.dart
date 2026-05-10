@@ -8,6 +8,7 @@ import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/memory_settings_provider.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -52,9 +53,34 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     await repo.put(_book!);
   }
 
+  MemoryGlobalSettings get _gs => ref.read(memoryGlobalSettingsProvider);
+
+  MemoryBookSettings _globalSettingsAsBookSettings() {
+    final g = _gs;
+    return MemoryBookSettings(
+      enabled: g.enabled,
+      autoCreateEnabled: g.autoCreateEnabled,
+      autoGenerateEnabled: g.autoGenerateEnabled,
+      maxInjectedEntries: g.maxInjectedEntries,
+      autoCreateInterval: g.autoCreateInterval,
+      useDelayedAutomation: g.useDelayedAutomation,
+      injectionTarget: g.injectionTarget,
+      batchSize: g.batchSize,
+      vectorSearchEnabled: g.vectorSearchEnabled,
+      keyMatchMode: g.keyMatchMode,
+      generationSource: g.generationSource,
+      generationModel: g.generationModel,
+      generationEndpoint: g.generationEndpoint,
+      generationApiKey: g.generationApiKey,
+      generationTemperature: g.generationTemperature,
+      generationMaxTokens: g.generationMaxTokens,
+      promptPreset: g.promptPreset,
+    );
+  }
+
   String get _settingsSummary {
     if (_book == null) return '';
-    final s = _book!.settings;
+    final s = _gs;
     final interval = s.autoCreateInterval;
     final autoCreate = s.autoCreateEnabled ? 'Auto ON' : 'Auto OFF';
     final autoGen = s.autoGenerateEnabled ? 'Auto-gen' : 'Manual';
@@ -69,7 +95,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   }
 
   String get _searchModelLabel {
-    final s = _book?.settings;
+    final s = _gs;
     if (s == null) return '';
     return s.generationModel.isNotEmpty ? s.generationModel : 'Current LLM model';
   }
@@ -89,7 +115,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     if (session == null) return;
 
     final messages = session.messages.where((m) =>
-        !m.isHidden && !m.isTyping && (m.role == 'user' || m.role == 'assistant')).toList();
+        !m.isTyping && (m.role == 'user' || m.role == 'assistant')).toList();
     if (messages.isEmpty) {
       if (mounted) GlazeToast.show(context, 'No stable messages to scan');
       return;
@@ -113,7 +139,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       return;
     }
 
-    final interval = _book!.settings.autoCreateInterval;
+    final interval = _gs.autoCreateInterval;
     final segments = <List<ChatMessage>>[];
     for (int i = 0; i < uncovered.length; i += interval) {
       final end = (i + interval > uncovered.length) ? uncovered.length : i + interval;
@@ -159,7 +185,19 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       );
     });
     await _save();
-    if (mounted) GlazeToast.show(context, '${newDrafts.length} draft placeholders created');
+    if (mounted) GlazeToast.show(context, '${newDrafts.length} drafts created');
+  }
+
+  void _generateAllPending() {
+    if (_book == null) return;
+    final needsGen = _book!.pendingDrafts.where((d) =>
+        d.content.isEmpty &&
+        (d.status == 'pending_generation' || d.status == 'needs_regeneration') &&
+        _generatingDrafts[d.id] != true).toList();
+
+    for (final draft in needsGen) {
+      _generateDraft(draft.id);
+    }
   }
 
   void _generateDraft(String draftId) async {
@@ -188,7 +226,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       final generator = MemoryDraftGenerator(ref);
       final result = await generator.generate(
         draft: draft,
-        settings: _book!.settings,
+        settings: _globalSettingsAsBookSettings(),
         historyText: historyText,
         cancelToken: cancelToken,
       );
@@ -229,7 +267,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
         d.content.isEmpty &&
         (d.status == 'pending_generation' || d.status == 'needs_regeneration') &&
         _generatingDrafts[d.id] != true).toList();
-    final batchSize = _book!.settings.batchSize;
+    final batchSize = _gs.batchSize;
     final toGenerate = needsGen.take(batchSize).toList();
 
     for (final draft in toGenerate) {
@@ -294,15 +332,36 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   }
 
   void _openSettings() async {
-    if (_book == null) return;
+    final currentSettings = _globalSettingsAsBookSettings();
     final newSettings = await GlazeBottomSheet.show<MemoryBookSettings>(
       context,
       title: 'Memory Settings',
-      child: MemoryGenerationSettingsSheet(settings: _book!.settings),
+      child: MemoryGenerationSettingsSheet(settings: currentSettings),
     );
     if (newSettings != null && mounted) {
-      setState(() { _book = _book!.copyWith(settings: newSettings); });
-      await _save();
+      final newGlobal = MemoryGlobalSettings(
+        enabled: newSettings.enabled,
+        autoCreateEnabled: newSettings.autoCreateEnabled,
+        autoGenerateEnabled: newSettings.autoGenerateEnabled,
+        maxInjectedEntries: newSettings.maxInjectedEntries,
+        autoCreateInterval: newSettings.autoCreateInterval,
+        useDelayedAutomation: newSettings.useDelayedAutomation,
+        injectionTarget: newSettings.injectionTarget,
+        batchSize: newSettings.batchSize,
+        parallelJobs: _gs.parallelJobs,
+        vectorSearchEnabled: newSettings.vectorSearchEnabled,
+        keyMatchMode: newSettings.keyMatchMode,
+        generationSource: newSettings.generationSource,
+        generationModel: newSettings.generationModel,
+        generationUseCurrentModelOverride: _gs.generationUseCurrentModelOverride,
+        generationEndpoint: newSettings.generationEndpoint,
+        generationApiKey: newSettings.generationApiKey,
+        generationTemperature: newSettings.generationTemperature,
+        generationMaxTokens: newSettings.generationMaxTokens,
+        promptPreset: newSettings.promptPreset,
+        customPrompts: _gs.customPrompts,
+      );
+      await ref.read(memoryGlobalSettingsProvider.notifier).save(newGlobal);
     }
   }
 
@@ -322,7 +381,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
         charId: widget.charId,
         sessionId: widget.sessionId,
         config: config,
-        embeddingTarget: _book!.settings.vectorSearchEnabled ? 'content' : 'content',
+        embeddingTarget: _gs.vectorSearchEnabled ? 'content' : 'content',
       );
       if (mounted) {
         setState(() { _isReindexing = false; });
@@ -420,8 +479,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   }
 
   void _cycleSearchType() async {
-    if (_book == null) return;
-    final s = _book!.settings;
+    final s = _gs;
     String nextMode;
     bool nextVector;
     if (!s.vectorSearchEnabled) {
@@ -437,12 +495,10 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       nextVector = false;
       nextMode = 'plain';
     }
-    setState(() {
-      _book = _book!.copyWith(
-        settings: s.copyWith(vectorSearchEnabled: nextVector, keyMatchMode: nextMode),
-      );
-    });
-    await _save();
+    await ref.read(memoryGlobalSettingsProvider.notifier).save(
+      s.copyWith(vectorSearchEnabled: nextVector, keyMatchMode: nextMode),
+    );
+    setState(() {});
   }
 
   @override
@@ -451,7 +507,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final settings = _book!.settings;
+    final settings = _gs;
     final entries = _book!.entries;
     final pendingDrafts = _book!.pendingDrafts;
     final activeCount = entries.where((e) => e.status == 'active').length;
@@ -489,7 +545,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     );
   }
 
-  Widget _buildOverview(MemoryBookSettings settings) {
+  Widget _buildOverview(MemoryGlobalSettings settings) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -528,7 +584,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     );
   }
 
-  Widget _buildSearchTypeSelector(MemoryBookSettings settings) {
+  Widget _buildSearchTypeSelector(MemoryGlobalSettings settings) {
     return GestureDetector(
       onTap: _cycleSearchType,
       child: Container(

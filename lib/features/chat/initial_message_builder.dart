@@ -49,6 +49,7 @@ class InitialMessageBuilder {
       personaPrompt: persona?.prompt,
       charId: character.id,
       sessionId: sessionId,
+      macroName: character.macroName,
     );
     return raw.map((g) => replaceMacros(g, macroCtx).text).toList();
   }

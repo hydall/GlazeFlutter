@@ -191,6 +191,7 @@ class CharacterImporter {
       depthPromptDepth: _extractDepthPromptDepth(data),
       depthPromptRole: _extractDepthPromptRole(data),
       world: _extractWorld(data),
+      macroName: data['macro_name'] as String?,
     );
   }
 

@@ -33,6 +33,7 @@ class Character with _$Character {
     @Default(4) int depthPromptDepth,
     @Default('system') String depthPromptRole,
     String? world,
+    String? macroName,
   }) = _Character;
 
   factory Character.fromJson(Map<String, dynamic> json) =>

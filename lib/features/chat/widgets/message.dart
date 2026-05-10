@@ -1,15 +1,17 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:markdown/markdown.dart' as md;
+import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 
 import '../../../core/llm/regex_service.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/character.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
+import '../../../core/utils/html_to_markdown.dart';
+import '../../../features/personas/persona_list_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
 import '../../image_gen/widgets/image_content_renderer.dart';
 import '../../settings/app_settings_provider.dart';
@@ -17,43 +19,100 @@ import '../chat_provider.dart';
 import '../editing_message_provider.dart';
 import 'message_actions.dart';
 
-class MarkSyntax extends md.InlineSyntax {
-  MarkSyntax() : super(r'==mark==(.*?)==');
+Color? _parseHexColor(String hex) {
+  var h = hex.replaceFirst('#', '');
+  if (h.length == 3) h = '${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}';
+  if (h.length == 4) h = '${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}';
+  if (h.length == 6) h = 'ff$h';
+  if (h.length != 8) return null;
+  final value = int.tryParse(h, radix: 16);
+  if (value == null) return null;
+  return Color(value);
+}
+
+class HtmlColorMd extends InlineMd {
   @override
-  bool onMatch(md.InlineParser parser, Match match) {
-    final el = md.Element.text('mark', match[1]!);
-    parser.addNode(el);
-    return true;
+  RegExp get exp => RegExp(r'==hc:(#[0-9a-fA-F]{3,8})==(.+?)==');
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text);
+    final colorHex = match?[1] ?? '#ffffff';
+    final content = match?[2] ?? '';
+    final color = _parseHexColor(colorHex) ?? (config.style?.color ?? Colors.white);
+    return TextSpan(
+      children: MarkdownComponent.generate(context, content, config.copyWith(
+        style: (config.style ?? const TextStyle()).copyWith(color: color),
+      ), false),
+      style: (config.style ?? const TextStyle()).copyWith(color: color),
+    );
   }
 }
 
-class ActiveMarkSyntax extends md.InlineSyntax {
-  ActiveMarkSyntax() : super(r'==active==(.*?)==');
-  @override
-  bool onMatch(md.InlineParser parser, Match match) {
-    final el = md.Element.text('activemark', match[1]!);
-    parser.addNode(el);
-    return true;
-  }
-}
-
-class _MarkElementBuilder extends MarkdownElementBuilder {
-  final Color bgColor;
+class MarkMd extends InlineMd {
   final Color textColor;
-  final GlobalKey? activeKey;
-  _MarkElementBuilder(this.bgColor, this.textColor, {this.activeKey});
+
+  MarkMd({required this.textColor});
 
   @override
-  Widget visitElementAfter(md.Element element, TextStyle? preferredStyle) {
-    return Container(
-      key: activeKey,
-      decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(2)),
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-      child: Text(
-        element.textContent,
-        style: preferredStyle?.copyWith(color: textColor) ?? TextStyle(color: textColor),
+  RegExp get exp => RegExp(r'==mark==(.+?)==');
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text);
+    final content = match?[1] ?? '';
+    final markStyle = (config.style ?? const TextStyle()).copyWith(color: textColor);
+    return TextSpan(
+      children: MarkdownComponent.generate(context, content, config.copyWith(style: markStyle), false),
+      style: markStyle,
+    );
+  }
+}
+
+class ActiveMarkMd extends InlineMd {
+  final GlobalKey? activeKey;
+
+  ActiveMarkMd({this.activeKey});
+
+  @override
+  RegExp get exp => RegExp(r'==active==(.+?)==');
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text);
+    final content = match?[1] ?? '';
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: KeyedSubtree(
+        key: activeKey,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFF44336).withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          child: Text.rich(
+            TextSpan(
+              children: MarkdownComponent.generate(context, content, config, false),
+              style: (config.style ?? const TextStyle()).copyWith(color: Colors.white),
+            ),
+          ),
+        ),
       ),
     );
+  }
+}
+
+class DetailsSummaryMd extends BlockMd {
+  @override
+  String get expString => r'<details[^>]*>\s*<summary[^>]*>(.*?)</summary>(.*?)</details>';
+
+  @override
+  Widget build(BuildContext context, String text, GptMarkdownConfig config) {
+    final fullMatch = RegExp(r'<details[^>]*>\s*<summary[^>]*>(.*?)</summary>(.*?)</details>', dotAll: true).firstMatch(text);
+    final summary = fullMatch?[1]?.trim() ?? 'Details';
+    final body = fullMatch?[2]?.trim() ?? '';
+    return _DetailsBlock(summary: summary, body: body, config: config);
   }
 }
 
@@ -134,14 +193,15 @@ class _MessageState extends ConsumerState<Message> {
   }
 
   String _highlightPhrases(String content) {
+    if (content.contains('==hc:')) return content;
+
     String text = content;
-    
     text = text.replaceAllMapped(
-      RegExp(r'(```.*?```|`[^`]*`)|"(?:(?!\n\n)[^"])*"|«(?:(?!\n\n)[^»])*»|“(?:(?!\n\n)[^”])*”|‘(?:(?!\n\n)[^’])*’|(?<!\p{L})\x27(?:(?!\n\n)[^\x27])*\x27(?!\p{L})', unicode: true, dotAll: true), 
+      RegExp(r'(```.*?```|`[^`]*`)|«(?:(?!\n\n)[^»])*»|"(?:(?!\n\n)[^"])*"|\u201C(?:(?!\n\n)[^\u201D])*\u201D|\u2018(?:(?!\n\n)[^\u2019])*\u2019|(?<!\p{L})\x27(?:(?!\n\n)[^\x27])*\x27(?!\p{L})', unicode: true, dotAll: true), 
       (match) {
         if (match[1] != null) return match[1]!;
-        return '~~${match[0]}~~';
-      }
+        return '==mark==${match[0]}==';
+      },
     );
 
     if (widget.searchQuery.isEmpty || !widget.isSearchMatch) return text;
@@ -239,7 +299,8 @@ class _MessageState extends ConsumerState<Message> {
     final isLast = widget.isLast;
     final isGenerating = widget.isGenerating;
     final charId = widget.charId;
-    final memoryCoverage = widget.memoryCoverage;
+    final memoryEntryIds = widget.memoryCoverage['entryIds'];
+    final memoryEntryCount = memoryEntryIds is List ? memoryEntryIds.length : 0;
 
     final scheme = Theme.of(context).colorScheme;
     final appSettings = ref.watch(appSettingsProvider).value;
@@ -275,84 +336,127 @@ class _MessageState extends ConsumerState<Message> {
 
     final style = _BubbleStyle.resolve(scheme: scheme, isStandard: isStandard, isUser: isUser, isSystem: isSystem);
 
-    String displayName = isUser ? 'User' : (character?.name ?? 'Character');
+    final personas = ref.watch(personaListProvider).value ?? [];
+    final activePersonaId = ref.watch(activePersonaIdProvider);
+    final personaConnections = ref.watch(personaConnectionsProvider);
+    final effectivePersona = getEffectivePersona(personas, charId, null, activePersonaId, personaConnections);
+
+    String displayName = isUser ? (effectivePersona?.name ?? 'User') : (character?.name ?? 'Character');
     String avatarLetter = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
     FileImage? avatarImage;
-    if (!isUser && character?.avatarPath != null && character!.avatarPath!.isNotEmpty) {
+    if (isUser) {
+      if (effectivePersona?.avatarPath != null && effectivePersona!.avatarPath!.isNotEmpty) {
+        avatarImage = FileImage(File(effectivePersona.avatarPath!));
+      }
+    } else if (character?.avatarPath != null && character!.avatarPath!.isNotEmpty) {
       avatarImage = FileImage(File(character.avatarPath!));
     }
 
     final textColor = style.textColor;
-    final effectiveTokens = (tokens != null && tokens! > 0)
+    final metaColor = style.metaColor;
+    final quoteColor = style.quoteColor;
+    final effectiveTokens = (tokens != null && tokens > 0)
         ? tokens
         : (isUser && content.isNotEmpty ? estimateTokens(content) : null);
 
-    final quoteColor = (isUser && !isStandard) ? scheme.inversePrimary : scheme.primary;
-    final asteriskColor = textColor.withValues(alpha: 0.65);
-
     Widget bubble = Align(
       alignment: style.alignment,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
+      child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: isStandard ? double.infinity : MediaQuery.of(context).size.width * 0.88),
-        margin: EdgeInsets.symmetric(horizontal: isStandard ? 16 : 12, vertical: isStandard ? 8 : 4),
-        padding: isStandard ? const EdgeInsets.all(0) : const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: _highlighted ? scheme.primary.withValues(alpha: 0.2) : style.bg,
-          borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16)
-        ),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          margin: EdgeInsets.symmetric(horizontal: isStandard ? 16 : 12, vertical: isStandard ? 8 : 4),
+          padding: isStandard ? const EdgeInsets.all(0) : const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _highlighted ? const Color(0xFF7996CE).withValues(alpha: 0.15) : style.bg,
+            borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16)
+          ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (isStandard && !isSystem) ...[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 12,
-                    backgroundColor: isUser ? scheme.primary : scheme.surfaceContainerHighest,
-                    backgroundImage: avatarImage,
-                    child: avatarImage == null ? Text(avatarLetter, style: TextStyle(fontSize: 12, color: isUser ? scheme.onPrimary : scheme.onSurface, fontWeight: FontWeight.bold)) : null,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(displayName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: scheme.onSurfaceVariant)),
-                  if (messageIndex >= 0) ...[
-                    const SizedBox(width: 6),
-                    Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant.withValues(alpha: 0.55))),
+            if (!isSystem) ...[
+              if (isStandard) ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
+                      backgroundImage: avatarImage,
+                      child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)) : null,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(displayName, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: scheme.onSurfaceVariant)),
+                    if (messageIndex >= 0) ...[
+                      const SizedBox(width: 6),
+                      Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant.withValues(alpha: 0.55))),
+                    ],
                   ],
-                ],
-              ),
-              const SizedBox(height: 8),
+                ),
+                const SizedBox(height: 8),
+              ] else ...[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    CircleAvatar(
+                      radius: 10,
+                      backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
+                      backgroundImage: avatarImage,
+                      child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)) : null,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(displayName, style: TextStyle(fontWeight: FontWeight.w500, fontSize: 12, color: style.metaColor)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+              ],
             ],
-            if (reasoning != null && reasoning!.isNotEmpty && !isEditing)
-              _ReasoningBlock(reasoning: reasoning!, scheme: scheme),
+            if (reasoning != null && reasoning.isNotEmpty && !isEditing)
+              _ReasoningBlock(reasoning: reasoning, scheme: scheme),
             if (isEditing)
-              _EditTextarea(controller: _editController!, textColor: textColor, scheme: scheme)
+              _EditTextarea(controller: _editController!, scheme: scheme)
             else if (isTyping && content.isEmpty)
               _TypingIndicator(textColor: textColor, scheme: scheme)
             else if (ImageContentRenderer.hasImageMarkers(displayContent))
               ImageContentRenderer(content: displayContent, textColor: textColor)
             else
-              MarkdownBody(
-                data: _highlightPhrases(displayContent), 
-                styleSheet: MarkdownStyleSheet(
-                  p: TextStyle(color: textColor),
-                  em: TextStyle(color: asteriskColor, fontStyle: FontStyle.italic),
-                  strong: TextStyle(color: asteriskColor, fontWeight: FontWeight.bold),
-                  del: TextStyle(color: quoteColor, decoration: TextDecoration.none),
-                ),
-                extensionSet: md.ExtensionSet([
-                  ...md.ExtensionSet.gitHubFlavored.blockSyntaxes
-                ], [
-                  ...md.ExtensionSet.gitHubFlavored.inlineSyntaxes,
-                  MarkSyntax(),
-                  ActiveMarkSyntax(),
-                ]),
-                builders: {
-                  'mark': _MarkElementBuilder(scheme.primary.withValues(alpha: 0.3), scheme.onSurface),
-                  'activemark': _MarkElementBuilder(Colors.orange.withValues(alpha: 0.6), Colors.white, activeKey: _activePhraseKey),
-                },
+              GptMarkdown(
+                _highlightPhrases(hasHtmlTags(displayContent) ? htmlToMarkdown(displayContent) : displayContent),
+                style: TextStyle(color: textColor),
+                components: [
+                  CodeBlockMd(),
+                  LatexMathMultiLine(),
+                  DetailsSummaryMd(),
+                  NewLines(),
+                  BlockQuote(),
+                  TableMd(),
+                  HTag(),
+                  UnOrderedList(),
+                  OrderedList(),
+                  RadioButtonMd(),
+                  CheckBoxMd(),
+                  HrLine(),
+                  IndentMd(),
+                ],
+                inlineComponents: [
+                  ATagMd(),
+                  ImageMd(),
+                  HtmlColorMd(),
+                  MarkMd(
+                    textColor: quoteColor,
+                  ),
+                  ActiveMarkMd(activeKey: _activePhraseKey),
+                  TableMd(),
+                  StrikeMd(),
+                  BoldMd(),
+                  ItalicMd(),
+                  UnderLineMd(),
+                  LatexMath(),
+                  LatexMathMultiLine(),
+                  HighlightedText(),
+                  SourceTag(),
+                ],
               ),
             if (isStreaming)
               Text('...', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
@@ -361,7 +465,7 @@ class _MessageState extends ConsumerState<Message> {
               _MetadataRow(
                 genTime: genTime,
                 tokens: effectiveTokens,
-                textColor: textColor,
+                metaColor: metaColor,
                 isStandard: isStandard,
                 isUser: isUser,
                 scheme: scheme,
@@ -375,7 +479,7 @@ class _MessageState extends ConsumerState<Message> {
                 swipeId: _switcherIndex(character),
                 onSwipeLeft: isEditing ? null : _onSwitcherLeft(character),
                 onSwipeRight: isEditing ? null : _onSwitcherRight(character),
-                memoryEntryCount: memoryCoverage.length,
+                memoryEntryCount: memoryEntryCount,
                 onRegenerate: (!isEditing && ((isUser && isLast) || isError) && !isGenerating)
                     ? () => ref.read(chatProvider(charId).notifier).regenerateLastAssistant()
                     : null,
@@ -387,9 +491,10 @@ class _MessageState extends ConsumerState<Message> {
           ],
         ),
       ),
+      ),
     );
 
-    Widget bubbleWidget = isHidden ? Opacity(opacity: 0.5, child: bubble) : bubble;
+    Widget bubbleWidget = isHidden ? Opacity(opacity: 0.45, child: bubble) : bubble;
 
     if (isSystem || isStreaming) return bubbleWidget;
 
@@ -442,11 +547,24 @@ class _MessageState extends ConsumerState<Message> {
 }
 
 class _BubbleStyle {
+  static const _textPrimary = Color(0xFFE1E3E6);
+  static const _textSecondary = Color(0xFFB0B8C1);
+  static const _vkBlue = Color(0xFF7996CE);
+  static const _appBg = Color(0xFF19191A);
+
   final Color bg;
   final Alignment alignment;
   final Color textColor;
+  final Color quoteColor;
+  final Color metaColor;
 
-  const _BubbleStyle({required this.bg, required this.alignment, required this.textColor});
+  const _BubbleStyle({
+    required this.bg,
+    required this.alignment,
+    required this.textColor,
+    required this.quoteColor,
+    required this.metaColor,
+  });
 
   factory _BubbleStyle.resolve({
     required ColorScheme scheme,
@@ -455,15 +573,133 @@ class _BubbleStyle {
     required bool isSystem,
   }) {
     if (isStandard) {
-      return _BubbleStyle(bg: Colors.transparent, alignment: Alignment.centerLeft, textColor: scheme.onSurface);
+      return _BubbleStyle(
+        bg: Colors.transparent,
+        alignment: Alignment.centerLeft,
+        textColor: _textPrimary,
+        quoteColor: _vkBlue,
+        metaColor: _textSecondary,
+      );
     }
     if (isUser) {
-      return _BubbleStyle(bg: scheme.primary, alignment: Alignment.centerRight, textColor: scheme.onPrimary);
+      return _BubbleStyle(
+        bg: _appBg.withValues(alpha: 0.8),
+        alignment: Alignment.centerRight,
+        textColor: _textPrimary,
+        quoteColor: _vkBlue,
+        metaColor: _textSecondary,
+      );
     }
     if (isSystem) {
-      return _BubbleStyle(bg: scheme.surfaceContainerLow, alignment: Alignment.center, textColor: scheme.onSurface);
+      return _BubbleStyle(
+        bg: const Color(0xFF1E1E1E).withValues(alpha: 0.8),
+        alignment: Alignment.center,
+        textColor: _textPrimary,
+        quoteColor: _vkBlue,
+        metaColor: _textSecondary,
+      );
     }
-    return _BubbleStyle(bg: scheme.surfaceContainerHighest, alignment: Alignment.centerLeft, textColor: scheme.onSurface);
+    return _BubbleStyle(
+      bg: _vkBlue.withValues(alpha: 0.8),
+      alignment: Alignment.centerLeft,
+      textColor: _textPrimary,
+      quoteColor: _vkBlue,
+      metaColor: _textSecondary,
+    );
+  }
+}
+
+class _DetailsBlock extends StatefulWidget {
+  final String summary;
+  final String body;
+  final GptMarkdownConfig config;
+  const _DetailsBlock({required this.summary, required this.body, required this.config});
+
+  @override
+  State<_DetailsBlock> createState() => _DetailsBlockState();
+}
+
+class _DetailsBlockState extends State<_DetailsBlock> with SingleTickerProviderStateMixin {
+  bool _expanded = false;
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
+    _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    setState(() => _expanded = !_expanded);
+    if (_expanded) {
+      _ctrl.forward();
+    } else {
+      _ctrl.reverse();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: _toggle,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              child: Row(
+                children: [
+                  AnimatedRotation(
+                    turns: _expanded ? 0.25 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(Icons.chevron_right, size: 16, color: scheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      widget.summary,
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: scheme.onSurface),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          ClipRect(
+            child: SizeTransition(
+              sizeFactor: _anim,
+              axisAlignment: -1.0,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
+                child: MdWidget(
+                  context,
+                  widget.body.trim(),
+                  true,
+                  config: widget.config,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -507,7 +743,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProvi
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(color: widget.scheme.surfaceContainerLow, borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: const Color(0xFF1E1E1E).withValues(alpha: 0.8), borderRadius: BorderRadius.circular(8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -518,12 +754,12 @@ class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProvi
               padding: const EdgeInsets.all(8),
               child: Row(
                 children: [
-                  Text('Reasoning', style: TextStyle(fontSize: 11, color: widget.scheme.onSurfaceVariant, fontWeight: FontWeight.w600)),
+                  Text('Reasoning', style: TextStyle(fontSize: 11, color: const Color(0xFFB0B8C1), fontWeight: FontWeight.w600)),
                   const Spacer(),
                   AnimatedRotation(
                     turns: _collapsed ? -0.25 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.expand_more, size: 16, color: widget.scheme.onSurfaceVariant),
+                    child: Icon(Icons.expand_more, size: 16, color: const Color(0xFFB0B8C1)),
                   ),
                 ],
               ),
@@ -539,7 +775,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProvi
                   padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                   child: Text(
                     widget.reasoning,
-                    style: TextStyle(fontSize: 12, color: widget.scheme.onSurfaceVariant, fontStyle: FontStyle.italic),
+                    style: const TextStyle(fontSize: 12, color: Color(0xFFB0B8C1), fontStyle: FontStyle.italic),
                   ),
                 ),
               ),
@@ -574,17 +810,16 @@ class _TypingIndicator extends StatelessWidget {
 
 class _EditTextarea extends StatelessWidget {
   final TextEditingController controller;
-  final Color textColor;
   final ColorScheme scheme;
-  const _EditTextarea({required this.controller, required this.textColor, required this.scheme});
+  const _EditTextarea({required this.controller, required this.scheme});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: textColor.withValues(alpha: 0.05),
-        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        color: scheme.surface,
+        border: Border.all(color: scheme.outlineVariant),
         borderRadius: BorderRadius.circular(8),
       ),
       child: TextField(
@@ -594,10 +829,10 @@ class _EditTextarea extends StatelessWidget {
         minLines: 1,
         keyboardType: TextInputType.multiline,
         textInputAction: TextInputAction.newline,
-        style: TextStyle(color: textColor, fontSize: 14),
-        decoration: const InputDecoration(
+        style: TextStyle(color: scheme.onSurface, fontSize: 14),
+        decoration: InputDecoration(
           isDense: true,
-          contentPadding: EdgeInsets.all(8),
+          contentPadding: const EdgeInsets.all(8),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
@@ -610,7 +845,7 @@ class _EditTextarea extends StatelessWidget {
 class _MetadataRow extends StatelessWidget {
   final String? genTime;
   final int? tokens;
-  final Color textColor;
+  final Color metaColor;
   final bool isStandard;
   final bool isUser;
   final ColorScheme scheme;
@@ -629,7 +864,7 @@ class _MetadataRow extends StatelessWidget {
   const _MetadataRow({
     required this.genTime,
     required this.tokens,
-    required this.textColor,
+    required this.metaColor,
     required this.isStandard,
     required this.isUser,
     required this.scheme,
@@ -655,25 +890,25 @@ class _MetadataRow extends StatelessWidget {
           child: Row(
             children: [
               if (!isStandard && messageIndex >= 0) ...[
-                Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.55))),
+                Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.55))),
                 const SizedBox(width: 8),
               ],
               if (genTime != null) ...[
-                Icon(Icons.access_time, size: 12, color: textColor),
+                Icon(Icons.access_time, size: 12, color: metaColor),
                 const SizedBox(width: 4),
-                Text(genTime!, style: TextStyle(fontSize: 12, color: textColor)),
+                Text(genTime!, style: TextStyle(fontSize: 12, color: metaColor)),
                 const SizedBox(width: 12),
               ],
               if (tokens != null && tokens! > 0) ...[
-                Icon(Icons.description_outlined, size: 12, color: textColor),
+                Icon(Icons.description_outlined, size: 12, color: metaColor),
                 const SizedBox(width: 4),
-                Text('${tokens}t', style: TextStyle(fontSize: 12, color: textColor)),
+                Text('${tokens}t', style: TextStyle(fontSize: 12, color: metaColor)),
               ],
               if (memoryEntryCount > 0) ...[
                 const SizedBox(width: 8),
-                Icon(Icons.auto_stories, size: 12, color: textColor.withValues(alpha: 0.7)),
+                Icon(Icons.auto_stories, size: 12, color: metaColor.withValues(alpha: 0.7)),
                 const SizedBox(width: 4),
-                Text('$memoryEntryCount mem', style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.7))),
+                Text('$memoryEntryCount mem', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.7))),
               ],
             ],
           ),
@@ -696,7 +931,7 @@ class _MetadataRow extends StatelessWidget {
                   width: 28,
                   child: Text(
                     '${swipeId + 1}/$swipeCount',
-                    style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.8)),
+                    style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.8)),
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -712,15 +947,15 @@ class _MetadataRow extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
+                color: const Color(0xFF7996CE).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.refresh, size: 14, color: textColor),
+                  Icon(Icons.refresh, size: 14, color: const Color(0xFF7996CE)),
                   const SizedBox(width: 4),
-                  Text('Regenerate', style: TextStyle(fontSize: 12, color: textColor)),
+                  Text('Regenerate', style: TextStyle(fontSize: 12, color: const Color(0xFF7996CE))),
                 ],
               ),
             ),
@@ -747,7 +982,7 @@ class _MetadataRow extends StatelessWidget {
                         color: isStandard ? scheme.surfaceContainerHighest : (isUser ? Colors.transparent : scheme.surfaceContainerHighest),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.menu, size: 16, color: textColor),
+                      child: Icon(Icons.menu, size: 16, color: metaColor),
                     ),
                   ),
           ),
@@ -780,7 +1015,7 @@ class _MetadataRow extends StatelessWidget {
         width: 20,
         height: 20,
         child: Center(
-          child: Icon(icon, size: 16, color: textColor.withValues(alpha: onTap != null ? 0.7 : 0.25)),
+          child: Icon(icon, size: 16, color: metaColor.withValues(alpha: onTap != null ? 0.7 : 0.25)),
         ),
       ),
     );

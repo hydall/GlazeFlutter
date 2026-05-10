@@ -91,7 +91,9 @@ class PromptPayloadBuilder {
       memoryInjectionTarget = memoryResult.injectionTarget;
       if (memoryResult.entries.isNotEmpty) {
         memoryCoverage = {
-          for (final e in memoryResult.entries) e.id: {'title': e.title, 'keys': e.keys},
+          'entryIds': memoryResult.entries.map((e) => e.id).toList(),
+          'needsRebuild': false,
+          'stale': false,
         };
       }
 

@@ -19,7 +19,7 @@ dependencies:
   json_annotation: ^4.9.0
   path: ^1.9.0
   shared_preferences: ^2.3.0
-  flutter_markdown: ^0.7.0
+  gpt_markdown: ^1.1.6
   url_launcher: ^6.3.0
   archive: ^4.0.0
   crypto: ^3.0.0

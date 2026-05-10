@@ -11,7 +11,21 @@ class PresetRepo {
 
   Future<List<Preset>> getAll() async {
     final rows = await _db.select(_db.presets).get();
-    return rows.map(_toModel).toList();
+    final presets = rows.map(_toModel).toList();
+    for (int i = 0; i < presets.length; i++) {
+      final original = rows[i].dataJson;
+      final repaired = jsonEncode(presets[i].toJson());
+      if (original != repaired) {
+        await _db.into(_db.presets).insertOnConflictUpdate(
+          PresetsCompanion(
+            presetId: Value(presets[i].id),
+            name: Value(presets[i].name),
+            dataJson: Value(repaired),
+          ),
+        );
+      }
+    }
+    return presets;
   }
 
   Future<Preset?> getById(String id) async {

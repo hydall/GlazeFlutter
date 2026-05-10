@@ -75,5 +75,5 @@ final summaryRepoProvider = Provider<SummaryRepo>((ref) {
 });
 
 final memoryBookRepoProvider = Provider<MemoryBookRepo>((ref) {
-  return MemoryBookRepo(ref.watch(appDbProvider));
+  return MemoryBookRepo(ref.watch(appDbProvider), ref);
 });

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/utils/html_to_markdown.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
@@ -229,7 +230,7 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
             style: const TextStyle(color: AppColors.textPrimary),
           ),
           subtitle: Text(
-            s.lastMessage.replaceAll('\n', ' '),
+            stripHtml(s.lastMessage).replaceAll('\n', ' '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -308,7 +309,7 @@ class _SessionTile extends ConsumerWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              info.lastMessage.replaceAll('\n', ' '),
+              stripHtml(info.lastMessage).replaceAll('\n', ' '),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 13),
