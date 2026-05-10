@@ -31,6 +31,14 @@
 
 **Known difference from JS:** `getEmbeddings()` (single-vector path) averages multi-chunk vectors into one. This is used only by `memory_embedding_service.dart`. Lorebook search uses `getEmbeddingsWithChunks()` which preserves all chunks — correct.
 
+## Chat / Sessions
+
+- **No rename session.** Missing feature — chat sessions cannot be renamed from the UI. Need to add rename action in session list/context menu.
+
+## Prompt Building
+
+- **Character card content injected with labels instead of raw content.** In some presets, the `char_card` block content is `""` (empty, `isStatic: true`) and `resolveBlockContent` correctly falls back to `char.description`. But Glaze JS uses a custom block (e.g. "character definitions" with `{{description}}`) that wraps content in `<scenario>`/`<info>` tags. Flutter's default seeder and fallback builder inject bare `char.description` without any formatting context. Need to investigate: (1) does `char_card` with empty content + `isStatic: true` produce "Character Name: / Character Description:" labels somewhere in the pipeline? (2) Should the default `char_card` block use a template with `{{description}}` instead of relying on the fallback? (3) Match JS behavior where marker blocks (`isStatic`) inject the raw field value without labels.
+
 ## Image Generation
 
 - **~~img-gen crashes with `String` → `bool?` cast error.~~** Fixed — `js_backup_importer.dart` now stores booleans as `setBool` instead of `setString`; `_migrateFromJsKeys` and `_fromJson` use safe `_castBool`/`_safeBool` helpers that handle string values.
