@@ -187,11 +187,17 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
     final router = ref.watch(routerProvider);
     final themeSettings = ref.watch(themeProvider);
     final uiFont = ref.watch(uiFontFamilyProvider).valueOrNull;
+    final preset = themeSettings.activePreset;
+    final mode = preset.themeMode == 'light'
+        ? ThemeMode.light
+        : preset.themeMode == 'dark'
+            ? ThemeMode.dark
+            : themeSettings.mode;
     return MaterialApp.router(
       title: 'Glaze',
-      theme: AppTheme.light(themeSettings.activePreset, fontFamily: uiFont),
-      darkTheme: AppTheme.dark(themeSettings.activePreset, fontFamily: uiFont),
-      themeMode: themeSettings.mode,
+      theme: AppTheme.light(preset, fontFamily: uiFont),
+      darkTheme: AppTheme.dark(preset, fontFamily: uiFont),
+      themeMode: mode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
     );

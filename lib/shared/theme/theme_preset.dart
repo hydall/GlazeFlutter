@@ -10,6 +10,7 @@ class ThemePreset with _$ThemePreset {
     required String id,
     required String name,
     @Default('') String author,
+    @Default('dark') String themeMode,
     @Default('#7996CE') String accentColor,
     @Default(0.85) double bgOpacity,
     @Default(0) double bgBlur,

@@ -59,6 +59,10 @@
 
 ## API Settings
 
+- **~~401 on generation — wrong API config used.~~** Fixed — 6 locations fetched first DB config instead of user-selected `activeApiConfigProvider`. If first config had empty key, `Authorization: Bearer ` header was rejected by CDN/proxy with 401 without forwarding to origin. All locations now use `activeApiConfigProvider`. Also: empty API key validation in `SseClient`, URL `/v1` prefix handling consolidated in `SseClient.buildChatUrl()`.
+
+- **~~Theme font loading crashes on invalid data URI.~~** Fixed — `_loadFontFromBase64` now strips `data:...;base64,` prefix before decoding, and validates decoded bytes against font magic numbers (TTF/OTF/WOFF/WOFF2/TTC). Corrupted font data (e.g. HTML page saved as font) is silently skipped instead of crashing.
+
 - **~~Generation errors shown as unclosable AlertDialog.~~** Fixed — errors now appear as chat messages with copy button (matching Glaze JS), using `_ErrorWindow` in `message.dart`. Auto-dismissing toast for transient errors.
 
 - **~~API settings not saved — 3 bugs.~~** Fixed — (1) `_flushSave()` before navigation and in `dispose()` instead of `cancel()`. (2) `_toCompanion()`/`_toModel()` now include `omitTemperature`, `omitTopP`, `omitReasoning`, `omitReasoningEffort`. (3) `activeApiPresetIdProvider` now loads from SharedPreferences on startup; `_persistActiveId()` saves on switch.

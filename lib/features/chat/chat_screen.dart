@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -413,10 +414,24 @@ class _ChatBody extends ConsumerWidget {
       children: [
         if (ref.watch(bgImageProvider).valueOrNull case final path?)
           Positioned.fill(
-            child: Image.file(
-              File(path),
-              fit: BoxFit.cover,
-              opacity: AlwaysStoppedAnimation(preset.bgOpacity.clamp(0.0, 1.0)),
+            child: ClipRect(
+              child: preset.bgBlur > 0
+                  ? ImageFiltered(
+                      imageFilter: ImageFilter.blur(
+                        sigmaX: preset.bgBlur,
+                        sigmaY: preset.bgBlur,
+                      ),
+                      child: Image.file(
+                        File(path),
+                        fit: BoxFit.cover,
+                        opacity: AlwaysStoppedAnimation(preset.bgOpacity.clamp(0.0, 1.0)),
+                      ),
+                    )
+                  : Image.file(
+                      File(path),
+                      fit: BoxFit.cover,
+                      opacity: AlwaysStoppedAnimation(preset.bgOpacity.clamp(0.0, 1.0)),
+                    ),
             ),
           ),
         if (preset.bgNoiseOpacity > 0)
