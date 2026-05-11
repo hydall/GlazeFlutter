@@ -35,7 +35,31 @@
 
 - **~~No rename session.~~** Fixed — `renameSession()` in `ChatHistoryNotifier`, rename menu item + dialog in `chat_history_screen.dart` and `magic_drawer.dart`. Name stored in `sessionVars['sessionName']`, no DB migration needed. Magic drawer now displays `sessionName` instead of `Session #N`.
 
+- **~~Enter to Send not wired.~~** Fixed — `ChatInputBar.focusNode.onKeyEvent` sends on Enter (without Shift) when `enterToSend` is enabled. Shift+Enter inserts newline. Virtual keyboard send also works via `TextInputAction.send`.
+
+## Theme
+
+- **~~Theme preset only applied accent color.~~** Fixed — `GlazeColors.fromPreset()` now maps all 30+ preset properties: bubble colors, text/quote/italic colors per role, uiColor, borderColor. Auto-contrast `_contrastFor()` picks dark/light text based on bubble luminance when no explicit text color in preset. `_distinctBubble()` lightens charBubble when it matches uiColor/background.
+
+- **~~Bubble colors wrong.~~** Fixed — user bubble uses `colors.userBubble` (was `colors.background`), char bubble uses `colors.charBubble` (was `colors.accent`). Meta text (name, tokens, time) uses `userText/charText` at 0.6 alpha for contrast on colored bubbles.
+
+- **~~No bgImage support.~~** Fixed — `bgImageProvider` decodes base64 data URI, saves to disk, renders as `Image.file` with `bgOpacity`.
+
+- **~~No custom font support.~~** Fixed — `ui.loadFontFromList()` loads base64 fonts at runtime. `chatFontFamilyProvider`/`uiFontFamilyProvider` feed into `GptMarkdown` fontFamily and `AppTheme` fontFamily.
+
+- **~~No font size/letter spacing.~~** Fixed — `chatFontSize`/`chatLetterSpacing` applied to `GptMarkdown` TextStyle. `uiFontSize`/`uiLetterSpacing` applied to global `textTheme.apply()`.
+
+- **~~No element opacity/blur.~~** Fixed — `elementOpacity` → bubble bg alpha, `elementBlur` → `ClipRRect`+`BackdropFilter` wrap.
+
+- **~~No border customization.~~** Fixed — `borderWidth`/`borderColor`/`borderOpacity` from preset applied to bubble `BoxDecoration.border`.
+
+- **~~No noise overlay.~~** Fixed — `NoiseOverlay` CustomPaint with `noiseOpacity`/`noiseIntensity` (element) and `bgNoiseOpacity`/`bgNoiseIntensity` (background).
+
+- **~~Italic/bold text not colored.~~** Fixed — `ColoredItalicMd`/`ColoredBoldMd` inline components pass `italicColor` from theme preset to `TextStyle.color`.
+
 ## API Settings
+
+- **~~Generation errors shown as unclosable AlertDialog.~~** Fixed — errors now appear as chat messages with copy button (matching Glaze JS), using `_ErrorWindow` in `message.dart`. Auto-dismissing toast for transient errors.
 
 - **~~API settings not saved — 3 bugs.~~** Fixed — (1) `_flushSave()` before navigation and in `dispose()` instead of `cancel()`. (2) `_toCompanion()`/`_toModel()` now include `omitTemperature`, `omitTopP`, `omitReasoning`, `omitReasoningEffort`. (3) `activeApiPresetIdProvider` now loads from SharedPreferences on startup; `_persistActiveId()` saves on switch.
 
