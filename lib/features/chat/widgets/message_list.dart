@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../../../shared/theme/app_colors.dart';
+
 import '../chat_screen.dart';
 import 'message.dart';
 
@@ -419,19 +420,19 @@ class _ScrollDownButton extends StatelessWidget {
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
                 child: Material(
-                  color: const Color(0xFF1E1E1E).withValues(alpha: 0.78),
-                  shape: const CircleBorder(
-                    side: BorderSide(color: AppColors.glassBorder),
+                  color: context.colors.charBubble.withValues(alpha: 0.78),
+                  shape: CircleBorder(
+                    side: BorderSide(color: context.colors.glassBorder),
                   ),
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: onTap,
-                    child: const SizedBox(
+                    child: SizedBox(
                       width: 40,
                       height: 40,
                       child: Icon(
                         Icons.keyboard_arrow_down_rounded,
-                        color: AppColors.accent,
+                        color: context.colors.accent,
                         size: 24,
                       ),
                     ),

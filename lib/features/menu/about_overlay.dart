@@ -38,9 +38,9 @@ class AboutOverlay extends ConsumerWidget {
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 400),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
+                  color: context.colors.surfaceHigh,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppColors.glassBorder),
+                  border: Border.all(color: context.colors.glassBorder),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Stack(
@@ -58,7 +58,7 @@ class AboutOverlay extends ConsumerWidget {
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                           ),
-                          child: const Icon(Icons.close_rounded, size: 20, color: AppColors.textSecondary),
+                          child: Icon(Icons.close_rounded, size: 20, color: context.colors.textSecondary),
                         ),
                       ),
                     ),
@@ -79,12 +79,12 @@ class AboutOverlay extends ConsumerWidget {
                             width: 48,
                             height: 48,
                             fit: BoxFit.contain,
-                            colorFilter: const ColorFilter.mode(AppColors.accent, BlendMode.srcIn),
+                            colorFilter: ColorFilter.mode(context.colors.accent, BlendMode.srcIn),
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const Text('Glaze', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary, letterSpacing: -0.5)),
-                        const Text(version, style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4)),
+                        Text('Glaze', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: context.colors.textPrimary, letterSpacing: -0.5)),
+                        Text(version, style: TextStyle(fontSize: 13, color: context.colors.textSecondary, height: 1.4)),
                         const SizedBox(height: 24),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),

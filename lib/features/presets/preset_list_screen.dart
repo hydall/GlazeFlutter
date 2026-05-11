@@ -154,7 +154,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Material(
-        color: AppColors.accent,
+        color: context.colors.accent,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: () => _showAddSheet(context, ref),
@@ -266,9 +266,9 @@ class _PsCard extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E).withValues(alpha: 0.4),
+        color: context.colors.surfaceHigh.withValues(alpha: 0.4),
         border: Border.all(
-          color: isActive ? AppColors.accent : AppColors.border,
+          color: isActive ? context.colors.accent : context.colors.border,
           width: 2,
         ),
         borderRadius: BorderRadius.circular(12),
@@ -279,8 +279,8 @@ class _PsCard extends StatelessWidget {
         child: InkWell(
           onTap: onActivate,
           borderRadius: BorderRadius.circular(10),
-          splashColor: AppColors.accent.withValues(alpha: 0.08),
-          highlightColor: AppColors.accent.withValues(alpha: 0.04),
+          splashColor: context.colors.accent.withValues(alpha: 0.08),
+          highlightColor: context.colors.accent.withValues(alpha: 0.04),
           child: Padding(
             padding: const EdgeInsets.all(10),
             child: Row(
@@ -291,13 +291,13 @@ class _PsCard extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.1),
+                    color: context.colors.accent.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.description_outlined,
                     size: 20,
-                    color: AppColors.accent,
+                    color: context.colors.accent,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -308,10 +308,10 @@ class _PsCard extends StatelessWidget {
                     children: [
                       Text(
                         preset.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
+                          color: context.colors.textPrimary,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -327,10 +327,10 @@ class _PsCard extends StatelessWidget {
                             Flexible(
                               child: Text(
                                 'by ${preset.author}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                ),
+                                 style: TextStyle(
+                                   fontSize: 12,
+                                   color: context.colors.textSecondary,
+                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -355,11 +355,11 @@ class _PsCard extends StatelessWidget {
                       onTap: onEdit,
                       onLongPress: () => _showContextMenu(context),
                       borderRadius: BorderRadius.circular(8),
-                      child: const Icon(
-                        Icons.edit_outlined,
-                        size: 18,
-                        color: AppColors.textSecondary,
-                      ),
+                       child: Icon(
+                         Icons.edit_outlined,
+                         size: 18,
+                         color: context.colors.textSecondary,
+                       ),
                     ),
                   ),
                 ),
@@ -425,14 +425,14 @@ class _SmallBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: AppColors.textSecondary),
+          Icon(icon, size: 12, color: context.colors.textSecondary),
           const SizedBox(width: 4),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,
-              color: AppColors.textSecondary,
+              color: context.colors.textSecondary,
             ),
           ),
         ],
@@ -461,7 +461,7 @@ class _ConnBadge extends StatelessWidget {
         size: 16,
         color: isActive
             ? const Color(0xFF34C759)
-            : AppColors.textSecondary.withValues(alpha: 0.5),
+            : context.colors.textSecondary.withValues(alpha: 0.5),
       ),
     );
   }

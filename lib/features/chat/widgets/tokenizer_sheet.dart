@@ -93,7 +93,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
           ? Center(
               child: Text(
                 'No data',
-                style: TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
             )
           : _showSettings
@@ -152,7 +152,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
                 child: FilledButton(
                   onPressed: hideCount > 0 ? () => _confirmHide(context, hideCount) : null,
                   style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF7996CE),
+                    backgroundColor: context.colors.accent,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
@@ -164,10 +164,10 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
                 child: OutlinedButton(
                   onPressed: () => setState(() => _showSettings = true),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textPrimary,
+                    foregroundColor: context.colors.textPrimary,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                     side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-                    backgroundColor: AppColors.surfaceHigh.withValues(alpha: 0.5),
+                    backgroundColor: context.colors.surfaceHigh.withValues(alpha: 0.5),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
                   child: const Text('Settings', style: TextStyle(fontWeight: FontWeight.w600)),

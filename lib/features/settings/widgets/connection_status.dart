@@ -40,7 +40,7 @@ class _ConnectionStatusState extends State<ConnectionStatus> {
   Color get _statusColor {
     switch (widget.status) {
       case ApiConnectionStatus.idle:
-        return AppColors.textSecondary.withValues(alpha: 0.4);
+        return context.colors.textSecondary.withValues(alpha: 0.4);
       case ApiConnectionStatus.connecting:
         return Colors.orange;
       case ApiConnectionStatus.connected:
@@ -95,9 +95,9 @@ class _ConnectionStatusState extends State<ConnectionStatus> {
                         child: Text(
                           _statusText,
                           key: ValueKey(widget.status),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: AppColors.textSecondary,
+                            color: context.colors.textSecondary,
                           ),
                         ),
                       ),

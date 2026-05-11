@@ -40,11 +40,11 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
             children: [
               Text(
                 'Custom Prompts',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.colors.textPrimary),
               ),
               IconButton(
                 onPressed: _addPrompt,
-                icon: const Icon(Icons.add_rounded, color: AppColors.accent),
+                icon: Icon(Icons.add_rounded, color: context.colors.accent),
                 tooltip: 'Add prompt',
               ),
             ],
@@ -57,7 +57,7 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
                 child: Text(
                   'No custom prompts yet.\nTap + to create one.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                  style: TextStyle(fontSize: 13, color: context.colors.textSecondary),
                 ),
               ),
             )
@@ -74,7 +74,7 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
               const SizedBox(width: 8),
               FilledButton(
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accent,
+                  backgroundColor: context.colors.accent,
                   foregroundColor: Colors.black,
                 ),
                 onPressed: () {
@@ -104,20 +104,20 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
           p.label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 14, color: AppColors.textPrimary),
+          style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
         ),
         subtitle: Text(
           p.prompt.length > 80 ? '${p.prompt.substring(0, 80)}...' : p.prompt,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
               onPressed: () => _editPrompt(index),
-              icon: Icon(Icons.edit_rounded, size: 18, color: AppColors.accent),
+              icon: Icon(Icons.edit_rounded, size: 18, color: context.colors.accent),
             ),
             IconButton(
               onPressed: () => _deletePrompt(index),
@@ -206,16 +206,16 @@ class _PromptEditorState extends State<_PromptEditor> {
         children: [
           Text(
             isEdit ? 'Edit Prompt' : 'New Prompt',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.colors.textPrimary),
           ),
           const SizedBox(height: 16),
           TextField(
             controller: _labelCtrl,
             onChanged: (_) => setState(() => _labelError = null),
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
             decoration: InputDecoration(
               labelText: 'Name',
-              labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+              labelStyle: TextStyle(color: context.colors.textSecondary, fontSize: 12),
               errorText: _labelError,
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.05),
@@ -227,12 +227,12 @@ class _PromptEditorState extends State<_PromptEditor> {
           TextField(
             controller: _promptCtrl,
             maxLines: 10,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 13),
             decoration: InputDecoration(
               labelText: 'Prompt template',
               hintText: 'Use {{history}} for chat text injection',
-              labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-              hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.4)),
+              labelStyle: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+              hintStyle: TextStyle(color: context.colors.textSecondary.withValues(alpha: 0.4)),
               alignLabelWithHint: true,
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.05),
@@ -251,7 +251,7 @@ class _PromptEditorState extends State<_PromptEditor> {
               const SizedBox(width: 8),
               FilledButton(
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accent,
+                  backgroundColor: context.colors.accent,
                   foregroundColor: Colors.black,
                 ),
                 onPressed: _save,

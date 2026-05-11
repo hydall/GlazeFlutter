@@ -318,8 +318,8 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         return StatefulBuilder(
           builder: (ctx, setDialogState) {
             return AlertDialog(
-              backgroundColor: AppColors.surfaceHigh,
-              title: const Text('Test Key Matching', style: TextStyle(color: AppColors.textPrimary)),
+              backgroundColor: context.colors.surfaceHigh,
+              title: Text('Test Key Matching', style: TextStyle(color: context.colors.textPrimary)),
               content: SizedBox(
                 width: 400,
                 child: Column(
@@ -328,10 +328,10 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                   children: [
                     TextField(
                       controller: testCtrl,
-                      style: const TextStyle(color: AppColors.textPrimary),
+                      style: TextStyle(color: context.colors.textPrimary),
                       decoration: InputDecoration(
                         hintText: 'Type test text...',
-                        hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+                        hintStyle: TextStyle(color: context.colors.textSecondary.withValues(alpha: 0.5)),
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.05),
                       ),
@@ -340,7 +340,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                       onChanged: (_) => setDialogState(() {}),
                     ),
                     const SizedBox(height: 12),
-                    Text('Matched entries:', style: TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                    Text('Matched entries:', style: TextStyle(color: context.colors.textSecondary, fontSize: 12)),
                     const SizedBox(height: 4),
                     ..._matchEntries(testCtrl.text).map((e) => Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -351,7 +351,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                           Expanded(
                             child: Text(
                               e.comment.isNotEmpty ? e.comment : e.keys.join(', '),
-                              style: TextStyle(color: AppColors.textPrimary, fontSize: 13),
+                              style: TextStyle(color: context.colors.textPrimary, fontSize: 13),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -360,14 +360,14 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                       ),
                     )),
                     if (testCtrl.text.isNotEmpty && _matchEntries(testCtrl.text).isEmpty)
-                      Text('No matches', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                      Text('No matches', style: TextStyle(color: context.colors.textSecondary, fontSize: 13)),
                   ],
                 ),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Close', style: TextStyle(color: AppColors.textSecondary)),
+                  child: Text('Close', style: TextStyle(color: context.colors.textSecondary)),
                 ),
               ],
             );
@@ -445,7 +445,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         final lb = _findLorebook(list);
         if (lb == null) {
           return Scaffold(
-            backgroundColor: AppColors.background,
+            backgroundColor: context.colors.background,
             appBar: AppBar(title: const Text('Not Found')),
             body: const Center(child: Text('Lorebook not found')),
           );
@@ -453,9 +453,9 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         _loadFrom(lb);
 
         return Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: context.colors.background,
           floatingActionButton: FloatingActionButton(
-            backgroundColor: AppColors.accent,
+            backgroundColor: context.colors.accent,
             child: const Icon(Icons.add, color: Colors.black),
             onPressed: _addEntry,
           ),
@@ -486,7 +486,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                                   : _indexStatus,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: _rateLimitCooldown > 0 ? Colors.orangeAccent : AppColors.accent,
+                                color: _rateLimitCooldown > 0 ? Colors.orangeAccent : context.colors.accent,
                               ),
                             ),
                           ),
@@ -507,10 +507,10 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                   children: [
                     TextField(
                       controller: _nameController,
-                      style: const TextStyle(color: AppColors.textPrimary),
+                      style: TextStyle(color: context.colors.textPrimary),
                       decoration: InputDecoration(
                         labelText: 'Name',
-                        labelStyle: TextStyle(color: AppColors.textSecondary),
+                        labelStyle: TextStyle(color: context.colors.textSecondary),
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.05),
                         border: OutlineInputBorder(
@@ -576,19 +576,19 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: TextField(
                   controller: _searchController,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
                     fontSize: 14,
                   ),
                   decoration: InputDecoration(
                     hintText: 'Search keys, content...',
                     hintStyle: TextStyle(
-                      color: AppColors.textSecondary.withValues(alpha: 0.5),
+                      color: context.colors.textSecondary.withValues(alpha: 0.5),
                     ),
                     prefixIcon: Icon(
                       Icons.search,
                       size: 18,
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                     ),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(vertical: 10),
@@ -633,7 +633,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                                 '$_missingVectorCount entries without embeddings',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: AppColors.textSecondary,
+                                  color: context.colors.textSecondary,
                                 ),
                               ),
                             ],
@@ -655,7 +655,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                         const SizedBox(width: 6),
                         OutlinedButton(
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.textSecondary,
+                            foregroundColor: context.colors.textSecondary,
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                           ),
@@ -685,19 +685,19 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                             Icon(
                               Icons.article_outlined,
                               size: 48,
-                              color: AppColors.textSecondary,
+                              color: context.colors.textSecondary,
                             ),
                             const SizedBox(height: 12),
                             Text(
                               'No entries yet',
-                              style: TextStyle(color: AppColors.textSecondary),
+                              style: TextStyle(color: context.colors.textSecondary),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               'Tap + to add one',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: AppColors.textSecondary,
+                                color: context.colors.textSecondary,
                               ),
                             ),
                           ],
@@ -787,7 +787,7 @@ class _EntryTile extends StatelessWidget {
         leading: Switch(
           value: entry.enabled,
           onChanged: (_) => onToggle(),
-          activeColor: AppColors.accent,
+          activeColor: context.colors.accent,
         ),
         title: Text(
           entry.comment.isNotEmpty
@@ -797,13 +797,13 @@ class _EntryTile extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: entry.enabled
-                ? AppColors.textPrimary
-                : AppColors.textSecondary,
+                ? context.colors.textPrimary
+                : context.colors.textSecondary,
           ),
         ),
         subtitle: Text(
           '${entry.keys.length} keys | order ${entry.order}${entry.constant ? ' | constant' : ''}',
-          style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 11, color: context.colors.textSecondary),
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,

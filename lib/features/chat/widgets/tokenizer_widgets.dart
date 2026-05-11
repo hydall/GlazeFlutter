@@ -77,7 +77,7 @@ class HeroCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
-          colors: [const Color(0xFF7996CE), Color.lerp(const Color(0xFF7996CE), Colors.black, 0.2)!],
+          colors: [context.colors.accent, Color.lerp(context.colors.accent, Colors.black, 0.2)!],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -174,7 +174,7 @@ class TokenizerLayout extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Container(
               decoration: BoxDecoration(
-                color: AppColors.surfaceHigh,
+                color: context.colors.surfaceHigh,
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(color: Colors.white.withValues(alpha: 0.05), offset: const Offset(1, 1), blurRadius: 2, spreadRadius: 0, blurStyle: BlurStyle.inner),
@@ -210,9 +210,9 @@ class TokenizerLayout extends StatelessWidget {
           ),
           const SizedBox(width: 24),
           Expanded(
-            child: Column(
+              child: Column(
               mainAxisSize: MainAxisSize.min,
-              children: combinedBreakdownItems.map((row) => _breakdownRow(row, breakdown)).toList(),
+              children: combinedBreakdownItems.map((row) => _breakdownRow(context, row, breakdown)).toList(),
             ),
           ),
         ],
@@ -246,7 +246,7 @@ class TokenizerLayout extends StatelessWidget {
     );
   }
 
-  Widget _breakdownRow(BarRow row, TokenBreakdown bd) {
+  Widget _breakdownRow(BuildContext context, BarRow row, TokenBreakdown bd) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -261,10 +261,10 @@ class TokenizerLayout extends StatelessWidget {
           else
             Container(width: 8, height: 8, decoration: BoxDecoration(color: row.color, shape: BoxShape.circle)),
           const SizedBox(width: 8),
-          Expanded(child: Text(row.label, style: const TextStyle(fontSize: 14, color: AppColors.textSecondary))),
+          Expanded(child: Text(row.label, style: TextStyle(fontSize: 14, color: context.colors.textSecondary))),
           Text(
             _rowTokenText(bd, row),
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
           ),
         ],
       ),
@@ -320,7 +320,7 @@ class TokenizerActionButtons extends ConsumerWidget {
               icon: const Icon(Icons.visibility, size: 16),
               label: Text('Unhide all ($hiddenCount)'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.accent,
+                foregroundColor: context.colors.accent,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
@@ -397,7 +397,7 @@ class NearLimitWarning extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Hide about $hideCount top message${hideCount == 1 ? '' : 's'} to free about $hideTokens tokens.',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
           ),
         ],
       ),
@@ -442,13 +442,13 @@ class SettingsSlider extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
-                Text('${value.round()}$unit', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.accent)),
+                Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
+                Text('${value.round()}$unit', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.colors.accent)),
               ],
             ),
             const SizedBox(height: 4),
-            Text(description, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-            Slider(value: value, min: min, max: max, divisions: (max - min).round(), activeColor: AppColors.accent, onChanged: onChanged),
+            Text(description, style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
+            Slider(value: value, min: min, max: max, divisions: (max - min).round(), activeColor: context.colors.accent, onChanged: onChanged),
           ],
         ),
       ),

@@ -34,7 +34,7 @@ class ModeSelector extends StatelessWidget {
               icon: Icons.hub,
               label: 'Embedding',
               selected: mode == 'embedding',
-              color: AppColors.accent,
+              color: context.colors.accent,
               onTap: () => onChanged('embedding'),
             ),
           ),

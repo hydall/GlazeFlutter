@@ -69,10 +69,10 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
   @override
   Widget build(BuildContext context) {
     if (_loading)
-      return const Padding(
-        padding: EdgeInsets.all(32),
+      return Padding(
+        padding: const EdgeInsets.all(32),
         child: Center(
-          child: CircularProgressIndicator(color: AppColors.accent),
+          child: CircularProgressIndicator(color: context.colors.accent),
         ),
       );
     if (_error != null) return _buildError();
@@ -87,16 +87,16 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.error_outline_rounded,
               size: 48,
-              color: AppColors.textSecondary,
+              color: context.colors.textSecondary,
             ),
             const SizedBox(height: 16),
             Text(
               _error ?? 'Unknown error',
-              style: const TextStyle(
-                color: AppColors.textSecondary,
+              style: TextStyle(
+                color: context.colors.textSecondary,
                 fontSize: 13,
               ),
               textAlign: TextAlign.center,
@@ -110,7 +110,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.accent,
+                  color: context.colors.accent,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text(
@@ -159,19 +159,19 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
                   children: [
                     Text(
                       char.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: context.colors.textPrimary,
                       ),
                     ),
                     if (char.creator.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
                         'by @${char.creator}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                         ),
                       ),
                     ],
@@ -190,7 +190,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
                             decoration: BoxDecoration(
                               color: isNsfw
                                   ? Colors.red.withValues(alpha: 0.2)
-                                  : AppColors.accent.withValues(alpha: 0.15),
+                                  : context.colors.accent.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
@@ -200,7 +200,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
                                 fontWeight: FontWeight.w600,
                                 color: isNsfw
                                     ? Colors.redAccent
-                                    : AppColors.accent,
+                                    : context.colors.accent,
                               ),
                             ),
                           );
@@ -218,8 +218,8 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             const SizedBox(height: 4),
             Text(
               char.creatorNotes,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
+              style: TextStyle(
+                color: context.colors.textSecondary,
                 fontSize: 13,
                 height: 1.4,
               ),
@@ -231,8 +231,8 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             const SizedBox(height: 4),
             Text(
               char.description,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
+              style: TextStyle(
+                color: context.colors.textSecondary,
                 fontSize: 13,
                 height: 1.4,
               ),
@@ -244,8 +244,8 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             const SizedBox(height: 4),
             Text(
               char.scenario,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
+              style: TextStyle(
+                color: context.colors.textSecondary,
                 fontSize: 13,
                 height: 1.4,
               ),
@@ -259,13 +259,13 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.background,
+                color: context.colors.background,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 char.firstMes,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
+                style: TextStyle(
+                  color: context.colors.textPrimary,
                   fontSize: 13,
                   height: 1.4,
                 ),
@@ -281,15 +281,15 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
 
   Widget _avatarPlaceholder() {
     return Container(
-      color: AppColors.accent.withValues(alpha: 0.2),
+      color: context.colors.accent.withValues(alpha: 0.2),
       child: Center(
         child: Text(
           _downloaded!.charData.name.isNotEmpty
               ? _downloaded!.charData.name[0].toUpperCase()
               : '?',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 40,
-            color: AppColors.accent,
+            color: context.colors.accent,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -300,8 +300,8 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
   Widget _sectionTitle(String title) {
     return Text(
       title,
-      style: const TextStyle(
-        color: AppColors.textPrimary,
+      style: TextStyle(
+        color: context.colors.textPrimary,
         fontSize: 14,
         fontWeight: FontWeight.w700,
       ),
@@ -340,8 +340,8 @@ class _ImportButton extends StatelessWidget {
         height: 48,
         decoration: BoxDecoration(
           color: importing
-              ? AppColors.accent.withValues(alpha: 0.5)
-              : AppColors.accent,
+              ? context.colors.accent.withValues(alpha: 0.5)
+              : context.colors.accent,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(

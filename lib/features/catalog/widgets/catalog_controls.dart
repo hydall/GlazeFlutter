@@ -145,7 +145,7 @@ class CatalogControls extends StatelessWidget {
           .map(
             (item) => BottomSheetItem(
               icon: item.isActive ? Icons.check_rounded : null,
-              iconColor: AppColors.accent,
+              iconColor: context.colors.accent,
               label: item.label,
               onTap: () {
                 Navigator.of(context, rootNavigator: true).pop();
@@ -183,26 +183,26 @@ class _LabeledChip extends StatelessWidget {
         height: 32,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.15),
+          color: context.colors.accent.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
+          border: Border.all(color: context.colors.accent.withValues(alpha: 0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: AppColors.accent,
+                color: context.colors.accent,
               ),
             ),
             const SizedBox(width: 4),
-            const Icon(
+            Icon(
               Icons.keyboard_arrow_down_rounded,
               size: 18,
-              color: AppColors.accent,
+              color: context.colors.accent,
             ),
           ],
         ),
@@ -225,18 +225,18 @@ class _FilterIconButton extends StatelessWidget {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.15),
+          color: context.colors.accent.withValues(alpha: 0.15),
           shape: BoxShape.circle,
-          border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
+          border: Border.all(color: context.colors.accent.withValues(alpha: 0.2)),
         ),
         child: Stack(
           clipBehavior: Clip.none,
           alignment: Alignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.filter_list_rounded,
               size: 18,
-              color: AppColors.accent,
+              color: context.colors.accent,
             ),
             if (count > 0)
               Positioned(
@@ -245,8 +245,8 @@ class _FilterIconButton extends StatelessWidget {
                 child: Container(
                   constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                   padding: const EdgeInsets.symmetric(horizontal: 4),
-                  decoration: const BoxDecoration(
-                    color: AppColors.accent,
+                  decoration: BoxDecoration(
+                    color: context.colors.accent,
                     shape: BoxShape.circle,
                   ),
                   child: Center(

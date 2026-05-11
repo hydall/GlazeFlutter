@@ -207,8 +207,8 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       decoration: BoxDecoration(
-        color: AppColors.accent.withValues(alpha: 0.05),
-        border: Border.all(color: AppColors.border),
+        color: context.colors.accent.withValues(alpha: 0.05),
+        border: Border.all(color: context.colors.border),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -230,10 +230,10 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
                         children: [
                           Text(
                             displayName,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
+                              color: context.colors.textPrimary,
                             ),
                           ),
                           if (_author.isNotEmpty)
@@ -243,7 +243,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                                 color:
-                                    AppColors.accent.withValues(alpha: 0.8),
+                                    context.colors.accent.withValues(alpha: 0.8),
                               ),
                             ),
                         ],
@@ -338,23 +338,23 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
         ),
         child: Row(
           children: [
-            const Text(
+            Text(
               'Advanced Settings',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
-              ),
+               style: TextStyle(
+                 fontSize: 14,
+                 fontWeight: FontWeight.w600,
+                 color: context.colors.textSecondary,
+               ),
             ),
             const Spacer(),
             AnimatedRotation(
               turns: _showAdvanced ? 0.5 : 0,
               duration: const Duration(milliseconds: 300),
-              child: const Icon(
-                Icons.expand_more,
-                color: AppColors.textSecondary,
-                size: 20,
-              ),
+               child: Icon(
+                 Icons.expand_more,
+                 color: context.colors.textSecondary,
+                 size: 20,
+               ),
             ),
           ],
         ),
@@ -369,7 +369,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.02),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: context.colors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -392,15 +392,15 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
                 Expanded(
                   child: TextField(
                     controller: _reasoningStartCtrl,
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    decoration: _inputDecoration('<think>'),
+                    style: TextStyle(color: context.colors.textPrimary),
+                    decoration: _inputDecoration('<textarea>'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: TextField(
                     controller: _reasoningEndCtrl,
-                    style: const TextStyle(color: AppColors.textPrimary),
+                    style: TextStyle(color: context.colors.textPrimary),
                     decoration: _inputDecoration('</think>'),
                   ),
                 ),
@@ -530,20 +530,20 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
     return InputDecoration(
       hintText: hint,
       hintStyle:
-          TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+          TextStyle(color: context.colors.textSecondary.withValues(alpha: 0.5)),
       filled: true,
       fillColor: Colors.white.withValues(alpha: 0.04),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppColors.border),
+        borderSide: BorderSide(color: context.colors.border),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppColors.border),
+        borderSide: BorderSide(color: context.colors.border),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: AppColors.accent),
+        borderSide: BorderSide(color: context.colors.accent),
       ),
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -595,7 +595,7 @@ class _BlockRow extends StatelessWidget {
                     '≡',
                     style: TextStyle(
                       fontSize: 20,
-                      color: AppColors.textSecondary.withValues(alpha: 0.5),
+                      color: context.colors.textSecondary.withValues(alpha: 0.5),
                     ),
                   ),
                 ),
@@ -605,7 +605,7 @@ class _BlockRow extends StatelessWidget {
             Icon(
               _roleIcon(block.role),
               size: 16,
-              color: AppColors.textPrimary.withValues(alpha: 0.6),
+              color: context.colors.textPrimary.withValues(alpha: 0.6),
             ),
             const SizedBox(width: 8),
             // Name + token estimate
@@ -617,11 +617,11 @@ class _BlockRow extends StatelessWidget {
                     Expanded(
                       child: Text(
                         block.name,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textPrimary,
-                        ),
+                         style: TextStyle(
+                           fontSize: 15,
+                           fontWeight: FontWeight.w500,
+                           color: context.colors.textPrimary,
+                         ),
                       ),
                     ),
                     if (block.content.isNotEmpty) ...[
@@ -635,10 +635,10 @@ class _BlockRow extends StatelessWidget {
                         ),
                         child: Text(
                           '~${(block.content.length / 4).round()}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textSecondary,
-                          ),
+                           style: TextStyle(
+                             fontSize: 11,
+                             color: context.colors.textSecondary,
+                           ),
                         ),
                       ),
                     ],
@@ -654,11 +654,11 @@ class _BlockRow extends StatelessWidget {
                 color: Colors.transparent,
                 child: InkWell(
                   onTap: onEdit,
-                  child: const Icon(
-                    Icons.edit_outlined,
-                    size: 20,
-                    color: AppColors.textSecondary,
-                  ),
+                   child: Icon(
+                     Icons.edit_outlined,
+                     size: 20,
+                     color: context.colors.textSecondary,
+                   ),
                 ),
               ),
             ),
@@ -671,7 +671,7 @@ class _BlockRow extends StatelessWidget {
                 child: Switch(
                   value: block.enabled,
                   onChanged: onToggle,
-                  activeThumbColor: AppColors.accent,
+                  activeThumbColor: context.colors.accent,
                 ),
               ),
             ),
@@ -720,15 +720,15 @@ class _AddBlockRow extends StatelessWidget {
           child: Row(
             children: [
               const SizedBox(width: 30), // align with drag handle column
-              const Icon(Icons.add, size: 16, color: AppColors.accent),
+              Icon(Icons.add, size: 16, color: context.colors.accent),
               const SizedBox(width: 8),
-              const Text(
+              Text(
                 'Add Block',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.accent,
-                ),
+                 style: TextStyle(
+                   fontSize: 15,
+                   fontWeight: FontWeight.w600,
+                   color: context.colors.accent,
+                 ),
               ),
             ],
           ),
@@ -747,7 +747,7 @@ class _DotsButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.accent.withValues(alpha: 0.1),
+            color: context.colors.accent.withValues(alpha: 0.1),
       shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
@@ -758,7 +758,7 @@ class _DotsButton extends StatelessWidget {
           child: Icon(
             Icons.more_vert,
             size: 20,
-            color: AppColors.accent.withValues(alpha: 0.8),
+            color: context.colors.accent.withValues(alpha: 0.8),
           ),
         ),
       ),
@@ -785,13 +785,13 @@ class _UtilButton extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.1),
+              color: context.colors.accent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(
               icon,
               size: 14,
-              color: AppColors.accent.withValues(alpha: 0.7),
+              color: context.colors.accent.withValues(alpha: 0.7),
             ),
           ),
           if (count > 0)
@@ -804,7 +804,7 @@ class _UtilButton extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: const Color(0xFFFF4444),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: AppColors.background, width: 1),
+                  border: Border.all(color: context.colors.background, width: 1),
                 ),
                 child: Text(
                   '$count',
@@ -839,14 +839,14 @@ class _BlocksBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.description, size: 14, color: AppColors.textSecondary),
+          Icon(Icons.description, size: 14, color: context.colors.textSecondary),
           const SizedBox(width: 4),
           Text(
             '$count blocks',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+              color: context.colors.textSecondary,
             ),
           ),
         ],
@@ -865,9 +865,9 @@ class _SectionLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 13,
-        color: AppColors.textSecondary,
+        color: context.colors.textSecondary,
         fontWeight: FontWeight.w500,
       ),
     );
@@ -899,23 +899,23 @@ class _SettingsToggle extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
-                  color: AppColors.textPrimary,
+                  color: context.colors.textPrimary,
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 description,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                 ),
               ),
             ],
           ),
         ),
-        Switch(value: value, onChanged: onChanged, activeThumbColor: AppColors.accent),
+        Switch(value: value, onChanged: onChanged, activeThumbColor: context.colors.accent),
       ],
     );
   }
@@ -1067,31 +1067,31 @@ class _RegexSheetState extends State<_RegexSheet> {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Row(
             children: [
-              const Icon(Icons.code, size: 18, color: AppColors.accent),
+              Icon(Icons.code, size: 18, color: context.colors.accent),
               const SizedBox(width: 8),
-              const Text(
+               Text(
                 'Regex Scripts',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
+                 style: TextStyle(
+                   fontSize: 18,
+                   fontWeight: FontWeight.w700,
+                   color: context.colors.textPrimary,
+                 ),
+               ),
               if (_regexes.isNotEmpty) ...[
                 const SizedBox(width: 8),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: AppColors.accent.withValues(alpha: 0.1),
+      color: context.colors.accent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     '${_regexes.length}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.accent,
+                      color: context.colors.accent,
                     ),
                   ),
                 ),
@@ -1099,7 +1099,7 @@ class _RegexSheetState extends State<_RegexSheet> {
             ],
           ),
         ),
-        Divider(color: AppColors.border, height: 1),
+        Divider(color: context.colors.border, height: 1),
         // List
         if (_regexes.isEmpty)
           Padding(
@@ -1108,7 +1108,7 @@ class _RegexSheetState extends State<_RegexSheet> {
               child: Text(
                 'No regex scripts',
                 style: TextStyle(
-                  color: AppColors.textSecondary.withValues(alpha: 0.6),
+                  color: context.colors.textSecondary.withValues(alpha: 0.6),
                   fontSize: 15,
                 ),
               ),
@@ -1146,24 +1146,24 @@ class _RegexSheetState extends State<_RegexSheet> {
         Padding(
           padding: const EdgeInsets.all(12),
           child: Material(
-            color: AppColors.accent.withValues(alpha: 0.1),
+                    color: context.colors.accent.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               onTap: _addRegex,
               borderRadius: BorderRadius.circular(12),
-              child: const Padding(
+              child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 14),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.add, size: 20, color: AppColors.accent),
+                    Icon(Icons.add, size: 20, color: context.colors.accent),
                     SizedBox(width: 8),
                     Text(
                       'Add Regex',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: AppColors.accent,
+                        color: context.colors.accent,
                       ),
                     ),
                   ],

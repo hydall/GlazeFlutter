@@ -17,7 +17,7 @@ class MenuScreen extends ConsumerWidget {
     final navHeight = ref.watch(navHeightProvider);
     final topPad = MediaQuery.of(context).padding.top + 66.0;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: Stack(
         children: [
           ListView(

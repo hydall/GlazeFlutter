@@ -16,14 +16,14 @@ class EmptyCharacterState extends StatelessWidget {
         children: [
           Icon(Icons.group_outlined,
               size: 64,
-              color: AppColors.textSecondary.withValues(alpha: 0.5)),
+              color: context.colors.textSecondary.withValues(alpha: 0.5)),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'No characters yet',
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w500,
-              color: AppColors.textSecondary,
+              color: context.colors.textSecondary,
             ),
           ),
           const SizedBox(height: 20),

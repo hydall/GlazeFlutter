@@ -105,7 +105,7 @@ class _InputBarState extends State<InputBar> {
                     height: 40,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: AppColors.accent,
+                      color: context.colors.accent,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -161,7 +161,7 @@ class _CircleBtn extends StatelessWidget {
               border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
               shape: BoxShape.circle,
             ),
-            child: Center(child: Icon(icon, color: AppColors.accent, size: 20)),
+            child: Center(child: Icon(icon, color: context.colors.accent, size: 20)),
           ),
         ),
       ),

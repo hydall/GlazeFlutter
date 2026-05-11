@@ -42,7 +42,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     final topPad = MediaQuery.of(context).padding.top + 74.0;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: Stack(
         children: [
           Positioned.fill(
@@ -53,13 +53,13 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                     tabBar: _buildTabBar(),
                   )
                 : characters.when(
-                    loading: () => const Center(
-                      child: CircularProgressIndicator(color: AppColors.accent),
+                    loading: () => Center(
+                      child: CircularProgressIndicator(color: context.colors.accent),
                     ),
                     error: (e, _) => Center(
                       child: Text(
                         'Error: $e',
-                        style: const TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(color: context.colors.textSecondary),
                       ),
                     ),
                     data: (chars) {
@@ -122,7 +122,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                           height: 44,
                           child: IconButton(
                             icon: const Icon(Icons.search_rounded, size: 22),
-                            color: AppColors.accent,
+                            color: context.colors.accent,
                             onPressed: () async {
                               final query = await showSearch<String>(
                                 context: context,
@@ -341,7 +341,7 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
 
   @override
   ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
-    appBarTheme: const AppBarTheme(backgroundColor: AppColors.background),
+    appBarTheme: AppBarTheme(backgroundColor: context.colors.background),
   );
 
   @override
@@ -356,12 +356,12 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
   );
 
   @override
-  Widget buildResults(BuildContext context) => _buildList();
+  Widget buildResults(BuildContext context) => _buildList(context);
 
   @override
-  Widget buildSuggestions(BuildContext context) => _buildList();
+  Widget buildSuggestions(BuildContext context) => _buildList(context);
 
-  Widget _buildList() {
+  Widget _buildList(BuildContext context) {
     final chars = ref.read(charactersProvider).valueOrNull ?? [];
     final q = query.toLowerCase();
     final filtered = chars
@@ -373,10 +373,10 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
       });
 
     if (filtered.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'No characters found',
-          style: TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: context.colors.textSecondary),
         ),
       );
     }
@@ -387,28 +387,28 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
         final c = filtered[i];
         return ListTile(
           leading: CircleAvatar(
-            backgroundColor: AppColors.accent.withValues(alpha: 0.15),
+            backgroundColor: context.colors.accent.withValues(alpha: 0.15),
             backgroundImage: c.avatarPath != null
                 ? FileImage(File(c.avatarPath!))
                 : null,
             child: c.avatarPath == null
                 ? Text(
                     c.name[0].toUpperCase(),
-                    style: const TextStyle(color: AppColors.accent),
+                    style: TextStyle(color: context.colors.accent),
                   )
                 : null,
           ),
           title: Text(
             c.name,
-            style: const TextStyle(color: AppColors.textPrimary),
+            style: TextStyle(color: context.colors.textPrimary),
           ),
           subtitle: c.description != null
               ? Text(
                   c.description!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
+                  style: TextStyle(
+                    color: context.colors.textSecondary,
                     fontSize: 12,
                   ),
                 )
@@ -432,7 +432,7 @@ class _AddButton extends StatelessWidget {
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          color: AppColors.accent,
+          color: context.colors.accent,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(

@@ -12,6 +12,7 @@ import '../../../core/models/character.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/utils/html_to_markdown.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../features/personas/persona_list_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
 import '../../../shared/widgets/rolling_number.dart';
@@ -428,7 +429,7 @@ class _MessageState extends ConsumerState<Message>
         ? content
         : applyRegexes(content, placement, 1, regexScripts, regexCtx);
 
-    final style = _BubbleStyle.resolve(scheme: scheme, isStandard: isStandard, isUser: isUser, isSystem: isSystem);
+    final style = _BubbleStyle.resolve(context: context, isStandard: isStandard, isUser: isUser, isSystem: isSystem);
 
     final personas = ref.watch(personaListProvider).value ?? [];
     final activePersonaId = ref.watch(activePersonaIdProvider);
@@ -467,7 +468,7 @@ class _MessageState extends ConsumerState<Message>
               margin: EdgeInsets.symmetric(horizontal: isStandard ? 16 : 12, vertical: isStandard ? 8 : 4),
               padding: isStandard ? const EdgeInsets.all(0) : const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: _highlighted ? const Color(0xFF7996CE).withValues(alpha: 0.15) : style.bg,
+                color: _highlighted ? context.colors.accent.withValues(alpha: 0.15) : style.bg,
                 borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16)
               ),
               child: AnimatedSwitcher(
@@ -512,7 +513,7 @@ class _MessageState extends ConsumerState<Message>
                       },
                       child: CircleAvatar(
                         radius: 12,
-                        backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
+                        backgroundColor: isUser ? context.colors.accent : const Color(0xFFCCCCCC),
                         backgroundImage: avatarImage,
                         child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)) : null,
                       ),
@@ -538,7 +539,7 @@ class _MessageState extends ConsumerState<Message>
                       },
                       child: CircleAvatar(
                         radius: 10,
-                        backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
+                        backgroundColor: isUser ? context.colors.accent : const Color(0xFFCCCCCC),
                         backgroundImage: avatarImage,
                         child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)) : null,
                       ),
@@ -850,11 +851,6 @@ class _SwipeableMessage extends StatelessWidget {
 }
 
 class _BubbleStyle {
-  static const _textPrimary = Color(0xFFE1E3E6);
-  static const _textSecondary = Color(0xFFB0B8C1);
-  static const _vkBlue = Color(0xFF7996CE);
-  static const _appBg = Color(0xFF19191A);
-
   final Color bg;
   final Alignment alignment;
   final Color textColor;
@@ -870,44 +866,45 @@ class _BubbleStyle {
   });
 
   factory _BubbleStyle.resolve({
-    required ColorScheme scheme,
+    required BuildContext context,
     required bool isStandard,
     required bool isUser,
     required bool isSystem,
   }) {
+    final colors = context.colors;
     if (isStandard) {
       return _BubbleStyle(
         bg: Colors.transparent,
         alignment: Alignment.centerLeft,
-        textColor: _textPrimary,
-        quoteColor: _vkBlue,
-        metaColor: _textSecondary,
+        textColor: colors.textPrimary,
+        quoteColor: colors.accent,
+        metaColor: colors.textSecondary,
       );
     }
     if (isUser) {
       return _BubbleStyle(
-        bg: _appBg.withValues(alpha: 0.8),
+        bg: colors.background.withValues(alpha: 0.8),
         alignment: Alignment.centerRight,
-        textColor: _textPrimary,
-        quoteColor: _vkBlue,
-        metaColor: _textSecondary,
+        textColor: colors.textPrimary,
+        quoteColor: colors.accent,
+        metaColor: colors.textSecondary,
       );
     }
     if (isSystem) {
       return _BubbleStyle(
-        bg: const Color(0xFF1E1E1E).withValues(alpha: 0.8),
+        bg: colors.charBubble.withValues(alpha: 0.8),
         alignment: Alignment.center,
-        textColor: _textPrimary,
-        quoteColor: _vkBlue,
-        metaColor: _textSecondary,
+        textColor: colors.textPrimary,
+        quoteColor: colors.accent,
+        metaColor: colors.textSecondary,
       );
     }
     return _BubbleStyle(
-      bg: _vkBlue.withValues(alpha: 0.8),
+      bg: colors.accent.withValues(alpha: 0.8),
       alignment: Alignment.centerLeft,
-      textColor: _textPrimary,
-      quoteColor: _vkBlue,
-      metaColor: _textSecondary,
+      textColor: colors.textPrimary,
+      quoteColor: colors.accent,
+      metaColor: colors.textSecondary,
     );
   }
 }
@@ -1046,7 +1043,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProvi
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(color: const Color(0xFF1E1E1E).withValues(alpha: 0.8), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: context.colors.charBubble.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1057,12 +1054,12 @@ class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProvi
               padding: const EdgeInsets.all(8),
               child: Row(
                 children: [
-                  Text('Reasoning', style: TextStyle(fontSize: 11, color: const Color(0xFFB0B8C1), fontWeight: FontWeight.w600)),
+                  Text('Reasoning', style: TextStyle(fontSize: 11, color: context.colors.textSecondary, fontWeight: FontWeight.w600)),
                   const Spacer(),
                   AnimatedRotation(
                     turns: _collapsed ? -0.25 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.expand_more, size: 16, color: const Color(0xFFB0B8C1)),
+                    child: Icon(Icons.expand_more, size: 16, color: context.colors.textSecondary),
                   ),
                 ],
               ),
@@ -1078,7 +1075,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProvi
                   padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                   child: Text(
                     widget.reasoning,
-                    style: const TextStyle(fontSize: 12, color: Color(0xFFB0B8C1), fontStyle: FontStyle.italic),
+                    style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontStyle: FontStyle.italic),
                   ),
                 ),
               ),
@@ -1253,15 +1250,15 @@ class _MetadataRow extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF7996CE).withValues(alpha: 0.15),
+                color: context.colors.accent.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.refresh, size: 14, color: const Color(0xFF7996CE)),
+                  Icon(Icons.refresh, size: 14, color: context.colors.accent),
                   const SizedBox(width: 4),
-                  Text('Regenerate', style: TextStyle(fontSize: 12, color: const Color(0xFF7996CE))),
+                  Text('Regenerate', style: TextStyle(fontSize: 12, color: context.colors.accent)),
                 ],
               ),
             ),

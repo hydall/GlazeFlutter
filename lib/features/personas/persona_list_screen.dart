@@ -89,13 +89,13 @@ class _PersonaTile extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isActive
-            ? AppColors.accent.withValues(alpha: 0.12)
+            ? context.colors.accent.withValues(alpha: 0.12)
             : Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isActive
-              ? AppColors.accent.withValues(alpha: 0.5)
-              : AppColors.border,
+              ? context.colors.accent.withValues(alpha: 0.5)
+              : context.colors.border,
         ),
       ),
       child: ListTile(
@@ -105,17 +105,17 @@ class _PersonaTile extends ConsumerWidget {
             setActivePersona(ref, isActive ? null : persona.id),
         leading: CircleAvatar(
           radius: 24,
-          backgroundColor: AppColors.accent.withValues(alpha: 0.18),
+          backgroundColor: context.colors.accent.withValues(alpha: 0.18),
           backgroundImage: persona.avatarPath != null
               ? FileImage(File(persona.avatarPath!))
               : null,
           child: persona.avatarPath == null
               ? Text(
                   persona.name.isNotEmpty ? persona.name[0].toUpperCase() : '?',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: context.colors.textPrimary,
                   ),
                 )
               : null,
@@ -127,9 +127,9 @@ class _PersonaTile extends ConsumerWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               )
-            : const Text(
+            : Text(
                 'No prompt',
-                style: TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -232,7 +232,7 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
                 children: [
                   CircleAvatar(
                     radius: 48,
-                    backgroundColor: AppColors.accent.withValues(alpha: 0.15),
+                    backgroundColor: context.colors.accent.withValues(alpha: 0.15),
                     backgroundImage: _avatarPath != null
                         ? FileImage(File(_avatarPath!))
                         : null,
@@ -240,7 +240,7 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
                         ? Icon(
                             Icons.person,
                             size: 40,
-                            color: AppColors.accent.withValues(alpha: 0.5),
+                            color: context.colors.accent.withValues(alpha: 0.5),
                           )
                         : null,
                   ),
@@ -250,10 +250,10 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: AppColors.accent,
+                        color: context.colors.accent,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: AppColors.background,
+                          color: context.colors.background,
                           width: 2,
                         ),
                       ),

@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/state/character_provider.dart';
 import '../../shared/theme/app_colors.dart';
+
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_toast.dart';
@@ -225,15 +226,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ? TextField(
                 controller: _searchController,
                 autofocus: true,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+                style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
                 decoration: InputDecoration(
                   hintText: 'Search messages...',
-                  hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+                  hintStyle: TextStyle(color: context.colors.textSecondary.withValues(alpha: 0.5)),
                   border: InputBorder.none,
                   isDense: true,
                   suffixIcon: _searchQuery.isNotEmpty 
                       ? IconButton(
-                          icon: const Icon(Icons.close, color: AppColors.textPrimary, size: 20),
+                          icon: Icon(Icons.close, color: context.colors.textPrimary, size: 20),
                           onPressed: () {
                             _searchController.clear();
                             setState(() {
@@ -294,7 +295,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             : [
           IconButton(
             icon: const Icon(Icons.search),
-            color: AppColors.accent,
+            color: context.colors.accent,
             onPressed: () {
               setState(() {
                 _showSearch = true;
@@ -585,10 +586,10 @@ class _ChatSearchBar extends StatelessWidget {
         Expanded(
           child: TextField(
             autofocus: true,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
             decoration: InputDecoration(
               hintText: 'Search messages...',
-              hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+              hintStyle: TextStyle(color: context.colors.textSecondary.withValues(alpha: 0.5)),
               border: InputBorder.none,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -599,23 +600,23 @@ class _ChatSearchBar extends StatelessWidget {
         if (query.isNotEmpty) ...[
           Text(
             matchCount > 0 ? '${currentIndex + 1}/$matchCount' : '0/0',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
           ),
           IconButton(
-            icon: const Icon(Icons.keyboard_arrow_up, size: 24, color: AppColors.textPrimary),
+            icon: Icon(Icons.keyboard_arrow_up, size: 24, color: context.colors.textPrimary),
             onPressed: onPrevious,
             padding: const EdgeInsets.symmetric(horizontal: 4),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
           IconButton(
-            icon: const Icon(Icons.keyboard_arrow_down, size: 24, color: AppColors.textPrimary),
+            icon: Icon(Icons.keyboard_arrow_down, size: 24, color: context.colors.textPrimary),
             onPressed: onNext,
             padding: const EdgeInsets.symmetric(horizontal: 4),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
         ],
         IconButton(
-          icon: const Icon(Icons.close, size: 24, color: AppColors.textPrimary),
+          icon: Icon(Icons.close, size: 24, color: context.colors.textPrimary),
           onPressed: onClose,
           padding: const EdgeInsets.symmetric(horizontal: 4),
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

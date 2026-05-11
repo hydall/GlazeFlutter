@@ -1,39 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
 class AppTheme {
   static ThemeData dark({Color? accent}) {
     final a = accent ?? AppColors.accent;
+    final c = GlazeColors.dark.withAccent(a);
+
     final base = ThemeData(
       brightness: Brightness.dark,
       colorSchemeSeed: a,
       useMaterial3: true,
-      scaffoldBackgroundColor: AppColors.background,
-      appBarTheme: const AppBarTheme(
+      scaffoldBackgroundColor: c.background,
+      appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
-        foregroundColor: AppColors.textPrimary,
+        foregroundColor: c.textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
-      cardTheme: const CardThemeData(
-        color: AppColors.surfaceHigh,
+      cardTheme: CardThemeData(
+        color: c.surfaceHigh,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-          side: BorderSide(color: AppColors.border),
+          borderRadius: const BorderRadius.all(Radius.circular(16)),
+          side: BorderSide(color: c.border),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: AppColors.surfaceHigh,
+        fillColor: c.surfaceHigh,
         border: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
-          borderSide: BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: c.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
-          borderSide: BorderSide(color: AppColors.border),
+          borderSide: BorderSide(color: c.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
@@ -49,59 +52,70 @@ class AppTheme {
           ),
         ),
       ),
-      textTheme: const TextTheme(
-        bodyLarge: TextStyle(color: AppColors.textPrimary),
-        bodyMedium: TextStyle(color: AppColors.textPrimary),
-        bodySmall: TextStyle(color: AppColors.textSecondary),
+      textTheme: TextTheme(
+        bodyLarge: TextStyle(color: c.textPrimary),
+        bodyMedium: TextStyle(color: c.textPrimary),
+        bodySmall: TextStyle(color: c.textSecondary),
       ),
+      extensions: [
+        c,
+        GptMarkdownThemeData(
+          brightness: Brightness.dark,
+          highlightColor: c.accent.withAlpha(40),
+          linkColor: c.accent,
+          linkHoverColor: c.accent.withAlpha(180),
+          hrLineColor: c.border,
+          h1: TextStyle(color: c.textPrimary, fontSize: 24, fontWeight: FontWeight.bold),
+          h2: TextStyle(color: c.textPrimary, fontSize: 22, fontWeight: FontWeight.bold),
+          h3: TextStyle(color: c.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
+          h4: TextStyle(color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+          h5: TextStyle(color: c.textSecondary, fontSize: 16, fontWeight: FontWeight.w600),
+          h6: TextStyle(color: c.textSecondary, fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ],
     );
 
     return base.copyWith(
       textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
-        bodyColor: AppColors.textPrimary,
-        displayColor: AppColors.textPrimary,
+        bodyColor: c.textPrimary,
+        displayColor: c.textPrimary,
       ),
     );
   }
 
   static ThemeData light({Color? accent}) {
     final a = accent ?? AppColors.accent;
-    const bg = Color(0xFFF5F5F7);
-    const surface = Color(0xFFFFFFFF);
-    const surfaceHigh = Color(0xFFEEEEF0);
-    const textPrimary = Color(0xFF1A1A1B);
-    const textSecondary = Color(0xFF6B6D70);
-    const border = Color(0xFFD8D9DA);
+    final c = GlazeColors.light.withAccent(a);
 
     final base = ThemeData(
       brightness: Brightness.light,
       colorSchemeSeed: a,
       useMaterial3: true,
-      scaffoldBackgroundColor: bg,
-      appBarTheme: const AppBarTheme(
+      scaffoldBackgroundColor: c.background,
+      appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
-        foregroundColor: textPrimary,
+        foregroundColor: c.textPrimary,
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
-      cardTheme: const CardThemeData(
-        color: surface,
+      cardTheme: CardThemeData(
+        color: c.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-          side: BorderSide(color: border),
+          borderRadius: const BorderRadius.all(Radius.circular(16)),
+          side: BorderSide(color: c.border),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: surfaceHigh,
+        fillColor: c.surfaceHigh,
         border: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
-          borderSide: BorderSide(color: border),
+          borderSide: BorderSide(color: c.border),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
-          borderSide: BorderSide(color: border),
+          borderSide: BorderSide(color: c.border),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
@@ -117,17 +131,33 @@ class AppTheme {
           ),
         ),
       ),
-      textTheme: const TextTheme(
-        bodyLarge: TextStyle(color: textPrimary),
-        bodyMedium: TextStyle(color: textPrimary),
-        bodySmall: TextStyle(color: textSecondary),
+      textTheme: TextTheme(
+        bodyLarge: TextStyle(color: c.textPrimary),
+        bodyMedium: TextStyle(color: c.textPrimary),
+        bodySmall: TextStyle(color: c.textSecondary),
       ),
+      extensions: [
+        c,
+        GptMarkdownThemeData(
+          brightness: Brightness.light,
+          highlightColor: c.accent.withAlpha(40),
+          linkColor: c.accent,
+          linkHoverColor: c.accent.withAlpha(180),
+          hrLineColor: c.border,
+          h1: TextStyle(color: c.textPrimary, fontSize: 24, fontWeight: FontWeight.bold),
+          h2: TextStyle(color: c.textPrimary, fontSize: 22, fontWeight: FontWeight.bold),
+          h3: TextStyle(color: c.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
+          h4: TextStyle(color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
+          h5: TextStyle(color: c.textSecondary, fontSize: 16, fontWeight: FontWeight.w600),
+          h6: TextStyle(color: c.textSecondary, fontSize: 14, fontWeight: FontWeight.w600),
+        ),
+      ],
     );
 
     return base.copyWith(
       textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
-        bodyColor: textPrimary,
-        displayColor: textPrimary,
+        bodyColor: c.textPrimary,
+        displayColor: c.textPrimary,
       ),
     );
   }

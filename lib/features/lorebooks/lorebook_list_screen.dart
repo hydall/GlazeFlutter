@@ -28,7 +28,7 @@ class LorebookListScreen extends ConsumerWidget {
       showBack: true,
       onBack: () => context.go('/tools'),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: AppColors.accent,
+        backgroundColor: context.colors.accent,
         child: const Icon(Icons.add, color: Colors.black),
         onPressed: () => _createLorebook(context, ref),
       ),
@@ -65,14 +65,14 @@ class LorebookListScreen extends ConsumerWidget {
                   Icon(
                     Icons.menu_book_outlined,
                     size: 64,
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                   ),
                   const SizedBox(height: 16),
                   Text(
                     'No lorebooks yet',
                     style: TextStyle(
                       fontSize: 16,
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -80,7 +80,7 @@ class LorebookListScreen extends ConsumerWidget {
                     'Tap + to create one',
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                     ),
                   ),
                 ],
@@ -242,7 +242,7 @@ class _LorebookTile extends ConsumerWidget {
       child: ListTile(
         leading: Icon(
           Icons.menu_book,
-          color: lorebook.enabled ? AppColors.accent : AppColors.textSecondary,
+          color: lorebook.enabled ? context.colors.accent : context.colors.textSecondary,
         ),
         title: Text(lorebook.name),
         subtitle: Row(
@@ -265,7 +265,7 @@ class _LorebookTile extends ConsumerWidget {
             const SizedBox(width: 8),
             Text(
               '${lorebook.entries.length} entries',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
             ),
           ],
         ),
@@ -280,7 +280,7 @@ class _LorebookTile extends ConsumerWidget {
             Switch(
               value: lorebook.enabled,
               onChanged: (_) => onToggle(),
-              activeColor: AppColors.accent,
+              activeColor: context.colors.accent,
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 20),

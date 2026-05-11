@@ -221,7 +221,7 @@ class _SubHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.accent, letterSpacing: 0.4)),
+      child: Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.colors.accent, letterSpacing: 0.4)),
     );
   }
 }
@@ -257,10 +257,10 @@ class _CheckboxRow extends StatelessWidget {
                   }
                   onChanged(newList);
                 },
-                activeColor: AppColors.accent,
+                activeColor: context.colors.accent,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+              Text(label, style: TextStyle(fontSize: 13, color: context.colors.textSecondary)),
               const SizedBox(width: 4),
             ],
           ),
@@ -290,10 +290,10 @@ class _MacroRulesSelector extends StatelessWidget {
         return Padding(
           padding: const EdgeInsets.only(right: 8),
           child: ChoiceChip(
-            label: Text(label, style: TextStyle(fontSize: 12, color: isActive ? Colors.black : AppColors.textSecondary)),
             selected: isActive,
+            label: Text(label, style: TextStyle(fontSize: 12, color: isActive ? Colors.black : context.colors.textSecondary)),
             onSelected: (_) => onChanged(val),
-            selectedColor: AppColors.accent,
+            selectedColor: context.colors.accent,
             visualDensity: VisualDensity.compact,
           ),
         );

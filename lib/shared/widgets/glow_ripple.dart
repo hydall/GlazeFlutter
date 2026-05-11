@@ -126,7 +126,7 @@ class _GlowInkWellState extends State<GlowInkWell>
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.glowColor ?? AppColors.accent;
+    final color = widget.glowColor ?? context.colors.accent;
 
     Widget inner = buildRippleOverlay(color, widget.child);
 
@@ -172,7 +172,7 @@ class _GlowRippleOverlayState extends State<GlowRippleOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.glowColor ?? AppColors.accent;
+    final color = widget.glowColor ?? context.colors.accent;
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _onPointerDown,

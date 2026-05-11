@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
-import '../../../shared/theme/app_colors.dart';
+
 import '../../../shared/widgets/generic_editor.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../../core/llm/summary_service.dart';

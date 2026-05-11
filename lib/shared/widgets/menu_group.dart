@@ -14,9 +14,9 @@ class MenuGroup extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF1E1E1E),
+          color: context.colors.surfaceHigh,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.glassBorder),
+          border: Border.all(color: context.colors.glassBorder),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -25,8 +25,8 @@ class MenuGroup extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
                 child: Text(header!,
-                    style: const TextStyle(
-                        color: AppColors.textPrimary,
+                    style: TextStyle(
+                        color: context.colors.textPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 16)),
               ),
@@ -76,7 +76,7 @@ class _MenuItemState extends State<MenuItem> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         color: _pressed
-            ? AppColors.accent.withValues(alpha: 0.08)
+            ? context.colors.accent.withValues(alpha: 0.08)
             : Colors.transparent,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
         child: Row(
@@ -89,15 +89,15 @@ class _MenuItemState extends State<MenuItem> {
               const SizedBox(width: 16),
             Expanded(
               child: Text(widget.label,
-                  style: const TextStyle(
-                      color: AppColors.textSecondary,
+                  style: TextStyle(
+                      color: context.colors.textSecondary,
                       fontSize: 15,
                       fontWeight: FontWeight.w400)),
             ),
             if (widget.value != null)
               Text(widget.value!,
-                  style: const TextStyle(
-                      color: AppColors.textSecondary, fontSize: 15)),
+                  style: TextStyle(
+                      color: context.colors.textSecondary, fontSize: 15)),
             if (widget.trailing != null) widget.trailing!,
             if (widget.value != null || widget.trailing != null)
               const SizedBox(width: 4),
@@ -135,8 +135,8 @@ class MenuSwitchItem extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(label,
-                      style: const TextStyle(
-                          color: AppColors.textSecondary,
+                      style: TextStyle(
+                          color: context.colors.textSecondary,
                           fontSize: 15,
                           fontWeight: FontWeight.w400)),
                   if (description != null) ...[
@@ -154,8 +154,8 @@ class MenuSwitchItem extends StatelessWidget {
             Switch(
               value: value,
               onChanged: onChanged,
-              activeThumbColor: AppColors.accent,
-              activeTrackColor: AppColors.accent.withValues(alpha: 0.5),
+              activeThumbColor: context.colors.accent,
+              activeTrackColor: context.colors.accent.withValues(alpha: 0.5),
             ),
           ],
         ),

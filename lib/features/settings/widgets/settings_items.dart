@@ -17,9 +17,9 @@ class SettingsGroup extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFF1E1E1E),
+          color: context.colors.surfaceHigh,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppColors.glassBorder),
+          border: Border.all(color: context.colors.glassBorder),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -28,8 +28,8 @@ class SettingsGroup extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 2),
               child: Text(
                 header,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
+                style: TextStyle(
+                  color: context.colors.textSecondary,
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
@@ -86,7 +86,7 @@ class SettingsItemField extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
           ),
           const SizedBox(height: 6),
           TextField(
@@ -94,11 +94,11 @@ class SettingsItemField extends StatelessWidget {
             obscureText: obscure,
             keyboardType: keyboardType,
             inputFormatters: inputFormatters,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 15),
             decoration: InputDecoration(
               hintText: placeholder,
               hintStyle: TextStyle(
-                color: AppColors.textSecondary.withValues(alpha: 0.4),
+                color: context.colors.textSecondary.withValues(alpha: 0.4),
               ),
               filled: true,
               fillColor: const Color(0xFF252525),
@@ -114,7 +114,7 @@ class SettingsItemField extends StatelessWidget {
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(
-                  color: AppColors.accent.withValues(alpha: 0.5),
+                  color: context.colors.accent.withValues(alpha: 0.5),
                   width: 1.5,
                 ),
               ),
@@ -159,8 +159,8 @@ class SettingsItemSwitch extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
                     fontSize: 15,
                   ),
                 ),
@@ -168,8 +168,8 @@ class SettingsItemSwitch extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle!,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
+                    style: TextStyle(
+                      color: context.colors.textSecondary,
                       fontSize: 13,
                     ),
                   ),
@@ -180,12 +180,12 @@ class SettingsItemSwitch extends StatelessWidget {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: AppColors.accent,
-            activeTrackColor: AppColors.accent.withValues(alpha: 0.5),
+            activeThumbColor: context.colors.accent,
+            activeTrackColor: context.colors.accent.withValues(alpha: 0.5),
             trackOutlineColor: WidgetStateProperty.resolveWith(
               (states) => states.contains(WidgetState.selected)
                   ? Colors.transparent
-                  : AppColors.glassBorder,
+                  : context.colors.glassBorder,
             ),
           ),
         ],
@@ -232,28 +232,28 @@ class SettingsItemRange extends StatelessWidget {
               Expanded(
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
+                  style: TextStyle(
+                    color: context.colors.textPrimary,
                     fontSize: 15,
                   ),
                 ),
               ),
               Text(
                 _display,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
+                style: TextStyle(
+                  color: context.colors.textSecondary,
                   fontSize: 14,
-                  fontVariations: [FontVariation('wght', 500)],
+                  fontVariations: const [FontVariation('wght', 500)],
                 ),
               ),
             ],
           ),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              activeTrackColor: AppColors.accent,
-              thumbColor: AppColors.accent,
-              inactiveTrackColor: AppColors.accent.withValues(alpha: 0.18),
-              overlayColor: AppColors.accent.withValues(alpha: 0.1),
+              activeTrackColor: context.colors.accent,
+              thumbColor: context.colors.accent,
+              inactiveTrackColor: context.colors.accent.withValues(alpha: 0.18),
+              overlayColor: context.colors.accent.withValues(alpha: 0.1),
               trackHeight: 3,
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
             ),
@@ -296,8 +296,8 @@ class SettingsItemSelector extends StatelessWidget {
           children: [
             Text(
               label,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
+              style: TextStyle(
+                color: context.colors.textSecondary,
                 fontSize: 13,
               ),
             ),
@@ -314,15 +314,15 @@ class SettingsItemSelector extends StatelessWidget {
                   Expanded(
                     child: Text(
                       currentValue,
-                      style: const TextStyle(
-                        color: AppColors.textPrimary,
+                      style: TextStyle(
+                        color: context.colors.textPrimary,
                         fontSize: 15,
                       ),
                     ),
                   ),
                   Icon(
                     Icons.keyboard_arrow_down_rounded,
-                    color: AppColors.textSecondary.withValues(alpha: 0.5),
+                    color: context.colors.textSecondary.withValues(alpha: 0.5),
                     size: 22,
                   ),
                 ],

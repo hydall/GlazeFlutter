@@ -251,7 +251,7 @@ class _SheetViewState extends State<SheetView>
       }
 
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: context.colors.background,
         body: Stack(
           children: [
             Positioned.fill(
@@ -305,7 +305,7 @@ class _SheetViewState extends State<SheetView>
                               return _HeaderIconButton(
                                 onPressed: action.onPressed,
                                 tooltip: action.tooltip,
-                                foregroundColor: action.color ?? AppColors.accent,
+                                 foregroundColor: action.color ?? context.colors.accent,
                                 child: action.icon,
                               );
                             }).toList(),
@@ -369,7 +369,7 @@ class _SheetViewState extends State<SheetView>
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            color: AppColors.background.withValues(alpha: 0.8),
+            color: context.colors.background.withValues(alpha: 0.8),
             child: Stack(
               children: [
                 Positioned.fill(
@@ -568,10 +568,10 @@ class _SheetViewHeader extends StatelessWidget {
                     _HeaderIconButton(
                       onPressed:
                           onBack ?? () => Navigator.of(context).maybePop(),
-                      child: const Icon(
+                      child: Icon(
                         Icons.arrow_back,
                         size: 20,
-                        color: AppColors.accent,
+                         color: context.colors.accent,
                       ),
                     )
                   else
@@ -585,10 +585,10 @@ class _SheetViewHeader extends StatelessWidget {
                                 title!,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
+                                  color: context.colors.textPrimary,
                                 ),
                               )
                             : const SizedBox.shrink()),
@@ -603,7 +603,7 @@ class _SheetViewHeader extends StatelessWidget {
                             child: _HeaderIconButton(
                               tooltip: action.tooltip,
                               onPressed: action.onPressed,
-                              foregroundColor: action.color ?? AppColors.accent,
+                              foregroundColor: action.color ?? context.colors.accent,
                               child: action.icon,
                             ),
                           ),
@@ -650,17 +650,18 @@ class _HeaderIconButton extends StatelessWidget {
   final Widget child;
   final VoidCallback onPressed;
   final String? tooltip;
-  final Color foregroundColor;
+  final Color? foregroundColor;
 
   const _HeaderIconButton({
     required this.child,
     required this.onPressed,
     this.tooltip,
-    this.foregroundColor = AppColors.accent,
+    this.foregroundColor,
   });
 
   @override
   Widget build(BuildContext context) {
+    final fg = foregroundColor ?? context.colors.accent;
     final button = Material(
       color: Colors.white.withValues(alpha: 0.06),
       shape: const CircleBorder(),
@@ -671,9 +672,9 @@ class _HeaderIconButton extends StatelessWidget {
           width: 40,
           height: 40,
           child: IconTheme(
-            data: IconThemeData(color: foregroundColor),
+            data: IconThemeData(color: fg),
             child: DefaultTextStyle(
-              style: TextStyle(color: foregroundColor),
+              style: TextStyle(color: fg),
               child: Center(child: child),
             ),
           ),
@@ -695,10 +696,10 @@ class _SheetTabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = active ? AppColors.accent : AppColors.textSecondary;
+    final foreground = active ? context.colors.accent : context.colors.textSecondary;
     return Material(
       color: active
-          ? AppColors.accent.withValues(alpha: 0.12)
+          ? context.colors.accent.withValues(alpha: 0.12)
           : Colors.white.withValues(alpha: 0.04),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
@@ -710,7 +711,7 @@ class _SheetTabButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: active
-                  ? AppColors.accent.withValues(alpha: 0.28)
+                  ? context.colors.accent.withValues(alpha: 0.28)
                   : Colors.transparent,
             ),
           ),

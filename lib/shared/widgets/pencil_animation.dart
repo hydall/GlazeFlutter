@@ -59,7 +59,7 @@ class _PencilAnimationState extends State<PencilAnimation>
           child: Icon(
             Icons.edit,
             size: widget.size,
-            color: widget.color ?? AppColors.accent,
+            color: widget.color ?? context.colors.accent,
           ),
         );
       },

@@ -16,7 +16,6 @@ import '../../shared/widgets/sheet_view.dart';
 
 // ─── Colour tokens ─────────────────────────────────────────────────────────
 
-const _kAccent = AppColors.accent;
 const _kAccentDim = Color(0x1F7996CE);
 const _kAccentBorder = Color(0x337996CE);
 const _kNsfw = Color(0xFFFF4444);
@@ -248,10 +247,10 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
               ? const []
               : [
                   SheetViewAction(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.more_vert_rounded,
                       size: 20,
-                      color: _kAccent,
+                      color: context.colors.accent,
                     ),
                     onPressed: _openActionsMenu,
                   ),
@@ -277,10 +276,10 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
     }
     final char = snap.data;
     if (char == null) {
-      return const Center(
+      return Center(
         child: Text(
           'Character not found',
-          style: TextStyle(color: AppColors.textPrimary),
+          style: TextStyle(color: context.colors.textPrimary),
         ),
       );
     }
@@ -337,7 +336,7 @@ class _ChatFab extends StatelessWidget {
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          color: _kAccent,
+          color: context.colors.accent,
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [
             BoxShadow(blurRadius: 16, color: Color(0x80000000)),
@@ -377,8 +376,8 @@ class _ImportFab extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
           color: importing
-              ? _kAccent.withValues(alpha: 0.5)
-              : _kAccent,
+              ? context.colors.accent.withValues(alpha: 0.5)
+              : context.colors.accent,
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [
             BoxShadow(blurRadius: 16, color: Color(0x80000000)),
@@ -626,7 +625,7 @@ class _TagChip extends StatelessWidget {
       border = const Color(0x3300FFFF);
     } else {
       bg = _kAccentDim;
-      fg = _kAccent;
+      fg = context.colors.accent;
       border = _kAccentBorder;
     }
     return Container(
@@ -755,11 +754,11 @@ class _AccordionCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       label.toUpperCase(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.65,
-                        color: _kAccent,
+                        color: context.colors.accent,
                       ),
                     ),
                   ),

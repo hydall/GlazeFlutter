@@ -62,7 +62,7 @@ class _MemoryEntryEditorSheetState extends State<MemoryEntryEditorSheet> {
           const SizedBox(height: 4),
           Padding(
             padding: const EdgeInsets.only(left: 4),
-            child: Text('Only this field is used for keyword retrieval', style: TextStyle(fontSize: 11, color: AppColors.textSecondary.withValues(alpha: 0.6))),
+            child: Text('Only this field is used for keyword retrieval', style: TextStyle(fontSize: 11, color: context.colors.textSecondary.withValues(alpha: 0.6))),
           ),
           const SizedBox(height: 12),
           _field('Content', _contentController, hint: 'Memory text injected into prompt', maxLines: 8),
@@ -76,7 +76,7 @@ class _MemoryEntryEditorSheetState extends State<MemoryEntryEditorSheet> {
               ),
               const SizedBox(width: 8),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.accent, foregroundColor: Colors.black),
+                style: FilledButton.styleFrom(backgroundColor: context.colors.accent, foregroundColor: Colors.black),
                 onPressed: _save,
                 child: const Text('Save'),
               ),
@@ -91,12 +91,12 @@ class _MemoryEntryEditorSheetState extends State<MemoryEntryEditorSheet> {
     return TextField(
       controller: controller,
       maxLines: maxLines,
-      style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+      style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        labelStyle: TextStyle(color: context.colors.textSecondary, fontSize: 12),
         hintText: hint,
-        hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.4)),
+        hintStyle: TextStyle(color: context.colors.textSecondary.withValues(alpha: 0.4)),
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.05),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),

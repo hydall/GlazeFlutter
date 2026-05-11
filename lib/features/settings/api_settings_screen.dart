@@ -284,9 +284,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         constraints: const BoxConstraints(maxWidth: 220),
         decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.12),
+          color: context.colors.accent.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.accent.withValues(alpha: 0.22)),
+          border: Border.all(color: context.colors.accent.withValues(alpha: 0.22)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -294,8 +294,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             Flexible(
               child: Text(
                 activeName,
-                style: const TextStyle(
-                  color: AppColors.accent,
+                style: TextStyle(
+                  color: context.colors.accent,
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -304,9 +304,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               ),
             ),
             const SizedBox(width: 2),
-            const Icon(
+            Icon(
               Icons.keyboard_arrow_down_rounded,
-              color: AppColors.accent,
+              color: context.colors.accent,
               size: 16,
             ),
           ],
@@ -320,11 +320,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.api_rounded, size: 64, color: AppColors.textSecondary),
+          Icon(Icons.api_rounded, size: 64, color: context.colors.textSecondary),
           const SizedBox(height: 16),
           Text(
             'No API configs yet',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 15),
           ),
           const SizedBox(height: 12),
           FilledButton.tonal(
@@ -378,9 +378,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                         ),
                       )
                     : IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.keyboard_arrow_down_rounded,
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                           size: 22,
                         ),
                         tooltip: _fetchedModels.isEmpty
@@ -399,7 +399,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                     _showApiKey
                         ? Icons.visibility_off_outlined
                         : Icons.visibility_outlined,
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                     size: 20,
                   ),
                   onPressed: () => setState(() => _showApiKey = !_showApiKey),
@@ -598,9 +598,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.accent,
+                  foregroundColor: context.colors.accent,
                   side: BorderSide(
-                    color: AppColors.accent.withValues(alpha: 0.4),
+                    color: context.colors.accent.withValues(alpha: 0.4),
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
@@ -639,9 +639,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       context,
       title: 'API Configs',
       headerAction: IconButton(
-        icon: const Icon(
+        icon: Icon(
           Icons.add_circle_outline_rounded,
-          color: AppColors.accent,
+          color: context.colors.accent,
         ),
         tooltip: 'New config',
         onPressed: () {
@@ -672,7 +672,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             if (list.length > 1)
               BottomSheetAction(
                 icon: Icons.delete_outline_rounded,
-                color: AppColors.textSecondary,
+                color: context.colors.textSecondary,
                 onTap: () async {
                   Navigator.of(context, rootNavigator: true).pop();
                   await ref.read(apiListProvider.notifier).remove(config.id);
@@ -743,7 +743,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       items: models.map((m) => BottomSheetItem(
         label: m,
         icon: m == current ? Icons.check : null,
-        iconColor: AppColors.accent,
+        iconColor: context.colors.accent,
         onTap: () {
           Navigator.of(context, rootNavigator: true).pop();
           _modelCtrl.text = m;
@@ -763,7 +763,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         return BottomSheetItem(
           label: label,
           icon: active ? Icons.check : null,
-          iconColor: AppColors.accent,
+          iconColor: context.colors.accent,
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             setState(() => _reasoningEffort = e);

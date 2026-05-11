@@ -21,7 +21,7 @@ class ChatHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    Color avatarColor = AppColors.accent;
+    Color avatarColor = context.colors.accent;
     if (character.color != null && character.color!.isNotEmpty) {
       try {
         final String c = character.color!.replaceFirst('#', '');
@@ -76,8 +76,8 @@ class ChatHeader extends ConsumerWidget {
                 character.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
+                style: TextStyle(
+                  color: context.colors.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                   height: 1.1,
@@ -88,8 +88,8 @@ class ChatHeader extends ConsumerWidget {
                 sessionName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
+                style: TextStyle(
+                  color: context.colors.textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.w400,
                   height: 1.1,

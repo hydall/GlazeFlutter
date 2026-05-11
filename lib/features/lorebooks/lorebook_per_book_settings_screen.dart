@@ -29,7 +29,7 @@ class _LorebookPerBookSettingsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.colors.background,
       body: Column(
         children: [
           SafeArea(
@@ -48,7 +48,7 @@ class _LorebookPerBookSettingsScreenState
                       'Reset to Global',
                       style: TextStyle(
                         fontSize: 12,
-                        color: _hasCustom ? AppColors.accent : AppColors.textSecondary,
+                        color: _hasCustom ? context.colors.accent : context.colors.textSecondary,
                       ),
                     ),
                   ),
@@ -62,18 +62,18 @@ class _LorebookPerBookSettingsScreenState
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppColors.accent.withValues(alpha: 0.08),
+                  color: context.colors.accent.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
+                  border: Border.all(color: context.colors.accent.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, size: 16, color: AppColors.accent),
+                    Icon(Icons.info_outline, size: 16, color: context.colors.accent),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Using global defaults. Change any setting to create per-book overrides.',
-                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
                       ),
                     ),
                   ],
@@ -335,10 +335,10 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 8),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w700,
-          color: AppColors.accent,
+          color: context.colors.accent,
           letterSpacing: 0.5,
         ),
       ),
@@ -370,7 +370,7 @@ class _NumberField extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 14),
           ),
         ),
         SizedBox(
@@ -378,7 +378,7 @@ class _NumberField extends StatelessWidget {
           child: TextFormField(
             initialValue: value == 0 && hint != null ? '' : value.toString(),
             keyboardType: TextInputType.number,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
             textAlign: TextAlign.center,
             decoration: InputDecoration(
               isDense: true,
@@ -387,7 +387,7 @@ class _NumberField extends StatelessWidget {
               fillColor: Colors.white.withValues(alpha: 0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               hintText: hint,
-              hintStyle: TextStyle(fontSize: 10, color: AppColors.textSecondary.withValues(alpha: 0.4)),
+              hintStyle: TextStyle(fontSize: 10, color: context.colors.textSecondary.withValues(alpha: 0.4)),
             ),
             onFieldSubmitted: (v) {
               if (v.isEmpty) {
@@ -424,7 +424,7 @@ class _DropdownField<T> extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            style: TextStyle(color: context.colors.textSecondary, fontSize: 14),
           ),
         ),
         SizedBox(
@@ -435,8 +435,8 @@ class _DropdownField<T> extends StatelessWidget {
             onChanged: (v) {
               if (v != null) onChanged(v);
             },
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 13),
-            dropdownColor: AppColors.background,
+            style: TextStyle(color: context.colors.textPrimary, fontSize: 13),
+            dropdownColor: context.colors.background,
             decoration: InputDecoration(
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -478,8 +478,8 @@ class _SliderField extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-            Text(displayText, style: const TextStyle(color: AppColors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
+            Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
+            Text(displayText, style: TextStyle(color: context.colors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
           ],
         ),
         Slider(
@@ -487,7 +487,7 @@ class _SliderField extends StatelessWidget {
           min: min,
           max: max,
           divisions: divisions,
-          activeColor: AppColors.accent,
+          activeColor: context.colors.accent,
           onChanged: onChanged,
         ),
       ],
@@ -507,8 +507,8 @@ class _SwitchField extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 14)),
-        Switch(value: value, onChanged: onChanged, activeColor: AppColors.accent),
+        Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
+        Switch(value: value, onChanged: onChanged, activeColor: context.colors.accent),
       ],
     );
   }

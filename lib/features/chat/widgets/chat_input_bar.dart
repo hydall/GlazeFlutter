@@ -96,24 +96,24 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 child: Row(
                   children: [
                     const SizedBox(width: 18),
-                    const Icon(Icons.search, size: 20, color: AppColors.accent),
+                    Icon(Icons.search, size: 20, color: context.colors.accent),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         widget.searchMatchCount > 0 
                             ? '${widget.searchCurrentIndex + 1} of ${widget.searchMatchCount} matches' 
                             : 'No matches found',
-                        style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+                        style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.keyboard_arrow_up, size: 24, color: AppColors.textPrimary),
+                      icon: Icon(Icons.keyboard_arrow_up, size: 24, color: context.colors.textPrimary),
                       onPressed: widget.onSearchPrev,
                     ),
                     IconButton(
-                      icon: const Icon(Icons.keyboard_arrow_down, size: 24, color: AppColors.textPrimary),
+                      icon: Icon(Icons.keyboard_arrow_down, size: 24, color: context.colors.textPrimary),
                       onPressed: widget.onSearchNext,
                     ),
                     const SizedBox(width: 8),
@@ -234,7 +234,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     height: 40,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: AppColors.accent,
+                      color: context.colors.accent,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -291,7 +291,7 @@ class _CircleBtn extends StatelessWidget {
               border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
               shape: BoxShape.circle,
             ),
-            child: Center(child: Icon(icon, color: color ?? AppColors.accent, size: 20)),
+            child: Center(child: Icon(icon, color: color ?? context.colors.accent, size: 20)),
           ),
         ),
       ),

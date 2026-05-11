@@ -63,7 +63,7 @@ class _LorebookConnectionsSheetState
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Row(
             children: [
-              const Text('Scope:', style: TextStyle(color: AppColors.textSecondary)),
+              Text('Scope:', style: TextStyle(color: context.colors.textSecondary)),
               const SizedBox(width: 8),
               _ScopeChip(
                 label: 'global',
@@ -243,14 +243,14 @@ class _Section extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 16, color: AppColors.textSecondary),
+              Icon(icon, size: 16, color: context.colors.textSecondary),
               const SizedBox(width: 6),
               Text(
                 title,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
+                  color: context.colors.textSecondary,
                 ),
               ),
               const Spacer(),
@@ -289,12 +289,12 @@ class _ToggleRow extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 14, color: AppColors.textPrimary),
+          style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
         ),
         Switch(
           value: value,
           onChanged: onChanged,
-          activeColor: AppColors.accent,
+          activeColor: context.colors.accent,
         ),
       ],
     );
@@ -339,7 +339,7 @@ class _EmptyHint extends StatelessWidget {
       text,
       style: TextStyle(
         fontSize: 12,
-        color: AppColors.textSecondary.withValues(alpha: 0.6),
+        color: context.colors.textSecondary.withValues(alpha: 0.6),
         fontStyle: FontStyle.italic,
       ),
     );
@@ -375,7 +375,7 @@ class _ScopeChip extends StatelessWidget {
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: selected ? color : AppColors.textSecondary,
+          color: selected ? color : context.colors.textSecondary,
         ),
       ),
     );

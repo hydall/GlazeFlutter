@@ -82,7 +82,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
     return SheetView(
       titleWidget: Row(
         children: [
-          const Expanded(
+          Expanded(
             child: Text(
               'Request Preview',
               maxLines: 1,
@@ -90,7 +90,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: context.colors.textPrimary,
               ),
             ),
           ),
@@ -103,11 +103,11 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
                 child: InkWell(
                   customBorder: const CircleBorder(),
                   onTap: _copyContent,
-                  child: const SizedBox(
+                  child: SizedBox(
                     width: 40,
                     height: 40,
                     child: Center(
-                      child: Icon(Icons.copy, size: 20, color: AppColors.accent),
+                      child: Icon(Icons.copy, size: 20, color: context.colors.accent),
                     ),
                   ),
                 ),
@@ -148,7 +148,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
             return Center(
               child: Text(
                 'No data',
-                style: TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
             );
           }
@@ -207,7 +207,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
             return Center(
               child: Text(
                 'No response data',
-                style: TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: context.colors.textSecondary),
               ),
             );
           }
@@ -236,8 +236,8 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SelectableText(
               text,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
+              style: TextStyle(
+                color: context.colors.textPrimary,
                 fontSize: 12,
                 fontFamily: 'monospace',
               ),
@@ -365,7 +365,7 @@ class _SummaryBar extends StatelessWidget {
               ),
               Text(
                 ' / $contextSize tokens',
-                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
               ),
               const Spacer(),
               Text(
@@ -379,7 +379,7 @@ class _SummaryBar extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '${result.messages.length} msgs',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
               ),
             ],
           ),
@@ -422,7 +422,7 @@ class _SectionTitle extends StatelessWidget {
         style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: AppColors.textSecondary,
+          color: context.colors.textSecondary,
         ),
       ),
     );
@@ -451,17 +451,17 @@ class _ParamItem extends StatelessWidget {
             label.toUpperCase(),
             style: TextStyle(
               fontSize: 11,
-              color: AppColors.textSecondary,
+              color: context.colors.textSecondary,
               letterSpacing: 0.5,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: AppColors.textPrimary,
+              color: context.colors.textPrimary,
             ),
           ),
         ],
@@ -517,7 +517,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
-                          color: AppColors.textSecondary,
+                          color: context.colors.textSecondary,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -528,7 +528,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                     '$tokenCount t',
                     style: TextStyle(
                       fontSize: 10,
-                      color: AppColors.textSecondary,
+                      color: context.colors.textSecondary,
                     ),
                   ),
                   if (msg.isDepth && msg.depth != null) ...[
@@ -554,7 +554,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 16,
-                    color: AppColors.textSecondary,
+                    color: context.colors.textSecondary,
                   ),
                 ],
               ),
@@ -566,7 +566,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    color: AppColors.textSecondary.withValues(alpha: 0.8),
+                    color: context.colors.textSecondary.withValues(alpha: 0.8),
                   ),
                 ),
               ],
@@ -583,9 +583,9 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                   child: SingleChildScrollView(
                     child: SelectableText(
                       msg.content,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textPrimary,
+                        color: context.colors.textPrimary,
                         fontFamily: 'monospace',
                       ),
                     ),
@@ -659,7 +659,7 @@ class _SegmentedToggle extends StatelessWidget {
               width: 32,
               child: Container(
                 decoration: BoxDecoration(
-                  color: AppColors.accent,
+                  color: context.colors.accent,
                   borderRadius: BorderRadius.circular(20),
                 ),
               ),
@@ -673,7 +673,7 @@ class _SegmentedToggle extends StatelessWidget {
                     child: Icon(
                       Icons.visibility,
                       size: 16,
-                      color: !isRaw ? Colors.white : AppColors.textSecondary,
+                      color: !isRaw ? Colors.white : context.colors.textSecondary,
                     ),
                   ),
                 ),
@@ -683,7 +683,7 @@ class _SegmentedToggle extends StatelessWidget {
                     child: Icon(
                       Icons.code,
                       size: 16,
-                      color: isRaw ? Colors.white : AppColors.textSecondary,
+                      color: isRaw ? Colors.white : context.colors.textSecondary,
                     ),
                   ),
                 ),

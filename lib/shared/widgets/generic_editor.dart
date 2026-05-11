@@ -330,15 +330,15 @@ class _GenericEditorState extends State<GenericEditor> {
               AspectRatio(
                 aspectRatio: 1,
                 child: Container(
-                  color: AppColors.surfaceHigh,
+                  color: context.colors.surfaceHigh,
                   child: avatarPath != null && avatarPath.isNotEmpty
                       ? Image.file(File(avatarPath), fit: BoxFit.cover)
                       : Container(
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
-                              colors: [Color(0xFF66CCFF), Color(0xFF7996CE)],
+                              colors: [Color(0xFF66CCFF), context.colors.accent],
                             ),
                           ),
                           alignment: Alignment.center,
@@ -422,7 +422,7 @@ class _GenericEditorState extends State<GenericEditor> {
           ? BoxDecoration(
               color: Colors.white.withOpacity(0.03),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.glassBorder),
+              border: Border.all(color: context.colors.glassBorder),
             )
           : null,
       clipBehavior: widget.useWindows ? Clip.antiAlias : Clip.none,
@@ -437,8 +437,8 @@ class _GenericEditorState extends State<GenericEditor> {
               ),
               child: Text(
                 section.title!.toUpperCase(),
-                style: const TextStyle(
-                  color: AppColors.accent,
+                style: TextStyle(
+                  color: context.colors.accent,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.5,
@@ -484,15 +484,15 @@ class _GenericEditorState extends State<GenericEditor> {
           children: [
             Text(
               field.label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
+                 color: context.colors.textPrimary,
               ),
             ),
             if (field.helpTerm != null) ...[
               const SizedBox(width: 8),
-              const Icon(Icons.help_outline, size: 16, color: AppColors.textSecondary),
+              Icon(Icons.help_outline, size: 16, color: context.colors.textSecondary),
             ]
           ],
         ),
@@ -504,7 +504,7 @@ class _GenericEditorState extends State<GenericEditor> {
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.open_in_full, size: 20, color: AppColors.accent),
+              child: Icon(Icons.open_in_full, size: 20, color: context.colors.accent),
             ),
           )
       ],
@@ -525,8 +525,8 @@ class _GenericEditorState extends State<GenericEditor> {
       case 'info':
         return Text(
           field.text ?? _localItem[field.key]?.toString() ?? '',
-          style: const TextStyle(
-            color: AppColors.textSecondary,
+          style: TextStyle(
+            color: context.colors.textSecondary,
             fontSize: 14,
             height: 1.5,
           ),
@@ -545,10 +545,10 @@ class _GenericEditorState extends State<GenericEditor> {
       maxLines: field.type == 'textarea' ? (field.rows ?? 3) : 1,
       minLines: field.type == 'textarea' ? (field.rows ?? 3) : 1,
       keyboardType: field.type == 'number' ? TextInputType.number : TextInputType.text,
-      style: const TextStyle(fontSize: 15, color: AppColors.textPrimary),
+      style: TextStyle(fontSize: 15, color: context.colors.textPrimary),
       decoration: InputDecoration(
         hintText: field.placeholder,
-        hintStyle: TextStyle(color: AppColors.textSecondary.withOpacity(0.5)),
+        hintStyle: TextStyle(color: context.colors.textSecondary.withOpacity(0.5)),
         filled: true,
         fillColor: Colors.black.withOpacity(0.2),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -562,7 +562,7 @@ class _GenericEditorState extends State<GenericEditor> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.accent),
+          borderSide: BorderSide(color: context.colors.accent),
         ),
       ),
     );
@@ -581,7 +581,7 @@ class _GenericEditorState extends State<GenericEditor> {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.03),
-              border: Border.all(color: AppColors.glassBorder),
+              border: Border.all(color: context.colors.glassBorder),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Column(
@@ -592,9 +592,9 @@ class _GenericEditorState extends State<GenericEditor> {
                   children: [
                     Text(
                       '#${gIdx + 1}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.textSecondary,
+                        color: context.colors.textSecondary,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -606,7 +606,7 @@ class _GenericEditorState extends State<GenericEditor> {
                               widget.onOpenFsEditor!('first_mes', gIdx);
                             }
                           },
-                          child: const Icon(Icons.edit, size: 18, color: AppColors.accent),
+                          child: Icon(Icons.edit, size: 18, color: context.colors.accent),
                         ),
                         const SizedBox(width: 12),
                         GestureDetector(
@@ -628,7 +628,7 @@ class _GenericEditorState extends State<GenericEditor> {
                     greets[gIdx].isEmpty ? 'Empty' : greets[gIdx],
                     style: TextStyle(
                       fontSize: 14,
-                      color: AppColors.textPrimary.withOpacity(0.9),
+                      color: context.colors.textPrimary.withOpacity(0.9),
                       height: 1.4,
                     ),
                     maxLines: 3,
@@ -643,18 +643,18 @@ class _GenericEditorState extends State<GenericEditor> {
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: const Color(0x1A7996CE), // 10% opacity vk-blue
+              color: context.colors.accent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.add, size: 20, color: AppColors.accent),
+              children: [
+                Icon(Icons.add, size: 20, color: context.colors.accent),
                 SizedBox(width: 8),
                 Text(
                   'Add Message',
                   style: TextStyle(
-                    color: AppColors.accent,
+                    color: context.colors.accent,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -673,8 +673,8 @@ class _GenericEditorState extends State<GenericEditor> {
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: AppColors.surfaceHigh,
-          border: Border.all(color: AppColors.glassBorder),
+          color: context.colors.surfaceHigh,
+          border: Border.all(color: context.colors.glassBorder),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -682,9 +682,9 @@ class _GenericEditorState extends State<GenericEditor> {
           children: [
             Text(
               _getSelectedLabel(field),
-              style: const TextStyle(fontSize: 15, color: AppColors.textPrimary),
+              style: TextStyle(fontSize: 15, color: context.colors.textPrimary),
             ),
-            Icon(Icons.arrow_drop_down, color: AppColors.textSecondary.withOpacity(0.5)),
+            Icon(Icons.arrow_drop_down, color: context.colors.textSecondary.withOpacity(0.5)),
           ],
         ),
       ),

@@ -16,6 +16,7 @@ import '../../../core/services/chat_import_export.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../image_gen/widgets/image_gen_sheet.dart';
@@ -527,7 +528,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       context,
       title: 'Sessions',
       headerAction: IconButton(
-        icon: const Icon(Icons.add, color: AppColors.accent),
+        icon: Icon(Icons.add, color: context.colors.accent),
         onPressed: _showSessionAddMenu,
       ),
       child: _SessionsSheetContent(
@@ -683,9 +684,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     final items = _displayItems;
 
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        border: Border(top: BorderSide(color: AppColors.glassBorder)),
+      decoration: BoxDecoration(
+        color: context.colors.charBubble,
+        border: Border(top: BorderSide(color: context.colors.glassBorder)),
       ),
       child: Stack(
           children: [

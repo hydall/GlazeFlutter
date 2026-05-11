@@ -33,10 +33,10 @@ class GlazeFilterChipBar<T> extends StatelessWidget {
                 onSelected: (_) => onSelected(option),
                 labelStyle: TextStyle(
                   fontSize: 12,
-                  color: selected ? AppColors.accent : AppColors.textSecondary,
+                  color: selected ? context.colors.accent : context.colors.textSecondary,
                 ),
-                selectedColor: AppColors.accent.withValues(alpha: 0.15),
-                side: BorderSide(color: selected ? AppColors.accent : Colors.white12),
+                selectedColor: context.colors.accent.withValues(alpha: 0.15),
+                side: BorderSide(color: selected ? context.colors.accent : Colors.white12),
               ),
             );
           }).toList(),
