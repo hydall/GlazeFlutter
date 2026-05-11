@@ -191,6 +191,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     
     final appSettings = ref.watch(appSettingsProvider).valueOrNull;
     final virtualKeyboardSend = appSettings?.virtualKeyboardSend ?? false;
+    final enterToSend = appSettings?.enterToSend ?? true;
 
     // Track the OS keyboard height so the drawer can match it exactly.
     final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
@@ -333,6 +334,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             onToggleDrawer: _toggleDrawer,
             onScrollDirection: _onScrollDirection,
             virtualKeyboardSend: virtualKeyboardSend,
+            enterToSend: enterToSend,
           ),
         ),
       ),
@@ -366,6 +368,7 @@ class _ChatBody extends ConsumerWidget {
   final VoidCallback onToggleDrawer;
   final ValueChanged<ScrollDirection>? onScrollDirection;
   final bool virtualKeyboardSend;
+  final bool enterToSend;
 
   const _ChatBody({
     required this.charId,
@@ -386,6 +389,7 @@ class _ChatBody extends ConsumerWidget {
     required this.onToggleDrawer,
     this.onScrollDirection,
     this.virtualKeyboardSend = false,
+    this.enterToSend = true,
   });
 
   static const double _inputBarApproxHeight = 130;
@@ -505,6 +509,7 @@ class _ChatBody extends ConsumerWidget {
                         onSearchPrev: onSearchPrev,
                         isDrawerOpen: drawerOpen,
                         virtualKeyboardSend: virtualKeyboardSend,
+                        enterToSend: enterToSend,
                         onSend: (text) {
                           if (text.trim().isEmpty) return;
                           ref

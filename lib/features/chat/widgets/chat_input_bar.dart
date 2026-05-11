@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../shared/theme/app_colors.dart';
 
 class ChatInputBar extends StatefulWidget {
@@ -11,6 +12,7 @@ class ChatInputBar extends StatefulWidget {
   final VoidCallback? onImageGen;
   final VoidCallback? onContinue;
   final bool virtualKeyboardSend;
+  final bool enterToSend;
 
   /// When true, the magic-drawer button shows the active state. The host
   /// also uses this to interpret onMagicDrawer as a toggle.
@@ -37,6 +39,7 @@ class ChatInputBar extends StatefulWidget {
     this.onImageGen,
     this.onContinue,
     this.virtualKeyboardSend = false,
+    this.enterToSend = true,
     this.isDrawerOpen = false,
     this.focusNode,
     this.showSearchControls = false,
@@ -55,6 +58,34 @@ class _ChatInputBarState extends State<ChatInputBar> {
   final _controller = TextEditingController();
   final _guidanceController = TextEditingController();
   bool _guidanceMode = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _updateFocusNodeHandler();
+  }
+
+  @override
+  void didUpdateWidget(ChatInputBar old) {
+    super.didUpdateWidget(old);
+    if (old.enterToSend != widget.enterToSend) {
+      _updateFocusNodeHandler();
+    }
+  }
+
+  void _updateFocusNodeHandler() {
+    final fn = widget.focusNode;
+    if (fn == null || !widget.enterToSend) return;
+    fn.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.enter &&
+          !HardwareKeyboard.instance.isShiftPressed) {
+        _handleSend();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+  }
 
   @override
   void dispose() {
@@ -183,11 +214,17 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     focusNode: widget.focusNode,
                     maxLines: 5,
                     minLines: 1,
-                    textInputAction: widget.virtualKeyboardSend ? TextInputAction.send : TextInputAction.newline,
-                    onSubmitted: widget.virtualKeyboardSend ? (_) => _handleSend() : null,
+                    textInputAction: widget.virtualKeyboardSend
+                        ? TextInputAction.send
+                        : TextInputAction.newline,
+                    onSubmitted: widget.virtualKeyboardSend
+                        ? (_) => _handleSend()
+                        : null,
                     style: const TextStyle(fontSize: 16),
                     decoration: InputDecoration(
-                      hintText: _guidanceMode ? 'Message with guidance...' : 'Type a message...',
+                      hintText: _guidanceMode
+                          ? 'Message with guidance...'
+                          : 'Type a message...',
                       border: InputBorder.none,
                       enabledBorder: InputBorder.none,
                       focusedBorder: InputBorder.none,
@@ -201,7 +238,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
