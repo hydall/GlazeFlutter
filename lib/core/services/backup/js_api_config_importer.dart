@@ -110,7 +110,24 @@ class JsApiConfigImporter with BackupHelpers {
         if (pid != llmProfileId) {
           final ep = (p['endpoint'] as String?) ?? '';
           final ak = (p['apiKey'] as String?) ?? (p['key'] as String?) ?? '';
+          final mdl = (p['model'] as String?) ?? '';
+          if (ep.isEmpty && mdl.isEmpty) continue;
           if (ep.isEmpty && imggenApiKeys.contains(ak)) continue;
+          if (embProfile != null) {
+            final embEp = (embProfile['endpoint'] as String?) ?? '';
+            final embMdl = (embProfile['model'] as String?) ?? '';
+            final isEmbDuplicate = (ep.isNotEmpty && embEp.isNotEmpty && ep == embEp) &&
+                (mdl.isNotEmpty && embMdl.isNotEmpty && mdl == embMdl);
+            if (isEmbDuplicate) continue;
+          }
+          if (embUseSame && ep.isNotEmpty) {
+            final embEndpoint = ls['gz_embedding_endpoint'] as String? ??
+                kv['gz_embedding_endpoint'] as String? ?? '';
+            final embModel = ls['gz_embedding_model'] as String? ??
+                kv['gz_embedding_model'] as String? ?? '';
+            final isEmbDuplicate = (ep == embEndpoint) && (mdl == embModel);
+            if (isEmbDuplicate) continue;
+          }
         }
 
         String embEndpoint = '';
