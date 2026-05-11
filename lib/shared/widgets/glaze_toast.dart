@@ -18,6 +18,7 @@ class GlazeToast {
     String text, {
     int duration = 2500,
     ToastPosition position = ToastPosition.bottom,
+    bool isError = false,
   }) {
     _current?.cancel();
 
@@ -29,6 +30,7 @@ class GlazeToast {
         key: key,
         text: text,
         position: position,
+        isError: isError,
         onRemove: () {
           entry.remove();
           if (_current?.entry == entry) _current = null;
@@ -56,27 +58,12 @@ class GlazeToast {
   static void error(BuildContext context, String prefix, Object error) {
     final text = '$prefix$error';
     final ctx = rootNavigatorKey.currentContext ?? context;
-    showDialog(
-      context: ctx,
-      builder: (d) => AlertDialog(
-        title: const Text('Error'),
-        content: SingleChildScrollView(
-          child: SelectableText(text),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(text: text));
-              Navigator.pop(d);
-            },
-            child: const Text('Copy'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(d),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+    show(
+      ctx,
+      text,
+      duration: 4000,
+      position: ToastPosition.top,
+      isError: true,
     );
   }
 }
@@ -101,12 +88,14 @@ class _ActiveToast {
 class _ToastAnimator extends StatefulWidget {
   final String text;
   final ToastPosition position;
+  final bool isError;
   final VoidCallback onRemove;
 
   const _ToastAnimator({
     super.key,
     required this.text,
     required this.position,
+    this.isError = false,
     required this.onRemove,
   });
 
@@ -190,7 +179,7 @@ class _ToastAnimatorState extends State<_ToastAnimator>
                   scale: _scale.value,
                   child: Opacity(
                     opacity: _opacity.value,
-                    child: _ToastChip(text: widget.text, onTap: dismiss),
+                    child: _ToastChip(text: widget.text, onTap: dismiss, isError: widget.isError),
                   ),
                 ),
               ),
@@ -207,8 +196,9 @@ class _ToastAnimatorState extends State<_ToastAnimator>
 class _ToastChip extends StatelessWidget {
   final String text;
   final VoidCallback onTap;
+  final bool isError;
 
-  const _ToastChip({required this.text, required this.onTap});
+  const _ToastChip({required this.text, required this.onTap, this.isError = false});
 
   @override
   Widget build(BuildContext context) {
@@ -216,6 +206,9 @@ class _ToastChip extends StatelessWidget {
       type: MaterialType.transparency,
       child: GestureDetector(
         onTap: onTap,
+        onLongPress: () {
+          Clipboard.setData(ClipboardData(text: text));
+        },
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           child: BackdropFilter(
@@ -226,7 +219,8 @@ class _ToastChip extends StatelessWidget {
               ),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xEB1E1E1E),
+                color: isError ? const Color(0xEB5C1A1A) : const Color(0xEB1E1E1E),
+                border: isError ? Border.all(color: const Color(0x80FF4444), width: 1) : null,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: const [
                   BoxShadow(
