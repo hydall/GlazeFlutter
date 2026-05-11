@@ -77,7 +77,7 @@ class AppTheme {
       textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
         bodyColor: c.textPrimary,
         displayColor: c.textPrimary,
-        fontSizeDelta: (preset.uiFontSize is num) ? uiSize - 14.0 : 0.0,
+        fontSizeFactor: (preset.uiFontSize is num) ? uiSize / 14.0 : 1.0,
         letterSpacingDelta: uiSpacing,
       ),
       extensions: [
@@ -169,7 +169,7 @@ class AppTheme {
       textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
         bodyColor: c.textPrimary,
         displayColor: c.textPrimary,
-        fontSizeDelta: (preset.uiFontSize is num) ? uiSize - 14.0 : 0.0,
+        fontSizeFactor: (preset.uiFontSize is num) ? uiSize / 14.0 : 1.0,
         letterSpacingDelta: uiSpacing,
       ),
       extensions: [
