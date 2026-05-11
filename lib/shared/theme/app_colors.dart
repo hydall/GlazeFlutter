@@ -97,8 +97,8 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
   static GlazeColors fromPreset(ThemePreset preset, {required bool isDark}) {
     final base = isDark ? dark : light;
     final accent = preset.accent;
-    final uiColor = preset.uiColorParsed;
-    final effectiveBg = uiColor ?? base.background;
+    final uiColor = preset.uiColorParsed ?? _deriveUiColor(accent, isDark);
+    final effectiveBg = uiColor;
 
     final userBubble = preset.userBubbleParsed ?? accent;
     final charBubbleRaw = preset.charBubbleParsed ?? base.charBubble;
@@ -115,15 +115,43 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
       border: preset.borderParsed ?? _borderFor(effectiveBg, isDark),
       textPrimary: textPrimary,
       textSecondary: textSecondary,
-      surface: uiColor ?? base.surface,
-      surfaceHigh: uiColor ?? base.surfaceHigh,
-      background: uiColor ?? base.background,
+      surface: uiColor,
+      surfaceHigh: _shiftColor(uiColor, isDark ? 1.08 : 0.96),
+      background: uiColor,
       userText: _ensureContrast(preset.userTextParsed, userBubble),
       charText: _ensureContrast(preset.charTextParsed, charBubble),
       userQuote: preset.userQuoteParsed ?? _contrastFor(userBubble).withValues(alpha: 0.7),
       charQuote: preset.charQuoteParsed ?? _contrastFor(charBubble).withValues(alpha: 0.7),
       userItalic: preset.userItalicParsed,
       charItalic: preset.charItalicParsed,
+    );
+  }
+
+  static Color _deriveUiColor(Color accent, bool isDark) {
+    if (isDark) {
+      final hsl = HSLColor.fromColor(accent);
+      return HSLColor.fromAHSL(
+        1.0,
+        hsl.hue,
+        (hsl.saturation * 0.6).clamp(0.0, 1.0),
+        (hsl.lightness * 0.15).clamp(0.02, 0.12),
+      ).toColor();
+    }
+    final hsl = HSLColor.fromColor(accent);
+    return HSLColor.fromAHSL(
+      1.0,
+      hsl.hue,
+      (hsl.saturation * 0.3).clamp(0.0, 1.0),
+      (0.92 + hsl.lightness * 0.06).clamp(0.9, 0.97),
+    ).toColor();
+  }
+
+  static Color _shiftColor(Color c, double factor) {
+    return Color.fromARGB(
+      c.alpha,
+      (c.red * factor).clamp(0, 255).round(),
+      (c.green * factor).clamp(0, 255).round(),
+      (c.blue * factor).clamp(0, 255).round(),
     );
   }
 
