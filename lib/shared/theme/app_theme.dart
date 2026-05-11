@@ -6,6 +6,40 @@ import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 import 'theme_preset.dart';
 
+TextTheme _applySafe(TextTheme theme, {
+  required Color bodyColor,
+  required Color displayColor,
+  required double fontSizeFactor,
+  required double letterSpacingDelta,
+}) {
+  TextStyle? scale(TextStyle? s) {
+    if (s == null) return null;
+    return s.copyWith(
+      color: s.color ?? bodyColor,
+      fontSize: s.fontSize != null ? s.fontSize! * fontSizeFactor : null,
+      letterSpacing: (s.letterSpacing ?? 0) + letterSpacingDelta,
+    );
+  }
+
+  return TextTheme(
+    displayLarge: scale(theme.displayLarge),
+    displayMedium: scale(theme.displayMedium),
+    displaySmall: scale(theme.displaySmall),
+    headlineLarge: scale(theme.headlineLarge),
+    headlineMedium: scale(theme.headlineMedium),
+    headlineSmall: scale(theme.headlineSmall),
+    titleLarge: scale(theme.titleLarge),
+    titleMedium: scale(theme.titleMedium),
+    titleSmall: scale(theme.titleSmall),
+    bodyLarge: scale(theme.bodyLarge),
+    bodyMedium: scale(theme.bodyMedium),
+    bodySmall: scale(theme.bodySmall),
+    labelLarge: scale(theme.labelLarge),
+    labelMedium: scale(theme.labelMedium),
+    labelSmall: scale(theme.labelSmall),
+  );
+}
+
 class AppTheme {
   static ThemeData dark(ThemePreset preset, {String? fontFamily}) {
     final accent = preset.accent;
@@ -13,6 +47,7 @@ class AppTheme {
     final effectiveFont = fontFamily ?? GoogleFonts.inter().fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
+    final scaleFactor = preset.uiFontSize is num ? uiSize / 14.0 : 1.0;
 
     final base = FlexThemeData.dark(
       colors: FlexSchemeColor.from(
@@ -74,10 +109,11 @@ class AppTheme {
           ),
         ),
       ),
-      textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
+      textTheme: _applySafe(
+        GoogleFonts.interTextTheme(base.textTheme),
         bodyColor: c.textPrimary,
         displayColor: c.textPrimary,
-        fontSizeFactor: (preset.uiFontSize is num) ? uiSize / 14.0 : 1.0,
+        fontSizeFactor: scaleFactor,
         letterSpacingDelta: uiSpacing,
       ),
       extensions: [
@@ -105,6 +141,7 @@ class AppTheme {
     final effectiveFont = fontFamily ?? GoogleFonts.inter().fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
+    final scaleFactor = preset.uiFontSize is num ? uiSize / 14.0 : 1.0;
 
     final base = FlexThemeData.light(
       colors: FlexSchemeColor.from(
@@ -166,10 +203,11 @@ class AppTheme {
           ),
         ),
       ),
-      textTheme: GoogleFonts.interTextTheme(base.textTheme).apply(
+      textTheme: _applySafe(
+        GoogleFonts.interTextTheme(base.textTheme),
         bodyColor: c.textPrimary,
         displayColor: c.textPrimary,
-        fontSizeFactor: (preset.uiFontSize is num) ? uiSize / 14.0 : 1.0,
+        fontSizeFactor: scaleFactor,
         letterSpacingDelta: uiSpacing,
       ),
       extensions: [
