@@ -40,6 +40,12 @@ TextTheme _applySafe(TextTheme theme, {
   );
 }
 
+Color _btnForeground(Color accent) {
+  return accent.computeLuminance() > 0.35
+      ? const Color(0xFF1A1A1B)
+      : const Color(0xFFE1E3E6);
+}
+
 class AppTheme {
   static ThemeData dark(ThemePreset preset, {String? fontFamily}) {
     final accent = preset.accent;
@@ -48,6 +54,7 @@ class AppTheme {
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 14.0 : 1.0;
+    final btnFg = _btnForeground(accent);
 
     final base = FlexThemeData.dark(
       colors: FlexSchemeColor.from(
@@ -103,12 +110,18 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: accent,
-          foregroundColor: Colors.black,
+          foregroundColor: btnFg,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(8)),
           ),
         ),
       ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: c.textPrimary,
+        ),
+      ),
+      iconTheme: IconThemeData(color: c.textPrimary),
       textTheme: _applySafe(
         GoogleFonts.interTextTheme(base.textTheme),
         bodyColor: c.textPrimary,
@@ -142,6 +155,7 @@ class AppTheme {
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 14.0 : 1.0;
+    final btnFg = _btnForeground(accent);
 
     final base = FlexThemeData.light(
       colors: FlexSchemeColor.from(
@@ -197,12 +211,18 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: accent,
-          foregroundColor: Colors.black,
+          foregroundColor: btnFg,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(8)),
           ),
         ),
       ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: c.textPrimary,
+        ),
+      ),
+      iconTheme: IconThemeData(color: c.textPrimary),
       textTheme: _applySafe(
         GoogleFonts.interTextTheme(base.textTheme),
         bodyColor: c.textPrimary,

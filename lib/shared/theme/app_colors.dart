@@ -97,23 +97,29 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
   static GlazeColors fromPreset(ThemePreset preset, {required bool isDark}) {
     final base = isDark ? dark : light;
     final accent = preset.accent;
+    final uiColor = preset.uiColorParsed;
+    final effectiveBg = uiColor ?? base.background;
+
     final userBubble = preset.userBubbleParsed ?? accent;
     final charBubbleRaw = preset.charBubbleParsed ?? base.charBubble;
-    final uiColor = preset.uiColorParsed;
-    final charBubble = _distinctBubble(charBubbleRaw, uiColor ?? base.background, isDark);
+    final charBubble = _distinctBubble(charBubbleRaw, effectiveBg, isDark);
+
+    final textPrimary = preset.uiTextParsed ?? _contrastFor(effectiveBg);
+    final textSecondary = preset.uiTextGrayParsed ?? _contrastFor(effectiveBg, secondary: true);
+
     return base.copyWith(
       accent: accent,
       activeTab: accent,
       userBubble: userBubble,
       charBubble: charBubble,
-      border: preset.borderParsed ?? base.border,
-      textPrimary: preset.uiTextParsed ?? base.textPrimary,
-      textSecondary: preset.uiTextGrayParsed ?? base.textSecondary,
+      border: preset.borderParsed ?? _borderFor(effectiveBg, isDark),
+      textPrimary: textPrimary,
+      textSecondary: textSecondary,
       surface: uiColor ?? base.surface,
       surfaceHigh: uiColor ?? base.surfaceHigh,
       background: uiColor ?? base.background,
-      userText: preset.userTextParsed ?? _contrastFor(userBubble),
-      charText: preset.charTextParsed ?? _contrastFor(charBubble),
+      userText: _ensureContrast(preset.userTextParsed, userBubble),
+      charText: _ensureContrast(preset.charTextParsed, charBubble),
       userQuote: preset.userQuoteParsed ?? _contrastFor(userBubble).withValues(alpha: 0.7),
       charQuote: preset.charQuoteParsed ?? _contrastFor(charBubble).withValues(alpha: 0.7),
       userItalic: preset.userItalicParsed,
@@ -137,9 +143,42 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
     return bubble;
   }
 
-  static Color _contrastFor(Color bg) {
+  static Color _contrastFor(Color bg, {bool secondary = false}) {
     final lum = bg.computeLuminance();
-    return lum > 0.4 ? const Color(0xFF1A1A1B) : const Color(0xFFE1E3E6);
+    final light = secondary
+        ? const Color(0xFFB0B8C1)
+        : const Color(0xFFE1E3E6);
+    final dark = secondary
+        ? const Color(0xFF6B6D70)
+        : const Color(0xFF1A1A1B);
+    return lum > 0.35 ? dark : light;
+  }
+
+  static Color _borderFor(Color bg, bool isDark) {
+    final lum = bg.computeLuminance();
+    if (isDark) {
+      return lum > 0.35
+          ? const Color(0xFF5C5D5E)
+          : const Color(0xFF2C2D2E);
+    }
+    return lum > 0.35
+        ? const Color(0xFFB8B9BA)
+        : const Color(0xFFD8D9DA);
+  }
+
+  static Color? _ensureContrast(Color? text, Color bg) {
+    if (text == null) return _contrastFor(bg);
+    final ratio = _contrastRatio(text, bg);
+    if (ratio < 2.5) return _contrastFor(bg);
+    return text;
+  }
+
+  static double _contrastRatio(Color a, Color b) {
+    final l1 = a.computeLuminance();
+    final l2 = b.computeLuminance();
+    final lighter = l1 > l2 ? l1 : l2;
+    final darker = l1 > l2 ? l2 : l1;
+    return (lighter + 0.05) / (darker + 0.05);
   }
 
   @override
