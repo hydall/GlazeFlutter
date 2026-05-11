@@ -145,18 +145,18 @@ class ChatGenerationService {
           if (partialText.isNotEmpty) {
             finalState = _saveAssistantMessage(partialText, null, session, pendingSessionVars: pendingSessionVars);
           } else {
-            String? errorMsg = error.toString();
             if (error is DioException && error.type == DioExceptionType.cancel) {
-              errorMsg = null;
+              finalState = ChatState(session: session, isGenerating: false);
+            } else {
+              finalState = _saveErrorMessage(error.toString(), session, pendingSessionVars: pendingSessionVars);
             }
-            finalState = ChatState(session: session, isGenerating: false, error: errorMsg);
           }
         },
       );
 
       return finalState ?? ChatState(session: session, isGenerating: false);
     } catch (e) {
-      return ChatState(session: session, isGenerating: false, error: e.toString());
+      return _saveErrorMessage(e.toString(), session);
     }
   }
 
@@ -317,5 +317,32 @@ class ChatGenerationService {
     );
     _ref.read(chatRepoProvider).put(finalSession);
     return ChatState(session: finalSession, lastRawResponse: rawResponse);
+  }
+
+  ChatState _saveErrorMessage(
+    String errorText,
+    ChatSession currentSession, {
+    Map<String, String>? pendingSessionVars,
+  }) {
+    final errorMsg = ChatMessage(
+      id: generateId(),
+      role: 'assistant',
+      content: errorText,
+      isError: true,
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+      swipes: [errorText],
+      swipeId: 0,
+      swipesMeta: [{}],
+    );
+    final finalMessages = [...currentSession.messages, errorMsg];
+    final now = currentTimestampSeconds();
+    final sessionVars = pendingSessionVars ?? currentSession.sessionVars;
+    final finalSession = currentSession.copyWith(
+      messages: finalMessages,
+      updatedAt: now,
+      sessionVars: sessionVars,
+    );
+    _ref.read(chatRepoProvider).put(finalSession);
+    return ChatState(session: finalSession);
   }
 }

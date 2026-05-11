@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
@@ -17,6 +18,7 @@ import '../../../features/personas/persona_list_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
 import '../../../shared/widgets/rolling_number.dart';
 import '../../../shared/widgets/image_viewer.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../../image_gen/widgets/image_content_renderer.dart';
 import '../../settings/app_settings_provider.dart';
 import '../chat_provider.dart';
@@ -557,6 +559,8 @@ class _MessageState extends ConsumerState<Message>
               _EditTextarea(controller: _editController!, scheme: scheme)
             else if (isTyping && content.isEmpty)
               _TypingIndicator(textColor: textColor, scheme: scheme)
+            else if (isError)
+              _ErrorWindow(text: displayContent)
             else if (ImageContentRenderer.hasImageMarkers(displayContent))
               ImageContentRenderer(content: displayContent, textColor: textColor)
             else
@@ -1321,6 +1325,69 @@ class _MetadataRow extends StatelessWidget {
         child: Center(
           child: Icon(icon, size: 16, color: metaColor.withValues(alpha: onTap != null ? 0.7 : 0.25)),
         ),
+      ),
+    );
+  }
+}
+
+class _ErrorWindow extends StatelessWidget {
+  final String text;
+  const _ErrorWindow({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final errorColor = Theme.of(context).colorScheme.error;
+    return Container(
+      decoration: BoxDecoration(
+        color: errorColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: errorColor.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 4, 4),
+            child: Row(
+              children: [
+                Icon(Icons.error_outline, size: 14, color: errorColor),
+                const SizedBox(width: 6),
+                Text(
+                  'ERROR',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: errorColor,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const Spacer(),
+                InkWell(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: text));
+                    GlazeToast.show(context, 'Copied to clipboard', duration: 1500);
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.copy, size: 14, color: errorColor.withValues(alpha: 0.7)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+            child: SelectableText(
+              text,
+              style: TextStyle(
+                fontSize: 12,
+                color: errorColor.withValues(alpha: 0.9),
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

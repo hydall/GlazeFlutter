@@ -495,20 +495,6 @@ class _ChatBody extends ConsumerWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (state.error != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          child: Text(
-                            state.error!,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
                       ChatInputBar(
                         focusNode: inputFocus,
                         showSearchControls: showSearchControls,
