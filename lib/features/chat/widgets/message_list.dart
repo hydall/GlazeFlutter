@@ -352,17 +352,19 @@ class _MessageListState extends State<MessageList> {
                   key: ValueKey('bottom-area-${showStreaming}-${showTyping}'),
                   children: [
                     if (showStreaming)
-                      Message(
-                        content: widget.streamingText!,
-                        isUser: false,
-                        isStreaming: true,
-                        reasoning: widget.streamingReasoning,
-                        messageIndex: -1,
-                        totalMessages: widget.messages.length,
-                        isLast: false,
-                        isGenerating: true,
-                        generationStartTime: widget.generationStartTime,
-                        charId: widget.charId,
+                      RepaintBoundary(
+                        child: Message(
+                          content: widget.streamingText!,
+                          isUser: false,
+                          isStreaming: true,
+                          reasoning: widget.streamingReasoning,
+                          messageIndex: -1,
+                          totalMessages: widget.messages.length,
+                          isLast: false,
+                          isGenerating: true,
+                          generationStartTime: widget.generationStartTime,
+                          charId: widget.charId,
+                        ),
                       )
                     else if (showTyping)
                       Message(

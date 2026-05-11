@@ -408,7 +408,8 @@ class _ChatBody extends ConsumerWidget {
               }
               return false;
             },
-            child: MessageList(
+            child: RepaintBoundary(
+              child: MessageList(
               messages: state.messages,
               streamingText: state.isGenerating ? state.streamingText : null,
               streamingReasoning:
@@ -420,6 +421,7 @@ class _ChatBody extends ConsumerWidget {
               searchQuery: searchQuery,
               searchMatches: searchMatches,
               searchCurrentIndex: searchCurrentIndex,
+            ),
             ),
           ),
         ),

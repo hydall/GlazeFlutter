@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/llm/prompt_isolate.dart';
@@ -86,6 +87,8 @@ class ChatGenerationService {
       ChatState? finalState;
       final coverage = payload.memoryCoverage;
 
+      bool frameScheduled = false;
+
       await sseClient.streamChatCompletion(
         endpoint: apiConfig.endpoint,
         apiKey: apiConfig.apiKey,
@@ -104,13 +107,19 @@ class ChatGenerationService {
         omitReasoningEffort: apiConfig.omitReasoningEffort,
         onUpdate: (delta, reasoningDelta) {
           accumulator.consumeDelta(delta, reasoningDelta: reasoningDelta);
-          onStateUpdate(ChatState(
-            session: session,
-            isGenerating: true,
-            generationStartTime: currentState.generationStartTime ?? startGenTime,
-            streamingText: accumulator.text,
-            streamingReasoning: accumulator.reasoning.isNotEmpty ? accumulator.reasoning : null,
-          ));
+          if (!frameScheduled) {
+            frameScheduled = true;
+            SchedulerBinding.instance.scheduleFrameCallback((_) {
+              frameScheduled = false;
+              onStateUpdate(ChatState(
+                session: session,
+                isGenerating: true,
+                generationStartTime: currentState.generationStartTime ?? startGenTime,
+                streamingText: accumulator.text,
+                streamingReasoning: accumulator.reasoning.isNotEmpty ? accumulator.reasoning : null,
+              ));
+            });
+          }
         },
         onComplete: (text, reasoning) {
           final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;

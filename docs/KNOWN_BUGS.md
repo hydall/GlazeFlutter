@@ -37,17 +37,17 @@
 
 ## API Settings
 
-- **API settings not saved — 3 bugs.** (1) `_saveTimer?.cancel()` in `dispose()` kills pending debounced save; `_goBack()` does not flush before navigating — changes made within 800ms of pressing back are silently lost. (2) `_toCompanion()` and `_toModel()` in `api_config_repo.dart` are missing 4 fields: `omitTemperature`, `omitTopP`, `omitReasoning`, `omitReasoningEffort` — toggling "Omit" switches appears to work but values reset on reload. (3) `activeApiPresetIdProvider` initialized to `null` and never loaded from SharedPreferences — active config lost on restart (falls back to `list.first`).
+- **~~API settings not saved — 3 bugs.~~** Fixed — (1) `_flushSave()` before navigation and in `dispose()` instead of `cancel()`. (2) `_toCompanion()`/`_toModel()` now include `omitTemperature`, `omitTopP`, `omitReasoning`, `omitReasoningEffort`. (3) `activeApiPresetIdProvider` now loads from SharedPreferences on startup; `_persistActiveId()` saves on switch.
 
-- **Duplicate embedding API profile on backup import.** When `gz_service_profile_map` is null in the backup, embedding profiles in `gz_provider_profiles` are not filtered — they pass through and get inserted as separate `mode='chat'` configs. Additionally, old-format presets with `mode: 'embedding'` are imported as standalone embedding-type configs. Both paths create a duplicate profile alongside the correct one. Fix: when `serviceProfileMap` is null, detect embedding profiles by checking if their endpoint/model matches embedding patterns, or merge them into the LLM config's embedding fields.
+- **~~Duplicate embedding API profile on backup import.~~** Fixed — Path 1: profiles with `mode: embedding/image_gen/memory_books` are skipped; when `serviceProfileMap` is null, embedding profile is detected and merged into LLM config. Path 2: embedding presets are merged into the first chat config instead of creating a separate profile.
 
 ## Android Performance
 
-- **CI builds debug APK.** `build-branch.yml` uses `flutter build apk --debug` — JIT mode is 5-50x slower than AOT. iOS builds use `--release`. This is the primary cause of Android lag.
+- **~~CI builds debug APK.~~** Fixed — `build-branch.yml` now uses `flutter build apk --release`.
 
-- **Unthrottled streaming updates.** Every SSE token triggers: new `ChatState` → Riverpod notification → full chat screen rebuild → `GptMarkdown` re-parses entire accumulated text with 26 custom components. No throttle, debounce, or frame-aligned batching. 30-100+ tokens/sec × full markdown re-parse = severe lag that worsens as response grows.
+- **~~Unthrottled streaming updates.~~** Fixed — `chat_generation_service.dart` now uses `SchedulerBinding.instance.scheduleFrameCallback` to throttle state updates to once per frame (~16ms). Tokens accumulate in the `StreamAccumulator` between frames without triggering Riverpod notifications.
 
-- **No RepaintBoundary.** Zero `RepaintBoundary` calls in codebase — streaming message repaint causes entire chat screen repaint (input bar, message list, etc.).
+- **~~No RepaintBoundary.~~** Fixed — `RepaintBoundary` wraps the `MessageList` in `chat_screen.dart` and the streaming `Message` widget in `message_list.dart`, preventing full-screen repaints on every streaming token.
 
 ## Prompt Building
 
