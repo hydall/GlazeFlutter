@@ -65,15 +65,15 @@ jobs:
           KEYSTORE_PASSWORD: android
           KEY_ALIAS: debug-key
           KEY_PASSWORD: android
-        run: flutter build apk --debug --no-pub --target-platform android-arm64
+        run: flutter build apk --release --no-pub --target-platform android-arm64
 
       - name: Rename APK
-        run: mv build/app/outputs/flutter-apk/app-debug.apk build/app/outputs/flutter-apk/Glaze-debug.apk || true
+        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/Glaze-release.apk || true
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Glaze-debug-APK
+          name: Glaze-release-APK
           path: build/app/outputs/flutter-apk/*.apk
 
   build-windows:

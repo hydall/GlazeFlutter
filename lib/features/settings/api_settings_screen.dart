@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/llm/embedding_service.dart';
 import '../../core/llm/sse_client.dart';
@@ -89,7 +90,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
 
   @override
   void dispose() {
-    _saveTimer?.cancel();
+    _flushSave();
     _scrollController.dispose();
     for (final c in _ctrls) {
       c.dispose();
@@ -97,9 +98,15 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     super.dispose();
   }
 
-  // ── State helpers ─────────────────────────────────────────────────────────────
+  void _flushSave() {
+    if (_saveTimer?.isActive == true) {
+      _saveTimer!.cancel();
+      _save();
+    }
+  }
 
   void _goBack() {
+    _flushSave();
     if (widget.startExpanded) {
       context.go('/tools');
     } else {
@@ -111,6 +118,16 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     if (_loading) return;
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 800), _save);
+  }
+
+  void _persistActiveId(String? id) {
+    SharedPreferences.getInstance().then((prefs) {
+      if (id != null) {
+        prefs.setString('activeApiConfigId', id);
+      } else {
+        prefs.remove('activeApiConfigId');
+      }
+    });
   }
 
   void _loadActivePreset() {
@@ -661,6 +678,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   await ref.read(apiListProvider.notifier).remove(config.id);
                   if (activeId == config.id) {
                     ref.read(activeApiPresetIdProvider.notifier).state = null;
+                    _persistActiveId(null);
                     _loadedPresetId = null;
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) _loadActivePreset();
@@ -673,6 +691,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             Navigator.of(context, rootNavigator: true).pop();
             _saveTimer?.cancel();
             ref.read(activeApiPresetIdProvider.notifier).state = config.id;
+            _persistActiveId(config.id);
             _loadedPresetId = null;
             _loadFromConfig(config);
           },
@@ -699,6 +718,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           );
           await ref.read(apiListProvider.notifier).put(newConfig);
           ref.read(activeApiPresetIdProvider.notifier).state = newConfig.id;
+          _persistActiveId(newConfig.id);
           _loadedPresetId = null;
           _loadFromConfig(newConfig);
         },

@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/models/api_config.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/utils/sync_deletion_tracker.dart';
 
 final activeApiPresetIdProvider = StateProvider<String?>((ref) => null);
+
+final _activeIdInitializedProvider = Provider<bool>((ref) => false);
 
 final activeApiConfigProvider = Provider<ApiConfig?>((ref) {
   final list = ref.watch(apiListProvider).valueOrNull;
@@ -21,7 +24,16 @@ final apiListProvider = AsyncNotifierProvider<ApiListNotifier, List<ApiConfig>>(
 class ApiListNotifier extends AsyncNotifier<List<ApiConfig>> {
   @override
   Future<List<ApiConfig>> build() async {
-    return ref.watch(apiConfigRepoProvider).getAll();
+    final configs = await ref.watch(apiConfigRepoProvider).getAll();
+    final initialized = ref.read(_activeIdInitializedProvider);
+    if (!initialized) {
+      final prefs = await SharedPreferences.getInstance();
+      final savedId = prefs.getString('activeApiConfigId');
+      if (savedId != null && configs.any((c) => c.id == savedId)) {
+        ref.read(activeApiPresetIdProvider.notifier).state = savedId;
+      }
+    }
+    return configs;
   }
 
   Future<void> put(ApiConfig config) async {

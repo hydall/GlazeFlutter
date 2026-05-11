@@ -55,6 +55,10 @@ class ApiConfigRepo {
         embeddingApiKey: c.embeddingApiKey ?? '',
         embeddingModel: c.embeddingModel ?? '',
         embeddingMaxChunkTokens: c.embeddingMaxChunkTokens,
+        omitTemperature: c.omitTemperature,
+        omitTopP: c.omitTopP,
+        omitReasoning: c.omitReasoning,
+        omitReasoningEffort: c.omitReasoningEffort,
       );
 
   ApiConfigsCompanion _toCompanion(ApiConfig m) => ApiConfigsCompanion(
@@ -80,5 +84,9 @@ class ApiConfigRepo {
         embeddingApiKey: Value(m.embeddingApiKey),
         embeddingModel: Value(m.embeddingModel),
         embeddingMaxChunkTokens: Value(m.embeddingMaxChunkTokens),
+        omitTemperature: Value(m.omitTemperature),
+        omitTopP: Value(m.omitTopP),
+        omitReasoning: Value(m.omitReasoning),
+        omitReasoningEffort: Value(m.omitReasoningEffort),
       );
 }
