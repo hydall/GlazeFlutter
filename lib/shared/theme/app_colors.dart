@@ -98,7 +98,9 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
     final base = isDark ? dark : light;
     final accent = preset.accent;
     final userBubble = preset.userBubbleParsed ?? accent;
-    final charBubble = preset.charBubbleParsed ?? base.charBubble;
+    final charBubbleRaw = preset.charBubbleParsed ?? base.charBubble;
+    final uiColor = preset.uiColorParsed;
+    final charBubble = _distinctBubble(charBubbleRaw, uiColor ?? base.background, isDark);
     return base.copyWith(
       accent: accent,
       activeTab: accent,
@@ -107,16 +109,32 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
       border: preset.borderParsed ?? base.border,
       textPrimary: preset.uiTextParsed ?? base.textPrimary,
       textSecondary: preset.uiTextGrayParsed ?? base.textSecondary,
-      surface: preset.uiColorParsed ?? base.surface,
-      surfaceHigh: preset.uiColorParsed ?? base.surfaceHigh,
-      background: preset.uiColorParsed ?? base.background,
+      surface: uiColor ?? base.surface,
+      surfaceHigh: uiColor ?? base.surfaceHigh,
+      background: uiColor ?? base.background,
       userText: preset.userTextParsed ?? _contrastFor(userBubble),
       charText: preset.charTextParsed ?? _contrastFor(charBubble),
-      userQuote: preset.userQuoteParsed,
-      charQuote: preset.charQuoteParsed,
+      userQuote: preset.userQuoteParsed ?? _contrastFor(userBubble).withValues(alpha: 0.7),
+      charQuote: preset.charQuoteParsed ?? _contrastFor(charBubble).withValues(alpha: 0.7),
       userItalic: preset.userItalicParsed,
       charItalic: preset.charItalicParsed,
     );
+  }
+
+  static Color _distinctBubble(Color bubble, Color bg, bool isDark) {
+    final diff = (bubble.red - bg.red).abs() +
+        (bubble.green - bg.green).abs() +
+        (bubble.blue - bg.blue).abs();
+    if (diff < 60) {
+      final factor = isDark ? 1.25 : 0.85;
+      return Color.fromARGB(
+        bubble.alpha,
+        (bubble.red * factor).clamp(0, 255).round(),
+        (bubble.green * factor).clamp(0, 255).round(),
+        (bubble.blue * factor).clamp(0, 255).round(),
+      );
+    }
+    return bubble;
   }
 
   static Color _contrastFor(Color bg) {

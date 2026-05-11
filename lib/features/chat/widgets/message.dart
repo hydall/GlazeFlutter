@@ -471,7 +471,8 @@ class _MessageState extends ConsumerState<Message>
               padding: isStandard ? const EdgeInsets.all(0) : const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: _highlighted ? context.colors.accent.withValues(alpha: 0.15) : style.bg,
-                borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16)
+                borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16),
+                border: isStandard ? null : Border.all(color: context.colors.border.withValues(alpha: 0.2)),
               ),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
@@ -860,6 +861,7 @@ class _BubbleStyle {
   final Color textColor;
   final Color quoteColor;
   final Color metaColor;
+  final Color? italicColor;
 
   const _BubbleStyle({
     required this.bg,
@@ -867,6 +869,7 @@ class _BubbleStyle {
     required this.textColor,
     required this.quoteColor,
     required this.metaColor,
+    this.italicColor,
   });
 
   factory _BubbleStyle.resolve({
@@ -883,32 +886,36 @@ class _BubbleStyle {
         textColor: isUser ? (colors.userText ?? colors.textPrimary) : (colors.charText ?? colors.textPrimary),
         quoteColor: isUser ? (colors.userQuote ?? colors.accent) : (colors.charQuote ?? colors.accent),
         metaColor: colors.textSecondary,
+        italicColor: isUser ? colors.userItalic : colors.charItalic,
       );
     }
     if (isUser) {
       return _BubbleStyle(
-        bg: colors.userBubble.withValues(alpha: 0.8),
+        bg: colors.userBubble,
         alignment: Alignment.centerRight,
         textColor: colors.userText ?? colors.textPrimary,
         quoteColor: colors.userQuote ?? colors.accent,
-        metaColor: colors.textSecondary,
+        metaColor: colors.userText?.withValues(alpha: 0.6) ?? colors.textSecondary,
+        italicColor: colors.userItalic,
       );
     }
     if (isSystem) {
       return _BubbleStyle(
-        bg: colors.charBubble.withValues(alpha: 0.8),
+        bg: colors.charBubble,
         alignment: Alignment.center,
         textColor: colors.charText ?? colors.textPrimary,
         quoteColor: colors.charQuote ?? colors.accent,
-        metaColor: colors.textSecondary,
+        metaColor: colors.charText?.withValues(alpha: 0.6) ?? colors.textSecondary,
+        italicColor: colors.charItalic,
       );
     }
     return _BubbleStyle(
-      bg: colors.charBubble.withValues(alpha: 0.8),
+      bg: colors.charBubble,
       alignment: Alignment.centerLeft,
       textColor: colors.charText ?? colors.textPrimary,
       quoteColor: colors.charQuote ?? colors.accent,
-      metaColor: colors.textSecondary,
+      metaColor: colors.charText?.withValues(alpha: 0.6) ?? colors.textSecondary,
+      italicColor: colors.charItalic,
     );
   }
 }
