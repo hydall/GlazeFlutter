@@ -93,13 +93,13 @@ Color _deriveUiColor(Color accent, bool isDark) {
 }
 
 Color _ensureButtonContrast(Color accent, Color surface, {required bool isDark}) {
-  if (_contrastRatio(accent, surface) >= 3.0) return accent;
+  if (_contrastRatio(accent, surface) >= 4.5) return accent;
   final hsl = HSLColor.fromColor(accent);
   double lightness = hsl.lightness;
   for (int i = 0; i < 20; i++) {
     lightness = isDark ? lightness + 0.04 : lightness - 0.04;
     final candidate = HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, lightness.clamp(0.0, 1.0)).toColor();
-    if (_contrastRatio(candidate, surface) >= 3.0) return candidate;
+    if (_contrastRatio(candidate, surface) >= 4.5) return candidate;
   }
   return isDark
       ? HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, 0.6).toColor()

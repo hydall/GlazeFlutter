@@ -159,8 +159,18 @@ class _NavButton extends StatelessWidget {
         duration: const Duration(milliseconds: 125),
         curve: Curves.easeInOut,
         builder: (context, t, _) {
+          final inactive = context.cs.onSurfaceVariant;
+          final active = context.colors.accent;
+          final inactiveLum = inactive.computeLuminance();
+          final activeLum = active.computeLuminance();
+          final surfaceLum = context.cs.surface.computeLuminance();
+          final effectiveActive = (activeLum > surfaceLum) == (inactiveLum > surfaceLum)
+              ? active
+              : (surfaceLum < 0.5
+                  ? HSLColor.fromColor(active).withLightness((HSLColor.fromColor(active).lightness + 0.3).clamp(0.0, 1.0)).toColor()
+                  : HSLColor.fromColor(active).withLightness((HSLColor.fromColor(active).lightness - 0.3).clamp(0.0, 1.0)).toColor());
           final color =
-              Color.lerp(context.cs.onSurfaceVariant, context.cs.primary, t)!;
+              Color.lerp(inactive, effectiveActive, t)!;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(
