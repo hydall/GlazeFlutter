@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui';
@@ -69,6 +70,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   final FocusNode _inputFocus = FocusNode();
   bool _drawerOpen = false;
   double _lastKeyboardHeight = _kDefaultKeyboardHeight;
+
+  /// Height frozen at the moment the drawer opens. Passed to _ChatBody so
+  /// the Positioned bottom doesn't jitter while the keyboard animates.
+  double _activeDrawerHeight = _kDefaultKeyboardHeight;
   late final AnimationController _drawerAnimController;
   late final Animation<double> _drawerAnim;
 
@@ -107,11 +112,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     super.dispose();
   }
 
+  double _tempMaxHeight = 0;
+  Timer? _heightTimer;
+
   Future<void> _restoreKeyboardHeight() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getDouble(_kKeyboardHeightPref);
-      if (saved != null && saved > 100 && mounted) {
+      if (saved != null && saved > 200 && mounted) {
         setState(() => _lastKeyboardHeight = saved);
       }
     } catch (_) {}
@@ -125,30 +133,32 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _onFocusChanged() {
-    // Keyboard about to come up: drawer must yield (Telegram semantics —
-    // exactly one of keyboard/drawer can occupy the bottom panel).
-    // Skip when we are intentionally opening the drawer (unfocus fires
-    // synchronously from _toggleDrawer).
+    debugPrint('[DRAWER] _onFocusChanged: hasFocus=${_inputFocus.hasFocus}, _drawerOpen=$_drawerOpen, _intentionalToggle=$_intentionalToggle');
     if (_intentionalToggle) return;
     if (_inputFocus.hasFocus && _drawerOpen) {
-      setState(() => _drawerOpen = false);
+      debugPrint('[DRAWER] → closing drawer via focus gained');
+      setState(() {
+        _drawerOpen = false;
+        _activeDrawerHeight = _lastKeyboardHeight;
+      });
+      _drawerAnimController.reverse();
     }
   }
 
   void _toggleDrawer() {
+    debugPrint('[DRAWER] _toggleDrawer: _drawerOpen=$_drawerOpen');
     if (_drawerOpen) {
       setState(() => _drawerOpen = false);
       _drawerAnimController.reverse();
     } else {
-      // Flag suppresses _onFocusChanged and the keyboardHeight > 0 guard
-      // during the keyboard dismiss animation.
       _intentionalToggle = true;
       _inputFocus.unfocus();
       HapticFeedback.selectionClick();
+      // Freeze the drawer height at open time.
+      _activeDrawerHeight = _lastKeyboardHeight;
+      debugPrint('[DRAWER] → opening drawer, activeH=$_activeDrawerHeight');
       setState(() => _drawerOpen = true);
       _drawerAnimController.forward();
-      // Clear the flag after the keyboard dismiss animation has had time to
-      // finish (keyboards typically animate out in ~250ms).
       Future.delayed(const Duration(milliseconds: 400), () {
         if (mounted) _intentionalToggle = false;
       });
@@ -198,28 +208,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final virtualKeyboardSend = appSettings?.virtualKeyboardSend ?? false;
     final enterToSend = appSettings?.enterToSend ?? true;
 
-    // Track the OS keyboard height so the drawer can match it exactly.
+    // Track the OS keyboard height — record peaks only when stable.
     final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
-    if (keyboardHeight > 100 &&
-        (keyboardHeight - _lastKeyboardHeight).abs() > 1) {
-      _lastKeyboardHeight = keyboardHeight;
-      _persistKeyboardHeight(keyboardHeight);
+    if (keyboardHeight > 200 && _inputFocus.hasFocus) {
+      if (keyboardHeight > _tempMaxHeight) {
+        _tempMaxHeight = keyboardHeight;
+        _heightTimer?.cancel();
+        _heightTimer = Timer(const Duration(milliseconds: 300), () {
+          if (mounted && _tempMaxHeight > 200 && _tempMaxHeight != _lastKeyboardHeight) {
+            debugPrint('[DRAWER] build: keyboardHeight stable peak: $_tempMaxHeight (was $_lastKeyboardHeight)');
+            setState(() {
+              _lastKeyboardHeight = _tempMaxHeight;
+              _persistKeyboardHeight(_lastKeyboardHeight);
+            });
+          }
+        });
+      }
     }
+    if (!_inputFocus.hasFocus && _tempMaxHeight != 0) {
+      _tempMaxHeight = 0;
+    }
+
     // If the system keyboard appears while the drawer is open (e.g. external
-    // keyboard, IME race), hide the drawer — keyboard wins.
-    // Skip during an intentional toggle: the keyboard is still animating out
-    // so keyboardHeight lingers > 0 for a few frames.
+    // keyboard, IME race), hide the drawer.
     if (keyboardHeight > 0 && _drawerOpen && !_intentionalToggle) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _drawerOpen && !_intentionalToggle) _closeDrawer();
       });
     }
 
+    // Safe area bottom padding is only needed when no panel (keyboard/drawer) 
+    // is active. When active, they sit at the very bottom above the system nav bar.
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    final isIdle = keyboardHeight == 0 && !_drawerOpen && _drawerAnimController.value == 0;
+    final bottomPadding = isIdle ? safeBottom : 0.0;
+
+    debugPrint('[DRAWER] build: kbH=$keyboardHeight, lastKbH=$_lastKeyboardHeight, activeH=$_activeDrawerHeight, _drawerOpen=$_drawerOpen, animV=${_drawerAnimController.value}, padding=$bottomPadding');
+
     // Final (post-animation) inset for layout-only consumers (MessageList).
     // Animated visual positioning of the input + drawer is driven by
     // _drawerAnim inside _ChatBody so list paddings don't churn each frame.
-    final targetDrawerInset = _drawerOpen ? _lastKeyboardHeight : 0.0;
-    final targetBottomPanelInset = math.max(targetDrawerInset, keyboardHeight);
+    final targetDrawerInset = _drawerOpen ? _activeDrawerHeight : 0.0;
+    final targetBottomPanelInset = math.max(targetDrawerInset, keyboardHeight) + bottomPadding;
 
     return SessionLifecycleTracker(
       charId: charId,
@@ -321,7 +351,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             state: state,
             inputFocus: _inputFocus,
             drawerOpen: _drawerOpen,
-            drawerHeight: _lastKeyboardHeight,
+            drawerHeight: _activeDrawerHeight,
             keyboardHeight: keyboardHeight,
             targetBottomPanelInset: targetBottomPanelInset,
             drawerAnim: _drawerAnim,
@@ -405,8 +435,11 @@ class _ChatBody extends ConsumerWidget {
     // drawer) + the bottom safe area. We pass the FINAL inset so the list's
     // padding doesn't churn per animation frame.
     final safeBottom = MediaQuery.paddingOf(context).bottom;
-    final messageListBottom =
-        _inputBarApproxHeight + targetBottomPanelInset + safeBottom;
+    final targetDrawerInset = drawerOpen ? drawerHeight : 0.0;
+    final panelHeight = math.max(targetDrawerInset, keyboardHeight);
+    final factor = math.min(1.0, panelHeight / math.max(1.0, safeBottom));
+    final effectiveBottomInset = panelHeight + (safeBottom * (1 - factor));
+    final messageListBottom = _inputBarApproxHeight + effectiveBottomInset;
 
     final preset = ref.watch(themeProvider).activePreset;
 
@@ -508,8 +541,14 @@ class _ChatBody extends ConsumerWidget {
           builder: (context, _) {
             final progress = drawerAnim.value;
             final animatedDrawerInset = drawerHeight * progress;
-            final animatedBottomPanelInset =
-                math.max(animatedDrawerInset, keyboardHeight);
+            final panelHeight = math.max(animatedDrawerInset, keyboardHeight);
+            
+            // Smoothly transition from safe area to panel height.
+            // This prevents a 24px jump when the animation starts.
+            final safeBottom = MediaQuery.paddingOf(context).bottom;
+            final factor = math.min(1.0, panelHeight / math.max(1.0, safeBottom));
+            final animatedBottomPanelInset = panelHeight + (safeBottom * (1 - factor));
+
             // Keep the panel mounted while the close animation runs out.
             final renderDrawer = drawerOpen || progress > 0.001;
 
