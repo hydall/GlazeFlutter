@@ -407,22 +407,27 @@ class _ScrollDownButton extends StatelessWidget {
       ),
       child: !visible
           ? const SizedBox.shrink(key: ValueKey('hide'))
-          : Material(
+          : ClipOval(
               key: const ValueKey('show'),
-              color: context.colors.charBubble.withValues(alpha: 0.85),
-              shape: CircleBorder(
-                side: BorderSide(color: context.cs.outlineVariant),
-              ),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: onTap,
-                child: SizedBox(
-                  width: 40,
-                  height: 40,
-                  child: Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    color: context.cs.primary,
-                    size: 24,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                child: Material(
+                  color: context.colors.charBubble.withValues(alpha: 0.78),
+                  shape: CircleBorder(
+                    side: BorderSide(color: context.cs.outlineVariant),
+                  ),
+                  child: InkWell(
+                    customBorder: const CircleBorder(),
+                    onTap: onTap,
+                    child: SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: context.cs.primary,
+                        size: 24,
+                      ),
+                    ),
                   ),
                 ),
               ),

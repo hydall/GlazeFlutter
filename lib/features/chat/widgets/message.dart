@@ -656,7 +656,13 @@ class _MessageState extends ConsumerState<Message>
 
     Widget decorated = container;
     if (!isStandard && style.elementBlur > 0) {
-      decorated = container;
+      decorated = ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: style.elementBlur, sigmaY: style.elementBlur),
+          child: container,
+        ),
+      );
     }
 
     Widget bubble = Align(

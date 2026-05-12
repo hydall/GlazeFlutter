@@ -113,10 +113,14 @@ class _ChatInputBarState extends State<ChatInputBar> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Container(
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
                 constraints: const BoxConstraints(minHeight: 56),
                 decoration: BoxDecoration(
-                  color: context.cs.surface.withValues(alpha: 0.85),
+                  color: context.cs.surface.withValues(alpha: 0.8),
                   border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                   borderRadius: BorderRadius.circular(28),
                 ),
@@ -148,7 +152,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 ),
               ),
             ),
-          );
+          ),
+        ),
+      );
     }
 
     return SafeArea(
@@ -188,17 +194,19 @@ class _ChatInputBarState extends State<ChatInputBar> {
             ],
             ClipRRect(
               borderRadius: BorderRadius.circular(28),
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 56),
-                decoration: BoxDecoration(
-                  color: context.cs.surface.withValues(alpha: 0.85),
-                  border: Border.all(
-                    color: _guidanceMode
-                        ? Colors.orange.withValues(alpha: 0.3)
-                        : Colors.white.withValues(alpha: 0.05),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 56),
+                  decoration: BoxDecoration(
+                    color: context.cs.surface.withValues(alpha: 0.8),
+                    border: Border.all(
+                      color: _guidanceMode
+                          ? Colors.orange.withValues(alpha: 0.3)
+                          : Colors.white.withValues(alpha: 0.05),
+                    ),
+                    borderRadius: BorderRadius.circular(28),
                   ),
-                  borderRadius: BorderRadius.circular(28),
-                ),
                   child: TextField(
                     controller: _controller,
                     focusNode: widget.focusNode,
@@ -227,7 +235,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   ),
                 ),
               ),
-              Row(
+            ),
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
@@ -302,15 +311,21 @@ class _CircleBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: context.cs.surface.withValues(alpha: 0.85),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-          shape: BoxShape.circle,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: context.cs.surface.withValues(alpha: 0.8),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+              shape: BoxShape.circle,
+            ),
+            child: Center(child: Icon(icon, color: color ?? context.cs.primary, size: 20)),
+          ),
         ),
-        child: Center(child: Icon(icon, color: color ?? context.cs.primary, size: 20)),
       ),
     );
   }
