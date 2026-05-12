@@ -8,6 +8,7 @@ import 'core/services/generation_notification_service.dart';
 import 'core/state/active_selection_provider.dart';
 import 'core/state/lorebook_provider.dart';
 import 'core/services/preset_seeder.dart';
+import 'shared/theme/theme_font_provider.dart';
 import 'core/services/onboarding_service.dart';
 import 'features/character_list/character_detail_screen.dart';
 import 'features/character_list/character_editor_screen.dart';
@@ -25,6 +26,7 @@ import 'features/regex/regex_list_screen.dart';
 import 'features/settings/api_settings_screen.dart';
 import 'features/cloud_sync/widgets/sync_sheet.dart';
 import 'features/settings/app_settings_screen.dart';
+import 'features/settings/theme_preset_screen.dart';
 import 'features/tools/tools_screen.dart';
 import 'shared/shell/shell_screen.dart';
 import 'shared/theme/app_theme.dart';
@@ -129,6 +131,7 @@ final routerProvider = Provider<GoRouter>(
       ),
 
       GoRoute(path: '/settings', builder: (_, __) => const AppSettingsScreen()),
+      GoRoute(path: '/themes', builder: (_, __) => const ThemePresetScreen()),
       GoRoute(path: '/sync', builder: (_, __) => const SyncSheet()),
       GoRoute(path: '/backup', builder: (_, __) => const BackupScreen()),
     ],
@@ -183,11 +186,18 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     final themeSettings = ref.watch(themeProvider);
+    final uiFont = ref.watch(uiFontFamilyProvider).valueOrNull;
+    final preset = themeSettings.activePreset;
+    final mode = preset.themeMode == 'light'
+        ? ThemeMode.light
+        : preset.themeMode == 'dark'
+            ? ThemeMode.dark
+            : themeSettings.mode;
     return MaterialApp.router(
       title: 'Glaze',
-      theme: AppTheme.light(accent: themeSettings.accentColor),
-      darkTheme: AppTheme.dark(accent: themeSettings.accentColor),
-      themeMode: themeSettings.mode,
+      theme: AppTheme.light(preset, fontFamily: uiFont),
+      darkTheme: AppTheme.dark(preset, fontFamily: uiFont),
+      themeMode: mode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
     );

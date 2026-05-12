@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/settings/api_list_provider.dart';
 import '../models/api_config.dart';
 import '../models/character.dart';
 import '../models/chat_message.dart';
@@ -36,9 +37,8 @@ class PromptPayloadBuilder {
     final character = await charRepo.getById(charId);
     if (character == null) throw StateError('Character not found: $charId');
 
-    final apiConfigs = await apiConfigRepo.getAll();
-    final chatApi = apiConfigs.where((cfg) => cfg.mode != 'embedding').firstOrNull;
-    if (chatApi == null) throw StateError('No chat API config available');
+    final chatApi = _ref.read(activeApiConfigProvider);
+    if (chatApi == null || chatApi.mode == 'embedding') throw StateError('No chat API config available');
 
     final activePresetId = _ref.read(activePresetIdProvider);
     final presets = await presetRepo.getAll();

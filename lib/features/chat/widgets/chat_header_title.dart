@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
 
@@ -17,7 +16,7 @@ class ChatHeaderTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color avatarColor = AppColors.accent;
+    Color avatarColor = context.cs.primary;
     if (character.color != null && character.color!.isNotEmpty) {
       try {
         final String c = character.color!.replaceFirst('#', '');
@@ -72,8 +71,8 @@ class ChatHeaderTitle extends StatelessWidget {
                 character.name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textPrimary,
+                style: TextStyle(
+                  color: context.cs.onSurface,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                   height: 1.1,
@@ -84,8 +83,8 @@ class ChatHeaderTitle extends StatelessWidget {
                 sessionName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppColors.textSecondary,
+                style: TextStyle(
+                  color: context.cs.onSurfaceVariant,
                   fontSize: 12,
                   fontWeight: FontWeight.w400,
                   height: 1.1,

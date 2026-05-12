@@ -77,6 +77,15 @@ class JsApiConfigImporter with BackupHelpers {
               .firstWhere((p) => p?['id'] == embProfileId,
                   orElse: () => null);
         }
+      } else {
+        for (final p in allProfiles) {
+          final pMode = p['mode'] as String?;
+          if (pMode == 'embedding') {
+            embProfile = p;
+            embUseSame = false;
+            break;
+          }
+        }
       }
 
       final imggenApiKeys = <String>{};
@@ -96,10 +105,29 @@ class JsApiConfigImporter with BackupHelpers {
         seenIds.add(pid);
 
         if (skipIds.contains(pid)) continue;
+        final pMode = p['mode'] as String?;
+        if (pMode == 'embedding' || pMode == 'image_gen' || pMode == 'memory_books') continue;
         if (pid != llmProfileId) {
           final ep = (p['endpoint'] as String?) ?? '';
           final ak = (p['apiKey'] as String?) ?? (p['key'] as String?) ?? '';
+          final mdl = (p['model'] as String?) ?? '';
+          if (ep.isEmpty && mdl.isEmpty) continue;
           if (ep.isEmpty && imggenApiKeys.contains(ak)) continue;
+          if (embProfile != null) {
+            final embEp = (embProfile['endpoint'] as String?) ?? '';
+            final embMdl = (embProfile['model'] as String?) ?? '';
+            final isEmbDuplicate = (ep.isNotEmpty && embEp.isNotEmpty && ep == embEp) &&
+                (mdl.isNotEmpty && embMdl.isNotEmpty && mdl == embMdl);
+            if (isEmbDuplicate) continue;
+          }
+          if (embUseSame && ep.isNotEmpty) {
+            final embEndpoint = ls['gz_embedding_endpoint'] as String? ??
+                kv['gz_embedding_endpoint'] as String? ?? '';
+            final embModel = ls['gz_embedding_model'] as String? ??
+                kv['gz_embedding_model'] as String? ?? '';
+            final isEmbDuplicate = (ep == embEndpoint) && (mdl == embModel);
+            if (isEmbDuplicate) continue;
+          }
         }
 
         String embEndpoint = '';
@@ -206,6 +234,39 @@ class JsApiConfigImporter with BackupHelpers {
     }
 
     for (final preset in presets) {
+      final presetMode = preset['mode'] as String? ?? 'chat';
+      if (presetMode == 'embedding') {
+        final embEndpoint = (preset['embedding_endpoint'] ??
+                ls['gz_embedding_endpoint'] ??
+                kv['gz_embedding_endpoint'] ??
+                preset['endpoint']) as String? ??
+            '';
+        final embApiKey = (preset['embedding_key'] ??
+                ls['gz_embedding_key'] ??
+                kv['gz_embedding_key'] ??
+                preset['apiKey'] ??
+                preset['key']) as String? ??
+            '';
+        final embModel = (preset['embedding_model'] ??
+                ls['gz_embedding_model'] ??
+                kv['gz_embedding_model'] ??
+                preset['model']) as String? ??
+            '';
+        final chatConfig = await db.select(db.apiConfigs).getSingleOrNull();
+        if (chatConfig != null) {
+          await (db.update(db.apiConfigs)
+                ..where((t) => t.configId.equals(chatConfig.configId)))
+              .write(ApiConfigsCompanion(
+            embeddingUseSame: const Value(false),
+            embeddingEnabled: const Value(true),
+            embeddingEndpoint: Value(embEndpoint),
+            embeddingApiKey: Value(embApiKey),
+            embeddingModel: Value(embModel),
+          ));
+        }
+        continue;
+      }
+
       final embEnabled = preset['embedding_enabled'] ??
           ls['gz_embedding_enabled'] ??
           kv['gz_embedding_enabled'];
@@ -223,7 +284,7 @@ class JsApiConfigImporter with BackupHelpers {
           kv['gz_embedding_model'] as String?;
 
       await insertApiConfig(
-          preset, preset['mode'] as String? ?? 'chat',
+          preset, presetMode,
           embeddingUseSame: embUseSame == 'true' || embUseSame == true,
           embeddingEnabled: embEnabled == 'true' || embEnabled == true,
           embeddingEndpoint: (embEndpoint ?? '') as String,

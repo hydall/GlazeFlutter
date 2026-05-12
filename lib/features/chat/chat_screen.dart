@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -9,9 +11,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/state/character_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/theme_font_provider.dart';
+import '../../shared/theme/theme_provider.dart';
+
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_toast.dart';
+import '../../shared/widgets/noise_overlay.dart';
 import '../settings/app_settings_provider.dart';
 import 'chat_actions_service.dart';
 import 'chat_provider.dart';
@@ -190,6 +196,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     
     final appSettings = ref.watch(appSettingsProvider).valueOrNull;
     final virtualKeyboardSend = appSettings?.virtualKeyboardSend ?? false;
+    final enterToSend = appSettings?.enterToSend ?? true;
 
     // Track the OS keyboard height so the drawer can match it exactly.
     final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
@@ -225,15 +232,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ? TextField(
                 controller: _searchController,
                 autofocus: true,
-                style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+                style: TextStyle(color: context.cs.onSurface, fontSize: 16),
                 decoration: InputDecoration(
                   hintText: 'Search messages...',
-                  hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+                  hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
                   border: InputBorder.none,
                   isDense: true,
                   suffixIcon: _searchQuery.isNotEmpty 
                       ? IconButton(
-                          icon: const Icon(Icons.close, color: AppColors.textPrimary, size: 20),
+                          icon: Icon(Icons.close, color: context.cs.onSurface, size: 20),
                           onPressed: () {
                             _searchController.clear();
                             setState(() {
@@ -294,7 +301,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             : [
           IconButton(
             icon: const Icon(Icons.search),
-            color: AppColors.accent,
+            color: context.cs.primary,
             onPressed: () {
               setState(() {
                 _showSearch = true;
@@ -332,6 +339,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             onToggleDrawer: _toggleDrawer,
             onScrollDirection: _onScrollDirection,
             virtualKeyboardSend: virtualKeyboardSend,
+            enterToSend: enterToSend,
           ),
         ),
       ),
@@ -365,6 +373,7 @@ class _ChatBody extends ConsumerWidget {
   final VoidCallback onToggleDrawer;
   final ValueChanged<ScrollDirection>? onScrollDirection;
   final bool virtualKeyboardSend;
+  final bool enterToSend;
 
   const _ChatBody({
     required this.charId,
@@ -385,6 +394,7 @@ class _ChatBody extends ConsumerWidget {
     required this.onToggleDrawer,
     this.onScrollDirection,
     this.virtualKeyboardSend = false,
+    this.enterToSend = true,
   });
 
   static const double _inputBarApproxHeight = 130;
@@ -398,8 +408,40 @@ class _ChatBody extends ConsumerWidget {
     final messageListBottom =
         _inputBarApproxHeight + targetBottomPanelInset + safeBottom;
 
+    final preset = ref.watch(themeProvider).activePreset;
+
     return Stack(
       children: [
+        if (ref.watch(bgImageProvider).valueOrNull case final path?)
+          Positioned.fill(
+            child: ClipRect(
+              child: preset.bgBlur > 0
+                  ? ImageFiltered(
+                      imageFilter: ImageFilter.blur(
+                        sigmaX: preset.bgBlur,
+                        sigmaY: preset.bgBlur,
+                      ),
+                      child: Image.file(
+                        File(path),
+                        fit: BoxFit.cover,
+                        opacity: AlwaysStoppedAnimation(preset.bgOpacity.clamp(0.0, 1.0)),
+                      ),
+                    )
+                  : Image.file(
+                      File(path),
+                      fit: BoxFit.cover,
+                      opacity: AlwaysStoppedAnimation(preset.bgOpacity.clamp(0.0, 1.0)),
+                    ),
+            ),
+          ),
+        if (preset.bgNoiseOpacity > 0)
+          Positioned.fill(
+            child: NoiseOverlay(opacity: preset.bgNoiseOpacity, intensity: preset.bgNoiseIntensity),
+          ),
+        if (preset.noiseOpacity > 0)
+          Positioned.fill(
+            child: NoiseOverlay(opacity: preset.noiseOpacity, intensity: preset.noiseIntensity),
+          ),
         Positioned.fill(
           child: NotificationListener<UserScrollNotification>(
             onNotification: (notification) {
@@ -408,7 +450,8 @@ class _ChatBody extends ConsumerWidget {
               }
               return false;
             },
-            child: MessageList(
+            child: RepaintBoundary(
+              child: MessageList(
               messages: state.messages,
               streamingText: state.isGenerating ? state.streamingText : null,
               streamingReasoning:
@@ -420,6 +463,7 @@ class _ChatBody extends ConsumerWidget {
               searchQuery: searchQuery,
               searchMatches: searchMatches,
               searchCurrentIndex: searchCurrentIndex,
+            ),
             ),
           ),
         ),
@@ -492,20 +536,6 @@ class _ChatBody extends ConsumerWidget {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (state.error != null)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 4,
-                          ),
-                          child: Text(
-                            state.error!,
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.error,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
                       ChatInputBar(
                         focusNode: inputFocus,
                         showSearchControls: showSearchControls,
@@ -516,6 +546,7 @@ class _ChatBody extends ConsumerWidget {
                         onSearchPrev: onSearchPrev,
                         isDrawerOpen: drawerOpen,
                         virtualKeyboardSend: virtualKeyboardSend,
+                        enterToSend: enterToSend,
                         onSend: (text) {
                           if (text.trim().isEmpty) return;
                           ref
@@ -583,10 +614,10 @@ class _ChatSearchBar extends StatelessWidget {
         Expanded(
           child: TextField(
             autofocus: true,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 16),
+            style: TextStyle(color: context.cs.onSurface, fontSize: 16),
             decoration: InputDecoration(
               hintText: 'Search messages...',
-              hintStyle: TextStyle(color: AppColors.textSecondary.withValues(alpha: 0.5)),
+              hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
               border: InputBorder.none,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -597,23 +628,23 @@ class _ChatSearchBar extends StatelessWidget {
         if (query.isNotEmpty) ...[
           Text(
             matchCount > 0 ? '${currentIndex + 1}/$matchCount' : '0/0',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
           ),
           IconButton(
-            icon: const Icon(Icons.keyboard_arrow_up, size: 24, color: AppColors.textPrimary),
+            icon: Icon(Icons.keyboard_arrow_up, size: 24, color: context.cs.onSurface),
             onPressed: onPrevious,
             padding: const EdgeInsets.symmetric(horizontal: 4),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
           IconButton(
-            icon: const Icon(Icons.keyboard_arrow_down, size: 24, color: AppColors.textPrimary),
+            icon: Icon(Icons.keyboard_arrow_down, size: 24, color: context.cs.onSurface),
             onPressed: onNext,
             padding: const EdgeInsets.symmetric(horizontal: 4),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
         ],
         IconButton(
-          icon: const Icon(Icons.close, size: 24, color: AppColors.textPrimary),
+          icon: Icon(Icons.close, size: 24, color: context.cs.onSurface),
           onPressed: onClose,
           padding: const EdgeInsets.symmetric(horizontal: 4),
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

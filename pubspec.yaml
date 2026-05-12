@@ -36,6 +36,7 @@ dependencies:
   app_links: ^6.3.3
   gradient_blur: ^1.0.2
   image_picker: ^1.2.2
+  flex_color_scheme: ^8.4.0
 
 dev_dependencies:
   flutter_test:

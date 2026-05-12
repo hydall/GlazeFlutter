@@ -62,8 +62,8 @@ class CatalogGrid extends ConsumerWidget {
                 child: Center(
                   child: Text(
                     state.error!,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 13,
                     ),
                     textAlign: TextAlign.center,
@@ -77,9 +77,9 @@ class CatalogGrid extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
                 child: Text(
                   '${state.total} result${state.total == 1 ? '' : 's'}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: AppColors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -93,8 +93,8 @@ class CatalogGrid extends ConsumerWidget {
                 child: Center(
                   child: Text(
                     state.error != null ? '' : 'No characters found',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 14,
                     ),
                   ),
@@ -159,16 +159,16 @@ class CatalogGrid extends ConsumerWidget {
               ),
             ),
           if (state.loading)
-            const SliverToBoxAdapter(
+            SliverToBoxAdapter(
               child: Padding(
-                padding: EdgeInsets.only(bottom: 24),
+                padding: const EdgeInsets.only(bottom: 24),
                 child: Center(
                   child: SizedBox(
                     width: 28,
                     height: 28,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
-                      color: AppColors.accent,
+                      color: context.cs.primary,
                     ),
                   ),
                 ),
@@ -183,7 +183,7 @@ class CatalogGrid extends ConsumerWidget {
                     'End of results',
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textSecondary.withValues(alpha: 0.5),
+                      color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
                     ),
                   ),
                 ),
@@ -289,9 +289,9 @@ class _ActiveTagsRow extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
-                  color: AppColors.accent.withValues(alpha: 0.2),
+                  color: context.cs.primary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.accent),
+                  border: Border.all(color: context.cs.primary),
                 ),
                 alignment: Alignment.center,
                 child: Row(

@@ -46,7 +46,7 @@ class RegexListScreen extends ConsumerWidget {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.code, size: 64, color: AppColors.textSecondary),
+                  Icon(Icons.code, size: 64, color: context.cs.onSurfaceVariant),
                   const SizedBox(height: 16),
                   const Text('No regex scripts yet'),
                   const SizedBox(height: 8),
@@ -67,6 +67,7 @@ class RegexListScreen extends ConsumerWidget {
               children: [
                 if (presetRegexes.isNotEmpty) ...[
                   _sectionHeader(
+                    context,
                     'Preset Regexes',
                     activePreset?.name ?? 'Default',
                     Icons.label,
@@ -80,7 +81,7 @@ class RegexListScreen extends ConsumerWidget {
                   const SizedBox(height: 16),
                 ],
                 if (globalRegexes.isNotEmpty) ...[
-                  _sectionHeader('Global Regexes', 'Always active', Icons.public),
+                  _sectionHeader(context, 'Global Regexes', 'Always active', Icons.public),
                   for (final r in globalRegexes)
                     _GlobalRegexItem(regex: r),
                 ],
@@ -92,29 +93,29 @@ class RegexListScreen extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton.small(
         onPressed: () => _showAddMenu(context, ref),
-        backgroundColor: AppColors.accent,
+        backgroundColor: context.cs.primary,
         foregroundColor: Colors.black,
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  Widget _sectionHeader(String title, String subtitle, IconData icon) {
+  Widget _sectionHeader(BuildContext context, String title, String subtitle, IconData icon) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8, top: 8),
       child: Row(
         children: [
-          Icon(icon, size: 16, color: AppColors.accent),
+          Icon(icon, size: 16, color: context.cs.primary),
           const SizedBox(width: 6),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+          Text(title, style: TextStyle(fontWeight: FontWeight.w600, color: context.cs.onSurface)),
           const SizedBox(width: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.15),
+              color: context.cs.primary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.accent)),
+            child: Text(subtitle, style: TextStyle(fontSize: 11, color: context.cs.primary)),
           ),
         ],
       ),
@@ -128,7 +129,7 @@ class RegexListScreen extends ConsumerWidget {
       items: [
         BottomSheetItem(
           icon: Icons.label,
-          iconColor: AppColors.accent,
+          iconColor: context.cs.primary,
           label: 'Add to Active Preset',
           onTap: () {
             Navigator.pop(context);
@@ -137,7 +138,7 @@ class RegexListScreen extends ConsumerWidget {
         ),
         BottomSheetItem(
           icon: Icons.public,
-          iconColor: AppColors.accent,
+          iconColor: context.cs.primary,
           label: 'Add Globally',
           onTap: () {
             Navigator.pop(context);
@@ -207,19 +208,19 @@ class _PresetRegexItem extends ConsumerWidget {
                   Icon(
                     regex.disabled ? Icons.code_off : Icons.code,
                     size: 16,
-                    color: regex.disabled ? AppColors.textSecondary : AppColors.accent,
+                    color: regex.disabled ? context.cs.onSurfaceVariant : context.cs.primary,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       'From: ${preset.name}',
-                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
                     ),
                   ),
                   Switch(
                     value: !regex.disabled,
                     onChanged: (v) => _updateRegex(ref, regex.copyWith(disabled: !v)),
-                    activeColor: AppColors.accent,
+                    activeColor: context.cs.primary,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ],
@@ -257,7 +258,7 @@ class _GlobalRegexItem extends ConsumerWidget {
       color: Colors.white.withValues(alpha: 0.03),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: AppColors.accent.withValues(alpha: 0.15)),
+        side: BorderSide(color: context.cs.primary.withValues(alpha: 0.15)),
       ),
       child: Padding(
         padding: const EdgeInsets.only(left: 4),
@@ -271,14 +272,14 @@ class _GlobalRegexItem extends ConsumerWidget {
                   Icon(
                     regex.disabled ? Icons.public_off : Icons.public,
                     size: 16,
-                    color: regex.disabled ? AppColors.textSecondary : AppColors.accent,
+                    color: regex.disabled ? context.cs.onSurfaceVariant : context.cs.primary,
                   ),
                   const SizedBox(width: 6),
-                  const Expanded(child: Text('Global', style: TextStyle(fontSize: 11, color: AppColors.textSecondary))),
+                  Expanded(child: Text('Global', style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant))),
                   Switch(
                     value: !regex.disabled,
                     onChanged: (v) => ref.read(globalRegexProvider.notifier).updateRegex(regex.copyWith(disabled: !v)),
-                    activeColor: AppColors.accent,
+                    activeColor: context.cs.primary,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   IconButton(

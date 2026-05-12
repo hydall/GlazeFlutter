@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-
 import '../theme/app_colors.dart';
 
 // ─── Shared painter ──────────────────────────────────────────────────────────
@@ -126,7 +125,7 @@ class _GlowInkWellState extends State<GlowInkWell>
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.glowColor ?? AppColors.accent;
+    final color = widget.glowColor ?? context.cs.primary;
 
     Widget inner = buildRippleOverlay(color, widget.child);
 
@@ -172,7 +171,7 @@ class _GlowRippleOverlayState extends State<GlowRippleOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final color = widget.glowColor ?? AppColors.accent;
+    final color = widget.glowColor ?? context.cs.primary;
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: _onPointerDown,

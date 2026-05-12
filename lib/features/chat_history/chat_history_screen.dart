@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/utils/html_to_markdown.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
+
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_toast.dart';
@@ -37,13 +38,13 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
         (_searchQuery.isNotEmpty ? 32.0 : 0.0);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.cs.surface,
       body: Stack(
         children: [
           Positioned.fill(
             child: sessionsAsync.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(color: AppColors.accent),
+              loading: () => Center(
+                child: CircularProgressIndicator(color: context.cs.primary),
               ),
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (list) {
@@ -94,12 +95,12 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
           Icon(
             Icons.chat_bubble_outline,
             size: 64,
-            color: AppColors.textSecondary.withValues(alpha: 0.5),
+            color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'No chats yet',
-            style: TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: context.cs.onSurfaceVariant),
           ),
           const SizedBox(height: 20),
           GlazePillButton(
@@ -186,7 +187,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                     height: 44,
                     child: IconButton(
                       icon: const Icon(Icons.search_rounded, size: 22),
-                      color: AppColors.accent,
+                      color: context.cs.primary,
                       onPressed: () async {
                         final query = await showSearch<String>(
                           context: context,
@@ -207,18 +208,18 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                 children: [
                   Text(
                     'Filter: "$_searchQuery"',
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 12,
                     ),
                   ),
                   const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () => setState(() => _searchQuery = ''),
-                    child: const Icon(
+                    child: Icon(
                       Icons.close,
                       size: 16,
-                      color: AppColors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -249,7 +250,7 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
 
   @override
   ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
-    appBarTheme: const AppBarTheme(backgroundColor: AppColors.background),
+    appBarTheme: AppBarTheme(backgroundColor: context.cs.surface),
   );
 
   @override
@@ -264,12 +265,12 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
   );
 
   @override
-  Widget buildResults(BuildContext context) => _buildList();
+  Widget buildResults(BuildContext context) => _buildList(context);
 
   @override
-  Widget buildSuggestions(BuildContext context) => _buildList();
+  Widget buildSuggestions(BuildContext context) => _buildList(context);
 
-  Widget _buildList() {
+  Widget _buildList(BuildContext context) {
     final sessions = ref.read(chatHistoryProvider).valueOrNull ?? [];
     final q = query.toLowerCase();
     final filtered = sessions
@@ -282,10 +283,10 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
         .toList();
 
     if (filtered.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'No chats found',
-          style: TextStyle(color: AppColors.textSecondary),
+          style: TextStyle(color: context.cs.onSurfaceVariant),
         ),
       );
     }
@@ -302,7 +303,7 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
                   height: 80,
                 ))
               : CircleAvatar(
-                  backgroundColor: AppColors.accent,
+                  backgroundColor: context.cs.primary,
                   child: Text(
                     s.characterName.isNotEmpty
                         ? s.characterName[0].toUpperCase()
@@ -312,14 +313,14 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
                 ),
           title: Text(
             s.characterName,
-            style: const TextStyle(color: AppColors.textPrimary),
+            style: TextStyle(color: context.cs.onSurface),
           ),
           subtitle: Text(
             stripHtml(s.lastMessage).replaceAll('\n', ' '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
+            style: TextStyle(
+              color: context.cs.onSurfaceVariant,
               fontSize: 12,
             ),
           ),
@@ -354,7 +355,7 @@ class _SessionTile extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           children: [
-            _buildAvatar(),
+            _buildAvatar(context),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -367,25 +368,25 @@ class _SessionTile extends ConsumerWidget {
                       Expanded(
                         child: Text(
                           info.characterName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w500,
                             fontSize: 16,
-                            color: AppColors.textPrimary,
+                            color: context.cs.onSurface,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      _buildTime(),
+                      _buildTime(context),
                     ],
                   ),
                   const SizedBox(height: 2),
                   Text(
                     stripHtml(info.lastMessage).replaceAll('\n', ' '),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color: AppColors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -425,10 +426,10 @@ class _SessionTile extends ConsumerWidget {
                       info.sessionName?.isNotEmpty == true
                           ? info.sessionName!
                           : 'Session #${info.sessionIndex}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
-                        color: AppColors.textPrimary,
+                        color: context.cs.onSurface,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -445,18 +446,18 @@ class _SessionTile extends ConsumerWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.description_outlined,
                           size: 12,
-                          color: AppColors.textSecondary,
+                          color: context.cs.onSurfaceVariant,
                         ),
                         const SizedBox(width: 4),
                         Text(
                           '${info.messageCount} messages${info.lastMessageTime > 0 ? ' · ${_formatTime()}' : ''}',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: AppColors.textSecondary,
+                            color: context.cs.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -467,9 +468,9 @@ class _SessionTile extends ConsumerWidget {
               const SizedBox(height: 4),
               Text(
                 stripHtml(info.lastMessage).replaceAll('\n', ' '),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: context.cs.onSurfaceVariant,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -492,6 +493,27 @@ class _SessionTile extends ConsumerWidget {
     if (diff.inDays < 1) return '${diff.inHours}h';
     if (diff.inDays < 7) return '${diff.inDays}d';
     return '${dt.day}/${dt.month}';
+  }
+
+  void _showRenameDialog(BuildContext context, WidgetRef ref) {
+    final currentName = info.sessionName?.isNotEmpty == true
+        ? info.sessionName!
+        : 'Session #${info.sessionIndex}';
+    GlazeBottomSheet.show(
+      context,
+      title: 'Rename Session',
+      input: BottomSheetInput(
+        placeholder: 'Session name',
+        value: currentName,
+        confirmLabel: 'Rename',
+        onConfirm: (val) {
+          Navigator.pop(context);
+          if (val.trim().isNotEmpty) {
+            ref.read(chatHistoryProvider.notifier).renameSession(info.sessionId, val.trim());
+          }
+        },
+      ),
+    );
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref) {
@@ -539,6 +561,14 @@ class _SessionTile extends ConsumerWidget {
           },
         ),
         BottomSheetItem(
+          icon: Icons.drive_file_rename_outline,
+          label: 'Rename',
+          onTap: () {
+            Navigator.of(context).pop();
+            _showRenameDialog(context, ref);
+          },
+        ),
+        BottomSheetItem(
           icon: Icons.delete_outline,
           label: 'Delete',
           isDestructive: true,
@@ -552,7 +582,7 @@ class _SessionTile extends ConsumerWidget {
   }
 
 
-  Widget _buildAvatar() {
+  Widget _buildAvatar(BuildContext context) {
     if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
       return CircleAvatar(
         backgroundImage: ResizeImage(
@@ -564,7 +594,7 @@ class _SessionTile extends ConsumerWidget {
       );
     }
     return CircleAvatar(
-      backgroundColor: AppColors.accent,
+      backgroundColor: context.cs.primary,
       child: Text(
         info.characterName.isNotEmpty
             ? info.characterName[0].toUpperCase()
@@ -574,13 +604,13 @@ class _SessionTile extends ConsumerWidget {
     );
   }
 
-  Widget _buildTime() {
+  Widget _buildTime(BuildContext context) {
     final text = _formatTime();
     if (text.isEmpty) return const SizedBox.shrink();
 
     return Text(
       text,
-      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
     );
   }
 }
@@ -607,7 +637,7 @@ class _GroupHeader extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           children: [
-            _buildAvatar(latest),
+            _buildAvatar(context, latest),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -620,17 +650,17 @@ class _GroupHeader extends ConsumerWidget {
                       Expanded(
                         child: Text(
                           latest.characterName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w500,
                             fontSize: 16,
-                            color: AppColors.textPrimary,
+                            color: context.cs.onSurface,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(width: 8),
-                      _buildTime(latest),
+                      _buildTime(context, latest),
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -639,16 +669,16 @@ class _GroupHeader extends ConsumerWidget {
                     children: [
                       Text(
                         '${sessions.length} sessions',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: AppColors.textSecondary,
+                          color: context.cs.onSurfaceVariant,
                         ),
                       ),
                       Icon(
                         isExpanded
                             ? Icons.keyboard_arrow_up
                             : Icons.keyboard_arrow_down,
-                        color: AppColors.textSecondary,
+                        color: context.cs.onSurfaceVariant,
                         size: 20,
                       ),
                     ],
@@ -656,9 +686,9 @@ class _GroupHeader extends ConsumerWidget {
                   const SizedBox(height: 2),
                   Text(
                     stripHtml(latest.lastMessage).replaceAll('\n', ' '),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -672,7 +702,7 @@ class _GroupHeader extends ConsumerWidget {
     );
   }
 
-  Widget _buildAvatar(ChatSessionInfo info) {
+  Widget _buildAvatar(BuildContext context, ChatSessionInfo info) {
     if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
       return CircleAvatar(
         backgroundImage: ResizeImage(
@@ -684,7 +714,7 @@ class _GroupHeader extends ConsumerWidget {
       );
     }
     return CircleAvatar(
-      backgroundColor: AppColors.accent,
+      backgroundColor: context.cs.primary,
       child: Text(
         info.characterName.isNotEmpty
             ? info.characterName[0].toUpperCase()
@@ -694,7 +724,7 @@ class _GroupHeader extends ConsumerWidget {
     );
   }
 
-  Widget _buildTime(ChatSessionInfo info) {
+  Widget _buildTime(BuildContext context, ChatSessionInfo info) {
     if (info.lastMessageTime == 0) return const SizedBox.shrink();
     final dt = DateTime.fromMillisecondsSinceEpoch(info.lastMessageTime);
     final now = DateTime.now();
@@ -715,7 +745,7 @@ class _GroupHeader extends ConsumerWidget {
 
     return Text(
       text,
-      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
     );
   }
 

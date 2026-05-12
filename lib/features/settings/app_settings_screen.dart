@@ -55,7 +55,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           items: [
             MenuItem(
               icon: Icons.palette_outlined,
-              label: 'Custom Theme',
+              label: 'Themes',
               trailing: Container(
                 width: 12,
                 height: 12,
@@ -64,7 +64,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                   shape: BoxShape.circle,
                 ),
               ),
-              onTap: () => _showAccentPicker(context, ref),
+              onTap: () => context.push('/themes'),
             ),
             MenuItem(
               icon: Icons.brightness_6_outlined,
@@ -223,7 +223,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                     ? Icons.radio_button_checked
                     : Icons.radio_button_off,
                 iconColor:
-                    mode == current ? AppColors.accent : AppColors.textSecondary,
+                    mode == current ? context.cs.primary : context.cs.onSurfaceVariant,
                 onTap: () {
                   Navigator.pop(context);
                   ref.read(themeProvider.notifier).setMode(mode);
@@ -290,7 +290,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               ? Icons.radio_button_checked
               : Icons.radio_button_off,
           iconColor:
-              s.language == 'en' ? AppColors.accent : AppColors.textSecondary,
+              s.language == 'en' ? context.cs.primary : context.cs.onSurfaceVariant,
           onTap: () {
             Navigator.pop(context);
             ref.read(appSettingsProvider.notifier).save(s.copyWith(language: 'en'));
@@ -302,7 +302,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               ? Icons.radio_button_checked
               : Icons.radio_button_off,
           iconColor:
-              s.language == 'ru' ? AppColors.accent : AppColors.textSecondary,
+              s.language == 'ru' ? context.cs.primary : context.cs.onSurfaceVariant,
           onTap: () {
             Navigator.pop(context);
             ref.read(appSettingsProvider.notifier).save(s.copyWith(language: 'ru'));
@@ -323,8 +323,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               ? Icons.radio_button_checked
               : Icons.radio_button_off,
           iconColor: s.chatLayout == 'default'
-              ? AppColors.accent
-              : AppColors.textSecondary,
+              ? context.cs.primary
+              : context.cs.onSurfaceVariant,
           onTap: () {
             Navigator.pop(context);
             ref
@@ -338,8 +338,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               ? Icons.radio_button_checked
               : Icons.radio_button_off,
           iconColor: s.chatLayout == 'bubble'
-              ? AppColors.accent
-              : AppColors.textSecondary,
+              ? context.cs.primary
+              : context.cs.onSurfaceVariant,
           onTap: () {
             Navigator.pop(context);
             ref

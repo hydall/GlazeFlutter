@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/llm/embedding_service.dart';
 import '../../core/llm/sse_client.dart';
@@ -89,7 +90,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
 
   @override
   void dispose() {
-    _saveTimer?.cancel();
+    _flushSave();
     _scrollController.dispose();
     for (final c in _ctrls) {
       c.dispose();
@@ -97,9 +98,15 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     super.dispose();
   }
 
-  // ── State helpers ─────────────────────────────────────────────────────────────
+  void _flushSave() {
+    if (_saveTimer?.isActive == true) {
+      _saveTimer!.cancel();
+      _save();
+    }
+  }
 
   void _goBack() {
+    _flushSave();
     if (widget.startExpanded) {
       context.go('/tools');
     } else {
@@ -111,6 +118,16 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     if (_loading) return;
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 800), _save);
+  }
+
+  void _persistActiveId(String? id) {
+    SharedPreferences.getInstance().then((prefs) {
+      if (id != null) {
+        prefs.setString('activeApiConfigId', id);
+      } else {
+        prefs.remove('activeApiConfigId');
+      }
+    });
   }
 
   void _loadActivePreset() {
@@ -267,9 +284,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         constraints: const BoxConstraints(maxWidth: 220),
         decoration: BoxDecoration(
-          color: AppColors.accent.withValues(alpha: 0.12),
+          color: context.cs.primary.withValues(alpha: 0.12),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.accent.withValues(alpha: 0.22)),
+          border: Border.all(color: context.cs.primary.withValues(alpha: 0.22)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -277,8 +294,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             Flexible(
               child: Text(
                 activeName,
-                style: const TextStyle(
-                  color: AppColors.accent,
+                style: TextStyle(
+                  color: context.cs.primary,
                   fontWeight: FontWeight.w600,
                   fontSize: 13,
                 ),
@@ -287,9 +304,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               ),
             ),
             const SizedBox(width: 2),
-            const Icon(
+            Icon(
               Icons.keyboard_arrow_down_rounded,
-              color: AppColors.accent,
+              color: context.cs.primary,
               size: 16,
             ),
           ],
@@ -303,11 +320,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.api_rounded, size: 64, color: AppColors.textSecondary),
+          Icon(Icons.api_rounded, size: 64, color: context.cs.onSurfaceVariant),
           const SizedBox(height: 16),
           Text(
             'No API configs yet',
-            style: TextStyle(color: AppColors.textSecondary, fontSize: 15),
+            style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 15),
           ),
           const SizedBox(height: 12),
           FilledButton.tonal(
@@ -361,9 +378,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                         ),
                       )
                     : IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.keyboard_arrow_down_rounded,
-                          color: AppColors.textSecondary,
+                          color: context.cs.onSurfaceVariant,
                           size: 22,
                         ),
                         tooltip: _fetchedModels.isEmpty
@@ -382,7 +399,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                     _showApiKey
                         ? Icons.visibility_off_outlined
                         : Icons.visibility_outlined,
-                    color: AppColors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                     size: 20,
                   ),
                   onPressed: () => setState(() => _showApiKey = !_showApiKey),
@@ -581,9 +598,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.accent,
+                  foregroundColor: context.cs.primary,
                   side: BorderSide(
-                    color: AppColors.accent.withValues(alpha: 0.4),
+                    color: context.cs.primary.withValues(alpha: 0.4),
                   ),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
@@ -622,9 +639,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       context,
       title: 'API Configs',
       headerAction: IconButton(
-        icon: const Icon(
+        icon: Icon(
           Icons.add_circle_outline_rounded,
-          color: AppColors.accent,
+          color: context.cs.primary,
         ),
         tooltip: 'New config',
         onPressed: () {
@@ -655,12 +672,13 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             if (list.length > 1)
               BottomSheetAction(
                 icon: Icons.delete_outline_rounded,
-                color: AppColors.textSecondary,
+                color: context.cs.onSurfaceVariant,
                 onTap: () async {
                   Navigator.of(context, rootNavigator: true).pop();
                   await ref.read(apiListProvider.notifier).remove(config.id);
                   if (activeId == config.id) {
                     ref.read(activeApiPresetIdProvider.notifier).state = null;
+                    _persistActiveId(null);
                     _loadedPresetId = null;
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) _loadActivePreset();
@@ -673,6 +691,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             Navigator.of(context, rootNavigator: true).pop();
             _saveTimer?.cancel();
             ref.read(activeApiPresetIdProvider.notifier).state = config.id;
+            _persistActiveId(config.id);
             _loadedPresetId = null;
             _loadFromConfig(config);
           },
@@ -699,6 +718,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           );
           await ref.read(apiListProvider.notifier).put(newConfig);
           ref.read(activeApiPresetIdProvider.notifier).state = newConfig.id;
+          _persistActiveId(newConfig.id);
           _loadedPresetId = null;
           _loadFromConfig(newConfig);
         },
@@ -723,7 +743,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       items: models.map((m) => BottomSheetItem(
         label: m,
         icon: m == current ? Icons.check : null,
-        iconColor: AppColors.accent,
+        iconColor: context.cs.primary,
         onTap: () {
           Navigator.of(context, rootNavigator: true).pop();
           _modelCtrl.text = m;
@@ -743,7 +763,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         return BottomSheetItem(
           label: label,
           icon: active ? Icons.check : null,
-          iconColor: AppColors.accent,
+          iconColor: context.cs.primary,
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             setState(() => _reasoningEffort = e);

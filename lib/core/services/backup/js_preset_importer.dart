@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../shared/theme/theme_preset.dart';
+import '../../../shared/theme/theme_preset_storage.dart';
 import '../../db/app_db.dart';
 import '../image_storage_service.dart';
 import 'backup_helpers.dart';
@@ -127,35 +129,46 @@ class JsPresetImporter with BackupHelpers {
     }
 
     final presetsRaw = ls['gz_theme_presets'] ?? kv['gz_theme_presets'];
-    Map<String, dynamic>? activePreset;
+    List<dynamic>? presetsList;
     if (presetsRaw is String) {
       try {
-        final list = jsonDecode(presetsRaw) as List<dynamic>;
-        final activeId = ls['gz_theme_active_preset'] ?? 'default';
-        for (final p in list) {
-          if (p is Map<String, dynamic> && p['id']?.toString() == activeId) {
-            activePreset = p;
-            break;
-          }
-        }
+        presetsList = jsonDecode(presetsRaw) as List<dynamic>;
       } catch (_) {}
     } else if (presetsRaw is List) {
-      final activeId = ls['gz_theme_active_preset'] ?? 'default';
-      for (final p in presetsRaw) {
-        if (p is Map<String, dynamic> && p['id']?.toString() == activeId) {
-          activePreset = p;
-          break;
-        }
+      presetsList = presetsRaw;
+    }
+
+    if (presetsList == null || presetsList.isEmpty) return;
+
+    final activeId = (ls['gz_theme_active_preset'] ?? kv['gz_theme_active_preset'] ?? 'default').toString();
+    final storage = ThemePresetStorage();
+    final imported = <ThemePreset>[];
+
+    for (final p in presetsList) {
+      if (p is! Map<String, dynamic>) continue;
+      try {
+        final preset = ThemePreset.fromJson(p);
+        imported.add(preset);
+      } catch (_) {
+        continue;
       }
     }
 
-    if (activePreset != null) {
-      final chatLayout = activePreset['chatLayout'] as String?;
-      if (chatLayout != null && chatLayout.isNotEmpty) {
+    if (imported.isNotEmpty) {
+      await storage.saveAll(imported);
+
+      final active = imported.firstWhere(
+        (p) => p.id == activeId,
+        orElse: () => imported.first,
+      );
+      await storage.setActive(active.id);
+
+      final chatLayout = active.chatLayout;
+      if (chatLayout.isNotEmpty) {
         await prefs.setString('chatLayout', chatLayout);
       }
-      final accent = activePreset['accentColor'] as String?;
-      if (accent != null && accent.isNotEmpty) {
+      final accent = active.accentColor;
+      if (accent.isNotEmpty) {
         final clean = accent.replaceFirst('#', '');
         await prefs.setString('theme_accent', clean);
       }

@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
-import '../../../shared/theme/app_colors.dart';
+import '../../../features/settings/api_list_provider.dart';
+
 import '../../../shared/widgets/generic_editor.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../../core/llm/summary_service.dart';
@@ -116,11 +117,8 @@ class _SummarySheetState extends ConsumerState<SummarySheet> {
     final chatState = ref.read(chatProvider(widget.charId)).value;
     final session = chatState?.session;
     if (session == null) return;
-    final apiConfigs = await ref.read(apiConfigRepoProvider).getAll();
-    final chatApi = apiConfigs
-        .where((cfg) => cfg.mode != 'embedding')
-        .firstOrNull;
-    if (chatApi == null) {
+    final chatApi = ref.read(activeApiConfigProvider);
+    if (chatApi == null || chatApi.mode == 'embedding') {
       if (mounted) {
         GlazeBottomSheet.show(
           context,

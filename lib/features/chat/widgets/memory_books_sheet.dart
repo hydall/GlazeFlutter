@@ -561,24 +561,24 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Memory Books', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+                    Text('Memory Books', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.cs.onSurface)),
                     const SizedBox(height: 2),
-                    Text('Session ${widget.sessionId.substring(0, 8)}...', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    Text('Session ${widget.sessionId.substring(0, 8)}...', style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant)),
                   ],
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: AppColors.accent.withValues(alpha: 0.1),
+                  color: context.cs.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(_searchModelLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.accent)),
+                child: Text(_searchModelLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.cs.primary)),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(_settingsSummary, style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+          Text(_settingsSummary, style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant)),
         ],
       ),
     );
@@ -596,12 +596,12 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Search type', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+            Text('Search type', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.cs.onSurface)),
             Row(
               children: [
-                Text(_searchTypeLabel, style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                Text(_searchTypeLabel, style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant)),
                 const SizedBox(width: 4),
-                Icon(Icons.arrow_drop_down, size: 20, color: AppColors.textSecondary),
+                Icon(Icons.arrow_drop_down, size: 20, color: context.cs.onSurfaceVariant),
               ],
             ),
           ],
@@ -632,8 +632,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       ),
       child: Column(
         children: [
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
-          Text(label, style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: context.cs.onSurface)),
+          Text(label, style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant)),
         ],
       ),
     );
@@ -647,8 +647,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: _openSettings,
-                icon: Icon(Icons.settings, size: 16, color: AppColors.textSecondary),
-                label: Text('Settings', style: TextStyle(color: AppColors.textPrimary)),
+                icon: Icon(Icons.settings, size: 16, color: context.cs.onSurfaceVariant),
+                label: Text('Settings', style: TextStyle(color: context.cs.onSurface)),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -660,8 +660,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: _scanChat,
-                icon: Icon(Icons.search, size: 16, color: AppColors.textSecondary),
-                label: Text('Scan Chat', style: TextStyle(color: AppColors.textPrimary)),
+                icon: Icon(Icons.search, size: 16, color: context.cs.onSurfaceVariant),
+                label: Text('Scan Chat', style: TextStyle(color: context.cs.onSurface)),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -676,7 +676,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                 icon: Icon(Icons.add, size: 16),
                 label: Text('Add'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.accent,
+                  backgroundColor: context.cs.primary,
                   foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   padding: const EdgeInsets.symmetric(vertical: 12),
@@ -691,8 +691,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: _isReindexing ? null : _reindexAll,
-                icon: Icon(Icons.storage, size: 16, color: AppColors.textSecondary),
-                label: Text(_isReindexing ? 'Indexing...' : 'Reindex All', style: TextStyle(color: AppColors.textPrimary)),
+                icon: Icon(Icons.storage, size: 16, color: context.cs.onSurfaceVariant),
+                label: Text(_isReindexing ? 'Indexing...' : 'Reindex All', style: TextStyle(color: context.cs.onSurface)),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -705,7 +705,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
               child: OutlinedButton.icon(
                 onPressed: _isReindexing ? null : _deleteAllMemoryIndexes,
                 icon: Icon(Icons.delete_sweep, size: 16, color: Colors.redAccent.withValues(alpha: 0.7)),
-                label: Text('Clear Indexes', style: TextStyle(color: AppColors.textSecondary)),
+                label: Text('Clear Indexes', style: TextStyle(color: context.cs.onSurfaceVariant)),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.2)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -725,7 +725,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
+        border: Border.all(color: context.cs.primary.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -734,13 +734,13 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
             isGenerating
                 ? 'Generating drafts...'
                 : '${needsGen.length} draft${needsGen.length > 1 ? 's' : ''} need generation',
-            style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 14, color: context.cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
           FilledButton(
             onPressed: needsGen.isNotEmpty ? _batchGenerate : null,
             style: FilledButton.styleFrom(
-              backgroundColor: AppColors.accent,
+              backgroundColor: context.cs.primary,
               foregroundColor: Colors.black,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
@@ -757,7 +757,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       children: [
         Row(
           children: [
-            Text('Pending Drafts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            Text('Pending Drafts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.cs.onSurface)),
             const Spacer(),
             if (drafts.length > 1)
               TextButton(
@@ -772,7 +772,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                 color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text('${drafts.length}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+              child: Text('${drafts.length}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
             ),
           ],
         ),
@@ -813,7 +813,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                   children: [
                     Text(
                       draft.title.isNotEmpty ? draft.title : 'Untitled Draft',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.cs.onSurface),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -830,7 +830,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
             const SizedBox(height: 8),
             Text(
               draft.content.length > 180 ? '${draft.content.substring(0, 180)}...' : draft.content,
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
@@ -851,7 +851,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                 _actionBtn('Approve', Colors.green, () => _approveDraft(draft.id)),
               const SizedBox(width: 6),
               if (hasContent && !isGen)
-                _actionBtn('Edit', AppColors.accent, () => _editDraft(draft)),
+                _actionBtn('Edit', context.cs.primary, () => _editDraft(draft)),
               const SizedBox(width: 6),
               _actionBtn('Delete', Colors.redAccent, () => _deleteDraft(draft.id)),
             ],
@@ -887,7 +887,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     if (isGen) return Colors.amber;
     if (draft.status == 'needs_regeneration') return Colors.redAccent;
     if (draft.content.isEmpty) return Colors.amber;
-    return AppColors.textSecondary;
+    return context.cs.onSurfaceVariant;
   }
 
   Widget _draftStatusBadge(MemoryDraft draft, bool isGen) {
@@ -914,7 +914,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       children: [
         Row(
           children: [
-            Text('Approved Memories', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            Text('Approved Memories', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.cs.onSurface)),
             const Spacer(),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -922,7 +922,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                 color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text('${entries.length}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+              child: Text('${entries.length}', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
             ),
           ],
         ),
@@ -935,7 +935,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
-              child: Text('No approved memories yet', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+              child: Text('No approved memories yet', style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant)),
             ),
           )
         else
@@ -967,12 +967,12 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                   children: [
                     Text(
                       entry.title.isNotEmpty ? entry.title : 'Untitled Memory',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isActive ? AppColors.textPrimary : AppColors.textSecondary),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isActive ? context.cs.onSurface : context.cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '${entry.status == "needs_rebuild" ? "Needs rebuild" : "Active"} • ${entry.messageIds.length} msgs • ${entry.keys.take(3).join(", ")}',
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -984,7 +984,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
             const SizedBox(height: 8),
             Text(
               entry.content.length > 180 ? '${entry.content.substring(0, 180)}...' : entry.content,
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
             ),
@@ -993,7 +993,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              _actionBtn('Edit', AppColors.accent, () => _editEntry(entry)),
+              _actionBtn('Edit', context.cs.primary, () => _editEntry(entry)),
               const SizedBox(width: 6),
               _actionBtn('Delete', Colors.redAccent, () => _deleteEntry(entry.id)),
             ],

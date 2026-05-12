@@ -114,7 +114,7 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
               setState(() => _enabled = v);
               _performSave(_localItem);
             },
-            activeThumbColor: AppColors.accent,
+            activeThumbColor: context.cs.primary,
           ),
           onPressed: () {
             setState(() => _enabled = !_enabled);

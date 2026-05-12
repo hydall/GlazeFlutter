@@ -81,7 +81,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                     const SizedBox(height: 12),
                     SizedBox(
                       width: double.infinity,
-                      child: OutlinedButton.icon(
+                      child: ElevatedButton.icon(
                         onPressed: _importing ? null : _importBackup,
                         icon: _importing
                             ? const SizedBox(

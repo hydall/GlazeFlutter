@@ -13,6 +13,7 @@ import '../../../core/db/repositories/persona_repo.dart';
 import '../../../core/db/repositories/preset_repo.dart';
 import '../../../core/db/repositories/api_config_repo.dart';
 import '../../../core/db/repositories/lorebook_repo.dart';
+import '../../../core/db/repositories/embedding_repo.dart';
 import '../../../core/services/image_storage_service.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/persona.dart';
@@ -38,6 +39,7 @@ class SyncEngine {
   final PresetRepo _presetRepo;
   final ApiConfigRepo _apiRepo;
   final LorebookRepo _lorebookRepo;
+  final EmbeddingRepo _embeddingRepo;
   final ImageStorageService _imageStorage;
   final SyncQueue _queue = SyncQueue();
 
@@ -50,6 +52,7 @@ class SyncEngine {
     this._presetRepo,
     this._apiRepo,
     this._lorebookRepo,
+    this._embeddingRepo,
     this._imageStorage,
   );
 
@@ -284,6 +287,10 @@ class SyncEngine {
           break;
         case 'chat':
           await _chatRepo.delete(id);
+          break;
+        case 'lorebooks':
+          await _lorebookRepo.delete(id);
+          await _embeddingRepo.deleteBySourceId(id);
           break;
       }
     } catch (_) {}

@@ -245,9 +245,9 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
           ),
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E).withValues(alpha: 0.8),
+              color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              border: const Border(top: BorderSide(color: AppColors.glassBorder)),
+              border: Border(top: BorderSide(color: context.cs.outlineVariant)),
             ),
             child: Stack(
               children: [
@@ -386,10 +386,10 @@ class _Header extends StatelessWidget {
           Expanded(
             child: Text(
               title ?? '',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: context.cs.onSurface,
               ),
             ),
           ),
@@ -471,7 +471,7 @@ class _ItemRowState extends State<_ItemRow> {
                 color: item.iconColor ??
                     (item.isDestructive
                         ? const Color(0xFFFF4444)
-                        : AppColors.textSecondary),
+                        : context.cs.onSurfaceVariant),
               ),
               const SizedBox(width: 16),
             ],
@@ -492,7 +492,7 @@ class _ItemRowState extends State<_ItemRow> {
                           child: Icon(
                             a.icon,
                             size: 22,
-                            color: a.color ?? AppColors.textSecondary,
+                            color: a.color ?? context.cs.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -569,7 +569,7 @@ class _ItemCardRowState extends State<_ItemCardRow> {
                   color: item.iconColor ??
                       (item.isDestructive
                           ? const Color(0xFFFF4444)
-                          : AppColors.textSecondary),
+                          : context.cs.onSurfaceVariant),
                 ),
                 const SizedBox(width: 16),
               ],
@@ -590,7 +590,7 @@ class _ItemCardRowState extends State<_ItemCardRow> {
                             child: Icon(
                               a.icon,
                               size: 22,
-                              color: a.color ?? AppColors.textSecondary,
+                              color: a.color ?? context.cs.onSurfaceVariant,
                             ),
                           ),
                         ),
@@ -614,7 +614,7 @@ class _ItemLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = item.isDestructive
         ? const Color(0xFFFF4444)
-        : AppColors.textPrimary;
+        : context.cs.onSurface;
     if (item.hint != null) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -623,9 +623,9 @@ class _ItemLabel extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             item.hint!,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
-              color: AppColors.textSecondary,
+              color: context.cs.onSurfaceVariant,
             ),
           ),
         ],
@@ -687,10 +687,10 @@ class GlazeSessionRow extends StatelessWidget {
                         Flexible(
                           child: Text(
                             item.title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
+                              color: context.cs.onSurface,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -698,17 +698,17 @@ class GlazeSessionRow extends StatelessWidget {
                         const SizedBox(width: 8),
                         Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.chat_bubble_outline,
                               size: 13,
-                              color: AppColors.textSecondary,
+                              color: context.cs.onSurfaceVariant,
                             ),
                             const SizedBox(width: 3),
                             Text(
                               '${item.count}',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: AppColors.textSecondary,
+                                color: context.cs.onSurfaceVariant,
                               ),
                             ),
                             if (item.time.isNotEmpty) ...[
@@ -719,15 +719,15 @@ class GlazeSessionRow extends StatelessWidget {
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
-                                    color: AppColors.textSecondary.withValues(alpha: 0.5),
+                                    color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
                                   ),
                                 ),
                               ),
                               Text(
                                 item.time,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 12,
-                                  color: AppColors.textSecondary,
+                                  color: context.cs.onSurfaceVariant,
                                 ),
                               ),
                             ],
@@ -738,9 +738,9 @@ class GlazeSessionRow extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       item.preview,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.textSecondary,
+                        color: context.cs.onSurfaceVariant,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -756,8 +756,8 @@ class GlazeSessionRow extends StatelessWidget {
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: const BoxDecoration(
-                        color: AppColors.accent,
+                      decoration: BoxDecoration(
+                        color: context.cs.primary,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -765,12 +765,12 @@ class GlazeSessionRow extends StatelessWidget {
                   ],
                   GestureDetector(
                     onTap: item.onMore,
-                    child: const Padding(
-                      padding: EdgeInsets.all(4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
                       child: Icon(
                         Icons.more_vert,
                         size: 20,
-                        color: AppColors.textSecondary,
+                        color: context.cs.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -837,13 +837,13 @@ class _CardRowState extends State<_CardRow> {
         constraints: hasImage ? const BoxConstraints(minHeight: 160) : null,
         decoration: BoxDecoration(
           color: _pressed
-              ? AppColors.accent.withValues(alpha: 0.1)
+              ? context.cs.primary.withValues(alpha: 0.1)
               : item.isActive
-              ? AppColors.accent.withValues(alpha: 0.2)
+              ? context.cs.primary.withValues(alpha: 0.2)
               : Colors.white.withValues(alpha: 0.04),
           border: Border.all(
             color: item.isActive
-                ? AppColors.accent.withValues(alpha: 0.4)
+                ? context.cs.primary.withValues(alpha: 0.4)
                 : const Color(0xFF555555),
           ),
           borderRadius: BorderRadius.circular(12),
@@ -896,10 +896,10 @@ class _CardRowState extends State<_CardRow> {
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        color: AppColors.accent.withValues(alpha: 0.1),
+                        color: context.cs.primary.withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(item.icon, size: 20, color: AppColors.accent),
+                      child: Icon(item.icon, size: 20, color: context.cs.primary),
                     ),
                     const SizedBox(width: 12),
                   ],
@@ -939,7 +939,7 @@ class _CardItemInfo extends StatelessWidget {
                 style: TextStyle(
                   fontSize: hasImage ? 16 : 15,
                   fontWeight: FontWeight.w600,
-                  color: hasImage ? Colors.white : AppColors.textPrimary,
+                  color: hasImage ? Colors.white : context.cs.onSurface,
                   shadows: hasImage
                       ? [const Shadow(color: Colors.black87, blurRadius: 3)]
                       : null,
@@ -964,7 +964,7 @@ class _CardItemInfo extends StatelessWidget {
                     Icon(
                       Icons.description_outlined,
                       size: 12,
-                      color: hasImage ? Colors.white : AppColors.textSecondary,
+                      color: hasImage ? Colors.white : context.cs.onSurfaceVariant,
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -974,7 +974,7 @@ class _CardItemInfo extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                         color: hasImage
                             ? Colors.white
-                            : AppColors.textSecondary,
+                            : context.cs.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -989,7 +989,7 @@ class _CardItemInfo extends StatelessWidget {
             item.sublabel!,
             style: TextStyle(
               fontSize: 12,
-              color: hasImage ? Colors.white70 : AppColors.textSecondary,
+              color: hasImage ? Colors.white70 : context.cs.onSurfaceVariant,
               shadows: hasImage
                   ? [const Shadow(color: Colors.black87, blurRadius: 2)]
                   : null,
@@ -1031,7 +1031,7 @@ class _CardActions extends StatelessWidget {
                   size: 20,
                   color: hasImage
                       ? Colors.white
-                      : (a.color ?? AppColors.textSecondary),
+                       : (a.color ?? context.cs.onSurfaceVariant),
                 ),
               ),
             ),
@@ -1055,15 +1055,15 @@ class _BigInfo extends StatelessWidget {
           Icon(
             info.icon,
             size: 64,
-            color: AppColors.textSecondary.withValues(alpha: 0.5),
+            color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
           ),
           const SizedBox(height: 16),
           Text(
             info.description,
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 16,
-              color: AppColors.textPrimary,
+              color: context.cs.onSurface,
               height: 1.5,
             ),
           ),
@@ -1111,10 +1111,10 @@ class _InputSection extends StatelessWidget {
           TextField(
             controller: controller,
             focusNode: focusNode,
-            style: const TextStyle(color: AppColors.textPrimary),
+            style: TextStyle(color: context.cs.onSurface),
             decoration: InputDecoration(
               hintText: input.placeholder,
-              hintStyle: const TextStyle(color: AppColors.textSecondary),
+              hintStyle: TextStyle(color: context.cs.onSurfaceVariant),
             ),
             onSubmitted: (_) => _confirm(context),
           ),

@@ -179,7 +179,10 @@ Features present in Glaze JS backups but not yet implemented in Flutter.
 - [x] **Theme** — `gz_theme_*`
   - Flutter theme: mode (light/dark/system) + accent color
   - Backup import: `_importJsTheme()` reads `gz_theme_state` from JS backup, maps accent/dark to `theme_accent`/`theme_mode` SharedPreferences keys
-  - Full custom bg/blur/opacity/fonts not implemented (would require extending AppTheme significantly)
+  - Full custom theme support: all 30+ preset properties mapped (bg, blur, opacity, fonts, bubble colors, text colors, borders, noise)
+  - ColorScheme migration: base UI colors in ColorScheme for automatic Material widget theming
+  - Auto-contrast for buttons (4.5:1 WCAG AA), nav bar active tab, theme screen UI
+  - `_deriveUiColor()` when uiColor is null (e.g. frutiger_aero)
 
 - [x] **Character fav UI** — star on card, filter, toggle
   - Star icon on CharacterCard when fav=true

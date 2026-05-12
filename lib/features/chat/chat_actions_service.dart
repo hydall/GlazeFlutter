@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../settings/api_list_provider.dart';
+
 import '../../core/models/chat_message.dart';
 import '../../core/services/chat_import_export.dart';
 import '../../core/llm/summary_service.dart';
@@ -23,8 +25,8 @@ class ChatActionsService {
       throw StateError('No active chat session');
     }
 
-    final apiConfigs = await _ref.read(apiConfigRepoProvider).getAll();
-    if (apiConfigs.isEmpty) {
+    final apiConfig = _ref.read(activeApiConfigProvider);
+    if (apiConfig == null) {
       throw StateError('No API config found');
     }
 
@@ -32,7 +34,7 @@ class ChatActionsService {
     return summaryService.generateSummary(
       sessionId: chatState.session!.id,
       history: chatState.session!.messages,
-      apiConfig: apiConfigs.first,
+      apiConfig: apiConfig,
     );
   }
 

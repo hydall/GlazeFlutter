@@ -1,52 +1,96 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'theme_preset.dart';
+import 'theme_preset_storage.dart';
 
 class ThemeSettings {
   final ThemeMode mode;
   final Color accentColor;
-  const ThemeSettings({this.mode = ThemeMode.dark, this.accentColor = const Color(0xFF7996CE)});
+  final ThemePreset activePreset;
+  final List<ThemePreset> presets;
 
-  ThemeSettings copyWith({ThemeMode? mode, Color? accentColor}) =>
-      ThemeSettings(mode: mode ?? this.mode, accentColor: accentColor ?? this.accentColor);
+  const ThemeSettings({
+    this.mode = ThemeMode.dark,
+    this.accentColor = const Color(0xFF7996CE),
+    this.activePreset = const ThemePreset(id: 'default', name: 'Default'),
+    this.presets = const [ThemePreset(id: 'default', name: 'Default')],
+  });
+
+  ThemeSettings copyWith({
+    ThemeMode? mode,
+    Color? accentColor,
+    ThemePreset? activePreset,
+    List<ThemePreset>? presets,
+  }) =>
+      ThemeSettings(
+        mode: mode ?? this.mode,
+        accentColor: accentColor ?? this.accentColor,
+        activePreset: activePreset ?? this.activePreset,
+        presets: presets ?? this.presets,
+      );
 }
 
 class ThemeNotifier extends StateNotifier<ThemeSettings> {
+  final ThemePresetStorage _storage = ThemePresetStorage();
+
   ThemeNotifier() : super(const ThemeSettings()) {
     _load();
   }
 
   Future<void> _load() async {
-    final prefs = await SharedPreferences.getInstance();
-    final modeIndex = prefs.getInt('theme_mode') ?? 2;
-    final accentHex = prefs.getString('theme_accent') ?? '7996CE';
+    final presets = await _storage.loadAll();
+    final activeId = await _storage.loadActiveId();
+    final active = presets.firstWhere(
+      (p) => p.id == activeId,
+      orElse: () => presets.first,
+    );
     state = ThemeSettings(
-      mode: ThemeMode.values[modeIndex.clamp(0, 2)],
-      accentColor: _hexToColor(accentHex),
+      mode: state.mode,
+      accentColor: active.accent,
+      activePreset: active,
+      presets: presets,
     );
   }
 
   Future<void> setMode(ThemeMode mode) async {
     state = state.copyWith(mode: mode);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('theme_mode', mode.index);
   }
 
   Future<void> setAccentColor(Color color) async {
     state = state.copyWith(accentColor: color);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('theme_accent', _colorToHex(color));
   }
 
-  Color _hexToColor(String hex) {
-    final clean = hex.replaceFirst('#', '');
-    return Color(int.parse('FF$clean', radix: 16));
+  Future<void> applyPreset(ThemePreset preset) async {
+    state = state.copyWith(
+      accentColor: preset.accent,
+      activePreset: preset,
+    );
+    await _storage.setActive(preset.id);
   }
 
-  String _colorToHex(Color c) {
-    return '${(c.r * 255).round().toRadixString(16).padLeft(2, '0')}'
-        '${(c.g * 255).round().toRadixString(16).padLeft(2, '0')}'
-        '${(c.b * 255).round().toRadixString(16).padLeft(2, '0')}';
+  Future<void> importPreset(ThemePreset preset) async {
+    await _storage.addPreset(preset);
+    final presets = await _storage.loadAll();
+    state = state.copyWith(presets: presets);
+  }
+
+  Future<void> deletePreset(String id) async {
+    await _storage.removePreset(id);
+    final presets = await _storage.loadAll();
+    var active = state.activePreset;
+    if (active.id == id) {
+      active = presets.first;
+    }
+    state = state.copyWith(
+      presets: presets,
+      activePreset: active,
+      accentColor: active.accent,
+    );
+  }
+
+  Future<void> reload() async {
+    await _load();
   }
 }
 

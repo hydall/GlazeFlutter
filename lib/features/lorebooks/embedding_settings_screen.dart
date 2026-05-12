@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../settings/api_list_provider.dart';
+
 import '../../../core/llm/embedding_service.dart';
 import '../../../core/llm/lorebook_vector_search.dart';
 import '../../../core/state/db_provider.dart';
@@ -54,9 +56,8 @@ class _EmbeddingSettingsScreenState
   }
 
   Future<void> _initFromDb() async {
-    final apiConfigs = await ref.read(apiConfigRepoProvider).getAll();
-    final chatConfig = apiConfigs.where((c) => c.mode != 'embedding').firstOrNull;
-    if (chatConfig != null && mounted) {
+    final chatConfig = ref.read(activeApiConfigProvider);
+    if (chatConfig != null && chatConfig.mode != 'embedding' && mounted) {
       String ep, ak, md;
       if (chatConfig.embeddingUseSame || chatConfig.embeddingEndpoint.isEmpty) {
         ep = chatConfig.endpoint;
@@ -145,7 +146,7 @@ class _EmbeddingSettingsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: context.cs.surface,
       body: Column(
         children: [
           SafeArea(
@@ -162,12 +163,12 @@ class _EmbeddingSettingsScreenState
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
               children: [
-                const Text(
+                Text(
                   'Search Mode',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -193,12 +194,12 @@ class _EmbeddingSettingsScreenState
                   ],
                 ),
                 const SizedBox(height: 20),
-                const Text(
+                Text(
                   'Embedding API',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -229,12 +230,12 @@ class _EmbeddingSettingsScreenState
                   ),
                 ),
                 const SizedBox(height: 24),
-                const Text(
+                Text(
                   'Vector Search Parameters',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -248,7 +249,7 @@ class _EmbeddingSettingsScreenState
                   width: double.infinity,
                   child: FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: AppColors.accent,
+                      backgroundColor: context.cs.primary,
                       foregroundColor: Colors.black,
                     ),
                     onPressed: _save,
@@ -274,13 +275,13 @@ class _EmbeddingSettingsScreenState
       controller: controller,
       obscureText: obscure,
       maxLines: maxLines,
-      style: const TextStyle(color: AppColors.textPrimary, fontSize: 14),
+      style: TextStyle(color: context.cs.onSurface, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: TextStyle(color: AppColors.textSecondary, fontSize: 12),
+        labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
         hintStyle: TextStyle(
-          color: AppColors.textSecondary.withValues(alpha: 0.5),
+          color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
           fontSize: 12,
         ),
         filled: true,
@@ -306,7 +307,7 @@ class _SearchModeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = selected
-        ? AppColors.accent
+        ? context.cs.primary
         : Colors.white.withValues(alpha: 0.1);
     return GestureDetector(
       onTap: onTap,
@@ -314,7 +315,7 @@ class _SearchModeChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.accent.withValues(alpha: 0.2)
+              ? context.cs.primary.withValues(alpha: 0.2)
               : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: color),
@@ -324,7 +325,7 @@ class _SearchModeChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: selected ? AppColors.accent : AppColors.textSecondary,
+            color: selected ? context.cs.primary : context.cs.onSurfaceVariant,
           ),
         ),
       ),

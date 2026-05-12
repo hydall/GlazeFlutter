@@ -77,9 +77,9 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
             decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E).withValues(alpha: 0.8),
+              color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.glassBorder),
+              border: Border.all(color: context.cs.outlineVariant),
             ),
             child: GlowRippleOverlay(
               child: Stack(
@@ -159,8 +159,18 @@ class _NavButton extends StatelessWidget {
         duration: const Duration(milliseconds: 125),
         curve: Curves.easeInOut,
         builder: (context, t, _) {
+          final inactive = context.cs.onSurfaceVariant;
+          final active = context.colors.accent;
+          final inactiveLum = inactive.computeLuminance();
+          final activeLum = active.computeLuminance();
+          final surfaceLum = context.cs.surface.computeLuminance();
+          final effectiveActive = (activeLum > surfaceLum) == (inactiveLum > surfaceLum)
+              ? active
+              : (surfaceLum < 0.5
+                  ? HSLColor.fromColor(active).withLightness((HSLColor.fromColor(active).lightness + 0.3).clamp(0.0, 1.0)).toColor()
+                  : HSLColor.fromColor(active).withLightness((HSLColor.fromColor(active).lightness - 0.3).clamp(0.0, 1.0)).toColor());
           final color =
-              Color.lerp(AppColors.inactiveTab, AppColors.activeTab, t)!;
+              Color.lerp(inactive, effectiveActive, t)!;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(

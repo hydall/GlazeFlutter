@@ -85,6 +85,7 @@ class MacroResult {
 MacroResult replaceMacros(String text, MacroContext ctx) {
   var result = text;
   final sessionVars = Map<String, String>.from(ctx.sessionVars);
+  var pickCount = 0;
   final globalVars = Map<String, String>.from(ctx.globalVars);
   var varsChanged = false;
   final random = Random();
@@ -246,7 +247,8 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
     (m) {
       final parts = m.group(1)!.split('::');
       if (parts.isEmpty) return '';
-      final seed = '${ctx.charId}_${ctx.sessionId}_pick_${m.group(0)}';
+      final version = int.tryParse(sessionVars['__pick_version'] ?? '0') ?? 0;
+      final seed = '${ctx.charId}_${ctx.sessionId}_pick_${pickCount++}_v$version';
       final hash = _simpleHash(seed);
       return parts[hash % parts.length];
     },

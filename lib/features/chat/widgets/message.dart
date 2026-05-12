@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
@@ -12,10 +14,16 @@ import '../../../core/models/character.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/utils/html_to_markdown.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../features/personas/persona_list_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
 import '../../../shared/widgets/rolling_number.dart';
+import '../../../shared/widgets/colored_markdown.dart';
 import '../../../shared/widgets/image_viewer.dart';
+import '../../../shared/widgets/glaze_toast.dart';
+import '../../../shared/theme/theme_font_provider.dart';
+import '../../../shared/theme/theme_provider.dart';
+import '../../../shared/theme/theme_preset.dart';
 import '../../image_gen/widgets/image_content_renderer.dart';
 import '../../settings/app_settings_provider.dart';
 import '../chat_provider.dart';
@@ -428,7 +436,13 @@ class _MessageState extends ConsumerState<Message>
         ? content
         : applyRegexes(content, placement, 1, regexScripts, regexCtx);
 
-    final style = _BubbleStyle.resolve(scheme: scheme, isStandard: isStandard, isUser: isUser, isSystem: isSystem);
+    final style = _BubbleStyle.resolve(
+      context: context,
+      isStandard: isStandard,
+      isUser: isUser,
+      isSystem: isSystem,
+      preset: ref.watch(themeProvider).activePreset,
+    );
 
     final personas = ref.watch(personaListProvider).value ?? [];
     final activePersonaId = ref.watch(activePersonaIdProvider);
@@ -454,48 +468,49 @@ class _MessageState extends ConsumerState<Message>
         ? tokens
         : (isUser && content.isNotEmpty ? estimateTokens(content) : null);
 
-    Widget bubble = Align(
-      alignment: style.alignment,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: isStandard ? double.infinity : MediaQuery.of(context).size.width * 0.88),
-        child: FadeTransition(
-          opacity: _appearanceFade,
-          child: SlideTransition(
-            position: _appearanceSlide,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              margin: EdgeInsets.symmetric(horizontal: isStandard ? 16 : 12, vertical: isStandard ? 8 : 4),
-              padding: isStandard ? const EdgeInsets.all(0) : const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: _highlighted ? const Color(0xFF7996CE).withValues(alpha: 0.15) : style.bg,
-                borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16)
+    final preset = ref.watch(themeProvider).activePreset;
+    final container = AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      margin: EdgeInsets.symmetric(horizontal: isStandard ? 16 : 12, vertical: isStandard ? 8 : 4),
+      padding: isStandard ? const EdgeInsets.all(0) : const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _highlighted
+            ? context.cs.primary.withValues(alpha: 0.15)
+            : style.bg.withValues(alpha: style.elementOpacity),
+        borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16),
+        border: isStandard || style.borderWidth <= 0
+            ? null
+            : Border.all(
+                color: style.borderColor.withValues(alpha: preset.borderOpacity),
+                width: style.borderWidth,
               ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                transitionBuilder: (Widget child, Animation<double> animation) {
-                  if (_slideDir == _SlideDirection.none) {
-                    return FadeTransition(opacity: animation, child: child);
-                  }
-                  
-                  final isOut = child.key != ValueKey('${widget.swipeId}-${widget.greetingIndex}');
-                  final offset = _slideDir == _SlideDirection.next 
-                      ? (isOut ? const Offset(-0.1, 0) : const Offset(0.1, 0))
-                      : (isOut ? const Offset(0.1, 0) : const Offset(-0.1, 0));
+      ),
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 200),
+        transitionBuilder: (Widget child, Animation<double> animation) {
+          if (_slideDir == _SlideDirection.none) {
+            return FadeTransition(opacity: animation, child: child);
+          }
 
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: Tween<Offset>(
-                        begin: offset,
-                        end: Offset.zero,
-                      ).animate(animation),
-                      child: child,
-                    ),
-                  );
-                },
-                child: KeyedSubtree(
-                  key: ValueKey('${widget.swipeId}-${widget.greetingIndex}'),
-                  child: Column(
+          final isOut = child.key != ValueKey('${widget.swipeId}-${widget.greetingIndex}');
+          final offset = _slideDir == _SlideDirection.next
+              ? (isOut ? const Offset(-0.1, 0) : const Offset(0.1, 0))
+              : (isOut ? const Offset(0.1, 0) : const Offset(-0.1, 0));
+
+          return FadeTransition(
+            opacity: animation,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: offset,
+                end: Offset.zero,
+              ).animate(animation),
+              child: child,
+            ),
+          );
+        },
+        child: KeyedSubtree(
+          key: ValueKey('${widget.swipeId}-${widget.greetingIndex}'),
+          child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -512,7 +527,7 @@ class _MessageState extends ConsumerState<Message>
                       },
                       child: CircleAvatar(
                         radius: 12,
-                        backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
+                        backgroundColor: isUser ? context.cs.primary : const Color(0xFFCCCCCC),
                         backgroundImage: avatarImage,
                         child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)) : null,
                       ),
@@ -538,7 +553,7 @@ class _MessageState extends ConsumerState<Message>
                       },
                       child: CircleAvatar(
                         radius: 10,
-                        backgroundColor: isUser ? const Color(0xFF7996CE) : const Color(0xFFCCCCCC),
+                        backgroundColor: isUser ? context.cs.primary : const Color(0xFFCCCCCC),
                         backgroundImage: avatarImage,
                         child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)) : null,
                       ),
@@ -556,12 +571,19 @@ class _MessageState extends ConsumerState<Message>
               _EditTextarea(controller: _editController!, scheme: scheme)
             else if (isTyping && content.isEmpty)
               _TypingIndicator(textColor: textColor, scheme: scheme)
+            else if (isError)
+              _ErrorWindow(text: displayContent)
             else if (ImageContentRenderer.hasImageMarkers(displayContent))
               ImageContentRenderer(content: displayContent, textColor: textColor)
             else
               GptMarkdown(
                 _highlightPhrases(hasHtmlTags(displayContent) ? htmlToMarkdown(displayContent) : displayContent),
-                style: TextStyle(color: textColor),
+                style: TextStyle(
+                  color: textColor,
+                  fontSize: ref.watch(chatFontSizeProvider),
+                  letterSpacing: ref.watch(chatLetterSpacingProvider),
+                  fontFamily: ref.watch(chatFontFamilyProvider).valueOrNull,
+                ),
                 components: [
                   CodeBlockMd(),
                   LatexMathMultiLine(),
@@ -587,8 +609,8 @@ class _MessageState extends ConsumerState<Message>
                   ActiveMarkMd(activeKey: _activePhraseKey),
                   TableMd(),
                   StrikeMd(),
-                  BoldMd(),
-                  ItalicMd(),
+                  ColoredBoldMd(color: style.italicColor),
+                  ColoredItalicMd(color: style.italicColor),
                   UnderLineMd(),
                   LatexMath(),
                   LatexMathMultiLine(),
@@ -631,11 +653,32 @@ class _MessageState extends ConsumerState<Message>
         ),
       ),
     ),
-  ),
-),
-),
-),
-);
+    );
+
+    Widget decorated = container;
+    if (!isStandard && style.elementBlur > 0) {
+      decorated = ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: style.elementBlur, sigmaY: style.elementBlur),
+          child: container,
+        ),
+      );
+    }
+
+    Widget bubble = Align(
+      alignment: style.alignment,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: isStandard ? double.infinity : MediaQuery.of(context).size.width * 0.88),
+        child: FadeTransition(
+          opacity: _appearanceFade,
+          child: SlideTransition(
+            position: _appearanceSlide,
+            child: decorated,
+          ),
+        ),
+      ),
+    );
 
     Widget bubbleWidget = isHidden ? Opacity(opacity: 0.45, child: bubble) : bubble;
 
@@ -850,16 +893,16 @@ class _SwipeableMessage extends StatelessWidget {
 }
 
 class _BubbleStyle {
-  static const _textPrimary = Color(0xFFE1E3E6);
-  static const _textSecondary = Color(0xFFB0B8C1);
-  static const _vkBlue = Color(0xFF7996CE);
-  static const _appBg = Color(0xFF19191A);
-
   final Color bg;
   final Alignment alignment;
   final Color textColor;
   final Color quoteColor;
   final Color metaColor;
+  final Color? italicColor;
+  final double elementOpacity;
+  final double elementBlur;
+  final double borderWidth;
+  final Color borderColor;
 
   const _BubbleStyle({
     required this.bg,
@@ -867,47 +910,76 @@ class _BubbleStyle {
     required this.textColor,
     required this.quoteColor,
     required this.metaColor,
+    this.italicColor,
+    this.elementOpacity = 1.0,
+    this.elementBlur = 0,
+    this.borderWidth = 0,
+    this.borderColor = Colors.transparent,
   });
 
   factory _BubbleStyle.resolve({
-    required ColorScheme scheme,
+    required BuildContext context,
     required bool isStandard,
     required bool isUser,
     required bool isSystem,
+    required ThemePreset preset,
   }) {
+    final colors = context.colors;
+    final cs = context.cs;
+    final elOp = isStandard ? 1.0 : preset.elementOpacity;
+    final elBlur = isStandard ? 0.0 : preset.elementBlur;
+    final bw = isStandard ? 0.0 : preset.borderWidth;
+    final bc = preset.borderParsed ?? cs.outline;
+
     if (isStandard) {
       return _BubbleStyle(
         bg: Colors.transparent,
         alignment: Alignment.centerLeft,
-        textColor: _textPrimary,
-        quoteColor: _vkBlue,
-        metaColor: _textSecondary,
+        textColor: isUser ? (colors.userText ?? cs.onSurface) : (colors.charText ?? cs.onSurface),
+        quoteColor: isUser ? (colors.userQuote ?? cs.primary) : (colors.charQuote ?? cs.primary),
+        metaColor: cs.onSurfaceVariant,
+        italicColor: isUser ? colors.userItalic : colors.charItalic,
       );
     }
     if (isUser) {
       return _BubbleStyle(
-        bg: _appBg.withValues(alpha: 0.8),
+        bg: colors.userBubble,
         alignment: Alignment.centerRight,
-        textColor: _textPrimary,
-        quoteColor: _vkBlue,
-        metaColor: _textSecondary,
+        textColor: colors.userText ?? cs.onSurface,
+        quoteColor: colors.userQuote ?? cs.primary,
+        metaColor: colors.userText?.withValues(alpha: 0.6) ?? cs.onSurfaceVariant,
+        italicColor: colors.userItalic,
+        elementOpacity: elOp,
+        elementBlur: elBlur,
+        borderWidth: bw,
+        borderColor: bc,
       );
     }
     if (isSystem) {
       return _BubbleStyle(
-        bg: const Color(0xFF1E1E1E).withValues(alpha: 0.8),
+        bg: colors.charBubble,
         alignment: Alignment.center,
-        textColor: _textPrimary,
-        quoteColor: _vkBlue,
-        metaColor: _textSecondary,
+        textColor: colors.charText ?? cs.onSurface,
+        quoteColor: colors.charQuote ?? cs.primary,
+        metaColor: colors.charText?.withValues(alpha: 0.6) ?? cs.onSurfaceVariant,
+        italicColor: colors.charItalic,
+        elementOpacity: elOp,
+        elementBlur: elBlur,
+        borderWidth: bw,
+        borderColor: bc,
       );
     }
     return _BubbleStyle(
-      bg: _vkBlue.withValues(alpha: 0.8),
+      bg: colors.charBubble,
       alignment: Alignment.centerLeft,
-      textColor: _textPrimary,
-      quoteColor: _vkBlue,
-      metaColor: _textSecondary,
+      textColor: colors.charText ?? cs.onSurface,
+      quoteColor: colors.charQuote ?? cs.primary,
+      metaColor: colors.charText?.withValues(alpha: 0.6) ?? cs.onSurfaceVariant,
+      italicColor: colors.charItalic,
+      elementOpacity: elOp,
+      elementBlur: elBlur,
+      borderWidth: bw,
+      borderColor: bc,
     );
   }
 }
@@ -1046,7 +1118,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProvi
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(color: const Color(0xFF1E1E1E).withValues(alpha: 0.8), borderRadius: BorderRadius.circular(8)),
+      decoration: BoxDecoration(color: context.colors.charBubble.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1057,12 +1129,12 @@ class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProvi
               padding: const EdgeInsets.all(8),
               child: Row(
                 children: [
-                  Text('Reasoning', style: TextStyle(fontSize: 11, color: const Color(0xFFB0B8C1), fontWeight: FontWeight.w600)),
+                  Text('Reasoning', style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
                   const Spacer(),
                   AnimatedRotation(
                     turns: _collapsed ? -0.25 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.expand_more, size: 16, color: const Color(0xFFB0B8C1)),
+                    child: Icon(Icons.expand_more, size: 16, color: context.cs.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -1078,7 +1150,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProvi
                   padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                   child: Text(
                     widget.reasoning,
-                    style: const TextStyle(fontSize: 12, color: Color(0xFFB0B8C1), fontStyle: FontStyle.italic),
+                    style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant, fontStyle: FontStyle.italic),
                   ),
                 ),
               ),
@@ -1253,15 +1325,15 @@ class _MetadataRow extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF7996CE).withValues(alpha: 0.15),
+                color: context.cs.primary.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.refresh, size: 14, color: const Color(0xFF7996CE)),
+                  Icon(Icons.refresh, size: 14, color: context.cs.primary),
                   const SizedBox(width: 4),
-                  Text('Regenerate', style: TextStyle(fontSize: 12, color: const Color(0xFF7996CE))),
+                  Text('Regenerate', style: TextStyle(fontSize: 12, color: context.cs.primary)),
                 ],
               ),
             ),
@@ -1324,6 +1396,69 @@ class _MetadataRow extends StatelessWidget {
         child: Center(
           child: Icon(icon, size: 16, color: metaColor.withValues(alpha: onTap != null ? 0.7 : 0.25)),
         ),
+      ),
+    );
+  }
+}
+
+class _ErrorWindow extends StatelessWidget {
+  final String text;
+  const _ErrorWindow({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final errorColor = Theme.of(context).colorScheme.error;
+    return Container(
+      decoration: BoxDecoration(
+        color: errorColor.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: errorColor.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 4, 4),
+            child: Row(
+              children: [
+                Icon(Icons.error_outline, size: 14, color: errorColor),
+                const SizedBox(width: 6),
+                Text(
+                  'ERROR',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: errorColor,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const Spacer(),
+                InkWell(
+                  onTap: () {
+                    Clipboard.setData(ClipboardData(text: text));
+                    GlazeToast.show(context, 'Copied to clipboard', duration: 1500);
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.copy, size: 14, color: errorColor.withValues(alpha: 0.7)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+            child: SelectableText(
+              text,
+              style: TextStyle(
+                fontSize: 12,
+                color: errorColor.withValues(alpha: 0.9),
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

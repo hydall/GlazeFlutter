@@ -38,7 +38,7 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
         maxHeight: MediaQuery.of(context).size.height * 0.85,
       ),
       decoration: BoxDecoration(
-        color: AppColors.background,
+        color: context.cs.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
@@ -86,7 +86,7 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
                       padding: const EdgeInsets.only(top: 8),
                       child: Row(
                         children: [
-                          const Text('Context images:', style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                          Text('Context images:', style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 13)),
                           const SizedBox(width: 8),
                           SegmentedButton<int>(
                             segments: const [ButtonSegment(value: 1, label: Text('1')), ButtonSegment(value: 2, label: Text('2')), ButtonSegment(value: 3, label: Text('3'))],
@@ -100,9 +100,9 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.04), borderRadius: BorderRadius.circular(8)),
-                    child: const Text(
+                    child: Text(
                       'Tip: Add [IMG:GEN:{"prompt":"..."}] to a message or system prompt to trigger auto-generation.',
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
                     ),
                   ),
                 ],
@@ -203,7 +203,7 @@ class _SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 8),
-    child: Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+    child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
   );
 }
 
@@ -217,7 +217,7 @@ class _ToggleRow extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     children: [
       Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
-      Switch(value: value, onChanged: onChanged, activeThumbColor: AppColors.accent),
+      Switch(value: value, onChanged: onChanged, activeThumbColor: context.cs.primary),
     ],
   );
 }
@@ -254,7 +254,7 @@ class _TextFieldRowState extends State<_TextFieldRow> {
     padding: const EdgeInsets.only(bottom: 8),
     child: Row(
       children: [
-        SizedBox(width: 100, child: Text(widget.label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary))),
+        SizedBox(width: 100, child: Text(widget.label, style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant))),
         Expanded(
           child: TextField(
             controller: _controller,
@@ -290,7 +290,7 @@ class _DropdownRow extends StatelessWidget {
     padding: const EdgeInsets.only(bottom: 8),
     child: Row(
       children: [
-        SizedBox(width: 100, child: Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary))),
+        SizedBox(width: 100, child: Text(label, style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant))),
         Expanded(
           child: DropdownButton<String>(
             value: items.contains(value) ? value : items.first,
@@ -328,14 +328,14 @@ class _ProviderSelector extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isSelected ? AppColors.accent.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.04),
+              color: isSelected ? context.cs.primary.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.04),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: isSelected ? AppColors.accent : Colors.white.withValues(alpha: 0.1)),
+              border: Border.all(color: isSelected ? context.cs.primary : Colors.white.withValues(alpha: 0.1)),
             ),
             child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Icon(p.$3, size: 16, color: isSelected ? AppColors.accent : AppColors.textSecondary),
+              Icon(p.$3, size: 16, color: isSelected ? context.cs.primary : context.cs.onSurfaceVariant),
               const SizedBox(width: 6),
-              Text(p.$2, style: TextStyle(fontSize: 13, color: isSelected ? AppColors.accent : AppColors.textSecondary, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
+              Text(p.$2, style: TextStyle(fontSize: 13, color: isSelected ? context.cs.primary : context.cs.onSurfaceVariant, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal)),
             ]),
           ),
         );

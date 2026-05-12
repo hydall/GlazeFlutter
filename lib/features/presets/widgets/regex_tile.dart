@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../../../core/models/preset.dart';
 import '../../../shared/theme/app_colors.dart';
 
@@ -221,7 +220,7 @@ class _SubHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.accent, letterSpacing: 0.4)),
+      child: Text(text, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.cs.primary, letterSpacing: 0.4)),
     );
   }
 }
@@ -257,10 +256,10 @@ class _CheckboxRow extends StatelessWidget {
                   }
                   onChanged(newList);
                 },
-                activeColor: AppColors.accent,
+                activeColor: context.cs.primary,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              Text(label, style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+              Text(label, style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant)),
               const SizedBox(width: 4),
             ],
           ),
@@ -290,10 +289,10 @@ class _MacroRulesSelector extends StatelessWidget {
         return Padding(
           padding: const EdgeInsets.only(right: 8),
           child: ChoiceChip(
-            label: Text(label, style: TextStyle(fontSize: 12, color: isActive ? Colors.black : AppColors.textSecondary)),
             selected: isActive,
+            label: Text(label, style: TextStyle(fontSize: 12, color: isActive ? Colors.black : context.cs.onSurfaceVariant)),
             onSelected: (_) => onChanged(val),
-            selectedColor: AppColors.accent,
+            selectedColor: context.cs.primary,
             visualDensity: VisualDensity.compact,
           ),
         );

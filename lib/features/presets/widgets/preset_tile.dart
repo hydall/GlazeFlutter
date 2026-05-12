@@ -23,16 +23,16 @@ class PresetTile extends ConsumerWidget {
     final isActive = activeId == preset.id;
 
     return ListTile(
-      leading: Icon(isActive ? Icons.tune : Icons.tune_outlined, color: isActive ? AppColors.accent : null),
-      title: Text(preset.name, style: isActive ? const TextStyle(color: AppColors.accent, fontWeight: FontWeight.w600) : null),
-      subtitle: Text('${preset.blocks.length} blocks · ${preset.regexes.length} regex', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+      leading: Icon(isActive ? Icons.tune : Icons.tune_outlined, color: isActive ? context.cs.primary : null),
+      title: Text(preset.name, style: isActive ? TextStyle(color: context.cs.primary, fontWeight: FontWeight.w600) : null),
+      subtitle: Text('${preset.blocks.length} blocks · ${preset.regexes.length} regex', style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           FilledButton.tonal(
             style: FilledButton.styleFrom(
-              backgroundColor: isActive ? AppColors.accent.withValues(alpha: 0.2) : null,
-              foregroundColor: isActive ? AppColors.accent : null,
+              backgroundColor: isActive ? context.cs.primary.withValues(alpha: 0.2) : null,
+              foregroundColor: isActive ? context.cs.primary : null,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               minimumSize: const Size(0, 32),
             ),

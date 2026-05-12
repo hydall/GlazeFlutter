@@ -108,4 +108,13 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
     );
     await chatRepo.put(clearedSession);
   }
+
+  Future<void> renameSession(String sessionId, String newName) async {
+    final chatRepo = ref.read(chatRepoProvider);
+    final session = await chatRepo.getById(sessionId);
+    if (session == null) return;
+    final updatedVars = Map<String, String>.from(session.sessionVars);
+    updatedVars['sessionName'] = newName;
+    await chatRepo.put(session.copyWith(sessionVars: updatedVars));
+  }
 }

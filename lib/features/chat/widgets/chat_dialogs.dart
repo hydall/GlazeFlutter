@@ -8,6 +8,7 @@ import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../chat_provider.dart';
@@ -104,7 +105,7 @@ void showPresetPickerDialog(BuildContext context, WidgetRef ref) async {
       BottomSheetItem(
         label: 'Default (first)',
         icon: activeId == null ? Icons.check : null,
-        iconColor: activeId == null ? const Color(0xFF7996CE) : null,
+        iconColor: activeId == null ? context.cs.primary : null,
         onTap: () {
           setActivePreset(ref, null);
           Navigator.pop(context);
@@ -114,7 +115,7 @@ void showPresetPickerDialog(BuildContext context, WidgetRef ref) async {
         (p) => BottomSheetItem(
           label: p.name,
           icon: activeId == p.id ? Icons.check : null,
-          iconColor: activeId == p.id ? const Color(0xFF7996CE) : null,
+          iconColor: activeId == p.id ? context.cs.primary : null,
           onTap: () {
             setActivePreset(ref, p.id);
             Navigator.pop(context);
@@ -137,7 +138,7 @@ void showPersonaPickerDialog(BuildContext context, WidgetRef ref) async {
       BottomSheetItem(
         label: 'Default (first)',
         icon: activeId == null ? Icons.check : null,
-        iconColor: activeId == null ? const Color(0xFF7996CE) : null,
+        iconColor: activeId == null ? context.cs.primary : null,
         onTap: () {
           setActivePersona(ref, null);
           Navigator.pop(context);
@@ -147,7 +148,7 @@ void showPersonaPickerDialog(BuildContext context, WidgetRef ref) async {
         (p) => BottomSheetItem(
           label: p.name,
           icon: activeId == p.id ? Icons.check : null,
-          iconColor: activeId == p.id ? const Color(0xFF7996CE) : null,
+          iconColor: activeId == p.id ? context.cs.primary : null,
           onTap: () {
             setActivePersona(ref, p.id);
             Navigator.pop(context);

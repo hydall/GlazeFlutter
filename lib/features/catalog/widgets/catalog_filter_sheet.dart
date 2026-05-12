@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../catalog_models.dart';
@@ -138,16 +137,16 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.background,
+          backgroundColor: context.cs.surface,
           title: const Text('NSFL Content', style: TextStyle(color: Colors.white)),
-          content: const Text(
+          content: Text(
             "You don't want to see this.",
-            style: TextStyle(color: AppColors.textSecondary),
+            style: TextStyle(color: context.cs.onSurfaceVariant),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('I don\'t want to die', style: TextStyle(color: AppColors.textSecondary)),
+              child: Text('I don\'t want to die', style: TextStyle(color: context.cs.onSurfaceVariant)),
             ),
             TextButton(
               onPressed: () {
@@ -196,12 +195,12 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
             const SizedBox(height: 20),
 
             // Tokens
-            const Text(
+            Text(
               'TOKEN RANGE',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
+                color: context.cs.onSurfaceVariant,
                 letterSpacing: 0.6,
               ),
             ),
@@ -211,9 +210,9 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
                 Expanded(
                   child: _tokenField('Min', _minTokens, (v) => setState(() => _minTokens = v)),
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('—', style: TextStyle(color: AppColors.textSecondary, fontSize: 18)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text('—', style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 18)),
                 ),
                 Expanded(
                   child: _tokenField('Max', _maxTokens, (v) => setState(() => _maxTokens = v)),
@@ -227,12 +226,12 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'TAGS',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                     letterSpacing: 0.6,
                   ),
                 ),
@@ -241,9 +240,9 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
                     onTap: _clearTags,
                     child: Text(
                       'Clear ($_totalSelectedCount)',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
-                        color: AppColors.accent,
+                        color: context.cs.primary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -279,11 +278,11 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
               ),
               child: TextField(
                 style: const TextStyle(fontSize: 14, color: Colors.white),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   hintText: 'Search tags...',
-                  hintStyle: TextStyle(color: AppColors.textSecondary),
+                  hintStyle: TextStyle(color: context.cs.onSurfaceVariant),
                   border: InputBorder.none,
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   isDense: true,
                 ),
                 onChanged: (v) => setState(() => _tagSearch = v),
@@ -311,12 +310,12 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
         children: [
           Text(
             label,
-            style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+            style: TextStyle(color: context.cs.onSurface, fontSize: 15),
           ),
           Switch(
             value: value,
             onChanged: onChanged,
-            activeTrackColor: isDanger ? Colors.redAccent : AppColors.accent,
+            activeTrackColor: isDanger ? Colors.redAccent : context.cs.primary,
             activeColor: Colors.white,
             inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
             inactiveThumbColor: Colors.white,
@@ -373,9 +372,9 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: active ? AppColors.accent : Colors.white.withValues(alpha: 0.12),
+            color: active ? context.cs.primary : Colors.white.withValues(alpha: 0.12),
           ),
-          color: active ? AppColors.accent.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05),
+          color: active ? context.cs.primary.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

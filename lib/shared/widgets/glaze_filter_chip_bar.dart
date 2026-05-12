@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../theme/app_colors.dart';
 
 class GlazeFilterChipBar<T> extends StatelessWidget {
@@ -33,10 +32,10 @@ class GlazeFilterChipBar<T> extends StatelessWidget {
                 onSelected: (_) => onSelected(option),
                 labelStyle: TextStyle(
                   fontSize: 12,
-                  color: selected ? AppColors.accent : AppColors.textSecondary,
+                  color: selected ? context.cs.primary : context.cs.onSurfaceVariant,
                 ),
-                selectedColor: AppColors.accent.withValues(alpha: 0.15),
-                side: BorderSide(color: selected ? AppColors.accent : Colors.white12),
+                selectedColor: context.cs.primary.withValues(alpha: 0.15),
+                side: BorderSide(color: selected ? context.cs.primary : Colors.white12),
               ),
             );
           }).toList(),

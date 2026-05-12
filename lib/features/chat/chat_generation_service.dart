@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/llm/prompt_isolate.dart';
@@ -12,6 +13,7 @@ import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../image_gen/image_gen_provider.dart';
+import '../settings/api_list_provider.dart';
 import '../image_gen/services/image_gen_service.dart';
 import 'chat_provider.dart';
 import 'chat_state.dart';
@@ -86,6 +88,8 @@ class ChatGenerationService {
       ChatState? finalState;
       final coverage = payload.memoryCoverage;
 
+      bool frameScheduled = false;
+
       await sseClient.streamChatCompletion(
         endpoint: apiConfig.endpoint,
         apiKey: apiConfig.apiKey,
@@ -104,13 +108,19 @@ class ChatGenerationService {
         omitReasoningEffort: apiConfig.omitReasoningEffort,
         onUpdate: (delta, reasoningDelta) {
           accumulator.consumeDelta(delta, reasoningDelta: reasoningDelta);
-          onStateUpdate(ChatState(
-            session: session,
-            isGenerating: true,
-            generationStartTime: currentState.generationStartTime ?? startGenTime,
-            streamingText: accumulator.text,
-            streamingReasoning: accumulator.reasoning.isNotEmpty ? accumulator.reasoning : null,
-          ));
+          if (!frameScheduled) {
+            frameScheduled = true;
+            SchedulerBinding.instance.scheduleFrameCallback((_) {
+              frameScheduled = false;
+              onStateUpdate(ChatState(
+                session: session,
+                isGenerating: true,
+                generationStartTime: currentState.generationStartTime ?? startGenTime,
+                streamingText: accumulator.text,
+                streamingReasoning: accumulator.reasoning.isNotEmpty ? accumulator.reasoning : null,
+              ));
+            });
+          }
         },
         onComplete: (text, reasoning) {
           final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;
@@ -136,18 +146,18 @@ class ChatGenerationService {
           if (partialText.isNotEmpty) {
             finalState = _saveAssistantMessage(partialText, null, session, pendingSessionVars: pendingSessionVars);
           } else {
-            String? errorMsg = error.toString();
             if (error is DioException && error.type == DioExceptionType.cancel) {
-              errorMsg = null;
+              finalState = ChatState(session: session, isGenerating: false);
+            } else {
+              finalState = _saveErrorMessage(error.toString(), session, pendingSessionVars: pendingSessionVars);
             }
-            finalState = ChatState(session: session, isGenerating: false, error: errorMsg);
           }
         },
       );
 
       return finalState ?? ChatState(session: session, isGenerating: false);
     } catch (e) {
-      return ChatState(session: session, isGenerating: false, error: e.toString());
+      return _saveErrorMessage(e.toString(), session);
     }
   }
 
@@ -171,9 +181,8 @@ class ChatGenerationService {
     final service = _ref.read(imageGenSettingsProvider.notifier).getService();
     if (!service.hasImageGenTags(lastMsg.content)) return;
 
-    final apiConfigs = await _ref.read(apiConfigRepoProvider).getAll();
-    if (apiConfigs.isEmpty) return;
-    final apiConfig = apiConfigs.first;
+    final apiConfig = _ref.read(activeApiConfigProvider);
+    if (apiConfig == null) return;
 
     final charRepo = _ref.read(characterRepoProvider);
     final character = await charRepo.getById(charId);
@@ -308,5 +317,32 @@ class ChatGenerationService {
     );
     _ref.read(chatRepoProvider).put(finalSession);
     return ChatState(session: finalSession, lastRawResponse: rawResponse);
+  }
+
+  ChatState _saveErrorMessage(
+    String errorText,
+    ChatSession currentSession, {
+    Map<String, String>? pendingSessionVars,
+  }) {
+    final errorMsg = ChatMessage(
+      id: generateId(),
+      role: 'assistant',
+      content: errorText,
+      isError: true,
+      timestamp: DateTime.now().millisecondsSinceEpoch,
+      swipes: [errorText],
+      swipeId: 0,
+      swipesMeta: [{}],
+    );
+    final finalMessages = [...currentSession.messages, errorMsg];
+    final now = currentTimestampSeconds();
+    final sessionVars = pendingSessionVars ?? currentSession.sessionVars;
+    final finalSession = currentSession.copyWith(
+      messages: finalMessages,
+      updatedAt: now,
+      sessionVars: sessionVars,
+    );
+    _ref.read(chatRepoProvider).put(finalSession);
+    return ChatState(session: finalSession);
   }
 }

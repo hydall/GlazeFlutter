@@ -99,10 +99,10 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _result == null
-          ? const Center(
+          ? Center(
               child: Text(
                 'No data',
-                style: TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: context.cs.onSurfaceVariant),
               ),
             )
           : Column(
@@ -168,7 +168,7 @@ class _SummaryBar extends StatelessWidget {
           _StatChip(
             label: 'Inactive',
             value: '${result.totalCandidates - result.activatedCount}',
-            color: AppColors.textSecondary,
+            color: context.cs.onSurfaceVariant,
           ),
           const SizedBox(width: 8),
           _StatChip(
@@ -243,7 +243,7 @@ class _EntryList extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: Text(
           'No entries in this category',
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+          style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14),
         ),
       );
     }
@@ -276,7 +276,7 @@ class _CoverageTileState extends State<_CoverageTile> {
         ? Colors.orange
         : e.activated
         ? Colors.green
-        : AppColors.textSecondary;
+        : context.cs.onSurfaceVariant;
 
     final tokenCount = estimateTokens(e.content);
 
@@ -314,8 +314,8 @@ class _CoverageTileState extends State<_CoverageTile> {
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: e.activated
-                            ? AppColors.textPrimary
-                            : AppColors.textSecondary,
+                            ? context.cs.onSurface
+                            : context.cs.onSurfaceVariant,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -327,13 +327,13 @@ class _CoverageTileState extends State<_CoverageTile> {
                     '$tokenCount t',
                     style: TextStyle(
                       fontSize: 10,
-                      color: AppColors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                     ),
                   ),
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 16,
-                    color: AppColors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ],
               ),
@@ -476,9 +476,9 @@ class _CoverageTileState extends State<_CoverageTile> {
                   child: SingleChildScrollView(
                     child: Text(
                       e.content,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.textSecondary,
+                        color: context.cs.onSurfaceVariant,
                         fontFamily: 'monospace',
                       ),
                     ),
@@ -503,7 +503,7 @@ class _PositionBadge extends StatelessWidget {
       'worldInfoBefore' => ('Before', Colors.cyan),
       'worldInfoAfter' => ('After', Colors.teal),
       'lorebooksMacro' => ('Macro', Colors.purple),
-      _ => (position, AppColors.textSecondary),
+      _ => (position, context.cs.onSurfaceVariant),
     };
 
     return Container(

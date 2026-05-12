@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-
 import '../../../core/models/chat_message.dart';
 import '../../../shared/theme/app_colors.dart';
+
 import '../chat_screen.dart';
 import 'message.dart';
 
@@ -352,17 +352,19 @@ class _MessageListState extends State<MessageList> {
                   key: ValueKey('bottom-area-${showStreaming}-${showTyping}'),
                   children: [
                     if (showStreaming)
-                      Message(
-                        content: widget.streamingText!,
-                        isUser: false,
-                        isStreaming: true,
-                        reasoning: widget.streamingReasoning,
-                        messageIndex: -1,
-                        totalMessages: widget.messages.length,
-                        isLast: false,
-                        isGenerating: true,
-                        generationStartTime: widget.generationStartTime,
-                        charId: widget.charId,
+                      RepaintBoundary(
+                        child: Message(
+                          content: widget.streamingText!,
+                          isUser: false,
+                          isStreaming: true,
+                          reasoning: widget.streamingReasoning,
+                          messageIndex: -1,
+                          totalMessages: widget.messages.length,
+                          isLast: false,
+                          isGenerating: true,
+                          generationStartTime: widget.generationStartTime,
+                          charId: widget.charId,
+                        ),
                       )
                     else if (showTyping)
                       Message(
@@ -417,19 +419,19 @@ class _ScrollDownButton extends StatelessWidget {
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
                 child: Material(
-                  color: const Color(0xFF1E1E1E).withValues(alpha: 0.78),
-                  shape: const CircleBorder(
-                    side: BorderSide(color: AppColors.glassBorder),
+                  color: context.colors.charBubble.withValues(alpha: 0.78),
+                  shape: CircleBorder(
+                    side: BorderSide(color: context.cs.outlineVariant),
                   ),
                   child: InkWell(
                     customBorder: const CircleBorder(),
                     onTap: onTap,
-                    child: const SizedBox(
+                    child: SizedBox(
                       width: 40,
                       height: 40,
                       child: Icon(
                         Icons.keyboard_arrow_down_rounded,
-                        color: AppColors.accent,
+                        color: context.cs.primary,
                         size: 24,
                       ),
                     ),

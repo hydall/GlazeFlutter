@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../db/repositories/summary_repo.dart';
 import '../models/api_config.dart';
+import 'sse_client.dart';
 import '../models/chat_message.dart';
 import '../state/db_provider.dart';
 
@@ -109,17 +110,7 @@ class SummaryService {
   }
 
   String _buildUrl(String endpoint) {
-    var url = endpoint.trim();
-    if (!url.endsWith('/chat/completions') && !url.endsWith('/v1/chat/completions')) {
-      if (url.endsWith('/v1')) {
-        url = '$url/chat/completions';
-      } else if (url.endsWith('/')) {
-        url = '${url}v1/chat/completions';
-      } else {
-        url = '$url/v1/chat/completions';
-      }
-    }
-    return url;
+    return SseClient.buildChatUrl(endpoint);
   }
 }
 

@@ -260,8 +260,8 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppColors.accent,
-            Color.lerp(AppColors.accent, Colors.black, 0.2)!,
+            context.cs.primary,
+            Color.lerp(context.cs.primary, Colors.black, 0.2)!,
           ],
         ),
         borderRadius: BorderRadius.circular(16),
@@ -382,10 +382,10 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
           Expanded(
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
-                color: AppColors.textPrimary,
+                color: context.cs.onSurface,
               ),
             ),
           ),
@@ -396,20 +396,20 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                   child: Text(
                     value,
                     key: ValueKey(value),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                     ),
                     textAlign: TextAlign.right,
                   ),
                 )
               : RollingNumber(
                   value: value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
         ],
@@ -469,10 +469,10 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                 Expanded(
                   child: Text(
                     charName,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      color: context.cs.onSurface,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -481,7 +481,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                   _showCharDropdown
                       ? Icons.keyboard_arrow_up
                       : Icons.keyboard_arrow_down,
-                  color: AppColors.textSecondary,
+                  color: context.cs.onSurfaceVariant,
                 ),
               ],
             ),
@@ -526,7 +526,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                     },
                     child: Container(
                       color: active
-                          ? AppColors.accent.withValues(alpha: 0.08)
+                          ? context.cs.primary.withValues(alpha: 0.08)
                           : Colors.transparent,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 10),
@@ -553,18 +553,18 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                           Expanded(
                             child: Text(
                               char.name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
-                                color: AppColors.textPrimary,
+                                color: context.cs.onSurface,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           if (active)
-                            const Icon(
+                            Icon(
                               Icons.check,
-                              color: AppColors.accent,
+                              color: context.cs.primary,
                               size: 20,
                             ),
                         ],

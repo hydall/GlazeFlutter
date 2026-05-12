@@ -133,12 +133,12 @@ class _LoadingView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 360,
-      decoration: const BoxDecoration(
-        color: AppColors.surfaceHigh,
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerHighest,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      child: const Center(
-        child: CircularProgressIndicator(color: AppColors.accent),
+      child: Center(
+        child: CircularProgressIndicator(color: context.cs.primary),
       ),
     );
   }
@@ -154,24 +154,24 @@ class _ErrorView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 360,
-      decoration: const BoxDecoration(
-        color: AppColors.surfaceHigh,
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerHighest,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: const EdgeInsets.all(32),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
+          Icon(
             Icons.error_outline_rounded,
             size: 48,
-            color: AppColors.textSecondary,
+            color: context.cs.onSurfaceVariant,
           ),
           const SizedBox(height: 16),
           Text(
             message,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
+            style: TextStyle(
+              color: context.cs.onSurfaceVariant,
               fontSize: 13,
             ),
             textAlign: TextAlign.center,
@@ -182,7 +182,7 @@ class _ErrorView extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.accent,
+                color: context.cs.primary,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(

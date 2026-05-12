@@ -48,7 +48,7 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
       label: 'Summary',
       active: summary != null && summary.isNotEmpty,
       detail: summary != null && summary.isNotEmpty ? '${summary.length} chars' : 'Not generated',
-      color: summary != null && summary.isNotEmpty ? Colors.green : AppColors.textSecondary,
+      color: summary != null && summary.isNotEmpty ? Colors.green : context.cs.onSurfaceVariant,
     ));
 
     final memoryService = ref.read(memoryInjectionServiceProvider);
@@ -65,7 +65,7 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
       detail: memoryResult.entries.isNotEmpty
           ? '${memoryResult.entries.length} entries injected (${memoryResult.injectionTarget})'
           : 'No active entries matched',
-      color: memoryResult.entries.isNotEmpty ? Colors.orange : AppColors.textSecondary,
+      color: memoryResult.entries.isNotEmpty ? Colors.orange : context.cs.onSurfaceVariant,
     ));
 
     final lorebooks = await ref.read(lorebookRepoProvider).getAll();
@@ -108,7 +108,7 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
       label: 'Lorebooks',
       active: activeLorebooks.isNotEmpty,
       detail: '${activeLorebooks.length} active book${activeLorebooks.length != 1 ? 's' : ''}, $triggeredCount entr${triggeredCount != 1 ? 'ies' : 'y'} triggered',
-      color: activeLorebooks.isNotEmpty ? Colors.cyan : AppColors.textSecondary,
+      color: activeLorebooks.isNotEmpty ? Colors.cyan : context.cs.onSurfaceVariant,
     ));
 
     sources.add(_SourceItem(
@@ -116,7 +116,7 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
       label: 'Chat History',
       active: true,
       detail: '${nonHiddenMessages.length} visible message${nonHiddenMessages.length != 1 ? 's' : ''}${session.messages.where((m) => m.isHidden).isNotEmpty ? ', ${session.messages.where((m) => m.isHidden).length} hidden' : ''}',
-      color: AppColors.accent,
+      color: context.cs.primary,
     ));
 
     if (mounted) setState(() { _sources = sources; _loading = false; });
@@ -136,10 +136,10 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
           padding: const EdgeInsets.fromLTRB(16, 4, 8, 8),
           child: Row(
             children: [
-              const Icon(Icons.info_outline, color: AppColors.accent, size: 22),
+              Icon(Icons.info_outline, color: context.cs.primary, size: 22),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('Context Sources', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                child: Text('Context Sources', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: context.cs.onSurface)),
               ),
               IconButton(
                 icon: const Icon(Icons.close, size: 20),
@@ -203,15 +203,15 @@ class _SourceTile extends StatelessWidget {
         ),
         title: Text(
           source.label,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: source.active ? AppColors.textPrimary : AppColors.textSecondary),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: source.active ? context.cs.onSurface : context.cs.onSurfaceVariant),
         ),
         subtitle: Text(
           source.detail,
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
         ),
         trailing: source.active
             ? Icon(Icons.check_circle, size: 18, color: source.color)
-            : const Icon(Icons.radio_button_unchecked, size: 18, color: AppColors.textSecondary),
+            : Icon(Icons.radio_button_unchecked, size: 18, color: context.cs.onSurfaceVariant),
       ),
     );
   }
