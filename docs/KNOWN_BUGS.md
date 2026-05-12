@@ -57,6 +57,18 @@
 
 - **~~Italic/bold text not colored.~~** Fixed — `ColoredItalicMd`/`ColoredBoldMd` inline components pass `italicColor` from theme preset to `TextStyle.color`.
 
+- **~~Buttons invisible on dark accent themes.~~** Fixed — ElevatedButton foreground auto-contrasts with accent (was hardcoded `Colors.black` — invisible on dark_gray `#3d3d3d`, dark_red `#720A15`, etc). `_ensureButtonContrast()` shifts accent lightness until 4.5:1 (WCAG AA) contrast with surface.
+
+- **~~Theme only visible in chat bubbles when uiColor is null.~~** Fixed — `_deriveUiColor()` creates a dark muted version of accent for dark mode (low sat, 15% lightness) and a light tinted version for light mode when `uiColor` is null (e.g. frutiger_aero).
+
+- **~~Theme colors not propagating to non-chat UI.~~** Fixed — migrated from custom `GlazeColors` ThemeExtension to `ColorScheme`. Base UI colors (accent→primary, textPrimary→onSurface, textSecondary→onSurfaceVariant, background→surface, surfaceHigh→surfaceContainerHighest, border→outline, glassBorder→outlineVariant) now in ColorScheme. Material widgets pick them up automatically. `GlazeColors` slimmed to chat-specific fields only (userBubble, charBubble, userText/charText, userQuote/charQuote, userItalic/charItalic, accent).
+
+- **~~Nav bar active tab darker/invisible on dark themes.~~** Fixed — active tab color auto-corrects when accent luminance direction mismatches surface: dark accent on dark bg → lightened, light accent on light bg → darkened.
+
+- **~~Theme screen import button / "Active" label invisible.~~** Fixed — OutlinedButton→ElevatedButton with `_contrastColor()` (4.5:1 guarantee). "Active" label and check icon use `_contrastColor()` instead of raw `primary`.
+
+- **~~Backup import button invisible.~~** Fixed — OutlinedButton→ElevatedButton (inherits `_ensureButtonContrast` from theme).
+
 ## API Settings
 
 - **~~401 on generation — wrong API config used.~~** Fixed — 6 locations fetched first DB config instead of user-selected `activeApiConfigProvider`. If first config had empty key, `Authorization: Bearer ` header was rejected by CDN/proxy with 401 without forwarding to origin. All locations now use `activeApiConfigProvider`. Also: empty API key validation in `SseClient`, URL `/v1` prefix handling consolidated in `SseClient.buildChatUrl()`.
