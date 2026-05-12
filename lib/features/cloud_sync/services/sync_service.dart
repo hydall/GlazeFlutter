@@ -8,6 +8,7 @@ import '../../../core/db/repositories/persona_repo.dart';
 import '../../../core/db/repositories/preset_repo.dart';
 import '../../../core/db/repositories/api_config_repo.dart';
 import '../../../core/db/repositories/lorebook_repo.dart';
+import '../../../core/db/repositories/embedding_repo.dart';
 import '../../../core/services/image_storage_service.dart';
 import 'dropbox/dropbox_adapter.dart';
 import 'dropbox/dropbox_auth.dart';
@@ -26,6 +27,7 @@ class SyncService {
   final PresetRepo _presetRepo;
   final ApiConfigRepo _apiRepo;
   final LorebookRepo _lorebookRepo;
+  final EmbeddingRepo _embeddingRepo;
   final ImageStorageService _imageStorage;
 
   SyncProvider _provider = SyncProvider.dropbox;
@@ -59,6 +61,7 @@ class SyncService {
     required PresetRepo presetRepo,
     required ApiConfigRepo apiRepo,
     required LorebookRepo lorebookRepo,
+    required EmbeddingRepo embeddingRepo,
     required ImageStorageService imageStorage,
   })  : _characterRepo = characterRepo,
         _chatRepo = chatRepo,
@@ -66,6 +69,7 @@ class SyncService {
         _presetRepo = presetRepo,
         _apiRepo = apiRepo,
         _lorebookRepo = lorebookRepo,
+        _embeddingRepo = embeddingRepo,
         _imageStorage = imageStorage;
 
   CloudAdapter get _adapter {
@@ -95,6 +99,7 @@ class SyncService {
         _presetRepo,
         _apiRepo,
         _lorebookRepo,
+        _embeddingRepo,
         _imageStorage,
       );
 
@@ -192,6 +197,7 @@ class SyncService {
       _presetRepo,
       _apiRepo,
       _lorebookRepo,
+      _embeddingRepo,
       _imageStorage,
     );
     await engine.resolveConflict(conflict, choice);

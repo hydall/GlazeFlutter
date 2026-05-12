@@ -24,6 +24,7 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
     presetRepo: ref.watch(presetRepoProvider),
     apiRepo: ref.watch(apiConfigRepoProvider),
     lorebookRepo: ref.watch(lorebookRepoProvider),
+    embeddingRepo: ref.watch(embeddingRepoProvider),
     imageStorage: imageStorage,
   );
   await service.init();

@@ -81,9 +81,9 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
   }
 
   Future<void> _loadEmbeddingStatus() async {
-    if (widget.entry?.id == null || !_vectorSearch) return;
+    if (widget.entry?.id == null || !_vectorSearch || widget.lorebookId == null) return;
     final repo = ref.read(embeddingRepoProvider);
-    final record = await repo.getByEntryId(widget.entry!.id);
+    final record = await repo.getByEntryId('${widget.lorebookId}_${widget.entry!.id}');
     if (!mounted) return;
     setState(() {
       if (record == null) {

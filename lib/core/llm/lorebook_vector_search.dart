@@ -87,7 +87,8 @@ class LorebookVectorSearch {
 
     final candidates = <VectorCandidate>[];
     for (final (entry, lbId) in vectorEntries) {
-      final row = embeddingMap[entry.id];
+      final namespacedId = '${lbId}_${entry.id}';
+      final row = embeddingMap[namespacedId];
       if (row == null || row.vectorsBlob == null) continue;
 
       final text = _getEmbeddingText(entry, lorebooks, lbId);

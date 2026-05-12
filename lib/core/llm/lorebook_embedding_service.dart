@@ -37,7 +37,8 @@ class LorebookEmbeddingService {
       final fingerprint = buildEmbeddingFingerprint(entry, text);
       final textHash = computeHash(fingerprint);
 
-      final existing = await _repo.getByEntryId(entry.id);
+      final namespacedId = '${lorebookId}_${entry.id}';
+      final existing = await _repo.getByEntryId(namespacedId);
       if (existing != null && existing.textHash == textHash && existing.vectorsBlob != null && existing.errorJson == null) {
         if (retryFailedOnly) {
           skipped++;
@@ -54,7 +55,7 @@ class LorebookEmbeddingService {
 
       if (text.trim().isEmpty) {
         await _repo.putEmbeddingError(
-          entryId: entry.id,
+          entryId: namespacedId,
           sourceType: 'lorebook_entry',
           sourceId: lorebookId,
           textHash: textHash,
@@ -70,7 +71,7 @@ class LorebookEmbeddingService {
         final vectors = chunks.map((c) => c.vector).toList();
 
         await _repo.putEmbeddingVector(
-          entryId: entry.id,
+          entryId: namespacedId,
           sourceType: 'lorebook_entry',
           sourceId: lorebookId,
           vectors: vectors,
@@ -87,7 +88,7 @@ class LorebookEmbeddingService {
           final laterText = _getEmbeddingText(laterEntry, config);
           final laterHash = computeHash(buildEmbeddingFingerprint(laterEntry, laterText));
           await _repo.putEmbeddingError(
-            entryId: laterEntry.id,
+            entryId: '${lorebookId}_${laterEntry.id}',
             sourceType: 'lorebook_entry',
             sourceId: lorebookId,
             textHash: laterHash,
@@ -100,7 +101,7 @@ class LorebookEmbeddingService {
       } catch (e) {
         final laterHash = computeHash(buildEmbeddingFingerprint(entry, text));
         await _repo.putEmbeddingError(
-          entryId: entry.id,
+          entryId: namespacedId,
           sourceType: 'lorebook_entry',
           sourceId: lorebookId,
           textHash: laterHash,

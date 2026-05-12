@@ -93,6 +93,24 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
     await repo.delete(id);
     await ref.read(embeddingRepoProvider).deleteBySourceId(id);
     await SyncDeletionTracker.record('lorebooks', id);
+
+    final activations = ref.read(lorebookActivationsProvider);
+    final charMap = <String, List<String>>{};
+    for (final e in activations.character.entries) {
+      charMap[e.key] = List<String>.from(e.value);
+    }
+    final chatMap = <String, List<String>>{};
+    for (final e in activations.chat.entries) {
+      chatMap[e.key] = List<String>.from(e.value);
+    }
+    for (final ids in charMap.values) { ids.remove(id); }
+    for (final ids in chatMap.values) { ids.remove(id); }
+    charMap.removeWhere((_, ids) => ids.isEmpty);
+    chatMap.removeWhere((_, ids) => ids.isEmpty);
+    final cleaned = LorebookActivations(character: charMap, chat: chatMap);
+    ref.read(lorebookActivationsProvider.notifier).state = cleaned;
+    await saveLorebookActivations(cleaned);
+
     ref.invalidateSelf();
   }
 }

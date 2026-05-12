@@ -73,7 +73,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     final errorLabels = <String, String>{};
     for (final entry in _entries) {
       if (!entry.vectorSearch || !entry.enabled || entry.constant) continue;
-      final record = await repo.getByEntryId(entry.id);
+      final record = await repo.getByEntryId('${widget.lorebookId}_${entry.id}');
       if (record == null) {
         statuses[entry.id] = 'none';
       } else if (record.errorJson != null) {
@@ -283,7 +283,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     );
     if (confirmed != true) return;
 
-    await ref.read(embeddingRepoProvider).deleteBySourceType('lorebook_entry');
+    await ref.read(embeddingRepoProvider).deleteBySourceId(widget.lorebookId);
     _loadEmbeddingStatuses();
     if (mounted) GlazeToast.show(context, 'All indexes deleted');
   }
