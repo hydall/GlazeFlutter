@@ -453,9 +453,6 @@ class _ChatBody extends ConsumerWidget {
             child: RepaintBoundary(
               child: MessageList(
               messages: state.messages,
-              streamingText: state.isGenerating ? state.streamingText : null,
-              streamingReasoning:
-                  state.isGenerating ? state.streamingReasoning : null,
               isGenerating: state.isGenerating,
               generationStartTime: state.generationStartTime,
               charId: charId,

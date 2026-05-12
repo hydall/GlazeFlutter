@@ -144,21 +144,15 @@ class _CircleBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: context.cs.surface.withValues(alpha: 0.8),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-              shape: BoxShape.circle,
-            ),
-            child: Center(child: Icon(icon, color: context.cs.primary, size: 20)),
-          ),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: context.cs.surface.withValues(alpha: 0.85),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          shape: BoxShape.circle,
         ),
+        child: Center(child: Icon(icon, color: context.cs.primary, size: 20)),
       ),
     );
   }
