@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -61,7 +60,7 @@ class CharacterGrid extends StatelessWidget {
               '${characters.length} character${characters.length == 1 ? '' : 's'}',
               style: TextStyle(
                 fontSize: 11,
-                color: context.colors.textSecondary,
+                color: context.cs.onSurfaceVariant,
               ),
             ),
           ),
@@ -91,9 +90,9 @@ class _SortDirButton extends StatelessWidget {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: context.colors.accent.withValues(alpha: 0.15),
+          color: context.cs.primary.withValues(alpha: 0.15),
           shape: BoxShape.circle,
-          border: Border.all(color: context.colors.accent.withValues(alpha: 0.2)),
+          border: Border.all(color: context.cs.primary.withValues(alpha: 0.2)),
         ),
         child: Center(
           child: AnimatedRotation(
@@ -103,7 +102,7 @@ class _SortDirButton extends StatelessWidget {
             child: Icon(
               Icons.arrow_downward_rounded,
               size: 18,
-              color: context.colors.accent,
+              color: context.cs.primary,
             ),
           ),
         ),
@@ -173,9 +172,9 @@ class _SortTypePill extends StatelessWidget {
         height: 32,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: context.colors.accent.withValues(alpha: 0.15),
+          color: context.cs.primary.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: context.colors.accent.withValues(alpha: 0.2)),
+          border: Border.all(color: context.cs.primary.withValues(alpha: 0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -185,14 +184,14 @@ class _SortTypePill extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: context.colors.accent,
+                color: context.cs.primary,
               ),
             ),
             const SizedBox(width: 4),
             Icon(
               Icons.keyboard_arrow_down_rounded,
               size: 18,
-              color: context.colors.accent,
+              color: context.cs.primary,
             ),
           ],
         ),
@@ -207,7 +206,7 @@ class _SortTypePill extends StatelessWidget {
               ? [
                   BottomSheetAction(
                     icon: Icons.check_rounded,
-                    color: context.colors.accent,
+                    color: context.cs.primary,
                     onTap: () {
                       Navigator.of(context, rootNavigator: true).pop();
                       onChanged(type);

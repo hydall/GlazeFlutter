@@ -89,13 +89,13 @@ class _PersonaTile extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: isActive
-            ? context.colors.accent.withValues(alpha: 0.12)
+            ? context.cs.primary.withValues(alpha: 0.12)
             : Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isActive
-              ? context.colors.accent.withValues(alpha: 0.5)
-              : context.colors.border,
+              ? context.cs.primary.withValues(alpha: 0.5)
+              : context.cs.outline,
         ),
       ),
       child: ListTile(
@@ -105,7 +105,7 @@ class _PersonaTile extends ConsumerWidget {
             setActivePersona(ref, isActive ? null : persona.id),
         leading: CircleAvatar(
           radius: 24,
-          backgroundColor: context.colors.accent.withValues(alpha: 0.18),
+          backgroundColor: context.cs.primary.withValues(alpha: 0.18),
           backgroundImage: persona.avatarPath != null
               ? FileImage(File(persona.avatarPath!))
               : null,
@@ -115,7 +115,7 @@ class _PersonaTile extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w700,
-                    color: context.colors.textPrimary,
+                    color: context.cs.onSurface,
                   ),
                 )
               : null,
@@ -129,7 +129,7 @@ class _PersonaTile extends ConsumerWidget {
               )
             : Text(
                 'No prompt',
-                style: TextStyle(color: context.colors.textSecondary),
+                style: TextStyle(color: context.cs.onSurfaceVariant),
               ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -232,7 +232,7 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
                 children: [
                   CircleAvatar(
                     radius: 48,
-                    backgroundColor: context.colors.accent.withValues(alpha: 0.15),
+                    backgroundColor: context.cs.primary.withValues(alpha: 0.15),
                     backgroundImage: _avatarPath != null
                         ? FileImage(File(_avatarPath!))
                         : null,
@@ -240,7 +240,7 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
                         ? Icon(
                             Icons.person,
                             size: 40,
-                            color: context.colors.accent.withValues(alpha: 0.5),
+                            color: context.cs.primary.withValues(alpha: 0.5),
                           )
                         : null,
                   ),
@@ -250,10 +250,10 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: context.colors.accent,
+                        color: context.cs.primary,
                         shape: BoxShape.circle,
                         border: Border.all(
-                          color: context.colors.background,
+                          color: context.cs.surface,
                           width: 2,
                         ),
                       ),

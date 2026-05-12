@@ -1,7 +1,6 @@
 
 
 import 'package:flutter/material.dart';
-
 import '../../../shared/theme/app_colors.dart';
 import 'magic_drawer_models.dart';
 
@@ -27,7 +26,7 @@ class MagicDrawerHeader extends StatelessWidget {
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: context.colors.textPrimary,
+              color: context.cs.onSurface,
               letterSpacing: -0.2,
             ),
           ),
@@ -40,12 +39,12 @@ class MagicDrawerHeader extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
                 color: editing
-                    ? context.colors.accent.withValues(alpha: 0.22)
+                    ? context.cs.primary.withValues(alpha: 0.22)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(17),
                 border: Border.all(
                   color: editing
-                      ? context.colors.accent.withValues(alpha: 0.38)
+                      ? context.cs.primary.withValues(alpha: 0.38)
                       : Colors.white.withValues(alpha: 0.18),
                 ),
               ),
@@ -55,7 +54,7 @@ class MagicDrawerHeader extends StatelessWidget {
                   Icon(
                     editing ? Icons.check : Icons.edit,
                     size: 16,
-                    color: editing ? context.colors.accent : context.colors.textPrimary,
+                    color: editing ? context.cs.primary : context.cs.onSurface,
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -63,7 +62,7 @@ class MagicDrawerHeader extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: editing ? context.colors.accent : context.colors.textPrimary,
+                      color: editing ? context.cs.primary : context.cs.onSurface,
                     ),
                   ),
                 ],
@@ -123,7 +122,7 @@ class _MagicCardState extends State<MagicCard> {
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
-                      color: context.colors.accent.withValues(alpha: 0.35),
+                      color: context.cs.primary.withValues(alpha: 0.35),
                       blurRadius: 14,
                     ),
                   ],
@@ -140,7 +139,7 @@ class _MagicCardState extends State<MagicCard> {
                   ),
                   border: Border.all(
                     color: editing
-                        ? context.colors.accent.withValues(alpha: 0.55)
+                        ? context.cs.primary.withValues(alpha: 0.55)
                         : Colors.white.withValues(alpha: 0.06),
                   ),
                 ),
@@ -169,7 +168,7 @@ class _MagicCardState extends State<MagicCard> {
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
-                                  color: context.colors.textPrimary,
+                                  color: context.cs.onSurface,
                                   height: 1,
                                 ),
                               ),
@@ -181,7 +180,7 @@ class _MagicCardState extends State<MagicCard> {
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 9,
-                                    color: context.colors.textSecondary.withValues(
+                                    color: context.cs.onSurfaceVariant.withValues(
                                       alpha: 0.95,
                                     ),
                                     height: 1,
@@ -254,7 +253,7 @@ class AddMagicCard extends StatelessWidget {
                 Icon(
                   Icons.add,
                   size: 20,
-                  color: context.colors.textPrimary.withValues(alpha: 0.6),
+                  color: context.cs.onSurface.withValues(alpha: 0.6),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -263,7 +262,7 @@ class AddMagicCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: context.colors.textPrimary,
+                      color: context.cs.onSurface,
                       height: 1,
                     ),
                   ),

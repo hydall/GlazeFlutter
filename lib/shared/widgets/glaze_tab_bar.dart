@@ -30,9 +30,9 @@ class GlazeTabBar extends StatelessWidget {
         return Container(
           height: 42,
           decoration: BoxDecoration(
-            color: context.colors.accent.withValues(alpha: 0.1),
+            color: context.cs.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(21),
-            border: Border.all(color: context.colors.accent.withValues(alpha: 0.2)),
+            border: Border.all(color: context.cs.primary.withValues(alpha: 0.2)),
           ),
           child: Stack(
             clipBehavior: Clip.none,
@@ -47,7 +47,7 @@ class GlazeTabBar extends StatelessWidget {
                 width: tabWidth,
                 child: Container(
                   decoration: BoxDecoration(
-                    color: context.colors.accent,
+                    color: context.cs.primary,
                     borderRadius: BorderRadius.circular(21),
                   ),
                 ),
@@ -58,7 +58,7 @@ class GlazeTabBar extends StatelessWidget {
                   children: List.generate(tabs.length, (index) {
                     final tab = tabs[index];
                     final isActive = index == activeIndex;
-                    final color = isActive ? Colors.white : context.colors.accent;
+                    final color = isActive ? Colors.white : context.cs.primary;
 
                     return Expanded(
                       child: GestureDetector(

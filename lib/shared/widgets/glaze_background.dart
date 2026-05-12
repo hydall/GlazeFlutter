@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../theme/app_colors.dart';
 
 class GlazeBackground extends StatefulWidget {
@@ -21,6 +20,6 @@ class GlazeBackground extends StatefulWidget {
 class _GlazeBackgroundState extends State<GlazeBackground> {
   @override
   Widget build(BuildContext context) {
-    return Container(color: widget.backgroundColor ?? context.colors.background, child: widget.child);
+    return Container(color: widget.backgroundColor ?? context.cs.surface, child: widget.child);
   }
 }

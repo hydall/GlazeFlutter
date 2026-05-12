@@ -77,7 +77,7 @@ class HeroCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         gradient: LinearGradient(
-          colors: [context.colors.accent, Color.lerp(context.colors.accent, Colors.black, 0.2)!],
+          colors: [context.cs.primary, Color.lerp(context.cs.primary, Colors.black, 0.2)!],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -174,7 +174,7 @@ class TokenizerLayout extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: Container(
               decoration: BoxDecoration(
-                color: context.colors.surfaceHigh,
+                color: context.cs.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(color: Colors.white.withValues(alpha: 0.05), offset: const Offset(1, 1), blurRadius: 2, spreadRadius: 0, blurStyle: BlurStyle.inner),
@@ -261,10 +261,10 @@ class TokenizerLayout extends StatelessWidget {
           else
             Container(width: 8, height: 8, decoration: BoxDecoration(color: row.color, shape: BoxShape.circle)),
           const SizedBox(width: 8),
-          Expanded(child: Text(row.label, style: TextStyle(fontSize: 14, color: context.colors.textSecondary))),
+          Expanded(child: Text(row.label, style: TextStyle(fontSize: 14, color: context.cs.onSurfaceVariant))),
           Text(
             _rowTokenText(bd, row),
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textPrimary),
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.cs.onSurface),
           ),
         ],
       ),
@@ -320,7 +320,7 @@ class TokenizerActionButtons extends ConsumerWidget {
               icon: const Icon(Icons.visibility, size: 16),
               label: Text('Unhide all ($hiddenCount)'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: context.colors.accent,
+                foregroundColor: context.cs.primary,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
             ),
@@ -397,7 +397,7 @@ class NearLimitWarning extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'Hide about $hideCount top message${hideCount == 1 ? '' : 's'} to free about $hideTokens tokens.',
-            style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+            style: TextStyle(fontSize: 14, color: context.cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -442,13 +442,13 @@ class SettingsSlider extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.colors.textPrimary)),
-                Text('${value.round()}$unit', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.colors.accent)),
+                Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.cs.onSurface)),
+                Text('${value.round()}$unit', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.cs.primary)),
               ],
             ),
             const SizedBox(height: 4),
-            Text(description, style: TextStyle(fontSize: 12, color: context.colors.textSecondary)),
-            Slider(value: value, min: min, max: max, divisions: (max - min).round(), activeColor: context.colors.accent, onChanged: onChanged),
+            Text(description, style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant)),
+            Slider(value: value, min: min, max: max, divisions: (max - min).round(), activeColor: context.cs.primary, onChanged: onChanged),
           ],
         ),
       ),

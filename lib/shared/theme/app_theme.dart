@@ -40,27 +40,104 @@ TextTheme _applySafe(TextTheme theme, {
   );
 }
 
-Color _btnForeground(Color accent) {
-  return accent.computeLuminance() > 0.35
+ColorScheme _buildColorScheme(ThemePreset preset, {required bool isDark}) {
+  final accent = preset.accent;
+  final uiColor = preset.uiColorParsed ?? _deriveUiColor(accent, isDark);
+  final onBg = _contrastFor(uiColor);
+  final onBgVariant = _contrastFor(uiColor, secondary: true);
+  final btnFg = accent.computeLuminance() > 0.35
       ? const Color(0xFF1A1A1B)
       : const Color(0xFFE1E3E6);
+  final surfaceHigh = _shiftColor(uiColor, isDark ? 1.08 : 0.96);
+  final outlineColor = _borderFor(uiColor, isDark);
+  final outlineVariant = isDark
+      ? Colors.white.withValues(alpha: 0.1)
+      : Colors.black.withValues(alpha: 0.1);
+
+  return ColorScheme(
+    brightness: isDark ? Brightness.dark : Brightness.light,
+    primary: accent,
+    onPrimary: btnFg,
+    secondary: accent,
+    onSecondary: btnFg,
+    tertiary: accent,
+    onTertiary: btnFg,
+    error: const Color(0xFFCF6679),
+    onError: Colors.white,
+    surface: uiColor,
+    onSurface: onBg,
+    surfaceContainerHighest: surfaceHigh,
+    onSurfaceVariant: onBgVariant,
+    outline: outlineColor,
+    outlineVariant: outlineVariant,
+  );
+}
+
+Color _deriveUiColor(Color accent, bool isDark) {
+  if (isDark) {
+    final hsl = HSLColor.fromColor(accent);
+    return HSLColor.fromAHSL(
+      1.0,
+      hsl.hue,
+      (hsl.saturation * 0.6).clamp(0.0, 1.0),
+      (hsl.lightness * 0.15).clamp(0.02, 0.12),
+    ).toColor();
+  }
+  final hsl = HSLColor.fromColor(accent);
+  return HSLColor.fromAHSL(
+    1.0,
+    hsl.hue,
+    (hsl.saturation * 0.3).clamp(0.0, 1.0),
+    (0.92 + hsl.lightness * 0.06).clamp(0.9, 0.97),
+  ).toColor();
+}
+
+Color _contrastFor(Color bg, {bool secondary = false}) {
+  final lum = bg.computeLuminance();
+  final light = secondary
+      ? const Color(0xFFB0B8C1)
+      : const Color(0xFFE1E3E6);
+  final dark = secondary
+      ? const Color(0xFF6B6D70)
+      : const Color(0xFF1A1A1B);
+  return lum > 0.35 ? dark : light;
+}
+
+Color _borderFor(Color bg, bool isDark) {
+  final lum = bg.computeLuminance();
+  if (isDark) {
+    return lum > 0.35
+        ? const Color(0xFF5C5D5E)
+        : const Color(0xFF2C2D2E);
+  }
+  return lum > 0.35
+      ? const Color(0xFFB8B9BA)
+      : const Color(0xFFD8D9DA);
+}
+
+Color _shiftColor(Color c, double factor) {
+  return Color.fromARGB(
+    c.alpha,
+    (c.red * factor).clamp(0, 255).round(),
+    (c.green * factor).clamp(0, 255).round(),
+    (c.blue * factor).clamp(0, 255).round(),
+  );
 }
 
 class AppTheme {
   static ThemeData dark(ThemePreset preset, {String? fontFamily}) {
-    final accent = preset.accent;
-    final c = GlazeColors.fromPreset(preset, isDark: true);
+    final colorScheme = _buildColorScheme(preset, isDark: true);
     final effectiveFont = fontFamily ?? GoogleFonts.inter().fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 14.0 : 1.0;
-    final btnFg = _btnForeground(accent);
+    final glazeColors = GlazeColors.fromPreset(preset, isDark: true);
 
     final base = FlexThemeData.dark(
       colors: FlexSchemeColor.from(
-        primary: accent,
-        secondary: accent,
-        tertiary: accent,
+        primary: colorScheme.primary,
+        secondary: colorScheme.primary,
+        tertiary: colorScheme.primary,
       ),
       useMaterial3: true,
       surfaceMode: FlexSurfaceMode.levelSurfacesLowScaffold,
@@ -76,41 +153,42 @@ class AppTheme {
     );
 
     return base.copyWith(
-      scaffoldBackgroundColor: c.background,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: colorScheme.surface,
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
-        foregroundColor: c.textPrimary,
+        foregroundColor: colorScheme.onSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
       cardTheme: CardThemeData(
-        color: c.surfaceHigh,
+        color: colorScheme.surfaceContainerHighest,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: const BorderRadius.all(Radius.circular(16)),
-          side: BorderSide(color: c.border),
+          side: BorderSide(color: colorScheme.outline),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: c.surfaceHigh,
+        fillColor: colorScheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
-          borderSide: BorderSide(color: c.border),
+          borderSide: BorderSide(color: colorScheme.outline),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
-          borderSide: BorderSide(color: c.border),
+          borderSide: BorderSide(color: colorScheme.outline),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
-          borderSide: BorderSide(color: accent),
+          borderSide: BorderSide(color: colorScheme.primary),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: accent,
-          foregroundColor: btnFg,
+          backgroundColor: colorScheme.primary,
+          foregroundColor: colorScheme.onPrimary,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(8)),
           ),
@@ -118,50 +196,49 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: c.textPrimary,
+          foregroundColor: colorScheme.onSurface,
         ),
       ),
-      iconTheme: IconThemeData(color: c.textPrimary),
+      iconTheme: IconThemeData(color: colorScheme.onSurface),
       textTheme: _applySafe(
         GoogleFonts.interTextTheme(base.textTheme),
-        bodyColor: c.textPrimary,
-        displayColor: c.textPrimary,
+        bodyColor: colorScheme.onSurface,
+        displayColor: colorScheme.onSurface,
         fontSizeFactor: scaleFactor,
         letterSpacingDelta: uiSpacing,
       ),
       extensions: [
-        c,
+        glazeColors,
         GptMarkdownThemeData(
           brightness: Brightness.dark,
-          highlightColor: c.accent.withAlpha(40),
-          linkColor: c.accent,
-          linkHoverColor: c.accent.withAlpha(180),
-          hrLineColor: c.border,
-          h1: TextStyle(color: c.textPrimary, fontSize: 24, fontWeight: FontWeight.bold),
-          h2: TextStyle(color: c.textPrimary, fontSize: 22, fontWeight: FontWeight.bold),
-          h3: TextStyle(color: c.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
-          h4: TextStyle(color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
-          h5: TextStyle(color: c.textSecondary, fontSize: 16, fontWeight: FontWeight.w600),
-          h6: TextStyle(color: c.textSecondary, fontSize: 14, fontWeight: FontWeight.w600),
+          highlightColor: colorScheme.primary.withAlpha(40),
+          linkColor: colorScheme.primary,
+          linkHoverColor: colorScheme.primary.withAlpha(180),
+          hrLineColor: colorScheme.outline,
+          h1: TextStyle(color: colorScheme.onSurface, fontSize: 24, fontWeight: FontWeight.bold),
+          h2: TextStyle(color: colorScheme.onSurface, fontSize: 22, fontWeight: FontWeight.bold),
+          h3: TextStyle(color: colorScheme.onSurface, fontSize: 20, fontWeight: FontWeight.w600),
+          h4: TextStyle(color: colorScheme.onSurface, fontSize: 18, fontWeight: FontWeight.w600),
+          h5: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 16, fontWeight: FontWeight.w600),
+          h6: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ],
     );
   }
 
   static ThemeData light(ThemePreset preset, {String? fontFamily}) {
-    final accent = preset.accent;
-    final c = GlazeColors.fromPreset(preset, isDark: false);
+    final colorScheme = _buildColorScheme(preset, isDark: false);
     final effectiveFont = fontFamily ?? GoogleFonts.inter().fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 14.0 : 1.0;
-    final btnFg = _btnForeground(accent);
+    final glazeColors = GlazeColors.fromPreset(preset, isDark: false);
 
     final base = FlexThemeData.light(
       colors: FlexSchemeColor.from(
-        primary: accent,
-        secondary: accent,
-        tertiary: accent,
+        primary: colorScheme.primary,
+        secondary: colorScheme.primary,
+        tertiary: colorScheme.primary,
       ),
       useMaterial3: true,
       surfaceMode: FlexSurfaceMode.levelSurfacesLowScaffold,
@@ -177,41 +254,42 @@ class AppTheme {
     );
 
     return base.copyWith(
-      scaffoldBackgroundColor: c.background,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: colorScheme.surface,
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
-        foregroundColor: c.textPrimary,
+        foregroundColor: colorScheme.onSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
       cardTheme: CardThemeData(
-        color: c.surface,
+        color: colorScheme.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: const BorderRadius.all(Radius.circular(16)),
-          side: BorderSide(color: c.border),
+          side: BorderSide(color: colorScheme.outline),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: c.surfaceHigh,
+        fillColor: colorScheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
-          borderSide: BorderSide(color: c.border),
+          borderSide: BorderSide(color: colorScheme.outline),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
-          borderSide: BorderSide(color: c.border),
+          borderSide: BorderSide(color: colorScheme.outline),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: const BorderRadius.all(Radius.circular(12)),
-          borderSide: BorderSide(color: accent),
+          borderSide: BorderSide(color: colorScheme.primary),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: accent,
-          foregroundColor: btnFg,
+          backgroundColor: colorScheme.primary,
+          foregroundColor: colorScheme.onPrimary,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(8)),
           ),
@@ -219,31 +297,31 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: c.textPrimary,
+          foregroundColor: colorScheme.onSurface,
         ),
       ),
-      iconTheme: IconThemeData(color: c.textPrimary),
+      iconTheme: IconThemeData(color: colorScheme.onSurface),
       textTheme: _applySafe(
         GoogleFonts.interTextTheme(base.textTheme),
-        bodyColor: c.textPrimary,
-        displayColor: c.textPrimary,
+        bodyColor: colorScheme.onSurface,
+        displayColor: colorScheme.onSurface,
         fontSizeFactor: scaleFactor,
         letterSpacingDelta: uiSpacing,
       ),
       extensions: [
-        c,
+        glazeColors,
         GptMarkdownThemeData(
           brightness: Brightness.light,
-          highlightColor: c.accent.withAlpha(40),
-          linkColor: c.accent,
-          linkHoverColor: c.accent.withAlpha(180),
-          hrLineColor: c.border,
-          h1: TextStyle(color: c.textPrimary, fontSize: 24, fontWeight: FontWeight.bold),
-          h2: TextStyle(color: c.textPrimary, fontSize: 22, fontWeight: FontWeight.bold),
-          h3: TextStyle(color: c.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
-          h4: TextStyle(color: c.textPrimary, fontSize: 18, fontWeight: FontWeight.w600),
-          h5: TextStyle(color: c.textSecondary, fontSize: 16, fontWeight: FontWeight.w600),
-          h6: TextStyle(color: c.textSecondary, fontSize: 14, fontWeight: FontWeight.w600),
+          highlightColor: colorScheme.primary.withAlpha(40),
+          linkColor: colorScheme.primary,
+          linkHoverColor: colorScheme.primary.withAlpha(180),
+          hrLineColor: colorScheme.outline,
+          h1: TextStyle(color: colorScheme.onSurface, fontSize: 24, fontWeight: FontWeight.bold),
+          h2: TextStyle(color: colorScheme.onSurface, fontSize: 22, fontWeight: FontWeight.bold),
+          h3: TextStyle(color: colorScheme.onSurface, fontSize: 20, fontWeight: FontWeight.w600),
+          h4: TextStyle(color: colorScheme.onSurface, fontSize: 18, fontWeight: FontWeight.w600),
+          h5: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 16, fontWeight: FontWeight.w600),
+          h6: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 14, fontWeight: FontWeight.w600),
         ),
       ],
     );

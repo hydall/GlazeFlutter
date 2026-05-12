@@ -38,9 +38,9 @@ class AboutOverlay extends ConsumerWidget {
               child: Container(
                 constraints: const BoxConstraints(maxWidth: 400),
                 decoration: BoxDecoration(
-                  color: context.colors.surfaceHigh,
+                  color: context.cs.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: context.colors.glassBorder),
+                  border: Border.all(color: context.cs.outlineVariant),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: Stack(
@@ -58,7 +58,7 @@ class AboutOverlay extends ConsumerWidget {
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                           ),
-                          child: Icon(Icons.close_rounded, size: 20, color: context.colors.textSecondary),
+                          child: Icon(Icons.close_rounded, size: 20, color: context.cs.onSurfaceVariant),
                         ),
                       ),
                     ),
@@ -79,12 +79,12 @@ class AboutOverlay extends ConsumerWidget {
                             width: 48,
                             height: 48,
                             fit: BoxFit.contain,
-                            colorFilter: ColorFilter.mode(context.colors.accent, BlendMode.srcIn),
+                            colorFilter: ColorFilter.mode(context.cs.primary, BlendMode.srcIn),
                           ),
                         ),
                         const SizedBox(height: 12),
-                        Text('Glaze', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: context.colors.textPrimary, letterSpacing: -0.5)),
-                        Text(version, style: TextStyle(fontSize: 13, color: context.colors.textSecondary, height: 1.4)),
+                        Text('Glaze', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: context.cs.onSurface, letterSpacing: -0.5)),
+                        Text(version, style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant, height: 1.4)),
                         const SizedBox(height: 24),
                         Padding(
                           padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),

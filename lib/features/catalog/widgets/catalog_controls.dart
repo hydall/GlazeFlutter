@@ -145,7 +145,7 @@ class CatalogControls extends StatelessWidget {
           .map(
             (item) => BottomSheetItem(
               icon: item.isActive ? Icons.check_rounded : null,
-              iconColor: context.colors.accent,
+              iconColor: context.cs.primary,
               label: item.label,
               onTap: () {
                 Navigator.of(context, rootNavigator: true).pop();
@@ -183,9 +183,9 @@ class _LabeledChip extends StatelessWidget {
         height: 32,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: context.colors.accent.withValues(alpha: 0.15),
+          color: context.cs.primary.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: context.colors.accent.withValues(alpha: 0.2)),
+          border: Border.all(color: context.cs.primary.withValues(alpha: 0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -195,14 +195,14 @@ class _LabeledChip extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: context.colors.accent,
+                color: context.cs.primary,
               ),
             ),
             const SizedBox(width: 4),
             Icon(
               Icons.keyboard_arrow_down_rounded,
               size: 18,
-              color: context.colors.accent,
+              color: context.cs.primary,
             ),
           ],
         ),
@@ -225,9 +225,9 @@ class _FilterIconButton extends StatelessWidget {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: context.colors.accent.withValues(alpha: 0.15),
+          color: context.cs.primary.withValues(alpha: 0.15),
           shape: BoxShape.circle,
-          border: Border.all(color: context.colors.accent.withValues(alpha: 0.2)),
+          border: Border.all(color: context.cs.primary.withValues(alpha: 0.2)),
         ),
         child: Stack(
           clipBehavior: Clip.none,
@@ -236,7 +236,7 @@ class _FilterIconButton extends StatelessWidget {
             Icon(
               Icons.filter_list_rounded,
               size: 18,
-              color: context.colors.accent,
+              color: context.cs.primary,
             ),
             if (count > 0)
               Positioned(
@@ -246,7 +246,7 @@ class _FilterIconButton extends StatelessWidget {
                   constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(
-                    color: context.colors.accent,
+                    color: context.cs.primary,
                     shape: BoxShape.circle,
                   ),
                   child: Center(

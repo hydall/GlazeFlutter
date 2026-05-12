@@ -94,7 +94,7 @@ class ImageContentRenderer extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: context.colors.accent)),
+            SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: context.cs.primary)),
             const SizedBox(width: 8),
             Flexible(child: Text('Generating image...', style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 12, fontStyle: FontStyle.italic))),
           ],

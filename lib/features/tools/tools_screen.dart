@@ -62,7 +62,7 @@ class ToolsScreen extends ConsumerWidget {
     final presetName = ref.watch(_activePresetNameProvider).value ?? 'Default';
     final topPad = MediaQuery.of(context).padding.top + 66.0;
     return Scaffold(
-      backgroundColor: context.colors.background,
+      backgroundColor: context.cs.surface,
       body: Stack(
         children: [
           ListView(
@@ -335,11 +335,11 @@ class _GridTile extends StatelessWidget {
                   width: 42,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: context.colors.background,
+                    color: context.cs.surface,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
-                    child: _svgPath(iconPath, fill: context.colors.textSecondary, size: 22),
+                    child: _svgPath(iconPath, fill: context.cs.onSurfaceVariant, size: 22),
                   ),
                 ),
                 if (showStatusDot)
@@ -351,8 +351,8 @@ class _GridTile extends StatelessWidget {
                       height: 12,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: context.colors.textSecondary,
-                        border: Border.all(color: context.colors.background, width: 2),
+                        color: context.cs.onSurfaceVariant,
+                        border: Border.all(color: context.cs.surface, width: 2),
                       ),
                     ),
                   ),
@@ -364,7 +364,7 @@ class _GridTile extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
-                color: context.colors.textPrimary,
+                color: context.cs.onSurface,
               ),
             ),
             const SizedBox(height: 4),
@@ -373,7 +373,7 @@ class _GridTile extends StatelessWidget {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: context.colors.accent,
+                color: context.cs.primary,
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

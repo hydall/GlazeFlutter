@@ -104,9 +104,9 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
           ),
           TabBar(
             controller: _tabController,
-            labelColor: context.colors.accent,
-            unselectedLabelColor: context.colors.textSecondary,
-            indicatorColor: context.colors.accent,
+            labelColor: context.cs.primary,
+            unselectedLabelColor: context.cs.onSurfaceVariant,
+            indicatorColor: context.cs.primary,
             tabs: const [
               Tab(icon: Icon(Icons.chat_bubble_outline, size: 18), text: 'LLM'),
               Tab(icon: Icon(Icons.layers_outlined, size: 18), text: 'Embeddings'),
@@ -432,6 +432,6 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(bottom: 4),
-    child: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+    child: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
   );
 }

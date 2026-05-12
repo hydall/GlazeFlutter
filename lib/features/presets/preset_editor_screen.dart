@@ -207,8 +207,8 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       decoration: BoxDecoration(
-        color: context.colors.accent.withValues(alpha: 0.05),
-        border: Border.all(color: context.colors.border),
+        color: context.cs.primary.withValues(alpha: 0.05),
+        border: Border.all(color: context.cs.outline),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -233,7 +233,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
-                              color: context.colors.textPrimary,
+                              color: context.cs.onSurface,
                             ),
                           ),
                           if (_author.isNotEmpty)
@@ -243,7 +243,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                                 color:
-                                    context.colors.accent.withValues(alpha: 0.8),
+                                    context.cs.primary.withValues(alpha: 0.8),
                               ),
                             ),
                         ],
@@ -343,7 +343,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
                style: TextStyle(
                  fontSize: 14,
                  fontWeight: FontWeight.w600,
-                 color: context.colors.textSecondary,
+                 color: context.cs.onSurfaceVariant,
                ),
             ),
             const Spacer(),
@@ -352,7 +352,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
               duration: const Duration(milliseconds: 300),
                child: Icon(
                  Icons.expand_more,
-                 color: context.colors.textSecondary,
+                 color: context.cs.onSurfaceVariant,
                  size: 20,
                ),
             ),
@@ -369,7 +369,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.02),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: context.colors.border),
+        border: Border.all(color: context.cs.outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -392,7 +392,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
                 Expanded(
                   child: TextField(
                     controller: _reasoningStartCtrl,
-                    style: TextStyle(color: context.colors.textPrimary),
+                    style: TextStyle(color: context.cs.onSurface),
                     decoration: _inputDecoration('<textarea>'),
                   ),
                 ),
@@ -400,7 +400,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
                 Expanded(
                   child: TextField(
                     controller: _reasoningEndCtrl,
-                    style: TextStyle(color: context.colors.textPrimary),
+                    style: TextStyle(color: context.cs.onSurface),
                     decoration: _inputDecoration('</think>'),
                   ),
                 ),
@@ -530,20 +530,20 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
     return InputDecoration(
       hintText: hint,
       hintStyle:
-          TextStyle(color: context.colors.textSecondary.withValues(alpha: 0.5)),
+          TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
       filled: true,
       fillColor: Colors.white.withValues(alpha: 0.04),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: context.colors.border),
+        borderSide: BorderSide(color: context.cs.outline),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: context.colors.border),
+        borderSide: BorderSide(color: context.cs.outline),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: context.colors.accent),
+        borderSide: BorderSide(color: context.cs.primary),
       ),
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -595,7 +595,7 @@ class _BlockRow extends StatelessWidget {
                     '≡',
                     style: TextStyle(
                       fontSize: 20,
-                      color: context.colors.textSecondary.withValues(alpha: 0.5),
+                      color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
                     ),
                   ),
                 ),
@@ -605,7 +605,7 @@ class _BlockRow extends StatelessWidget {
             Icon(
               _roleIcon(block.role),
               size: 16,
-              color: context.colors.textPrimary.withValues(alpha: 0.6),
+              color: context.cs.onSurface.withValues(alpha: 0.6),
             ),
             const SizedBox(width: 8),
             // Name + token estimate
@@ -620,7 +620,7 @@ class _BlockRow extends StatelessWidget {
                          style: TextStyle(
                            fontSize: 15,
                            fontWeight: FontWeight.w500,
-                           color: context.colors.textPrimary,
+                           color: context.cs.onSurface,
                          ),
                       ),
                     ),
@@ -637,7 +637,7 @@ class _BlockRow extends StatelessWidget {
                           '~${(block.content.length / 4).round()}',
                            style: TextStyle(
                              fontSize: 11,
-                             color: context.colors.textSecondary,
+                             color: context.cs.onSurfaceVariant,
                            ),
                         ),
                       ),
@@ -657,7 +657,7 @@ class _BlockRow extends StatelessWidget {
                    child: Icon(
                      Icons.edit_outlined,
                      size: 20,
-                     color: context.colors.textSecondary,
+                     color: context.cs.onSurfaceVariant,
                    ),
                 ),
               ),
@@ -671,7 +671,7 @@ class _BlockRow extends StatelessWidget {
                 child: Switch(
                   value: block.enabled,
                   onChanged: onToggle,
-                  activeThumbColor: context.colors.accent,
+                  activeThumbColor: context.cs.primary,
                 ),
               ),
             ),
@@ -720,14 +720,14 @@ class _AddBlockRow extends StatelessWidget {
           child: Row(
             children: [
               const SizedBox(width: 30), // align with drag handle column
-              Icon(Icons.add, size: 16, color: context.colors.accent),
+              Icon(Icons.add, size: 16, color: context.cs.primary),
               const SizedBox(width: 8),
               Text(
                 'Add Block',
                  style: TextStyle(
                    fontSize: 15,
                    fontWeight: FontWeight.w600,
-                   color: context.colors.accent,
+                   color: context.cs.primary,
                  ),
               ),
             ],
@@ -747,7 +747,7 @@ class _DotsButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-            color: context.colors.accent.withValues(alpha: 0.1),
+            color: context.cs.primary.withValues(alpha: 0.1),
       shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
@@ -758,7 +758,7 @@ class _DotsButton extends StatelessWidget {
           child: Icon(
             Icons.more_vert,
             size: 20,
-            color: context.colors.accent.withValues(alpha: 0.8),
+            color: context.cs.primary.withValues(alpha: 0.8),
           ),
         ),
       ),
@@ -785,13 +785,13 @@ class _UtilButton extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: context.colors.accent.withValues(alpha: 0.1),
+              color: context.cs.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Icon(
               icon,
               size: 14,
-              color: context.colors.accent.withValues(alpha: 0.7),
+              color: context.cs.primary.withValues(alpha: 0.7),
             ),
           ),
           if (count > 0)
@@ -804,7 +804,7 @@ class _UtilButton extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: const Color(0xFFFF4444),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: context.colors.background, width: 1),
+                  border: Border.all(color: context.cs.surface, width: 1),
                 ),
                 child: Text(
                   '$count',
@@ -839,14 +839,14 @@ class _BlocksBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.description, size: 14, color: context.colors.textSecondary),
+          Icon(Icons.description, size: 14, color: context.cs.onSurfaceVariant),
           const SizedBox(width: 4),
           Text(
             '$count blocks',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: context.colors.textSecondary,
+              color: context.cs.onSurfaceVariant,
             ),
           ),
         ],
@@ -867,7 +867,7 @@ class _SectionLabel extends StatelessWidget {
       text,
       style: TextStyle(
         fontSize: 13,
-        color: context.colors.textSecondary,
+        color: context.cs.onSurfaceVariant,
         fontWeight: FontWeight.w500,
       ),
     );
@@ -901,7 +901,7 @@ class _SettingsToggle extends StatelessWidget {
                 label,
                 style: TextStyle(
                   fontSize: 14,
-                  color: context.colors.textPrimary,
+                  color: context.cs.onSurface,
                 ),
               ),
               const SizedBox(height: 2),
@@ -909,13 +909,13 @@ class _SettingsToggle extends StatelessWidget {
                 description,
                 style: TextStyle(
                   fontSize: 12,
-                  color: context.colors.textSecondary,
+                  color: context.cs.onSurfaceVariant,
                 ),
               ),
             ],
           ),
         ),
-        Switch(value: value, onChanged: onChanged, activeThumbColor: context.colors.accent),
+        Switch(value: value, onChanged: onChanged, activeThumbColor: context.cs.primary),
       ],
     );
   }
@@ -1067,14 +1067,14 @@ class _RegexSheetState extends State<_RegexSheet> {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: Row(
             children: [
-              Icon(Icons.code, size: 18, color: context.colors.accent),
+              Icon(Icons.code, size: 18, color: context.cs.primary),
               const SizedBox(width: 8),
                Text(
                 'Regex Scripts',
                  style: TextStyle(
                    fontSize: 18,
                    fontWeight: FontWeight.w700,
-                   color: context.colors.textPrimary,
+                   color: context.cs.onSurface,
                  ),
                ),
               if (_regexes.isNotEmpty) ...[
@@ -1083,7 +1083,7 @@ class _RegexSheetState extends State<_RegexSheet> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-      color: context.colors.accent.withValues(alpha: 0.1),
+      color: context.cs.primary.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -1091,7 +1091,7 @@ class _RegexSheetState extends State<_RegexSheet> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: context.colors.accent,
+                      color: context.cs.primary,
                     ),
                   ),
                 ),
@@ -1099,7 +1099,7 @@ class _RegexSheetState extends State<_RegexSheet> {
             ],
           ),
         ),
-        Divider(color: context.colors.border, height: 1),
+        Divider(color: context.cs.outline, height: 1),
         // List
         if (_regexes.isEmpty)
           Padding(
@@ -1108,7 +1108,7 @@ class _RegexSheetState extends State<_RegexSheet> {
               child: Text(
                 'No regex scripts',
                 style: TextStyle(
-                  color: context.colors.textSecondary.withValues(alpha: 0.6),
+                  color: context.cs.onSurfaceVariant.withValues(alpha: 0.6),
                   fontSize: 15,
                 ),
               ),
@@ -1146,7 +1146,7 @@ class _RegexSheetState extends State<_RegexSheet> {
         Padding(
           padding: const EdgeInsets.all(12),
           child: Material(
-                    color: context.colors.accent.withValues(alpha: 0.1),
+                    color: context.cs.primary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
             child: InkWell(
               onTap: _addRegex,
@@ -1156,14 +1156,14 @@ class _RegexSheetState extends State<_RegexSheet> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.add, size: 20, color: context.colors.accent),
+                    Icon(Icons.add, size: 20, color: context.cs.primary),
                     SizedBox(width: 8),
                     Text(
                       'Add Regex',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
-                        color: context.colors.accent,
+                        color: context.cs.primary,
                       ),
                     ),
                   ],

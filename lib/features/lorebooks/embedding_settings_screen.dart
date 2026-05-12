@@ -146,7 +146,7 @@ class _EmbeddingSettingsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: context.colors.background,
+      backgroundColor: context.cs.surface,
       body: Column(
         children: [
           SafeArea(
@@ -168,7 +168,7 @@ class _EmbeddingSettingsScreenState
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: context.colors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -199,7 +199,7 @@ class _EmbeddingSettingsScreenState
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: context.colors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -235,7 +235,7 @@ class _EmbeddingSettingsScreenState
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: context.colors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -249,7 +249,7 @@ class _EmbeddingSettingsScreenState
                   width: double.infinity,
                   child: FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: context.colors.accent,
+                      backgroundColor: context.cs.primary,
                       foregroundColor: Colors.black,
                     ),
                     onPressed: _save,
@@ -275,13 +275,13 @@ class _EmbeddingSettingsScreenState
       controller: controller,
       obscureText: obscure,
       maxLines: maxLines,
-      style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
+      style: TextStyle(color: context.cs.onSurface, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+        labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
         hintStyle: TextStyle(
-          color: context.colors.textSecondary.withValues(alpha: 0.5),
+          color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
           fontSize: 12,
         ),
         filled: true,
@@ -307,7 +307,7 @@ class _SearchModeChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = selected
-        ? context.colors.accent
+        ? context.cs.primary
         : Colors.white.withValues(alpha: 0.1);
     return GestureDetector(
       onTap: onTap,
@@ -315,7 +315,7 @@ class _SearchModeChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: selected
-              ? context.colors.accent.withValues(alpha: 0.2)
+              ? context.cs.primary.withValues(alpha: 0.2)
               : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: color),
@@ -325,7 +325,7 @@ class _SearchModeChip extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: selected ? context.colors.accent : context.colors.textSecondary,
+            color: selected ? context.cs.primary : context.cs.onSurfaceVariant,
           ),
         ),
       ),

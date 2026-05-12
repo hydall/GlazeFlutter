@@ -29,11 +29,11 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: context.colors.surfaceHigh,
+      backgroundColor: context.cs.surfaceContainerHighest,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: Text(
         'Import by URL',
-        style: TextStyle(color: context.colors.textPrimary),
+        style: TextStyle(color: context.cs.onSurface),
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -41,20 +41,20 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
         children: [
           Text(
             'Paste a JanitorAI, Saucepan.ai, or Chub.ai character URL',
-            style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+            style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 13),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _controller,
-            style: TextStyle(fontSize: 14, color: context.colors.textPrimary),
+            style: TextStyle(fontSize: 14, color: context.cs.onSurface),
             decoration: InputDecoration(
               hintText: 'https://...',
               hintStyle: TextStyle(
-                color: context.colors.textSecondary,
+                color: context.cs.onSurfaceVariant,
                 fontSize: 14,
               ),
               filled: true,
-              fillColor: context.colors.background,
+              fillColor: context.cs.surface,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 14,
                 vertical: 12,
@@ -76,7 +76,7 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
                   height: 20,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: context.colors.accent,
+                    color: context.cs.primary,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -86,7 +86,7 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
                         ? 'Phase: $_phase'
                         : 'Extracting character...',
                     style: TextStyle(
-                      color: context.colors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 13,
                     ),
                   ),
@@ -109,7 +109,7 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
             onPressed: () => Navigator.pop(context),
             child: Text(
               'Cancel',
-              style: TextStyle(color: context.colors.textSecondary),
+              style: TextStyle(color: context.cs.onSurfaceVariant),
             ),
           ),
         if (!_loading)
@@ -117,7 +117,7 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
             onPressed: _startExtraction,
             child: Text(
               'Import',
-              style: TextStyle(color: context.colors.accent),
+              style: TextStyle(color: context.cs.primary),
             ),
           ),
         if (_loading)
@@ -125,7 +125,7 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
             onPressed: () => Navigator.pop(context),
             child: Text(
               'Cancel',
-              style: TextStyle(color: context.colors.textSecondary),
+              style: TextStyle(color: context.cs.onSurfaceVariant),
             ),
           ),
       ],

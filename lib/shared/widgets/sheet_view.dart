@@ -251,7 +251,7 @@ class _SheetViewState extends State<SheetView>
       }
 
       return Scaffold(
-        backgroundColor: context.colors.background,
+        backgroundColor: context.cs.surface,
         body: Stack(
           children: [
             Positioned.fill(
@@ -305,7 +305,7 @@ class _SheetViewState extends State<SheetView>
                               return _HeaderIconButton(
                                 onPressed: action.onPressed,
                                 tooltip: action.tooltip,
-                                 foregroundColor: action.color ?? context.colors.accent,
+                                 foregroundColor: action.color ?? context.cs.primary,
                                 child: action.icon,
                               );
                             }).toList(),
@@ -369,7 +369,7 @@ class _SheetViewState extends State<SheetView>
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
-            color: context.colors.background.withValues(alpha: 0.8),
+            color: context.cs.surface.withValues(alpha: 0.8),
             child: Stack(
               children: [
                 Positioned.fill(
@@ -571,7 +571,7 @@ class _SheetViewHeader extends StatelessWidget {
                       child: Icon(
                         Icons.arrow_back,
                         size: 20,
-                         color: context.colors.accent,
+                         color: context.cs.primary,
                       ),
                     )
                   else
@@ -588,7 +588,7 @@ class _SheetViewHeader extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
-                                  color: context.colors.textPrimary,
+                                  color: context.cs.onSurface,
                                 ),
                               )
                             : const SizedBox.shrink()),
@@ -603,7 +603,7 @@ class _SheetViewHeader extends StatelessWidget {
                             child: _HeaderIconButton(
                               tooltip: action.tooltip,
                               onPressed: action.onPressed,
-                              foregroundColor: action.color ?? context.colors.accent,
+                              foregroundColor: action.color ?? context.cs.primary,
                               child: action.icon,
                             ),
                           ),
@@ -661,7 +661,7 @@ class _HeaderIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = foregroundColor ?? context.colors.accent;
+    final fg = foregroundColor ?? context.cs.primary;
     final button = Material(
       color: Colors.white.withValues(alpha: 0.06),
       shape: const CircleBorder(),
@@ -696,10 +696,10 @@ class _SheetTabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = active ? context.colors.accent : context.colors.textSecondary;
+    final foreground = active ? context.cs.primary : context.cs.onSurfaceVariant;
     return Material(
       color: active
-          ? context.colors.accent.withValues(alpha: 0.12)
+          ? context.cs.primary.withValues(alpha: 0.12)
           : Colors.white.withValues(alpha: 0.04),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
@@ -711,7 +711,7 @@ class _SheetTabButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: active
-                  ? context.colors.accent.withValues(alpha: 0.28)
+                  ? context.cs.primary.withValues(alpha: 0.28)
                   : Colors.transparent,
             ),
           ),

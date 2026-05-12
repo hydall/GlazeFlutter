@@ -42,7 +42,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     final topPad = MediaQuery.of(context).padding.top + 74.0;
 
     return Scaffold(
-      backgroundColor: context.colors.background,
+      backgroundColor: context.cs.surface,
       body: Stack(
         children: [
           Positioned.fill(
@@ -54,12 +54,12 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                   )
                 : characters.when(
                     loading: () => Center(
-                      child: CircularProgressIndicator(color: context.colors.accent),
+                      child: CircularProgressIndicator(color: context.cs.primary),
                     ),
                     error: (e, _) => Center(
                       child: Text(
                         'Error: $e',
-                        style: TextStyle(color: context.colors.textSecondary),
+                        style: TextStyle(color: context.cs.onSurfaceVariant),
                       ),
                     ),
                     data: (chars) {
@@ -122,7 +122,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                           height: 44,
                           child: IconButton(
                             icon: const Icon(Icons.search_rounded, size: 22),
-                            color: context.colors.accent,
+                            color: context.cs.primary,
                             onPressed: () async {
                               final query = await showSearch<String>(
                                 context: context,
@@ -341,7 +341,7 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
 
   @override
   ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
-    appBarTheme: AppBarTheme(backgroundColor: context.colors.background),
+    appBarTheme: AppBarTheme(backgroundColor: context.cs.surface),
   );
 
   @override
@@ -376,7 +376,7 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
       return Center(
         child: Text(
           'No characters found',
-          style: TextStyle(color: context.colors.textSecondary),
+          style: TextStyle(color: context.cs.onSurfaceVariant),
         ),
       );
     }
@@ -387,20 +387,20 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
         final c = filtered[i];
         return ListTile(
           leading: CircleAvatar(
-            backgroundColor: context.colors.accent.withValues(alpha: 0.15),
+            backgroundColor: context.cs.primary.withValues(alpha: 0.15),
             backgroundImage: c.avatarPath != null
                 ? FileImage(File(c.avatarPath!))
                 : null,
             child: c.avatarPath == null
                 ? Text(
                     c.name[0].toUpperCase(),
-                    style: TextStyle(color: context.colors.accent),
+                    style: TextStyle(color: context.cs.primary),
                   )
                 : null,
           ),
           title: Text(
             c.name,
-            style: TextStyle(color: context.colors.textPrimary),
+            style: TextStyle(color: context.cs.onSurface),
           ),
           subtitle: c.description != null
               ? Text(
@@ -408,7 +408,7 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    color: context.colors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                     fontSize: 12,
                   ),
                 )
@@ -432,7 +432,7 @@ class _AddButton extends StatelessWidget {
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          color: context.colors.accent,
+          color: context.cs.primary,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(

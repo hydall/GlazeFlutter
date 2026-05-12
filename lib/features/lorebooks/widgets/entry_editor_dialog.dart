@@ -188,7 +188,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: context.colors.background,
+      backgroundColor: context.cs.surface,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 500, maxHeight: 600),
@@ -328,7 +328,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                       width: double.infinity,
                       child: FilledButton.icon(
                         style: FilledButton.styleFrom(
-                          backgroundColor: context.colors.accent,
+                          backgroundColor: context.cs.primary,
                           foregroundColor: Colors.black,
                         ),
                         onPressed: _isIndexing ? null : _indexEntry,
@@ -362,7 +362,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                           'Not indexed yet',
                           style: TextStyle(
                             fontSize: 12,
-                            color: context.colors.textSecondary,
+                            color: context.cs.onSurfaceVariant,
                           ),
                         ),
                       ),
@@ -390,7 +390,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                   const SizedBox(width: 8),
                   FilledButton(
                     style: FilledButton.styleFrom(
-                      backgroundColor: context.colors.accent,
+                      backgroundColor: context.cs.primary,
                       foregroundColor: Colors.black,
                     ),
                     onPressed: () => Navigator.pop(context, _buildEntry()),
@@ -414,13 +414,13 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
     return TextField(
       controller: controller,
       maxLines: maxLines,
-      style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
+      style: TextStyle(color: context.cs.onSurface, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+        labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
         hintStyle: TextStyle(
-          color: context.colors.textSecondary.withValues(alpha: 0.5),
+          color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
           fontSize: 12,
         ),
         filled: true,
@@ -440,7 +440,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
     return InputDecorator(
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+        labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.05),
         isDense: true,
@@ -451,7 +451,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
           value: value,
           isDense: true,
           isExpanded: true,
-          style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
+          style: TextStyle(color: context.cs.onSurface, fontSize: 14),
           items: items.entries
               .map(
                 (e) => DropdownMenuItem(
@@ -474,13 +474,13 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
         label,
         style: TextStyle(
           fontSize: 11,
-          color: value ? context.colors.accent : context.colors.textSecondary,
+          color: value ? context.cs.primary : context.cs.onSurfaceVariant,
         ),
       ),
       selected: value,
       onSelected: onChanged,
-      selectedColor: context.colors.accent.withValues(alpha: 0.2),
-      checkmarkColor: context.colors.accent,
+      selectedColor: context.cs.primary.withValues(alpha: 0.2),
+      checkmarkColor: context.cs.primary,
     );
   }
 }

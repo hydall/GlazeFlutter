@@ -17,9 +17,9 @@ class SettingsGroup extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       child: Container(
         decoration: BoxDecoration(
-          color: context.colors.surfaceHigh,
+          color: context.cs.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: context.colors.glassBorder),
+          border: Border.all(color: context.cs.outlineVariant),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -29,7 +29,7 @@ class SettingsGroup extends StatelessWidget {
               child: Text(
                 header,
                 style: TextStyle(
-                  color: context.colors.textSecondary,
+                  color: context.cs.onSurfaceVariant,
                   fontWeight: FontWeight.w700,
                   fontSize: 13,
                 ),
@@ -86,7 +86,7 @@ class SettingsItemField extends StatelessWidget {
         children: [
           Text(
             label,
-            style: TextStyle(color: context.colors.textSecondary, fontSize: 13),
+            style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 13),
           ),
           const SizedBox(height: 6),
           TextField(
@@ -94,11 +94,11 @@ class SettingsItemField extends StatelessWidget {
             obscureText: obscure,
             keyboardType: keyboardType,
             inputFormatters: inputFormatters,
-            style: TextStyle(color: context.colors.textPrimary, fontSize: 15),
+            style: TextStyle(color: context.cs.onSurface, fontSize: 15),
             decoration: InputDecoration(
               hintText: placeholder,
               hintStyle: TextStyle(
-                color: context.colors.textSecondary.withValues(alpha: 0.4),
+                color: context.cs.onSurfaceVariant.withValues(alpha: 0.4),
               ),
               filled: true,
               fillColor: const Color(0xFF252525),
@@ -114,7 +114,7 @@ class SettingsItemField extends StatelessWidget {
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide(
-                  color: context.colors.accent.withValues(alpha: 0.5),
+                  color: context.cs.primary.withValues(alpha: 0.5),
                   width: 1.5,
                 ),
               ),
@@ -160,7 +160,7 @@ class SettingsItemSwitch extends StatelessWidget {
                 Text(
                   label,
                   style: TextStyle(
-                    color: context.colors.textPrimary,
+                    color: context.cs.onSurface,
                     fontSize: 15,
                   ),
                 ),
@@ -169,7 +169,7 @@ class SettingsItemSwitch extends StatelessWidget {
                   Text(
                     subtitle!,
                     style: TextStyle(
-                      color: context.colors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 13,
                     ),
                   ),
@@ -180,12 +180,12 @@ class SettingsItemSwitch extends StatelessWidget {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: context.colors.accent,
-            activeTrackColor: context.colors.accent.withValues(alpha: 0.5),
+            activeThumbColor: context.cs.primary,
+            activeTrackColor: context.cs.primary.withValues(alpha: 0.5),
             trackOutlineColor: WidgetStateProperty.resolveWith(
               (states) => states.contains(WidgetState.selected)
                   ? Colors.transparent
-                  : context.colors.glassBorder,
+                  : context.cs.outlineVariant,
             ),
           ),
         ],
@@ -233,7 +233,7 @@ class SettingsItemRange extends StatelessWidget {
                 child: Text(
                   label,
                   style: TextStyle(
-                    color: context.colors.textPrimary,
+                    color: context.cs.onSurface,
                     fontSize: 15,
                   ),
                 ),
@@ -241,7 +241,7 @@ class SettingsItemRange extends StatelessWidget {
               Text(
                 _display,
                 style: TextStyle(
-                  color: context.colors.textSecondary,
+                  color: context.cs.onSurfaceVariant,
                   fontSize: 14,
                   fontVariations: const [FontVariation('wght', 500)],
                 ),
@@ -250,10 +250,10 @@ class SettingsItemRange extends StatelessWidget {
           ),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              activeTrackColor: context.colors.accent,
-              thumbColor: context.colors.accent,
-              inactiveTrackColor: context.colors.accent.withValues(alpha: 0.18),
-              overlayColor: context.colors.accent.withValues(alpha: 0.1),
+              activeTrackColor: context.cs.primary,
+              thumbColor: context.cs.primary,
+              inactiveTrackColor: context.cs.primary.withValues(alpha: 0.18),
+              overlayColor: context.cs.primary.withValues(alpha: 0.1),
               trackHeight: 3,
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
             ),
@@ -297,7 +297,7 @@ class SettingsItemSelector extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                color: context.colors.textSecondary,
+                color: context.cs.onSurfaceVariant,
                 fontSize: 13,
               ),
             ),
@@ -315,14 +315,14 @@ class SettingsItemSelector extends StatelessWidget {
                     child: Text(
                       currentValue,
                       style: TextStyle(
-                        color: context.colors.textPrimary,
+                        color: context.cs.onSurface,
                         fontSize: 15,
                       ),
                     ),
                   ),
                   Icon(
                     Icons.keyboard_arrow_down_rounded,
-                    color: context.colors.textSecondary.withValues(alpha: 0.5),
+                    color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
                     size: 22,
                   ),
                 ],

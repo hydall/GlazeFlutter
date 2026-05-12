@@ -250,7 +250,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
                     icon: Icon(
                       Icons.more_vert_rounded,
                       size: 20,
-                      color: context.colors.accent,
+                      color: context.cs.primary,
                     ),
                     onPressed: _openActionsMenu,
                   ),
@@ -279,7 +279,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
       return Center(
         child: Text(
           'Character not found',
-          style: TextStyle(color: context.colors.textPrimary),
+          style: TextStyle(color: context.cs.onSurface),
         ),
       );
     }
@@ -336,7 +336,7 @@ class _ChatFab extends StatelessWidget {
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
-          color: context.colors.accent,
+          color: context.cs.primary,
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [
             BoxShadow(blurRadius: 16, color: Color(0x80000000)),
@@ -376,8 +376,8 @@ class _ImportFab extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 20),
         decoration: BoxDecoration(
           color: importing
-              ? context.colors.accent.withValues(alpha: 0.5)
-              : context.colors.accent,
+              ? context.cs.primary.withValues(alpha: 0.5)
+              : context.cs.primary,
           borderRadius: BorderRadius.circular(24),
           boxShadow: const [
             BoxShadow(blurRadius: 16, color: Color(0x80000000)),
@@ -625,7 +625,7 @@ class _TagChip extends StatelessWidget {
       border = const Color(0x3300FFFF);
     } else {
       bg = _kAccentDim;
-      fg = context.colors.accent;
+      fg = context.cs.primary;
       border = _kAccentBorder;
     }
     return Container(
@@ -758,7 +758,7 @@ class _AccordionCard extends StatelessWidget {
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.65,
-                        color: context.colors.accent,
+                        color: context.cs.primary,
                       ),
                     ),
                   ),

@@ -177,7 +177,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
               TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
               const SizedBox(width: 8),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: context.colors.accent, foregroundColor: Colors.black),
+                style: FilledButton.styleFrom(backgroundColor: context.cs.primary, foregroundColor: Colors.black),
                 onPressed: _save,
                 child: const Text('Save'),
               ),
@@ -190,12 +190,12 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
 
   Widget _switchTile(String label, bool value, ValueChanged<bool> onChanged, {String? subtitle}) {
     return SwitchListTile(
-      title: Text(label, style: TextStyle(fontSize: 14, color: context.colors.textPrimary)),
-      subtitle: subtitle != null ? Text(subtitle, style: TextStyle(fontSize: 11, color: context.colors.textSecondary)) : null,
+      title: Text(label, style: TextStyle(fontSize: 14, color: context.cs.onSurface)),
+      subtitle: subtitle != null ? Text(subtitle, style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant)) : null,
       value: value,
       onChanged: onChanged,
       dense: true,
-      activeThumbColor: context.colors.accent,
+      activeThumbColor: context.cs.primary,
       contentPadding: EdgeInsets.zero,
     );
   }
@@ -203,7 +203,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
   Widget _numberField(String label, int value, ValueChanged<int> onChanged, {int min = 0, int max = 99999}) {
     return Row(
       children: [
-        Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: context.colors.textPrimary))),
+        Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: context.cs.onSurface))),
         SizedBox(
           width: 80,
           child: DropdownButton<int>(
@@ -211,7 +211,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
             items: List.generate(max - min + 1, (i) => DropdownMenuItem(value: min + i, child: Text('${min + i}'))),
             onChanged: (v) => onChanged(v ?? value),
             underline: const SizedBox.shrink(),
-            style: TextStyle(fontSize: 14, color: context.colors.accent),
+            style: TextStyle(fontSize: 14, color: context.cs.primary),
           ),
         ),
       ],
@@ -224,12 +224,12 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
       obscureText: obscure,
       keyboardType: inputType,
       inputFormatters: inputType == TextInputType.number ? [FilteringTextInputFormatter.digitsOnly] : null,
-      style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
+      style: TextStyle(color: context.cs.onSurface, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+        labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
         hintText: hint,
-        hintStyle: TextStyle(color: context.colors.textSecondary.withValues(alpha: 0.4)),
+        hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.4)),
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.05),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
@@ -241,20 +241,20 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
   Widget _modelField(TextEditingController controller, {String? hint, required bool isCustom}) {
     return TextField(
       controller: controller,
-      style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
+      style: TextStyle(color: context.cs.onSurface, fontSize: 14),
       decoration: InputDecoration(
         labelText: isCustom ? 'Model' : 'Model Override (optional)',
-        labelStyle: TextStyle(color: context.colors.textSecondary, fontSize: 12),
+        labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
         hintText: hint,
-        hintStyle: TextStyle(color: context.colors.textSecondary.withValues(alpha: 0.4)),
+        hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.4)),
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.05),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         suffixIcon: IconButton(
           icon: _fetchingModels
-              ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: context.colors.accent))
-              : Icon(Icons.download_rounded, size: 20, color: context.colors.textSecondary),
+              ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: context.cs.primary))
+              : Icon(Icons.download_rounded, size: 20, color: context.cs.onSurfaceVariant),
           tooltip: 'Fetch models from API',
           onPressed: _fetchingModels ? null : _fetchAndPickModel,
         ),
@@ -298,7 +298,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
         items: ids.map((id) => BottomSheetItem(
           label: id,
           icon: id == _generationModelCtrl.text ? Icons.check : null,
-          iconColor: context.colors.accent,
+          iconColor: context.cs.primary,
           onTap: () => Navigator.pop(context, id),
         )).toList(),
       );
@@ -325,7 +325,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
                 ...MemoryPromptPresets.builtIn.map((p) => BottomSheetItem(
                   label: p.label,
                   icon: p.key == _promptPreset ? Icons.check : null,
-                  iconColor: context.colors.accent,
+                  iconColor: context.cs.primary,
                   onTap: () => Navigator.pop(context, p.key),
                 )),
                 if (custom.isNotEmpty)
@@ -337,7 +337,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
                 ...custom.map((p) => BottomSheetItem(
                   label: p.label,
                   icon: p.key == _promptPreset ? Icons.check : null,
-                  iconColor: context.colors.accent,
+                  iconColor: context.cs.primary,
                   onTap: () => Navigator.pop(context, p.key),
                 )),
               ],
@@ -353,8 +353,8 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(MemoryPromptPresets.label(_promptPreset, custom), style: TextStyle(fontSize: 13, color: context.colors.textPrimary)),
-                Icon(Icons.arrow_drop_down, size: 20, color: context.colors.textSecondary),
+                Text(MemoryPromptPresets.label(_promptPreset, custom), style: TextStyle(fontSize: 13, color: context.cs.onSurface)),
+                Icon(Icons.arrow_drop_down, size: 20, color: context.cs.onSurfaceVariant),
               ],
             ),
           ),
@@ -367,7 +367,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
             icon: const Icon(Icons.manage_accounts_rounded, size: 16),
             label: const Text('Manage prompts'),
             style: TextButton.styleFrom(
-              foregroundColor: context.colors.accent,
+              foregroundColor: context.cs.primary,
               padding: const EdgeInsets.symmetric(horizontal: 12),
             ),
           ),
@@ -418,7 +418,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
   Widget _sectionLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.colors.textSecondary)),
+      child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
     );
   }
 }

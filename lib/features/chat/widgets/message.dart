@@ -475,7 +475,7 @@ class _MessageState extends ConsumerState<Message>
       padding: isStandard ? const EdgeInsets.all(0) : const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: _highlighted
-            ? context.colors.accent.withValues(alpha: 0.15)
+            ? context.cs.primary.withValues(alpha: 0.15)
             : style.bg.withValues(alpha: style.elementOpacity),
         borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16),
         border: isStandard || style.borderWidth <= 0
@@ -527,7 +527,7 @@ class _MessageState extends ConsumerState<Message>
                       },
                       child: CircleAvatar(
                         radius: 12,
-                        backgroundColor: isUser ? context.colors.accent : const Color(0xFFCCCCCC),
+                        backgroundColor: isUser ? context.cs.primary : const Color(0xFFCCCCCC),
                         backgroundImage: avatarImage,
                         child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)) : null,
                       ),
@@ -553,7 +553,7 @@ class _MessageState extends ConsumerState<Message>
                       },
                       child: CircleAvatar(
                         radius: 10,
-                        backgroundColor: isUser ? context.colors.accent : const Color(0xFFCCCCCC),
+                        backgroundColor: isUser ? context.cs.primary : const Color(0xFFCCCCCC),
                         backgroundImage: avatarImage,
                         child: avatarImage == null ? Text(avatarLetter, style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)) : null,
                       ),
@@ -925,18 +925,19 @@ class _BubbleStyle {
     required ThemePreset preset,
   }) {
     final colors = context.colors;
+    final cs = context.cs;
     final elOp = isStandard ? 1.0 : preset.elementOpacity;
     final elBlur = isStandard ? 0.0 : preset.elementBlur;
     final bw = isStandard ? 0.0 : preset.borderWidth;
-    final bc = preset.borderParsed ?? colors.border;
+    final bc = preset.borderParsed ?? cs.outline;
 
     if (isStandard) {
       return _BubbleStyle(
         bg: Colors.transparent,
         alignment: Alignment.centerLeft,
-        textColor: isUser ? (colors.userText ?? colors.textPrimary) : (colors.charText ?? colors.textPrimary),
-        quoteColor: isUser ? (colors.userQuote ?? colors.accent) : (colors.charQuote ?? colors.accent),
-        metaColor: colors.textSecondary,
+        textColor: isUser ? (colors.userText ?? cs.onSurface) : (colors.charText ?? cs.onSurface),
+        quoteColor: isUser ? (colors.userQuote ?? cs.primary) : (colors.charQuote ?? cs.primary),
+        metaColor: cs.onSurfaceVariant,
         italicColor: isUser ? colors.userItalic : colors.charItalic,
       );
     }
@@ -944,9 +945,9 @@ class _BubbleStyle {
       return _BubbleStyle(
         bg: colors.userBubble,
         alignment: Alignment.centerRight,
-        textColor: colors.userText ?? colors.textPrimary,
-        quoteColor: colors.userQuote ?? colors.accent,
-        metaColor: colors.userText?.withValues(alpha: 0.6) ?? colors.textSecondary,
+        textColor: colors.userText ?? cs.onSurface,
+        quoteColor: colors.userQuote ?? cs.primary,
+        metaColor: colors.userText?.withValues(alpha: 0.6) ?? cs.onSurfaceVariant,
         italicColor: colors.userItalic,
         elementOpacity: elOp,
         elementBlur: elBlur,
@@ -958,9 +959,9 @@ class _BubbleStyle {
       return _BubbleStyle(
         bg: colors.charBubble,
         alignment: Alignment.center,
-        textColor: colors.charText ?? colors.textPrimary,
-        quoteColor: colors.charQuote ?? colors.accent,
-        metaColor: colors.charText?.withValues(alpha: 0.6) ?? colors.textSecondary,
+        textColor: colors.charText ?? cs.onSurface,
+        quoteColor: colors.charQuote ?? cs.primary,
+        metaColor: colors.charText?.withValues(alpha: 0.6) ?? cs.onSurfaceVariant,
         italicColor: colors.charItalic,
         elementOpacity: elOp,
         elementBlur: elBlur,
@@ -971,9 +972,9 @@ class _BubbleStyle {
     return _BubbleStyle(
       bg: colors.charBubble,
       alignment: Alignment.centerLeft,
-      textColor: colors.charText ?? colors.textPrimary,
-      quoteColor: colors.charQuote ?? colors.accent,
-      metaColor: colors.charText?.withValues(alpha: 0.6) ?? colors.textSecondary,
+      textColor: colors.charText ?? cs.onSurface,
+      quoteColor: colors.charQuote ?? cs.primary,
+      metaColor: colors.charText?.withValues(alpha: 0.6) ?? cs.onSurfaceVariant,
       italicColor: colors.charItalic,
       elementOpacity: elOp,
       elementBlur: elBlur,
@@ -1128,12 +1129,12 @@ class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProvi
               padding: const EdgeInsets.all(8),
               child: Row(
                 children: [
-                  Text('Reasoning', style: TextStyle(fontSize: 11, color: context.colors.textSecondary, fontWeight: FontWeight.w600)),
+                  Text('Reasoning', style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant, fontWeight: FontWeight.w600)),
                   const Spacer(),
                   AnimatedRotation(
                     turns: _collapsed ? -0.25 : 0,
                     duration: const Duration(milliseconds: 200),
-                    child: Icon(Icons.expand_more, size: 16, color: context.colors.textSecondary),
+                    child: Icon(Icons.expand_more, size: 16, color: context.cs.onSurfaceVariant),
                   ),
                 ],
               ),
@@ -1149,7 +1150,7 @@ class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProvi
                   padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                   child: Text(
                     widget.reasoning,
-                    style: TextStyle(fontSize: 12, color: context.colors.textSecondary, fontStyle: FontStyle.italic),
+                    style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant, fontStyle: FontStyle.italic),
                   ),
                 ),
               ),
@@ -1324,15 +1325,15 @@ class _MetadataRow extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: context.colors.accent.withValues(alpha: 0.15),
+                color: context.cs.primary.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.refresh, size: 14, color: context.colors.accent),
+                  Icon(Icons.refresh, size: 14, color: context.cs.primary),
                   const SizedBox(width: 4),
-                  Text('Regenerate', style: TextStyle(fontSize: 12, color: context.colors.accent)),
+                  Text('Regenerate', style: TextStyle(fontSize: 12, color: context.cs.primary)),
                 ],
               ),
             ),

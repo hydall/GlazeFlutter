@@ -528,7 +528,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       context,
       title: 'Sessions',
       headerAction: IconButton(
-        icon: Icon(Icons.add, color: context.colors.accent),
+        icon: Icon(Icons.add, color: context.cs.primary),
         onPressed: _showSessionAddMenu,
       ),
       child: _SessionsSheetContent(
@@ -686,7 +686,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     return Container(
       decoration: BoxDecoration(
         color: context.colors.charBubble,
-        border: Border(top: BorderSide(color: context.colors.glassBorder)),
+        border: Border(top: BorderSide(color: context.cs.outlineVariant)),
       ),
       child: Stack(
           children: [

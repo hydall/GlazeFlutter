@@ -120,31 +120,31 @@ class _ChatInputBarState extends State<ChatInputBar> {
               child: Container(
                 constraints: const BoxConstraints(minHeight: 56),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).scaffoldBackgroundColor.withValues(alpha: 0.8),
+                  color: context.cs.surface.withValues(alpha: 0.8),
                   border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                   borderRadius: BorderRadius.circular(28),
                 ),
                 child: Row(
                   children: [
                     const SizedBox(width: 18),
-                    Icon(Icons.search, size: 20, color: context.colors.accent),
+                    Icon(Icons.search, size: 20, color: context.cs.primary),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         widget.searchMatchCount > 0 
                             ? '${widget.searchCurrentIndex + 1} of ${widget.searchMatchCount} matches' 
                             : 'No matches found',
-                        style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
+                        style: TextStyle(color: context.cs.onSurface, fontSize: 16),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     IconButton(
-                      icon: Icon(Icons.keyboard_arrow_up, size: 24, color: context.colors.textPrimary),
+                      icon: Icon(Icons.keyboard_arrow_up, size: 24, color: context.cs.onSurface),
                       onPressed: widget.onSearchPrev,
                     ),
                     IconButton(
-                      icon: Icon(Icons.keyboard_arrow_down, size: 24, color: context.colors.textPrimary),
+                      icon: Icon(Icons.keyboard_arrow_down, size: 24, color: context.cs.onSurface),
                       onPressed: widget.onSearchNext,
                     ),
                     const SizedBox(width: 8),
@@ -199,9 +199,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 child: Container(
                   constraints: const BoxConstraints(minHeight: 56),
                   decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).scaffoldBackgroundColor.withValues(alpha: 0.8),
+                    color: context.cs.surface.withValues(alpha: 0.8),
                     border: Border.all(
                       color: _guidanceMode
                           ? Colors.orange.withValues(alpha: 0.3)
@@ -270,7 +268,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     height: 40,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: context.colors.accent,
+                      color: context.cs.primary,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -321,13 +319,11 @@ class _CircleBtn extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).scaffoldBackgroundColor.withValues(alpha: 0.8),
+              color: context.cs.surface.withValues(alpha: 0.8),
               border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
               shape: BoxShape.circle,
             ),
-            child: Center(child: Icon(icon, color: color ?? context.colors.accent, size: 20)),
+            child: Center(child: Icon(icon, color: color ?? context.cs.primary, size: 20)),
           ),
         ),
       ),

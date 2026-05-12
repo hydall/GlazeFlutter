@@ -19,7 +19,7 @@ class _LorebookGlobalSettingsScreenState extends ConsumerState<LorebookGlobalSet
     final settings = ref.watch(lorebookSettingsProvider);
 
     return Scaffold(
-      backgroundColor: context.colors.background,
+      backgroundColor: context.cs.surface,
       body: Column(
         children: [
           SafeArea(
@@ -179,7 +179,7 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.colors.accent, letterSpacing: 0.5)),
+      child: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: context.cs.primary, letterSpacing: 0.5)),
     );
   }
 }
@@ -197,13 +197,13 @@ class _NumberField extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: 14))),
+        Expanded(child: Text(label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14))),
         SizedBox(
           width: 80,
           child: TextFormField(
             initialValue: value.toString(),
             keyboardType: TextInputType.number,
-            style: TextStyle(color: context.colors.textPrimary, fontSize: 14),
+            style: TextStyle(color: context.cs.onSurface, fontSize: 14),
             textAlign: TextAlign.center,
             decoration: InputDecoration(
               isDense: true,
@@ -235,15 +235,15 @@ class _DropdownField<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: 14))),
+        Expanded(child: Text(label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14))),
         SizedBox(
           width: 180,
           child: DropdownButtonFormField<T>(
             value: value,
             items: items,
             onChanged: (v) { if (v != null) onChanged(v); },
-            style: TextStyle(color: context.colors.textPrimary, fontSize: 13),
-            dropdownColor: context.colors.background,
+            style: TextStyle(color: context.cs.onSurface, fontSize: 13),
+            dropdownColor: context.cs.surface,
             decoration: InputDecoration(
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -285,8 +285,8 @@ class _SliderField extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
-            Text(displayText, style: TextStyle(color: context.colors.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
+            Text(label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
+            Text(displayText, style: TextStyle(color: context.cs.onSurface, fontSize: 13, fontWeight: FontWeight.w500)),
           ],
         ),
         Slider(
@@ -294,7 +294,7 @@ class _SliderField extends StatelessWidget {
           min: min,
           max: max,
           divisions: divisions,
-          activeColor: context.colors.accent,
+          activeColor: context.cs.primary,
           onChanged: onChanged,
         ),
       ],
@@ -314,8 +314,8 @@ class _SwitchField extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(color: context.colors.textSecondary, fontSize: 14)),
-        Switch(value: value, onChanged: onChanged, activeColor: context.colors.accent),
+        Text(label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
+        Switch(value: value, onChanged: onChanged, activeColor: context.cs.primary),
       ],
     );
   }

@@ -154,7 +154,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Material(
-        color: context.colors.accent,
+        color: context.cs.primary,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           onTap: () => _showAddSheet(context, ref),
@@ -266,9 +266,9 @@ class _PsCard extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       decoration: BoxDecoration(
-        color: context.colors.surfaceHigh.withValues(alpha: 0.4),
+        color: context.cs.surfaceContainerHighest.withValues(alpha: 0.4),
         border: Border.all(
-          color: isActive ? context.colors.accent : context.colors.border,
+          color: isActive ? context.cs.primary : context.cs.outline,
           width: 2,
         ),
         borderRadius: BorderRadius.circular(12),
@@ -279,8 +279,8 @@ class _PsCard extends StatelessWidget {
         child: InkWell(
           onTap: onActivate,
           borderRadius: BorderRadius.circular(10),
-          splashColor: context.colors.accent.withValues(alpha: 0.08),
-          highlightColor: context.colors.accent.withValues(alpha: 0.04),
+          splashColor: context.cs.primary.withValues(alpha: 0.08),
+          highlightColor: context.cs.primary.withValues(alpha: 0.04),
           child: Padding(
             padding: const EdgeInsets.all(10),
             child: Row(
@@ -291,13 +291,13 @@ class _PsCard extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: context.colors.accent.withValues(alpha: 0.1),
+                    color: context.cs.primary.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
                     Icons.description_outlined,
                     size: 20,
-                    color: context.colors.accent,
+                    color: context.cs.primary,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -311,7 +311,7 @@ class _PsCard extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
-                          color: context.colors.textPrimary,
+                          color: context.cs.onSurface,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -329,7 +329,7 @@ class _PsCard extends StatelessWidget {
                                 'by ${preset.author}',
                                  style: TextStyle(
                                    fontSize: 12,
-                                   color: context.colors.textSecondary,
+                                   color: context.cs.onSurfaceVariant,
                                  ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -358,7 +358,7 @@ class _PsCard extends StatelessWidget {
                        child: Icon(
                          Icons.edit_outlined,
                          size: 18,
-                         color: context.colors.textSecondary,
+                         color: context.cs.onSurfaceVariant,
                        ),
                     ),
                   ),
@@ -425,14 +425,14 @@ class _SmallBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: context.colors.textSecondary),
+          Icon(icon, size: 12, color: context.cs.onSurfaceVariant),
           const SizedBox(width: 4),
           Text(
             label,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,
-              color: context.colors.textSecondary,
+              color: context.cs.onSurfaceVariant,
             ),
           ),
         ],
@@ -461,7 +461,7 @@ class _ConnBadge extends StatelessWidget {
         size: 16,
         color: isActive
             ? const Color(0xFF34C759)
-            : context.colors.textSecondary.withValues(alpha: 0.5),
+            : context.cs.onSurfaceVariant.withValues(alpha: 0.5),
       ),
     );
   }

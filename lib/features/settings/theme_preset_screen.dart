@@ -43,7 +43,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: context.colors.textSecondary,
+                color: context.cs.onSurfaceVariant,
               ),
             ),
           ),
@@ -59,9 +59,9 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         decoration: BoxDecoration(
-          color: context.colors.surfaceHigh,
+          color: context.cs.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: context.colors.glassBorder),
+          border: Border.all(color: context.cs.outlineVariant),
         ),
         child: Column(
           children: [
@@ -118,7 +118,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: context.colors.textPrimary,
+                            color: context.cs.onSurface,
                           ),
                         ),
                         if (preset.author.isNotEmpty)
@@ -126,7 +126,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
                             'by ${preset.author}',
                             style: TextStyle(
                               fontSize: 12,
-                              color: context.colors.textSecondary,
+                              color: context.cs.onSurfaceVariant,
                             ),
                           ),
                       ],
@@ -137,7 +137,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: context.colors.accent,
+                      color: context.cs.primary,
                     ),
                   ),
                 ],
@@ -154,13 +154,13 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: OutlinedButton.icon(
         onPressed: _importTheme,
-        icon: Icon(Icons.file_download_outlined, color: context.colors.accent),
+        icon: Icon(Icons.file_download_outlined, color: context.cs.primary),
         label: Text(
           'Import Theme',
-          style: TextStyle(color: context.colors.accent),
+          style: TextStyle(color: context.cs.primary),
         ),
         style: OutlinedButton.styleFrom(
-          side: BorderSide(color: context.colors.accent.withAlpha(100)),
+          side: BorderSide(color: context.cs.primary.withAlpha(100)),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
@@ -192,30 +192,30 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       title: Text(
         preset.name,
         style: TextStyle(
-          color: context.colors.textPrimary,
+          color: context.cs.onSurface,
           fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
         ),
       ),
       subtitle: preset.author.isNotEmpty
           ? Text(
               'by ${preset.author}',
-              style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+              style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
             )
           : null,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (isActive)
-            Icon(Icons.check_circle, color: context.colors.accent, size: 20),
+            Icon(Icons.check_circle, color: context.cs.primary, size: 20),
           if (!isActive)
             IconButton(
-              icon: Icon(Icons.play_arrow, color: context.colors.textSecondary, size: 20),
+              icon: Icon(Icons.play_arrow, color: context.cs.onSurfaceVariant, size: 20),
               onPressed: () => _applyPreset(preset),
               tooltip: 'Apply',
             ),
           if (preset.id != 'default')
             IconButton(
-              icon: Icon(Icons.delete_outline, color: context.colors.textSecondary, size: 18),
+              icon: Icon(Icons.delete_outline, color: context.cs.onSurfaceVariant, size: 18),
               onPressed: () => _deletePreset(preset.id),
               tooltip: 'Delete',
             ),

@@ -77,9 +77,9 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
           filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
           child: Container(
             decoration: BoxDecoration(
-              color: context.colors.surfaceHigh.withValues(alpha: 0.8),
+              color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: context.colors.glassBorder),
+              border: Border.all(color: context.cs.outlineVariant),
             ),
             child: GlowRippleOverlay(
               child: Stack(
@@ -160,7 +160,7 @@ class _NavButton extends StatelessWidget {
         curve: Curves.easeInOut,
         builder: (context, t, _) {
           final color =
-              Color.lerp(context.colors.inactiveTab, context.colors.activeTab, t)!;
+              Color.lerp(context.cs.onSurfaceVariant, context.cs.primary, t)!;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(

@@ -105,7 +105,7 @@ void showPresetPickerDialog(BuildContext context, WidgetRef ref) async {
       BottomSheetItem(
         label: 'Default (first)',
         icon: activeId == null ? Icons.check : null,
-        iconColor: activeId == null ? context.colors.accent : null,
+        iconColor: activeId == null ? context.cs.primary : null,
         onTap: () {
           setActivePreset(ref, null);
           Navigator.pop(context);
@@ -115,7 +115,7 @@ void showPresetPickerDialog(BuildContext context, WidgetRef ref) async {
         (p) => BottomSheetItem(
           label: p.name,
           icon: activeId == p.id ? Icons.check : null,
-          iconColor: activeId == p.id ? context.colors.accent : null,
+          iconColor: activeId == p.id ? context.cs.primary : null,
           onTap: () {
             setActivePreset(ref, p.id);
             Navigator.pop(context);
@@ -138,7 +138,7 @@ void showPersonaPickerDialog(BuildContext context, WidgetRef ref) async {
       BottomSheetItem(
         label: 'Default (first)',
         icon: activeId == null ? Icons.check : null,
-        iconColor: activeId == null ? context.colors.accent : null,
+        iconColor: activeId == null ? context.cs.primary : null,
         onTap: () {
           setActivePersona(ref, null);
           Navigator.pop(context);
@@ -148,7 +148,7 @@ void showPersonaPickerDialog(BuildContext context, WidgetRef ref) async {
         (p) => BottomSheetItem(
           label: p.name,
           icon: activeId == p.id ? Icons.check : null,
-          iconColor: activeId == p.id ? context.colors.accent : null,
+          iconColor: activeId == p.id ? context.cs.primary : null,
           onTap: () {
             setActivePersona(ref, p.id);
             Navigator.pop(context);

@@ -232,15 +232,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             ? TextField(
                 controller: _searchController,
                 autofocus: true,
-                style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
+                style: TextStyle(color: context.cs.onSurface, fontSize: 16),
                 decoration: InputDecoration(
                   hintText: 'Search messages...',
-                  hintStyle: TextStyle(color: context.colors.textSecondary.withValues(alpha: 0.5)),
+                  hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
                   border: InputBorder.none,
                   isDense: true,
                   suffixIcon: _searchQuery.isNotEmpty 
                       ? IconButton(
-                          icon: Icon(Icons.close, color: context.colors.textPrimary, size: 20),
+                          icon: Icon(Icons.close, color: context.cs.onSurface, size: 20),
                           onPressed: () {
                             _searchController.clear();
                             setState(() {
@@ -301,7 +301,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             : [
           IconButton(
             icon: const Icon(Icons.search),
-            color: context.colors.accent,
+            color: context.cs.primary,
             onPressed: () {
               setState(() {
                 _showSearch = true;
@@ -614,10 +614,10 @@ class _ChatSearchBar extends StatelessWidget {
         Expanded(
           child: TextField(
             autofocus: true,
-            style: TextStyle(color: context.colors.textPrimary, fontSize: 16),
+            style: TextStyle(color: context.cs.onSurface, fontSize: 16),
             decoration: InputDecoration(
               hintText: 'Search messages...',
-              hintStyle: TextStyle(color: context.colors.textSecondary.withValues(alpha: 0.5)),
+              hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
               border: InputBorder.none,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -628,23 +628,23 @@ class _ChatSearchBar extends StatelessWidget {
         if (query.isNotEmpty) ...[
           Text(
             matchCount > 0 ? '${currentIndex + 1}/$matchCount' : '0/0',
-            style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+            style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
           ),
           IconButton(
-            icon: Icon(Icons.keyboard_arrow_up, size: 24, color: context.colors.textPrimary),
+            icon: Icon(Icons.keyboard_arrow_up, size: 24, color: context.cs.onSurface),
             onPressed: onPrevious,
             padding: const EdgeInsets.symmetric(horizontal: 4),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
           IconButton(
-            icon: Icon(Icons.keyboard_arrow_down, size: 24, color: context.colors.textPrimary),
+            icon: Icon(Icons.keyboard_arrow_down, size: 24, color: context.cs.onSurface),
             onPressed: onNext,
             padding: const EdgeInsets.symmetric(horizontal: 4),
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
           ),
         ],
         IconButton(
-          icon: Icon(Icons.close, size: 24, color: context.colors.textPrimary),
+          icon: Icon(Icons.close, size: 24, color: context.cs.onSurface),
           onPressed: onClose,
           padding: const EdgeInsets.symmetric(horizontal: 4),
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),

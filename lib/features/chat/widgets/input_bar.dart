@@ -1,7 +1,6 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-
 import '../../../shared/theme/app_colors.dart';
 
 class InputBar extends StatefulWidget {
@@ -55,9 +54,7 @@ class _InputBarState extends State<InputBar> {
                 child: Container(
                   constraints: const BoxConstraints(minHeight: 56),
                   decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).scaffoldBackgroundColor.withValues(alpha: 0.8),
+                    color: context.cs.surface.withValues(alpha: 0.8),
                     border: Border.all(
                       color: Colors.white.withValues(alpha: 0.05),
                     ),
@@ -105,7 +102,7 @@ class _InputBarState extends State<InputBar> {
                     height: 40,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     decoration: BoxDecoration(
-                      color: context.colors.accent,
+                      color: context.cs.primary,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -155,13 +152,11 @@ class _CircleBtn extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).scaffoldBackgroundColor.withValues(alpha: 0.8),
+              color: context.cs.surface.withValues(alpha: 0.8),
               border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
               shape: BoxShape.circle,
             ),
-            child: Center(child: Icon(icon, color: context.colors.accent, size: 20)),
+            child: Center(child: Icon(icon, color: context.cs.primary, size: 20)),
           ),
         ),
       ),

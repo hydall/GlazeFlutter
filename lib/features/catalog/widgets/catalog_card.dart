@@ -1,6 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-
 import '../../../shared/theme/app_colors.dart';
 import '../catalog_models.dart';
 
@@ -41,7 +40,7 @@ class _CatalogCardState extends State<CatalogCard> {
             ..scaleByDouble(scale, scale, 1.0, 1.0),
           transformAlignment: Alignment.center,
           decoration: BoxDecoration(
-            color: context.colors.surfaceHigh,
+            color: context.cs.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
             boxShadow: [
@@ -99,13 +98,13 @@ class _CatalogCardState extends State<CatalogCard> {
 
   Widget _buildPlaceholder() {
     return ColoredBox(
-      color: context.colors.accent.withValues(alpha: 0.2),
+      color: context.cs.primary.withValues(alpha: 0.2),
       child: Center(
         child: Text(
           item.name.isNotEmpty ? item.name[0].toUpperCase() : '?',
           style: TextStyle(
             fontSize: 48,
-            color: context.colors.accent,
+            color: context.cs.primary,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -131,7 +130,7 @@ class _BottomFade extends StatelessWidget {
               end: Alignment.bottomCenter,
               colors: [
                 Colors.transparent,
-                context.colors.surfaceHigh,
+                context.cs.surfaceContainerHighest,
               ],
             ),
           ),
@@ -257,9 +256,9 @@ class _TagChips extends StatelessWidget {
           fg = const Color(0xFF00CCCC);
           border = const Color(0x3300FFFF);
         } else {
-          bg = context.colors.accent.withValues(alpha: 0.15);
-          fg = context.colors.accent;
-          border = context.colors.accent.withValues(alpha: 0.2);
+          bg = context.cs.primary.withValues(alpha: 0.15);
+          fg = context.cs.primary;
+          border = context.cs.primary.withValues(alpha: 0.2);
         }
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),

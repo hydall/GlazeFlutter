@@ -393,7 +393,7 @@ class _OnboardingFlowState extends ConsumerState<_OnboardingFlow> {
                 slide.desc!,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 16, color: context.colors.textSecondary, height: 1.5,
+                  fontSize: 16, color: context.cs.onSurfaceVariant, height: 1.5,
                 ),
               ),
             ),
@@ -435,7 +435,7 @@ class _OnboardingFlowState extends ConsumerState<_OnboardingFlow> {
                 slide.desc!,
                 textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 16, color: context.colors.textSecondary, height: 1.5,
+                  fontSize: 16, color: context.cs.onSurfaceVariant, height: 1.5,
                 ),
               ),
             ),
@@ -485,7 +485,7 @@ class _StoriesBar extends StatelessWidget {
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(2),
-                     color: context.colors.accent,
+                     color: context.cs.primary,
                   ),
                 ),
               ),
@@ -513,14 +513,14 @@ class _GlassBackButton extends StatelessWidget {
           child: Container(
             width: 40, height: 40,
             decoration: BoxDecoration(
-              color: context.colors.background.withValues(alpha: 0.8),
+              color: context.cs.surface.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
               boxShadow: const [
                 BoxShadow(color: Color(0x4D000000), blurRadius: 15, offset: Offset(0, 4)),
               ],
             ),
-            child: Icon(Icons.arrow_back, size: 20, color: context.colors.accent),
+            child: Icon(Icons.arrow_back, size: 20, color: context.cs.primary),
           ),
         ),
       ),
@@ -538,10 +538,10 @@ class _IconBubble extends StatelessWidget {
     return Container(
       width: 100, height: 100,
       decoration: BoxDecoration(
-        color: context.colors.accent.withValues(alpha: 0.1),
+        color: context.cs.primary.withValues(alpha: 0.1),
         shape: BoxShape.circle,
       ),
-      child: Icon(icon, size: 48, color: context.colors.accent),
+      child: Icon(icon, size: 48, color: context.cs.primary),
     );
   }
 }
@@ -563,7 +563,7 @@ class _IntroBlockCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(block.icon, size: 48, color: context.colors.accent),
+          Icon(block.icon, size: 48, color: context.cs.primary),
           const SizedBox(height: 8),
           Text(
             block.title,
@@ -575,7 +575,7 @@ class _IntroBlockCard extends StatelessWidget {
           Text(
             block.desc,
             style: TextStyle(
-              fontSize: 15, color: context.colors.textSecondary, height: 1.5,
+              fontSize: 15, color: context.cs.onSurfaceVariant, height: 1.5,
             ),
           ),
         ],
@@ -621,7 +621,7 @@ class _ClickableBlockState extends State<_ClickableBlock> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(widget.icon, size: 48, color: context.colors.accent),
+              Icon(widget.icon, size: 48, color: context.cs.primary),
               const SizedBox(height: 8),
               Text(
                 widget.title,
@@ -633,7 +633,7 @@ class _ClickableBlockState extends State<_ClickableBlock> {
               Text(
                 widget.subtitle,
                 style: TextStyle(
-                  fontSize: 15, color: context.colors.textSecondary, height: 1.5,
+                  fontSize: 15, color: context.cs.onSurfaceVariant, height: 1.5,
                 ),
               ),
             ],
@@ -670,7 +670,7 @@ class _PrimaryButtonState extends State<_PrimaryButton> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
-            color: context.colors.accent,
+            color: context.cs.primary,
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(

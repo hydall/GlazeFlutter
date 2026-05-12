@@ -63,7 +63,7 @@ class CatalogGrid extends ConsumerWidget {
                   child: Text(
                     state.error!,
                     style: TextStyle(
-                      color: context.colors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 13,
                     ),
                     textAlign: TextAlign.center,
@@ -79,7 +79,7 @@ class CatalogGrid extends ConsumerWidget {
                   '${state.total} result${state.total == 1 ? '' : 's'}',
                   style: TextStyle(
                     fontSize: 11,
-                    color: context.colors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -94,7 +94,7 @@ class CatalogGrid extends ConsumerWidget {
                   child: Text(
                     state.error != null ? '' : 'No characters found',
                     style: TextStyle(
-                      color: context.colors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 14,
                     ),
                   ),
@@ -168,7 +168,7 @@ class CatalogGrid extends ConsumerWidget {
                     height: 28,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
-                      color: context.colors.accent,
+                      color: context.cs.primary,
                     ),
                   ),
                 ),
@@ -183,7 +183,7 @@ class CatalogGrid extends ConsumerWidget {
                     'End of results',
                     style: TextStyle(
                       fontSize: 12,
-                      color: context.colors.textSecondary.withValues(alpha: 0.5),
+                      color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
                     ),
                   ),
                 ),
@@ -289,9 +289,9 @@ class _ActiveTagsRow extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
-                  color: context.colors.accent.withValues(alpha: 0.2),
+                  color: context.cs.primary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: context.colors.accent),
+                  border: Border.all(color: context.cs.primary),
                 ),
                 alignment: Alignment.center,
                 child: Row(

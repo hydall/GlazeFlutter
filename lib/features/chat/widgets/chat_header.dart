@@ -21,7 +21,7 @@ class ChatHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    Color avatarColor = context.colors.accent;
+    Color avatarColor = context.cs.primary;
     if (character.color != null && character.color!.isNotEmpty) {
       try {
         final String c = character.color!.replaceFirst('#', '');
@@ -77,7 +77,7 @@ class ChatHeader extends ConsumerWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: context.colors.textPrimary,
+                  color: context.cs.onSurface,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                   height: 1.1,
@@ -89,7 +89,7 @@ class ChatHeader extends ConsumerWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: context.colors.textSecondary,
+                  color: context.cs.onSurfaceVariant,
                   fontSize: 12,
                   fontWeight: FontWeight.w400,
                   height: 1.1,

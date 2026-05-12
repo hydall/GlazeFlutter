@@ -72,7 +72,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
       return Padding(
         padding: const EdgeInsets.all(32),
         child: Center(
-          child: CircularProgressIndicator(color: context.colors.accent),
+          child: CircularProgressIndicator(color: context.cs.primary),
         ),
       );
     if (_error != null) return _buildError();
@@ -90,13 +90,13 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             Icon(
               Icons.error_outline_rounded,
               size: 48,
-              color: context.colors.textSecondary,
+              color: context.cs.onSurfaceVariant,
             ),
             const SizedBox(height: 16),
             Text(
               _error ?? 'Unknown error',
               style: TextStyle(
-                color: context.colors.textSecondary,
+                color: context.cs.onSurfaceVariant,
                 fontSize: 13,
               ),
               textAlign: TextAlign.center,
@@ -110,7 +110,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: context.colors.accent,
+                  color: context.cs.primary,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text(
@@ -162,7 +162,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.w700,
-                        color: context.colors.textPrimary,
+                        color: context.cs.onSurface,
                       ),
                     ),
                     if (char.creator.isNotEmpty) ...[
@@ -171,7 +171,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
                         'by @${char.creator}',
                         style: TextStyle(
                           fontSize: 13,
-                          color: context.colors.textSecondary,
+                          color: context.cs.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -190,7 +190,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
                             decoration: BoxDecoration(
                               color: isNsfw
                                   ? Colors.red.withValues(alpha: 0.2)
-                                  : context.colors.accent.withValues(alpha: 0.15),
+                                  : context.cs.primary.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Text(
@@ -200,7 +200,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
                                 fontWeight: FontWeight.w600,
                                 color: isNsfw
                                     ? Colors.redAccent
-                                    : context.colors.accent,
+                                    : context.cs.primary,
                               ),
                             ),
                           );
@@ -219,7 +219,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             Text(
               char.creatorNotes,
               style: TextStyle(
-                color: context.colors.textSecondary,
+                color: context.cs.onSurfaceVariant,
                 fontSize: 13,
                 height: 1.4,
               ),
@@ -232,7 +232,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             Text(
               char.description,
               style: TextStyle(
-                color: context.colors.textSecondary,
+                color: context.cs.onSurfaceVariant,
                 fontSize: 13,
                 height: 1.4,
               ),
@@ -245,7 +245,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             Text(
               char.scenario,
               style: TextStyle(
-                color: context.colors.textSecondary,
+                color: context.cs.onSurfaceVariant,
                 fontSize: 13,
                 height: 1.4,
               ),
@@ -259,13 +259,13 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: context.colors.background,
+                color: context.cs.surface,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 char.firstMes,
                 style: TextStyle(
-                  color: context.colors.textPrimary,
+                  color: context.cs.onSurface,
                   fontSize: 13,
                   height: 1.4,
                 ),
@@ -281,7 +281,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
 
   Widget _avatarPlaceholder() {
     return Container(
-      color: context.colors.accent.withValues(alpha: 0.2),
+      color: context.cs.primary.withValues(alpha: 0.2),
       child: Center(
         child: Text(
           _downloaded!.charData.name.isNotEmpty
@@ -289,7 +289,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
               : '?',
           style: TextStyle(
             fontSize: 40,
-            color: context.colors.accent,
+            color: context.cs.primary,
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -301,7 +301,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
     return Text(
       title,
       style: TextStyle(
-        color: context.colors.textPrimary,
+        color: context.cs.onSurface,
         fontSize: 14,
         fontWeight: FontWeight.w700,
       ),
@@ -340,8 +340,8 @@ class _ImportButton extends StatelessWidget {
         height: 48,
         decoration: BoxDecoration(
           color: importing
-              ? context.colors.accent.withValues(alpha: 0.5)
-              : context.colors.accent,
+              ? context.cs.primary.withValues(alpha: 0.5)
+              : context.cs.primary,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(

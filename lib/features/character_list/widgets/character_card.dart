@@ -170,7 +170,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard> {
         return Color(int.parse('FF$c', radix: 16));
       } catch (_) {}
     }
-    return context.colors.accent;
+    return context.cs.primary;
   }
 
   void _showDetailSheet(BuildContext context) async {

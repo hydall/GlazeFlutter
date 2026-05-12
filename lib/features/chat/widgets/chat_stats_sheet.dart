@@ -260,8 +260,8 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            context.colors.accent,
-            Color.lerp(context.colors.accent, Colors.black, 0.2)!,
+            context.cs.primary,
+            Color.lerp(context.cs.primary, Colors.black, 0.2)!,
           ],
         ),
         borderRadius: BorderRadius.circular(16),
@@ -385,7 +385,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
-                color: context.colors.textPrimary,
+                color: context.cs.onSurface,
               ),
             ),
           ),
@@ -399,7 +399,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w500,
-                      color: context.colors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                     ),
                     textAlign: TextAlign.right,
                   ),
@@ -409,7 +409,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w500,
-                    color: context.colors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
         ],
@@ -472,7 +472,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
-                      color: context.colors.textPrimary,
+                      color: context.cs.onSurface,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -481,7 +481,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                   _showCharDropdown
                       ? Icons.keyboard_arrow_up
                       : Icons.keyboard_arrow_down,
-                  color: context.colors.textSecondary,
+                  color: context.cs.onSurfaceVariant,
                 ),
               ],
             ),
@@ -526,7 +526,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                     },
                     child: Container(
                       color: active
-                          ? context.colors.accent.withValues(alpha: 0.08)
+                          ? context.cs.primary.withValues(alpha: 0.08)
                           : Colors.transparent,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 10),
@@ -556,7 +556,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                               style: TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w500,
-                                color: context.colors.textPrimary,
+                                color: context.cs.onSurface,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -564,7 +564,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                           if (active)
                             Icon(
                               Icons.check,
-                              color: context.colors.accent,
+                              color: context.cs.primary,
                               size: 20,
                             ),
                         ],

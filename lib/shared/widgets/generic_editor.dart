@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-
 import '../theme/app_colors.dart';
 import 'glaze_bottom_sheet.dart';
 
@@ -330,7 +329,7 @@ class _GenericEditorState extends State<GenericEditor> {
               AspectRatio(
                 aspectRatio: 1,
                 child: Container(
-                  color: context.colors.surfaceHigh,
+                  color: context.cs.surfaceContainerHighest,
                   child: avatarPath != null && avatarPath.isNotEmpty
                       ? Image.file(File(avatarPath), fit: BoxFit.cover)
                       : Container(
@@ -338,7 +337,7 @@ class _GenericEditorState extends State<GenericEditor> {
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
-                              colors: [Color(0xFF66CCFF), context.colors.accent],
+                              colors: [Color(0xFF66CCFF), context.cs.primary],
                             ),
                           ),
                           alignment: Alignment.center,
@@ -422,7 +421,7 @@ class _GenericEditorState extends State<GenericEditor> {
           ? BoxDecoration(
               color: Colors.white.withOpacity(0.03),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: context.colors.glassBorder),
+              border: Border.all(color: context.cs.outlineVariant),
             )
           : null,
       clipBehavior: widget.useWindows ? Clip.antiAlias : Clip.none,
@@ -438,7 +437,7 @@ class _GenericEditorState extends State<GenericEditor> {
               child: Text(
                 section.title!.toUpperCase(),
                 style: TextStyle(
-                  color: context.colors.accent,
+                  color: context.cs.primary,
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.5,
@@ -487,12 +486,12 @@ class _GenericEditorState extends State<GenericEditor> {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
-                 color: context.colors.textPrimary,
+                 color: context.cs.onSurface,
               ),
             ),
             if (field.helpTerm != null) ...[
               const SizedBox(width: 8),
-              Icon(Icons.help_outline, size: 16, color: context.colors.textSecondary),
+              Icon(Icons.help_outline, size: 16, color: context.cs.onSurfaceVariant),
             ]
           ],
         ),
@@ -504,7 +503,7 @@ class _GenericEditorState extends State<GenericEditor> {
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.open_in_full, size: 20, color: context.colors.accent),
+              child: Icon(Icons.open_in_full, size: 20, color: context.cs.primary),
             ),
           )
       ],
@@ -526,7 +525,7 @@ class _GenericEditorState extends State<GenericEditor> {
         return Text(
           field.text ?? _localItem[field.key]?.toString() ?? '',
           style: TextStyle(
-            color: context.colors.textSecondary,
+            color: context.cs.onSurfaceVariant,
             fontSize: 14,
             height: 1.5,
           ),
@@ -545,10 +544,10 @@ class _GenericEditorState extends State<GenericEditor> {
       maxLines: field.type == 'textarea' ? (field.rows ?? 3) : 1,
       minLines: field.type == 'textarea' ? (field.rows ?? 3) : 1,
       keyboardType: field.type == 'number' ? TextInputType.number : TextInputType.text,
-      style: TextStyle(fontSize: 15, color: context.colors.textPrimary),
+      style: TextStyle(fontSize: 15, color: context.cs.onSurface),
       decoration: InputDecoration(
         hintText: field.placeholder,
-        hintStyle: TextStyle(color: context.colors.textSecondary.withOpacity(0.5)),
+        hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withOpacity(0.5)),
         filled: true,
         fillColor: Colors.black.withOpacity(0.2),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -562,7 +561,7 @@ class _GenericEditorState extends State<GenericEditor> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: context.colors.accent),
+          borderSide: BorderSide(color: context.cs.primary),
         ),
       ),
     );
@@ -581,7 +580,7 @@ class _GenericEditorState extends State<GenericEditor> {
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
               color: Colors.white.withOpacity(0.03),
-              border: Border.all(color: context.colors.glassBorder),
+              border: Border.all(color: context.cs.outlineVariant),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Column(
@@ -594,7 +593,7 @@ class _GenericEditorState extends State<GenericEditor> {
                       '#${gIdx + 1}',
                       style: TextStyle(
                         fontSize: 13,
-                        color: context.colors.textSecondary,
+                        color: context.cs.onSurfaceVariant,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -606,7 +605,7 @@ class _GenericEditorState extends State<GenericEditor> {
                               widget.onOpenFsEditor!('first_mes', gIdx);
                             }
                           },
-                          child: Icon(Icons.edit, size: 18, color: context.colors.accent),
+                          child: Icon(Icons.edit, size: 18, color: context.cs.primary),
                         ),
                         const SizedBox(width: 12),
                         GestureDetector(
@@ -628,7 +627,7 @@ class _GenericEditorState extends State<GenericEditor> {
                     greets[gIdx].isEmpty ? 'Empty' : greets[gIdx],
                     style: TextStyle(
                       fontSize: 14,
-                      color: context.colors.textPrimary.withOpacity(0.9),
+                      color: context.cs.onSurface.withOpacity(0.9),
                       height: 1.4,
                     ),
                     maxLines: 3,
@@ -643,18 +642,18 @@ class _GenericEditorState extends State<GenericEditor> {
           child: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: context.colors.accent.withValues(alpha: 0.1),
+              color: context.cs.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.add, size: 20, color: context.colors.accent),
+                Icon(Icons.add, size: 20, color: context.cs.primary),
                 SizedBox(width: 8),
                 Text(
                   'Add Message',
                   style: TextStyle(
-                    color: context.colors.accent,
+                    color: context.cs.primary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -673,8 +672,8 @@ class _GenericEditorState extends State<GenericEditor> {
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
-          color: context.colors.surfaceHigh,
-          border: Border.all(color: context.colors.glassBorder),
+          color: context.cs.surfaceContainerHighest,
+          border: Border.all(color: context.cs.outlineVariant),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -682,9 +681,9 @@ class _GenericEditorState extends State<GenericEditor> {
           children: [
             Text(
               _getSelectedLabel(field),
-              style: TextStyle(fontSize: 15, color: context.colors.textPrimary),
+              style: TextStyle(fontSize: 15, color: context.cs.onSurface),
             ),
-            Icon(Icons.arrow_drop_down, color: context.colors.textSecondary.withOpacity(0.5)),
+            Icon(Icons.arrow_drop_down, color: context.cs.onSurfaceVariant.withOpacity(0.5)),
           ],
         ),
       ),

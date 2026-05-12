@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../catalog_models.dart';
@@ -138,16 +137,16 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          backgroundColor: context.colors.background,
+          backgroundColor: context.cs.surface,
           title: const Text('NSFL Content', style: TextStyle(color: Colors.white)),
           content: Text(
             "You don't want to see this.",
-            style: TextStyle(color: context.colors.textSecondary),
+            style: TextStyle(color: context.cs.onSurfaceVariant),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text('I don\'t want to die', style: TextStyle(color: context.colors.textSecondary)),
+              child: Text('I don\'t want to die', style: TextStyle(color: context.cs.onSurfaceVariant)),
             ),
             TextButton(
               onPressed: () {
@@ -201,7 +200,7 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: context.colors.textSecondary,
+                color: context.cs.onSurfaceVariant,
                 letterSpacing: 0.6,
               ),
             ),
@@ -213,7 +212,7 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
                 ),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('—', style: TextStyle(color: context.colors.textSecondary, fontSize: 18)),
+                  child: Text('—', style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 18)),
                 ),
                 Expanded(
                   child: _tokenField('Max', _maxTokens, (v) => setState(() => _maxTokens = v)),
@@ -232,7 +231,7 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: context.colors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                     letterSpacing: 0.6,
                   ),
                 ),
@@ -243,7 +242,7 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
                       'Clear ($_totalSelectedCount)',
                       style: TextStyle(
                         fontSize: 13,
-                        color: context.colors.accent,
+                        color: context.cs.primary,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -281,7 +280,7 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
                 style: const TextStyle(fontSize: 14, color: Colors.white),
                 decoration: InputDecoration(
                   hintText: 'Search tags...',
-                  hintStyle: TextStyle(color: context.colors.textSecondary),
+                  hintStyle: TextStyle(color: context.cs.onSurfaceVariant),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   isDense: true,
@@ -311,12 +310,12 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
         children: [
           Text(
             label,
-            style: TextStyle(color: context.colors.textPrimary, fontSize: 15),
+            style: TextStyle(color: context.cs.onSurface, fontSize: 15),
           ),
           Switch(
             value: value,
             onChanged: onChanged,
-            activeTrackColor: isDanger ? Colors.redAccent : context.colors.accent,
+            activeTrackColor: isDanger ? Colors.redAccent : context.cs.primary,
             activeColor: Colors.white,
             inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
             inactiveThumbColor: Colors.white,
@@ -373,9 +372,9 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: active ? context.colors.accent : Colors.white.withValues(alpha: 0.12),
+            color: active ? context.cs.primary : Colors.white.withValues(alpha: 0.12),
           ),
-          color: active ? context.colors.accent.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05),
+          color: active ? context.cs.primary.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

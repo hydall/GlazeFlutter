@@ -223,7 +223,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                     ? Icons.radio_button_checked
                     : Icons.radio_button_off,
                 iconColor:
-                    mode == current ? context.colors.accent : context.colors.textSecondary,
+                    mode == current ? context.cs.primary : context.cs.onSurfaceVariant,
                 onTap: () {
                   Navigator.pop(context);
                   ref.read(themeProvider.notifier).setMode(mode);
@@ -290,7 +290,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               ? Icons.radio_button_checked
               : Icons.radio_button_off,
           iconColor:
-              s.language == 'en' ? context.colors.accent : context.colors.textSecondary,
+              s.language == 'en' ? context.cs.primary : context.cs.onSurfaceVariant,
           onTap: () {
             Navigator.pop(context);
             ref.read(appSettingsProvider.notifier).save(s.copyWith(language: 'en'));
@@ -302,7 +302,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               ? Icons.radio_button_checked
               : Icons.radio_button_off,
           iconColor:
-              s.language == 'ru' ? context.colors.accent : context.colors.textSecondary,
+              s.language == 'ru' ? context.cs.primary : context.cs.onSurfaceVariant,
           onTap: () {
             Navigator.pop(context);
             ref.read(appSettingsProvider.notifier).save(s.copyWith(language: 'ru'));
@@ -323,8 +323,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               ? Icons.radio_button_checked
               : Icons.radio_button_off,
           iconColor: s.chatLayout == 'default'
-              ? context.colors.accent
-              : context.colors.textSecondary,
+              ? context.cs.primary
+              : context.cs.onSurfaceVariant,
           onTap: () {
             Navigator.pop(context);
             ref
@@ -338,8 +338,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               ? Icons.radio_button_checked
               : Icons.radio_button_off,
           iconColor: s.chatLayout == 'bubble'
-              ? context.colors.accent
-              : context.colors.textSecondary,
+              ? context.cs.primary
+              : context.cs.onSurfaceVariant,
           onTap: () {
             Navigator.pop(context);
             ref

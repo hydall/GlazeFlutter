@@ -102,7 +102,7 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
           ? Center(
               child: Text(
                 'No data',
-                style: TextStyle(color: context.colors.textSecondary),
+                style: TextStyle(color: context.cs.onSurfaceVariant),
               ),
             )
           : Column(
@@ -168,7 +168,7 @@ class _SummaryBar extends StatelessWidget {
           _StatChip(
             label: 'Inactive',
             value: '${result.totalCandidates - result.activatedCount}',
-            color: context.colors.textSecondary,
+            color: context.cs.onSurfaceVariant,
           ),
           const SizedBox(width: 8),
           _StatChip(
@@ -243,7 +243,7 @@ class _EntryList extends StatelessWidget {
         padding: const EdgeInsets.all(24),
         child: Text(
           'No entries in this category',
-          style: TextStyle(color: context.colors.textSecondary, fontSize: 14),
+          style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14),
         ),
       );
     }
@@ -276,7 +276,7 @@ class _CoverageTileState extends State<_CoverageTile> {
         ? Colors.orange
         : e.activated
         ? Colors.green
-        : context.colors.textSecondary;
+        : context.cs.onSurfaceVariant;
 
     final tokenCount = estimateTokens(e.content);
 
@@ -314,8 +314,8 @@ class _CoverageTileState extends State<_CoverageTile> {
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: e.activated
-                            ? context.colors.textPrimary
-                            : context.colors.textSecondary,
+                            ? context.cs.onSurface
+                            : context.cs.onSurfaceVariant,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -327,13 +327,13 @@ class _CoverageTileState extends State<_CoverageTile> {
                     '$tokenCount t',
                     style: TextStyle(
                       fontSize: 10,
-                      color: context.colors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                     ),
                   ),
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 16,
-                    color: context.colors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ],
               ),
@@ -478,7 +478,7 @@ class _CoverageTileState extends State<_CoverageTile> {
                       e.content,
                       style: TextStyle(
                         fontSize: 12,
-                        color: context.colors.textSecondary,
+                        color: context.cs.onSurfaceVariant,
                         fontFamily: 'monospace',
                       ),
                     ),
@@ -503,7 +503,7 @@ class _PositionBadge extends StatelessWidget {
       'worldInfoBefore' => ('Before', Colors.cyan),
       'worldInfoAfter' => ('After', Colors.teal),
       'lorebooksMacro' => ('Macro', Colors.purple),
-      _ => (position, context.colors.textSecondary),
+      _ => (position, context.cs.onSurfaceVariant),
     };
 
     return Container(

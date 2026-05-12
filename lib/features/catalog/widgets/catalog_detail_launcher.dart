@@ -134,11 +134,11 @@ class _LoadingView extends StatelessWidget {
     return Container(
       height: 360,
       decoration: BoxDecoration(
-        color: context.colors.surfaceHigh,
+        color: context.cs.surfaceContainerHighest,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       child: Center(
-        child: CircularProgressIndicator(color: context.colors.accent),
+        child: CircularProgressIndicator(color: context.cs.primary),
       ),
     );
   }
@@ -155,7 +155,7 @@ class _ErrorView extends StatelessWidget {
     return Container(
       height: 360,
       decoration: BoxDecoration(
-        color: context.colors.surfaceHigh,
+        color: context.cs.surfaceContainerHighest,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: const EdgeInsets.all(32),
@@ -165,13 +165,13 @@ class _ErrorView extends StatelessWidget {
           Icon(
             Icons.error_outline_rounded,
             size: 48,
-            color: context.colors.textSecondary,
+            color: context.cs.onSurfaceVariant,
           ),
           const SizedBox(height: 16),
           Text(
             message,
             style: TextStyle(
-              color: context.colors.textSecondary,
+              color: context.cs.onSurfaceVariant,
               fontSize: 13,
             ),
             textAlign: TextAlign.center,
@@ -182,7 +182,7 @@ class _ErrorView extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
-                color: context.colors.accent,
+                color: context.cs.primary,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Text(

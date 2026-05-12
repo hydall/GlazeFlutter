@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-
 import '../../../core/models/chat_message.dart';
 import '../../../shared/theme/app_colors.dart';
 
@@ -422,7 +421,7 @@ class _ScrollDownButton extends StatelessWidget {
                 child: Material(
                   color: context.colors.charBubble.withValues(alpha: 0.78),
                   shape: CircleBorder(
-                    side: BorderSide(color: context.colors.glassBorder),
+                    side: BorderSide(color: context.cs.outlineVariant),
                   ),
                   child: InkWell(
                     customBorder: const CircleBorder(),
@@ -432,7 +431,7 @@ class _ScrollDownButton extends StatelessWidget {
                       height: 40,
                       child: Icon(
                         Icons.keyboard_arrow_down_rounded,
-                        color: context.colors.accent,
+                        color: context.cs.primary,
                         size: 24,
                       ),
                     ),

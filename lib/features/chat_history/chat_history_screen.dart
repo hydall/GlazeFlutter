@@ -38,13 +38,13 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
         (_searchQuery.isNotEmpty ? 32.0 : 0.0);
 
     return Scaffold(
-      backgroundColor: context.colors.background,
+      backgroundColor: context.cs.surface,
       body: Stack(
         children: [
           Positioned.fill(
             child: sessionsAsync.when(
               loading: () => Center(
-                child: CircularProgressIndicator(color: context.colors.accent),
+                child: CircularProgressIndicator(color: context.cs.primary),
               ),
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (list) {
@@ -95,12 +95,12 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
           Icon(
             Icons.chat_bubble_outline,
             size: 64,
-            color: context.colors.textSecondary.withValues(alpha: 0.5),
+            color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
           ),
           const SizedBox(height: 16),
           Text(
             'No chats yet',
-            style: TextStyle(color: context.colors.textSecondary),
+            style: TextStyle(color: context.cs.onSurfaceVariant),
           ),
           const SizedBox(height: 20),
           GlazePillButton(
@@ -187,7 +187,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                     height: 44,
                     child: IconButton(
                       icon: const Icon(Icons.search_rounded, size: 22),
-                      color: context.colors.accent,
+                      color: context.cs.primary,
                       onPressed: () async {
                         final query = await showSearch<String>(
                           context: context,
@@ -209,7 +209,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                   Text(
                     'Filter: "$_searchQuery"',
                     style: TextStyle(
-                      color: context.colors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 12,
                     ),
                   ),
@@ -219,7 +219,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                     child: Icon(
                       Icons.close,
                       size: 16,
-                      color: context.colors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -250,7 +250,7 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
 
   @override
   ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
-    appBarTheme: AppBarTheme(backgroundColor: context.colors.background),
+    appBarTheme: AppBarTheme(backgroundColor: context.cs.surface),
   );
 
   @override
@@ -286,7 +286,7 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
       return Center(
         child: Text(
           'No chats found',
-          style: TextStyle(color: context.colors.textSecondary),
+          style: TextStyle(color: context.cs.onSurfaceVariant),
         ),
       );
     }
@@ -303,7 +303,7 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
                   height: 80,
                 ))
               : CircleAvatar(
-                  backgroundColor: context.colors.accent,
+                  backgroundColor: context.cs.primary,
                   child: Text(
                     s.characterName.isNotEmpty
                         ? s.characterName[0].toUpperCase()
@@ -313,14 +313,14 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
                 ),
           title: Text(
             s.characterName,
-            style: TextStyle(color: context.colors.textPrimary),
+            style: TextStyle(color: context.cs.onSurface),
           ),
           subtitle: Text(
             stripHtml(s.lastMessage).replaceAll('\n', ' '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              color: context.colors.textSecondary,
+              color: context.cs.onSurfaceVariant,
               fontSize: 12,
             ),
           ),
@@ -371,7 +371,7 @@ class _SessionTile extends ConsumerWidget {
                           style: TextStyle(
                             fontWeight: FontWeight.w500,
                             fontSize: 16,
-                            color: context.colors.textPrimary,
+                            color: context.cs.onSurface,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -386,7 +386,7 @@ class _SessionTile extends ConsumerWidget {
                     stripHtml(info.lastMessage).replaceAll('\n', ' '),
                     style: TextStyle(
                       fontSize: 13,
-                      color: context.colors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -429,7 +429,7 @@ class _SessionTile extends ConsumerWidget {
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
-                        color: context.colors.textPrimary,
+                        color: context.cs.onSurface,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -449,7 +449,7 @@ class _SessionTile extends ConsumerWidget {
                         Icon(
                           Icons.description_outlined,
                           size: 12,
-                          color: context.colors.textSecondary,
+                          color: context.cs.onSurfaceVariant,
                         ),
                         const SizedBox(width: 4),
                         Text(
@@ -457,7 +457,7 @@ class _SessionTile extends ConsumerWidget {
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
-                            color: context.colors.textSecondary,
+                            color: context.cs.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -470,7 +470,7 @@ class _SessionTile extends ConsumerWidget {
                 stripHtml(info.lastMessage).replaceAll('\n', ' '),
                 style: TextStyle(
                   fontSize: 12,
-                  color: context.colors.textSecondary,
+                  color: context.cs.onSurfaceVariant,
                 ),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -594,7 +594,7 @@ class _SessionTile extends ConsumerWidget {
       );
     }
     return CircleAvatar(
-      backgroundColor: context.colors.accent,
+      backgroundColor: context.cs.primary,
       child: Text(
         info.characterName.isNotEmpty
             ? info.characterName[0].toUpperCase()
@@ -610,7 +610,7 @@ class _SessionTile extends ConsumerWidget {
 
     return Text(
       text,
-      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+      style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
     );
   }
 }
@@ -653,7 +653,7 @@ class _GroupHeader extends ConsumerWidget {
                           style: TextStyle(
                             fontWeight: FontWeight.w500,
                             fontSize: 16,
-                            color: context.colors.textPrimary,
+                            color: context.cs.onSurface,
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -671,14 +671,14 @@ class _GroupHeader extends ConsumerWidget {
                         '${sessions.length} sessions',
                         style: TextStyle(
                           fontSize: 13,
-                          color: context.colors.textSecondary,
+                          color: context.cs.onSurfaceVariant,
                         ),
                       ),
                       Icon(
                         isExpanded
                             ? Icons.keyboard_arrow_up
                             : Icons.keyboard_arrow_down,
-                        color: context.colors.textSecondary,
+                        color: context.cs.onSurfaceVariant,
                         size: 20,
                       ),
                     ],
@@ -688,7 +688,7 @@ class _GroupHeader extends ConsumerWidget {
                     stripHtml(latest.lastMessage).replaceAll('\n', ' '),
                     style: TextStyle(
                       fontSize: 12,
-                      color: context.colors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -714,7 +714,7 @@ class _GroupHeader extends ConsumerWidget {
       );
     }
     return CircleAvatar(
-      backgroundColor: context.colors.accent,
+      backgroundColor: context.cs.primary,
       child: Text(
         info.characterName.isNotEmpty
             ? info.characterName[0].toUpperCase()
@@ -745,7 +745,7 @@ class _GroupHeader extends ConsumerWidget {
 
     return Text(
       text,
-      style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+      style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
     );
   }
 

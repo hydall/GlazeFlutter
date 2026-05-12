@@ -2,32 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'theme_preset.dart';
 
-class AppColors {
-  static const Color background = Color(0xFF19191A);
-  static const Color surface = Color(0xFF19191A);
-  static const Color surfaceHigh = Color(0xFF1E1E1E);
-  static const Color accent = Color(0xFF7996CE);
-  static const Color activeTab = Color(0xFF7996CE);
-  static const Color inactiveTab = Color(0xFF828282);
-  static const Color textPrimary = Color(0xFFE1E3E6);
-  static const Color textSecondary = Color(0xFFB0B8C1);
-  static const Color border = Color(0xFF2C2D2E);
-  static const Color glassBorder = Color(0x1AFFFFFF);
-  static const Color userBubble = Color(0xFF7996CE);
-  static const Color charBubble = Color(0xFF1E1E1E);
-}
-
 class GlazeColors extends ThemeExtension<GlazeColors> {
-  final Color background;
-  final Color surface;
-  final Color surfaceHigh;
-  final Color accent;
-  final Color activeTab;
-  final Color inactiveTab;
-  final Color textPrimary;
-  final Color textSecondary;
-  final Color border;
-  final Color glassBorder;
   final Color userBubble;
   final Color charBubble;
   final Color? userText;
@@ -38,16 +13,6 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
   final Color? charItalic;
 
   const GlazeColors({
-    required this.background,
-    required this.surface,
-    required this.surfaceHigh,
-    required this.accent,
-    required this.activeTab,
-    required this.inactiveTab,
-    required this.textPrimary,
-    required this.textSecondary,
-    required this.border,
-    required this.glassBorder,
     required this.userBubble,
     required this.charBubble,
     this.userText,
@@ -59,40 +24,14 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
   });
 
   static const dark = GlazeColors(
-    background: Color(0xFF19191A),
-    surface: Color(0xFF19191A),
-    surfaceHigh: Color(0xFF1E1E1E),
-    accent: Color(0xFF7996CE),
-    activeTab: Color(0xFF7996CE),
-    inactiveTab: Color(0xFF828282),
-    textPrimary: Color(0xFFE1E3E6),
-    textSecondary: Color(0xFFB0B8C1),
-    border: Color(0xFF2C2D2E),
-    glassBorder: Color(0x1AFFFFFF),
     userBubble: Color(0xFF7996CE),
     charBubble: Color(0xFF1E1E1E),
   );
 
   static const light = GlazeColors(
-    background: Color(0xFFF5F5F7),
-    surface: Color(0xFFFFFFFF),
-    surfaceHigh: Color(0xFFEEEEF0),
-    accent: Color(0xFF7996CE),
-    activeTab: Color(0xFF7996CE),
-    inactiveTab: Color(0xFF828282),
-    textPrimary: Color(0xFF1A1A1B),
-    textSecondary: Color(0xFF6B6D70),
-    border: Color(0xFFD8D9DA),
-    glassBorder: Color(0x1A000000),
     userBubble: Color(0xFF7996CE),
     charBubble: Color(0xFFEEEEF0),
   );
-
-  GlazeColors withAccent(Color c) => copyWith(
-        accent: c,
-        activeTab: c,
-        userBubble: c,
-      );
 
   static GlazeColors fromPreset(ThemePreset preset, {required bool isDark}) {
     final base = isDark ? dark : light;
@@ -104,20 +43,9 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
     final charBubbleRaw = preset.charBubbleParsed ?? base.charBubble;
     final charBubble = _distinctBubble(charBubbleRaw, effectiveBg, isDark);
 
-    final textPrimary = preset.uiTextParsed ?? _contrastFor(effectiveBg);
-    final textSecondary = preset.uiTextGrayParsed ?? _contrastFor(effectiveBg, secondary: true);
-
     return base.copyWith(
-      accent: accent,
-      activeTab: accent,
       userBubble: userBubble,
       charBubble: charBubble,
-      border: preset.borderParsed ?? _borderFor(effectiveBg, isDark),
-      textPrimary: textPrimary,
-      textSecondary: textSecondary,
-      surface: uiColor,
-      surfaceHigh: _shiftColor(uiColor, isDark ? 1.08 : 0.96),
-      background: uiColor,
       userText: _ensureContrast(preset.userTextParsed, userBubble),
       charText: _ensureContrast(preset.charTextParsed, charBubble),
       userQuote: preset.userQuoteParsed ?? _contrastFor(userBubble).withValues(alpha: 0.7),
@@ -146,15 +74,6 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
     ).toColor();
   }
 
-  static Color _shiftColor(Color c, double factor) {
-    return Color.fromARGB(
-      c.alpha,
-      (c.red * factor).clamp(0, 255).round(),
-      (c.green * factor).clamp(0, 255).round(),
-      (c.blue * factor).clamp(0, 255).round(),
-    );
-  }
-
   static Color _distinctBubble(Color bubble, Color bg, bool isDark) {
     final diff = (bubble.red - bg.red).abs() +
         (bubble.green - bg.green).abs() +
@@ -171,27 +90,9 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
     return bubble;
   }
 
-  static Color _contrastFor(Color bg, {bool secondary = false}) {
+  static Color _contrastFor(Color bg) {
     final lum = bg.computeLuminance();
-    final light = secondary
-        ? const Color(0xFFB0B8C1)
-        : const Color(0xFFE1E3E6);
-    final dark = secondary
-        ? const Color(0xFF6B6D70)
-        : const Color(0xFF1A1A1B);
-    return lum > 0.35 ? dark : light;
-  }
-
-  static Color _borderFor(Color bg, bool isDark) {
-    final lum = bg.computeLuminance();
-    if (isDark) {
-      return lum > 0.35
-          ? const Color(0xFF5C5D5E)
-          : const Color(0xFF2C2D2E);
-    }
-    return lum > 0.35
-        ? const Color(0xFFB8B9BA)
-        : const Color(0xFFD8D9DA);
+    return lum > 0.35 ? const Color(0xFF1A1A1B) : const Color(0xFFE1E3E6);
   }
 
   static Color? _ensureContrast(Color? text, Color bg) {
@@ -211,16 +112,6 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
 
   @override
   GlazeColors copyWith({
-    Color? background,
-    Color? surface,
-    Color? surfaceHigh,
-    Color? accent,
-    Color? activeTab,
-    Color? inactiveTab,
-    Color? textPrimary,
-    Color? textSecondary,
-    Color? border,
-    Color? glassBorder,
     Color? userBubble,
     Color? charBubble,
     Color? userText,
@@ -231,16 +122,6 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
     Color? charItalic,
   }) {
     return GlazeColors(
-      background: background ?? this.background,
-      surface: surface ?? this.surface,
-      surfaceHigh: surfaceHigh ?? this.surfaceHigh,
-      accent: accent ?? this.accent,
-      activeTab: activeTab ?? this.activeTab,
-      inactiveTab: inactiveTab ?? this.inactiveTab,
-      textPrimary: textPrimary ?? this.textPrimary,
-      textSecondary: textSecondary ?? this.textSecondary,
-      border: border ?? this.border,
-      glassBorder: glassBorder ?? this.glassBorder,
       userBubble: userBubble ?? this.userBubble,
       charBubble: charBubble ?? this.charBubble,
       userText: userText ?? this.userText,
@@ -256,16 +137,6 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
   GlazeColors lerp(covariant GlazeColors? other, double t) {
     if (other == null) return this;
     return GlazeColors(
-      background: Color.lerp(background, other.background, t)!,
-      surface: Color.lerp(surface, other.surface, t)!,
-      surfaceHigh: Color.lerp(surfaceHigh, other.surfaceHigh, t)!,
-      accent: Color.lerp(accent, other.accent, t)!,
-      activeTab: Color.lerp(activeTab, other.activeTab, t)!,
-      inactiveTab: Color.lerp(inactiveTab, other.inactiveTab, t)!,
-      textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
-      textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
-      border: Color.lerp(border, other.border, t)!,
-      glassBorder: Color.lerp(glassBorder, other.glassBorder, t)!,
       userBubble: Color.lerp(userBubble, other.userBubble, t)!,
       charBubble: Color.lerp(charBubble, other.charBubble, t)!,
       userText: Color.lerp(userText, other.userText, t),
@@ -280,4 +151,5 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
 
 extension GlazeColorsX on BuildContext {
   GlazeColors get colors => Theme.of(this).extension<GlazeColors>() ?? GlazeColors.dark;
+  ColorScheme get cs => Theme.of(this).colorScheme;
 }

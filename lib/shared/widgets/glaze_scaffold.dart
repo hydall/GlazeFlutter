@@ -63,7 +63,7 @@ class GlazeScaffold extends StatelessWidget {
     );
 
     return Scaffold(
-      backgroundColor: context.colors.background,
+      backgroundColor: context.cs.surface,
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
       body: extendBodyBehindHeader
           ? Stack(
@@ -114,9 +114,9 @@ class GlazeAppBar extends StatelessWidget {
         child: Container(
           height: 56,
           decoration: BoxDecoration(
-            color: context.colors.surfaceHigh.withValues(alpha: 0.8),
+            color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: context.colors.glassBorder),
+            border: Border.all(color: context.cs.outlineVariant),
           ),
           child: Row(
             children: [
@@ -129,7 +129,7 @@ class GlazeAppBar extends StatelessWidget {
                           Icons.arrow_back_ios_new_rounded,
                           size: 20,
                         ),
-                        color: context.colors.accent,
+                        color: context.cs.primary,
                         onPressed:
                             onBack ?? () => Navigator.of(context).maybePop(),
                       )
@@ -147,7 +147,7 @@ class GlazeAppBar extends StatelessWidget {
                         ? Text(
                             title!,
                             style: TextStyle(
-                              color: context.colors.textPrimary,
+                              color: context.cs.onSurface,
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
                             ),
@@ -183,7 +183,7 @@ class _GlazeLogo extends StatelessWidget {
       width: 32,
       height: 32,
       fit: BoxFit.contain,
-      colorFilter: ColorFilter.mode(context.colors.accent, BlendMode.srcIn),
+      colorFilter: ColorFilter.mode(context.cs.primary, BlendMode.srcIn),
     );
   }
 }
@@ -211,21 +211,21 @@ class GlazePillButton extends StatelessWidget {
         height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: context.colors.accent.withValues(alpha: 0.15),
+          color: context.cs.primary.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: context.colors.accent.withValues(alpha: 0.2)),
+          border: Border.all(color: context.cs.primary.withValues(alpha: 0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: context.colors.accent),
+            Icon(icon, size: 16, color: context.cs.primary),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: context.colors.accent,
+                color: context.cs.primary,
               ),
             ),
           ],

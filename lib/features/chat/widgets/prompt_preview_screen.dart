@@ -90,7 +90,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: context.colors.textPrimary,
+                color: context.cs.onSurface,
               ),
             ),
           ),
@@ -107,7 +107,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
                     width: 40,
                     height: 40,
                     child: Center(
-                      child: Icon(Icons.copy, size: 20, color: context.colors.accent),
+                      child: Icon(Icons.copy, size: 20, color: context.cs.primary),
                     ),
                   ),
                 ),
@@ -148,7 +148,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
             return Center(
               child: Text(
                 'No data',
-                style: TextStyle(color: context.colors.textSecondary),
+                style: TextStyle(color: context.cs.onSurfaceVariant),
               ),
             );
           }
@@ -207,7 +207,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
             return Center(
               child: Text(
                 'No response data',
-                style: TextStyle(color: context.colors.textSecondary),
+                style: TextStyle(color: context.cs.onSurfaceVariant),
               ),
             );
           }
@@ -237,7 +237,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
             child: SelectableText(
               text,
               style: TextStyle(
-                color: context.colors.textPrimary,
+                color: context.cs.onSurface,
                 fontSize: 12,
                 fontFamily: 'monospace',
               ),
@@ -365,7 +365,7 @@ class _SummaryBar extends StatelessWidget {
               ),
               Text(
                 ' / $contextSize tokens',
-                style: TextStyle(fontSize: 14, color: context.colors.textSecondary),
+                style: TextStyle(fontSize: 14, color: context.cs.onSurfaceVariant),
               ),
               const Spacer(),
               Text(
@@ -379,7 +379,7 @@ class _SummaryBar extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '${result.messages.length} msgs',
-                style: TextStyle(fontSize: 12, color: context.colors.textSecondary),
+                style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
               ),
             ],
           ),
@@ -422,7 +422,7 @@ class _SectionTitle extends StatelessWidget {
         style: TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w600,
-          color: context.colors.textSecondary,
+          color: context.cs.onSurfaceVariant,
         ),
       ),
     );
@@ -451,7 +451,7 @@ class _ParamItem extends StatelessWidget {
             label.toUpperCase(),
             style: TextStyle(
               fontSize: 11,
-              color: context.colors.textSecondary,
+              color: context.cs.onSurfaceVariant,
               letterSpacing: 0.5,
             ),
           ),
@@ -461,7 +461,7 @@ class _ParamItem extends StatelessWidget {
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w500,
-              color: context.colors.textPrimary,
+              color: context.cs.onSurface,
             ),
           ),
         ],
@@ -517,7 +517,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
-                          color: context.colors.textSecondary,
+                          color: context.cs.onSurfaceVariant,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -528,7 +528,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                     '$tokenCount t',
                     style: TextStyle(
                       fontSize: 10,
-                      color: context.colors.textSecondary,
+                      color: context.cs.onSurfaceVariant,
                     ),
                   ),
                   if (msg.isDepth && msg.depth != null) ...[
@@ -554,7 +554,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                   Icon(
                     _expanded ? Icons.expand_less : Icons.expand_more,
                     size: 16,
-                    color: context.colors.textSecondary,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ],
               ),
@@ -566,7 +566,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    color: context.colors.textSecondary.withValues(alpha: 0.8),
+                    color: context.cs.onSurfaceVariant.withValues(alpha: 0.8),
                   ),
                 ),
               ],
@@ -585,7 +585,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
                       msg.content,
                       style: TextStyle(
                         fontSize: 12,
-                        color: context.colors.textPrimary,
+                        color: context.cs.onSurface,
                         fontFamily: 'monospace',
                       ),
                     ),
@@ -659,7 +659,7 @@ class _SegmentedToggle extends StatelessWidget {
               width: 32,
               child: Container(
                 decoration: BoxDecoration(
-                  color: context.colors.accent,
+                  color: context.cs.primary,
                   borderRadius: BorderRadius.circular(20),
                 ),
               ),
@@ -673,7 +673,7 @@ class _SegmentedToggle extends StatelessWidget {
                     child: Icon(
                       Icons.visibility,
                       size: 16,
-                      color: !isRaw ? Colors.white : context.colors.textSecondary,
+                      color: !isRaw ? Colors.white : context.cs.onSurfaceVariant,
                     ),
                   ),
                 ),
@@ -683,7 +683,7 @@ class _SegmentedToggle extends StatelessWidget {
                     child: Icon(
                       Icons.code,
                       size: 16,
-                      color: isRaw ? Colors.white : context.colors.textSecondary,
+                      color: isRaw ? Colors.white : context.cs.onSurfaceVariant,
                     ),
                   ),
                 ),
