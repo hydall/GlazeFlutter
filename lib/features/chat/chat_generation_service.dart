@@ -112,13 +112,13 @@ class ChatGenerationService {
             frameScheduled = true;
             SchedulerBinding.instance.scheduleFrameCallback((_) {
               frameScheduled = false;
-              onStateUpdate(ChatState(
-                session: session,
-                isGenerating: true,
-                generationStartTime: currentState.generationStartTime ?? startGenTime,
-                streamingText: accumulator.text,
-                streamingReasoning: accumulator.reasoning.isNotEmpty ? accumulator.reasoning : null,
-              ));
+              _ref.read(streamingStateProvider(charId).notifier).state =
+                  StreamingState(
+                    text: accumulator.text,
+                    reasoning: accumulator.reasoning.isNotEmpty
+                        ? accumulator.reasoning
+                        : null,
+                  );
             });
           }
         },

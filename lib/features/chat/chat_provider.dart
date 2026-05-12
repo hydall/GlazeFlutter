@@ -19,6 +19,11 @@ final chatProvider =
       ChatNotifier.new,
     );
 
+final streamingStateProvider =
+    StateProvider.family<StreamingState, String>(
+      (ref, _) => const StreamingState(),
+    );
+
 class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   CancelToken? _cancelToken;
   ChatMessage? _restorationMessage;
@@ -64,6 +69,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       if (talkativeness is num && talkativeness < 1.0) {
         final roll = DateTime.now().microsecond % 100 / 100.0;
         if (roll > talkativeness) {
+          _clearStreaming();
           state = AsyncData(ChatState(session: updatedSession));
           return;
         }
@@ -285,11 +291,16 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   void abortGeneration() {
     _cancelToken?.cancel();
     _cancelToken = null;
+    _clearStreaming();
 
     GenerationNotificationService.instance.onGenerationAborted();
   }
 
   void _invalidateHistory() => ref.invalidate(chatHistoryProvider);
+
+  void _clearStreaming() {
+    ref.read(streamingStateProvider(arg).notifier).state = const StreamingState();
+  }
 
   Future<void> _runGeneration(
     ChatSession session,
@@ -342,6 +353,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       state = AsyncData(result);
     }
     _restorationMessage = null;
+    _clearStreaming();
 
     await service.processImageTags(
       currentState: result,

@@ -1,4 +1,4 @@
-name: Build Debug
+name: Build Release
 
 on:
   workflow_dispatch:
@@ -111,14 +111,14 @@ jobs:
       - name: Generate code
         run: dart run build_runner build --delete-conflicting-outputs
 
-      - name: Build Windows (debug)
-        run: flutter build windows --debug --no-pub
+      - name: Build Windows (release)
+        run: flutter build windows --release --no-pub
 
       - name: Upload Windows
         uses: actions/upload-artifact@v4
         with:
-          name: Glaze-debug-Windows
-          path: build/windows/x64/runner/Debug/**
+          name: Glaze-release-Windows
+          path: build/windows/x64/runner/Release/**
 
   build-ios:
     runs-on: macos-latest
@@ -171,10 +171,10 @@ jobs:
         run: |
           mkdir -p Payload
           cp -r build/ios/iphoneos/*.app Payload/
-          zip -r Glaze-debug.ipa Payload
+          zip -r Glaze-release.ipa Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: Glaze-debug-iOS
-          path: Glaze-debug.ipa
+          name: Glaze-release-iOS
+          path: Glaze-release.ipa

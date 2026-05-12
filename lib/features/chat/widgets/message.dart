@@ -468,7 +468,6 @@ class _MessageState extends ConsumerState<Message>
         ? tokens
         : (isUser && content.isNotEmpty ? estimateTokens(content) : null);
 
-    final preset = ref.watch(themeProvider).activePreset;
     final container = AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       margin: EdgeInsets.symmetric(horizontal: isStandard ? 16 : 12, vertical: isStandard ? 8 : 4),
@@ -481,7 +480,7 @@ class _MessageState extends ConsumerState<Message>
         border: isStandard || style.borderWidth <= 0
             ? null
             : Border.all(
-                color: style.borderColor.withValues(alpha: preset.borderOpacity),
+                color: style.borderColor.withValues(alpha: style.borderOpacity),
                 width: style.borderWidth,
               ),
       ),
@@ -903,6 +902,7 @@ class _BubbleStyle {
   final double elementBlur;
   final double borderWidth;
   final Color borderColor;
+  final double borderOpacity;
 
   const _BubbleStyle({
     required this.bg,
@@ -915,6 +915,7 @@ class _BubbleStyle {
     this.elementBlur = 0,
     this.borderWidth = 0,
     this.borderColor = Colors.transparent,
+    this.borderOpacity = 1.0,
   });
 
   factory _BubbleStyle.resolve({
@@ -953,6 +954,7 @@ class _BubbleStyle {
         elementBlur: elBlur,
         borderWidth: bw,
         borderColor: bc,
+        borderOpacity: preset.borderOpacity,
       );
     }
     if (isSystem) {
@@ -967,6 +969,7 @@ class _BubbleStyle {
         elementBlur: elBlur,
         borderWidth: bw,
         borderColor: bc,
+        borderOpacity: preset.borderOpacity,
       );
     }
     return _BubbleStyle(
@@ -980,6 +983,7 @@ class _BubbleStyle {
       elementBlur: elBlur,
       borderWidth: bw,
       borderColor: bc,
+      borderOpacity: preset.borderOpacity,
     );
   }
 }
