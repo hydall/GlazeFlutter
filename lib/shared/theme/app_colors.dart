@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'theme_preset.dart';
 
 class GlazeColors extends ThemeExtension<GlazeColors> {
+  final Color accent;
   final Color userBubble;
   final Color charBubble;
   final Color? userText;
@@ -13,6 +14,7 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
   final Color? charItalic;
 
   const GlazeColors({
+    required this.accent,
     required this.userBubble,
     required this.charBubble,
     this.userText,
@@ -24,11 +26,13 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
   });
 
   static const dark = GlazeColors(
+    accent: Color(0xFF7996CE),
     userBubble: Color(0xFF7996CE),
     charBubble: Color(0xFF1E1E1E),
   );
 
   static const light = GlazeColors(
+    accent: Color(0xFF7996CE),
     userBubble: Color(0xFF7996CE),
     charBubble: Color(0xFFEEEEF0),
   );
@@ -44,6 +48,7 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
     final charBubble = _distinctBubble(charBubbleRaw, effectiveBg, isDark);
 
     return base.copyWith(
+      accent: accent,
       userBubble: userBubble,
       charBubble: charBubble,
       userText: _ensureContrast(preset.userTextParsed, userBubble),
@@ -112,6 +117,7 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
 
   @override
   GlazeColors copyWith({
+    Color? accent,
     Color? userBubble,
     Color? charBubble,
     Color? userText,
@@ -122,6 +128,7 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
     Color? charItalic,
   }) {
     return GlazeColors(
+      accent: accent ?? this.accent,
       userBubble: userBubble ?? this.userBubble,
       charBubble: charBubble ?? this.charBubble,
       userText: userText ?? this.userText,
@@ -137,6 +144,7 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
   GlazeColors lerp(covariant GlazeColors? other, double t) {
     if (other == null) return this;
     return GlazeColors(
+      accent: Color.lerp(accent, other.accent, t)!,
       userBubble: Color.lerp(userBubble, other.userBubble, t)!,
       charBubble: Color.lerp(charBubble, other.charBubble, t)!,
       userText: Color.lerp(userText, other.userText, t),

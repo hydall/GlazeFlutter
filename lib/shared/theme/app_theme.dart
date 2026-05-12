@@ -45,14 +45,14 @@ ColorScheme _buildColorScheme(ThemePreset preset, {required bool isDark}) {
   final uiColor = preset.uiColorParsed ?? _deriveUiColor(accent, isDark);
   final onBg = _contrastFor(uiColor);
   final onBgVariant = _contrastFor(uiColor, secondary: true);
-  final btnFg = accent.computeLuminance() > 0.35
-      ? const Color(0xFF1A1A1B)
-      : const Color(0xFFE1E3E6);
   final surfaceHigh = _shiftColor(uiColor, isDark ? 1.08 : 0.96);
   final outlineColor = _borderFor(uiColor, isDark);
   final outlineVariant = isDark
       ? Colors.white.withValues(alpha: 0.1)
       : Colors.black.withValues(alpha: 0.1);
+  final btnFg = accent.computeLuminance() > 0.35
+      ? const Color(0xFF1A1A1B)
+      : const Color(0xFFE1E3E6);
 
   return ColorScheme(
     brightness: isDark ? Brightness.dark : Brightness.light,
@@ -90,6 +90,28 @@ Color _deriveUiColor(Color accent, bool isDark) {
     (hsl.saturation * 0.3).clamp(0.0, 1.0),
     (0.92 + hsl.lightness * 0.06).clamp(0.9, 0.97),
   ).toColor();
+}
+
+Color _ensureButtonContrast(Color accent, Color surface, {required bool isDark}) {
+  if (_contrastRatio(accent, surface) >= 3.0) return accent;
+  final hsl = HSLColor.fromColor(accent);
+  double lightness = hsl.lightness;
+  for (int i = 0; i < 20; i++) {
+    lightness = isDark ? lightness + 0.04 : lightness - 0.04;
+    final candidate = HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, lightness.clamp(0.0, 1.0)).toColor();
+    if (_contrastRatio(candidate, surface) >= 3.0) return candidate;
+  }
+  return isDark
+      ? HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, 0.6).toColor()
+      : HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, 0.4).toColor();
+}
+
+double _contrastRatio(Color a, Color b) {
+  final l1 = a.computeLuminance();
+  final l2 = b.computeLuminance();
+  final lighter = l1 > l2 ? l1 : l2;
+  final darker = l1 > l2 ? l2 : l1;
+  return (lighter + 0.05) / (darker + 0.05);
 }
 
 Color _contrastFor(Color bg, {bool secondary = false}) {
@@ -132,6 +154,11 @@ class AppTheme {
     final uiSpacing = preset.uiLetterSpacing;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 14.0 : 1.0;
     final glazeColors = GlazeColors.fromPreset(preset, isDark: true);
+    final btnBg = _ensureButtonContrast(
+        colorScheme.primary, colorScheme.surface, isDark: true);
+    final btnFg = btnBg.computeLuminance() > 0.35
+        ? const Color(0xFF1A1A1B)
+        : const Color(0xFFE1E3E6);
 
     final base = FlexThemeData.dark(
       colors: FlexSchemeColor.from(
@@ -187,8 +214,8 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: colorScheme.primary,
-          foregroundColor: colorScheme.onPrimary,
+          backgroundColor: btnBg,
+          foregroundColor: btnFg,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(8)),
           ),
@@ -233,6 +260,11 @@ class AppTheme {
     final uiSpacing = preset.uiLetterSpacing;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 14.0 : 1.0;
     final glazeColors = GlazeColors.fromPreset(preset, isDark: false);
+    final btnBg = _ensureButtonContrast(
+        colorScheme.primary, colorScheme.surface, isDark: false);
+    final btnFg = btnBg.computeLuminance() > 0.35
+        ? const Color(0xFF1A1A1B)
+        : const Color(0xFFE1E3E6);
 
     final base = FlexThemeData.light(
       colors: FlexSchemeColor.from(
@@ -288,8 +320,8 @@ class AppTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: colorScheme.primary,
-          foregroundColor: colorScheme.onPrimary,
+          backgroundColor: btnBg,
+          foregroundColor: btnFg,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.all(Radius.circular(8)),
           ),
