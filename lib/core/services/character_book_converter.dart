@@ -70,3 +70,50 @@ int _mapSelectiveLogic(bool? selective, int? selectiveLogic) {
   if (selective != true) return 4;
   return selectiveLogic ?? 1;
 }
+
+int _reversePosition(String pos) {
+  switch (pos) {
+    case 'before_char': return 0;
+    case 'after_char': return 1;
+    case 'worldInfoBefore': return 2;
+    case 'worldInfoAfter': return 3;
+    case 'at_depth': return 4;
+    default: return 1;
+  }
+}
+
+Map<String, dynamic> lorebookToCharacterBookJson(Lorebook lorebook) {
+  final entries = <Map<String, dynamic>>[];
+  for (final e in lorebook.entries) {
+    final entry = <String, dynamic>{
+      'id': e.id,
+      'keys': e.keys,
+      'secondary_keys': e.secondaryKeys,
+      'content': e.content,
+      'comment': e.comment,
+      'enabled': e.enabled,
+      'constant': e.constant,
+      'position': _reversePosition(e.position),
+      'insertion_order': e.order,
+      'selective_logic': e.selectiveLogic,
+      'probability': e.probability,
+      'group': e.group,
+      'prevent_recursion': e.preventRecursion,
+    };
+    if (e.scanDepth != null) entry['scan_depth'] = e.scanDepth!;
+    if (e.caseSensitive != null) entry['case_sensitive'] = e.caseSensitive!;
+    if (e.matchWholeWords != null) entry['match_whole_words'] = e.matchWholeWords!;
+    if (e.characterFilter != null) {
+      entry['character_filter'] = {
+        'names': e.characterFilter!.names,
+        'is_exclude': e.characterFilter!.isExclude,
+      };
+    }
+    entries.add(entry);
+  }
+
+  return {
+    'name': lorebook.name,
+    'entries': entries,
+  };
+}

@@ -37,7 +37,9 @@
 
 ## Lorebook / Export
 
-- **Lorebook may be missing from PNG export after delete + recreate.** Steps: (1) Import character with lorebook. (2) Delete the lorebook. (3) Create a new lorebook, link it to the character. (4) Export character as PNG. **Needs verification:** Does the export pick up the new lorebook correctly, or does it miss it due to stale activation mappings? The `lorebookActivations` SharedPreferences map and character-scoped lorebook filtering both need to be checked.
+- **~~Lorebook may be missing from PNG export after delete + recreate.~~** Fixed — PNG and JSON exports now always include character-scoped lorebooks. `lorebookToCharacterBookJson()` converts Lorebook model to V2 `character_book` format. Export queries lorebooks by `activationScope == 'character' && activationTargetId == charId`. Multiple character-scoped lorebooks are merged into one book.
+
+- **Lorebook activation dual-system not synced.** Two independent systems track which lorebooks are "character-scoped": (1) DB fields `activationScope`/`activationTargetId` on the Lorebook row, set on import. (2) `lorebookActivations` SharedPreferences map, updated via connections sheet UI. Neither updates the other. Import creates DB entries but not SharedPreferences entries; UI linking creates SharedPreferences entries but not DB entries. The runtime scanner (`lorebook_scanner.dart`) only checks `lorebookActivations` for disabled lorebooks; enabled lorebooks are always active regardless. **Impact:** Low for runtime, but export only checks DB fields, so lorebooks linked only via UI won't be exported.
 
 ## Chat / Sessions
 
