@@ -11,6 +11,11 @@ final charactersProvider = AsyncNotifierProvider<CharactersNotifier, List<Charac
   CharactersNotifier.new,
 );
 
+final characterByIdProvider = Provider.family<Character?, String>((ref, id) {
+  final chars = ref.watch(charactersProvider).value ?? [];
+  return chars.where((c) => c.id == id).firstOrNull;
+});
+
 class CharactersNotifier extends AsyncNotifier<List<Character>> {
   StreamSubscription<List<Character>>? _sub;
 

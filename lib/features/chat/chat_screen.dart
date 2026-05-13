@@ -196,8 +196,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final chatStateAsync = ref.watch(chatProvider(charId));
     final chatState = chatStateAsync.value;
 
-    final chars = ref.watch(charactersProvider).value ?? [];
-    final character = chars.where((c) => c.id == charId).firstOrNull;
+    final character = ref.watch(characterByIdProvider(charId));
     final title = character?.name ?? 'Chat';
     final sessionName = chatState?.session != null
         ? 'Session #${chatState!.session!.sessionIndex}'

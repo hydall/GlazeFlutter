@@ -216,6 +216,8 @@ class _MessageState extends ConsumerState<Message>
   String? _cachedDisplayContent;
   int? _cachedRegexHash;
   String? _cachedMarkdownContent;
+  String? _cachedAvatarPath;
+  FileImage? _cachedAvatarImage;
 
   @override
   void initState() {
@@ -419,8 +421,7 @@ class _MessageState extends ConsumerState<Message>
     final appSettings = ref.watch(appSettingsProvider).value;
     final isStandard = (appSettings?.chatLayout ?? 'default') == 'default';
 
-    final editingIndex = ref.watch(editingMessageIndexProvider(charId));
-    final isEditing = editingIndex == messageIndex && !isSystem && !isStreaming && !isTyping;
+    final isEditing = ref.watch(editingMessageIndexProvider(charId).select((v) => v == messageIndex)) && !isSystem && !isStreaming && !isTyping;
     if (isEditing) {
       _ensureEditController();
     } else if (_editController != null) {
@@ -431,8 +432,7 @@ class _MessageState extends ConsumerState<Message>
       });
     }
 
-    final chars = ref.watch(charactersProvider).value ?? [];
-    final character = chars.where((c) => c.id == charId).firstOrNull;
+    final character = ref.watch(characterByIdProvider(charId));
 
     final regexScripts = ref.watch(activeRegexesProvider).value ?? [];
     final regexHash = regexScripts.isEmpty ? 0 : Object.hashAll(regexScripts.map((r) => r.id));
@@ -464,22 +464,20 @@ class _MessageState extends ConsumerState<Message>
       preset: ref.watch(themeProvider).activePreset,
     );
 
-    final personas = ref.watch(personaListProvider).value ?? [];
-    final activePersonaId = ref.watch(activePersonaIdProvider);
-    final personaConnections = ref.watch(personaConnectionsProvider);
-    final effectivePersona = getEffectivePersona(personas, charId, null, activePersonaId, personaConnections);
+    final effectivePersona = ref.watch(effectivePersonaForChatProvider(charId));
 
     String displayName = isUser ? (effectivePersona?.name ?? 'User') : (character?.name ?? 'Character');
     String avatarLetter = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
+    final avatarPath = isUser
+        ? (effectivePersona?.avatarPath?.isNotEmpty == true ? effectivePersona!.avatarPath : null)
+        : (character?.avatarPath?.isNotEmpty == true ? character!.avatarPath : null);
     FileImage? avatarImage;
-    if (isUser) {
-      if (effectivePersona?.avatarPath != null && effectivePersona!.avatarPath!.isNotEmpty) {
-        avatarImage = FileImage(File(effectivePersona.avatarPath!));
-      }
-    } else if (character?.avatarPath != null && character!.avatarPath!.isNotEmpty) {
-      avatarImage = FileImage(File(character.avatarPath!));
+    if (avatarPath != _cachedAvatarPath) {
+      _cachedAvatarPath = avatarPath;
+      _cachedAvatarImage = avatarPath != null ? FileImage(File(avatarPath)) : null;
     }
+    avatarImage = _cachedAvatarImage;
 
     final textColor = style.textColor;
     final metaColor = style.metaColor;
