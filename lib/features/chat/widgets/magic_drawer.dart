@@ -616,12 +616,12 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         placeholder: 'Session name',
         value: currentName,
         confirmLabel: 'Rename',
-        onConfirm: (val) {
+        onConfirm: (val) async {
           Navigator.pop(context);
           if (val.trim().isNotEmpty) {
             final updatedVars = Map<String, String>.from(session.sessionVars);
             updatedVars['sessionName'] = val.trim();
-            ref.read(chatRepoProvider).put(session.copyWith(sessionVars: updatedVars));
+            await ref.read(chatRepoProvider).put(session.copyWith(sessionVars: updatedVars));
             ref.invalidate(chatProvider(widget.charId));
           }
         },

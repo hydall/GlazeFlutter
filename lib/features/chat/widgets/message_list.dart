@@ -13,6 +13,8 @@ import 'message.dart';
 
 const double _kStickToBottomThreshold = 100;
 const double _kInstantScrollDistance = 3000;
+const int _kInitialRenderCount = 30;
+const int _kLoadMoreCount = 20;
 
 class MessageList extends StatefulWidget {
   final List<ChatMessage> messages;
@@ -42,8 +44,6 @@ class MessageList extends StatefulWidget {
 
 class _MessageListState extends State<MessageList> {
   final _scrollController = ScrollController();
-  final _listKey = GlobalKey<SliverAnimatedListState>();
-  final List<ChatMessage> _items = [];
 
   bool _wasAtBottom = true;
   bool _showScrollButton = false;
@@ -51,14 +51,13 @@ class _MessageListState extends State<MessageList> {
   Timer? _programmaticUnlockTimer;
   Timer? _scrollDebounceTimer;
 
+  int _renderCount = _kInitialRenderCount;
+  bool _needsInitialScroll = true;
+
   @override
   void initState() {
     super.initState();
-    _items.addAll(widget.messages);
     _scrollController.addListener(_onScroll);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _scrollToBottom(smooth: false, force: true);
-    });
   }
 
   @override
@@ -74,39 +73,19 @@ class _MessageListState extends State<MessageList> {
   void didUpdateWidget(covariant MessageList oldWidget) {
     super.didUpdateWidget(oldWidget);
 
-    final newMessages = widget.messages;
-
-    int i = 0;
-    while (i < _items.length || i < newMessages.length) {
-      if (i >= _items.length) {
-        _items.add(newMessages[i]);
-        _listKey.currentState?.insertItem(i);
-        i++;
-      } else if (i >= newMessages.length) {
-        final removed = _items.removeAt(i);
-        _listKey.currentState?.removeItem(
-          i,
-          (context, animation) => _buildRemovedItem(removed, i, animation, oldWidget),
-        );
-      } else if (_items[i].id != newMessages[i].id) {
-        if (newMessages.any((m) => m.id == _items[i].id)) {
-          _items.insert(i, newMessages[i]);
-          _listKey.currentState?.insertItem(i);
-          i++;
-        } else {
-          final removed = _items.removeAt(i);
-          _listKey.currentState?.removeItem(
-            i,
-            (context, animation) => _buildRemovedItem(removed, i, animation, oldWidget),
-          );
+    final totalCount = widget.messages.length;
+    if (totalCount > _renderCount) {
+      if (_wasAtBottom) {
+        _renderCount = totalCount;
+      } else if (_scrollController.hasClients) {
+        final pos = _scrollController.position;
+        if (pos.hasContentDimensions && pos.pixels < 200) {
+          _renderCount = (_renderCount + _kLoadMoreCount).clamp(0, totalCount);
         }
-      } else {
-        _items[i] = newMessages[i];
-        i++;
       }
     }
 
-    final newCount = _items.length;
+    final newCount = widget.messages.length;
     final oldCount = oldWidget.messages.length;
 
     if (_wasAtBottom && newCount > oldCount) {
@@ -141,28 +120,12 @@ class _MessageListState extends State<MessageList> {
     }
   }
 
-  Widget _buildRemovedItem(ChatMessage msg, int index, Animation<double> animation, MessageList w) {
-    return FadeTransition(
-      opacity: animation,
-      child: SizeTransition(
-        sizeFactor: animation,
-        child: SlideTransition(
-          position: Tween<Offset>(
-            begin: const Offset(0, 0.1),
-            end: Offset.zero,
-          ).animate(animation),
-          child: _buildMessageWidget(msg, index, w, isRemoved: true),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMessageWidget(ChatMessage msg, int index, MessageList w, {bool isRemoved = false}) {
-    final msgMatches = w.searchMatches.where((m) => m.messageIndex == index).toList();
+  Widget _buildMessageWidget(ChatMessage msg, int index) {
+    final msgMatches = widget.searchMatches.where((m) => m.messageIndex == index).toList();
     final isMatch = msgMatches.isNotEmpty;
-    final activeMatchIndex = (w.searchMatches.isNotEmpty &&
-        w.searchMatches[w.searchCurrentIndex].messageIndex == index)
-        ? w.searchMatches[w.searchCurrentIndex].matchIndexInMessage
+    final activeMatchIndex = (widget.searchMatches.isNotEmpty &&
+        widget.searchMatches[widget.searchCurrentIndex].messageIndex == index)
+        ? widget.searchMatches[widget.searchCurrentIndex].matchIndexInMessage
         : -1;
 
     return Message(
@@ -176,16 +139,16 @@ class _MessageListState extends State<MessageList> {
       isHidden: msg.isHidden,
       isError: msg.isError,
       messageIndex: index,
-      totalMessages: w.messages.length,
-      isLast: !isRemoved && index == w.messages.length - 1,
-      isGenerating: w.isGenerating,
-      charId: w.charId,
+      totalMessages: widget.messages.length,
+      isLast: index == widget.messages.length - 1,
+      isGenerating: widget.isGenerating,
+      charId: widget.charId,
       swipes: msg.swipes,
       swipeId: msg.swipeId,
       greetingIndex: msg.greetingIndex,
       memoryCoverage: msg.memoryCoverage,
       isSearchMatch: isMatch,
-      searchQuery: w.searchQuery,
+      searchQuery: widget.searchQuery,
       activeMatchIndex: activeMatchIndex,
     );
   }
@@ -199,6 +162,12 @@ class _MessageListState extends State<MessageList> {
     final distance = pos.maxScrollExtent - pos.pixels;
     final atBottom = distance < _kStickToBottomThreshold;
     final wantsButton = distance > _kStickToBottomThreshold;
+
+    if (pos.pixels < 200 && _renderCount < widget.messages.length) {
+      setState(() {
+        _renderCount = (_renderCount + _kLoadMoreCount).clamp(0, widget.messages.length);
+      });
+    }
 
     if (atBottom != _wasAtBottom || wantsButton != _showScrollButton) {
       setState(() {
@@ -273,51 +242,64 @@ class _MessageListState extends State<MessageList> {
 
   @override
   Widget build(BuildContext context) {
+    final messages = widget.messages;
+    final totalCount = messages.length;
+    final renderCount = _renderCount.clamp(0, totalCount);
+    final startFrom = totalCount > renderCount ? totalCount - renderCount : 0;
+
+    if (_needsInitialScroll && totalCount > 0) {
+      _needsInitialScroll = false;
+      _renderCount = totalCount;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToBottom(smooth: false, force: true);
+      });
+    }
+
     return Stack(
       children: [
-        CustomScrollView(
+        ListView.builder(
           controller: _scrollController,
-          slivers: [
-            SliverPadding(
-              padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top + 80),
-              sliver: SliverAnimatedList(
-                key: _listKey,
-                initialItemCount: _items.length,
-                itemBuilder: (context, index, animation) {
-                  if (index >= _items.length) return const SizedBox.shrink();
-                  final msg = _items[index];
-                  return RepaintBoundary(
-                    key: ValueKey(msg.id),
-                    child: FadeTransition(
-                      opacity: animation,
-                      child: SizeTransition(
-                        sizeFactor: animation,
-                        child: SlideTransition(
-                          position: Tween<Offset>(
-                            begin: const Offset(0, 0.05),
-                            end: Offset.zero,
-                          ).animate(animation),
-                          child: _buildMessageWidget(msg, index, widget),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: _StreamingIndicator(
+          padding: EdgeInsets.only(
+            top: MediaQuery.paddingOf(context).top + 80,
+            bottom: widget.bottomInset,
+          ),
+          itemCount: renderCount + (widget.isGenerating ? 1 : 0) + (startFrom > 0 ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (startFrom > 0 && index == 0) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _renderCount = (_renderCount + _kLoadMoreCount).clamp(0, totalCount);
+                      });
+                    },
+                    child: Text('Load earlier messages (${startFrom} more)'),
+                  ),
+                ),
+              );
+            }
+
+            final adjustedIndex = startFrom > 0 ? index - 1 : index;
+
+            if (adjustedIndex >= renderCount) {
+              return _StreamingIndicator(
                 isGenerating: widget.isGenerating,
                 generationStartTime: widget.generationStartTime,
                 charId: widget.charId,
-                totalMessages: widget.messages.length,
+                totalMessages: totalCount,
                 onStreamingTick: _wasAtBottom ? _scheduleScrollToBottom : null,
-              ),
-            ),
-            SliverPadding(
-              padding: EdgeInsets.only(bottom: widget.bottomInset),
-            ),
-          ],
+              );
+            }
+
+            final msgIndex = startFrom + adjustedIndex;
+            final msg = messages[msgIndex];
+            return RepaintBoundary(
+              key: ValueKey(msg.id),
+              child: _buildMessageWidget(msg, msgIndex),
+            );
+          },
         ),
         Positioned(
           right: 16,

@@ -32,6 +32,9 @@ class ChatRepo {
   final AppDatabase _db;
   ChatRepo(this._db);
 
+  Future<T> transaction<T>(Future<T> Function() action) =>
+      _db.transaction(action);
+
   Future<List<ChatSession>> getByCharacterId(String charId) async {
     final rows = await (_db.select(
       _db.chatSessions,
@@ -54,10 +57,26 @@ class ChatRepo {
   }
 
   Stream<List<SessionMetadata>> watchAllSessionMetadata() {
+    var lastEmit = <SessionMetadata>[];
     return (_db.select(_db.chatSessions)
           ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
         .watch()
-        .map((rows) => rows.map(_toMetadata).toList());
+        .asyncMap((rows) async {
+          final meta = rows.map(_toMetadata).toList();
+          if (_metadataEqual(lastEmit, meta)) return lastEmit;
+          lastEmit = meta;
+          return meta;
+        });
+  }
+
+  static bool _metadataEqual(List<SessionMetadata> a, List<SessionMetadata> b) {
+    if (a.length != b.length) return false;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i].sessionId != b[i].sessionId ||
+          a[i].updatedAt != b[i].updatedAt ||
+          a[i].messageCount != b[i].messageCount) return false;
+    }
+    return true;
   }
 
   Future<ChatSession?> getById(String sessionId) async {

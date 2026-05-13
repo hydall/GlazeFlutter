@@ -39,6 +39,7 @@ final chatHistoryProvider =
 
 class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
   StreamSubscription? _sub;
+  List<ChatSessionInfo>? _lastResult;
 
   @override
   Future<List<ChatSessionInfo>> build() async {
@@ -86,7 +87,27 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
     CharacterRepo charRepo,
   ) async {
     final data = await _buildFromMetadata(allMeta, charRepo);
+    if (_lastResult != null &&
+        _lastResult!.length == data.length &&
+        _listEquals(_lastResult!, data)) {
+      return;
+    }
+    _lastResult = data;
     state = AsyncData(data);
+  }
+
+  static bool _listEquals(List<ChatSessionInfo> a, List<ChatSessionInfo> b) {
+    for (int i = 0; i < a.length; i++) {
+      final ai = a[i], bi = b[i];
+      if (ai.sessionId != bi.sessionId ||
+          ai.lastMessageTime != bi.lastMessageTime ||
+          ai.messageCount != bi.messageCount ||
+          ai.lastMessage != bi.lastMessage ||
+          ai.sessionName != bi.sessionName) {
+        return false;
+      }
+    }
+    return true;
   }
 
   Future<void> deleteSession(String sessionId) async {

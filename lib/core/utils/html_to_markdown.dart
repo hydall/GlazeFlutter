@@ -240,7 +240,7 @@ const _namedColors = <String, String>{
 
 String? _namedColorToHex(String name) => _namedColors[name];
 
-bool hasHtmlTags(String content) => _htmlTagRegex.hasMatch(content);
+bool hasHtmlTags(String content) => content.contains('<') && _htmlTagRegex.hasMatch(content);
 
 String stripHtml(String content) {
   if (!hasHtmlTags(content)) return content;

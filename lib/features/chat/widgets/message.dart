@@ -212,6 +212,13 @@ class _MessageState extends ConsumerState<Message>
   Timer? _genTimer;
   double _elapsedGenSeconds = 0.0;
 
+  String? _cachedContent;
+  String? _cachedDisplayContent;
+  int? _cachedRegexHash;
+  String? _cachedMarkdownContent;
+  String? _cachedAvatarPath;
+  FileImage? _cachedAvatarImage;
+
   @override
   void initState() {
     super.initState();
@@ -268,6 +275,12 @@ class _MessageState extends ConsumerState<Message>
   @override
   void didUpdateWidget(Message oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    if (widget.content != oldWidget.content ||
+        widget.searchQuery != oldWidget.searchQuery ||
+        widget.activeMatchIndex != oldWidget.activeMatchIndex) {
+      _cachedMarkdownContent = null;
+    }
 
     if (widget.swipeId != oldWidget.swipeId) {
       setState(() {
@@ -408,8 +421,7 @@ class _MessageState extends ConsumerState<Message>
     final appSettings = ref.watch(appSettingsProvider).value;
     final isStandard = (appSettings?.chatLayout ?? 'default') == 'default';
 
-    final editingIndex = ref.watch(editingMessageIndexProvider(charId));
-    final isEditing = editingIndex == messageIndex && !isSystem && !isStreaming && !isTyping;
+    final isEditing = ref.watch(editingMessageIndexProvider(charId).select((v) => v == messageIndex)) && !isSystem && !isStreaming && !isTyping;
     if (isEditing) {
       _ensureEditController();
     } else if (_editController != null) {
@@ -420,21 +432,29 @@ class _MessageState extends ConsumerState<Message>
       });
     }
 
-    final chars = ref.watch(charactersProvider).value ?? [];
-    final character = chars.where((c) => c.id == charId).firstOrNull;
+    final character = ref.watch(characterByIdProvider(charId));
 
     final regexScripts = ref.watch(activeRegexesProvider).value ?? [];
-    final placement = isUser ? 1 : 2;
-    final depth = totalMessages > 0 ? totalMessages - 1 - messageIndex : null;
-    final regexCtx = RegexApplyContext(
-      char: character,
-      persona: null,
-      depth: depth,
-      totalMessages: totalMessages,
-    );
-    final displayContent = regexScripts.isEmpty
-        ? content
-        : applyRegexes(content, placement, 1, regexScripts, regexCtx);
+    final regexHash = regexScripts.isEmpty ? 0 : Object.hashAll(regexScripts.map((r) => r.id));
+    String displayContent;
+    if (_cachedContent == content && _cachedRegexHash == regexHash) {
+      displayContent = _cachedDisplayContent!;
+    } else {
+      final placement = isUser ? 1 : 2;
+      final depth = totalMessages > 0 ? totalMessages - 1 - messageIndex : null;
+      final regexCtx = RegexApplyContext(
+        char: character,
+        persona: null,
+        depth: depth,
+        totalMessages: totalMessages,
+      );
+      displayContent = regexScripts.isEmpty
+          ? content
+          : applyRegexes(content, placement, 1, regexScripts, regexCtx);
+      _cachedContent = content;
+      _cachedDisplayContent = displayContent;
+      _cachedRegexHash = regexHash;
+    }
 
     final style = _BubbleStyle.resolve(
       context: context,
@@ -444,22 +464,20 @@ class _MessageState extends ConsumerState<Message>
       preset: ref.watch(themeProvider).activePreset,
     );
 
-    final personas = ref.watch(personaListProvider).value ?? [];
-    final activePersonaId = ref.watch(activePersonaIdProvider);
-    final personaConnections = ref.watch(personaConnectionsProvider);
-    final effectivePersona = getEffectivePersona(personas, charId, null, activePersonaId, personaConnections);
+    final effectivePersona = ref.watch(effectivePersonaForChatProvider(charId));
 
     String displayName = isUser ? (effectivePersona?.name ?? 'User') : (character?.name ?? 'Character');
     String avatarLetter = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
 
+    final avatarPath = isUser
+        ? (effectivePersona?.avatarPath?.isNotEmpty == true ? effectivePersona!.avatarPath : null)
+        : (character?.avatarPath?.isNotEmpty == true ? character!.avatarPath : null);
     FileImage? avatarImage;
-    if (isUser) {
-      if (effectivePersona?.avatarPath != null && effectivePersona!.avatarPath!.isNotEmpty) {
-        avatarImage = FileImage(File(effectivePersona.avatarPath!));
-      }
-    } else if (character?.avatarPath != null && character!.avatarPath!.isNotEmpty) {
-      avatarImage = FileImage(File(character.avatarPath!));
+    if (avatarPath != _cachedAvatarPath) {
+      _cachedAvatarPath = avatarPath;
+      _cachedAvatarImage = avatarPath != null ? FileImage(File(avatarPath)) : null;
     }
+    avatarImage = _cachedAvatarImage;
 
     final textColor = style.textColor;
     final metaColor = style.metaColor;
@@ -575,8 +593,12 @@ class _MessageState extends ConsumerState<Message>
             else if (ImageContentRenderer.hasImageMarkers(displayContent))
               ImageContentRenderer(content: displayContent, textColor: textColor)
             else
-              GptMarkdown(
-                _highlightPhrases(hasHtmlTags(displayContent) ? htmlToMarkdown(displayContent) : displayContent),
+              Builder(builder: (_) {
+                final mdContent = _cachedMarkdownContent ??= _highlightPhrases(
+                  hasHtmlTags(displayContent) ? htmlToMarkdown(displayContent) : displayContent,
+                );
+                return GptMarkdown(
+                  mdContent,
                 style: TextStyle(
                   color: textColor,
                   fontSize: ref.watch(chatFontSizeProvider),
@@ -616,7 +638,8 @@ class _MessageState extends ConsumerState<Message>
                   HighlightedText(),
                   SourceTag(),
                 ],
-              ),
+              );
+            }),
             if (isStreaming)
               Text('...', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
             if (!isSystem) ...[

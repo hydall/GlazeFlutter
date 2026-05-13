@@ -33,6 +33,8 @@ class Characters extends Table {
 }
 
 @DataClassName('ChatSessionRow')
+@TableIndex(name: 'idx_chat_sessions_character_id', columns: {#characterId})
+@TableIndex(name: 'idx_chat_sessions_updated_at', columns: {#updatedAt})
 class ChatSessions extends Table {
   @override
   String get tableName => 'chat_sessions';
@@ -131,6 +133,8 @@ class Personas extends Table {
 }
 
 @DataClassName('LorebookRow')
+@TableIndex(name: 'idx_lorebooks_activation_scope', columns: {#activationScope})
+@TableIndex(name: 'idx_lorebooks_activation_target_id', columns: {#activationTargetId})
 class Lorebooks extends Table {
   @override
   String get tableName => 'lorebooks';
@@ -150,6 +154,8 @@ class Lorebooks extends Table {
 }
 
 @DataClassName('EmbeddingRow')
+@TableIndex(name: 'idx_embeddings_source_type', columns: {#sourceType})
+@TableIndex(name: 'idx_embeddings_source_id', columns: {#sourceId})
 class Embeddings extends Table {
   @override
   String get tableName => 'embeddings';

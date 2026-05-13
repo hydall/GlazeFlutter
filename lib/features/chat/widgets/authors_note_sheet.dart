@@ -35,7 +35,7 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
     };
   }
 
-  void _performSave(Map<String, dynamic> item) {
+  Future<void> _performSave(Map<String, dynamic> item) async {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
     if (session == null) return;
     
@@ -54,7 +54,7 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
       authorsNote: note,
       updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
-    ref.read(chatRepoProvider).put(updated);
+    await ref.read(chatRepoProvider).put(updated);
     ref.invalidate(chatProvider(widget.charId));
   }
 

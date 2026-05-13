@@ -31,6 +31,14 @@
 
 **Known difference from JS:** `getEmbeddings()` (single-vector path) averages multi-chunk vectors into one. This is used only by `memory_embedding_service.dart`. Lorebook search uses `getEmbeddingsWithChunks()` which preserves all chunks — correct.
 
+## Cloud Sync
+
+- **Session index collision on delete + recreate.** Steps: (1) Push sessions to cloud. (2) Delete a session locally. (3) Create a new session — it reuses the deleted session's index number. (4) Push or pull. On pull, the old session should reappear (it still exists in cloud). On push, the new session should overwrite. Currently no tracking of which records were intentionally deleted, so cloud ghosts may accumulate. **Proposed fix:** Add a `pendingDeletions` list to the sync manifest. On push: (1) apply pending deletions to cloud, (2) remove entries from manifest, (3) push new/updated records. Same logic applies to lorebooks, characters, and other synced entities. Alternative: use UUID-based IDs instead of sequential indices so collisions are impossible — but this requires migration.
+
+## Lorebook / Export
+
+- **Lorebook may be missing from PNG export after delete + recreate.** Steps: (1) Import character with lorebook. (2) Delete the lorebook. (3) Create a new lorebook, link it to the character. (4) Export character as PNG. **Needs verification:** Does the export pick up the new lorebook correctly, or does it miss it due to stale activation mappings? The `lorebookActivations` SharedPreferences map and character-scoped lorebook filtering both need to be checked.
+
 ## Chat / Sessions
 
 - **~~No rename session.~~** Fixed — `renameSession()` in `ChatHistoryNotifier`, rename menu item + dialog in `chat_history_screen.dart` and `magic_drawer.dart`. Name stored in `sessionVars['sessionName']`, no DB migration needed. Magic drawer now displays `sessionName` instead of `Session #N`.

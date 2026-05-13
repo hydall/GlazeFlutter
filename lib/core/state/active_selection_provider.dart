@@ -10,6 +10,7 @@ import 'db_provider.dart';
 import 'memory_settings_provider.dart';
 
 import 'global_regex_provider.dart';
+import '../../features/personas/persona_list_provider.dart';
 
 final activePresetIdProvider = StateProvider<String?>((ref) => null);
 final activePersonaIdProvider = StateProvider<String?>((ref) => null);
@@ -158,6 +159,13 @@ Persona? getEffectivePersona(
   }
   return personas.isNotEmpty ? personas.first : null;
 }
+
+final effectivePersonaForChatProvider = Provider.family<Persona?, String>((ref, charId) {
+  final personas = ref.watch(personaListProvider).value ?? [];
+  final activePersonaId = ref.watch(activePersonaIdProvider);
+  final personaConnections = ref.watch(personaConnectionsProvider);
+  return getEffectivePersona(personas, charId, null, activePersonaId, personaConnections);
+});
 
 Future<void> _persistGlobalVars(Map<String, String> vars) async {
   final prefs = await SharedPreferences.getInstance();

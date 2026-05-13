@@ -223,7 +223,7 @@ class ChatGenerationService {
       messages: newMessages,
       updatedAt: currentTimestampSeconds(),
     );
-    _ref.read(chatRepoProvider).put(finalSession);
+    await _ref.read(chatRepoProvider).put(finalSession);
     onStateUpdate(ChatState(session: finalSession));
   }
 
