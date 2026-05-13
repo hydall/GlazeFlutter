@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:io';
 import 'dart:ui';
 
@@ -127,6 +128,47 @@ class DetailsSummaryMd extends BlockMd {
   }
 }
 
+final _markdownCache = LruCache<String, String>(maxSize: 200);
+
+final _mdComponents = [
+  CodeBlockMd(),
+  LatexMathMultiLine(),
+  DetailsSummaryMd(),
+  NewLines(),
+  BlockQuote(),
+  TableMd(),
+  HTag(),
+  UnOrderedList(),
+  OrderedList(),
+  RadioButtonMd(),
+  CheckBoxMd(),
+  HrLine(),
+  IndentMd(),
+];
+
+class LruCache<K, V> {
+  final int maxSize;
+  final LinkedHashMap<K, V> _map = LinkedHashMap();
+
+  LruCache({required this.maxSize});
+
+  V? get(K key) {
+    final v = _map.remove(key);
+    if (v != null) _map[key] = v;
+    return v;
+  }
+
+  void put(K key, V value) {
+    _map.remove(key);
+    _map[key] = value;
+    while (_map.length > maxSize) {
+      _map.remove(_map.keys.first);
+    }
+  }
+
+  void remove(K key) => _map.remove(key);
+}
+
 class Message extends ConsumerStatefulWidget {
   final String content;
   final bool isUser;
@@ -188,7 +230,7 @@ class Message extends ConsumerStatefulWidget {
 }
 
 class _MessageState extends ConsumerState<Message>
-    with TickerProviderStateMixin {
+    with AutomaticKeepAliveClientMixin, TickerProviderStateMixin {
   TextEditingController? _editController;
   bool _highlighted = false;
   final GlobalKey _activePhraseKey = GlobalKey();
@@ -212,10 +254,11 @@ class _MessageState extends ConsumerState<Message>
   Timer? _genTimer;
   double _elapsedGenSeconds = 0.0;
 
+  String get _cacheKey => '${widget.messageIndex}:${widget.content}:${widget.searchQuery}:${widget.activeMatchIndex}';
+
   String? _cachedContent;
   String? _cachedDisplayContent;
   int? _cachedRegexHash;
-  String? _cachedMarkdownContent;
   String? _cachedAvatarPath;
   FileImage? _cachedAvatarImage;
 
@@ -279,7 +322,7 @@ class _MessageState extends ConsumerState<Message>
     if (widget.content != oldWidget.content ||
         widget.searchQuery != oldWidget.searchQuery ||
         widget.activeMatchIndex != oldWidget.activeMatchIndex) {
-      _cachedMarkdownContent = null;
+      _markdownCache.remove(_cacheKey);
     }
 
     if (widget.swipeId != oldWidget.swipeId) {
@@ -398,7 +441,12 @@ class _MessageState extends ConsumerState<Message>
   }
 
   @override
+  @override
+  bool get wantKeepAlive => widget.messageIndex >= widget.totalMessages - 50;
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     final content = widget.content;
     final isUser = widget.isUser;
     final isSystem = widget.isSystem;
@@ -465,6 +513,7 @@ class _MessageState extends ConsumerState<Message>
     );
 
     final effectivePersona = ref.watch(effectivePersonaForChatProvider(charId));
+    final fontStyle = ref.watch(chatFontStyleProvider);
 
     String displayName = isUser ? (effectivePersona?.name ?? 'User') : (character?.name ?? 'Character');
     String avatarLetter = displayName.isNotEmpty ? displayName[0].toUpperCase() : '?';
@@ -594,32 +643,22 @@ class _MessageState extends ConsumerState<Message>
               ImageContentRenderer(content: displayContent, textColor: textColor)
             else
               Builder(builder: (_) {
-                final mdContent = _cachedMarkdownContent ??= _highlightPhrases(
-                  hasHtmlTags(displayContent) ? htmlToMarkdown(displayContent) : displayContent,
-                );
+                var mdContent = _markdownCache.get(_cacheKey);
+                if (mdContent == null) {
+                  mdContent = _highlightPhrases(
+                    hasHtmlTags(displayContent) ? htmlToMarkdown(displayContent) : displayContent,
+                  );
+                  _markdownCache.put(_cacheKey, mdContent);
+                }
                 return GptMarkdown(
                   mdContent,
                 style: TextStyle(
                   color: textColor,
-                  fontSize: ref.watch(chatFontSizeProvider),
-                  letterSpacing: ref.watch(chatLetterSpacingProvider),
-                  fontFamily: ref.watch(chatFontFamilyProvider).valueOrNull,
+                  fontSize: fontStyle.fontSize,
+                  letterSpacing: fontStyle.letterSpacing,
+                  fontFamily: fontStyle.fontFamily,
                 ),
-                components: [
-                  CodeBlockMd(),
-                  LatexMathMultiLine(),
-                  DetailsSummaryMd(),
-                  NewLines(),
-                  BlockQuote(),
-                  TableMd(),
-                  HTag(),
-                  UnOrderedList(),
-                  OrderedList(),
-                  RadioButtonMd(),
-                  CheckBoxMd(),
-                  HrLine(),
-                  IndentMd(),
-                ],
+                components: _mdComponents,
                 inlineComponents: [
                   ATagMd(),
                   ImageMd(),
