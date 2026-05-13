@@ -9,8 +9,10 @@ import 'package:path/path.dart' as p;
 import 'package:go_router/go_router.dart';
 
 import '../../../core/models/character.dart';
+import '../../../core/services/character_book_converter.dart';
 import '../../../core/services/character_exporter.dart';
 import '../../../core/state/character_provider.dart';
+import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
@@ -261,6 +263,20 @@ class _CharacterCardState extends ConsumerState<CharacterCard> {
           '.';
       final outputDir = p.join(desktop, 'Desktop');
 
+      final lorebooks = ref.read(lorebooksProvider).value ?? [];
+      final charLorebooks = lorebooks.where((lb) =>
+          lb.activationScope == 'character' && lb.activationTargetId == character.id);
+      Map<String, dynamic>? characterBookData;
+      if (charLorebooks.isNotEmpty) {
+        final merged = <String, dynamic>{'name': charLorebooks.first.name, 'entries': <Map<String, dynamic>>[]};
+        for (final lb in charLorebooks) {
+          final bookJson = lorebookToCharacterBookJson(lb);
+          (merged['entries'] as List).addAll(bookJson['entries']);
+          if (lb != charLorebooks.first) merged['name'] = '${merged['name']}, ${lb.name}';
+        }
+        characterBookData = merged;
+      }
+
       if (format == 'png') {
         Uint8List? avatarBytes;
         if (character.avatarPath != null &&
@@ -274,6 +290,8 @@ class _CharacterCardState extends ConsumerState<CharacterCard> {
           character: character,
           avatarBytes: avatarBytes,
           outputDir: outputDir,
+          includeCharacterBook: true,
+          characterBookData: characterBookData,
         );
         if (context.mounted) {
           GlazeToast.show(context, 'Exported PNG to ${result.filePath}');
@@ -282,6 +300,8 @@ class _CharacterCardState extends ConsumerState<CharacterCard> {
         final result = await exportCharacterAsJson(
           character: character,
           outputDir: outputDir,
+          includeCharacterBook: true,
+          characterBookData: characterBookData,
         );
         if (context.mounted) {
           GlazeToast.show(context, 'Exported JSON to ${result.filePath}');

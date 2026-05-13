@@ -20,6 +20,22 @@ final chatLetterSpacingProvider = Provider<double>((ref) {
   return preset.chatLetterSpacing;
 });
 
+class ChatFontStyle {
+  final double fontSize;
+  final double letterSpacing;
+  final String? fontFamily;
+  const ChatFontStyle({required this.fontSize, required this.letterSpacing, this.fontFamily});
+}
+
+final chatFontStyleProvider = Provider<ChatFontStyle>((ref) {
+  final preset = ref.watch(themeProvider).activePreset;
+  return ChatFontStyle(
+    fontSize: preset.chatFontSizeValue,
+    letterSpacing: preset.chatLetterSpacing,
+    fontFamily: ref.watch(chatFontFamilyProvider).valueOrNull,
+  );
+});
+
 final uiFontSizeProvider = Provider<double?>((ref) {
   final preset = ref.watch(themeProvider).activePreset;
   final v = preset.uiFontSize;

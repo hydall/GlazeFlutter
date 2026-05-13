@@ -259,6 +259,7 @@ class _MessageListState extends State<MessageList> {
       children: [
         ListView.builder(
           controller: _scrollController,
+          cacheExtent: 2000,
           padding: EdgeInsets.only(
             top: MediaQuery.paddingOf(context).top + 80,
             bottom: widget.bottomInset,
