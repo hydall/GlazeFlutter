@@ -244,7 +244,6 @@ class _MessageState extends ConsumerState<Message>
 
   // --- Animation states ---
   late final AnimationController _appearanceCtrl;
-  late final Animation<double> _appearanceFade;
   late final Animation<Offset> _appearanceSlide;
 
   _SlideDirection _slideDir = _SlideDirection.none;
@@ -281,7 +280,6 @@ class _MessageState extends ConsumerState<Message>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _appearanceFade = CurvedAnimation(parent: _appearanceCtrl, curve: Curves.easeOut);
     _appearanceSlide = Tween<Offset>(
       begin: const Offset(0, 0.05),
       end: Offset.zero,
@@ -731,12 +729,9 @@ class _MessageState extends ConsumerState<Message>
       alignment: style.alignment,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: isStandard ? double.infinity : MediaQuery.of(context).size.width * 0.88),
-        child: FadeTransition(
-          opacity: _appearanceFade,
-          child: SlideTransition(
-            position: _appearanceSlide,
-            child: decorated,
-          ),
+        child: SlideTransition(
+          position: _appearanceSlide,
+          child: decorated,
         ),
       ),
     );

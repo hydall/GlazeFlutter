@@ -222,8 +222,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             });
           }
         });
-      }
-    }
+  }
+}
+
     if (!_inputFocus.hasFocus && _tempMaxHeight != 0) {
       _tempMaxHeight = 0;
     }
@@ -295,9 +296,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                         matches.add(SearchMatch(i, matchIndex));
                         matchIndex++;
                         startIndex = idx + lower.length;
-                      }
-                    }
-                  }
+  }
+  }
+}
+
                   setState(() {
                     _searchQuery = q;
                     _searchMatches = matches;
@@ -446,24 +448,12 @@ class _ChatBody extends ConsumerWidget {
       children: [
         if (ref.watch(bgImageProvider).valueOrNull case final path?)
           Positioned.fill(
-            child: ClipRect(
-              child: preset.bgBlur > 0
-                  ? ImageFiltered(
-                      imageFilter: ImageFilter.blur(
-                        sigmaX: preset.bgBlur,
-                        sigmaY: preset.bgBlur,
-                      ),
-                      child: Image.file(
-                        File(path),
-                        fit: BoxFit.cover,
-                        opacity: AlwaysStoppedAnimation(preset.bgOpacity.clamp(0.0, 1.0)),
-                      ),
-                    )
-                  : Image.file(
-                      File(path),
-                      fit: BoxFit.cover,
-                      opacity: AlwaysStoppedAnimation(preset.bgOpacity.clamp(0.0, 1.0)),
-                    ),
+            child: RepaintBoundary(
+              child: _BgImage(
+                path: path,
+                blur: preset.bgBlur > 0 ? preset.bgBlur : 0.0,
+                opacity: preset.bgOpacity.clamp(0.0, 1.0),
+              ),
             ),
           ),
         if (preset.bgNoiseOpacity > 0)
@@ -686,5 +676,37 @@ class _ChatSearchBar extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _BgImage extends StatelessWidget {
+  final String path;
+  final double blur;
+  final double opacity;
+
+  const _BgImage({required this.path, required this.blur, required this.opacity});
+
+  @override
+  Widget build(BuildContext context) {
+    if (opacity <= 0) return const SizedBox.shrink();
+    final imageProvider = FileImage(File(path));
+    Widget child = DecoratedBox(
+      decoration: BoxDecoration(
+        image: DecorationImage(
+          image: imageProvider,
+          fit: BoxFit.cover,
+          colorFilter: opacity < 1.0
+              ? ColorFilter.mode(Color.fromRGBO(0, 0, 0, 1.0 - opacity), BlendMode.dstIn)
+              : null,
+        ),
+      ),
+    );
+    if (blur > 0) {
+      child = ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: child,
+      );
+    }
+    return ClipRect(child: child);
   }
 }
