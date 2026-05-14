@@ -981,7 +981,7 @@ class _BubbleStyle {
   }) {
     final colors = context.colors;
     final cs = context.cs;
-    final elOp = isStandard ? 1.0 : preset.elementOpacity;
+    final elOp = isStandard ? 1.0 : preset.elementOpacity.clamp(0.6, 1.0);
     final elBlur = isStandard ? 0.0 : preset.elementBlur;
     final bw = isStandard ? 0.0 : preset.borderWidth;
     final bc = preset.borderParsed ?? cs.outline;

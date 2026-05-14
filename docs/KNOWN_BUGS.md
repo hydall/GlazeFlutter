@@ -89,7 +89,7 @@
 
 - **Generation sometimes excessively slow on PC.** Intermittent — same config, same model, but response takes 120+ seconds instead of expected 20s. After backup restore, generation is faster (200 on endpoint). **Needs investigation:** (1) Compare prompt payload sizes before/after backup restore. (2) Check if `omitTemperature`/`omitTopP` flags cause different model routing. (3) Check if streaming tokens are delayed by throttling or batched updates.
 
-- **Generation speed slower than expected vs other apps.** Unconfirmed report: same preset, same model, same provider — another app generates a response in 20 seconds, Glaze JS takes 140 seconds. **Needs investigation:** (1) Compare prompt payload sizes between Glaze and the other app. (2) Check if `max_tokens` / `temperature` / `top_p` are sent correctly (especially with `omitTemperature`/`omitTopP` flags). (3) Check if streaming tokens are delayed by throttling or batched updates. (4) Compare network latency and TLS handshake overhead.
+- **Generation speed slower than expected vs other apps.** Unconfirmed report: same preset, same model, same provider — another app generates a response in 20 seconds, Glaze Flutter takes 140 seconds. **Needs investigation:** (1) Compare prompt payload sizes between Glaze and the other app. (2) Check if `max_tokens` / `temperature` / `top_p` are sent correctly (especially with `omitTemperature`/`omitTopP` flags). (3) Check if streaming tokens are delayed by throttling or batched updates. (4) Compare network latency and TLS handshake overhead.
 
 - **~~Theme font loading crashes on invalid data URI.~~** Fixed — `_loadFontFromBase64` now strips `data:...;base64,` prefix before decoding, and validates decoded bytes against font magic numbers (TTF/OTF/WOFF/WOFF2/TTC). Corrupted font data (e.g. HTML page saved as font) is silently skipped instead of crashing.
 
@@ -109,9 +109,7 @@
 
 - **~~10 FPS scroll on long chats.~~** Fixed — multiple GPU raster bottlenecks eliminated: (1) Removed 2 NoiseOverlay instances (20K rects/frame at 0.03 opacity was #1 cause of GPU jank — barely visible, removed entirely). (2) Removed BackdropFilter from message bubbles (per-bubble GPU blur forced 30ms+ raster). (3) Replaced Opacity wrapper in NoiseOverlay with alpha baked into Paint (eliminated 2 full-screen saveLayer calls). (4) Removed FadeTransition from Message appearance (eliminated saveLayer per new message entering viewport). (5) Global LRU markdown cache (200 entries) survives widget disposal. (6) AutomaticKeepAliveClientMixin keeps last 50 messages alive. (7) chatFontStyleProvider — single composite watch replaces 3 separate. Result: 93% smooth frames (was 52%).
 
-- **~~Bubble mode blur uses BackdropFilter.~~** Fixed — BackdropFilter removed from bubble messages. ClipRRect kept for rounded corners. Blur was too expensive per-frame on mobile GPU; semi-transparent background achieves similar visual without GPU cost. **Side effect:** some themes have bubbles too transparent — text blends into background. May need to increase `elementOpacity` or add a semi-opaque background layer.
-
-- **Bubble text blends into background on some themes.** After removing BackdropFilter (which provided visual separation), bubbles with high transparency make text hard to read. **Fix needed:** Either increase minimum `elementOpacity` for bubble mode, or add a semi-opaque background layer behind bubble text when blur is disabled.
+- **~~Bubble mode blur uses BackdropFilter.~~** Fixed — BackdropFilter removed from bubble messages. ClipRRect kept for rounded corners. Blur was too expensive per-frame on mobile GPU; semi-transparent background achieves similar visual without GPU cost. Minimum `elementOpacity` clamped to 0.6 to ensure text readability without blur.
 
 ## Prompt Building
 
