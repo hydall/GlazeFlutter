@@ -33,18 +33,26 @@ class JsBackupImporter with BackupHelpers {
     final chatImporter = JsChatImporter(db, imageStorage);
     final presetImporter = JsPresetImporter(db, imageStorage);
 
-    await characterImporter.importCharacters(data['characters']);
-    await characterImporter.importPersonas(data['personas']);
-    await lorebookImporter.importLorebooks(kv);
-    await lorebookImporter.importCharacterBooks(data['characters']);
-    await apiConfigImporter.importApiConfigs(kv, ls, data);
-    await lorebookImporter.importLorebookSettings(kv, ls);
-    await chatImporter.importChats(kv);
-    await presetImporter.importPresets(kv, ls);
-    await _importJsActiveSelections(kv, ls);
-    await characterImporter.importGalleryFromCharacters(data['characters']);
-    await presetImporter.importDeletedEntries(ls, kv);
-    await presetImporter.importTheme(ls, kv);
+    Future<void> step(String name, Future<void> Function() fn) async {
+      try {
+        await fn();
+      } catch (e, st) {
+        throw Exception('[$name] $e\n$st');
+      }
+    }
+
+    await step('importCharacters', () => characterImporter.importCharacters(data['characters']));
+    await step('importPersonas', () => characterImporter.importPersonas(data['personas']));
+    await step('importLorebooks', () => lorebookImporter.importLorebooks(kv));
+    await step('importCharacterBooks', () => lorebookImporter.importCharacterBooks(data['characters']));
+    await step('importApiConfigs', () => apiConfigImporter.importApiConfigs(kv, ls, data));
+    await step('importLorebookSettings', () => lorebookImporter.importLorebookSettings(kv, ls));
+    await step('importChats', () => chatImporter.importChats(kv));
+    await step('importPresets', () => presetImporter.importPresets(kv, ls));
+    await step('importJsActiveSelections', () => _importJsActiveSelections(kv, ls));
+    await step('importGalleryFromCharacters', () => characterImporter.importGalleryFromCharacters(data['characters']));
+    await step('importDeletedEntries', () => presetImporter.importDeletedEntries(ls, kv));
+    await step('importTheme', () => presetImporter.importTheme(ls, kv));
   }
 
   Future<void> _clearAllTables() async {
