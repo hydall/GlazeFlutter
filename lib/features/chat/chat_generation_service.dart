@@ -123,11 +123,17 @@ class ChatGenerationService {
           }
         },
         onComplete: (text, reasoning) {
+          if (accumulator.text.isEmpty && accumulator.reasoning.isEmpty && accumulator.hasInlineTags) {
+            accumulator.consumeDelta(text);
+          }
+          accumulator.flush();
+          final finalText = accumulator.text.isNotEmpty ? accumulator.text : text;
+          final finalReasoning = accumulator.reasoning.isNotEmpty ? accumulator.reasoning : reasoning;
           final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;
           final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
-          final tokenCount = (text.length / 4).round();
+          final tokenCount = (finalText.length / 4).round();
           finalState = _saveAssistantMessage(
-            text, reasoning, session,
+            finalText, finalReasoning, session,
             pendingSessionVars: pendingSessionVars,
             genTime: timeStr, tokens: tokenCount,
             rawResponse: text,

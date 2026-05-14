@@ -99,14 +99,19 @@ class SyncEngine {
       await _queue.enqueue(() => _pushEntry(entry));
     }
 
+    final cleanedEntries = Map<String, SyncManifestEntry>.from(localManifest.entries)
+      ..removeWhere((_, e) => e.deleted);
+
     final updatedManifest = localManifest.copyWith(
       lastSync: DateTime.now().millisecondsSinceEpoch,
+      entries: cleanedEntries,
     );
     await _adapter.upload(
       cloudPath('manifest', 'manifest'),
       jsonEncode(updatedManifest.toJson()),
     );
     await _manifestBuilder.writeLocalManifest(updatedManifest);
+    await _manifestBuilder.clearDeleted();
   }
 
   Future<void> pullEntities({
@@ -152,9 +157,21 @@ class SyncEngine {
       await _queue.enqueue(() => _pullEntry(cloudEntry));
     }
 
+    final cloudKeys = cloudManifest.entries.keys.toSet();
+    final previousLocal = await _manifestBuilder.readLocalManifest();
+    for (final localEntry in localManifest.entries.values) {
+      if (localEntry.deleted) continue;
+      if (!cloudKeys.contains(localEntry.key) &&
+          previousLocal.entries.containsKey(localEntry.key) &&
+          !previousLocal.entries[localEntry.key]!.deleted) {
+        await _deleteLocalEntity(localEntry.type, localEntry.id);
+      }
+    }
+
     await _manifestBuilder.writeLocalManifest(cloudManifest.copyWith(
       lastSync: DateTime.now().millisecondsSinceEpoch,
     ));
+    await _manifestBuilder.clearDeleted();
   }
 
   Future<void> resolveConflict(SyncConflict conflict, String choice) async {

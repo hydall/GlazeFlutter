@@ -155,6 +155,10 @@ class JsApiConfigImporter with BackupHelpers {
         final merged = <String, dynamic>{};
         if (pid == llmProfileId && connPreset != null) {
           merged.addAll(connPreset);
+          if (connPreset['key'] != null && connPreset['apiKey'] == null) {
+            merged['apiKey'] = connPreset['key'];
+          }
+          merged.remove('key');
         } else {
           merged['max_tokens'] = ls['api-max-tokens'] ?? kv['api-max-tokens'];
           merged['context'] = ls['api-context'] ?? kv['api-context'];

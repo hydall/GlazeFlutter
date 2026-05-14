@@ -70,4 +70,14 @@ class StreamAccumulator {
     _inReasoningBlock = false;
     _pending = '';
   }
+
+  void flush() {
+    if (_pending.isEmpty) return;
+    if (_inReasoningBlock) {
+      _reasoning += _pending;
+    } else {
+      _text += _pending;
+    }
+    _pending = '';
+  }
 }

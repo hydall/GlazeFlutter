@@ -540,7 +540,9 @@ class _MessageState extends ConsumerState<Message>
       decoration: BoxDecoration(
         color: _highlighted
             ? context.cs.primary.withValues(alpha: 0.15)
-            : style.bg.withValues(alpha: style.elementOpacity),
+            : style.bg == Colors.transparent
+                ? null
+                : style.bg.withValues(alpha: style.elementOpacity),
         borderRadius: isStandard ? BorderRadius.zero : BorderRadius.circular(16),
         border: isStandard || style.borderWidth <= 0
             ? null
