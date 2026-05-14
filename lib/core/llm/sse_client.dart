@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+
 typedef SseOnUpdate = void Function(String delta, String? reasoningDelta);
 typedef SseOnComplete = void Function(String text, String? reasoning);
 typedef SseOnError = void Function(Object error);

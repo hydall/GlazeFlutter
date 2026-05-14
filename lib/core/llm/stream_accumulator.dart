@@ -30,34 +30,57 @@ class StreamAccumulator {
   void _processPending() {
     var input = _pending;
     var textPart = '';
-    var reasoningPart = '';
 
     while (input.isNotEmpty) {
       if (_inReasoningBlock) {
-        final endIdx = input.indexOf(tagEnd!);
+        final tag = tagEnd!;
+        final endIdx = input.indexOf(tag);
         if (endIdx == -1) {
-          _reasoning += input;
-          _pending = '';
+          // Check if input ends with a partial tagEnd prefix
+          final partial = _partialSuffixLength(input, tag);
+          if (partial > 0) {
+            _reasoning += input.substring(0, input.length - partial);
+            _pending = input.substring(input.length - partial);
+          } else {
+            _reasoning += input;
+            _pending = '';
+          }
+          _text += textPart;
           return;
         }
         _reasoning += input.substring(0, endIdx);
-        input = input.substring(endIdx + tagEnd!.length);
+        input = input.substring(endIdx + tag.length);
         _inReasoningBlock = false;
       } else {
-        final startIdx = input.indexOf(tagStart!);
+        final tag = tagStart!;
+        final startIdx = input.indexOf(tag);
         if (startIdx == -1) {
-          textPart += input;
-          _pending = '';
+          // Check if input ends with a partial tagStart prefix
+          final partial = _partialSuffixLength(input, tag);
+          if (partial > 0) {
+            textPart += input.substring(0, input.length - partial);
+            _pending = input.substring(input.length - partial);
+          } else {
+            textPart += input;
+            _pending = '';
+          }
           break;
         }
         textPart += input.substring(0, startIdx);
-        input = input.substring(startIdx + tagStart!.length);
+        input = input.substring(startIdx + tag.length);
         _inReasoningBlock = true;
       }
     }
 
     _text += textPart;
-    _reasoning += reasoningPart;
+  }
+
+  /// Returns the length of the longest suffix of [input] that is a prefix of [tag].
+  int _partialSuffixLength(String input, String tag) {
+    for (var len = tag.length - 1; len > 0; len--) {
+      if (input.endsWith(tag.substring(0, len))) return len;
+    }
+    return 0;
   }
 
   String get text => _text;

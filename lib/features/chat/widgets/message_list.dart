@@ -335,7 +335,7 @@ class _StreamingIndicator extends ConsumerWidget {
     if (!isGenerating) return const SizedBox.shrink();
 
     final streaming = ref.watch(streamingStateProvider(charId));
-    final showStreaming = streaming.text.isNotEmpty;
+    final showStreaming = streaming.text.isNotEmpty || (streaming.reasoning?.isNotEmpty ?? false);
     final showTyping = !showStreaming;
 
     if (showStreaming) {

@@ -65,10 +65,24 @@ class ChatGenerationService {
 
       final cancelToken = CancelToken();
       _ref.read(chatProvider(charId).notifier).setCancelToken(cancelToken);
+      final preset = payload.preset;
+      // JS default: always parse <think></think>, preset overrides tags
+      const defaultTagStart = '<think>';
+      const defaultTagEnd = '</think>';
+      final reasoningTagStart = (preset?.reasoningStart?.isNotEmpty == true)
+          ? preset!.reasoningStart!
+          : (apiConfig.reasoningTagStart?.isNotEmpty == true)
+              ? apiConfig.reasoningTagStart!
+              : defaultTagStart;
+      final reasoningTagEnd = (preset?.reasoningEnd?.isNotEmpty == true)
+          ? preset!.reasoningEnd!
+          : (apiConfig.reasoningTagEnd?.isNotEmpty == true)
+              ? apiConfig.reasoningTagEnd!
+              : defaultTagEnd;
       final accumulator = StreamAccumulator(
-        tagStart: apiConfig.reasoningTagStart,
-        tagEnd: apiConfig.reasoningTagEnd,
-        hasInlineTags: apiConfig.reasoningTagStart != null,
+        tagStart: reasoningTagStart,
+        tagEnd: reasoningTagEnd,
+        hasInlineTags: true,
       );
 
       final apiMessages = promptResult.messages
@@ -127,8 +141,14 @@ class ChatGenerationService {
             accumulator.consumeDelta(text);
           }
           accumulator.flush();
-          final finalText = accumulator.text.isNotEmpty ? accumulator.text : text;
-          final finalReasoning = accumulator.reasoning.isNotEmpty ? accumulator.reasoning : reasoning;
+          var finalText = accumulator.text.isNotEmpty ? accumulator.text : text;
+          var finalReasoning = accumulator.reasoning.isNotEmpty ? accumulator.reasoning : reasoning;
+          // If entire response ended up as reasoning (model put <think> at wrong place),
+          // promote reasoning to text so the message is not empty.
+          if (finalText.isEmpty && finalReasoning != null && finalReasoning.isNotEmpty) {
+            finalText = finalReasoning;
+            finalReasoning = null;
+          }
           final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;
           final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
           final tokenCount = (finalText.length / 4).round();
