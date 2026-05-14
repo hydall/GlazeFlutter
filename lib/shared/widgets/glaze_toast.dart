@@ -19,6 +19,7 @@ class GlazeToast {
     int duration = 2500,
     ToastPosition position = ToastPosition.bottom,
     bool isError = false,
+    bool showCopyButton = false,
   }) {
     _current?.cancel();
 
@@ -31,6 +32,7 @@ class GlazeToast {
         text: text,
         position: position,
         isError: isError,
+        showCopyButton: showCopyButton,
         onRemove: () {
           entry.remove();
           if (_current?.entry == entry) _current = null;
@@ -66,6 +68,19 @@ class GlazeToast {
       isError: true,
     );
   }
+
+  static void errorWithCopy(BuildContext context, String prefix, Object error) {
+    final text = '$prefix$error';
+    final ctx = rootNavigatorKey.currentContext ?? context;
+    show(
+      ctx,
+      text,
+      duration: 8000,
+      position: ToastPosition.top,
+      isError: true,
+      showCopyButton: true,
+    );
+  }
 }
 
 // ── Internal state tracker ────────────────────────────────────────────────────
@@ -89,6 +104,7 @@ class _ToastAnimator extends StatefulWidget {
   final String text;
   final ToastPosition position;
   final bool isError;
+  final bool showCopyButton;
   final VoidCallback onRemove;
 
   const _ToastAnimator({
@@ -96,6 +112,7 @@ class _ToastAnimator extends StatefulWidget {
     required this.text,
     required this.position,
     this.isError = false,
+    this.showCopyButton = false,
     required this.onRemove,
   });
 
@@ -179,7 +196,7 @@ class _ToastAnimatorState extends State<_ToastAnimator>
                   scale: _scale.value,
                   child: Opacity(
                     opacity: _opacity.value,
-                    child: _ToastChip(text: widget.text, onTap: dismiss, isError: widget.isError),
+                    child: _ToastChip(text: widget.text, onTap: dismiss, isError: widget.isError, showCopyButton: widget.showCopyButton),
                   ),
                 ),
               ),
@@ -193,21 +210,42 @@ class _ToastAnimatorState extends State<_ToastAnimator>
 
 // ── Visual chip ───────────────────────────────────────────────────────────────
 
-class _ToastChip extends StatelessWidget {
+class _ToastChip extends StatefulWidget {
   final String text;
   final VoidCallback onTap;
   final bool isError;
+  final bool showCopyButton;
 
-  const _ToastChip({required this.text, required this.onTap, this.isError = false});
+  const _ToastChip({
+    required this.text,
+    required this.onTap,
+    this.isError = false,
+    this.showCopyButton = false,
+  });
+
+  @override
+  State<_ToastChip> createState() => _ToastChipState();
+}
+
+class _ToastChipState extends State<_ToastChip> {
+  bool _copied = false;
+
+  void _copy() {
+    Clipboard.setData(ClipboardData(text: widget.text));
+    setState(() => _copied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _copied = false);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Material(
       type: MaterialType.transparency,
       child: GestureDetector(
-        onTap: onTap,
-        onLongPress: () {
-          Clipboard.setData(ClipboardData(text: text));
+        onTap: widget.showCopyButton ? null : widget.onTap,
+        onLongPress: widget.showCopyButton ? null : () {
+          Clipboard.setData(ClipboardData(text: widget.text));
         },
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
@@ -217,10 +255,10 @@ class _ToastChip extends StatelessWidget {
               constraints: BoxConstraints(
                 maxWidth: MediaQuery.of(context).size.width - 48,
               ),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: EdgeInsets.fromLTRB(20, 10, widget.showCopyButton ? 8 : 20, 10),
               decoration: BoxDecoration(
-                color: isError ? const Color(0xEB5C1A1A) : const Color(0xEB1E1E1E),
-                border: isError ? Border.all(color: const Color(0x80FF4444), width: 1) : null,
+                color: widget.isError ? const Color(0xEB5C1A1A) : const Color(0xEB1E1E1E),
+                border: widget.isError ? Border.all(color: const Color(0x80FF4444), width: 1) : null,
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: const [
                   BoxShadow(
@@ -230,16 +268,46 @@ class _ToastChip extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Text(
-                text,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white,
-                  height: 1.3,
-                  decoration: TextDecoration.none,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      widget.text,
+                      textAlign: TextAlign.left,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white,
+                        height: 1.3,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ),
+                  if (widget.showCopyButton) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _copy,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0x33FFFFFF),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          _copied ? 'Copied' : 'Copy',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                            decoration: TextDecoration.none,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),

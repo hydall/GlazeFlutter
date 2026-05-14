@@ -53,10 +53,13 @@ class JsChatImporter with BackupHelpers {
 
     for (final sessionEntry in sessions.entries) {
       final sessionIdx = int.tryParse(sessionEntry.key) ?? 0;
-      final rawMessages = sessionEntry.value as List<dynamic>;
+      final rawMessages = sessionEntry.value;
+      if (rawMessages is! List) continue;
 
-      final messages = rawMessages.map((m) {
-        final msg = m as Map<String, dynamic>;
+      final typedMessages = rawMessages.whereType<Map<String, dynamic>>().toList();
+      final messages = typedMessages.asMap().entries.map((e) {
+        final mi = e.key;
+        final msg = e.value;
         var role = msg['role'] as String? ?? 'user';
         if (role == 'char') role = 'assistant';
 
@@ -95,7 +98,7 @@ class JsChatImporter with BackupHelpers {
 
         return {
           'id': msg['id']?.toString() ??
-              '${charId}_${sessionIdx}_${rawMessages.indexOf(m)}',
+              '${charId}_${sessionIdx}_$mi',
           'role': role,
           'content': content,
           'timestamp': msg['timestamp'],

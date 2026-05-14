@@ -83,7 +83,8 @@ class JsCharacterImporter with BackupHelpers {
   Future<void> importPersonas(dynamic data) async {
     if (data is! List) return;
     for (final p in data) {
-      final per = p as Map<String, dynamic>;
+      if (p is! Map<String, dynamic>) continue;
+      final per = p;
       String? avatarPath;
       final avatar = per['avatar'] as String?;
       if (avatar != null && avatar.startsWith('data:')) {
@@ -110,7 +111,8 @@ class JsCharacterImporter with BackupHelpers {
   Future<void> importGalleryFromCharacters(dynamic data) async {
     if (data is! List) return;
     for (final c in data) {
-      final char = c as Map<String, dynamic>;
+      if (c is! Map<String, dynamic>) continue;
+      final char = c;
       final charId = char['id'] as String?;
       if (charId == null) continue;
 

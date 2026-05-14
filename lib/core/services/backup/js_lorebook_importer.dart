@@ -48,7 +48,8 @@ class JsLorebookImporter with BackupHelpers {
     if (lorebooks == null) return;
 
     for (final l in lorebooks) {
-      final lbJson = l as Map<String, dynamic>;
+      if (l is! Map<String, dynamic>) continue;
+      final lbJson = l;
       final rawEntries = lbJson['entries'];
       final mappedEntries = <Map<String, dynamic>>[];
 

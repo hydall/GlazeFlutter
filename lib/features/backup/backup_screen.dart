@@ -214,7 +214,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        GlazeToast.error(context, 'Import failed: ', e);
+        GlazeToast.errorWithCopy(context, 'Import failed: ', e);
       }
     } finally {
       if (mounted) setState(() => _importing = false);
