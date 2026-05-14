@@ -244,7 +244,6 @@ class _MessageState extends ConsumerState<Message>
 
   // --- Animation states ---
   late final AnimationController _appearanceCtrl;
-  late final Animation<double> _appearanceFade;
   late final Animation<Offset> _appearanceSlide;
 
   _SlideDirection _slideDir = _SlideDirection.none;
@@ -281,7 +280,6 @@ class _MessageState extends ConsumerState<Message>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _appearanceFade = CurvedAnimation(parent: _appearanceCtrl, curve: Curves.easeOut);
     _appearanceSlide = Tween<Offset>(
       begin: const Offset(0, 0.05),
       end: Offset.zero,
@@ -720,10 +718,7 @@ class _MessageState extends ConsumerState<Message>
     if (!isStandard && style.elementBlur > 0) {
       decorated = ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: style.elementBlur, sigmaY: style.elementBlur),
-          child: container,
-        ),
+        child: container,
       );
     }
 
@@ -731,12 +726,9 @@ class _MessageState extends ConsumerState<Message>
       alignment: style.alignment,
       child: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: isStandard ? double.infinity : MediaQuery.of(context).size.width * 0.88),
-        child: FadeTransition(
-          opacity: _appearanceFade,
-          child: SlideTransition(
-            position: _appearanceSlide,
-            child: decorated,
-          ),
+        child: SlideTransition(
+          position: _appearanceSlide,
+          child: decorated,
         ),
       ),
     );
@@ -989,7 +981,7 @@ class _BubbleStyle {
   }) {
     final colors = context.colors;
     final cs = context.cs;
-    final elOp = isStandard ? 1.0 : preset.elementOpacity;
+    final elOp = isStandard ? 1.0 : preset.elementOpacity.clamp(0.6, 1.0);
     final elBlur = isStandard ? 0.0 : preset.elementBlur;
     final bw = isStandard ? 0.0 : preset.borderWidth;
     final bc = preset.borderParsed ?? cs.outline;

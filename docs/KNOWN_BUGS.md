@@ -83,6 +83,14 @@
 
 - **~~401 on generation — wrong API config used.~~** Fixed — 6 locations fetched first DB config instead of user-selected `activeApiConfigProvider`. If first config had empty key, `Authorization: Bearer ` header was rejected by CDN/proxy with 401 without forwarding to origin. All locations now use `activeApiConfigProvider`. Also: empty API key validation in `SseClient`, URL `/v1` prefix handling consolidated in `SseClient.buildChatUrl()`.
 
+- **499 on endpoint when stopping generation.** Expected — 499 is server-side "client closed connection" when user aborts. Not a bug.
+
+- **Themes not deleted on backup restore.** Theme presets are stored in SharedPreferences (key `gz_theme_presets`), not in the DB `presets` table. `FlutterBackupImporter` clears DB tables before import but only **adds** SharedPreferences on top of existing ones — old themes are never removed. `BackupService.importBackup()` iterates `prefsData.entries` with `prefs.set*()` without clearing previous theme keys first. **Fix:** Before importing preferences, clear all `gz_theme_*` / `glaze_theme_*` keys from SharedPreferences, then write the new ones. **Possible causes:** (1) Android network security config blocking certain HTTPS connections. (2) `android:usesCleartextTraffic` not set — if API uses HTTP it's silently blocked. (3) API key not persisted correctly on Android (SharedPreferences vs desktop storage difference). (4) `activeApiConfigProvider` resolves to wrong/empty config on Android. **Needs investigation:** Add request logging to `SseClient` on Android to see actual URL + headers being sent.
+
+- **Generation sometimes excessively slow on PC.** Intermittent — same config, same model, but response takes 120+ seconds instead of expected 20s. After backup restore, generation is faster (200 on endpoint). **Needs investigation:** (1) Compare prompt payload sizes before/after backup restore. (2) Check if `omitTemperature`/`omitTopP` flags cause different model routing. (3) Check if streaming tokens are delayed by throttling or batched updates.
+
+- **Generation speed slower than expected vs other apps.** Unconfirmed report: same preset, same model, same provider — another app generates a response in 20 seconds, Glaze Flutter takes 140 seconds. **Needs investigation:** (1) Compare prompt payload sizes between Glaze and the other app. (2) Check if `max_tokens` / `temperature` / `top_p` are sent correctly (especially with `omitTemperature`/`omitTopP` flags). (3) Check if streaming tokens are delayed by throttling or batched updates. (4) Compare network latency and TLS handshake overhead.
+
 - **~~Theme font loading crashes on invalid data URI.~~** Fixed — `_loadFontFromBase64` now strips `data:...;base64,` prefix before decoding, and validates decoded bytes against font magic numbers (TTF/OTF/WOFF/WOFF2/TTC). Corrupted font data (e.g. HTML page saved as font) is silently skipped instead of crashing.
 
 - **~~Generation errors shown as unclosable AlertDialog.~~** Fixed — errors now appear as chat messages with copy button (matching Glaze JS), using `_ErrorWindow` in `message.dart`. Auto-dismissing toast for transient errors.
@@ -98,6 +106,10 @@
 - **~~Unthrottled streaming updates.~~** Fixed — `chat_generation_service.dart` now uses `SchedulerBinding.instance.scheduleFrameCallback` to throttle state updates to once per frame (~16ms). Tokens accumulate in the `StreamAccumulator` between frames without triggering Riverpod notifications.
 
 - **~~No RepaintBoundary.~~** Fixed — `RepaintBoundary` wraps the `MessageList` in `chat_screen.dart` and the streaming `Message` widget in `message_list.dart`, preventing full-screen repaints on every streaming token.
+
+- **~~10 FPS scroll on long chats.~~** Fixed — multiple GPU raster bottlenecks eliminated: (1) Removed 2 NoiseOverlay instances (20K rects/frame at 0.03 opacity was #1 cause of GPU jank — barely visible, removed entirely). (2) Removed BackdropFilter from message bubbles (per-bubble GPU blur forced 30ms+ raster). (3) Replaced Opacity wrapper in NoiseOverlay with alpha baked into Paint (eliminated 2 full-screen saveLayer calls). (4) Removed FadeTransition from Message appearance (eliminated saveLayer per new message entering viewport). (5) Global LRU markdown cache (200 entries) survives widget disposal. (6) AutomaticKeepAliveClientMixin keeps last 50 messages alive. (7) chatFontStyleProvider — single composite watch replaces 3 separate. Result: 93% smooth frames (was 52%).
+
+- **~~Bubble mode blur uses BackdropFilter.~~** Fixed — BackdropFilter removed from bubble messages. ClipRRect kept for rounded corners. Blur was too expensive per-frame on mobile GPU; semi-transparent background achieves similar visual without GPU cost. Minimum `elementOpacity` clamped to 0.6 to ensure text readability without blur.
 
 ## Prompt Building
 
