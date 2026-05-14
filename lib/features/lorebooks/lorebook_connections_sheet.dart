@@ -161,7 +161,8 @@ class _LorebookConnectionsSheetState
         : Map<String, List<String>>.from(current.chat);
 
     final list = List<String>.from(map[targetId] ?? []);
-    if (list.contains(lbId)) {
+    final wasLinked = list.contains(lbId);
+    if (wasLinked) {
       list.remove(lbId);
     } else {
       list.add(lbId);
@@ -177,6 +178,23 @@ class _LorebookConnectionsSheetState
         : current.copyWith(chat: map);
     ref.read(lorebookActivationsProvider.notifier).state = updated;
     saveLorebookActivations(updated);
+
+    final lorebooks = ref.read(lorebooksProvider).valueOrNull ?? [];
+    final lb = lorebooks.where((l) => l.id == lbId).firstOrNull;
+    if (lb != null) {
+      final allLinked = scope == 'character'
+          ? updated.character.entries.where((e) => e.value.contains(lbId)).map((e) => e.key).toList()
+          : updated.chat.entries.where((e) => e.value.contains(lbId)).map((e) => e.key).toList();
+      if (allLinked.isEmpty && !lb.enabled) {
+        ref.read(lorebooksProvider.notifier).updateLorebook(
+              lb.copyWith(activationScope: 'global', activationTargetId: null),
+            );
+      } else if (allLinked.isNotEmpty) {
+        ref.read(lorebooksProvider.notifier).updateLorebook(
+              lb.copyWith(activationScope: scope, activationTargetId: allLinked.first),
+            );
+      }
+    }
   }
 
   void _addCharacterConnection(Lorebook lb) async {

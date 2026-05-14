@@ -79,13 +79,37 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
   Future<void> addLorebook(Lorebook lorebook) async {
     final repo = ref.read(lorebookRepoProvider);
     await repo.put(lorebook);
+    _syncActivationToPrefs(lorebook);
     ref.invalidateSelf();
   }
 
   Future<void> updateLorebook(Lorebook lorebook) async {
     final repo = ref.read(lorebookRepoProvider);
     await repo.put(lorebook);
+    _syncActivationToPrefs(lorebook);
     ref.invalidateSelf();
+  }
+
+  void _syncActivationToPrefs(Lorebook lorebook) {
+    if (lorebook.activationTargetId == null) return;
+    if (lorebook.activationScope != 'character' && lorebook.activationScope != 'chat') return;
+    final scope = lorebook.activationScope!;
+    final targetId = lorebook.activationTargetId!;
+
+    final current = ref.read(lorebookActivationsProvider);
+    final map = scope == 'character'
+        ? Map<String, List<String>>.from(current.character)
+        : Map<String, List<String>>.from(current.chat);
+    final list = List<String>.from(map[targetId] ?? []);
+    if (!list.contains(lorebook.id)) {
+      list.add(lorebook.id);
+      map[targetId] = list;
+      final updated = scope == 'character'
+          ? current.copyWith(character: map)
+          : current.copyWith(chat: map);
+      ref.read(lorebookActivationsProvider.notifier).state = updated;
+      saveLorebookActivations(updated);
+    }
   }
 
   Future<void> deleteLorebook(String id) async {

@@ -47,6 +47,8 @@ List<ScannedEntry> scanLorebooks({
     if (lb.enabled) return true;
     if (charId != null && activations.character[charId]?.contains(lb.id) == true) return true;
     if (chatId != null && activations.chat[chatId]?.contains(lb.id) == true) return true;
+    if (charId != null && lb.activationScope == 'character' && lb.activationTargetId == charId) return true;
+    if (chatId != null && lb.activationScope == 'chat' && lb.activationTargetId == chatId) return true;
     if (charWorld != null && charWorld.isNotEmpty && lb.name == charWorld) return true;
     return false;
   }).toList();
