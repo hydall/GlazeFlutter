@@ -22,8 +22,23 @@ class _LorebookPerBookSettingsScreenState
   @override
   void initState() {
     super.initState();
-    _settings = widget.settings ?? const LorebookSettings();
     _hasCustom = widget.settings != null;
+    _settings = widget.settings ?? _settingsFromGlobal(widget.globalSettings);
+  }
+
+  LorebookSettings _settingsFromGlobal(LorebookGlobalSettings? g) {
+    if (g == null) return const LorebookSettings();
+    return LorebookSettings(
+      scanDepth: null,
+      maxInjectedEntries: null,
+      recursiveScan: g.recursiveScan,
+      caseSensitive: g.caseSensitive,
+      matchWholeWords: g.matchWholeWords ? 'true' : 'false',
+      vectorSearchEnabled: true,
+      embeddingTarget: 'content',
+      vectorThreshold: g.vectorThreshold,
+      vectorTopK: g.vectorTopK,
+    );
   }
 
   @override
@@ -204,21 +219,8 @@ class _LorebookPerBookSettingsScreenState
   }
 
   void _resetToGlobal() {
-    final g = widget.globalSettings;
     setState(() {
-      _settings = g == null
-          ? const LorebookSettings()
-          : LorebookSettings(
-              scanDepth: null,
-              maxInjectedEntries: null,
-              recursiveScan: g.recursiveScan,
-              caseSensitive: g.caseSensitive,
-              matchWholeWords: g.matchWholeWords ? 'true' : 'false',
-              vectorSearchEnabled: true,
-              embeddingTarget: 'content',
-              vectorThreshold: g.vectorThreshold,
-              vectorTopK: g.vectorTopK,
-            );
+      _settings = _settingsFromGlobal(widget.globalSettings);
       _hasCustom = false;
     });
   }
