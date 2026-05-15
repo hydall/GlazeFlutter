@@ -11,7 +11,6 @@ import 'package:gradient_blur/gradient_blur.dart';
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/models/lorebook.dart';
 import '../../../core/services/chat_import_export.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
@@ -30,6 +29,7 @@ import '../../settings/api_settings_screen.dart';
 import 'authors_note_sheet.dart';
 import 'chat_stats_sheet.dart';
 import 'lorebook_coverage_sheet.dart';
+import 'lorebook_quick_sheet.dart';
 import 'magic_drawer_models.dart';
 import 'magic_drawer_stats_service.dart';
 import 'magic_drawer_widgets.dart';
@@ -348,7 +348,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         }
         return;
       case 'lorebooks':
-        await _showLorebooksSheet();
+        if (mounted) showLorebookQuickSheet(context, ref, widget.charId);
         return;
       case 'memory-books':
         await _showMemoryBooks();
@@ -432,78 +432,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     GlazeBottomSheet.show(
       context,
       child: MemoryBooksSheet(sessionId: session.id, charId: widget.charId),
-    );
-  }
-
-  Future<void> _showLorebooksSheet() async {
-    final lorebooks = await ref.read(lorebookRepoProvider).getAll();
-    if (!mounted) return;
-    if (lorebooks.isEmpty) {
-      GlazeBottomSheet.show(
-        context,
-        title: 'Lorebooks',
-        bigInfo: const BottomSheetBigInfo(
-          icon: Icons.menu_book_outlined,
-          description:
-              'No lorebooks yet. Import a backup or create one in Tools.',
-        ),
-      );
-      return;
-    }
-    GlazeBottomSheet.show(
-      context,
-      title: 'Lorebooks',
-      items: lorebooks
-          .map(
-            (lb) => BottomSheetItem(
-              icon: lb.enabled ? Icons.menu_book : Icons.menu_book_outlined,
-              label: lb.name,
-              hint: '${lb.entries.length} entries · ${lb.activationScope}',
-              onTap: () {
-                Navigator.of(context, rootNavigator: true).pop();
-                _showLorebookEntries(lb);
-              },
-            ),
-          )
-          .toList(),
-    );
-  }
-
-  void _showLorebookEntries(Lorebook lb) {
-    final entries = lb.entries;
-    if (entries.isEmpty) {
-      GlazeBottomSheet.show<bool>(
-        context,
-        title: lb.name,
-        bigInfo: BottomSheetBigInfo(
-          icon: Icons.menu_book_outlined,
-          description: 'No entries in ${lb.name}',
-          buttonText: 'Open Editor',
-          onButtonTap: () => Navigator.of(context).pop(true),
-        ),
-      ).then((openEditor) {
-        if (!mounted || openEditor != true) return;
-        widget.onClose?.call();
-        context.go('/tools/lorebooks');
-      });
-      return;
-    }
-    GlazeBottomSheet.show(
-      context,
-      title: lb.name,
-      items: entries
-          .take(20)
-          .map(
-            (e) => BottomSheetItem(
-              icon: e.enabled ? Icons.description : Icons.description_outlined,
-              label: e.comment.isNotEmpty ? e.comment : e.keys.join(', '),
-              hint: e.constant
-                  ? 'constant'
-                  : (e.keys.isNotEmpty ? e.keys.first : ''),
-              onTap: () {},
-            ),
-          )
-          .toList(),
     );
   }
 
