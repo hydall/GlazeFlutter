@@ -52,17 +52,17 @@ Lorebook convertCharacterBook(
 String _mapPosition(int? pos) {
   switch (pos) {
     case 0:
-      return 'before_char';
+      return 'worldInfoBefore';
     case 1:
-      return 'after_char';
+      return 'worldInfoAfter';
     case 2:
       return 'worldInfoBefore';
     case 3:
       return 'worldInfoAfter';
     case 4:
-      return 'at_depth';
+      return 'worldInfoBefore';
     default:
-      return 'after_char';
+      return 'worldInfoAfter';
   }
 }
 
@@ -73,11 +73,9 @@ int _mapSelectiveLogic(bool? selective, int? selectiveLogic) {
 
 int _reversePosition(String pos) {
   switch (pos) {
-    case 'before_char': return 0;
-    case 'after_char': return 1;
-    case 'worldInfoBefore': return 2;
-    case 'worldInfoAfter': return 3;
-    case 'at_depth': return 4;
+    case 'worldInfoBefore': return 0;
+    case 'worldInfoAfter': return 1;
+    case 'lorebooksMacro': return 2;
     default: return 1;
   }
 }
