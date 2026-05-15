@@ -16,8 +16,17 @@ class CharacterImportResult {
   final Character character;
   final bool hadAvatar;
   final Map<String, dynamic>? characterBookData;
+  final List<GalleryImageData>? galleryImages;
 
-  CharacterImportResult({required this.character, required this.hadAvatar, this.characterBookData});
+  CharacterImportResult({required this.character, required this.hadAvatar, this.characterBookData, this.galleryImages});
+}
+
+class GalleryImageData {
+  final String label;
+  final Uint8List bytes;
+  final String ext;
+
+  GalleryImageData({required this.label, required this.bytes, required this.ext});
 }
 
 class CharacterImporter {
@@ -131,10 +140,52 @@ class CharacterImporter {
       }
     }
 
+    final galleryImages = <GalleryImageData>[];
+    final extGallery = data['extensions'] is Map
+        ? (data['extensions'] as Map)['gallery'] as List<dynamic>?
+        : null;
+    if (extGallery != null) {
+      for (final g in extGallery) {
+        final gMap = g as Map<String, dynamic>;
+        final uri = gMap['uri'] as String?;
+        if (uri != null) {
+          final zipPath = _resolveEmbeddedUri(uri);
+          if (assetFiles.containsKey(zipPath) && assetFiles[zipPath]!.isNotEmpty) {
+            final fileExt = p.extension(zipPath).replaceFirst('.', '');
+            galleryImages.add(GalleryImageData(
+              label: gMap['label'] as String? ?? '',
+              bytes: assetFiles[zipPath]!,
+              ext: fileExt.isEmpty ? 'png' : fileExt,
+            ));
+          }
+        }
+      }
+    }
+
+    if (galleryImages.isEmpty && assets != null) {
+      for (final asset in assets) {
+        final assetMap = asset as Map<String, dynamic>;
+        final type = assetMap['type'] as String?;
+        final uri = assetMap['uri'] as String?;
+        if (type == 'gallery' && uri != null) {
+          final zipPath = _resolveEmbeddedUri(uri);
+          if (assetFiles.containsKey(zipPath) && assetFiles[zipPath]!.isNotEmpty) {
+            final fileExt = p.extension(zipPath).replaceFirst('.', '');
+            galleryImages.add(GalleryImageData(
+              label: assetMap['name'] as String? ?? '',
+              bytes: assetFiles[zipPath]!,
+              ext: fileExt.isEmpty ? 'png' : fileExt,
+            ));
+          }
+        }
+      }
+    }
+
     final character = await _saveCharacterWithAvatar(data, avatarBytes);
     return CharacterImportResult(
         character: character, hadAvatar: avatarBytes != null,
-        characterBookData: data['character_book'] as Map<String, dynamic>?);
+        characterBookData: data['character_book'] as Map<String, dynamic>?,
+        galleryImages: galleryImages.isNotEmpty ? galleryImages : null);
   }
 
   Map<String, dynamic> _normalizeCharacterData(Map<String, dynamic> json) {

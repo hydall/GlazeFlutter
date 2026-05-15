@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -252,6 +251,14 @@ class _CharacterCardState extends ConsumerState<CharacterCard> {
             _export(context, 'json');
           },
         ),
+        BottomSheetItem(
+          icon: Icons.folder_zip_rounded,
+          label: 'Export as ZIP',
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _export(context, 'zip');
+          },
+        ),
       ],
     );
   }
@@ -295,6 +302,43 @@ class _CharacterCardState extends ConsumerState<CharacterCard> {
         );
         if (context.mounted) {
           GlazeToast.show(context, 'Exported PNG to ${result.filePath}');
+        }
+      } else if (format == 'zip') {
+        Uint8List avatarBytes;
+        if (character.avatarPath != null &&
+            File(character.avatarPath!).existsSync()) {
+          avatarBytes = await File(character.avatarPath!).readAsBytes();
+        } else {
+          avatarBytes = generatePlaceholderAvatar(character.name);
+        }
+
+        final galleryEntries = character.gallery;
+        final galleryBytesList = <Uint8List>[];
+        for (final entry in galleryEntries) {
+          final file = File(entry.imagePath);
+          if (await file.exists()) {
+            galleryBytesList.add(await file.readAsBytes());
+          } else {
+            galleryBytesList.add(Uint8List(0));
+          }
+        }
+        final validGallery = <int>[];
+        for (int i = 0; i < galleryEntries.length; i++) {
+          if (galleryBytesList[i].isNotEmpty) validGallery.add(i);
+        }
+        final filteredEntries = validGallery.map((i) => galleryEntries[i]).toList();
+        final filteredBytes = validGallery.map((i) => galleryBytesList[i]).toList();
+
+        final result = await exportCharacterAsZip(
+          character: character,
+          avatarBytes: avatarBytes,
+          outputDir: outputDir,
+          characterBookData: characterBookData,
+          gallery: filteredEntries,
+          galleryBytes: filteredBytes,
+        );
+        if (context.mounted) {
+          GlazeToast.show(context, 'Exported ZIP to ${result.filePath}');
         }
       } else {
         final result = await exportCharacterAsJson(

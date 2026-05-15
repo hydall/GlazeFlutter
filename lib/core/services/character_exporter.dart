@@ -2,9 +2,11 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/character.dart';
+import '../models/gallery_entry.dart';
 
 class PngExportResult {
   final String filePath;
@@ -76,7 +78,72 @@ Future<PngExportResult> exportCharacterAsJson({
   return PngExportResult(filePath: filePath);
 }
 
-Map<String, dynamic> _buildV2Data(Character character, {Map<String, dynamic>? characterBookData}) {
+Future<PngExportResult> exportCharacterAsZip({
+  required Character character,
+  required Uint8List avatarBytes,
+  required String outputDir,
+  Map<String, dynamic>? characterBookData,
+  List<GalleryEntry> gallery = const [],
+  List<Uint8List> galleryBytes = const [],
+}) async {
+  final assets = <Map<String, dynamic>>[];
+
+  assets.add({
+    'type': 'icon',
+    'name': 'avatar',
+    'uri': 'embedded://avatar.png',
+    'ext': 'png',
+  });
+
+  final galleryMeta = <Map<String, dynamic>>[];
+  for (int i = 0; i < gallery.length && i < galleryBytes.length; i++) {
+    final entry = gallery[i];
+    final ext = p.extension(entry.imagePath).replaceFirst('.', '');
+    final safeExt = ext.isEmpty ? 'png' : ext;
+    final fileName = 'gallery_$i.$safeExt';
+    assets.add({
+      'type': 'gallery',
+      'name': entry.label ?? 'gallery_$i',
+      'uri': 'embedded://gallery/$fileName',
+      'ext': safeExt,
+    });
+    galleryMeta.add({
+      'id': entry.id,
+      'label': entry.label,
+      'uri': 'embedded://gallery/$fileName',
+    });
+  }
+
+  final cardData = _buildV2Data(
+    character,
+    characterBookData: characterBookData,
+    assets: assets,
+    galleryMeta: galleryMeta,
+  );
+
+  final archive = Archive();
+  archive.addFile(ArchiveFile.string('card.json', jsonEncode(cardData)));
+  archive.addFile(ArchiveFile.bytes('avatar.png', avatarBytes));
+
+  for (int i = 0; i < gallery.length && i < galleryBytes.length; i++) {
+    final entry = gallery[i];
+    final ext = p.extension(entry.imagePath).replaceFirst('.', '');
+    final safeExt = ext.isEmpty ? 'png' : ext;
+    archive.addFile(ArchiveFile.bytes('gallery/gallery_$i.$safeExt', galleryBytes[i]));
+  }
+
+  final zipBytes = Uint8List.fromList(ZipEncoder().encode(archive));
+
+  final safeName = (character.name.isEmpty ? 'character' : character.name)
+      .replaceAll(RegExp(r'[/\\?%*:|"<>\.]'), '-')
+      .trim();
+  final filePath = p.join(outputDir, '$safeName.zip');
+  await File(filePath).writeAsBytes(zipBytes);
+
+  return PngExportResult(filePath: filePath);
+}
+
+Map<String, dynamic> _buildV2Data(Character character, {Map<String, dynamic>? characterBookData, List<Map<String, dynamic>>? assets, List<Map<String, dynamic>>? galleryMeta}) {
   final data = <String, dynamic>{
     'name': character.name,
     'description': character.description ?? '',
@@ -130,6 +197,16 @@ Map<String, dynamic> _buildV2Data(Character character, {Map<String, dynamic>? ch
   }
 
   data['character_version'] = character.characterVersion;
+
+  if (assets != null && assets.isNotEmpty) {
+    data['assets'] = assets;
+  }
+
+  if (galleryMeta != null && galleryMeta.isNotEmpty) {
+    final ext = data['extensions'] as Map<String, dynamic>? ?? {};
+    ext['gallery'] = galleryMeta;
+    data['extensions'] = ext;
+  }
 
   return {
     'spec': 'chara_card_v2',

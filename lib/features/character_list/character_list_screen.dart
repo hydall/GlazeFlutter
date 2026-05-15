@@ -17,6 +17,7 @@ import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../catalog/widgets/widgets.dart';
+import '../character_gallery/gallery_provider.dart';
 import 'widgets/widgets.dart';
 
 class CharacterListScreen extends ConsumerStatefulWidget {
@@ -252,6 +253,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     final importer = await ref.read(characterImporterProvider.future);
     final notifier = ref.read(charactersProvider.notifier);
     final lorebookRepo = ref.read(lorebookRepoProvider);
+    final galleryService = await ref.read(galleryServiceProvider.future);
     int imported = 0;
     String? lastError;
 
@@ -266,6 +268,13 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
             r.character.id,
           );
           await lorebookRepo.put(lorebook);
+        }
+        if (r.galleryImages != null) {
+          for (final img in r.galleryImages!) {
+            await galleryService.addImageBytes(
+              r.character.id, img.bytes, img.ext, label: img.label,
+            );
+          }
         }
         imported++;
       } catch (e) {
@@ -296,6 +305,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     final importer = await ref.read(characterImporterProvider.future);
     final notifier = ref.read(charactersProvider.notifier);
     final lorebookRepo = ref.read(lorebookRepoProvider);
+    final galleryService = await ref.read(galleryServiceProvider.future);
     int imported = 0;
     String? lastError;
 
@@ -316,6 +326,13 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
             r.character.id,
           );
           await lorebookRepo.put(lorebook);
+        }
+        if (r.galleryImages != null) {
+          for (final img in r.galleryImages!) {
+            await galleryService.addImageBytes(
+              r.character.id, img.bytes, img.ext, label: img.label,
+            );
+          }
         }
         imported++;
       } catch (e) {
