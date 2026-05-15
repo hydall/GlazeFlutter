@@ -9,12 +9,14 @@ class ThemeSettings {
   final Color accentColor;
   final ThemePreset activePreset;
   final List<ThemePreset> presets;
+  final bool ignoreCustomFont;
 
   const ThemeSettings({
     this.mode = ThemeMode.dark,
     this.accentColor = const Color(0xFF7996CE),
     this.activePreset = const ThemePreset(id: 'default', name: 'Default'),
     this.presets = const [ThemePreset(id: 'default', name: 'Default')],
+    this.ignoreCustomFont = false,
   });
 
   ThemeSettings copyWith({
@@ -22,12 +24,14 @@ class ThemeSettings {
     Color? accentColor,
     ThemePreset? activePreset,
     List<ThemePreset>? presets,
+    bool? ignoreCustomFont,
   }) =>
       ThemeSettings(
         mode: mode ?? this.mode,
         accentColor: accentColor ?? this.accentColor,
         activePreset: activePreset ?? this.activePreset,
         presets: presets ?? this.presets,
+        ignoreCustomFont: ignoreCustomFont ?? this.ignoreCustomFont,
       );
 }
 
@@ -89,8 +93,23 @@ class ThemeNotifier extends StateNotifier<ThemeSettings> {
     );
   }
 
+  /// Live-update the active preset and persist it (mirrors JS auto-save on change).
+  Future<void> updatePreset(ThemePreset preset) async {
+    final updated = state.presets.map((p) => p.id == preset.id ? preset : p).toList();
+    state = state.copyWith(
+      activePreset: preset,
+      accentColor: preset.accent,
+      presets: updated,
+    );
+    await _storage.saveAll(updated);
+  }
+
   Future<void> reload() async {
     await _load();
+  }
+
+  void setIgnoreCustomFont(bool value) {
+    state = state.copyWith(ignoreCustomFont: value);
   }
 }
 

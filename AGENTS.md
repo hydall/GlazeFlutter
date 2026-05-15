@@ -99,21 +99,15 @@ Large UI files are acceptable. A 800-line screen with private widgets (`_HeroSec
 
 Rule of thumb: if removing the business logic leaves a file with only `build()` methods and `Widget` returns, it's done. Don't split further.
 
-## Code Rules (lazy-loaded)
+## Code Rules
 
-Detailed rules are split into topic files. When in doubt, read all that apply before editing:
+There are no separate doc files in this repo. All rules live here in `AGENTS.md`.
 
-| Topic | File |
-|-------|------|
-| Generation lifecycle, abort, genId, streaming | `docs/rules/generation.md` |
-| Race conditions, async boundaries, ownership | `docs/rules/race-conditions.md` |
-| Database, Drift, write transactions | `docs/rules/database.md` |
-| Formal invariants with code references | `docs/INVARIANTS.md` |
-| Architecture, directory structure, full flow | `docs/ARCHITECTURE.md` |
-| Flutter/Riverpod specifics | `CLAUDE.md` |
-| **All screens, buttons, navigation, port status** | **`docs/UI_REFERENCE.md`** |
-
-**Before building or modifying any UI screen**, read the relevant section in `docs/UI_REFERENCE.md`. It maps every Glaze JS view to its Flutter route, lists every button/action, and tracks port status.
+Key patterns to follow when editing:
+- **Generation:** always use a `genId` (or `CancelToken`) to guard against stale completions writing to state after abort/regen
+- **Race conditions:** check that the active generation ID still matches before applying any async result to state
+- **Database:** go through Drift repos; never write raw SQL outside of repo classes
+- **Riverpod:** prefer `ref.watch` in build, `ref.read` in callbacks; never call `ref.read` at provider build time for side effects
 
 ## Cleanup Checklist After Merge
 

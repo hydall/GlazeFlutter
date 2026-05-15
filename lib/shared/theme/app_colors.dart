@@ -37,6 +37,10 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
     charBubble: Color(0xFFEEEEF0),
   );
 
+  // Defaults matching Glaze JS: quote = vk-blue (#7996ce), italic = gray (#888)
+  static const _defaultQuote = Color(0xFF7996CE);
+  static const _defaultItalic = Color(0xFF888888);
+
   static GlazeColors fromPreset(ThemePreset preset, {required bool isDark}) {
     final base = isDark ? dark : light;
     final accent = preset.accent;
@@ -53,10 +57,11 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
       charBubble: charBubble,
       userText: _ensureContrast(preset.userTextParsed, userBubble),
       charText: _ensureContrast(preset.charTextParsed, charBubble),
-      userQuote: preset.userQuoteParsed ?? _contrastFor(userBubble).withValues(alpha: 0.7),
-      charQuote: preset.charQuoteParsed ?? _contrastFor(charBubble).withValues(alpha: 0.7),
-      userItalic: preset.userItalicParsed,
-      charItalic: preset.charItalicParsed,
+      // If preset sets a quote/italic color — use it; otherwise fall back to JS defaults
+      userQuote: preset.userQuoteParsed ?? _defaultQuote,
+      charQuote: preset.charQuoteParsed ?? _defaultQuote,
+      userItalic: preset.userItalicParsed ?? _defaultItalic,
+      charItalic: preset.charItalicParsed ?? _defaultItalic,
     );
   }
 
@@ -97,7 +102,9 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
 
   static Color _contrastFor(Color bg) {
     final lum = bg.computeLuminance();
-    return lum > 0.35 ? const Color(0xFF1A1A1B) : const Color(0xFFE1E3E6);
+    final hsl = HSLColor.fromColor(bg);
+    final threshold = hsl.saturation > 0.2 ? 0.25 : 0.35;
+    return lum > threshold ? const Color(0xFF1A1A1B) : const Color(0xFFE1E3E6);
   }
 
   static Color? _ensureContrast(Color? text, Color bg) {

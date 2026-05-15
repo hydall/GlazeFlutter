@@ -100,14 +100,18 @@ Future<String?> _loadFontFromBase64(String dataUri, String name) async {
 }
 
 final chatFontFamilyProvider = FutureProvider<String?>((ref) async {
-  final preset = ref.watch(themeProvider).activePreset;
+  final settings = ref.watch(themeProvider);
+  if (settings.ignoreCustomFont) return null;
+  final preset = settings.activePreset;
   if (preset.chatFontMode != 'custom') return null;
   if (!preset.hasChatFont || preset.chatFontName == null) return null;
   return _loadFontFromBase64(preset.chatFont!, preset.chatFontName!);
 });
 
 final uiFontFamilyProvider = FutureProvider<String?>((ref) async {
-  final preset = ref.watch(themeProvider).activePreset;
+  final settings = ref.watch(themeProvider);
+  if (settings.ignoreCustomFont) return null;
+  final preset = settings.activePreset;
   if (preset.uiFontMode != 'custom') return null;
   if (!preset.hasCustomFont || preset.customFontName == null) return null;
   return _loadFontFromBase64(preset.customFont!, preset.customFontName!);

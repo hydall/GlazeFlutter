@@ -28,6 +28,7 @@ import '../../../shared/theme/theme_preset.dart';
 import '../../image_gen/widgets/image_content_renderer.dart';
 import '../../settings/app_settings_provider.dart';
 import '../chat_provider.dart';
+
 import '../editing_message_provider.dart';
 import 'message_actions.dart';
 
@@ -73,7 +74,9 @@ class MarkMd extends InlineMd {
   InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
     final match = exp.firstMatch(text);
     final content = match?[1] ?? '';
-    final markStyle = (config.style ?? const TextStyle()).copyWith(color: textColor);
+    final markStyle = (config.style ?? const TextStyle()).copyWith(
+      color: textColor,
+    );
     return TextSpan(
       children: MarkdownComponent.generate(context, content, config.copyWith(style: markStyle), false),
       style: markStyle,
@@ -993,10 +996,14 @@ class _BubbleStyle {
     final bc = preset.borderParsed ?? cs.outline;
 
     if (isStandard) {
+      // Standard layout has no bubble background — text color must be readable on
+      // the app background, not on the bubble. Mirror Glaze JS behaviour: text = inherit
+      // (cs.onSurface), quote = vk-blue, italic = gray. Preset bubble text colors are
+      // intentionally ignored here — they're calibrated for the bubble background only.
       return _BubbleStyle(
         bg: Colors.transparent,
         alignment: Alignment.centerLeft,
-        textColor: isUser ? (colors.userText ?? cs.onSurface) : (colors.charText ?? cs.onSurface),
+        textColor: cs.onSurface,
         quoteColor: isUser ? (colors.userQuote ?? cs.primary) : (colors.charQuote ?? cs.primary),
         metaColor: cs.onSurfaceVariant,
         italicColor: isUser ? colors.userItalic : colors.charItalic,

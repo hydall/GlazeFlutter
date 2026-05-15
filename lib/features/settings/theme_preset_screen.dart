@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +7,7 @@ import '../../../shared/theme/theme_preset_storage.dart';
 import '../../../shared/theme/theme_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
+import 'theme_editor_screen.dart';
 
 class ThemePresetScreen extends ConsumerStatefulWidget {
   const ThemePresetScreen({super.key});
@@ -36,6 +35,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
           const SizedBox(height: 16),
           _buildImportButton(context),
           const SizedBox(height: 16),
+          _buildFontToggle(context),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
@@ -132,12 +132,22 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
                       ],
                     ),
                   ),
-                  Text(
-                    'Active',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _contrastColor(context.colors.accent, context.cs.surfaceContainerHighest),
+                  FilledButton.tonal(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ThemeEditorScreen()),
+                    ),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      minimumSize: const Size(0, 32),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.tune, size: 14),
+                        SizedBox(width: 4),
+                        Text('Edit', style: TextStyle(fontSize: 12)),
+                      ],
                     ),
                   ),
                 ],
@@ -145,6 +155,30 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildFontToggle(BuildContext context) {
+    final ignoreCustomFont = ref.watch(themeProvider).ignoreCustomFont;
+    final hasFont = ref.watch(themeProvider).activePreset.hasChatFont ||
+        ref.watch(themeProvider).activePreset.hasCustomFont;
+    if (!hasFont) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: SwitchListTile(
+        value: !ignoreCustomFont,
+        onChanged: (v) =>
+            ref.read(themeProvider.notifier).setIgnoreCustomFont(!v),
+        title: Text(
+          'Custom Font',
+          style: TextStyle(color: context.cs.onSurface),
+        ),
+        subtitle: Text(
+          'Use theme\'s custom font',
+          style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+        ),
+        contentPadding: EdgeInsets.zero,
       ),
     );
   }
@@ -239,6 +273,17 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
               onPressed: () => _applyPreset(preset),
               tooltip: 'Apply',
             ),
+          IconButton(
+            icon: Icon(Icons.tune, color: context.cs.onSurfaceVariant, size: 18),
+            tooltip: 'Edit',
+            onPressed: () async {
+              if (!isActive) _applyPreset(preset);
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ThemeEditorScreen()),
+              );
+            },
+          ),
           if (preset.id != 'default')
             IconButton(
               icon: Icon(Icons.delete_outline, color: context.cs.onSurfaceVariant, size: 18),
