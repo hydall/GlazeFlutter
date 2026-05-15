@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,7 +35,9 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   bool _loading = true;
   bool _isReindexing = false;
   final Map<String, bool> _generatingDrafts = {};
+  final Map<String, DateTime> _genStartTimes = {};
   final Map<String, CancelToken> _cancelTokens = {};
+  Timer? _genElapsedTimer;
 
   @override
   void initState() {
@@ -220,7 +224,11 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     final cancelToken = CancelToken();
     _cancelTokens[draftId] = cancelToken;
 
-    setState(() { _generatingDrafts[draftId] = true; });
+    setState(() {
+      _generatingDrafts[draftId] = true;
+      _genStartTimes[draftId] = DateTime.now();
+      _startGenElapsedTimer();
+    });
 
     try {
       final generator = MemoryDraftGenerator(ref);
@@ -236,6 +244,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       setState(() {
         _book = _book!.copyWith(pendingDrafts: updatedDrafts);
         _generatingDrafts.remove(draftId);
+        _genStartTimes.remove(draftId);
+        _stopGenElapsedTimer();
       });
       await _save();
     } catch (e) {
@@ -248,6 +258,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       setState(() {
         _book = _book!.copyWith(pendingDrafts: updatedDrafts);
         _generatingDrafts.remove(draftId);
+        _genStartTimes.remove(draftId);
+        _stopGenElapsedTimer();
       });
       await _save();
       if (mounted) GlazeToast.show(context, 'Generation failed: $e');
@@ -876,7 +888,14 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   }
 
   String _draftStatusLabel(MemoryDraft draft, bool isGen) {
-    if (isGen) return 'Generating...';
+    if (isGen) {
+      final start = _genStartTimes[draft.id];
+      if (start != null) {
+        final elapsed = DateTime.now().difference(start).inMilliseconds / 1000.0;
+        return 'Generating... ${elapsed.toStringAsFixed(1)}s';
+      }
+      return 'Generating...';
+    }
     if (draft.status == 'needs_regeneration') return 'Needs regeneration';
     if (draft.content.isEmpty && draft.status == 'pending_generation') return 'Needs generation';
     if (draft.content.isNotEmpty) return 'Pending approval';
@@ -1016,5 +1035,26 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: isActive ? Colors.green : Colors.orange),
       ),
     );
+  }
+
+  void _startGenElapsedTimer() {
+    _genElapsedTimer ??= Timer.periodic(const Duration(milliseconds: 200), (_) {
+      if (_generatingDrafts.isNotEmpty && mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  void _stopGenElapsedTimer() {
+    if (_generatingDrafts.isEmpty) {
+      _genElapsedTimer?.cancel();
+      _genElapsedTimer = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _genElapsedTimer?.cancel();
+    super.dispose();
   }
 }

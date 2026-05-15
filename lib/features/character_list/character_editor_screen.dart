@@ -182,7 +182,97 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
   }
 
   void _onOpenFsEditor(String field, int index) {
-    // Left empty for now. Can be connected to a full-screen editor if needed.
+    if (field == 'first_mes') {
+      _editGreeting(index);
+    } else {
+      _editExpandableField(field);
+    }
+  }
+
+  void _editGreeting(int index) {
+    final greetings = <String>[];
+    final first = (_item['first_mes'] as String?) ?? '';
+    greetings.add(first);
+    final alt = _item['alternate_greetings'];
+    if (alt is List) greetings.addAll(alt.cast<String>());
+    if (index < 0 || index >= greetings.length) return;
+
+    final ctrl = TextEditingController(text: greetings[index]);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
+        title: Text('Edit Greeting #${index + 1}'),
+        content: SizedBox(
+          width: MediaQuery.of(ctx).size.width * 0.8,
+          child: TextField(
+            controller: ctrl,
+            maxLines: 12,
+            autofocus: true,
+            style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface, fontSize: 14),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.05),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              final newText = ctrl.text;
+              if (index == 0) {
+                _item['first_mes'] = newText;
+              } else {
+                final altList = (_item['alternate_greetings'] as List?)?.cast<String>().toList() ?? <String>[];
+                if (index - 1 < altList.length) altList[index - 1] = newText;
+                _item['alternate_greetings'] = altList;
+              }
+              Navigator.pop(ctx);
+              setState(() {});
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _editExpandableField(String field) {
+    final ctrl = TextEditingController(text: (_item[field] as String?) ?? '');
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
+        title: Text(field.replaceAll('_', ' ').replaceFirstMapped(RegExp(r'[a-z]'), (m) => m.group(0)!.toUpperCase())),
+        content: SizedBox(
+          width: MediaQuery.of(ctx).size.width * 0.8,
+          child: TextField(
+            controller: ctrl,
+            maxLines: 16,
+            autofocus: true,
+            style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface, fontSize: 14),
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.05),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () {
+              _item[field] = ctrl.text;
+              Navigator.pop(ctx);
+              setState(() {});
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
