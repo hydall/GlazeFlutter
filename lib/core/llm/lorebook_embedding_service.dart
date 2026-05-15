@@ -12,12 +12,17 @@ class LorebookEmbeddingService {
 
   LorebookEmbeddingService(this._repo, this._embeddingService, [this._embeddingTarget = 'content']);
 
+  Future<void> clearLorebookEmbeddings(String lorebookId) {
+    return _repo.deleteBySourceId(lorebookId);
+  }
+
   Future<IndexResult> indexLorebookEntries(
     String lorebookId,
     List<LorebookEntry> entries,
     EmbeddingConfig config, {
     void Function(int current, int total, String entryName)? onProgress,
     bool retryFailedOnly = false,
+    bool forceReindex = false,
     String embeddingTarget = 'content',
   }) async {
     int indexed = 0;
@@ -38,16 +43,15 @@ class LorebookEmbeddingService {
       final textHash = computeHash(fingerprint);
 
       final namespacedId = '${lorebookId}_${entry.id}';
-      final existing = await _repo.getByEntryId(namespacedId);
+      final existing = forceReindex ? null : await _repo.getByEntryId(namespacedId);
+
+      // Skip if already indexed with matching hash (unless forcing reindex)
       if (existing != null && existing.textHash == textHash && existing.vectorsBlob != null && existing.errorJson == null) {
-        if (retryFailedOnly) {
-          skipped++;
-          continue;
-        }
         skipped++;
         continue;
       }
 
+      // retryFailedOnly: skip entries that have no error (i.e. already good or just not indexed)
       if (retryFailedOnly && existing != null && existing.errorJson == null) {
         skipped++;
         continue;

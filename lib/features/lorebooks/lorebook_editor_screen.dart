@@ -260,6 +260,74 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     }
   }
 
+  Future<void> _clearAndReindex() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear & Reindex'),
+        content: const Text('Delete all existing embeddings for this lorebook and reindex from scratch?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reindex')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await ref.read(apiListProvider.future);
+    final config = ref.read(embeddingConfigProvider);
+    if (config.endpoint.isEmpty) {
+      GlazeToast.show(context, 'Set up embedding API in Embedding Settings first');
+      return;
+    }
+
+    final vectorEntries = _entries.where((e) => e.vectorSearch && e.enabled && !e.constant).toList();
+    if (vectorEntries.isEmpty) {
+      GlazeToast.show(context, 'No vector-enabled entries to index');
+      return;
+    }
+
+    setState(() {
+      _isIndexing = true;
+      _indexStatus = 'Clearing embeddings...';
+    });
+
+    try {
+      final service = ref.read(lorebookEmbeddingServiceProvider);
+      await service.clearLorebookEmbeddings(widget.lorebookId);
+
+      final result = await service.indexLorebookEntries(
+        widget.lorebookId,
+        _entries,
+        config,
+        forceReindex: true,
+        embeddingTarget: _settings?.embeddingTarget ?? 'content',
+        onProgress: (current, total, name) {
+          setState(() => _indexStatus = 'Indexing $current/$total...');
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _isIndexing = false;
+          _indexStatus = '';
+          if (result.rateLimited && result.retryAfter > 0) {
+            _rateLimitCooldown = result.retryAfter;
+            _startCooldownTimer();
+          }
+        });
+        _loadEmbeddingStatuses();
+        GlazeToast.show(context, 'Reindexed: ${result.indexed}, Failed: ${result.failed}${result.rateLimited ? ' (Rate limited)' : ''}');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() { _isIndexing = false; _indexStatus = ''; });
+        _loadEmbeddingStatuses();
+        GlazeToast.error(context, 'Reindex failed: ', e);
+      }
+    }
+  }
+
   void _startCooldownTimer() {
     Future.doWhile(() async {
       await Future.delayed(const Duration(seconds: 1));
@@ -524,12 +592,18 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                             ),
                           ),
                         )
-                      else
+                       else ...[
+                        IconButton(
+                          icon: const Icon(Icons.delete_sweep_outlined, size: 20),
+                          tooltip: 'Clear & Reindex (force)',
+                          onPressed: _clearAndReindex,
+                        ),
                         IconButton(
                           icon: const Icon(Icons.auto_fix_high, size: 20),
                           tooltip: 'Index Vector Entries',
                           onPressed: _indexEntries,
                         ),
+                       ],
                     ],
                   ),
                 ),
