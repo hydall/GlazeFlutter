@@ -65,6 +65,7 @@ class PromptPayloadBuilder {
 
     String? summaryContent;
     String? memoryContent;
+    String? memoryMacroContent;
     String memoryInjectionTarget = 'summary_block';
     Map<String, dynamic> memoryCoverage = {};
     List<ChatMessage> history = session?.messages ?? [];
@@ -92,6 +93,7 @@ class PromptPayloadBuilder {
         embeddingConfig: embeddingConfig,
       );
       memoryContent = memoryResult.content.isNotEmpty ? memoryResult.content : null;
+      memoryMacroContent = memoryResult.macroContent.isNotEmpty ? memoryResult.macroContent : null;
       memoryInjectionTarget = memoryResult.injectionTarget;
       if (memoryResult.entries.isNotEmpty) {
         memoryCoverage = {
@@ -120,6 +122,7 @@ class PromptPayloadBuilder {
       vectorEntries: vectorEntries,
       summaryContent: summaryContent,
       memoryContent: memoryContent,
+      memoryMacroContent: memoryMacroContent,
       memoryInjectionTarget: memoryInjectionTarget,
       memoryCoverage: memoryCoverage,
       guidanceText: guidanceText,

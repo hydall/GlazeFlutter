@@ -63,6 +63,10 @@ class PromptMessage {
   final bool isHistory;
   final bool isDepth;
   final bool isLorebook;
+  /// True for messages that carry summary content (dedicated summary block or
+  /// any preset block whose content contained {{summary}}). Used by memory
+  /// injection in summary_macro mode to locate the right message.
+  final bool isSummary;
   final String? blockName;
 
   const PromptMessage({
@@ -73,6 +77,7 @@ class PromptMessage {
     this.isHistory = false,
     this.isDepth = false,
     this.isLorebook = false,
+    this.isSummary = false,
     this.blockName,
   });
 

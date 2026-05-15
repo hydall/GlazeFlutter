@@ -36,6 +36,10 @@ class PromptPayload {
   final String? summaryContent;
   final String? summaryPrefix;
   final String? memoryContent;
+  /// Raw entry text joined with \n\n — used in summary_macro mode to append
+  /// directly onto the summary message (no bullet headers, no summary excerpt).
+  /// Mirrors JS memoryInjection.macroContent.
+  final String? memoryMacroContent;
   final String memoryInjectionTarget;
   final String? guidanceText;
   final List<Lorebook> lorebooks;
@@ -61,6 +65,7 @@ class PromptPayload {
     this.summaryContent,
     this.summaryPrefix,
     this.memoryContent,
+    this.memoryMacroContent,
     this.memoryInjectionTarget = 'summary_block',
     this.guidanceText,
     this.lorebooks = const [],
@@ -96,14 +101,16 @@ class _ResolvedDepthBlock {
   final String role;
   final String content;
   final int depth;
-  const _ResolvedDepthBlock({required this.id, required this.role, required this.content, required this.depth});
+  final bool isSummary;
+  const _ResolvedDepthBlock({required this.id, required this.role, required this.content, required this.depth, this.isSummary = false});
 }
 
 class _ResolvedRelativeBlock {
   final String id;
   final String role;
   final String content;
-  const _ResolvedRelativeBlock({required this.id, required this.role, required this.content});
+  final bool isSummary;
+  const _ResolvedRelativeBlock({required this.id, required this.role, required this.content, this.isSummary = false});
 }
 
 PromptResult buildPrompt(PromptPayload payload) {
@@ -193,6 +200,8 @@ PromptResult buildPrompt(PromptPayload payload) {
 
     if (resolved == null) continue;
 
+    final blockIsSummary = id == 'summary' || rawBlock.content.contains('{{summary}}');
+
     if (id == 'authors_note' && payload.authorsNote != null) {
       final anMode = payload.authorsNote!.insertionMode.isNotEmpty
           ? payload.authorsNote!.insertionMode
@@ -201,14 +210,14 @@ PromptResult buildPrompt(PromptPayload payload) {
           ? payload.authorsNote!.depth
           : rawBlock.depth ?? 0;
       if (anMode == 'depth') {
-        depthBlocks.add(_ResolvedDepthBlock(id: id, role: resolved.role, content: resolved.content, depth: anDepth));
+        depthBlocks.add(_ResolvedDepthBlock(id: id, role: resolved.role, content: resolved.content, depth: anDepth, isSummary: blockIsSummary));
       } else {
-        relativeBlocks.add(_ResolvedRelativeBlock(id: id, role: resolved.role, content: resolved.content));
+        relativeBlocks.add(_ResolvedRelativeBlock(id: id, role: resolved.role, content: resolved.content, isSummary: blockIsSummary));
       }
     } else if (rawBlock.insertionMode == 'depth' && id != 'chat_history') {
-      depthBlocks.add(_ResolvedDepthBlock(id: id, role: resolved.role, content: resolved.content, depth: rawBlock.depth ?? 0));
+      depthBlocks.add(_ResolvedDepthBlock(id: id, role: resolved.role, content: resolved.content, depth: rawBlock.depth ?? 0, isSummary: blockIsSummary));
     } else {
-      relativeBlocks.add(_ResolvedRelativeBlock(id: id, role: resolved.role, content: resolved.content));
+      relativeBlocks.add(_ResolvedRelativeBlock(id: id, role: resolved.role, content: resolved.content, isSummary: blockIsSummary));
     }
   }
 
@@ -294,7 +303,7 @@ PromptResult _assembleMessages({
   String? mergeBuffer;
   String? mergeRole;
 
-  final resolvedDepthMsgs = depthBlocks.map((b) => PromptMessage(role: b.role, content: b.content, blockId: b.id, depth: b.depth, isDepth: true)).toList();
+  final resolvedDepthMsgs = depthBlocks.map((b) => PromptMessage(role: b.role, content: b.content, blockId: b.id, depth: b.depth, isDepth: true, isSummary: b.isSummary)).toList();
 
   // Track whether loreBefore/loreAfter were injected via char_card trigger.
   // If the preset has no char_card block, they fall through to the end.
@@ -354,7 +363,7 @@ PromptResult _assembleMessages({
         if (mergeBuffer != null) { mergeBuffer = '$mergeBuffer\n\n$content'; } else { mergeBuffer = content; mergeRole = preset.mergeRole; }
       } else {
         if (mergeBuffer != null) { messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer)); mergeBuffer = null; }
-        messages.add(PromptMessage(role: block.role, blockId: block.id, content: content));
+        messages.add(PromptMessage(role: block.role, blockId: block.id, content: content, isSummary: block.isSummary));
       }
 
       // worldInfoAfter injects just after char_card (mirrors JS generationWorker.js:792)
@@ -368,40 +377,39 @@ PromptResult _assembleMessages({
   if (mergeBuffer != null) messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer));
 
   if (payload.memoryContent != null && payload.memoryContent!.isNotEmpty) {
-    if (payload.memoryInjectionTarget == 'summary_macro') {
-      final attrSummaryIdx = attributionBlocks.indexWhere((b) => b.id == 'summary');
-      if (attrSummaryIdx >= 0) {
-        attributionBlocks[attrSummaryIdx] = StaticBlock(id: 'summary', content: '${attributionBlocks[attrSummaryIdx].content}\n\n${payload.memoryContent}');
-      } else {
-        attributionBlocks.add(StaticBlock(id: 'memory', content: payload.memoryContent!));
-      }
-      final msgSummaryIdx = messages.indexWhere((m) => m.blockId == 'summary');
+    // summary_macro: append raw entry text onto the summary message in-place.
+    // Uses memoryMacroContent (plain join) not memoryContent (structured block with headers).
+    // Falls back to summary_block if no summary message exists (mirrors JS behaviour).
+    final macroText = payload.memoryMacroContent ?? payload.memoryContent!;
+    if (payload.memoryInjectionTarget == 'summary_macro' && macroText.isNotEmpty) {
+      final msgSummaryIdx = messages.indexWhere((m) => m.isSummary);
       if (msgSummaryIdx >= 0) {
         final existing = messages[msgSummaryIdx];
         messages[msgSummaryIdx] = PromptMessage(
           role: existing.role,
-          content: '${existing.content}\n\n${payload.memoryContent}',
+          content: '${existing.content}\n\n$macroText',
+          blockId: existing.blockId,
           blockName: existing.blockName,
           isHistory: existing.isHistory,
           isDepth: existing.isDepth,
           depth: existing.depth,
           isLorebook: existing.isLorebook,
+          isSummary: true,
         );
+        final attrSummaryIdx = attributionBlocks.indexWhere((b) => b.id == (existing.blockId ?? 'summary'));
+        if (attrSummaryIdx >= 0) {
+          attributionBlocks[attrSummaryIdx] = StaticBlock(id: attributionBlocks[attrSummaryIdx].id, content: '${attributionBlocks[attrSummaryIdx].content}\n\n$macroText');
+        } else {
+          attributionBlocks.add(StaticBlock(id: 'memory', content: macroText));
+        }
+        // Done — memory appended to summary message; skip summary_block injection.
+      } else {
+        // No summary message found — fall through to summary_block behaviour.
+        _injectMemoryBlock(messages, attributionBlocks, payload.memoryContent!);
       }
     } else {
-      attributionBlocks.add(StaticBlock(id: 'memory', content: payload.memoryContent!));
-      final memMsg = PromptMessage(
-        role: 'system',
-        content: payload.memoryContent!,
-        blockId: 'memory',
-        blockName: 'Memory Book',
-      );
-      final historyIdx = messages.indexWhere((m) => m.isHistory);
-      if (historyIdx >= 0) {
-        messages.insert(historyIdx, memMsg);
-      } else {
-        messages.add(memMsg);
-      }
+      // summary_block (default): inject as standalone system message just before history.
+      _injectMemoryBlock(messages, attributionBlocks, payload.memoryContent!);
     }
   }
 
@@ -471,4 +479,20 @@ PromptResult _assembleMessages({
   }
 
   return PromptResult(messages: finalMessages, breakdown: breakdown, sessionVars: currentSessionVars, globalVars: currentGlobalVars);
+}
+
+void _injectMemoryBlock(List<PromptMessage> messages, List<StaticBlock> attributionBlocks, String content) {
+  attributionBlocks.add(StaticBlock(id: 'memory', content: content));
+  final memMsg = PromptMessage(
+    role: 'system',
+    content: content,
+    blockId: 'memory',
+    blockName: 'Memory Book',
+  );
+  final historyIdx = messages.indexWhere((m) => m.isHistory);
+  if (historyIdx >= 0) {
+    messages.insert(historyIdx, memMsg);
+  } else {
+    messages.add(memMsg);
+  }
 }
