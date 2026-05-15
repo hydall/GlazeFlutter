@@ -35,7 +35,7 @@ class LorebookVectorSearch {
     String? charWorld,
     Character? character,
   }) async {
-    if (settings.searchType == 'keys') return [];
+    if (settings.searchType == 'keyword') return [];
 
     final activeLorebooks = lorebooks.where((lb) {
       if (lb.enabled) return true;

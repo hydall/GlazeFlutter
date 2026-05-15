@@ -194,7 +194,7 @@ class PromptPayloadBuilder {
     Character? character,
   ) async {
     final settings = _ref.read(lorebookSettingsProvider);
-    if (settings.searchType == 'keys') return [];
+    if (settings.searchType == 'keyword') return [];
 
     final config = _ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) return [];
