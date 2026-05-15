@@ -27,6 +27,7 @@ final streamingStateProvider =
 class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   CancelToken? _cancelToken;
   ChatMessage? _restorationMessage;
+  int _activeGenId = 0;
 
   void setCancelToken(CancelToken token) => _cancelToken = token;
 
@@ -131,6 +132,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final lastMsg = current.messages[lastIdx];
     if (lastMsg.role != 'assistant') return;
 
+    final genId = ++_activeGenId;
     state = AsyncData(ChatState(session: current.session, isGenerating: true, generationStartTime: DateTime.now()));
 
     final notifService = GenerationNotificationService.instance;
@@ -141,8 +143,10 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       session: current.session!,
       charId: arg,
       currentState: current,
-      onStateUpdate: (s) => state = AsyncData(s),
+      onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
     );
+
+    if (_activeGenId != genId) return;
 
     final generatedMsg = result.messages.isNotEmpty ? result.messages.last : null;
     if (generatedMsg != null && generatedMsg.role == 'assistant') {
@@ -259,6 +263,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> switchSession(int sessionIndex) async {
+    _activeGenId++; // disown any in-flight generation so it won't overwrite the new session
+    _clearStreaming();
     final session = await _sessionSvc.switchToSession(arg, sessionIndex);
     if (session != null) {
       state = AsyncData(ChatState(session: session));
@@ -266,6 +272,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> createNewSession() async {
+    _activeGenId++; // disown any in-flight generation
+    _clearStreaming();
     final session = await _sessionSvc.createNewSession(arg);
     _invalidateHistory();
     state = AsyncData(ChatState(session: session));
@@ -277,18 +285,23 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final current = state.value;
     if (current == null || current.session == null) return;
     if (index < 0 || index >= current.messages.length) return;
+    _activeGenId++; // disown any in-flight generation
+    _clearStreaming();
     final session = await _sessionSvc.branchSession(arg, current.session!, index);
     _invalidateHistory();
     state = AsyncData(ChatState(session: session));
   }
 
   Future<void> newSession() async {
+    _activeGenId++; // disown any in-flight generation
+    _clearStreaming();
     final session = await _sessionSvc.createNewSession(arg);
     _invalidateHistory();
     state = AsyncData(ChatState(session: session));
   }
 
   void abortGeneration() {
+    _activeGenId++; // invalidate any in-flight onStateUpdate / final writes
     _cancelToken?.cancel();
     _cancelToken = null;
     _clearStreaming();
@@ -313,6 +326,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     int? previousTokens,
     List<Map<String, dynamic>>? previousSwipesMeta,
   }) async {
+    final genId = ++_activeGenId;
+
     final notifService = GenerationNotificationService.instance;
     await notifService.onGenerationStarted();
 
@@ -321,7 +336,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       session: session,
       charId: arg,
       currentState: current,
-      onStateUpdate: (s) => state = AsyncData(s),
+      onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
       previousSwipes: previousSwipes,
       previousSwipeId: previousSwipeId,
       previousReasoning: previousReasoning,
@@ -330,6 +345,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       previousSwipesMeta: previousSwipesMeta,
       guidanceText: guidanceText,
     );
+
+    // A newer generation started while we were awaiting — discard this result.
+    if (_activeGenId != genId) return;
 
     if (result.session?.messages.length == session.messages.length) {
       // No new message was saved (cancelled or failed)
@@ -342,8 +360,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         await ref.read(chatRepoProvider).put(restoredSession);
         _invalidateHistory();
         state = AsyncData(ChatState(
-          session: restoredSession, 
-          isGenerating: false, 
+          session: restoredSession,
+          isGenerating: false,
           error: result.error,
         ));
       } else {
@@ -358,8 +376,11 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     await service.processImageTags(
       currentState: result,
       charId: arg,
-      onStateUpdate: (s) => state = AsyncData(s),
+      onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
     );
+
+    if (_activeGenId != genId) return;
+
     notifySyncMessageGenerated(ref);
 
     final charRepo = ref.read(characterRepoProvider);
