@@ -55,6 +55,8 @@ class MemoryDraftGenerator {
       throw Exception('API not configured for memory generation');
     }
 
+    print('[MemoryDraft] endpoint=$endpoint apiKey=${apiKey.length > 8 ? '${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}' : '(short)'} model=$model');
+
     final maxTokens = (settings.generationMaxTokens != null && settings.generationMaxTokens! > 0)
         ? settings.generationMaxTokens!
         : 2000;
