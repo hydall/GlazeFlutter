@@ -647,6 +647,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                               MaterialPageRoute(
                                 builder: (_) => LorebookPerBookSettingsScreen(
                                   settings: _settings,
+                                  globalSettings: ref.read(lorebookSettingsProvider),
                                 ),
                               ),
                             );

@@ -5,8 +5,9 @@ import '../../../shared/widgets/glaze_scaffold.dart';
 
 class LorebookPerBookSettingsScreen extends StatefulWidget {
   final LorebookSettings? settings;
+  final LorebookGlobalSettings? globalSettings;
 
-  const LorebookPerBookSettingsScreen({super.key, this.settings});
+  const LorebookPerBookSettingsScreen({super.key, this.settings, this.globalSettings});
 
   @override
   State<LorebookPerBookSettingsScreen> createState() =>
@@ -37,9 +38,7 @@ class _LorebookPerBookSettingsScreenState
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               child: GlazeAppBar(
                 title: 'Lorebook Settings',
-                leading: BackButton(
-                  onPressed: () => Navigator.pop(context),
-                ),
+                leading: BackButton(onPressed: () => Navigator.pop(context)),
                 actions: [
                   TextButton(
                     onPressed: _hasCustom ? _resetToGlobal : null,
@@ -47,7 +46,9 @@ class _LorebookPerBookSettingsScreenState
                       'Reset to Global',
                       style: TextStyle(
                         fontSize: 12,
-                        color: _hasCustom ? context.cs.primary : context.cs.onSurfaceVariant,
+                        color: _hasCustom
+                            ? context.cs.primary
+                            : context.cs.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -63,7 +64,8 @@ class _LorebookPerBookSettingsScreenState
                 decoration: BoxDecoration(
                   color: context.cs.primary.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: context.cs.primary.withValues(alpha: 0.2)),
+                  border:
+                      Border.all(color: context.cs.primary.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
@@ -72,7 +74,8 @@ class _LorebookPerBookSettingsScreenState
                     Expanded(
                       child: Text(
                         'Using global defaults. Change any setting to create per-book overrides.',
-                        style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+                        style: TextStyle(
+                            fontSize: 12, color: context.cs.onSurfaceVariant),
                       ),
                     ),
                   ],
@@ -83,14 +86,16 @@ class _LorebookPerBookSettingsScreenState
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
+                // ── Scanning ──────────────────────────────────────────────
                 _SectionHeader('Scanning'),
                 _NumberField(
                   label: 'Scan Depth',
                   value: _settings.scanDepth ?? 0,
                   min: 0,
                   max: 100,
-                  hint: 'Global default',
-                  onChanged: (v) => _update(_settings.copyWith(scanDepth: v)),
+                  hint: '0 = global default',
+                  onChanged: (v) =>
+                      _update(_settings.copyWith(scanDepth: v == 0 ? null : v)),
                 ),
                 const SizedBox(height: 12),
                 _NumberField(
@@ -98,30 +103,26 @@ class _LorebookPerBookSettingsScreenState
                   value: _settings.maxInjectedEntries ?? 0,
                   min: 0,
                   max: 100,
-                  hint: 'Global default',
-                  onChanged: (v) => _update(_settings.copyWith(maxInjectedEntries: v)),
-                ),
-                const SizedBox(height: 12),
-                _NumberField(
-                  label: 'Max Recursion Steps',
-                  value: _settings.maxRecursionSteps,
-                  min: 0,
-                  max: 100,
-                  onChanged: (v) => _update(_settings.copyWith(maxRecursionSteps: v)),
+                  hint: '0 = global default',
+                  onChanged: (v) => _update(
+                      _settings.copyWith(maxInjectedEntries: v == 0 ? null : v)),
                 ),
                 const SizedBox(height: 24),
 
+                // ── Matching ──────────────────────────────────────────────
                 _SectionHeader('Matching'),
                 _SwitchField(
                   label: 'Recursive Scan',
                   value: _settings.recursiveScan,
                   onChanged: (v) => _update(_settings.copyWith(recursiveScan: v)),
                 ),
+                const SizedBox(height: 4),
                 _SwitchField(
                   label: 'Case Sensitive',
                   value: _settings.caseSensitive,
                   onChanged: (v) => _update(_settings.copyWith(caseSensitive: v)),
                 ),
+                const SizedBox(height: 8),
                 _DropdownField<String>(
                   label: 'Match Whole Words',
                   value: _settings.matchWholeWords ?? '',
@@ -129,108 +130,24 @@ class _LorebookPerBookSettingsScreenState
                     DropdownMenuItem(value: '', child: Text('Global default')),
                     DropdownMenuItem(value: 'false', child: Text('No')),
                     DropdownMenuItem(value: 'true', child: Text('Yes')),
-                    DropdownMenuItem(value: 'glaze', child: Text('Glaze boundary')),
+                    DropdownMenuItem(
+                        value: 'glaze', child: Text('Glaze boundary')),
                   ],
-                  onChanged: (v) => _update(_settings.copyWith(matchWholeWords: v.isEmpty ? null : v)),
-                ),
-                _SwitchField(
-                  label: 'Include Names',
-                  value: _settings.includeNames,
-                  onChanged: (v) => _update(_settings.copyWith(includeNames: v)),
-                ),
-                _SwitchField(
-                  label: 'Use Group Scoring',
-                  value: _settings.useGroupScoring,
-                  onChanged: (v) => _update(_settings.copyWith(useGroupScoring: v)),
-                ),
-                _SwitchField(
-                  label: 'Alert on Overflow',
-                  value: _settings.alertOnOverflow,
-                  onChanged: (v) => _update(_settings.copyWith(alertOnOverflow: v)),
+                  onChanged: (v) => _update(
+                      _settings.copyWith(matchWholeWords: v.isEmpty ? null : v)),
                 ),
                 const SizedBox(height: 24),
 
-                _SectionHeader('Injection'),
-                _DropdownField<String>(
-                  label: 'Injection Position',
-                  value: _settings.injectionPosition,
-                  items: const [
-                    DropdownMenuItem(value: 'lorebooksMacro', child: Text('{{lorebooks}} Macro')),
-                    DropdownMenuItem(value: 'worldInfoBefore', child: Text('Before Chat History')),
-                    DropdownMenuItem(value: 'worldInfoAfter', child: Text('After Chat History')),
-                  ],
-                  onChanged: (v) => _update(_settings.copyWith(injectionPosition: v)),
-                ),
-                _DropdownField<String>(
-                  label: 'Insertion Strategy',
-                  value: _settings.insertionStrategy,
-                  items: const [
-                    DropdownMenuItem(value: 'character_first', child: Text('Character First')),
-                    DropdownMenuItem(value: 'evenly_distributed', child: Text('Evenly Distributed')),
-                  ],
-                  onChanged: (v) => _update(_settings.copyWith(insertionStrategy: v)),
-                ),
-                const SizedBox(height: 12),
-                _NumberField(
-                  label: 'Context %',
-                  value: _settings.contextPercent,
-                  min: 0,
-                  max: 100,
-                  onChanged: (v) => _update(_settings.copyWith(contextPercent: v)),
-                ),
-                const SizedBox(height: 24),
-
-                _SectionHeader('Token Budget'),
-                _DropdownField<String>(
-                  label: 'Reserve Mode',
-                  value: _settings.reserveMode,
-                  items: const [
-                    DropdownMenuItem(value: 'tokens', child: Text('Absolute Tokens')),
-                    DropdownMenuItem(value: 'percent', child: Text('Percentage')),
-                  ],
-                  onChanged: (v) => _update(_settings.copyWith(reserveMode: v)),
-                ),
-                const SizedBox(height: 12),
-                _NumberField(
-                  label: _settings.reserveMode == 'percent' ? 'Reserve %' : 'Reserve Tokens',
-                  value: _settings.reserveValue,
-                  min: 0,
-                  max: _settings.reserveMode == 'percent' ? 100 : 2147483647,
-                  onChanged: (v) => _update(_settings.copyWith(reserveValue: v)),
-                ),
-                const SizedBox(height: 12),
-                _NumberField(
-                  label: 'Budget Cap',
-                  value: _settings.budgetCap,
-                  min: 0,
-                  hint: '0 = unlimited',
-                  onChanged: (v) => _update(_settings.copyWith(budgetCap: v)),
-                ),
-                const SizedBox(height: 24),
-
-                _SectionHeader('Search Type'),
-                _DropdownField<String>(
-                  label: 'Search Type',
-                  value: _settings.searchType,
-                  items: const [
-                    DropdownMenuItem(value: 'keyword', child: Text('Keyword')),
-                    DropdownMenuItem(value: 'vector', child: Text('Vector')),
-                    DropdownMenuItem(value: 'both', child: Text('Both (Hybrid)')),
-                  ],
-                  onChanged: (v) => _update(_settings.copyWith(searchType: v)),
-                ),
-                _SwitchField(
-                  label: 'Key Search Enabled',
-                  value: _settings.keySearchEnabled,
-                  onChanged: (v) => _update(_settings.copyWith(keySearchEnabled: v)),
-                ),
+                // ── Vector Search ─────────────────────────────────────────
+                _SectionHeader('Vector Search'),
                 _SwitchField(
                   label: 'Vector Search Enabled',
                   value: _settings.vectorSearchEnabled,
-                  onChanged: (v) => _update(_settings.copyWith(vectorSearchEnabled: v)),
+                  onChanged: (v) =>
+                      _update(_settings.copyWith(vectorSearchEnabled: v)),
                 ),
-                if (_settings.searchType != 'keyword') ...[
-                  const SizedBox(height: 12),
+                if (_settings.vectorSearchEnabled) ...[
+                  const SizedBox(height: 8),
                   _DropdownField<String>(
                     label: 'Embedding Target',
                     value: _settings.embeddingTarget,
@@ -239,7 +156,8 @@ class _LorebookPerBookSettingsScreenState
                       DropdownMenuItem(value: 'comment', child: Text('Comment')),
                       DropdownMenuItem(value: 'both', child: Text('Both')),
                     ],
-                    onChanged: (v) => _update(_settings.copyWith(embeddingTarget: v)),
+                    onChanged: (v) =>
+                        _update(_settings.copyWith(embeddingTarget: v)),
                   ),
                   const SizedBox(height: 12),
                   _SliderField(
@@ -249,7 +167,8 @@ class _LorebookPerBookSettingsScreenState
                     max: 1.0,
                     divisions: 20,
                     displayText: _settings.vectorThreshold.toStringAsFixed(2),
-                    onChanged: (v) => _update(_settings.copyWith(vectorThreshold: v)),
+                    onChanged: (v) =>
+                        _update(_settings.copyWith(vectorThreshold: v)),
                   ),
                   const SizedBox(height: 12),
                   _NumberField(
@@ -259,47 +178,8 @@ class _LorebookPerBookSettingsScreenState
                     max: 50,
                     onChanged: (v) => _update(_settings.copyWith(vectorTopK: v)),
                   ),
-                  const SizedBox(height: 12),
-                  _NumberField(
-                    label: 'Vector Scan Depth',
-                    value: _settings.vectorScanDepth,
-                    min: 1,
-                    max: 100,
-                    onChanged: (v) => _update(_settings.copyWith(vectorScanDepth: v)),
-                  ),
-                  if (_settings.searchType == 'both') ...[
-                    const SizedBox(height: 12),
-                    _SliderField(
-                      label: 'Keyword / Vector Split',
-                      value: _settings.keywordVectorSplit.toDouble(),
-                      min: 0,
-                      max: 100,
-                      divisions: 20,
-                      displayText: '${_settings.keywordVectorSplit}% key / ${100 - _settings.keywordVectorSplit}% vec',
-                      onChanged: (v) => _update(_settings.copyWith(keywordVectorSplit: v.round())),
-                    ),
-                  ],
                 ],
                 const SizedBox(height: 24),
-
-                _SectionHeader('Activation Limits'),
-                _NumberField(
-                  label: 'Min Activations',
-                  value: _settings.minActivations,
-                  min: 0,
-                  max: 100,
-                  hint: '0 = disabled',
-                  onChanged: (v) => _update(_settings.copyWith(minActivations: v)),
-                ),
-                const SizedBox(height: 12),
-                _NumberField(
-                  label: 'Max Depth',
-                  value: _settings.maxDepth,
-                  min: 0,
-                  max: 100,
-                  hint: '0 = unlimited',
-                  onChanged: (v) => _update(_settings.copyWith(maxDepth: v)),
-                ),
               ],
             ),
           ),
@@ -316,12 +196,27 @@ class _LorebookPerBookSettingsScreenState
   }
 
   void _resetToGlobal() {
+    final g = widget.globalSettings;
     setState(() {
-      _settings = const LorebookSettings();
+      _settings = g == null
+          ? const LorebookSettings()
+          : LorebookSettings(
+              scanDepth: null, // null = follow global at runtime
+              maxInjectedEntries: null,
+              recursiveScan: g.recursiveScan,
+              caseSensitive: g.caseSensitive,
+              matchWholeWords: g.matchWholeWords ? 'true' : 'false',
+              vectorSearchEnabled: true,
+              embeddingTarget: 'content',
+              vectorThreshold: g.vectorThreshold,
+              vectorTopK: g.vectorTopK,
+            );
       _hasCustom = false;
     });
   }
 }
+
+// ── Reusable widgets (same style as global settings screen) ────────────────
 
 class _SectionHeader extends StatelessWidget {
   final String title;
@@ -380,10 +275,9 @@ class _NumberFieldState extends State<_NumberField> {
   void didUpdateWidget(_NumberField old) {
     super.didUpdateWidget(old);
     if (old.value != widget.value) {
-      final newText = widget.value == 0 && widget.hint != null ? '' : widget.value.toString();
-      if (_ctrl.text != newText) {
-        _ctrl.text = newText;
-      }
+      final newText =
+          widget.value == 0 && widget.hint != null ? '' : widget.value.toString();
+      if (_ctrl.text != newText) _ctrl.text = newText;
     }
   }
 
@@ -403,8 +297,8 @@ class _NumberFieldState extends State<_NumberField> {
     if (n != null && n >= widget.min && n <= widget.max) {
       widget.onChanged(n);
     } else {
-      // Reset to last valid value
-      _ctrl.text = widget.value == 0 && widget.hint != null ? '' : widget.value.toString();
+      _ctrl.text =
+          widget.value == 0 && widget.hint != null ? '' : widget.value.toString();
     }
   }
 
@@ -413,10 +307,9 @@ class _NumberFieldState extends State<_NumberField> {
     return Row(
       children: [
         Expanded(
-          child: Text(
-            widget.label,
-            style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14),
-          ),
+          child: Text(widget.label,
+              style:
+                  TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
         ),
         SizedBox(
           width: 80,
@@ -432,7 +325,9 @@ class _NumberFieldState extends State<_NumberField> {
               fillColor: Colors.white.withValues(alpha: 0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
               hintText: widget.hint,
-              hintStyle: TextStyle(fontSize: 10, color: context.cs.onSurfaceVariant.withValues(alpha: 0.4)),
+              hintStyle: TextStyle(
+                  fontSize: 10,
+                  color: context.cs.onSurfaceVariant.withValues(alpha: 0.4)),
             ),
             onSubmitted: (_) => _commit(),
             onEditingComplete: _commit,
@@ -465,10 +360,9 @@ class _DropdownField<T> extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: Text(
-            label,
-            style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14),
-          ),
+          child: Text(label,
+              style:
+                  TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
         ),
         SizedBox(
           width: 180,
@@ -482,7 +376,8 @@ class _DropdownField<T> extends StatelessWidget {
             dropdownColor: context.cs.surface,
             decoration: InputDecoration(
               isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               filled: true,
               fillColor: Colors.white.withValues(alpha: 0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
@@ -521,8 +416,14 @@ class _SliderField extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
-            Text(displayText, style: TextStyle(color: context.cs.onSurface, fontSize: 13, fontWeight: FontWeight.w500)),
+            Text(label,
+                style:
+                    TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
+            Text(displayText,
+                style: TextStyle(
+                    color: context.cs.onSurface,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500)),
           ],
         ),
         Slider(
@@ -543,15 +444,20 @@ class _SwitchField extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
-  const _SwitchField({required this.label, required this.value, required this.onChanged});
+  const _SwitchField(
+      {required this.label, required this.value, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
-        Switch(value: value, onChanged: onChanged, activeColor: context.cs.primary),
+        Text(label,
+            style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
+        Switch(
+            value: value,
+            onChanged: onChanged,
+            activeThumbColor: context.cs.primary),
       ],
     );
   }
