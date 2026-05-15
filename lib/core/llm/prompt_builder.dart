@@ -133,6 +133,7 @@ PromptResult buildPrompt(PromptPayload payload) {
 
   var currentSessionVars = Map<String, String>.from(payload.sessionVars);
   var currentGlobalVars = Map<String, String>.from(payload.globalVars);
+  var currentMacroCtx = macroCtx;
   final notifyObj = NotifyObj();
 
   final depthBlocks = <_ResolvedDepthBlock>[];
@@ -154,7 +155,7 @@ PromptResult buildPrompt(PromptPayload payload) {
     settings: payload.lorebookSettings,
   );
 
-  final (loreBefore, loreAfter, loreMacroBuffer) = _classifyLorebooks(mergedEntries, macroCtx, payload.lorebookSettings);
+  final (loreBefore, loreAfter, loreMacroBuffer) = _classifyLorebooks(mergedEntries, currentMacroCtx, payload.lorebookSettings);
   final macroLoreContent = loreMacroBuffer.join('\n\n');
 
   for (final rawBlock in preset.blocks) {
@@ -167,7 +168,7 @@ PromptResult buildPrompt(PromptPayload payload) {
       role: rawBlock.role,
       char: char,
       persona: persona,
-      macroCtx: macroCtx,
+      macroCtx: currentMacroCtx,
       sessionVars: currentSessionVars,
       globalVars: currentGlobalVars,
       notifyObj: notifyObj,
@@ -179,6 +180,11 @@ PromptResult buildPrompt(PromptPayload payload) {
     if (notifyObj.varsChanged) {
       currentSessionVars = Map<String, String>.from(notifyObj.sessionVars);
       currentGlobalVars = Map<String, String>.from(notifyObj.globalVars);
+      currentMacroCtx = currentMacroCtx.copyWith(
+        sessionVars: currentSessionVars,
+        globalVars: currentGlobalVars,
+      );
+      notifyObj.varsChanged = false;
     }
 
     if (resolved == null) continue;
@@ -203,7 +209,7 @@ PromptResult buildPrompt(PromptPayload payload) {
   }
 
   if (payload.characterDepthPrompt.isNotEmpty) {
-    final dpContent = replaceMacros(payload.characterDepthPrompt, macroCtx).text;
+    final dpContent = replaceMacros(payload.characterDepthPrompt, currentMacroCtx).text;
     if (dpContent.trim().isNotEmpty) {
       depthBlocks.add(_ResolvedDepthBlock(
         id: 'char_depth_prompt',
@@ -221,7 +227,7 @@ PromptResult buildPrompt(PromptPayload payload) {
     loreAfter: loreAfter,
     macroLoreContent: macroLoreContent,
     history: payload.history,
-    macroCtx: macroCtx,
+    macroCtx: currentMacroCtx,
     currentSessionVars: currentSessionVars,
     currentGlobalVars: currentGlobalVars,
     preset: preset,
