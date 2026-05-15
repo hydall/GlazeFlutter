@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/embedding_types.dart';
 import '../../../core/llm/lorebook_coverage.dart';
+import '../../../core/llm/lorebook_providers.dart';
+import '../../../core/llm/lorebook_vector_search.dart';
 import '../../../core/llm/tokenizer.dart';
+import '../../../core/models/lorebook.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -68,6 +72,35 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
       }
     }
 
+    // Run vector search so vector-matched entries appear in coverage.
+    List<LorebookEntry> vectorEntries = [];
+    if (settings.searchType != 'keyword') {
+      final embeddingConfig = ref.read(embeddingConfigProvider);
+      if (embeddingConfig.endpoint.isNotEmpty) {
+        try {
+          final searchService = ref.read(lorebookVectorSearchProvider);
+          final searchHistory = session.messages
+              .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
+              .toList();
+          final results = await searchService.search(
+            searchHistory, lastUserMsg, lorebooks, settings, embeddingConfig,
+            charWorld: character?.world,
+            character: character,
+          );
+          final entryMap = <String, LorebookEntry>{};
+          for (final lb in lorebooks) {
+            for (final entry in lb.entries) {
+              entryMap[entry.id] = entry;
+            }
+          }
+          vectorEntries = results
+              .where((r) => entryMap.containsKey(r.entryId))
+              .map((r) => entryMap[r.entryId]!)
+              .toList();
+        } catch (_) {}
+      }
+    }
+
     final result = computeLorebookCoverage(
       history: session.messages,
       char: character,
@@ -76,6 +109,7 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
       lorebooks: lorebooks,
       globalSettings: settings,
       activations: activations,
+      vectorEntries: vectorEntries,
     );
 
     if (mounted)

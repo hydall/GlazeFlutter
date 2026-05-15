@@ -263,7 +263,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> switchSession(int sessionIndex) async {
-    _activeGenId++; // disown any in-flight generation so it won't overwrite the new session
+    _activeGenId++;
+    _restorationMessage = null;
     _clearStreaming();
     final session = await _sessionSvc.switchToSession(arg, sessionIndex);
     if (session != null) {
@@ -272,7 +273,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> createNewSession() async {
-    _activeGenId++; // disown any in-flight generation
+    _activeGenId++;
+    _restorationMessage = null;
     _clearStreaming();
     final session = await _sessionSvc.createNewSession(arg);
     _invalidateHistory();
@@ -285,7 +287,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final current = state.value;
     if (current == null || current.session == null) return;
     if (index < 0 || index >= current.messages.length) return;
-    _activeGenId++; // disown any in-flight generation
+    _activeGenId++;
+    _restorationMessage = null;
     _clearStreaming();
     final session = await _sessionSvc.branchSession(arg, current.session!, index);
     _invalidateHistory();
@@ -293,7 +296,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> newSession() async {
-    _activeGenId++; // disown any in-flight generation
+    _activeGenId++;
+    _restorationMessage = null;
     _clearStreaming();
     final session = await _sessionSvc.createNewSession(arg);
     _invalidateHistory();
@@ -302,6 +306,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
   void abortGeneration() {
     _activeGenId++; // invalidate any in-flight onStateUpdate / final writes
+    _restorationMessage = null;
     _cancelToken?.cancel();
     _cancelToken = null;
     _clearStreaming();
