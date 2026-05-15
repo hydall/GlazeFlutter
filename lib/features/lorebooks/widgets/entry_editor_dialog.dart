@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/lorebook_vector_search.dart';
 import '../../../core/models/lorebook.dart';
+import '../../../features/settings/api_list_provider.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -100,6 +101,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
 
   Future<void> _indexEntry() async {
     if (widget.entry?.id == null || widget.lorebookId == null) return;
+    await ref.read(apiListProvider.future);
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
       GlazeToast.show(

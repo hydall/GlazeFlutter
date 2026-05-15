@@ -5,6 +5,7 @@ import '../../core/models/lorebook.dart';
 import '../../core/llm/embedding_error_labels.dart';
 import '../../core/llm/lorebook_vector_search.dart';
 import '../../core/state/db_provider.dart';
+import '../../features/settings/api_list_provider.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../shared/theme/app_colors.dart';
@@ -147,6 +148,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   }
 
   Future<void> _indexEntries() async {
+    await ref.read(apiListProvider.future);
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
       GlazeToast.show(
@@ -209,6 +211,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   }
 
   void _retryFailed() async {
+    await ref.read(apiListProvider.future);
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
       GlazeToast.show(context, 'Set up embedding API in Embedding Settings first');
