@@ -158,6 +158,10 @@ PromptResult buildPrompt(PromptPayload payload) {
   final (loreBefore, loreAfter, loreMacroBuffer) = _classifyLorebooks(mergedEntries, currentMacroCtx, payload.lorebookSettings);
   final macroLoreContent = loreMacroBuffer.join('\n\n');
 
+  // Populate lorebooksContent in MacroContext so macro_engine can expand {{lorebooks}}
+  // inline at the exact position of the placeholder inside any preset block.
+  currentMacroCtx = currentMacroCtx.copyWith(lorebooksContent: macroLoreContent);
+
   for (final rawBlock in preset.blocks) {
     final id = normalizeBlockId(rawBlock.id);
     if (!rawBlock.enabled || rawBlock.isStashed) continue;
@@ -225,7 +229,6 @@ PromptResult buildPrompt(PromptPayload payload) {
     depthBlocks: depthBlocks,
     loreBefore: loreBefore,
     loreAfter: loreAfter,
-    macroLoreContent: macroLoreContent,
     history: payload.history,
     macroCtx: currentMacroCtx,
     currentSessionVars: currentSessionVars,
@@ -277,7 +280,6 @@ PromptResult _assembleMessages({
   required List<_ResolvedDepthBlock> depthBlocks,
   required List<PromptMessage> loreBefore,
   required List<PromptMessage> loreAfter,
-  required String macroLoreContent,
   required List<ChatMessage> history,
   required MacroContext macroCtx,
   required Map<String, String> currentSessionVars,
@@ -301,19 +303,17 @@ PromptResult _assembleMessages({
 
   void injectLoreBefore() {
     if (loreBeforeInjected || loreBefore.isEmpty) return;
-    messages.addAll(loreBefore);
-    for (final lb in loreBefore) {
-      attributionBlocks.add(StaticBlock(id: lb.blockId ?? 'lorebook', content: lb.content));
-    }
+    final combined = loreBefore.map((e) => e.content).join('\n\n');
+    messages.add(PromptMessage(role: 'system', content: combined, isLorebook: true, blockId: 'worldInfoBefore', blockName: 'Lorebook (Before)'));
+    attributionBlocks.add(StaticBlock(id: 'worldInfoBefore', content: combined));
     loreBeforeInjected = true;
   }
 
   void injectLoreAfter() {
     if (loreAfterInjected || loreAfter.isEmpty) return;
-    messages.addAll(loreAfter);
-    for (final la in loreAfter) {
-      attributionBlocks.add(StaticBlock(id: la.blockId ?? 'lorebook', content: la.content));
-    }
+    final combined = loreAfter.map((e) => e.content).join('\n\n');
+    messages.add(PromptMessage(role: 'system', content: combined, isLorebook: true, blockId: 'worldInfoAfter', blockName: 'Lorebook (After)'));
+    attributionBlocks.add(StaticBlock(id: 'worldInfoAfter', content: combined));
     loreAfterInjected = true;
   }
 
@@ -341,14 +341,9 @@ PromptResult _assembleMessages({
         attributionBlocks.add(StaticBlock(id: db.blockId ?? 'preset', content: db.content));
       }
     } else {
-      var content = block.content.trim();
+      final content = block.content.trim();
       if (content.isEmpty) {
         // worldInfoAfter also fires after char_card even when char_card resolves empty (mirrors JS:743)
-        if (block.id == 'char_card') injectLoreAfter();
-        continue;
-      }
-      content = content.replaceAll('{{lorebooks}}', macroLoreContent);
-      if (content.trim().isEmpty) {
         if (block.id == 'char_card') injectLoreAfter();
         continue;
       }
