@@ -25,6 +25,7 @@ class ChatActionsService {
       throw StateError('No active chat session');
     }
 
+    await _ref.read(apiListProvider.future);
     final apiConfig = _ref.read(activeApiConfigProvider);
     if (apiConfig == null) {
       throw StateError('No API config found');

@@ -40,6 +40,7 @@ class MemoryDraftGenerator {
       apiKey = settings.generationApiKey;
       model = settings.generationModel;
     } else {
+      await _ref.read(apiListProvider.future);
       final chatConfig = _ref.read(activeApiConfigProvider);
       if (chatConfig == null) {
         throw Exception('No chat API config available');
