@@ -39,7 +39,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
   bool _vectorSearch = false;
   bool _useKeywordSearch = true;
   int _selectiveLogic = 5;
-  String _position = 'worldInfoBefore';
+  String _position = 'matchGlobal';
   String _embeddingStatus = 'none';
   bool _isIndexing = false;
 
@@ -77,7 +77,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
     _vectorSearch = e?.vectorSearch ?? false;
     _useKeywordSearch = e?.useKeywordSearch ?? true;
     _selectiveLogic = e?.selectiveLogic ?? 5;
-    _position = e?.position ?? 'worldInfoBefore';
+    _position = e?.position ?? 'matchGlobal';
     _loadEmbeddingStatus();
   }
 
@@ -250,6 +250,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                   _field('Content', _contentController, maxLines: 5),
                   const SizedBox(height: 8),
                   _dropdown('Position', _position, const {
+                    'matchGlobal': 'Match global setting',
                     'worldInfoBefore': 'Before char card',
                     'worldInfoAfter': 'After chat history',
                     'lorebooksMacro': '{{lorebooks}} macro',
