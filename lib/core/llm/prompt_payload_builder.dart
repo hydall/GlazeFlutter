@@ -37,6 +37,9 @@ class PromptPayloadBuilder {
     final character = await charRepo.getById(charId);
     if (character == null) throw StateError('Character not found: $charId');
 
+    // Ensure apiListProvider has finished loading before reading the sync provider.
+    // On cold start, activeApiConfigProvider returns null until the async load completes.
+    await _ref.read(apiListProvider.future);
     final chatApi = _ref.read(activeApiConfigProvider);
     if (chatApi == null || chatApi.mode == 'embedding') throw StateError('No chat API config available');
 
