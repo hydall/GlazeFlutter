@@ -507,7 +507,7 @@ class _SessionTile extends ConsumerWidget {
         value: currentName,
         confirmLabel: 'Rename',
         onConfirm: (val) {
-          Navigator.pop(context);
+          Navigator.of(context, rootNavigator: true).pop();
           if (val.trim().isNotEmpty) {
             ref.read(chatHistoryProvider.notifier).renameSession(info.sessionId, val.trim());
           }
@@ -530,55 +530,56 @@ class _SessionTile extends ConsumerWidget {
           isDestructive: true,
           centered: true,
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             ref.read(chatHistoryProvider.notifier).deleteSession(info.sessionId);
           },
         ),
         BottomSheetItem(
           label: 'Cancel',
           centered: true,
-          onTap: () => Navigator.pop(context),
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(),
         ),
       ],
     );
   }
 
   void _showSessionActions(BuildContext context, WidgetRef ref) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<String>(
       context,
       title: 'Session',
       items: [
         BottomSheetItem(
           icon: Icons.upload_file,
           label: 'Export (JSONL)',
-          onTap: () async {
-            Navigator.of(context).pop(); // Pops Actions Sheet
-            await ChatActionsService(ref).exportSessionUI(
-              context,
-              charId: info.characterId,
-              sessionId: info.sessionId,
-            );
-          },
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('export'),
         ),
         BottomSheetItem(
           icon: Icons.drive_file_rename_outline,
           label: 'Rename',
-          onTap: () {
-            Navigator.of(context).pop();
-            _showRenameDialog(context, ref);
-          },
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('rename'),
         ),
         BottomSheetItem(
           icon: Icons.delete_outline,
           label: 'Delete',
           isDestructive: true,
-          onTap: () {
-            Navigator.of(context).pop(); // Pops Actions Sheet
-            _confirmDelete(context, ref);
-          },
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('delete'),
         ),
       ],
-    );
+    ).then((result) {
+      if (!context.mounted) return;
+      switch (result) {
+        case 'export':
+          ChatActionsService(ref).exportSessionUI(
+            context,
+            charId: info.characterId,
+            sessionId: info.sessionId,
+          );
+        case 'rename':
+          _showRenameDialog(context, ref);
+        case 'delete':
+          _confirmDelete(context, ref);
+      }
+    });
   }
 
 
@@ -751,30 +752,31 @@ class _GroupHeader extends ConsumerWidget {
 
   void _showGroupActions(
       BuildContext context, WidgetRef ref, ChatSessionInfo info) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<String>(
       context,
       title: info.characterName,
       items: [
         BottomSheetItem(
           icon: Icons.add_comment_outlined,
           label: 'New Session',
-          onTap: () {
-            Navigator.of(context).pop();
-            ref
-                .read(chatProvider(info.characterId).notifier)
-                .createNewSession();
-            context.go('/chat/${info.characterId}');
-          },
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('new'),
         ),
         BottomSheetItem(
           icon: Icons.edit_note_rounded,
           label: 'Edit Character',
-          onTap: () {
-            Navigator.of(context).pop();
-            context.push('/characters/${info.characterId}/edit');
-          },
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('edit'),
         ),
       ],
-    );
+    ).then((result) {
+      if (!context.mounted) return;
+      if (result == 'new') {
+        ref
+            .read(chatProvider(info.characterId).notifier)
+            .createNewSession();
+        context.go('/chat/${info.characterId}');
+      } else if (result == 'edit') {
+        context.push('/characters/${info.characterId}/edit');
+      }
+    });
   }
 }

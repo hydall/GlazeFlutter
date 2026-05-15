@@ -294,7 +294,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         .toList();
     if (available.isEmpty) return;
 
-    await GlazeBottomSheet.show(
+    await GlazeBottomSheet.show<MagicDrawerItemDef>(
       context,
       title: 'Add Action',
       items: available
@@ -302,18 +302,18 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             (item) => BottomSheetItem(
               icon: item.icon,
               label: item.label,
-              onTap: () async {
-                Navigator.of(context).pop();
-                setState(() {
-                  _itemIds.add(item.id);
-                  _deletedIds.remove(item.id);
-                });
-                await _saveLayout();
-              },
+              onTap: () => Navigator.of(context).pop(item),
             ),
           )
           .toList(),
-    );
+    ).then((selected) async {
+      if (selected == null || !mounted) return;
+      setState(() {
+        _itemIds.add(selected.id);
+        _deletedIds.remove(selected.id);
+      });
+      await _saveLayout();
+    });
   }
 
   Future<void> _handleTap(MagicDrawerItemDef item) async {
@@ -472,20 +472,20 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   void _showLorebookEntries(Lorebook lb) {
     final entries = lb.entries;
     if (entries.isEmpty) {
-      GlazeBottomSheet.show(
+      GlazeBottomSheet.show<bool>(
         context,
         title: lb.name,
         bigInfo: BottomSheetBigInfo(
           icon: Icons.menu_book_outlined,
           description: 'No entries in ${lb.name}',
           buttonText: 'Open Editor',
-          onButtonTap: () {
-            Navigator.of(context).pop();
-            widget.onClose?.call();
-            context.go('/tools/lorebooks');
-          },
+          onButtonTap: () => Navigator.of(context).pop(true),
         ),
-      );
+      ).then((openEditor) {
+        if (!mounted || openEditor != true) return;
+        widget.onClose?.call();
+        context.go('/tools/lorebooks');
+      });
       return;
     }
     GlazeBottomSheet.show(
@@ -539,68 +539,70 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   void _showSessionAddMenu() {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<String>(
       context,
       title: 'Add Session',
       items: [
         BottomSheetItem(
           icon: Icons.add_circle_outline,
           label: 'New Session',
-          onTap: () async {
-            Navigator.of(context).pop(); // Pops Add Menu
-            Navigator.of(context).pop(); // Pops Sessions Sheet
-            await ref.read(chatProvider(widget.charId).notifier).newSession();
-          },
+          onTap: () => Navigator.of(context).pop('new'),
         ),
         BottomSheetItem(
           icon: Icons.file_download,
           label: 'Import Chat',
-          onTap: () async {
-            Navigator.of(context).pop(); // Pops Add Menu
-            await _importChat();
-          },
+          onTap: () => Navigator.of(context).pop('import'),
         ),
       ],
-    );
+    ).then((result) async {
+      if (!mounted) return;
+      if (result == 'new') {
+        Navigator.of(context).pop(); // Pops Sessions Sheet
+        await ref.read(chatProvider(widget.charId).notifier).newSession();
+      } else if (result == 'import') {
+        await _importChat();
+      }
+    });
   }
 
   void _showSessionActions(String sessionId) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<String>(
       context,
       title: 'Session',
       items: [
         BottomSheetItem(
           icon: Icons.upload_file,
           label: 'Export (JSONL)',
-          onTap: () async {
-            Navigator.of(context).pop(); // Pops Actions Sheet
-            await ChatActionsService(ref).exportSessionUI(
-              context,
-              charId: widget.charId,
-              sessionId: sessionId,
-            );
-          },
+          onTap: () => Navigator.of(context).pop('export'),
         ),
         BottomSheetItem(
           icon: Icons.drive_file_rename_outline,
           label: 'Rename',
-          onTap: () {
-            Navigator.of(context).pop();
-            _showRenameDialog(sessionId);
-          },
+          onTap: () => Navigator.of(context).pop('rename'),
         ),
         BottomSheetItem(
           icon: Icons.delete_outline,
           label: 'Delete',
           isDestructive: true,
-          onTap: () async {
-            Navigator.of(context).pop(); // Pops Actions Sheet
-            await ref.read(chatRepoProvider).delete(sessionId);
-            ref.invalidate(chatProvider(widget.charId));
-          },
+          onTap: () => Navigator.of(context).pop('delete'),
         ),
       ],
-    );
+    ).then((result) async {
+      if (!mounted) return;
+      switch (result) {
+        case 'export':
+          await ChatActionsService(ref).exportSessionUI(
+            context,
+            charId: widget.charId,
+            sessionId: sessionId,
+          );
+        case 'rename':
+          _showRenameDialog(sessionId);
+        case 'delete':
+          await ref.read(chatRepoProvider).delete(sessionId);
+          ref.invalidate(chatProvider(widget.charId));
+      }
+    });
   }
 
   void _showRenameDialog(String sessionId) async {
@@ -617,7 +619,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         value: currentName,
         confirmLabel: 'Rename',
         onConfirm: (val) async {
-          Navigator.pop(context);
+          Navigator.of(context, rootNavigator: true).pop();
           if (val.trim().isNotEmpty) {
             final updatedVars = Map<String, String>.from(session.sessionVars);
             updatedVars['sessionName'] = val.trim();
