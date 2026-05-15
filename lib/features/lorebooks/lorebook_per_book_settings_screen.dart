@@ -38,7 +38,7 @@ class _LorebookPerBookSettingsScreenState
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               child: GlazeAppBar(
                 title: 'Lorebook Settings',
-                leading: BackButton(onPressed: () => Navigator.pop(context)),
+                leading: BackButton(onPressed: () => _pop(context)),
                 actions: [
                   TextButton(
                     onPressed: _hasCustom ? _resetToGlobal : null,
@@ -188,6 +188,14 @@ class _LorebookPerBookSettingsScreenState
     );
   }
 
+  void _pop(BuildContext context) {
+    if (_hasCustom) {
+      Navigator.pop(context, {'settings': _settings.toJson()});
+    } else {
+      Navigator.pop(context, {'reset': true});
+    }
+  }
+
   void _update(LorebookSettings s) {
     setState(() {
       _settings = s;
@@ -201,7 +209,7 @@ class _LorebookPerBookSettingsScreenState
       _settings = g == null
           ? const LorebookSettings()
           : LorebookSettings(
-              scanDepth: null, // null = follow global at runtime
+              scanDepth: null,
               maxInjectedEntries: null,
               recursiveScan: g.recursiveScan,
               caseSensitive: g.caseSensitive,

@@ -653,7 +653,12 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                             );
                             if (result != null) {
                               setState(() {
-                                _settings = LorebookSettings.fromJson(result);
+                                if (result['reset'] == true) {
+                                  _settings = null;
+                                } else if (result['settings'] != null) {
+                                  _settings = LorebookSettings.fromJson(
+                                      result['settings'] as Map<String, dynamic>);
+                                }
                               });
                               _save();
                             }
