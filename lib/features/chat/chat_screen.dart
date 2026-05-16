@@ -133,10 +133,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _onFocusChanged() {
-    debugPrint('[DRAWER] _onFocusChanged: hasFocus=${_inputFocus.hasFocus}, _drawerOpen=$_drawerOpen, _intentionalToggle=$_intentionalToggle');
     if (_intentionalToggle) return;
     if (_inputFocus.hasFocus && _drawerOpen) {
-      debugPrint('[DRAWER] → closing drawer via focus gained');
       setState(() {
         _drawerOpen = false;
         _activeDrawerHeight = _lastKeyboardHeight;
@@ -146,7 +144,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   }
 
   void _toggleDrawer() {
-    debugPrint('[DRAWER] _toggleDrawer: _drawerOpen=$_drawerOpen');
     if (_drawerOpen) {
       setState(() => _drawerOpen = false);
       _drawerAnimController.reverse();
@@ -154,9 +151,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       _intentionalToggle = true;
       _inputFocus.unfocus();
       HapticFeedback.selectionClick();
-      // Freeze the drawer height at open time.
       _activeDrawerHeight = _lastKeyboardHeight;
-      debugPrint('[DRAWER] → opening drawer, activeH=$_activeDrawerHeight');
       setState(() => _drawerOpen = true);
       _drawerAnimController.forward();
       Future.delayed(const Duration(milliseconds: 400), () {
@@ -215,7 +210,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         _heightTimer?.cancel();
         _heightTimer = Timer(const Duration(milliseconds: 300), () {
           if (mounted && _tempMaxHeight > 200 && _tempMaxHeight != _lastKeyboardHeight) {
-            debugPrint('[DRAWER] build: keyboardHeight stable peak: $_tempMaxHeight (was $_lastKeyboardHeight)');
             setState(() {
               _lastKeyboardHeight = _tempMaxHeight;
               _persistKeyboardHeight(_lastKeyboardHeight);
@@ -242,8 +236,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final safeBottom = MediaQuery.paddingOf(context).bottom;
     final isIdle = keyboardHeight == 0 && !_drawerOpen && _drawerAnimController.value == 0;
     final bottomPadding = isIdle ? safeBottom : 0.0;
-
-    debugPrint('[DRAWER] build: kbH=$keyboardHeight, lastKbH=$_lastKeyboardHeight, activeH=$_activeDrawerHeight, _drawerOpen=$_drawerOpen, animV=${_drawerAnimController.value}, padding=$bottomPadding');
 
     // Final (post-animation) inset for layout-only consumers (MessageList).
     // Animated visual positioning of the input + drawer is driven by

@@ -103,7 +103,7 @@ class _LorebookGlobalSettingsScreenState extends ConsumerState<LorebookGlobalSet
                   label: settings.reserveMode == 'percent' ? 'Reserve %' : 'Reserve Tokens',
                   value: settings.reserveValue,
                   min: 0,
-                  max: settings.reserveMode == 'percent' ? 100 : 10000,
+                  max: settings.reserveMode == 'percent' ? 100 : 2147483647,
                   onChanged: (v) => _update(settings.copyWith(reserveValue: v)),
                 ),
                 const SizedBox(height: 24),
@@ -185,25 +185,68 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _NumberField extends StatelessWidget {
+class _NumberField extends StatefulWidget {
   final String label;
   final int value;
   final int min;
   final int max;
   final ValueChanged<int> onChanged;
 
-  const _NumberField({required this.label, required this.value, this.min = 0, this.max = 99999, required this.onChanged});
+  const _NumberField({required this.label, required this.value, this.min = 0, this.max = 2147483647, required this.onChanged});
+
+  @override
+  State<_NumberField> createState() => _NumberFieldState();
+}
+
+class _NumberFieldState extends State<_NumberField> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.value.toString());
+  }
+
+  @override
+  void didUpdateWidget(_NumberField old) {
+    super.didUpdateWidget(old);
+    // Sync controller when the external value changes (e.g. reserveMode switch resets value)
+    if (old.value != widget.value) {
+      final cursor = _ctrl.selection;
+      _ctrl.text = widget.value.toString();
+      // Restore cursor if still valid
+      if (cursor.start <= _ctrl.text.length) {
+        _ctrl.selection = cursor;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _commit() {
+    final n = int.tryParse(_ctrl.text);
+    if (n != null && n >= widget.min && n <= widget.max) {
+      widget.onChanged(n);
+    } else {
+      // Reset to last valid value
+      _ctrl.text = widget.value.toString();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text(label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14))),
+        Expanded(child: Text(widget.label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14))),
         const SizedBox(width: 8),
         ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 64, maxWidth: 100),
-          child: TextFormField(
-            initialValue: value.toString(),
+          child: TextField(
+            controller: _ctrl,
             keyboardType: TextInputType.number,
             style: TextStyle(color: context.cs.onSurface, fontSize: 14),
             textAlign: TextAlign.center,
@@ -214,9 +257,11 @@ class _NumberField extends StatelessWidget {
               fillColor: Colors.white.withValues(alpha: 0.05),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            onFieldSubmitted: (v) {
-              final n = int.tryParse(v);
-              if (n != null && n >= min && n <= max) onChanged(n);
+            onSubmitted: (_) => _commit(),
+            onEditingComplete: _commit,
+            onTapOutside: (_) {
+              FocusScope.of(context).unfocus();
+              _commit();
             },
           ),
         ),

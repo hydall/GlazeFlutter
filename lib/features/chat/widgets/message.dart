@@ -348,17 +348,40 @@ class _MessageState extends ConsumerState<Message>
     _updateGenTimer();
   }
 
-  String _highlightPhrases(String content) {
-    if (content.contains('==hc:')) return content;
+  static final _quoteRegex = RegExp(
+    r'(```.*?```|`[^`]*`)|«(?:(?!\n\n)[^»])*»|"(?:(?!\n\n)[^"])*"|\u201C(?:(?!\n\n)[^\u201D])*\u201D|\u2018(?:(?!\n\n)[^\u2019])*\u2019|(?<!\p{L})\x27(?:(?!\n\n)[^\x27])*\x27(?!\p{L})',
+    unicode: true, dotAll: true,
+  );
+  static final _hcSegmentRegex = RegExp(r'(==hc:#[0-9a-fA-F]{3,8}==.+?==)', dotAll: true);
 
-    String text = content;
-    text = text.replaceAllMapped(
-      RegExp(r'(```.*?```|`[^`]*`)|«(?:(?!\n\n)[^»])*»|"(?:(?!\n\n)[^"])*"|\u201C(?:(?!\n\n)[^\u201D])*\u201D|\u2018(?:(?!\n\n)[^\u2019])*\u2019|(?<!\p{L})\x27(?:(?!\n\n)[^\x27])*\x27(?!\p{L})', unicode: true, dotAll: true), 
-      (match) {
-        if (match[1] != null) return match[1]!;
-        return '==mark==${match[0]}==';
-      },
-    );
+  String _applyQuoteHighlight(String plain) {
+    return plain.replaceAllMapped(_quoteRegex, (match) {
+      if (match[1] != null) return match[1]!;
+      return '==mark==${match[0]}==';
+    });
+  }
+
+  String _highlightPhrases(String content) {
+    // Apply quote/asterisk highlighting only to plain segments — leave ==hc:..== spans intact.
+    String text;
+    if (!content.contains('==hc:')) {
+      text = _applyQuoteHighlight(content);
+    } else {
+      // Split on ==hc:..== sentinels, highlight the plain parts, rejoin.
+      final buffer = StringBuffer();
+      int cursor = 0;
+      for (final match in _hcSegmentRegex.allMatches(content)) {
+        if (match.start > cursor) {
+          buffer.write(_applyQuoteHighlight(content.substring(cursor, match.start)));
+        }
+        buffer.write(match[0]);
+        cursor = match.end;
+      }
+      if (cursor < content.length) {
+        buffer.write(_applyQuoteHighlight(content.substring(cursor)));
+      }
+      text = buffer.toString();
+    }
 
     if (widget.searchQuery.isEmpty || !widget.isSearchMatch) return text;
     final lowerContent = text.toLowerCase();

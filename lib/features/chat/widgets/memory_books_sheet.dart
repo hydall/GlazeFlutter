@@ -4,8 +4,9 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/llm/lorebook_vector_search.dart';
+import '../../../core/llm/lorebook_providers.dart';
 import '../../../core/llm/memory_embedding_service.dart';
+import '../../../features/settings/api_list_provider.dart';
 import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/memory_book.dart';
@@ -379,6 +380,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
   void _reindexAll() async {
     if (_book == null) return;
+    await ref.read(apiListProvider.future);
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
       if (mounted) GlazeToast.show(context, 'Set up embedding API in Embedding Settings first');

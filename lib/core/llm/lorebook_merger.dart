@@ -28,6 +28,9 @@ List<LorebookEntry> mergeKeywordVector({
   final keywordIds = usedKeyword.map((e) => e.id).toSet();
   final dedupedVector = vectorEntries.where((e) => !keywordIds.contains(e.id)).toList();
 
+  // If dedup removed some entries, compensate by taking more from the vector
+  // pool so vectorSlots is still filled (requires vector search to return
+  // enough candidates — overrideTopK=maxInjectedEntries handles that).
   final usedVector = dedupedVector.take(adjustedVectorSlots).toList();
 
   final keywordAsEntries = usedKeyword.map((e) => LorebookEntry(

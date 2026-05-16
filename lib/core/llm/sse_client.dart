@@ -137,6 +137,7 @@ class SseClient {
         if (!trimmed.startsWith('data: ')) continue;
         final data = trimmed.substring(6).trim();
         if (data == '[DONE]') {
+          // Normal completion — call onComplete and return.
           onComplete?.call(fullText, fullReasoning.isNotEmpty ? fullReasoning : null);
           return;
         }
@@ -164,7 +165,23 @@ class SseClient {
       }
     }
 
-    onComplete?.call(fullText, fullReasoning.isNotEmpty ? fullReasoning : null);
+    // Stream ended without [DONE] — this means the connection was dropped
+    // (server-side cancel, network error, 499, etc.) or the client cancelled.
+    // Do NOT call onComplete here; the outer catch will invoke onError instead.
+    // If the client cancelled cleanly, onError handles it via DioException.cancel.
+    // If text accumulated, we throw so onError can decide what to save.
+    if (cancelToken != null && cancelToken.isCancelled) return;
+    // Server dropped connection without [DONE] — treat as normal completion
+    // if any text was accumulated (provider returned 200 but omitted [DONE]).
+    if (fullText.isNotEmpty || fullReasoning.isNotEmpty) {
+      onComplete?.call(fullText, fullReasoning.isNotEmpty ? fullReasoning : null);
+      return;
+    }
+    throw DioException(
+      requestOptions: RequestOptions(path: url),
+      message: 'Stream ended without [DONE] (server dropped connection)',
+      type: DioExceptionType.connectionError,
+    );
   }
 
   Future<void> _oneShotResponse(

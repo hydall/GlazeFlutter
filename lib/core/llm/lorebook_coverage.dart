@@ -57,9 +57,42 @@ CoverageResult computeLorebookCoverage({
   required List<Lorebook> lorebooks,
   required LorebookGlobalSettings globalSettings,
   required LorebookActivations activations,
+  List<LorebookEntry> vectorEntries = const [],
+  // Maps entry.id → lorebookId for correct lorebook lookup without id collisions.
+  Map<String, String> vectorEntryLorebookIds = const {},
 }) {
+  Lorebook? _lbForEntry(String entryId) {
+    final lbId = vectorEntryLorebookIds[entryId];
+    if (lbId != null) return lorebooks.where((l) => l.id == lbId).firstOrNull;
+    return lorebooks.where((l) => l.entries.any((en) => en.id == entryId)).firstOrNull;
+  }
+
+  // In vector-only mode, show only vector results (keyword scan is skipped).
   if (globalSettings.searchType == 'vector') {
-    return const CoverageResult(entries: [], totalCandidates: 0, activatedCount: 0, cutOffCount: 0);
+    if (vectorEntries.isEmpty) {
+      return const CoverageResult(entries: [], totalCandidates: 0, activatedCount: 0, cutOffCount: 0);
+    }
+    final entries = vectorEntries.map((e) {
+      final lb = _lbForEntry(e.id);
+      return CoverageEntry(
+        id: e.id,
+        comment: e.comment,
+        content: e.content,
+        position: e.position,
+        order: e.order,
+        lorebookName: lb?.name ?? '',
+        lorebookId: lb?.id ?? '',
+        constant: e.constant,
+        activated: true,
+        matchedKeys: ['[vector]'],
+      );
+    }).toList();
+    return CoverageResult(
+      entries: entries,
+      totalCandidates: entries.length,
+      activatedCount: entries.length,
+      cutOffCount: 0,
+    );
   }
 
   final charId = char?.id;
@@ -216,6 +249,29 @@ CoverageResult computeLorebookCoverage({
   final inBudget = activatedList.take(maxInjectedEntries).toList();
   final overBudget = activatedList.skip(maxInjectedEntries).toList();
 
+  // In hybrid mode, merge in vector-only results that keyword didn't activate.
+  // Use activated IDs (not all candidates) — an entry in candidates but not
+  // activated by keyword should still be shown as a vector hit.
+  final keywordActivatedIds = candidates.values
+      .where((c) => c.activated)
+      .map((c) => c.entry.id)
+      .toSet();
+  final vectorOnlyEntries = vectorEntries.where((e) => !keywordActivatedIds.contains(e.id)).map((e) {
+    final lb = _lbForEntry(e.id);
+    return CoverageEntry(
+      id: e.id,
+      comment: e.comment,
+      content: e.content,
+      position: e.position,
+      order: e.order,
+      lorebookName: lb?.name ?? '',
+      lorebookId: lb?.id ?? '',
+      constant: e.constant,
+      activated: true,
+      matchedKeys: ['[vector]'],
+    );
+  }).toList();
+
   final allEntries = <CoverageEntry>[
     ...inBudget.map(_toCoverage),
     ...overBudget.map((c) {
@@ -236,13 +292,14 @@ CoverageResult computeLorebookCoverage({
         cutOffByBudget: true,
       );
     }),
+    ...vectorOnlyEntries,
     ...notActivatedList.map(_toCoverage),
   ];
 
   return CoverageResult(
     entries: allEntries,
-    totalCandidates: candidates.length,
-    activatedCount: activatedList.length,
+    totalCandidates: candidates.length + vectorOnlyEntries.length,
+    activatedCount: activatedList.length + vectorOnlyEntries.length,
     cutOffCount: cutOffCount,
   );
 }

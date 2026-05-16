@@ -7,6 +7,11 @@ class StreamAccumulator {
   String _reasoning = '';
   bool _inReasoningBlock = false;
   String _pending = '';
+  // True once we've received at least one non-empty reasoningDelta via the
+  // dedicated API field.  When this is set we know the model is delivering
+  // reasoning out-of-band, so any tagEnd that leaks into the content stream
+  // should be stripped rather than parsed as inline.
+  bool _hasExternalReasoning = false;
 
   StreamAccumulator({
     this.tagStart,
@@ -17,11 +22,21 @@ class StreamAccumulator {
   void consumeDelta(String delta, {String? reasoningDelta}) {
     if (reasoningDelta != null && reasoningDelta.isNotEmpty) {
       _reasoning += reasoningDelta;
+      _hasExternalReasoning = true;
     }
 
     if (hasInlineTags && tagStart != null && tagEnd != null) {
-      _pending += delta;
-      _processPending();
+      // If reasoning is coming via a dedicated API field the model may still
+      // leak the closing tag into the content stream.  Strip it so it doesn't
+      // end up in the visible text.
+      var cleaned = delta;
+      if (_hasExternalReasoning && tagEnd != null && cleaned.startsWith(tagEnd!)) {
+        cleaned = cleaned.substring(tagEnd!.length);
+      }
+      if (cleaned.isNotEmpty) {
+        _pending += cleaned;
+        _processPending();
+      }
     } else {
       _text += delta;
     }
@@ -87,11 +102,14 @@ class StreamAccumulator {
   String get reasoning => _reasoning;
   bool get isInReasoningBlock => _inReasoningBlock;
 
+  bool get hasExternalReasoning => _hasExternalReasoning;
+
   void reset() {
     _text = '';
     _reasoning = '';
     _inReasoningBlock = false;
     _pending = '';
+    _hasExternalReasoning = false;
   }
 
   void flush() {

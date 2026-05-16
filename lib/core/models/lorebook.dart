@@ -14,7 +14,7 @@ class LorebookEntry with _$LorebookEntry {
     @Default([]) List<String> secondaryKeys,
     @Default(5) int selectiveLogic,
     @Default('') String content,
-    @Default('worldInfoBefore') String position,
+    @Default('matchGlobal') String position,
     @Default(100) int order,
     int? scanDepth,
     bool? caseSensitive,

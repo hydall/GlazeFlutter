@@ -3,8 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/lorebook.dart';
 import '../../core/llm/embedding_error_labels.dart';
-import '../../core/llm/lorebook_vector_search.dart';
+import '../../core/llm/lorebook_providers.dart';
 import '../../core/state/db_provider.dart';
+import '../../features/settings/api_list_provider.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../shared/theme/app_colors.dart';
@@ -147,6 +148,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   }
 
   Future<void> _indexEntries() async {
+    await ref.read(apiListProvider.future);
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
       GlazeToast.show(
@@ -209,6 +211,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   }
 
   void _retryFailed() async {
+    await ref.read(apiListProvider.future);
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
       GlazeToast.show(context, 'Set up embedding API in Embedding Settings first');
@@ -253,6 +256,74 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         });
         _loadEmbeddingStatuses();
         GlazeToast.error(context, 'Retry failed: ', e);
+      }
+    }
+  }
+
+  Future<void> _clearAndReindex() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear & Reindex'),
+        content: const Text('Delete all existing embeddings for this lorebook and reindex from scratch?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reindex')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await ref.read(apiListProvider.future);
+    final config = ref.read(embeddingConfigProvider);
+    if (config.endpoint.isEmpty) {
+      GlazeToast.show(context, 'Set up embedding API in Embedding Settings first');
+      return;
+    }
+
+    final vectorEntries = _entries.where((e) => e.vectorSearch && e.enabled && !e.constant).toList();
+    if (vectorEntries.isEmpty) {
+      GlazeToast.show(context, 'No vector-enabled entries to index');
+      return;
+    }
+
+    setState(() {
+      _isIndexing = true;
+      _indexStatus = 'Clearing embeddings...';
+    });
+
+    try {
+      final service = ref.read(lorebookEmbeddingServiceProvider);
+      await service.clearLorebookEmbeddings(widget.lorebookId);
+
+      final result = await service.indexLorebookEntries(
+        widget.lorebookId,
+        _entries,
+        config,
+        forceReindex: true,
+        embeddingTarget: _settings?.embeddingTarget ?? 'content',
+        onProgress: (current, total, name) {
+          setState(() => _indexStatus = 'Indexing $current/$total...');
+        },
+      );
+
+      if (mounted) {
+        setState(() {
+          _isIndexing = false;
+          _indexStatus = '';
+          if (result.rateLimited && result.retryAfter > 0) {
+            _rateLimitCooldown = result.retryAfter;
+            _startCooldownTimer();
+          }
+        });
+        _loadEmbeddingStatuses();
+        GlazeToast.show(context, 'Reindexed: ${result.indexed}, Failed: ${result.failed}${result.rateLimited ? ' (Rate limited)' : ''}');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() { _isIndexing = false; _indexStatus = ''; });
+        _loadEmbeddingStatuses();
+        GlazeToast.error(context, 'Reindex failed: ', e);
       }
     }
   }
@@ -303,11 +374,29 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         _entries[i] = _entries[i].copyWith(
           caseSensitive: null,
           matchWholeWords: null,
+          position: 'matchGlobal',
         );
       }
     });
     _save();
     GlazeToast.show(context, 'Entry settings reset to global defaults');
+  }
+
+  void _enableVectorForAll() {
+    final alreadyAll = _entries.every((e) => e.vectorSearch || e.constant);
+    setState(() {
+      for (int i = 0; i < _entries.length; i++) {
+        if (!_entries[i].constant) {
+          _entries[i] = _entries[i].copyWith(vectorSearch: !alreadyAll);
+        }
+      }
+    });
+    _save();
+    _loadEmbeddingStatuses();
+    GlazeToast.show(
+      context,
+      alreadyAll ? 'Vector search disabled for all entries' : 'Vector search enabled for all entries',
+    );
   }
 
   void _showTestDialog() {
@@ -476,6 +565,18 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                         tooltip: 'Reset Entry Settings to Global',
                         onPressed: _resetEntriesToGlobal,
                       ),
+                      IconButton(
+                        icon: Icon(
+                          _entries.every((e) => e.vectorSearch || e.constant)
+                              ? Icons.hub
+                              : Icons.hub_outlined,
+                          size: 20,
+                        ),
+                        tooltip: _entries.every((e) => e.vectorSearch || e.constant)
+                            ? 'Disable Vector Search for All'
+                            : 'Enable Vector Search for All',
+                        onPressed: _entries.isEmpty ? null : _enableVectorForAll,
+                      ),
                       if (_isIndexing || _rateLimitCooldown > 0)
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -491,12 +592,18 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                             ),
                           ),
                         )
-                      else
+                       else ...[
+                        IconButton(
+                          icon: const Icon(Icons.delete_sweep_outlined, size: 20),
+                          tooltip: 'Clear & Reindex (force)',
+                          onPressed: _clearAndReindex,
+                        ),
                         IconButton(
                           icon: const Icon(Icons.auto_fix_high, size: 20),
                           tooltip: 'Index Vector Entries',
                           onPressed: _indexEntries,
                         ),
+                       ],
                     ],
                   ),
                 ),
@@ -540,12 +647,18 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                               MaterialPageRoute(
                                 builder: (_) => LorebookPerBookSettingsScreen(
                                   settings: _settings,
+                                  globalSettings: ref.read(lorebookSettingsProvider),
                                 ),
                               ),
                             );
                             if (result != null) {
                               setState(() {
-                                _settings = LorebookSettings.fromJson(result);
+                                if (result['reset'] == true) {
+                                  _settings = null;
+                                } else if (result['settings'] != null) {
+                                  _settings = LorebookSettings.fromJson(
+                                      result['settings'] as Map<String, dynamic>);
+                                }
                               });
                               _save();
                             }

@@ -1,13 +1,10 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../features/settings/api_list_provider.dart';
 import '../models/character.dart';
 import '../models/lorebook.dart';
-import '../state/db_provider.dart';
 import '../db/app_db.dart';
 import '../db/repositories/embedding_repo.dart';
 import '../utils/cast_helpers.dart';
 import 'embedding_service.dart';
+import 'embedding_types.dart';
 import 'lorebook_embedding_service.dart';
 import 'vector_math.dart';
 
@@ -37,11 +34,19 @@ class LorebookVectorSearch {
     EmbeddingConfig config, {
     String? charWorld,
     Character? character,
+    LorebookActivations? activations,
+    String? chatId,
+    int? overrideTopK,
   }) async {
-    if (settings.searchType == 'keys') return [];
+    if (settings.searchType == 'keyword') return [];
 
+    final charId = character?.id;
     final activeLorebooks = lorebooks.where((lb) {
       if (lb.enabled) return true;
+      if (charId != null && activations?.character[charId]?.contains(lb.id) == true) return true;
+      if (chatId != null && activations?.chat[chatId]?.contains(lb.id) == true) return true;
+      if (charId != null && lb.activationScope == 'character' && lb.activationTargetId == charId) return true;
+      if (chatId != null && lb.activationScope == 'chat' && lb.activationTargetId == chatId) return true;
       if (charWorld != null && charWorld.isNotEmpty && lb.name == charWorld) return true;
       return false;
     }).toList();
@@ -52,7 +57,7 @@ class LorebookVectorSearch {
     });
 
     var effectiveThreshold = settings.vectorThreshold;
-    var effectiveTopK = settings.vectorTopK;
+    var effectiveTopK = overrideTopK ?? settings.vectorTopK;
     for (final lb in activeLorebooks) {
       final lbSettings = lb.settings;
       if (lbSettings != null) {
@@ -78,6 +83,7 @@ class LorebookVectorSearch {
     if (vectorEntries.isEmpty) return [];
 
     final embeddingRows = await _repo.getBySourceType('lorebook_entry');
+
     final embeddingMap = <String, EmbeddingRow>{};
     for (final row in embeddingRows) {
       embeddingMap[row.entryId] = row;
@@ -260,47 +266,4 @@ class LorebookVectorSearch {
   }
 }
 
-class ChatMessageForSearch {
-  final String role;
-  final String content;
 
-  const ChatMessageForSearch({required this.role, required this.content});
-}
-
-final embeddingConfigProvider = Provider<EmbeddingConfig>((ref) {
-  final chatConfig = ref.watch(activeApiConfigProvider);
-  if (chatConfig == null || chatConfig.mode == 'embedding') {
-    return const EmbeddingConfig(endpoint: '', model: '');
-  }
-  if (chatConfig.embeddingUseSame || chatConfig.embeddingEndpoint.isEmpty) {
-    return EmbeddingConfig(
-      endpoint: chatConfig.endpoint,
-      apiKey: chatConfig.apiKey,
-      model: chatConfig.embeddingModel.isNotEmpty
-          ? chatConfig.embeddingModel
-          : chatConfig.model,
-      maxChunkTokens: chatConfig.embeddingMaxChunkTokens,
-    );
-  } else {
-    return EmbeddingConfig(
-      endpoint: chatConfig.embeddingEndpoint,
-      apiKey: chatConfig.embeddingApiKey,
-      model: chatConfig.embeddingModel,
-      maxChunkTokens: chatConfig.embeddingMaxChunkTokens,
-    );
-  }
-});
-
-final lorebookVectorSearchProvider = Provider<LorebookVectorSearch>((ref) {
-  return LorebookVectorSearch(
-    ref.watch(embeddingRepoProvider),
-    EmbeddingService(),
-  );
-});
-
-final lorebookEmbeddingServiceProvider = Provider<LorebookEmbeddingService>((ref) {
-  return LorebookEmbeddingService(
-    ref.watch(embeddingRepoProvider),
-    EmbeddingService(),
-  );
-});

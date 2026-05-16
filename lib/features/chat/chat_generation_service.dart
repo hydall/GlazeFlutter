@@ -29,6 +29,7 @@ class ChatGenerationService {
     required String charId,
     required ChatState currentState,
     required void Function(ChatState) onStateUpdate,
+    required bool Function() isAborted,
     List<String>? previousSwipes,
     int previousSwipeId = 0,
     String? previousReasoning,
@@ -47,10 +48,7 @@ class ChatGenerationService {
 
       final apiConfig = payload.apiConfig;
 
-      debugPrint('CHAT: building prompt for "${payload.character.name}", history=${session.messages.length}, preset=${payload.preset?.name ?? "none"}');
-
       final promptResult = await buildPromptInIsolate(payload);
-      debugPrint('CHAT: prompt built, ${promptResult.messages.length} messages');
 
       _ref.read(cachedTokenBreakdownProvider(charId).notifier).state =
           promptResult.breakdown;
@@ -90,12 +88,6 @@ class ChatGenerationService {
           .map((m) => m.toApiMap())
           .toList();
 
-      debugPrint('CHAT: sending ${apiMessages.length} messages to ${apiConfig.endpoint}');
-      for (int i = 0; i < apiMessages.length; i++) {
-        final m = apiMessages[i];
-        final preview = m['content']!.length > 80 ? '${m['content']!.substring(0, 80)}...' : m['content'];
-        debugPrint('  [$i] ${m['role']}: $preview');
-      }
 
       final startGenTime = DateTime.now();
       final sseClient = SseClient();
@@ -128,7 +120,7 @@ class ChatGenerationService {
               frameScheduled = false;
               _ref.read(streamingStateProvider(charId).notifier).state =
                   StreamingState(
-                    text: accumulator.text,
+                    text: accumulator.text.trimLeft(),
                     reasoning: accumulator.reasoning.isNotEmpty
                         ? accumulator.reasoning
                         : null,
@@ -137,11 +129,17 @@ class ChatGenerationService {
           }
         },
         onComplete: (text, reasoning) {
+          if (isAborted()) return;
           if (accumulator.text.isEmpty && accumulator.reasoning.isEmpty && accumulator.hasInlineTags) {
             accumulator.consumeDelta(text);
           }
           accumulator.flush();
-          var finalText = accumulator.text.isNotEmpty ? accumulator.text : text;
+          var finalText = (accumulator.text.isNotEmpty ? accumulator.text : text).trimLeft();
+          // If the model emitted <think>...</think> via reasoning_content but leaked
+          // the closing tag into content, strip it from the start of finalText.
+          if (finalText.startsWith(reasoningTagEnd)) {
+            finalText = finalText.substring(reasoningTagEnd.length).trimLeft();
+          }
           var finalReasoning = accumulator.reasoning.isNotEmpty ? accumulator.reasoning : reasoning;
           // If entire response ended up as reasoning (model put <think> at wrong place),
           // promote reasoning to text so the message is not empty.
@@ -168,21 +166,23 @@ class ChatGenerationService {
           );
         },
         onError: (error) {
-          final partialText = accumulator.text;
-          if (partialText.isNotEmpty) {
-            finalState = _saveAssistantMessage(partialText, null, session, pendingSessionVars: pendingSessionVars);
+          final isCancelled = error is DioException && error.type == DioExceptionType.cancel;
+          if (isCancelled) {
+            // User aborted — discard partial text, restore prior state.
+            finalState = ChatState(session: session, isGenerating: false);
           } else {
-            if (error is DioException && error.type == DioExceptionType.cancel) {
-              finalState = ChatState(session: session, isGenerating: false);
-            } else {
-              finalState = _saveErrorMessage(error.toString(), session, pendingSessionVars: pendingSessionVars);
-            }
+            // Server dropped connection (499, network error, etc.) —
+            // do not save partial text as a real message.
+            finalState = _saveErrorMessage(error.toString(), session, pendingSessionVars: pendingSessionVars);
           }
         },
       );
 
       return finalState ?? ChatState(session: session, isGenerating: false);
     } catch (e) {
+      // If aborted, don't write an error message to the DB — the provider will
+      // restore the previous assistant message via _restorationMessage.
+      if (isAborted()) return ChatState(session: session, isGenerating: false);
       return _saveErrorMessage(e.toString(), session);
     }
   }
@@ -205,7 +205,7 @@ class ChatGenerationService {
     if (lastMsg.role != 'assistant') return;
 
     final service = _ref.read(imageGenSettingsProvider.notifier).getService();
-    if (!service.hasImageGenTags(lastMsg.content)) return;
+    if (service == null || !service.hasImageGenTags(lastMsg.content)) return;
 
     final apiConfig = _ref.read(activeApiConfigProvider);
     if (apiConfig == null) return;

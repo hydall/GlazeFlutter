@@ -11,7 +11,7 @@ import '../state/db_provider.dart';
 import '../state/memory_settings_provider.dart';
 import 'embedding_service.dart';
 import 'glaze_matcher.dart';
-import 'lorebook_vector_search.dart';
+import 'embedding_types.dart';
 import 'memory_embedding_service.dart';
 import 'vector_math.dart';
 

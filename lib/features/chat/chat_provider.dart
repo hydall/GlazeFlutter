@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -27,6 +30,8 @@ final streamingStateProvider =
 class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   CancelToken? _cancelToken;
   ChatMessage? _restorationMessage;
+  int _activeGenId = 0;
+  Completer<void>? _activeGenCompleter;
 
   void setCancelToken(CancelToken token) => _cancelToken = token;
 
@@ -80,6 +85,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
+    if (_activeGenCompleter != null && !_activeGenCompleter!.isCompleted) {
+      await _abortAndWait();
+    }
     final current = state.value;
     if (current == null || current.session == null || current.isGenerating) return;
 
@@ -89,6 +97,10 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final lastMsg = current.messages[lastIdx];
     ChatMessage? prevAssistant;
     List<ChatMessage> baseMessages;
+
+    debugPrint('[regen] lastMsg.role=${lastMsg.role} isError=${lastMsg.isError} '
+        'swipes=${lastMsg.swipes.length} swipeId=${lastMsg.swipeId} '
+        'totalMessages=${current.messages.length}');
 
     if (lastMsg.role == 'assistant') {
       prevAssistant = lastMsg;
@@ -131,6 +143,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final lastMsg = current.messages[lastIdx];
     if (lastMsg.role != 'assistant') return;
 
+    final genId = ++_activeGenId;
     state = AsyncData(ChatState(session: current.session, isGenerating: true, generationStartTime: DateTime.now()));
 
     final notifService = GenerationNotificationService.instance;
@@ -141,8 +154,11 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       session: current.session!,
       charId: arg,
       currentState: current,
-      onStateUpdate: (s) => state = AsyncData(s),
+      onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
+      isAborted: () => _activeGenId != genId,
     );
+
+    if (_activeGenId != genId) return;
 
     final generatedMsg = result.messages.isNotEmpty ? result.messages.last : null;
     if (generatedMsg != null && generatedMsg.role == 'assistant') {
@@ -259,6 +275,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> switchSession(int sessionIndex) async {
+    _activeGenId++;
+    _restorationMessage = null;
+    _clearStreaming();
     final session = await _sessionSvc.switchToSession(arg, sessionIndex);
     if (session != null) {
       state = AsyncData(ChatState(session: session));
@@ -266,6 +285,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> createNewSession() async {
+    _activeGenId++;
+    _restorationMessage = null;
+    _clearStreaming();
     final session = await _sessionSvc.createNewSession(arg);
     _invalidateHistory();
     state = AsyncData(ChatState(session: session));
@@ -277,23 +299,65 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final current = state.value;
     if (current == null || current.session == null) return;
     if (index < 0 || index >= current.messages.length) return;
+    _activeGenId++;
+    _restorationMessage = null;
+    _clearStreaming();
     final session = await _sessionSvc.branchSession(arg, current.session!, index);
     _invalidateHistory();
     state = AsyncData(ChatState(session: session));
   }
 
   Future<void> newSession() async {
+    _activeGenId++;
+    _restorationMessage = null;
+    _clearStreaming();
     final session = await _sessionSvc.createNewSession(arg);
     _invalidateHistory();
     state = AsyncData(ChatState(session: session));
   }
 
   void abortGeneration() {
+    _activeGenId++; // invalidate any in-flight onStateUpdate / final writes
     _cancelToken?.cancel();
     _cancelToken = null;
     _clearStreaming();
 
+    // Immediately clear isGenerating and restore the previous assistant message
+    // if we aborted a regeneration mid-flight.  The genId guard blocks any
+    // in-flight onError/onComplete from writing isGenerating: false on their own.
+    final current = state.value;
+    if (current != null && current.isGenerating) {
+      final restoration = _restorationMessage;
+      if (restoration != null) {
+        final restoredMessages = <ChatMessage>[...(current.session?.messages ?? const <ChatMessage>[]), restoration];
+        final restoredSession = current.session?.copyWith(
+          messages: restoredMessages,
+          updatedAt: currentTimestampSeconds(),
+        );
+        if (restoredSession != null) {
+          ref.read(chatRepoProvider).put(restoredSession);
+        }
+        state = AsyncData(ChatState(
+          session: restoredSession ?? current.session,
+          isGenerating: false,
+        ));
+      } else {
+        state = AsyncData(ChatState(session: current.session, isGenerating: false));
+      }
+    }
+    _restorationMessage = null;
+
     GenerationNotificationService.instance.onGenerationAborted();
+  }
+
+  /// Aborts any active generation and waits for the SSE stream to fully close
+  /// before returning. This prevents the race condition where a new generation
+  /// starts before the old stream's onError/onComplete callbacks have fired.
+  Future<void> _abortAndWait() async {
+    final completer = _activeGenCompleter;
+    if (completer == null || completer.isCompleted) return;
+    abortGeneration();
+    await completer.future;
   }
 
   void _invalidateHistory() => ref.invalidate(chatHistoryProvider);
@@ -313,6 +377,11 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     int? previousTokens,
     List<Map<String, dynamic>>? previousSwipesMeta,
   }) async {
+    final genId = ++_activeGenId;
+    final completer = Completer<void>();
+    _activeGenCompleter = completer;
+    _clearStreaming();
+
     final notifService = GenerationNotificationService.instance;
     await notifService.onGenerationStarted();
 
@@ -321,7 +390,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       session: session,
       charId: arg,
       currentState: current,
-      onStateUpdate: (s) => state = AsyncData(s),
+      onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
+      isAborted: () => _activeGenId != genId,
       previousSwipes: previousSwipes,
       previousSwipeId: previousSwipeId,
       previousReasoning: previousReasoning,
@@ -330,6 +400,12 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       previousSwipesMeta: previousSwipesMeta,
       guidanceText: guidanceText,
     );
+
+    // A newer generation started while we were awaiting — discard this result.
+    if (_activeGenId != genId) {
+      if (!completer.isCompleted) completer.complete();
+      return;
+    }
 
     if (result.session?.messages.length == session.messages.length) {
       // No new message was saved (cancelled or failed)
@@ -342,8 +418,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         await ref.read(chatRepoProvider).put(restoredSession);
         _invalidateHistory();
         state = AsyncData(ChatState(
-          session: restoredSession, 
-          isGenerating: false, 
+          session: restoredSession,
+          isGenerating: false,
           error: result.error,
         ));
       } else {
@@ -358,12 +434,20 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     await service.processImageTags(
       currentState: result,
       charId: arg,
-      onStateUpdate: (s) => state = AsyncData(s),
+      onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
     );
+
+    if (_activeGenId != genId) {
+      if (!completer.isCompleted) completer.complete();
+      return;
+    }
+
     notifySyncMessageGenerated(ref);
 
     final charRepo = ref.read(characterRepoProvider);
     final character = await charRepo.getById(arg);
     await notifService.onGenerationCompleted(character?.name ?? 'Unknown', arg);
+
+    if (!completer.isCompleted) completer.complete();
   }
 }

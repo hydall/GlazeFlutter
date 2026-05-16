@@ -12,7 +12,8 @@ import '../state/active_selection_provider.dart';
 import '../state/db_provider.dart';
 import '../state/global_regex_provider.dart';
 import '../state/lorebook_provider.dart';
-import 'lorebook_vector_search.dart';
+import 'embedding_types.dart';
+import 'lorebook_providers.dart';
 import 'memory_injection_service.dart';
 import 'prompt_builder.dart';
 import 'summary_service.dart';
@@ -64,6 +65,7 @@ class PromptPayloadBuilder {
 
     String? summaryContent;
     String? memoryContent;
+    String? memoryMacroContent;
     String memoryInjectionTarget = 'summary_block';
     Map<String, dynamic> memoryCoverage = {};
     List<ChatMessage> history = session?.messages ?? [];
@@ -91,6 +93,7 @@ class PromptPayloadBuilder {
         embeddingConfig: embeddingConfig,
       );
       memoryContent = memoryResult.content.isNotEmpty ? memoryResult.content : null;
+      memoryMacroContent = memoryResult.macroContent.isNotEmpty ? memoryResult.macroContent : null;
       memoryInjectionTarget = memoryResult.injectionTarget;
       if (memoryResult.entries.isNotEmpty) {
         memoryCoverage = {
@@ -101,7 +104,7 @@ class PromptPayloadBuilder {
       }
 
       if (!skipVectorSearch) {
-        vectorEntries = await _runVectorSearch(session.messages, session.messages.lastOrNull?.content ?? '', character.world, character);
+        vectorEntries = await _runVectorSearch(session.messages, session.messages.lastOrNull?.content ?? '', character.world, character, chatId: session.id);
       }
     }
 
@@ -119,6 +122,7 @@ class PromptPayloadBuilder {
       vectorEntries: vectorEntries,
       summaryContent: summaryContent,
       memoryContent: memoryContent,
+      memoryMacroContent: memoryMacroContent,
       memoryInjectionTarget: memoryInjectionTarget,
       memoryCoverage: memoryCoverage,
       guidanceText: guidanceText,
@@ -187,10 +191,11 @@ class PromptPayloadBuilder {
     List<ChatMessage> history,
     String currentText,
     String? charWorld,
-    Character? character,
-  ) async {
+    Character? character, {
+    String? chatId,
+  }) async {
     final settings = _ref.read(lorebookSettingsProvider);
-    if (settings.searchType == 'keys') return [];
+    if (settings.searchType == 'keyword') return [];
 
     final config = _ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) return [];
@@ -203,17 +208,33 @@ class PromptPayloadBuilder {
       final searchHistory = history
           .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
           .toList();
-      final results = await searchService.search(searchHistory, currentText, lorebooks, settings, config, charWorld: charWorld, character: character);
+      final activations = _ref.read(lorebookActivationsProvider);
+      // Request up to maxInjectedEntries candidates so that after deduplication
+      // with keyword entries we still have enough to fill vectorSlots.
+      final overrideTopK = settings.maxInjectedEntries;
+      final results = await searchService.search(
+        searchHistory, currentText, lorebooks, settings, config,
+        charWorld: charWorld,
+        character: character,
+        activations: activations,
+        chatId: chatId,
+        overrideTopK: overrideTopK,
+      );
 
+      // Key by "lorebookId_entryId" to avoid collisions between lorebooks
+      // whose entries share the same numeric id.
       final entryMap = <String, LorebookEntry>{};
       for (final lb in lorebooks) {
         for (final entry in lb.entries) {
-          entryMap[entry.id] = entry;
+          entryMap['${lb.id}_${entry.id}'] = entry;
         }
       }
-      return results.where((r) => entryMap.containsKey(r.entryId)).map((r) => entryMap[r.entryId]!.copyWith()).toList();
-    } catch (e) {
-      debugPrint('VECTOR SEARCH: failed: $e');
+      return results
+          .where((r) => entryMap.containsKey('${r.lorebookId}_${r.entryId}'))
+          .map((r) => entryMap['${r.lorebookId}_${r.entryId}']!.copyWith())
+          .toList();
+    } catch (e, st) {
+      debugPrint('VECTOR SEARCH: failed: $e\n$st');
       return [];
     }
   }

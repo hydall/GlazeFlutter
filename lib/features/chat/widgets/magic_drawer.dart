@@ -115,6 +115,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   int? _hoverIndex;
   MagicDrawerStats _stats = const MagicDrawerStats();
   Timer? _debounceTimer;
+  final _scrollController = ScrollController();
 
   @override
   void initState() {
@@ -125,6 +126,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   @override
   void dispose() {
     _debounceTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -622,6 +624,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
           children: [
             Positioned.fill(
               child: RawScrollbar(
+                controller: _scrollController,
                 padding: const EdgeInsets.only(top: 60),
                   thickness: 3,
                   radius: const Radius.circular(3),
@@ -634,6 +637,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
                       builder: (context, constraints) {
                         final itemWidth = (constraints.maxWidth - 24 - 12) / 3;
                         return SingleChildScrollView(
+                          controller: _scrollController,
                           padding: EdgeInsets.fromLTRB(
                             12,
                             60,

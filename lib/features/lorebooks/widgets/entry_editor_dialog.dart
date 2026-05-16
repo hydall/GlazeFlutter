@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/llm/lorebook_vector_search.dart';
+import '../../../core/llm/lorebook_providers.dart';
 import '../../../core/models/lorebook.dart';
+import '../../../features/settings/api_list_provider.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -38,7 +39,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
   bool _vectorSearch = false;
   bool _useKeywordSearch = true;
   int _selectiveLogic = 5;
-  String _position = 'worldInfoBefore';
+  String _position = 'matchGlobal';
   String _embeddingStatus = 'none';
   bool _isIndexing = false;
 
@@ -76,7 +77,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
     _vectorSearch = e?.vectorSearch ?? false;
     _useKeywordSearch = e?.useKeywordSearch ?? true;
     _selectiveLogic = e?.selectiveLogic ?? 5;
-    _position = e?.position ?? 'worldInfoBefore';
+    _position = e?.position ?? 'matchGlobal';
     _loadEmbeddingStatus();
   }
 
@@ -100,6 +101,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
 
   Future<void> _indexEntry() async {
     if (widget.entry?.id == null || widget.lorebookId == null) return;
+    await ref.read(apiListProvider.future);
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
       GlazeToast.show(
@@ -248,6 +250,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                   _field('Content', _contentController, maxLines: 5),
                   const SizedBox(height: 8),
                   _dropdown('Position', _position, const {
+                    'matchGlobal': 'Match global setting',
                     'worldInfoBefore': 'Before char card',
                     'worldInfoAfter': 'After chat history',
                     'lorebooksMacro': '{{lorebooks}} macro',
