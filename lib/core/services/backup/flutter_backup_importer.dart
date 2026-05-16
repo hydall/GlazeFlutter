@@ -186,30 +186,41 @@ class FlutterBackupImporter with BackupHelpers {
     }
   }
 
-  /// Restores character and persona avatar PNG files from base64 blobs.
+  /// Restores character and persona avatar PNG files from base64 blobs and
+  /// updates avatar_path in the DB to the new device-local path.
   /// Expected structure: { "characters": { "<id>": "<base64>" }, "personas": { "<id>": "<base64>" } }
   Future<void> _restoreAvatars(Map<String, dynamic>? avatarsData) async {
     if (avatarsData == null) return;
 
-    Future<void> saveAvatar(String id, dynamic b64) async {
-      if (b64 is! String) return;
-      try {
-        final bytes = base64Decode(b64);
-        await imageStorage.saveAvatar(id, Uint8List.fromList(bytes));
-      } catch (_) {}
-    }
-
     final chars = avatarsData['characters'] as Map<String, dynamic>?;
     if (chars != null) {
       for (final e in chars.entries) {
-        await saveAvatar(e.key, e.value);
+        if (e.value is! String) continue;
+        try {
+          final bytes = base64Decode(e.value as String);
+          final savedPath =
+              await imageStorage.saveAvatar(e.key, Uint8List.fromList(bytes));
+          await db.customStatement(
+            'UPDATE characters SET avatar_path = ? WHERE char_id = ?',
+            [savedPath, e.key],
+          );
+        } catch (_) {}
       }
     }
 
     final personas = avatarsData['personas'] as Map<String, dynamic>?;
     if (personas != null) {
       for (final e in personas.entries) {
-        await saveAvatar(e.key, e.value);
+        if (e.value is! String) continue;
+        try {
+          final bytes = base64Decode(e.value as String);
+          final savedPath =
+              await imageStorage.saveAvatar(e.key, Uint8List.fromList(bytes));
+          await db.customStatement(
+            'UPDATE personas SET avatar_path = ? WHERE persona_id = ?',
+            [savedPath, e.key],
+          );
+        } catch (_) {}
       }
     }
   }
