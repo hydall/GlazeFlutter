@@ -241,9 +241,14 @@ CoverageResult computeLorebookCoverage({
   final inBudget = activatedList.take(maxInjectedEntries).toList();
   final overBudget = activatedList.skip(maxInjectedEntries).toList();
 
-  // In hybrid mode, merge in vector-only results that keyword didn't catch.
-  final keywordIds = candidates.keys.toSet();
-  final vectorOnlyEntries = vectorEntries.where((e) => !keywordIds.contains(e.id)).map((e) {
+  // In hybrid mode, merge in vector-only results that keyword didn't activate.
+  // Use activated IDs (not all candidates) — an entry in candidates but not
+  // activated by keyword should still be shown as a vector hit.
+  final keywordActivatedIds = candidates.values
+      .where((c) => c.activated)
+      .map((c) => c.entry.id)
+      .toSet();
+  final vectorOnlyEntries = vectorEntries.where((e) => !keywordActivatedIds.contains(e.id)).map((e) {
     final lb = lorebooks.where((l) => l.entries.any((en) => en.id == e.id)).firstOrNull;
     return CoverageEntry(
       id: e.id,
