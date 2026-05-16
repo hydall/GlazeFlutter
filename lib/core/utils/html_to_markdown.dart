@@ -40,7 +40,7 @@ String htmlToMarkdown(String html) {
   result = _convertInline(result, 'i', '*');
   result = _convertInline(result, 'del', '~~');
   result = _convertInline(result, 's', '~~');
-  result = _convertInline(result, 'u', '__');
+  result = _convertInlineKeep(result, 'u');
   result = _convertInline(result, 'code', '`');
 
   result = result.replaceAllMapped(
@@ -113,6 +113,13 @@ String _convertInline(String html, String tag, String marker) {
   );
 }
 
+String _convertInlineKeep(String html, String tag) {
+  return html.replaceAllMapped(
+    RegExp('<$tag[^>]*>(.*?)</$tag>', caseSensitive: false, dotAll: true),
+    (match) => '<$tag>${_inline(match[1]!)}</$tag>',
+  );
+}
+
 final _cssColorRegex = RegExp(r'(?:(?:color|background-color)\s*:\s*)(#[0-9a-fA-F]{3,8}|(?:rgb|hsl)a?\([^)]+\)|[a-zA-Z]+)');
 
 String _extractColor(String styleAttr) {
@@ -137,7 +144,7 @@ String _convertInlineTags(String html) {
   var result = html;
   for (final entry in [
     ('strong', '**'), ('b', '**'), ('em', '*'), ('i', '*'),
-    ('del', '~~'), ('s', '~~'), ('u', '__'), ('code', '`'),
+    ('del', '~~'), ('s', '~~'), ('code', '`'),
   ]) {
     result = result.replaceAllMapped(
       RegExp('<${entry.$1}[^>]*>(.*?)</${entry.$1}>', caseSensitive: false, dotAll: true),
