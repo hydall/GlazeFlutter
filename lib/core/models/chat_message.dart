@@ -16,6 +16,7 @@ class ChatMessage with _$ChatMessage {
     @Default([]) List<String> swipes,
     @Default(0) int swipeId,
     String? reasoning,
+    @Default(false) bool isAllReasoning,
     @Default(false) bool isHidden,
     @Default(false) bool isError,
     String? genTime,

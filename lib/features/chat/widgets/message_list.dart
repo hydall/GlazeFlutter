@@ -134,6 +134,7 @@ class _MessageListState extends State<MessageList> {
       isUser: msg.role == 'user',
       isSystem: msg.role == 'system',
       reasoning: msg.reasoning,
+      isAllReasoning: msg.isAllReasoning,
       genTime: msg.genTime,
       tokens: msg.tokens,
       isHidden: msg.isHidden,

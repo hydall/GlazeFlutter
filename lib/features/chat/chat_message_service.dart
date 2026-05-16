@@ -10,16 +10,47 @@ class ChatMessageService {
 
   ChatMessageService(this._ref);
 
-  ChatSession editMessage(ChatSession session, int index, String newContent) {
+  ChatSession editMessage(
+    ChatSession session,
+    int index,
+    String newContent, {
+    String? tagStart,
+    String? tagEnd,
+  }) {
     if (index < 0 || index >= session.messages.length) return session;
     final msg = session.messages[index];
-    if (msg.content == newContent) return session;
+
+    var text = newContent;
+    String? newReasoning = msg.reasoning;
+    bool isAllReasoning = msg.isAllReasoning;
+
+    if (tagStart != null && tagEnd != null && text.contains(tagStart)) {
+      final startIdx = text.indexOf(tagStart);
+      final endIdx = text.indexOf(tagEnd, startIdx + tagStart.length);
+      if (endIdx != -1) {
+        newReasoning = text.substring(startIdx + tagStart.length, endIdx).trim();
+        text = (text.substring(0, startIdx) + text.substring(endIdx + tagEnd.length)).trim();
+        isAllReasoning = text.isEmpty && newReasoning.isNotEmpty;
+      }
+    }
+
+    if (msg.content == text && msg.reasoning == newReasoning) return session;
     final newMessages = List<ChatMessage>.from(session.messages);
     final swipeIdx = msg.swipeId;
     final updatedSwipes = msg.swipes.isNotEmpty && swipeIdx >= 0 && swipeIdx < msg.swipes.length
-        ? (List<String>.from(msg.swipes)..[swipeIdx] = newContent)
+        ? (List<String>.from(msg.swipes)..[swipeIdx] = text)
         : msg.swipes;
-    newMessages[index] = msg.copyWith(content: newContent, swipes: updatedSwipes);
+    final updatedSwipesMeta = List<Map<String, dynamic>>.from(msg.swipesMeta);
+    if (swipeIdx >= 0 && swipeIdx < updatedSwipesMeta.length) {
+      updatedSwipesMeta[swipeIdx] = {...updatedSwipesMeta[swipeIdx], 'reasoning': newReasoning};
+    }
+    newMessages[index] = msg.copyWith(
+      content: text,
+      reasoning: newReasoning,
+      isAllReasoning: isAllReasoning,
+      swipes: updatedSwipes,
+      swipesMeta: updatedSwipesMeta,
+    );
     return _persist(session, newMessages);
   }
 

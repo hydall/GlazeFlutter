@@ -189,10 +189,10 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     state = AsyncData(ChatState(session: cleared));
   }
 
-  Future<void> editMessage(int index, String newContent) async {
+  Future<void> editMessage(int index, String newContent, {String? tagStart, String? tagEnd}) async {
     final current = state.value;
     if (current == null || current.session == null) return;
-    final updated = _messageSvc.editMessage(current.session!, index, newContent);
+    final updated = _messageSvc.editMessage(current.session!, index, newContent, tagStart: tagStart, tagEnd: tagEnd);
     _invalidateHistory();
     state = AsyncData(ChatState(session: updated));
   }

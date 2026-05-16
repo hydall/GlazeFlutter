@@ -27,7 +27,9 @@ import '../../../shared/theme/theme_provider.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../../image_gen/widgets/image_content_renderer.dart';
 import '../../settings/app_settings_provider.dart';
+import '../../settings/api_list_provider.dart';
 import '../chat_provider.dart';
+import '../../presets/preset_list_provider.dart';
 
 import '../editing_message_provider.dart';
 import 'message_actions.dart';
@@ -179,6 +181,7 @@ class Message extends ConsumerStatefulWidget {
   final bool isStreaming;
   final bool isTyping;
   final String? reasoning;
+  final bool isAllReasoning;
   final String? genTime;
   final int? tokens;
   final bool isHidden;
@@ -208,6 +211,7 @@ class Message extends ConsumerStatefulWidget {
     this.isStreaming = false,
     this.isTyping = false,
     this.reasoning,
+    this.isAllReasoning = false,
     this.genTime,
     this.tokens,
     this.isHidden = false,
@@ -444,7 +448,33 @@ class _MessageState extends ConsumerState<Message>
   }
 
   void _ensureEditController() {
-    _editController ??= TextEditingController(text: widget.content);
+    _editController ??= TextEditingController(
+      text: _editTextWithReasoning(),
+    );
+  }
+
+  String _editTextWithReasoning() {
+    final reasoning = widget.reasoning;
+    if (reasoning == null || reasoning.isEmpty) return widget.content;
+    final tags = _reasoningTags();
+    return '${tags.$1}$reasoning${tags.$2}\n${widget.content}'.trim();
+  }
+
+  (String, String) _reasoningTags() {
+    final charId = widget.charId;
+    final activePresetId = ref.read(activePresetIdProvider);
+    final presetsAsync = ref.read(presetListProvider);
+    final preset = presetsAsync.valueOrNull
+        ?.where((p) => p.id == activePresetId)
+        .firstOrNull;
+    if (preset?.reasoningStart != null && preset?.reasoningEnd != null) {
+      return (preset!.reasoningStart!, preset.reasoningEnd!);
+    }
+    final apiConfig = ref.read(activeApiConfigProvider);
+    if (apiConfig?.reasoningTagStart != null && apiConfig?.reasoningTagEnd != null) {
+      return (apiConfig!.reasoningTagStart!, apiConfig.reasoningTagEnd!);
+    }
+    return ('<think', '</think');
   }
 
   void _disposeEditController() {
@@ -455,7 +485,13 @@ class _MessageState extends ConsumerState<Message>
   void _saveEdit() {
     final text = _editController?.text.trim() ?? '';
     if (text.isNotEmpty) {
-      ref.read(chatProvider(widget.charId).notifier).editMessage(widget.messageIndex, text);
+      final tags = _reasoningTags();
+      ref.read(chatProvider(widget.charId).notifier).editMessage(
+            widget.messageIndex,
+            text,
+            tagStart: tags.$1,
+            tagEnd: tags.$2,
+          );
     }
     ref.read(editingMessageIndexProvider(widget.charId).notifier).state = null;
   }
@@ -657,8 +693,8 @@ class _MessageState extends ConsumerState<Message>
                 const SizedBox(height: 4),
               ],
             ],
-            if (reasoning != null && reasoning.isNotEmpty && !isEditing)
-              _ReasoningBlock(reasoning: reasoning, scheme: scheme),
+            if (reasoning != null && reasoning.isNotEmpty)
+              _ReasoningBlock(reasoning: reasoning, scheme: scheme, initiallyExpanded: widget.isAllReasoning),
             if (isEditing)
               _EditTextarea(controller: _editController!, scheme: scheme)
             else if (isTyping && content.isEmpty)
@@ -1175,22 +1211,25 @@ class _DetailsBlockState extends State<_DetailsBlock> with SingleTickerProviderS
 class _ReasoningBlock extends StatefulWidget {
   final String reasoning;
   final ColorScheme scheme;
-  const _ReasoningBlock({required this.reasoning, required this.scheme});
+  final bool initiallyExpanded;
+  const _ReasoningBlock({required this.reasoning, required this.scheme, this.initiallyExpanded = false});
 
   @override
   State<_ReasoningBlock> createState() => _ReasoningBlockState();
 }
 
 class _ReasoningBlockState extends State<_ReasoningBlock> with SingleTickerProviderStateMixin {
-  bool _collapsed = true;
+  late bool _collapsed;
   late final AnimationController _ctrl;
   late final Animation<double> _anim;
 
   @override
   void initState() {
     super.initState();
+    _collapsed = !widget.initiallyExpanded;
     _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 250));
     _anim = CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut);
+    if (!_collapsed) _ctrl.value = 1.0;
   }
 
   @override

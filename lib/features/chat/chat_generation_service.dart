@@ -141,12 +141,7 @@ class ChatGenerationService {
             finalText = finalText.substring(reasoningTagEnd.length).trimLeft();
           }
           var finalReasoning = accumulator.reasoning.isNotEmpty ? accumulator.reasoning : reasoning;
-          // If entire response ended up as reasoning (model put <think> at wrong place),
-          // promote reasoning to text so the message is not empty.
-          if (finalText.isEmpty && finalReasoning != null && finalReasoning.isNotEmpty) {
-            finalText = finalReasoning;
-            finalReasoning = null;
-          }
+          final isAllReasoning = finalText.isEmpty && finalReasoning != null && finalReasoning.isNotEmpty;
           final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;
           final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
           final tokenCount = (finalText.length / 4).round();
@@ -163,6 +158,7 @@ class ChatGenerationService {
             previousSwipesMeta: previousSwipesMeta,
             guidanceText: guidanceText,
             memoryCoverage: coverage,
+            isAllReasoning: isAllReasoning,
           );
         },
         onError: (error) {
@@ -278,6 +274,7 @@ class ChatGenerationService {
     List<Map<String, dynamic>>? previousSwipesMeta,
     String? guidanceText,
     Map<String, dynamic> memoryCoverage = const {},
+    bool isAllReasoning = false,
   }) {
     List<String> swipes;
     int swipeId;
@@ -325,6 +322,7 @@ class ChatGenerationService {
       role: 'assistant',
       content: text,
       reasoning: reasoning,
+      isAllReasoning: isAllReasoning,
       genTime: genTime,
       tokens: tokens,
       timestamp: DateTime.now().millisecondsSinceEpoch,
