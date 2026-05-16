@@ -168,22 +168,33 @@ PromptResult buildPrompt(PromptPayload payload) {
     settings: payload.lorebookSettings,
   );
 
-  final triggeredLorebooks = <TriggeredEntry>[];
+  final keywordIdToEntry = <String, ScannedEntry>{};
   for (final e in loreEntries) {
-    triggeredLorebooks.add(TriggeredEntry(
-      id: e.id,
-      name: e.comment.isNotEmpty ? e.comment : e.id,
-      lorebookName: e.lorebookName,
-      lorebookId: e.lorebookId,
-      source: 'keyword',
-    ));
+    keywordIdToEntry[e.id] = e;
   }
-  final keywordIds = loreEntries.map((e) => e.id).toSet();
+  final vectorIdToEntry = <String, LorebookEntry>{};
   for (final e in payload.vectorEntries) {
-    if (!keywordIds.contains(e.id)) {
+    vectorIdToEntry[e.id] = e;
+  }
+
+  final triggeredLorebooks = <TriggeredEntry>[];
+  for (final merged in mergedEntries) {
+    final kw = keywordIdToEntry[merged.id];
+    if (kw != null) {
       triggeredLorebooks.add(TriggeredEntry(
-        id: e.id,
-        name: e.comment.isNotEmpty ? e.comment : e.id,
+        id: kw.id,
+        name: kw.comment.isNotEmpty ? kw.comment : kw.id,
+        lorebookName: kw.lorebookName,
+        lorebookId: kw.lorebookId,
+        source: 'keyword',
+      ));
+      continue;
+    }
+    final vec = vectorIdToEntry[merged.id];
+    if (vec != null) {
+      triggeredLorebooks.add(TriggeredEntry(
+        id: vec.id,
+        name: vec.comment.isNotEmpty ? vec.comment : vec.id,
         source: 'vector',
       ));
     }
