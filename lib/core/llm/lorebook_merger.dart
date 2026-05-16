@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 import '../models/lorebook.dart';
 import 'lorebook_scanner.dart';
 
@@ -9,14 +7,12 @@ List<LorebookEntry> mergeKeywordVector({
   required LorebookGlobalSettings settings,
 }) {
   if (vectorEntries.isEmpty) {
-    final result = keywordEntries.map((e) => LorebookEntry(
+    return keywordEntries.map((e) => LorebookEntry(
       id: e.id,
       comment: e.comment,
       content: e.content,
       position: e.position,
     )).toList();
-    debugPrint('MERGER: vectorEntries empty → keyword only: ${result.length}');
-    return result;
   }
 
   final maxEntries = settings.maxInjectedEntries;
@@ -32,13 +28,10 @@ List<LorebookEntry> mergeKeywordVector({
   final keywordIds = usedKeyword.map((e) => e.id).toSet();
   final dedupedVector = vectorEntries.where((e) => !keywordIds.contains(e.id)).toList();
 
+  // If dedup removed some entries, compensate by taking more from the vector
+  // pool so vectorSlots is still filled (requires vector search to return
+  // enough candidates — overrideTopK=maxInjectedEntries handles that).
   final usedVector = dedupedVector.take(adjustedVectorSlots).toList();
-
-  debugPrint('MERGER: maxEntries=$maxEntries splitPct=$splitPct% '
-      '→ keywordSlots=$keywordSlots vectorSlots=$vectorSlots '
-      '| keyword in=${keywordEntries.length} used=${usedKeyword.length} unusedSlots=$unusedKeywordSlots '
-      '| vector in=${vectorEntries.length} deduped=${dedupedVector.length} adjustedSlots=$adjustedVectorSlots used=${usedVector.length} '
-      '| total=${usedKeyword.length + usedVector.length}');
 
   final keywordAsEntries = usedKeyword.map((e) => LorebookEntry(
     id: e.id,

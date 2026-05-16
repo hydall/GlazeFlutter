@@ -36,6 +36,7 @@ class LorebookVectorSearch {
     Character? character,
     LorebookActivations? activations,
     String? chatId,
+    int? overrideTopK,
   }) async {
     if (settings.searchType == 'keyword') return [];
 
@@ -56,7 +57,7 @@ class LorebookVectorSearch {
     });
 
     var effectiveThreshold = settings.vectorThreshold;
-    var effectiveTopK = settings.vectorTopK;
+    var effectiveTopK = overrideTopK ?? settings.vectorTopK;
     for (final lb in activeLorebooks) {
       final lbSettings = lb.settings;
       if (lbSettings != null) {

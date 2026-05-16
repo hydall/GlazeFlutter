@@ -209,12 +209,16 @@ class PromptPayloadBuilder {
           .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
           .toList();
       final activations = _ref.read(lorebookActivationsProvider);
+      // Request up to maxInjectedEntries candidates so that after deduplication
+      // with keyword entries we still have enough to fill vectorSlots.
+      final overrideTopK = settings.maxInjectedEntries;
       final results = await searchService.search(
         searchHistory, currentText, lorebooks, settings, config,
         charWorld: charWorld,
         character: character,
         activations: activations,
         chatId: chatId,
+        overrideTopK: overrideTopK,
       );
 
       // Key by "lorebookId_entryId" to avoid collisions between lorebooks
