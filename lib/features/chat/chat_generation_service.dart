@@ -47,10 +47,7 @@ class ChatGenerationService {
 
       final apiConfig = payload.apiConfig;
 
-      debugPrint('CHAT: building prompt for "${payload.character.name}", history=${session.messages.length}, preset=${payload.preset?.name ?? "none"}');
-
       final promptResult = await buildPromptInIsolate(payload);
-      debugPrint('CHAT: prompt built, ${promptResult.messages.length} messages');
 
       _ref.read(cachedTokenBreakdownProvider(charId).notifier).state =
           promptResult.breakdown;
@@ -90,12 +87,6 @@ class ChatGenerationService {
           .map((m) => m.toApiMap())
           .toList();
 
-      debugPrint('CHAT: sending ${apiMessages.length} messages to ${apiConfig.endpoint}');
-      for (int i = 0; i < apiMessages.length; i++) {
-        final m = apiMessages[i];
-        final preview = m['content']!.length > 80 ? '${m['content']!.substring(0, 80)}...' : m['content'];
-        debugPrint('  [$i] ${m['role']}: $preview');
-      }
 
       final startGenTime = DateTime.now();
       final sseClient = SseClient();
