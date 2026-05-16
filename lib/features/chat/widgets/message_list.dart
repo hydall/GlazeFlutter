@@ -148,6 +148,8 @@ class _MessageListState extends State<MessageList> {
       swipeId: msg.swipeId,
       greetingIndex: msg.greetingIndex,
       memoryCoverage: msg.memoryCoverage,
+      triggeredLorebooks: msg.triggeredLorebooks,
+      triggeredMemories: msg.triggeredMemories,
       isSearchMatch: isMatch,
       searchQuery: widget.searchQuery,
       activeMatchIndex: activeMatchIndex,

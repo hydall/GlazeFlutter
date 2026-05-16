@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:gpt_markdown/custom_widgets/markdown_config.dart';
 
+import '../../../core/models/chat_message.dart';
 import '../../../core/llm/regex_service.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/character.dart';
@@ -196,6 +197,8 @@ class Message extends ConsumerStatefulWidget {
   final int swipeId;
   final int? greetingIndex;
   final Map<String, dynamic> memoryCoverage;
+  final List<TriggeredEntry> triggeredLorebooks;
+  final List<TriggeredEntry> triggeredMemories;
   final bool isSearchMatch;
   final String searchQuery;
   final int activeMatchIndex;
@@ -226,6 +229,8 @@ class Message extends ConsumerStatefulWidget {
     this.swipeId = 0,
     this.greetingIndex,
     this.memoryCoverage = const {},
+    this.triggeredLorebooks = const [],
+    this.triggeredMemories = const [],
     this.isSearchMatch = false,
     this.searchQuery = '',
     this.activeMatchIndex = -1,
@@ -500,6 +505,20 @@ class _MessageState extends ConsumerState<Message>
     ref.read(editingMessageIndexProvider(widget.charId).notifier).state = null;
   }
 
+  void _showTriggeredSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.cs.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => _TriggeredItemsSheet(
+        lorebooks: widget.triggeredLorebooks,
+        memories: widget.triggeredMemories,
+      ),
+    );
+  }
+
   @override
   @override
   bool get wantKeepAlive => widget.messageIndex >= widget.totalMessages - 50;
@@ -765,6 +784,9 @@ class _MessageState extends ConsumerState<Message>
                 onSwipeLeft: isEditing ? null : _onSwitcherLeft(character),
                 onSwipeRight: isEditing ? null : _onSwitcherRight(character),
                 memoryEntryCount: memoryEntryCount,
+                triggeredLorebooks: widget.triggeredLorebooks,
+                triggeredMemories: widget.triggeredMemories,
+                onTriggeredTap: () => _showTriggeredSheet(context),
                 onRegenerate: (!isEditing && ((isUser && isLast) || isError) && !isGenerating)
                     ? () => ref.read(chatProvider(charId).notifier).regenerateLastAssistant()
                     : null,
@@ -1366,6 +1388,9 @@ class _MetadataRow extends StatelessWidget {
   final VoidCallback? onSwipeLeft;
   final VoidCallback? onSwipeRight;
   final int memoryEntryCount;
+  final List<TriggeredEntry> triggeredLorebooks;
+  final List<TriggeredEntry> triggeredMemories;
+  final VoidCallback? onTriggeredTap;
   final VoidCallback? onRegenerate;
   final bool isEditing;
   final VoidCallback? onSaveEdit;
@@ -1386,6 +1411,9 @@ class _MetadataRow extends StatelessWidget {
     this.onSwipeLeft,
     this.onSwipeRight,
     this.memoryEntryCount = 0,
+    this.triggeredLorebooks = const [],
+    this.triggeredMemories = const [],
+    this.onTriggeredTap,
     this.onRegenerate,
     this.isEditing = false,
     this.onSaveEdit,
@@ -1421,6 +1449,29 @@ class _MetadataRow extends StatelessWidget {
                 Icon(Icons.auto_stories, size: 12, color: metaColor.withValues(alpha: 0.7)),
                 const SizedBox(width: 4),
                 Text('$memoryEntryCount mem', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.7))),
+              ],
+              if (triggeredLorebooks.isNotEmpty || triggeredMemories.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: onTriggeredTap,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.8),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.auto_awesome, size: 12, color: metaColor.withValues(alpha: 0.8)),
+                        const SizedBox(width: 4),
+                        Text('${triggeredLorebooks.length + triggeredMemories.length}',
+                            style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.8))),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ],
           ),
@@ -1592,6 +1643,114 @@ class _ErrorWindow extends StatelessWidget {
                 height: 1.4,
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TriggeredItemsSheet extends StatelessWidget {
+  final List<TriggeredEntry> lorebooks;
+  final List<TriggeredEntry> memories;
+
+  const _TriggeredItemsSheet({
+    required this.lorebooks,
+    required this.memories,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = context.cs;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 32, height: 4,
+              decoration: BoxDecoration(
+                color: scheme.outlineVariant.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text('Triggered Items', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: scheme.onSurface)),
+          const SizedBox(height: 12),
+          if (lorebooks.isNotEmpty) ...[
+            _sectionHeader(context, 'World Info', Icons.menu_book),
+            const SizedBox(width: 4),
+            ...lorebooks.map((e) => _entryTile(context, e)),
+            if (memories.isNotEmpty) const SizedBox(height: 12),
+          ],
+          if (memories.isNotEmpty) ...[
+            _sectionHeader(context, 'Memory Books', Icons.psychology),
+            const SizedBox(width: 4),
+            ...memories.map((e) => _entryTile(context, e)),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionHeader(BuildContext context, String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: context.cs.onSurfaceVariant),
+        const SizedBox(width: 6),
+        Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
+      ],
+    );
+  }
+
+  Widget _entryTile(BuildContext context, TriggeredEntry entry) {
+    final scheme = context.cs;
+    final badgeColor = entry.source == 'vector'
+        ? Colors.purple.withValues(alpha: 0.15)
+        : entry.source == 'memory'
+            ? Colors.teal.withValues(alpha: 0.15)
+            : scheme.primaryContainer;
+    final badgeText = entry.source == 'vector'
+        ? 'vector'
+        : entry.source == 'memory'
+            ? 'memory'
+            : 'keyword';
+    final badgeFg = entry.source == 'vector'
+        ? Colors.purple
+        : entry.source == 'memory'
+            ? Colors.teal
+            : scheme.onPrimaryContainer;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              entry.name,
+              style: TextStyle(fontSize: 13, color: scheme.onSurface),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          if (entry.lorebookName.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            Text(
+              entry.lorebookName,
+              style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant.withValues(alpha: 0.6)),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          const SizedBox(width: 6),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+            decoration: BoxDecoration(
+              color: badgeColor,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(badgeText, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: badgeFg)),
           ),
         ],
       ),

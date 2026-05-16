@@ -148,23 +148,27 @@ Uint8List vectorToBytes(List<double> vector) {
 
 List<List<double>> bytesToVectorList(Uint8List bytes) {
   final data = ByteData.sublistView(bytes);
-  final offset = 0;
+  var pos = 0;
 
-  final count = data.getUint32(offset, Endian.host);
-  var pos = offset + 4;
-
-  final result = <List<double>>[];
-  for (int c = 0; c < count; c++) {
-    final dim = data.getUint32(pos, Endian.host);
+  try {
+    final count = data.getUint32(pos, Endian.host);
     pos += 4;
-    final vec = List<double>.filled(dim, 0);
-    for (int i = 0; i < dim; i++) {
-      vec[i] = data.getFloat64(pos, Endian.host);
-      pos += 8;
+
+    final result = <List<double>>[];
+    for (int c = 0; c < count; c++) {
+      final dim = data.getUint32(pos, Endian.host);
+      pos += 4;
+      final vec = List<double>.filled(dim, 0);
+      for (int i = 0; i < dim; i++) {
+        vec[i] = data.getFloat64(pos, Endian.host);
+        pos += 8;
+      }
+      result.add(vec);
     }
-    result.add(vec);
+    return result;
+  } on RangeError catch (_) {
+    return [];
   }
-  return result;
 }
 
 Uint8List vectorListToBytes(List<List<double>> vectors) {

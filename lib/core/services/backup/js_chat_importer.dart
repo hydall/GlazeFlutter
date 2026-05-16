@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart';
 
 import '../../db/app_db.dart';
+import '../../models/chat_message.dart';
 import '../../utils/time_helpers.dart';
 import '../image_storage_service.dart';
 import 'backup_helpers.dart';
@@ -132,13 +133,11 @@ class JsChatImporter with BackupHelpers {
               ? msg['guidanceType'] as String
               : 'GENERATION',
           'triggeredLorebooks': msg['triggeredLorebooks'] is List
-              ? List<String>.from(
-                  msg['triggeredLorebooks'].whereType<String>())
-              : <String>[],
+              ? _parseTriggeredEntries(msg['triggeredLorebooks'])
+              : <TriggeredEntry>[],
           'triggeredMemories': msg['triggeredMemories'] is List
-              ? List<String>.from(
-                  msg['triggeredMemories'].whereType<String>())
-              : <String>[],
+              ? _parseTriggeredEntries(msg['triggeredMemories'])
+              : <TriggeredEntry>[],
           'swipesMeta': msg['swipesMeta'] is List
               ? (msg['swipesMeta'] as List)
                   .whereType<Map<String, dynamic>>()
@@ -404,4 +403,22 @@ class JsChatImporter with BackupHelpers {
     }
     return null;
   }
+}
+
+List<TriggeredEntry> _parseTriggeredEntries(List raw) {
+  return raw.map((item) {
+    if (item is Map<String, dynamic>) {
+      return TriggeredEntry(
+        id: item['id'] as String? ?? '',
+        name: item['name'] as String? ?? item['comment'] as String? ?? '',
+        lorebookName: item['lorebookName'] as String? ?? '',
+        lorebookId: item['lorebookId'] as String? ?? '',
+        source: item['_source'] as String? ?? item['source'] as String? ?? 'keyword',
+      );
+    }
+    if (item is String) {
+      return TriggeredEntry(id: item, name: item, source: 'keyword');
+    }
+    return TriggeredEntry(id: '', name: '', source: 'keyword');
+  }).toList();
 }

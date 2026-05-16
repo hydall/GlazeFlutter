@@ -146,9 +146,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
     final interval = _gs.autoCreateInterval;
     final segments = <List<ChatMessage>>[];
-    for (int i = 0; i < uncovered.length; i += interval) {
-      final end = (i + interval > uncovered.length) ? uncovered.length : i + interval;
-      segments.add(uncovered.sublist(i, end));
+    for (int i = 0; i + interval <= uncovered.length; i += interval) {
+      segments.add(uncovered.sublist(i, i + interval));
     }
 
     if (segments.isEmpty) {

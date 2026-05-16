@@ -92,6 +92,8 @@ class ChatGenerationService {
       final sseClient = SseClient();
       ChatState? finalState;
       final coverage = payload.memoryCoverage;
+      final triggeredLorebooks = promptResult.triggeredLorebooks;
+      final triggeredMemories = promptResult.triggeredMemories;
 
       bool frameScheduled = false;
 
@@ -158,6 +160,8 @@ class ChatGenerationService {
             guidanceText: guidanceText,
             memoryCoverage: coverage,
             isAllReasoning: isAllReasoning,
+            triggeredLorebooks: triggeredLorebooks,
+            triggeredMemories: triggeredMemories,
           );
         },
         onError: (error) {
@@ -274,6 +278,8 @@ class ChatGenerationService {
     String? guidanceText,
     Map<String, dynamic> memoryCoverage = const {},
     bool isAllReasoning = false,
+    List<TriggeredEntry> triggeredLorebooks = const [],
+    List<TriggeredEntry> triggeredMemories = const [],
   }) {
     List<String> swipes;
     int swipeId;
@@ -329,6 +335,8 @@ class ChatGenerationService {
       swipeId: swipeId,
       swipesMeta: swipesMeta,
       memoryCoverage: memoryCoverage,
+      triggeredLorebooks: triggeredLorebooks,
+      triggeredMemories: triggeredMemories,
     );
     final finalMessages = [...currentSession.messages, assistantMsg];
     final now = currentTimestampSeconds();

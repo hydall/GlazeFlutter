@@ -3,6 +3,38 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'chat_message.freezed.dart';
 part 'chat_message.g.dart';
 
+class TriggeredEntry {
+  final String id;
+  final String name;
+  final String lorebookName;
+  final String lorebookId;
+  final String source;
+
+  const TriggeredEntry({
+    required this.id,
+    required this.name,
+    this.lorebookName = '',
+    this.lorebookId = '',
+    this.source = 'keyword',
+  });
+
+  factory TriggeredEntry.fromJson(Map<String, dynamic> json) => TriggeredEntry(
+        id: json['id'] as String? ?? '',
+        name: json['name'] as String? ?? '',
+        lorebookName: json['lorebookName'] as String? ?? '',
+        lorebookId: json['lorebookId'] as String? ?? '',
+        source: json['source'] as String? ?? 'keyword',
+      );
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'lorebookName': lorebookName,
+        'lorebookId': lorebookId,
+        'source': source,
+      };
+}
+
 @freezed
 class ChatMessage with _$ChatMessage {
   const factory ChatMessage({
@@ -28,8 +60,8 @@ class ChatMessage with _$ChatMessage {
     @Default(false) bool isTyping,
     String? guidanceText,
     @Default('GENERATION') String guidanceType,
-    @Default([]) List<String> triggeredLorebooks,
-    @Default([]) List<String> triggeredMemories,
+    @Default([]) List<TriggeredEntry> triggeredLorebooks,
+    @Default([]) List<TriggeredEntry> triggeredMemories,
     @Default([]) List<Map<String, dynamic>> swipesMeta,
     @Default({}) Map<String, dynamic> memoryCoverage,
     String? time,

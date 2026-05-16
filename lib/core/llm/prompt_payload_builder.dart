@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/api_list_provider.dart';
+import '../../shared/widgets/glaze_toast.dart' show GlazeToast, ToastPosition;
 import '../models/api_config.dart';
 import '../models/character.dart';
 import '../models/chat_message.dart';
@@ -68,6 +69,7 @@ class PromptPayloadBuilder {
     String? memoryMacroContent;
     String memoryInjectionTarget = 'summary_block';
     Map<String, dynamic> memoryCoverage = {};
+    List<TriggeredEntry> triggeredMemories = [];
     List<ChatMessage> history = session?.messages ?? [];
     Map<String, String> sessionVars = session?.sessionVars ?? {};
     List<LorebookEntry> vectorEntries = [];
@@ -101,6 +103,11 @@ class PromptPayloadBuilder {
           'needsRebuild': false,
           'stale': false,
         };
+        triggeredMemories = memoryResult.entries.map((e) => TriggeredEntry(
+          id: e.id,
+          name: e.title.isNotEmpty ? e.title : e.id,
+          source: 'memory',
+        )).toList();
       }
 
       if (!skipVectorSearch) {
@@ -131,6 +138,7 @@ class PromptPayloadBuilder {
       characterDepthPromptDepth: character.depthPromptDepth,
       characterDepthPromptRole: character.depthPromptRole,
       globalRegexes: _ref.read(globalRegexProvider).valueOrNull ?? [],
+      triggeredMemories: triggeredMemories,
     );
   }
 
@@ -146,6 +154,7 @@ class PromptPayloadBuilder {
     String? memoryContent,
     String memoryInjectionTarget = 'summary_block',
     Map<String, dynamic> memoryCoverage = const {},
+    List<TriggeredEntry> triggeredMemories = const [],
     String? guidanceText,
     bool skipVectorSearch = true,
   }) async {
@@ -184,6 +193,7 @@ class PromptPayloadBuilder {
       characterDepthPromptDepth: character.depthPromptDepth,
       characterDepthPromptRole: character.depthPromptRole,
       globalRegexes: _ref.read(globalRegexProvider).valueOrNull ?? [],
+      triggeredMemories: triggeredMemories,
     );
   }
 
@@ -235,6 +245,12 @@ class PromptPayloadBuilder {
           .toList();
     } catch (e, st) {
       debugPrint('VECTOR SEARCH: failed: $e\n$st');
+      GlazeToast.showWithoutContext(
+        'Vector search failed — try reindexing embeddings',
+        duration: 4000,
+        position: ToastPosition.top,
+        isError: true,
+      );
       return [];
     }
   }

@@ -57,6 +57,16 @@ class GlazeToast {
 
   static void hide() => _current?.cancel();
 
+  static void showWithoutContext(
+    String text, {
+    int duration = 2500,
+    ToastPosition position = ToastPosition.bottom,
+    bool isError = false,
+  }) {
+    final ctx = rootNavigatorKey.currentContext;
+    if (ctx != null) show(ctx, text, duration: duration, position: position, isError: isError);
+  }
+
   static void error(BuildContext context, String prefix, Object error) {
     final text = '$prefix$error';
     final ctx = rootNavigatorKey.currentContext ?? context;
