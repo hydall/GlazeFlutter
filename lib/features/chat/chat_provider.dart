@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -28,6 +30,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   CancelToken? _cancelToken;
   ChatMessage? _restorationMessage;
   int _activeGenId = 0;
+  Completer<void>? _activeGenCompleter;
 
   void setCancelToken(CancelToken token) => _cancelToken = token;
 
@@ -81,6 +84,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
+    if (_activeGenCompleter != null && !_activeGenCompleter!.isCompleted) {
+      await _abortAndWait();
+    }
     final current = state.value;
     if (current == null || current.session == null || current.isGenerating) return;
 
@@ -144,6 +150,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       charId: arg,
       currentState: current,
       onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
+      isAborted: () => _activeGenId != genId,
     );
 
     if (_activeGenId != genId) return;
@@ -311,7 +318,24 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _cancelToken = null;
     _clearStreaming();
 
+    // Immediately clear isGenerating — the in-flight onError is now blocked by
+    // the genId guard and will never write isGenerating: false to state.
+    final current = state.value;
+    if (current != null && current.isGenerating) {
+      state = AsyncData(ChatState(session: current.session, isGenerating: false));
+    }
+
     GenerationNotificationService.instance.onGenerationAborted();
+  }
+
+  /// Aborts any active generation and waits for the SSE stream to fully close
+  /// before returning. This prevents the race condition where a new generation
+  /// starts before the old stream's onError/onComplete callbacks have fired.
+  Future<void> _abortAndWait() async {
+    final completer = _activeGenCompleter;
+    if (completer == null || completer.isCompleted) return;
+    abortGeneration();
+    await completer.future;
   }
 
   void _invalidateHistory() => ref.invalidate(chatHistoryProvider);
@@ -332,6 +356,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     List<Map<String, dynamic>>? previousSwipesMeta,
   }) async {
     final genId = ++_activeGenId;
+    final completer = Completer<void>();
+    _activeGenCompleter = completer;
 
     final notifService = GenerationNotificationService.instance;
     await notifService.onGenerationStarted();
@@ -342,6 +368,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       charId: arg,
       currentState: current,
       onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
+      isAborted: () => _activeGenId != genId,
       previousSwipes: previousSwipes,
       previousSwipeId: previousSwipeId,
       previousReasoning: previousReasoning,
@@ -384,12 +411,17 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
     );
 
-    if (_activeGenId != genId) return;
+    if (_activeGenId != genId) {
+      if (!completer.isCompleted) completer.complete();
+      return;
+    }
 
     notifySyncMessageGenerated(ref);
 
     final charRepo = ref.read(characterRepoProvider);
     final character = await charRepo.getById(arg);
     await notifService.onGenerationCompleted(character?.name ?? 'Unknown', arg);
+
+    if (!completer.isCompleted) completer.complete();
   }
 }

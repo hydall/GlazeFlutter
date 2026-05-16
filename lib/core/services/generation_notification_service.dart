@@ -120,7 +120,7 @@ class GenerationNotificationService {
     _isGenerating = false;
     await _stopForegroundTask();
 
-    if (_lifecycleState != AppLifecycleState.resumed) {
+    if (_isMobile && _lifecycleState != AppLifecycleState.resumed) {
       await _showMessageNotification(charName, charId);
     }
   }

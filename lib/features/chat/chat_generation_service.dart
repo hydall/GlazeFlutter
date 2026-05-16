@@ -29,6 +29,7 @@ class ChatGenerationService {
     required String charId,
     required ChatState currentState,
     required void Function(ChatState) onStateUpdate,
+    required bool Function() isAborted,
     List<String>? previousSwipes,
     int previousSwipeId = 0,
     String? previousReasoning,
@@ -119,7 +120,7 @@ class ChatGenerationService {
               frameScheduled = false;
               _ref.read(streamingStateProvider(charId).notifier).state =
                   StreamingState(
-                    text: accumulator.text,
+                    text: accumulator.text.trimLeft(),
                     reasoning: accumulator.reasoning.isNotEmpty
                         ? accumulator.reasoning
                         : null,
@@ -128,11 +129,17 @@ class ChatGenerationService {
           }
         },
         onComplete: (text, reasoning) {
+          if (isAborted()) return;
           if (accumulator.text.isEmpty && accumulator.reasoning.isEmpty && accumulator.hasInlineTags) {
             accumulator.consumeDelta(text);
           }
           accumulator.flush();
-          var finalText = accumulator.text.isNotEmpty ? accumulator.text : text;
+          var finalText = (accumulator.text.isNotEmpty ? accumulator.text : text).trimLeft();
+          // If the model emitted <think>...</think> via reasoning_content but leaked
+          // the closing tag into content, strip it from the start of finalText.
+          if (finalText.startsWith(reasoningTagEnd)) {
+            finalText = finalText.substring(reasoningTagEnd.length).trimLeft();
+          }
           var finalReasoning = accumulator.reasoning.isNotEmpty ? accumulator.reasoning : reasoning;
           // If entire response ended up as reasoning (model put <think> at wrong place),
           // promote reasoning to text so the message is not empty.
@@ -195,7 +202,7 @@ class ChatGenerationService {
     if (lastMsg.role != 'assistant') return;
 
     final service = _ref.read(imageGenSettingsProvider.notifier).getService();
-    if (!service.hasImageGenTags(lastMsg.content)) return;
+    if (service == null || !service.hasImageGenTags(lastMsg.content)) return;
 
     final apiConfig = _ref.read(activeApiConfigProvider);
     if (apiConfig == null) return;

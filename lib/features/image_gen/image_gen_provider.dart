@@ -94,10 +94,10 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
   }
 
   ImageGenService? _service;
-  ImageGenService getService() {
+  ImageGenService? getService() {
     if (_service != null) return _service!;
     final storage = ref.read(imageStorageProvider).value;
-    if (storage == null) throw StateError('ImageStorageService not ready');
+    if (storage == null) return null;
     _service = ImageGenService(storage);
     return _service!;
   }
