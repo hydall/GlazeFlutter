@@ -125,12 +125,74 @@ final _cssColorRegex = RegExp(r'(?:(?:color|background-color)\s*:\s*)(#[0-9a-fA-
 
 final _textShadowColorRegex = RegExp(r'text-shadow\s*:[^;]*?(#[0-9a-fA-F]{3,8}|(?:rgb|hsl)a?\([^)]+\)|[a-zA-Z]+)');
 
-final _gradientColorRegex = RegExp(r'linear-gradient\s*\([^)]*?(?:,|^)\s*(#[0-9a-fA-F]{3,8})');
+final _gradientColorsRegex = RegExp(r'linear-gradient\s*\([^)]*\)');
+
+List<String> _extractGradientColors(String styleAttr) {
+  final gradMatch = _gradientColorsRegex.firstMatch(styleAttr);
+  if (gradMatch == null) return [];
+  final gradContent = gradMatch[0]!;
+  final hexMatches = RegExp(r'#[0-9a-fA-F]{3,8}').allMatches(gradContent);
+  return hexMatches.map((m) => m[0]!).toList();
+}
+
+final _textShadowRegex = RegExp(r'text-shadow\s*:\s*([^;]+)');
+
+class _ShadowInfo {
+  final String color;
+  final double blur;
+  _ShadowInfo(this.color, this.blur);
+}
+
+List<_ShadowInfo> _extractTextShadows(String styleAttr) {
+  final match = _textShadowRegex.firstMatch(styleAttr);
+  if (match == null) return [];
+  var value = match[1]!.trim();
+  final placeholders = <String, String>{};
+  var idx = 0;
+  value = value.replaceAllMapped(
+    RegExp(r'(?:rgb|hsl)a?\([^)]+\)'),
+    (m) {
+      final key = '\x00PH$idx\x00';
+      placeholders[key] = m[0]!;
+      idx++;
+      return key;
+    },
+  );
+  final shadows = <_ShadowInfo>[];
+  for (final part in value.split(',')) {
+    final trimmed = part.trim();
+    if (trimmed.isEmpty) continue;
+    var resolved = trimmed;
+    for (final entry in placeholders.entries) {
+      resolved = resolved.replaceFirst(entry.key, entry.value);
+    }
+    var color = '';
+    double? blur;
+    final hexMatch = RegExp(r'(#[0-9a-fA-F]{3,8})').firstMatch(resolved);
+    if (hexMatch != null) color = hexMatch[1]!;
+    final rgbaMatch = RegExp(r'(?:rgb|hsl)a?\([^)]+\)').firstMatch(resolved);
+    if (color.isEmpty && rgbaMatch != null) color = _rgbToHex(rgbaMatch[0]!);
+    if (color.isEmpty) {
+      final namedMatch = RegExp(r'^([a-zA-Z]+)').firstMatch(resolved);
+      if (namedMatch != null) {
+        final hex = _namedColorToHex(namedMatch[1]!.toLowerCase());
+        if (hex != null) color = hex;
+      }
+    }
+    final blurMatch = RegExp(r'(\d+(?:\.\d+)?)px\s*$').firstMatch(resolved);
+    if (blurMatch != null) blur = double.tryParse(blurMatch[1]!);
+    if (color.isNotEmpty) shadows.add(_ShadowInfo(color, blur ?? 4.0));
+  }
+  return shadows;
+}
 
 String _extractColor(String styleAttr) {
   var color = _extractColorFromCss(styleAttr);
   if (color.isEmpty) color = _extractColorFromTextShadow(styleAttr);
-  if (color.isEmpty) color = _extractColorFromGradient(styleAttr);
+  if (color.isEmpty) {
+    final gradColors = _extractGradientColors(styleAttr);
+    if (gradColors.isNotEmpty) color = gradColors.first;
+  }
   return color;
 }
 
@@ -166,16 +228,6 @@ String _extractColorFromTextShadow(String styleAttr) {
   return color;
 }
 
-String _extractColorFromGradient(String styleAttr) {
-  final matches = _gradientColorRegex.allMatches(styleAttr);
-  final colors = <String>[];
-  for (final m in matches) {
-    var color = m[1]!.trim();
-    if (color.startsWith('#')) colors.add(color);
-  }
-  return colors.isNotEmpty ? colors.first : '';
-}
-
 String _convertInlineTags(String html) {
   var result = html;
   for (final entry in [
@@ -204,14 +256,27 @@ String _convertColoredSpan(String html) {
   return html.replaceAllMapped(
     RegExp(r'''<span\s+[^>]*style=(["'])(.*?)\1[^>]*>(.*?)</span>''', caseSensitive: false, dotAll: true),
     (m) {
-      final color = _extractColor(m[2]!);
-      if (color.isNotEmpty) return _wrapColored(color, m[3]!);
-      final isItalic = RegExp(r'font-style\s*:\s*italic', caseSensitive: false).hasMatch(m[2]!);
-      if (isItalic) {
-        final text = _convertInlineTags(m[3]!).replaceAll(RegExp(r'<[^>]+>'), '').trim();
-        return '*$text*';
+      final styleAttr = m[2]!;
+      final content = m[3]!;
+      final text = _convertInlineTags(content).replaceAll(RegExp(r'<[^>]+>'), '').trim();
+      if (text.isEmpty) return '';
+
+      final cssColor = _extractColorFromCss(styleAttr);
+      final shadows = _extractTextShadows(styleAttr);
+      final isItalic = RegExp(r'font-style\s*:\s*italic', caseSensitive: false).hasMatch(styleAttr);
+
+      if (cssColor.isNotEmpty && shadows.isNotEmpty) {
+        final shadow = shadows.first;
+        return '==cg:$cssColor,${shadow.color},${shadow.blur.round()}==$text==';
       }
-      return _inline(m[3]!);
+      if (shadows.isNotEmpty) {
+        final shadow = shadows.first;
+        return '==glow:${shadow.color},${shadow.blur.round()}==$text==';
+      }
+      if (cssColor.isNotEmpty) return _wrapColored(cssColor, content);
+
+      if (isItalic) return '*$text*';
+      return _inline(content);
     },
   );
 }
@@ -232,9 +297,20 @@ String _convertColoredFont(String html) {
   result = result.replaceAllMapped(
     RegExp(r'''<font\s+[^>]*style=(["'])(.*?)\1[^>]*>(.*?)</font>''', caseSensitive: false, dotAll: true),
     (m) {
-      final color = _extractColor(m[2]!);
-      if (color.isNotEmpty) return _wrapColored(color, m[3]!);
-      return _convertInlineTags(m[3]!).replaceAll(RegExp(r'<[^>]+>'), '').trim();
+      final styleAttr = m[2]!;
+      final content = m[3]!;
+      final text = _convertInlineTags(content).replaceAll(RegExp(r'<[^>]+>'), '').trim();
+      if (text.isEmpty) return '';
+
+      final gradColors = _extractGradientColors(styleAttr);
+      if (gradColors.length >= 2) {
+        return '==grad:${gradColors.join(",")}==$text==';
+      }
+      if (gradColors.length == 1) return _wrapColored(gradColors.first, content);
+
+      final color = _extractColor(styleAttr);
+      if (color.isNotEmpty) return _wrapColored(color, content);
+      return text;
     },
   );
 
