@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -9,6 +10,9 @@ class FileExportService {
     required String filename,
     required String subfolder,
   }) async {
+    if (Platform.isWindows) {
+      return _saveToWindowsFolder(data: data, filename: filename);
+    }
     if (Platform.isAndroid) {
       return _saveToDownloads(data, filename, subfolder);
     }
@@ -23,6 +27,9 @@ class FileExportService {
     required String filename,
     required String subfolder,
   }) async {
+    if (Platform.isWindows) {
+      return _saveBytesToWindowsFolder(bytes: bytes, filename: filename);
+    }
     if (Platform.isAndroid) {
       return _saveBytesToDownloads(bytes, filename, subfolder);
     }
@@ -30,6 +37,32 @@ class FileExportService {
       return _saveBytesToMacDownloads(bytes, filename, subfolder);
     }
     return _shareBytes(bytes, filename);
+  }
+
+  static Future<String> _saveToWindowsFolder({
+    required String data,
+    required String filename,
+  }) async {
+    final dirPath = await FilePicker.getDirectoryPath(
+      dialogTitle: 'Choose folder to save $filename',
+    );
+    if (dirPath == null) throw Exception('Folder selection cancelled');
+    final file = File('$dirPath\\$filename');
+    await file.writeAsString(data);
+    return file.path;
+  }
+
+  static Future<String> _saveBytesToWindowsFolder({
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    final dirPath = await FilePicker.getDirectoryPath(
+      dialogTitle: 'Choose folder to save $filename',
+    );
+    if (dirPath == null) throw Exception('Folder selection cancelled');
+    final file = File('$dirPath\\$filename');
+    await file.writeAsBytes(bytes);
+    return file.path;
   }
 
   static Future<String> _saveToDownloads(
