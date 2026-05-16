@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
 import 'dart:ui';
@@ -474,7 +474,7 @@ class _MessageState extends ConsumerState<Message>
     if (apiConfig?.reasoningTagStart != null && apiConfig?.reasoningTagEnd != null) {
       return (apiConfig!.reasoningTagStart!, apiConfig.reasoningTagEnd!);
     }
-    return ('<think', '</think');
+    return ('<think' + '>' , '</think' + '>' );
   }
 
   void _disposeEditController() {

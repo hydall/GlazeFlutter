@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -64,9 +64,8 @@ class ChatGenerationService {
       final cancelToken = CancelToken();
       _ref.read(chatProvider(charId).notifier).setCancelToken(cancelToken);
       final preset = payload.preset;
-      // JS default: always parse <think></think>, preset overrides tags
-      const defaultTagStart = '<think>';
-      const defaultTagEnd = '</think>';
+      const defaultTagStart = '<think' + '>' ;
+      const defaultTagEnd = '</think' + '>' ;
       final reasoningTagStart = (preset?.reasoningStart?.isNotEmpty == true)
           ? preset!.reasoningStart!
           : (apiConfig.reasoningTagStart?.isNotEmpty == true)
