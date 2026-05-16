@@ -14,7 +14,7 @@ class BackupService {
 
   BackupService(this._db, this._imageStorage);
 
-  Future<String> exportBackup() => BackupExporter(_db).export();
+  Future<String> exportBackup() => BackupExporter(_db, _imageStorage).export();
 
   Future<void> importBackup(String jsonString) async {
     final data = jsonDecode(jsonString) as Map<String, dynamic>;
