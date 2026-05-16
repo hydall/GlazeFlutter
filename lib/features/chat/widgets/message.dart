@@ -1680,17 +1680,27 @@ class _TriggeredItemsSheet extends StatelessWidget {
           const SizedBox(height: 12),
           Text('Triggered Items', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: scheme.onSurface)),
           const SizedBox(height: 12),
-          if (lorebooks.isNotEmpty) ...[
-            _sectionHeader(context, 'World Info', Icons.menu_book),
-            const SizedBox(width: 4),
-            ...lorebooks.map((e) => _entryTile(context, e)),
-            if (memories.isNotEmpty) const SizedBox(height: 12),
-          ],
-          if (memories.isNotEmpty) ...[
-            _sectionHeader(context, 'Memory Books', Icons.psychology),
-            const SizedBox(width: 4),
-            ...memories.map((e) => _entryTile(context, e)),
-          ],
+          Flexible(
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (lorebooks.isNotEmpty) ...[
+                    _sectionHeader(context, 'World Info', Icons.menu_book),
+                    const SizedBox(height: 4),
+                    ...lorebooks.map((e) => _entryTile(context, e)),
+                    if (memories.isNotEmpty) const SizedBox(height: 12),
+                  ],
+                  if (memories.isNotEmpty) ...[
+                    _sectionHeader(context, 'Memory Books', Icons.psychology),
+                    const SizedBox(height: 4),
+                    ...memories.map((e) => _entryTile(context, e)),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
