@@ -313,17 +313,34 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
   void abortGeneration() {
     _activeGenId++; // invalidate any in-flight onStateUpdate / final writes
-    _restorationMessage = null;
     _cancelToken?.cancel();
     _cancelToken = null;
     _clearStreaming();
 
-    // Immediately clear isGenerating — the in-flight onError is now blocked by
-    // the genId guard and will never write isGenerating: false to state.
+    // Immediately clear isGenerating and restore the previous assistant message
+    // if we aborted a regeneration mid-flight.  The genId guard blocks any
+    // in-flight onError/onComplete from writing isGenerating: false on their own.
     final current = state.value;
     if (current != null && current.isGenerating) {
-      state = AsyncData(ChatState(session: current.session, isGenerating: false));
+      final restoration = _restorationMessage;
+      if (restoration != null) {
+        final restoredMessages = [...(current.session?.messages ?? []), restoration];
+        final restoredSession = current.session?.copyWith(
+          messages: restoredMessages,
+          updatedAt: currentTimestampSeconds(),
+        );
+        if (restoredSession != null) {
+          ref.read(chatRepoProvider).put(restoredSession);
+        }
+        state = AsyncData(ChatState(
+          session: restoredSession ?? current.session,
+          isGenerating: false,
+        ));
+      } else {
+        state = AsyncData(ChatState(session: current.session, isGenerating: false));
+      }
     }
+    _restorationMessage = null;
 
     GenerationNotificationService.instance.onGenerationAborted();
   }
@@ -379,7 +396,10 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     );
 
     // A newer generation started while we were awaiting — discard this result.
-    if (_activeGenId != genId) return;
+    if (_activeGenId != genId) {
+      if (!completer.isCompleted) completer.complete();
+      return;
+    }
 
     if (result.session?.messages.length == session.messages.length) {
       // No new message was saved (cancelled or failed)

@@ -180,6 +180,9 @@ class ChatGenerationService {
 
       return finalState ?? ChatState(session: session, isGenerating: false);
     } catch (e) {
+      // If aborted, don't write an error message to the DB — the provider will
+      // restore the previous assistant message via _restorationMessage.
+      if (isAborted()) return ChatState(session: session, isGenerating: false);
       return _saveErrorMessage(e.toString(), session);
     }
   }
