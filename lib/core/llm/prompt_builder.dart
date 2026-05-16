@@ -294,27 +294,37 @@ PromptResult _assembleMessages({
 
   final resolvedDepthMsgs = depthBlocks.map((b) => PromptMessage(role: b.role, content: b.content, blockId: b.id, depth: b.depth, isDepth: true)).toList();
 
+  // Track whether loreBefore/loreAfter were injected via char_card trigger.
+  // If the preset has no char_card block, they fall through to the end.
   bool loreBeforeInjected = false;
   bool loreAfterInjected = false;
 
-  for (final block in relativeBlocks) {
-    if (!loreBeforeInjected) {
-      messages.addAll(loreBefore);
-      for (final lb in loreBefore) {
-        attributionBlocks.add(StaticBlock(id: lb.blockId ?? 'lorebook', content: lb.content));
-      }
-      loreBeforeInjected = true;
+  void injectLoreBefore() {
+    if (loreBeforeInjected || loreBefore.isEmpty) return;
+    messages.addAll(loreBefore);
+    for (final lb in loreBefore) {
+      attributionBlocks.add(StaticBlock(id: lb.blockId ?? 'lorebook', content: lb.content));
     }
+    loreBeforeInjected = true;
+  }
+
+  void injectLoreAfter() {
+    if (loreAfterInjected || loreAfter.isEmpty) return;
+    messages.addAll(loreAfter);
+    for (final la in loreAfter) {
+      attributionBlocks.add(StaticBlock(id: la.blockId ?? 'lorebook', content: la.content));
+    }
+    loreAfterInjected = true;
+  }
+
+  for (final block in relativeBlocks) {
+    // worldInfoBefore injects just before char_card (mirrors JS generationWorker.js:739)
+    if (block.id == 'char_card') injectLoreBefore();
 
     if (block.id == 'chat_history') {
       if (mergeBuffer != null) { messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer)); mergeBuffer = null; }
-      if (!loreAfterInjected) {
-        messages.addAll(loreAfter);
-        for (final la in loreAfter) {
-          attributionBlocks.add(StaticBlock(id: la.blockId ?? 'lorebook', content: la.content));
-        }
-        loreAfterInjected = true;
-      }
+      // worldInfoAfter injects just before chat_history (mirrors JS generationWorker.js:680)
+      injectLoreAfter();
 
       final historyMacroCtx = MacroContext(
         charName: macroCtx.charName, charDescription: macroCtx.charDescription,
@@ -332,9 +342,16 @@ PromptResult _assembleMessages({
       }
     } else {
       var content = block.content.trim();
-      if (content.isEmpty) continue;
+      if (content.isEmpty) {
+        // worldInfoAfter also fires after char_card even when char_card resolves empty (mirrors JS:743)
+        if (block.id == 'char_card') injectLoreAfter();
+        continue;
+      }
       content = content.replaceAll('{{lorebooks}}', macroLoreContent);
-      if (content.trim().isEmpty) continue;
+      if (content.trim().isEmpty) {
+        if (block.id == 'char_card') injectLoreAfter();
+        continue;
+      }
 
       attributionBlocks.add(StaticBlock(id: block.id, content: content));
 
@@ -344,21 +361,15 @@ PromptResult _assembleMessages({
         if (mergeBuffer != null) { messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer)); mergeBuffer = null; }
         messages.add(PromptMessage(role: block.role, blockId: block.id, content: content));
       }
+
+      // worldInfoAfter injects just after char_card (mirrors JS generationWorker.js:792)
+      if (block.id == 'char_card') injectLoreAfter();
     }
   }
 
-  if (!loreBeforeInjected) {
-    messages.addAll(loreBefore);
-    for (final lb in loreBefore) {
-      attributionBlocks.add(StaticBlock(id: lb.blockId ?? 'lorebook', content: lb.content));
-    }
-  }
-  if (!loreAfterInjected) {
-    messages.addAll(loreAfter);
-    for (final la in loreAfter) {
-      attributionBlocks.add(StaticBlock(id: la.blockId ?? 'lorebook', content: la.content));
-    }
-  }
+  // Fallback: if preset had no char_card block, inject remaining lore at the end
+  injectLoreBefore();
+  injectLoreAfter();
   if (mergeBuffer != null) messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer));
 
   if (payload.memoryContent != null && payload.memoryContent!.isNotEmpty) {

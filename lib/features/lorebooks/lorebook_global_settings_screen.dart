@@ -168,6 +168,7 @@ class _LorebookGlobalSettingsScreenState extends ConsumerState<LorebookGlobalSet
 
   void _update(LorebookGlobalSettings s) {
     ref.read(lorebookSettingsProvider.notifier).state = s;
+    saveLorebookSettings(s);
   }
 }
 
@@ -198,8 +199,9 @@ class _NumberField extends StatelessWidget {
     return Row(
       children: [
         Expanded(child: Text(label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14))),
-        SizedBox(
-          width: 80,
+        const SizedBox(width: 8),
+        ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 64, maxWidth: 100),
           child: TextFormField(
             initialValue: value.toString(),
             keyboardType: TextInputType.number,
@@ -236,11 +238,13 @@ class _DropdownField<T> extends StatelessWidget {
     return Row(
       children: [
         Expanded(child: Text(label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14))),
-        SizedBox(
-          width: 180,
+        const SizedBox(width: 8),
+        Flexible(
+          flex: 2,
           child: DropdownButtonFormField<T>(
             value: value,
             items: items,
+            isExpanded: true,
             onChanged: (v) { if (v != null) onChanged(v); },
             style: TextStyle(color: context.cs.onSurface, fontSize: 13),
             dropdownColor: context.cs.surface,
@@ -315,7 +319,7 @@ class _SwitchField extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
-        Switch(value: value, onChanged: onChanged, activeColor: context.cs.primary),
+        Switch(value: value, onChanged: onChanged, activeThumbColor: context.cs.primary),
       ],
     );
   }

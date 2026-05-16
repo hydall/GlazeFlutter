@@ -69,6 +69,11 @@ Future<void> loadLorebookSettings(WidgetRef ref) async {
   }
 }
 
+Future<void> saveLorebookSettings(LorebookGlobalSettings settings) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('lorebookSettings', jsonEncode(settings.toJson()));
+}
+
 class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
   @override
   Future<List<Lorebook>> build() async {
