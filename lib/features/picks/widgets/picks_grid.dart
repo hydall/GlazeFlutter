@@ -1,20 +1,14 @@
-import 'dart:convert';
 import 'dart:math';
-import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/models/character.dart';
-import '../../../core/services/character_book_converter.dart';
-import '../../../core/services/character_importer.dart';
 import '../../../core/state/character_provider.dart';
-import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../shared/widgets/glaze_toast.dart';
 import '../picks_models.dart';
 import '../picks_provider.dart';
+import 'picks_detail_launcher.dart';
 
 class PicksGrid extends ConsumerWidget {
   final double topPadding;
@@ -463,7 +457,6 @@ class _PicksCharacterCard extends ConsumerStatefulWidget {
 class _PicksCharacterCardState extends ConsumerState<_PicksCharacterCard> {
   bool _hovered = false;
   bool _pressed = false;
-  bool _importing = false;
 
   PicksCharacter get char => widget.character;
 
@@ -503,7 +496,7 @@ class _PicksCharacterCardState extends ConsumerState<_PicksCharacterCard> {
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
-        onTap: _importing ? null : _importCharacter,
+        onTap: _openDetail,
         onTapDown: (_) => setState(() => _pressed = true),
         onTapUp: (_) => setState(() => _pressed = false),
         onTapCancel: () => setState(() => _pressed = false),
@@ -548,34 +541,35 @@ class _PicksCharacterCardState extends ConsumerState<_PicksCharacterCard> {
                     ),
                   ),
                 ),
-                if (_importing)
-                  Container(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    child: Center(
-                      child: SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: context.cs.primary,
-                        ),
-                      ),
-                    ),
-                  ),
-                if (imported && !_importing)
+                if (imported && !needsUpdate)
                   Positioned(
                     top: 8,
                     right: 8,
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: needsUpdate
-                            ? Colors.orange.withValues(alpha: 0.9)
-                            : Colors.green.withValues(alpha: 0.9),
+                        color: Colors.green.withValues(alpha: 0.9),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        needsUpdate ? Icons.refresh_rounded : Icons.check_rounded,
+                        Icons.check_rounded,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                if (imported && needsUpdate)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.9),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.refresh_rounded,
                         size: 14,
                         color: Colors.white,
                       ),
@@ -645,51 +639,17 @@ class _PicksCharacterCardState extends ConsumerState<_PicksCharacterCard> {
     );
   }
 
-  Future<void> _importCharacter() async {
-    setState(() => _importing = true);
-    try {
-      final pngBytes = await fetchPicksCharacterPng(_relativePath);
-      final bytes = Uint8List.fromList(pngBytes);
-      final importer = await ref.read(characterImporterProvider.future);
-      final result = await importer.importFromBytes(bytes, '${char.id}.png');
-
-      final existingChars = ref.read(charactersProvider).valueOrNull ?? [];
-      final existing = existingChars.where(
-        (c) => c.picksHash != null && c.name == char.name,
-      );
-
-      Character characterWithHash;
-      if (existing.isNotEmpty) {
-        final old = existing.first;
-        characterWithHash = result.character.copyWith(
-          id: old.id,
-          picksHash: char.hash,
-        );
-      } else {
-        characterWithHash = result.character.copyWith(picksHash: char.hash);
-      }
-
-      await ref.read(charactersProvider.notifier).add(characterWithHash);
-
-      if (result.characterBookData != null) {
-        final lorebookRepo = ref.read(lorebookRepoProvider);
-        final converted = convertCharacterBook(
-          result.characterBookData!,
-          characterWithHash.id,
-        );
-        await lorebookRepo.put(converted);
-      }
-
-      if (mounted) {
-        final wasUpdate = existing.isNotEmpty;
-        GlazeToast.show(context, '${wasUpdate ? 'Updated' : 'Imported'} ${char.name}');
-      }
-    } catch (e) {
-      if (mounted) {
-        GlazeToast.error(context, 'Import failed: ', e);
-      }
-    } finally {
-      if (mounted) setState(() => _importing = false);
-    }
+  void _openDetail() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => PicksDetailLauncher(
+        character: char,
+        imageUrl: _imageUrl,
+        relativePath: _relativePath,
+      ),
+    );
   }
 }
