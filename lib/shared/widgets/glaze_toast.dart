@@ -21,6 +21,22 @@ class GlazeToast {
     bool isError = false,
     bool showCopyButton = false,
   }) {
+    final rootOverlay = rootNavigatorKey.currentState?.overlay;
+    if (rootOverlay != null) {
+      _showOnOverlay(rootOverlay, text, duration: duration, position: position, isError: isError, showCopyButton: showCopyButton);
+    } else {
+      _showOnOverlay(Overlay.of(context), text, duration: duration, position: position, isError: isError, showCopyButton: showCopyButton);
+    }
+  }
+
+  static void _showOnOverlay(
+    OverlayState overlay,
+    String text, {
+    int duration = 2500,
+    ToastPosition position = ToastPosition.bottom,
+    bool isError = false,
+    bool showCopyButton = false,
+  }) {
     _current?.cancel();
 
     final key = GlobalKey<_ToastAnimatorState>();
@@ -40,12 +56,7 @@ class GlazeToast {
       ),
     );
 
-    final rootOverlay = rootNavigatorKey.currentState?.overlay;
-    if (rootOverlay != null) {
-      rootOverlay.insert(entry);
-    } else {
-      Overlay.of(context).insert(entry);
-    }
+    overlay.insert(entry);
 
     final timer = Timer(
       Duration(milliseconds: duration),
@@ -63,8 +74,10 @@ class GlazeToast {
     ToastPosition position = ToastPosition.bottom,
     bool isError = false,
   }) {
-    final ctx = rootNavigatorKey.currentContext;
-    if (ctx != null) show(ctx, text, duration: duration, position: position, isError: isError);
+    final rootOverlay = rootNavigatorKey.currentState?.overlay;
+    if (rootOverlay != null) {
+      _showOnOverlay(rootOverlay, text, duration: duration, position: position, isError: isError);
+    }
   }
 
   static void error(BuildContext context, String prefix, Object error) {

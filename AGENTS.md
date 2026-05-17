@@ -109,6 +109,53 @@ Key patterns to follow when editing:
 - **Database:** go through Drift repos; never write raw SQL outside of repo classes
 - **Riverpod:** prefer `ref.watch` in build, `ref.read` in callbacks; never call `ref.read` at provider build time for side effects
 
+## Custom Markdown Markers
+
+The app extends GptMarkdown with custom `==...==` inline markers. When adding new ones, both the converter (`html_to_markdown.dart`) and the renderer (`message.dart`) must be updated in sync.
+
+### Registered markers
+
+| Marker | Example | Renders as |
+|---|---|---|
+| `==hc:#hex==text==` | `==hc:#ff33ff==pink==` | Colored text (HtmlColorMd) |
+| `==glow:#hex,blur==text==` | `==glow:#ffffff,4==echo==` | Text with glow shadow (GlowTextMd) |
+| `==cg:#textHex,#glowHex,blur==text==` | `==cg:#ffb6c1,#ff6eb4,4==rosa==` | Colored text + glow shadow (ColorGlowTextMd) |
+| `==grad:#hex1,#hex2==text==` | `==grad:#ff33ff,#ff1493==text==` | Gradient text via ShaderMask (GradientTextMd) |
+| `==mark==text==` | `==mark=="dialogue"==` | Quote-highlighted text (MarkMd) |
+| `==active==text==` | `==active==search hit==` | Active search match (ActiveMarkMd) |
+
+### Guard: `_styledSegmentRegex`
+
+`_highlightPhrases()` in `message.dart` splits text on styled segments before wrapping quotes in `==mark==`. This prevents `==mark==` from being injected inside other markers (e.g. `"..."` inside `==grad:...==`). When adding a new marker, add it to `_styledSegmentRegex` so quotes inside it are left alone.
+
+Also protect markdown formatting patterns (`**bold**`, `*italic*`, `__bold__`, `_italic_`, `~~strike~~`, `'quotes'`) from quote highlighting — they are already included in `_styledSegmentRegex`.
+
+## Trello Board
+
+- **Board URL:** https://trello.com/b/jRUaax0b/glazeflutter
+- **Board ID:** `6a08b1a3055cd731743d9c2b`
+- **API credentials** are in `.env` (`TRELLO_API_KEY`, `TRELLO_TOKEN`)
+- Use Trello REST API (`https://api.trello.com/1/...?key=...&token=...`) to read/update cards
+
+### Lists
+
+| Name | ID |
+|---|---|
+| features | `6a08b1a3055cd731743d9c1c` |
+| Known Bugs | `6a08b1a3055cd731743d9c29` |
+| Done, not tested | `6a08b1a3055cd731743d9c2a` |
+| Fixed | `6a08b1a3055cd731743d9c2a` → `6a08b6a98f657e17b6c33a23` |
+| later | `6a08b1a3055cd731743d9c23` |
+| ios | `6a08b1a3055cd731743d9c24` |
+| chat modes | `6a08b1a3055cd731743d9c20` |
+| CD-ROM | `6a08b1a3055cd731743d9c21` |
+
+### Workflow
+
+- New features → **features** list
+- Move to **Done, not tested** after implementation
+- Move to **Fixed** after testing
+
 ## Cleanup Checklist After Merge
 
 - [ ] Delete local branch: `git branch -D feat/xxx`

@@ -65,6 +65,120 @@ class HtmlColorMd extends InlineMd {
   }
 }
 
+class GlowTextMd extends InlineMd {
+  @override
+  RegExp get exp => RegExp(r'==glow:(#[0-9a-fA-F]{3,8}),(\d+)==(.+?)==');
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text);
+    final glowColorHex = match?[1] ?? '#ffffff';
+    final blurRadius = int.tryParse(match?[2] ?? '4') ?? 4;
+    final content = match?[3] ?? '';
+    final glowColor = _parseHexColor(glowColorHex) ?? Colors.white;
+    final baseStyle = config.style ?? const TextStyle();
+    return TextSpan(
+      children: MarkdownComponent.generate(context, content, config.copyWith(
+        style: baseStyle.copyWith(
+          shadows: [
+            Shadow(color: glowColor, blurRadius: blurRadius.toDouble()),
+            Shadow(color: glowColor, blurRadius: blurRadius.toDouble() * 0.5),
+          ],
+        ),
+      ), false),
+      style: baseStyle.copyWith(
+        shadows: [
+          Shadow(color: glowColor, blurRadius: blurRadius.toDouble()),
+          Shadow(color: glowColor, blurRadius: blurRadius.toDouble() * 0.5),
+        ],
+      ),
+    );
+  }
+}
+
+class ColorGlowTextMd extends InlineMd {
+  @override
+  RegExp get exp => RegExp(r'==cg:(#[0-9a-fA-F]{3,8}),(#[0-9a-fA-F]{3,8}),(\d+)==(.+?)==');
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text);
+    final textColorHex = match?[1] ?? '#ffffff';
+    final glowColorHex = match?[2] ?? '#ffffff';
+    final blurRadius = int.tryParse(match?[3] ?? '4') ?? 4;
+    final content = match?[4] ?? '';
+    final textColor = _parseHexColor(textColorHex) ?? Colors.white;
+    final glowColor = _parseHexColor(glowColorHex) ?? Colors.white;
+    final baseStyle = config.style ?? const TextStyle();
+    return TextSpan(
+      children: MarkdownComponent.generate(context, content, config.copyWith(
+        style: baseStyle.copyWith(
+          color: textColor,
+          shadows: [
+            Shadow(color: glowColor, blurRadius: blurRadius.toDouble()),
+            Shadow(color: glowColor, blurRadius: blurRadius.toDouble() * 0.5),
+          ],
+        ),
+      ), false),
+      style: baseStyle.copyWith(
+        color: textColor,
+        shadows: [
+          Shadow(color: glowColor, blurRadius: blurRadius.toDouble()),
+          Shadow(color: glowColor, blurRadius: blurRadius.toDouble() * 0.5),
+        ],
+      ),
+    );
+  }
+}
+
+class GradientTextMd extends InlineMd {
+  @override
+  RegExp get exp => RegExp(r'==grad:(#[0-9a-fA-F]{3,8}(?:,#[0-9a-fA-F]{3,8})+)==(.+?)==');
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text);
+    if (match == null) {
+      return TextSpan(text: text, style: config.style);
+    }
+    final colorsParam = match[1]!;
+    final content = match[2]!;
+
+    final colors = RegExp(r'#[0-9a-fA-F]{3,8}')
+        .allMatches(colorsParam)
+        .map((m) => _parseHexColor(m[0]!) ?? Colors.white)
+        .toList();
+
+    if (colors.length < 2) {
+      final baseStyle = config.style ?? const TextStyle();
+      return TextSpan(
+        children: MarkdownComponent.generate(context, content, config, false),
+        style: baseStyle,
+      );
+    }
+
+    final baseStyle = config.style ?? const TextStyle();
+    final fontSize = baseStyle.fontSize ?? 14;
+
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: ShaderMask(
+        shaderCallback: (bounds) => LinearGradient(
+          colors: colors,
+        ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
+        blendMode: BlendMode.srcIn,
+        child: Text(
+          content,
+          style: baseStyle.copyWith(
+            color: Colors.white,
+            fontSize: fontSize,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class MarkMd extends InlineMd {
   final Color textColor;
 
@@ -363,7 +477,17 @@ class _MessageState extends ConsumerState<Message>
     r'(```.*?```|`[^`]*`)|«(?:(?!\n\n)[^»])*»|"(?:(?!\n\n)[^"])*"|\u201C(?:(?!\n\n)[^\u201D])*\u201D|\u2018(?:(?!\n\n)[^\u2019])*\u2019|(?<!\p{L})\x27(?:(?!\n\n)[^\x27])*\x27(?!\p{L})',
     unicode: true, dotAll: true,
   );
-  static final _hcSegmentRegex = RegExp(r'(==hc:#[0-9a-fA-F]{3,8}==.+?==)', dotAll: true);
+  static final _styledSegmentRegex = RegExp(
+    r'(==(?:hc:#[0-9a-fA-F]{3,8}|glow:#[0-9a-fA-F]{3,8},\d+|cg:#[0-9a-fA-F]{3,8},#[0-9a-fA-F]{3,8},\d+|grad:#[0-9a-fA-F]{3,8}(?:,#[0-9a-fA-F]{3,8})+)==.+?=='
+    r'|\*\*[^*]+?\*\*'
+    r'|(?<!\*)\*[^*]+?\*(?!\*)'
+    r'|__[^_]+?__'
+    r'|(?<!\w)_[^_]+?_(?!\w)'
+    r'|~~[^~]+?~~'
+    r"|(?<!\w)'[^']+'(?!\w)"
+    r')',
+    dotAll: true,
+  );
 
   String _applyQuoteHighlight(String plain) {
     return plain.replaceAllMapped(_quoteRegex, (match) {
@@ -373,51 +497,44 @@ class _MessageState extends ConsumerState<Message>
   }
 
   String _highlightPhrases(String content) {
-    // Apply quote/asterisk highlighting only to plain segments — leave ==hc:..== spans intact.
-    String text;
-    if (!content.contains('==hc:')) {
-      text = _applyQuoteHighlight(content);
-    } else {
-      // Split on ==hc:..== sentinels, highlight the plain parts, rejoin.
-      final buffer = StringBuffer();
-      int cursor = 0;
-      for (final match in _hcSegmentRegex.allMatches(content)) {
-        if (match.start > cursor) {
-          buffer.write(_applyQuoteHighlight(content.substring(cursor, match.start)));
-        }
-        buffer.write(match[0]);
-        cursor = match.end;
+    final buffer = StringBuffer();
+    int cursor = 0;
+    for (final match in _styledSegmentRegex.allMatches(content)) {
+      if (match.start > cursor) {
+        buffer.write(_applyQuoteHighlight(content.substring(cursor, match.start)));
       }
-      if (cursor < content.length) {
-        buffer.write(_applyQuoteHighlight(content.substring(cursor)));
-      }
-      text = buffer.toString();
+      buffer.write(match[0]);
+      cursor = match.end;
     }
+    if (cursor < content.length) {
+      buffer.write(_applyQuoteHighlight(content.substring(cursor)));
+    }
+    String text = buffer.toString();
 
     if (widget.searchQuery.isEmpty || !widget.isSearchMatch) return text;
     final lowerContent = text.toLowerCase();
     final lowerQuery = widget.searchQuery.toLowerCase();
-    final buffer = StringBuffer();
+    final searchBuffer = StringBuffer();
     int startIndex = 0;
     int currentMatchIndex = 0;
-    
+
     while (true) {
       final idx = lowerContent.indexOf(lowerQuery, startIndex);
       if (idx == -1) {
-        buffer.write(text.substring(startIndex));
+        searchBuffer.write(text.substring(startIndex));
         break;
       }
-      buffer.write(text.substring(startIndex, idx));
+      searchBuffer.write(text.substring(startIndex, idx));
       final originalText = text.substring(idx, idx + lowerQuery.length);
       if (currentMatchIndex == widget.activeMatchIndex) {
-        buffer.write('==active==$originalText==');
+        searchBuffer.write('==active==$originalText==');
       } else {
-        buffer.write('==mark==$originalText==');
+        searchBuffer.write('==mark==$originalText==');
       }
       currentMatchIndex++;
       startIndex = idx + lowerQuery.length;
     }
-    return buffer.toString();
+    return searchBuffer.toString();
   }
 
   void _triggerHighlight() {
@@ -761,6 +878,9 @@ class _MessageState extends ConsumerState<Message>
                   ATagMd(),
                   ImageMd(),
                   HtmlColorMd(),
+                  GlowTextMd(),
+                  ColorGlowTextMd(),
+                  GradientTextMd(),
                   MarkMd(
                     textColor: quoteColor,
                   ),
