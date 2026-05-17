@@ -524,14 +524,34 @@ class _MessageState extends ConsumerState<Message>
   }
 
   String _highlightPhrases(String content) {
+    final styledMatches = _styledSegmentRegex.allMatches(content).toList();
+
+    final quoteSpans = <({int start, int end})>[];
+    for (final m in _quoteRegex.allMatches(content)) {
+      if (m[1] == null) {
+        quoteSpans.add((start: m.start, end: m.end));
+      }
+    }
+
+    final protectedRanges = <({int start, int end, String text})>[];
+    for (final sm in styledMatches) {
+      final insideQuote = quoteSpans.any(
+        (q) => sm.start >= q.start && sm.end <= q.end,
+      );
+      if (!insideQuote) {
+        protectedRanges.add((start: sm.start, end: sm.end, text: sm[0]!));
+      }
+    }
+    protectedRanges.sort((a, b) => a.start.compareTo(b.start));
+
     final buffer = StringBuffer();
     int cursor = 0;
-    for (final match in _styledSegmentRegex.allMatches(content)) {
-      if (match.start > cursor) {
-        buffer.write(_applyQuoteHighlight(content.substring(cursor, match.start)));
+    for (final range in protectedRanges) {
+      if (range.start > cursor) {
+        buffer.write(_applyQuoteHighlight(content.substring(cursor, range.start)));
       }
-      buffer.write(match[0]);
-      cursor = match.end;
+      buffer.write(range.text);
+      cursor = range.end;
     }
     if (cursor < content.length) {
       buffer.write(_applyQuoteHighlight(content.substring(cursor)));
