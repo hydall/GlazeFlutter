@@ -28,9 +28,8 @@ class DeepLinkService {
 
   void _handleDeepLink(Uri uri) {
     debugPrint('DeepLinkService: received $uri');
-    final path = uri.path;
-    if (path.startsWith('/oauth/')) {
-      final provider = path.replaceFirst('/oauth/', '');
+    if (uri.host == 'oauth') {
+      final provider = uri.path.replaceFirst('/', '');
       final completer = _pendingOAuth.remove(provider);
       if (completer != null && !completer.isCompleted) {
         completer.complete(uri);
@@ -39,7 +38,7 @@ class DeepLinkService {
       }
       return;
     }
-    if (uri.scheme.startsWith('db-') && path == '/auth') {
+    if (uri.scheme.startsWith('db-') && uri.host == 'auth') {
       final completer = _pendingOAuth.remove('dropbox');
       if (completer != null && !completer.isCompleted) {
         completer.complete(uri);
