@@ -199,6 +199,7 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
                   final folder = _currentFolders[index];
                   return _FolderCard(
                     folder: folder,
+                    path: _path,
                     onTap: () => _navigateInto(folder.id),
                   );
                 },
@@ -251,9 +252,10 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
 
 class _FolderCard extends StatefulWidget {
   final PicksFolder folder;
+  final List<String> path;
   final VoidCallback onTap;
 
-  const _FolderCard({required this.folder, required this.onTap});
+  const _FolderCard({required this.folder, required this.path, required this.onTap});
 
   @override
   State<_FolderCard> createState() => _FolderCardState();
@@ -423,17 +425,8 @@ class _FolderCardState extends State<_FolderCard> {
   }
 
   String _charImageUrl(PicksCharacter c) {
-    final base = [widget.folder.id];
-    if (widget.folder.characters.isEmpty &&
-        widget.folder.subfolders.isNotEmpty) {
-      for (final sf in widget.folder.subfolders) {
-        if (sf.characters.contains(c)) {
-          base.add(sf.id);
-          break;
-        }
-      }
-    }
-    return '$kPicksBaseUrl/${base.join('/')}/${c.fileName ?? '${c.id}.png'}';
+    final parts = <String>[...widget.path, widget.folder.id];
+    return '$kPicksBaseUrl/${parts.join('/')}/${c.fileName ?? '${c.id}.png'}';
   }
 }
 
