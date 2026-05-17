@@ -8,6 +8,7 @@ import '../../core/services/file_export_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/sheet_view.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import 'backup_provider.dart';
 
 class BackupScreen extends ConsumerStatefulWidget {
@@ -33,6 +34,16 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       showBack: true,
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 200),
+        layoutBuilder: (currentChild, previousChildren) {
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ...previousChildren,
+              if (currentChild != null) currentChild,
+            ],
+          );
+        },
         child: _buildContent(context),
       ),
     );
@@ -108,23 +119,26 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     if (path == null) return;
 
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Replace all data?'),
-        content: const Text(
-            'This will overwrite current data. This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Continue'),
-          ),
-        ],
+    final confirmed = await GlazeBottomSheet.show<bool>(
+      context,
+      title: 'Replace all data?',
+      bigInfo: const BottomSheetBigInfo(
+        icon: Icons.warning_amber_rounded,
+        description: 'This will overwrite current data. This cannot be undone.',
       ),
+      items: [
+        BottomSheetItem(
+          label: 'Continue',
+          isDestructive: true,
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+        ),
+      ],
     );
     if (confirmed != true) return;
 
@@ -193,9 +207,10 @@ class _NormalView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _Section(
@@ -210,7 +225,10 @@ class _NormalView extends StatelessWidget {
               const SizedBox(height: 4),
               const _Hint(
                 lines: [
-                  _HintLine(bold: 'Tavo (.tbk): ', text: 'characters, presets, chats'),
+                  _HintLine(
+                    bold: 'Tavo (.tbk): ',
+                    text: 'characters, presets, chats',
+                  ),
                   _HintLine(
                     bold: 'SillyTavern (.zip): ',
                     text: 'characters, lorebooks, presets, chats, personas',

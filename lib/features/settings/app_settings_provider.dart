@@ -18,6 +18,7 @@ class AppSettings {
   final bool virtualKeyboardSend;
   final double tokenizerHidePercent;
   final double tokenizerHistoryFillThreshold;
+  final bool showOurPicks;
 
   const AppSettings({
     this.enterToSend = true,
@@ -33,6 +34,7 @@ class AppSettings {
     this.virtualKeyboardSend = false,
     this.tokenizerHidePercent = 30,
     this.tokenizerHistoryFillThreshold = 85,
+    this.showOurPicks = true,
   });
 
   AppSettings copyWith({
@@ -49,6 +51,7 @@ class AppSettings {
     bool? virtualKeyboardSend,
     double? tokenizerHidePercent,
     double? tokenizerHistoryFillThreshold,
+    bool? showOurPicks,
   }) {
     return AppSettings(
       enterToSend: enterToSend ?? this.enterToSend,
@@ -65,6 +68,7 @@ class AppSettings {
       virtualKeyboardSend: virtualKeyboardSend ?? this.virtualKeyboardSend,
       tokenizerHidePercent: tokenizerHidePercent ?? this.tokenizerHidePercent,
       tokenizerHistoryFillThreshold: tokenizerHistoryFillThreshold ?? this.tokenizerHistoryFillThreshold,
+      showOurPicks: showOurPicks ?? this.showOurPicks,
     );
   }
 }
@@ -88,6 +92,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
       virtualKeyboardSend: prefs.getBool('virtualKeyboardSend') ?? false,
       tokenizerHidePercent: prefs.getDouble('tokenizerHidePercent') ?? 30,
       tokenizerHistoryFillThreshold: prefs.getDouble('tokenizerHistoryFillThreshold') ?? 85,
+      showOurPicks: prefs.getBool('showOurPicks') ?? true,
     );
   }
 
@@ -106,6 +111,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setBool('virtualKeyboardSend', settings.virtualKeyboardSend);
     await prefs.setDouble('tokenizerHidePercent', settings.tokenizerHidePercent);
     await prefs.setDouble('tokenizerHistoryFillThreshold', settings.tokenizerHistoryFillThreshold);
+    await prefs.setBool('showOurPicks', settings.showOurPicks);
     state = AsyncData(settings);
   }
 }

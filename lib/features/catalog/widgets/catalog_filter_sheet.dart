@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/sheet_view.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../catalog_models.dart';
 import '../services/chub_provider.dart';
 import '../services/datacat_provider.dart';
@@ -134,29 +135,29 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
   void _onNsflToggle(bool value) {
     if (value) {
       // Trying to enable — show warning
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: context.cs.surface,
-          title: const Text('NSFL Content', style: TextStyle(color: Colors.white)),
-          content: Text(
-            "You don't want to see this.",
-            style: TextStyle(color: context.cs.onSurfaceVariant),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('I don\'t want to die', style: TextStyle(color: context.cs.onSurfaceVariant)),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() => _nsfl = true);
-                Navigator.pop(ctx);
-              },
-              child: const Text('I have nothing to lose', style: TextStyle(color: Colors.redAccent)),
-            ),
-          ],
+      GlazeBottomSheet.show(
+        context,
+        title: 'NSFL Content',
+        bigInfo: const BottomSheetBigInfo(
+          icon: Icons.warning_amber_rounded,
+          description: "You don't want to see this.",
         ),
+        items: [
+          BottomSheetItem(
+            label: 'I have nothing to lose',
+            isDestructive: true,
+            centered: true,
+            onTap: () {
+              setState(() => _nsfl = true);
+              Navigator.of(context, rootNavigator: true).pop();
+            },
+          ),
+          BottomSheetItem(
+            label: 'I don\'t want to die',
+            centered: true,
+            onTap: () => Navigator.of(context, rootNavigator: true).pop(),
+          ),
+        ],
       );
     } else {
       // Disabling

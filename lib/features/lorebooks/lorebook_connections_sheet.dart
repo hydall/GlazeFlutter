@@ -211,19 +211,17 @@ class _LorebookConnectionsSheetState
       return;
     }
 
-    final selected = await showDialog<Character>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Add Character'),
-        children: available
-            .map(
-              (c) => SimpleDialogOption(
-                onPressed: () => Navigator.pop(ctx, c),
-                child: Text(c.name),
-              ),
-            )
-            .toList(),
-      ),
+    final selected = await GlazeBottomSheet.show<Character>(
+      context,
+      title: 'Add Character',
+      items: available
+          .map(
+            (c) => BottomSheetItem(
+              label: c.name,
+              onTap: () => Navigator.of(context, rootNavigator: true).pop(c),
+            ),
+          )
+          .toList(),
     );
 
     if (selected != null) {

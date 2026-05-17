@@ -12,6 +12,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/sheet_view.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import 'embedding_settings_screen.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import 'lorebook_connections_sheet.dart';
 import 'lorebook_editor_screen.dart';
 import 'lorebook_global_settings_screen.dart';
@@ -170,25 +171,29 @@ class LorebookListScreen extends ConsumerWidget {
   }
 
   void _deleteLorebook(BuildContext context, WidgetRef ref, Lorebook lb) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Lorebook'),
-        content: Text('Delete "${lb.name}"? This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              ref.read(lorebooksProvider.notifier).deleteLorebook(lb.id);
-              Navigator.pop(ctx);
-            },
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
-          ),
-        ],
+    GlazeBottomSheet.show(
+      context,
+      title: 'Delete Lorebook',
+      bigInfo: BottomSheetBigInfo(
+        icon: Icons.delete_outline,
+        description: 'Delete "${lb.name}"? This cannot be undone.',
       ),
+      items: [
+        BottomSheetItem(
+          label: 'Delete',
+          isDestructive: true,
+          centered: true,
+          onTap: () {
+            ref.read(lorebooksProvider.notifier).deleteLorebook(lb.id);
+            Navigator.of(context, rootNavigator: true).pop();
+          },
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(),
+        ),
+      ],
     );
   }
 }

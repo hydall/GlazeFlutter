@@ -36,6 +36,8 @@ class GlazeScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final backHandler = onBack ?? () => Navigator.of(context).maybePop();
+
     final header = SafeArea(
       bottom: false,
       child: Padding(
@@ -45,7 +47,7 @@ class GlazeScaffold extends StatelessWidget {
           titleWidget: titleWidget,
           actions: actions,
           showBack: showBack,
-          onBack: onBack ?? () => Navigator.of(context).maybePop(),
+          onBack: backHandler,
         ),
       ),
     );
@@ -62,28 +64,35 @@ class GlazeScaffold extends StatelessWidget {
       ),
     );
 
-    return Scaffold(
-      backgroundColor: context.cs.surface,
-      resizeToAvoidBottomInset: resizeToAvoidBottomInset,
-      body: extendBodyBehindHeader
-          ? Stack(
-              children: [
-                Positioned.fill(child: body),
-                Positioned(top: 0, left: 0, right: 0, child: animatedHeader),
-              ],
-            )
-          : Column(
-              children: [
-                animatedHeader,
-                Expanded(
-                  child: MediaQuery.removePadding(
-                    context: context,
-                    removeTop: true,
-                    child: body,
+    return PopScope(
+      canPop: !showBack,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        backHandler();
+      },
+      child: Scaffold(
+        backgroundColor: context.cs.surface,
+        resizeToAvoidBottomInset: resizeToAvoidBottomInset,
+        body: extendBodyBehindHeader
+            ? Stack(
+                children: [
+                  Positioned.fill(child: body),
+                  Positioned(top: 0, left: 0, right: 0, child: animatedHeader),
+                ],
+              )
+            : Column(
+                children: [
+                  animatedHeader,
+                  Expanded(
+                    child: MediaQuery.removePadding(
+                      context: context,
+                      removeTop: true,
+                      child: body,
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+      ),
     );
   }
 }

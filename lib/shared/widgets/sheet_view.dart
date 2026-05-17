@@ -87,6 +87,7 @@ class _SheetViewState extends State<SheetView>
   bool _expanded = false;
   double _currentHeight = 0;
   bool _heightInit = false;
+  bool _lockToContentHeight = false;
 
   /// Whether this SheetView is hosted inside [showModalBottomSheet]. When
   /// false (e.g. opened as a route via GoRouter), we behave as a regular
@@ -100,7 +101,9 @@ class _SheetViewState extends State<SheetView>
   Animation<double>? _anim;
 
   final _headerKey = GlobalKey();
+  final _bodyKey = GlobalKey();
   double _headerH = 0;
+  double _bodyH = 0;
 
   double _dragStartY = 0;
   double _dragStartH = 0;
@@ -116,6 +119,64 @@ class _SheetViewState extends State<SheetView>
   }
 
   double _full(BuildContext ctx) => MediaQuery.of(ctx).size.height;
+
+  double _resolvedBodyVerticalPadding(BuildContext ctx) {
+    final padding =
+        widget.bodyPadding?.resolve(Directionality.of(ctx)) ?? EdgeInsets.zero;
+    return padding.vertical;
+  }
+
+  double _contentHeight(BuildContext ctx) {
+    final full = _full(ctx);
+    final content = (_headerH + _bodyH + _resolvedBodyVerticalPadding(ctx))
+        .clamp(0.0, full);
+    return content;
+  }
+
+  bool _shouldLockToContentHeight(BuildContext ctx) {
+    if (!_inModalSheet || widget.startExpanded) {
+      return false;
+    }
+    if (_bodyH <= 0) {
+      return false;
+    }
+
+    return _contentHeight(ctx) <= _collapsed(ctx);
+  }
+
+  void _syncHeightMode({bool force = false}) {
+    if (!mounted || !_heightInit) {
+      return;
+    }
+
+    final shouldLock = _shouldLockToContentHeight(context);
+    final target = shouldLock ? _contentHeight(context) : _collapsed(context);
+
+    if (_lockToContentHeight != shouldLock) {
+      _lockToContentHeight = shouldLock;
+    }
+
+    if (force) {
+      if (shouldLock) {
+        _expanded = false;
+        _currentHeight = target;
+      } else if (!_expanded) {
+        _currentHeight = target;
+      }
+      return;
+    }
+
+    if (_expanded || _ctrl.isAnimating) {
+      return;
+    }
+
+    if ((_currentHeight - target).abs() > 1) {
+      setState(() {
+        _expanded = false;
+        _currentHeight = target;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -162,6 +223,24 @@ class _SheetViewState extends State<SheetView>
       final h = box.size.height;
       if (h != _headerH) {
         setState(() => _headerH = h);
+        _syncHeightMode();
+      }
+    });
+  }
+
+  void _measureBody() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      final box = _bodyKey.currentContext?.findRenderObject() as RenderBox?;
+      if (box == null || !box.hasSize) {
+        return;
+      }
+      final h = box.size.height;
+      if ((h - _bodyH).abs() > 1) {
+        setState(() => _bodyH = h);
+        _syncHeightMode();
       }
     });
   }
@@ -176,6 +255,7 @@ class _SheetViewState extends State<SheetView>
           : _collapsed(context);
       _expanded = widget.startExpanded || !_inModalSheet;
       _heightInit = true;
+      _syncHeightMode(force: true);
     }
   }
 
@@ -187,6 +267,9 @@ class _SheetViewState extends State<SheetView>
   }
 
   void _toggle() {
+    if (_lockToContentHeight) {
+      return;
+    }
     final target = _expanded ? _collapsed(context) : _full(context);
     _animateTo(target, expanding: !_expanded);
   }
@@ -212,8 +295,11 @@ class _SheetViewState extends State<SheetView>
 
   void _onDragUpdate(DragUpdateDetails d) {
     final dy = d.globalPosition.dy - _dragStartY;
+    final minHeight = _lockToContentHeight
+        ? _contentHeight(context) * 0.3
+        : _collapsed(context) * 0.3;
     final h = (_dragStartH - dy).clamp(
-      _collapsed(context) * 0.3,
+      minHeight,
       _full(context),
     );
     setState(() => _currentHeight = h);
@@ -222,8 +308,18 @@ class _SheetViewState extends State<SheetView>
   void _onDragEnd(DragEndDetails d) {
     final vy = d.velocity.pixelsPerSecond.dy;
     final collapsed = _collapsed(context);
+    final content = _contentHeight(context);
     final full = _full(context);
     final mid = (collapsed + full) / 2;
+
+    if (_lockToContentHeight) {
+      if (vy > 600 || _currentHeight < content * 0.6) {
+        Navigator.of(context).maybePop();
+      } else {
+        _animateTo(content, expanding: false);
+      }
+      return;
+    }
 
     if (vy < -600 || (_currentHeight > mid && vy <= 600)) {
       _animateTo(full, expanding: true);
@@ -254,7 +350,7 @@ class _SheetViewState extends State<SheetView>
     if (isKeyboardOpen != _keyboardOpen) {
       _keyboardOpen = isKeyboardOpen;
       if (isKeyboardOpen) {
-        if (!_expanded) {
+        if (!_expanded && !_lockToContentHeight) {
           _wasExpandedBeforeKeyboard = false;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_expanded) _animateTo(_full(context), expanding: true);
@@ -263,7 +359,7 @@ class _SheetViewState extends State<SheetView>
           _wasExpandedBeforeKeyboard = true;
         }
       } else {
-        if (!_wasExpandedBeforeKeyboard) {
+        if (!_wasExpandedBeforeKeyboard && !_lockToContentHeight) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && _expanded) _animateTo(_collapsed(context), expanding: false);
           });
@@ -276,7 +372,16 @@ class _SheetViewState extends State<SheetView>
         _measureHeader();
       }
 
-      return Scaffold(
+      final backHandler =
+          widget.onBack ?? () => Navigator.of(context).maybePop();
+
+      return PopScope(
+        canPop: !widget.showBack,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          backHandler();
+        },
+        child: Scaffold(
         backgroundColor: context.cs.surface,
         resizeToAvoidBottomInset: false,
         body: Stack(
@@ -377,6 +482,7 @@ class _SheetViewState extends State<SheetView>
               ),
           ],
         ),
+        ),
       );
     }
 
@@ -392,6 +498,7 @@ class _SheetViewState extends State<SheetView>
     if (_hasHeader) {
       _measureHeader();
     }
+    _measureBody();
 
     return SizedBox(
       height: _currentHeight,
@@ -415,12 +522,29 @@ class _SheetViewState extends State<SheetView>
                         final newPadding = mediaQuery.padding.copyWith(
                           top: extraTop,
                         );
+                        final bodyTopInset = _lockToContentHeight
+                            ? extraTop
+                            : 0.0;
 
                         final innerChild = Padding(
-                          padding: widget.bodyPadding ?? EdgeInsets.zero,
+                          padding: EdgeInsets.only(top: bodyTopInset),
                           child: Padding(
-                            padding: EdgeInsets.only(bottom: isKeyboardOpen ? bottomInset + 10 : 0),
-                            child: widget.body,
+                          padding: widget.bodyPadding ?? EdgeInsets.zero,
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                bottom: isKeyboardOpen ? bottomInset + 10 : 0,
+                              ),
+                              child: Align(
+                                alignment: Alignment.topCenter,
+                                child: SizedBox(
+                                  width: double.infinity,
+                                  child: KeyedSubtree(
+                                    key: _bodyKey,
+                                    child: widget.body,
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
                         );
 

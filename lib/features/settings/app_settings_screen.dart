@@ -152,6 +152,14 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(hideTooltips: v)),
             ),
+            MenuSwitchItem(
+              label: 'Show Our Picks',
+              description: 'Shows "Our Picks" card at the beginning of My Characters list',
+              value: s.showOurPicks,
+              onChanged: (v) => ref
+                  .read(appSettingsProvider.notifier)
+                  .save(s.copyWith(showOurPicks: v)),
+            ),
           ],
         ),
         MenuGroup(

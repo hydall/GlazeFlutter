@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_toast.dart';
+import '../../../shared/widgets/sheet_view.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../sync_provider.dart';
 import '../sync_models.dart';
 import '../services/sync_conflict.dart';
 import '../services/sync_engine.dart';
+import '../services/sync_service.dart';
 
 class SyncSheet extends ConsumerStatefulWidget {
   const SyncSheet({super.key});
@@ -15,6 +22,58 @@ class SyncSheet extends ConsumerStatefulWidget {
 }
 
 class _SyncSheetState extends ConsumerState<SyncSheet> {
+  bool _isConnecting = false;
+  bool _isConnectingGdrive = false;
+  bool _isDisconnecting = false;
+  bool _isWiping = false;
+  Map<String, dynamic>? _syncResult;
+  bool _syncIncludeApiKeys = false;
+  String? _gdriveFolderId;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadIncludeApiKeys();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final service = ref.read(syncServiceProvider).value;
+      if (service != null) {
+        ref.read(syncConnectedProvider.notifier).state = service.isConnected();
+        ref.read(syncProviderProvider.notifier).state = service.provider;
+        ref.read(syncAutoEnabledProvider.notifier).state = service.autoSyncEnabled;
+        _resolveFolderIdIfNeeded();
+      }
+    });
+  }
+
+  void _loadIncludeApiKeys() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _syncIncludeApiKeys = prefs.getBool('gz_sync_include_api_keys') ?? false;
+    });
+  }
+
+  void _setIncludeApiKeys(bool val) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('gz_sync_include_api_keys', val);
+    setState(() {
+      _syncIncludeApiKeys = val;
+    });
+  }
+
+  void _resolveFolderIdIfNeeded() async {
+    final service = ref.read(syncServiceProvider).value;
+    if (service != null && service.provider == SyncProvider.gdrive && service.isConnected()) {
+      if (service.gdriveFolderId != null) {
+        setState(() => _gdriveFolderId = service.gdriveFolderId);
+      } else {
+        final id = await service.resolveGDriveFolderId();
+        if (mounted) {
+          setState(() => _gdriveFolderId = id);
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(syncStatusProvider);
@@ -24,77 +83,765 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     final conflicts = ref.watch(syncConflictsProvider);
     final lastError = ref.watch(syncLastErrorProvider);
     final autoEnabled = ref.watch(syncAutoEnabledProvider);
+    final service = ref.watch(syncServiceProvider).value;
 
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      appBar: AppBar(
-        title: const Text('Cloud Sync'),
-        leading: BackButton(onPressed: () => Navigator.of(context).pop()),
-        backgroundColor: const Color(0xFF16213E),
-        foregroundColor: Colors.white,
+    final isSyncing = status == SyncStatus.syncing || _isWiping;
+
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _goBack();
+      },
+      child: SheetView(
+        title: 'Cloud Sync',
+        showBack: true,
+        onBack: _goBack,
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!connected) ...[
+                _buildSectionHeader('Connect a Cloud Provider'),
+                const SizedBox(height: 4),
+                _buildProviderSelectorButton(
+                  icon: const DropboxIcon(size: 22, color: Colors.white),
+                  label: _isConnecting ? 'Connecting...' : 'Dropbox',
+                  color: context.colors.accent,
+                  onPressed: _isConnecting || _isConnectingGdrive ? null : _connectDropbox,
+                ),
+                const SizedBox(height: 8),
+                _buildProviderSelectorButton(
+                  icon: const GDriveIcon(size: 22, color: Colors.white),
+                  label: _isConnectingGdrive ? 'Connecting...' : 'Google Drive',
+                  color: const Color(0xFF4285F4),
+                  onPressed: _isConnecting || _isConnectingGdrive ? null : _connectGDrive,
+                ),
+                if (lastError != null) ...[
+                  const SizedBox(height: 12),
+                  _buildErrorCard(lastError),
+                ],
+              ] else ...[
+                // Connected status card
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: context.colors.accent.withValues(alpha: 0.05),
+                    border: Border.all(color: context.colors.accent.withValues(alpha: 0.15)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          if (provider == SyncProvider.dropbox)
+                            DropboxIcon(size: 24, color: context.colors.accent)
+                          else
+                            const GDriveIcon(size: 24, color: Color(0xFF4285F4)),
+                          const SizedBox(width: 8),
+                          Text(
+                            provider == SyncProvider.dropbox ? 'Dropbox' : 'Google Drive',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: context.cs.onSurface,
+                            ),
+                          ),
+                          const Spacer(),
+                          if (status == SyncStatus.syncing)
+                            const _PulsingDot(color: Color(0xFFFF9800))
+                          else if (status == SyncStatus.error)
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFF3B30),
+                                shape: BoxShape.circle,
+                              ),
+                            )
+                          else
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF4CAF50),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                        ],
+                      ),
+                      if (service?.accountInfo != null && service!.accountInfo!['email'] != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          service.accountInfo!['email'],
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 4),
+                      Text(
+                        _getStatusLabel(status, service),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: context.cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Folder ID row if GDrive
+                if (provider == SyncProvider.gdrive && _gdriveFolderId != null)
+                  Container(
+                    margin: const EdgeInsets.only(top: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Folder ID',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.cs.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _gdriveFolderId!,
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontSize: 11,
+                              color: Colors.white70,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          icon: const Icon(Icons.copy, size: 16, color: Colors.white54),
+                          onPressed: () {
+                            Clipboard.setData(ClipboardData(text: _gdriveFolderId!));
+                            GlazeToast.show(context, 'Folder ID copied');
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+
+                // Conflict Banner / Resolve section
+                if (conflicts.isNotEmpty)
+                  Container(
+                    margin: const EdgeInsets.only(top: 12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.05),
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.15)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 20),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Sync Conflicts (${conflicts.length})',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.orangeAccent,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        ...conflicts.map((c) => Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      c.name,
+                                      style: const TextStyle(fontSize: 13, color: Colors.white70),
+                                    ),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _resolveConflict(c, 'local'),
+                                    child: const Text('Keep Local', style: TextStyle(color: Colors.blueAccent)),
+                                  ),
+                                  TextButton(
+                                    onPressed: () => _resolveConflict(c, 'cloud'),
+                                    child: const Text('Use Cloud', style: TextStyle(color: Colors.greenAccent)),
+                                  ),
+                                ],
+                              ),
+                            )),
+                      ],
+                    ),
+                  ),
+
+                // Sync result card
+                if (_syncResult != null) ...[
+                  _buildSyncResultCard(_syncResult!),
+                ],
+
+                // Linear Progress bar during Sync
+                if (status == SyncStatus.syncing && progress != null) ...[
+                  _buildProgressBar(progress),
+                ],
+
+                // Error Card if any
+                if (lastError != null) ...[
+                  const SizedBox(height: 12),
+                  _buildErrorCard(lastError),
+                ],
+
+                // Manual Sync section
+                const SizedBox(height: 16),
+                _buildSectionHeader('Manual Sync'),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildManualButton(
+                        onPressed: isSyncing ? null : () => _doSync('push'),
+                        icon: Icons.cloud_upload_outlined,
+                        label: 'Push',
+                        primary: false,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildManualButton(
+                        onPressed: isSyncing ? null : () => _doSync('pull'),
+                        icon: Icons.cloud_download_outlined,
+                        label: 'Pull',
+                        primary: true,
+                      ),
+                    ),
+                  ],
+                ),
+
+                // Sync settings section
+                const SizedBox(height: 16),
+                _buildSectionHeader('Sync Settings'),
+                const SizedBox(height: 4),
+                // Auto Sync Toggle
+                GestureDetector(
+                  onTap: () {
+                    _setAutoSync(!autoEnabled);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    color: Colors.transparent,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Enable Auto-Sync',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: context.cs.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Automatically sync after every N messages',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: autoEnabled,
+                          onChanged: _setAutoSync,
+                          activeColor: context.colors.accent,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                // Auto sync threshold count picker
+                if (autoEnabled && service != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(top: 4, bottom: 8),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Every ',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: context.cs.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _buildCountButton(
+                          icon: Icons.remove,
+                          onPressed: service.autoSyncMessageCount > 1
+                              ? () => _updateAutoSyncThreshold(service.autoSyncMessageCount - 1)
+                              : null,
+                        ),
+                        Container(
+                          width: 50,
+                          alignment: Alignment.center,
+                          child: Text(
+                            '${service.autoSyncMessageCount}',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: context.cs.onSurface,
+                            ),
+                          ),
+                        ),
+                        _buildCountButton(
+                          icon: Icons.add,
+                          onPressed: service.autoSyncMessageCount < 50
+                              ? () => _updateAutoSyncThreshold(service.autoSyncMessageCount + 1)
+                              : null,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          ' messages',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: context.cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                // Include API keys in sync
+                GestureDetector(
+                  onTap: () {
+                    _setIncludeApiKeys(!_syncIncludeApiKeys);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    color: Colors.transparent,
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Include API Keys in Sync',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                  color: context.cs.onSurface,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Send provider API keys to cloud backup',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: context.cs.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: _syncIncludeApiKeys,
+                          onChanged: _setIncludeApiKeys,
+                          activeColor: context.colors.accent,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Danger zone section
+                const SizedBox(height: 16),
+                Divider(color: Colors.white.withValues(alpha: 0.1), height: 1),
+                const SizedBox(height: 16),
+                _buildDangerButton(
+                  icon: Icons.logout_rounded,
+                  label: 'Disconnect',
+                  onPressed: _isDisconnecting ? null : _disconnect,
+                ),
+                const SizedBox(height: 8),
+                _buildDangerButton(
+                  icon: Icons.delete_outline_rounded,
+                  label: _isWiping ? 'Wiping...' : 'Wipe Cloud Data',
+                  onPressed: _isWiping ? null : _wipeCloudData,
+                  light: true,
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+    );
+  }
+
+  void _goBack() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      context.go('/menu');
+    }
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4, bottom: 8, top: 12),
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProviderSelectorButton({
+    required Widget icon,
+    required String label,
+    required Color color,
+    required VoidCallback? onPressed,
+  }) {
+    final disabled = onPressed == null;
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onPressed,
+        child: Opacity(
+          opacity: disabled ? 0.7 : 1.0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                icon,
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildManualButton({
+    required VoidCallback? onPressed,
+    required IconData icon,
+    required String label,
+    required bool primary,
+  }) {
+    final accent = context.colors.accent;
+    final bg = primary ? accent : accent.withValues(alpha: 0.1);
+    final fg = primary ? Colors.white : accent;
+    final disabled = onPressed == null;
+
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onPressed,
+        child: Opacity(
+          opacity: disabled ? 0.7 : 1.0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 22, color: fg),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: fg,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDangerButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback? onPressed,
+    bool light = false,
+  }) {
+    final disabled = onPressed == null;
+    final bg = light ? const Color(0xFFFF3B30).withValues(alpha: 0.05) : const Color(0xFFFF3B30).withValues(alpha: 0.1);
+    return Material(
+      color: bg,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onPressed,
+        child: Opacity(
+          opacity: disabled ? 0.7 : 1.0,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 22, color: const Color(0xFFFF3B30)),
+                const SizedBox(width: 10),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFFF3B30),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCountButton({required IconData icon, VoidCallback? onPressed}) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.05),
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: onPressed,
+        child: Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: onPressed == null ? Colors.white24 : Colors.white70),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorCard(String error) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFF3B30).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _ProviderSelector(
-            provider: provider,
-            onChanged: (p) => ref.read(syncProviderProvider.notifier).state = p,
-          ),
-          const SizedBox(height: 16),
-          _ConnectButton(
-            provider: provider,
-            connected: connected,
-            onConnect: _connect,
-            onDisconnect: _disconnect,
-          ),
-          if (connected) ...[
-            const SizedBox(height: 16),
-            _SyncActions(
-              status: status,
-              onPush: () => _doSync('push'),
-              onPull: () => _doSync('pull'),
-              onFullSync: () => _doSync('full'),
+          const Icon(Icons.error_outline, color: Color(0xFFFF3B30), size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              error,
+              style: const TextStyle(color: Color(0xFFFF3B30), fontSize: 13, height: 1.4),
             ),
-          ],
-          if (progress != null) ...[
-            const SizedBox(height: 16),
-            _ProgressBar(progress: progress),
-          ],
-          if (lastError != null) ...[
-            const SizedBox(height: 16),
-            _ErrorCard(error: lastError),
-          ],
-          if (conflicts.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _ConflictList(
-              conflicts: conflicts,
-              onResolve: _resolveConflict,
-            ),
-          ],
-          const SizedBox(height: 16),
-          _AutoSyncToggle(
-            enabled: autoEnabled,
-            onChanged: (v) => ref.read(syncAutoEnabledProvider.notifier).state = v,
           ),
         ],
       ),
     );
   }
 
-  Future<void> _connect() async {
+  Widget _buildSyncResultCard(Map<String, dynamic> result) {
+    final type = result['type'];
+    final pushed = result['pushed'];
+    final pulled = result['pulled'];
+    final deleted = result['deleted'];
+    final total = result['total'];
+    final conflictsCount = result['conflictsCount'] ?? 0;
+
+    String message = '';
+    Color cardColor = const Color(0xFF4CAF50).withValues(alpha: 0.1);
+    Color textColor = const Color(0xFF4CAF50);
+
+    if (type == 'push') {
+      message = 'Pushed: $pushed items';
+    } else if (type == 'pull') {
+      message = 'Pulled: $pulled items';
+      if (conflictsCount > 0) {
+        message += ', $conflictsCount conflicts';
+      }
+      cardColor = context.colors.accent.withValues(alpha: 0.1);
+      textColor = context.colors.accent;
+    } else if (type == 'wipe') {
+      message = total == 'all' ? 'Cloud data wiped' : 'Deleted: $deleted/$total items';
+    } else {
+      message = 'Full sync complete';
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: 13,
+                color: textColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          if (type == 'pull' && conflictsCount > 0)
+            TextButton(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                backgroundColor: Colors.orange.withValues(alpha: 0.15),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              ),
+              onPressed: () {
+                // Focus / view conflicts
+              },
+              child: const Text(
+                'Resolve',
+                style: TextStyle(fontSize: 12, color: Colors.orangeAccent, fontWeight: FontWeight.bold),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressBar(SyncProgress p) {
+    final pct = p.total > 0 ? (p.current / p.total).clamp(0.0, 1.0) : 0.0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          p.message ?? 'Syncing...',
+          style: TextStyle(
+            fontSize: 12,
+            color: context.cs.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(2),
+          child: LinearProgressIndicator(
+            value: pct,
+            backgroundColor: Colors.white.withValues(alpha: 0.1),
+            valueColor: AlwaysStoppedAnimation<Color>(context.colors.accent),
+            minHeight: 4,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${p.current}/${p.total}',
+          style: TextStyle(
+            fontSize: 11,
+            color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _getStatusLabel(SyncStatus status, SyncService? service) {
+    if (status == SyncStatus.syncing) return 'Syncing...';
+    if (status == SyncStatus.error) return 'Error';
+    if (status == SyncStatus.conflict) return 'Conflict detected';
+    if (service?.lastSyncTime != null) {
+      return 'Last sync: ${_formatTimeAgo(service!.lastSyncTime!)}';
+    }
+    return 'Ready';
+  }
+
+  String _formatTimeAgo(int ts) {
+    final diff = (DateTime.now().millisecondsSinceEpoch - ts) ~/ 1000;
+    if (diff < 60) return 'just now';
+    if (diff < 3600) return '${diff ~/ 60}m ago';
+    if (diff < 86400) return '${diff ~/ 3600}h ago';
+    return '${diff ~/ 86400}d ago';
+  }
+
+  Future<void> _connectDropbox() async {
     final service = ref.read(syncServiceProvider).value;
     if (service == null) return;
-    final provider = ref.read(syncProviderProvider);
+    setState(() => _isConnecting = true);
     try {
-      if (provider == SyncProvider.dropbox) {
-        await service.connectDropbox();
-      } else {
-        await service.connectGDrive();
-      }
+      await service.connectDropbox();
       ref.read(syncConnectedProvider.notifier).state = true;
+      ref.read(syncProviderProvider.notifier).state = SyncProvider.dropbox;
+      ref.read(syncStatusProvider.notifier).state = service.status;
+      ref.read(syncLastErrorProvider.notifier).state = null;
+      _resolveFolderIdIfNeeded();
     } catch (e) {
       if (mounted) {
-        GlazeToast.error(context, 'Connection failed: ', e);
+        GlazeToast.error(context, 'Dropbox connection failed: ', e);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isConnecting = false);
+      }
+    }
+  }
+
+  Future<void> _connectGDrive() async {
+    final service = ref.read(syncServiceProvider).value;
+    if (service == null) return;
+    setState(() => _isConnectingGdrive = true);
+    try {
+      await service.connectGDrive();
+      ref.read(syncConnectedProvider.notifier).state = true;
+      ref.read(syncProviderProvider.notifier).state = SyncProvider.gdrive;
+      ref.read(syncStatusProvider.notifier).state = service.status;
+      ref.read(syncLastErrorProvider.notifier).state = null;
+      _resolveFolderIdIfNeeded();
+    } catch (e) {
+      if (mounted) {
+        GlazeToast.error(context, 'Google Drive connection failed: ', e);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isConnectingGdrive = false);
       }
     }
   }
@@ -102,8 +849,141 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   Future<void> _disconnect() async {
     final service = ref.read(syncServiceProvider).value;
     if (service == null) return;
-    await service.disconnect();
-    ref.read(syncConnectedProvider.notifier).state = false;
+
+    final confirmed = await GlazeBottomSheet.show<bool>(
+      context,
+      title: 'Disconnect',
+      bigInfo: const BottomSheetBigInfo(
+        icon: Icons.link_off_rounded,
+        description: 'Disconnect cloud sync? Your local data will remain intact.',
+      ),
+      items: [
+        BottomSheetItem(
+          label: 'Disconnect',
+          isDestructive: true,
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+        ),
+      ],
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isDisconnecting = true);
+    try {
+      await service.disconnect();
+      ref.read(syncConnectedProvider.notifier).state = false;
+      ref.read(syncProviderProvider.notifier).state = SyncProvider.dropbox;
+      ref.read(syncStatusProvider.notifier).state = service.status;
+      setState(() {
+        _syncResult = null;
+        _gdriveFolderId = null;
+      });
+    } catch (e) {
+      if (mounted) {
+        GlazeToast.error(context, 'Disconnect failed: ', e);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDisconnecting = false);
+      }
+    }
+  }
+
+  Future<void> _wipeCloudData() async {
+    final service = ref.read(syncServiceProvider).value;
+    if (service == null) return;
+
+    final providerLabel = service.provider == SyncProvider.dropbox ? 'Dropbox' : 'Google Drive';
+
+    // Step 1: Warning dialog
+    final confirmed = await GlazeBottomSheet.show<bool>(
+      context,
+      title: 'Wipe Cloud Data',
+      bigInfo: const BottomSheetBigInfo(
+        icon: Icons.warning_amber_rounded,
+        description: 'Delete ALL data from cloud? This cannot be undone. Your local data will remain intact.',
+      ),
+      items: [
+        BottomSheetItem(
+          label: 'Wipe Cloud Data',
+          isDestructive: true,
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+        ),
+      ],
+    );
+
+    if (confirmed != true) return;
+
+    // Step 2: Confirmation input dialog
+    if (!mounted) return;
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: 'Wipe Cloud Data',
+      bigInfo: BottomSheetBigInfo(
+        icon: Icons.delete_forever_rounded,
+        description: 'Are you sure? Type "$providerLabel" to confirm.',
+      ),
+      input: BottomSheetInput(
+        placeholder: providerLabel,
+        confirmLabel: 'Confirm',
+        onConfirm: (typed) async {
+          Navigator.of(context, rootNavigator: true).pop(); // Close input sheet
+          if (typed.trim().toLowerCase() != providerLabel.toLowerCase()) {
+            if (context.mounted) {
+              GlazeToast.show(context, 'Wipe cancelled: Provider name did not match.', isError: true);
+            }
+            return;
+          }
+
+          // Execute wipe!
+          setState(() {
+            _isWiping = true;
+            _syncResult = null;
+          });
+
+          try {
+            await service.wipeCloudData(
+              onProgress: (p) {
+                if (mounted) {
+                  ref.read(syncProgressProvider.notifier).state = p;
+                }
+              },
+            );
+            ref.read(syncStatusProvider.notifier).state = service.status;
+            setState(() {
+              _syncResult = {
+                'type': 'wipe',
+                'total': 'all',
+              };
+            });
+            if (context.mounted) {
+              GlazeToast.show(context, 'Cloud data wiped successfully.');
+            }
+          } catch (e) {
+            if (mounted) {
+              GlazeToast.error(context, 'Wipe failed: ', e);
+            }
+          } finally {
+            if (mounted) {
+              setState(() => _isWiping = false);
+              ref.read(syncProgressProvider.notifier).state = null;
+            }
+          }
+        },
+      ),
+    );
   }
 
   Future<void> _doSync(String mode) async {
@@ -112,23 +992,58 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
 
     ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
     ref.read(syncLastErrorProvider.notifier).state = null;
+    setState(() => _syncResult = null);
 
+    int itemsCount = 0;
     try {
       switch (mode) {
         case 'push':
           await service.fullPush(
-            onProgress: (p) => ref.read(syncProgressProvider.notifier).state = p,
+            onProgress: (p) {
+              if (mounted) {
+                ref.read(syncProgressProvider.notifier).state = p;
+                itemsCount = p.total;
+              }
+            },
           );
+          setState(() {
+            _syncResult = {
+              'type': 'push',
+              'pushed': itemsCount,
+            };
+          });
           break;
         case 'pull':
           await service.fullPull(
-            onProgress: (p) => ref.read(syncProgressProvider.notifier).state = p,
+            onProgress: (p) {
+              if (mounted) {
+                ref.read(syncProgressProvider.notifier).state = p;
+                itemsCount = p.total;
+              }
+            },
           );
+          setState(() {
+            _syncResult = {
+              'type': 'pull',
+              'pulled': itemsCount,
+              'conflictsCount': service.conflicts.length,
+            };
+          });
           break;
         case 'full':
           await service.fullSync(
-            onProgress: (p) => ref.read(syncProgressProvider.notifier).state = p,
+            onProgress: (p) {
+              if (mounted) {
+                ref.read(syncProgressProvider.notifier).state = p;
+                itemsCount = p.total;
+              }
+            },
           );
+          setState(() {
+            _syncResult = {
+              'type': 'full',
+            };
+          });
           break;
       }
       ref.read(syncStatusProvider.notifier).state = service.status;
@@ -136,8 +1051,11 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     } catch (e) {
       ref.read(syncLastErrorProvider.notifier).state = e.toString();
       ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
+    } finally {
+      if (mounted) {
+        ref.read(syncProgressProvider.notifier).state = null;
+      }
     }
-    ref.read(syncProgressProvider.notifier).state = null;
   }
 
   Future<void> _resolveConflict(SyncConflict conflict, String choice) async {
@@ -149,278 +1067,156 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       ref.read(syncStatusProvider.notifier).state = SyncStatus.idle;
     }
   }
-}
 
-class _ProviderSelector extends StatelessWidget {
-  final SyncProvider provider;
-  final ValueChanged<SyncProvider> onChanged;
-
-  const _ProviderSelector({required this.provider, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFF16213E),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Provider', style: TextStyle(color: Colors.white70, fontSize: 12)),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _ProviderChip(
-                  label: 'Dropbox',
-                  selected: provider == SyncProvider.dropbox,
-                  onTap: () => onChanged(SyncProvider.dropbox),
-                ),
-                const SizedBox(width: 8),
-                _ProviderChip(
-                  label: 'Google Drive',
-                  selected: provider == SyncProvider.gdrive,
-                  onTap: () => onChanged(SyncProvider.gdrive),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProviderChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ProviderChip({required this.label, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected,
-      onSelected: (_) => onTap(),
-      selectedColor: const Color(0xFF0F3460),
-      backgroundColor: const Color(0xFF1A1A2E),
-      labelStyle: TextStyle(color: selected ? Colors.white : Colors.white54),
-    );
-  }
-}
-
-class _ConnectButton extends StatelessWidget {
-  final SyncProvider provider;
-  final bool connected;
-  final VoidCallback onConnect;
-  final VoidCallback onDisconnect;
-
-  const _ConnectButton({
-    required this.provider,
-    required this.connected,
-    required this.onConnect,
-    required this.onDisconnect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (connected) {
-      return OutlinedButton.icon(
-        onPressed: onDisconnect,
-        icon: const Icon(Icons.link_off, color: Colors.redAccent),
-        label: const Text('Disconnect', style: TextStyle(color: Colors.redAccent)),
-        style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.redAccent)),
-      );
+  void _setAutoSync(bool val) async {
+    final service = ref.read(syncServiceProvider).value;
+    if (service != null) {
+      await service.setAutoSync(val, messageCount: service.autoSyncMessageCount);
+      ref.read(syncAutoEnabledProvider.notifier).state = val;
     }
-    return FilledButton.icon(
-      onPressed: onConnect,
-      icon: const Icon(Icons.link),
-      label: Text('Connect ${provider == SyncProvider.dropbox ? 'Dropbox' : 'Google Drive'}'),
-      style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F3460)),
+  }
+
+  void _updateAutoSyncThreshold(int count) async {
+    final service = ref.read(syncServiceProvider).value;
+    if (service != null) {
+      await service.setAutoSync(service.autoSyncEnabled, messageCount: count);
+      setState(() {});
+    }
+  }
+}
+
+class DropboxIcon extends StatelessWidget {
+  final double size;
+  final Color? color;
+  const DropboxIcon({super.key, this.size = 22, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: Size(size, size),
+      painter: _DropboxIconPainter(color ?? Colors.white),
     );
   }
 }
 
-class _SyncActions extends StatelessWidget {
-  final SyncStatus status;
-  final VoidCallback onPush;
-  final VoidCallback onPull;
-  final VoidCallback onFullSync;
+class _DropboxIconPainter extends CustomPainter {
+  final Color color;
+  _DropboxIconPainter(this.color);
 
-  const _SyncActions({
-    required this.status,
-    required this.onPush,
-    required this.onPull,
-    required this.onFullSync,
-  });
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    final scaleX = size.width / 24.0;
+    final scaleY = size.height / 24.0;
+
+    void drawPath(List<Offset> points) {
+      final path = Path();
+      path.moveTo(points[0].dx * scaleX, points[0].dy * scaleY);
+      for (var i = 1; i < points.length; i++) {
+        path.lineTo(points[i].dx * scaleX, points[i].dy * scaleY);
+      }
+      path.close();
+      canvas.drawPath(path, paint);
+    }
+
+    drawPath([const Offset(6.5, 2), const Offset(2, 5), const Offset(6.5, 8), const Offset(11, 5)]);
+    drawPath([const Offset(17.5, 2), const Offset(13, 5), const Offset(17.5, 8), const Offset(22, 5)]);
+    drawPath([const Offset(6.5, 8), const Offset(2, 11), const Offset(6.5, 14), const Offset(11, 11)]);
+    drawPath([const Offset(17.5, 8), const Offset(13, 11), const Offset(17.5, 14), const Offset(22, 11)]);
+    drawPath([const Offset(12, 14), const Offset(7.5, 17), const Offset(12, 20), const Offset(16.5, 17)]);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class GDriveIcon extends StatelessWidget {
+  final double size;
+  final Color? color;
+  const GDriveIcon({super.key, this.size = 22, this.color});
 
   @override
   Widget build(BuildContext context) {
-    final syncing = status == SyncStatus.syncing;
-    return Card(
-      color: const Color(0xFF16213E),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: syncing ? null : onFullSync,
-                icon: const Icon(Icons.sync),
-                label: const Text('Full Sync (Push + Pull)'),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: syncing ? null : onPush,
-                    icon: const Icon(Icons.cloud_upload),
-                    label: const Text('Push'),
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.white70),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: syncing ? null : onPull,
-                    icon: const Icon(Icons.cloud_download),
-                    label: const Text('Pull'),
-                    style: OutlinedButton.styleFrom(foregroundColor: Colors.white70),
-                  ),
-                ),
-              ],
+    return CustomPaint(
+      size: Size(size, size),
+      painter: _GDriveIconPainter(color ?? Colors.white),
+    );
+  }
+}
+
+class _GDriveIconPainter extends CustomPainter {
+  final Color color;
+  _GDriveIconPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    final scaleX = size.width / 24.0;
+    final scaleY = size.height / 24.0;
+
+    final path = Path()
+      ..moveTo(7.71 * scaleX, 3.5 * scaleY)
+      ..lineTo(16.29 * scaleX, 3.5 * scaleY)
+      ..lineTo(22.85 * scaleX, 15.0 * scaleY)
+      ..lineTo(18.27 * scaleX, 22.5 * scaleY)
+      ..lineTo(5.73 * scaleX, 22.5 * scaleY)
+      ..lineTo(1.15 * scaleX, 15.0 * scaleY)
+      ..close();
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _PulsingDot extends StatefulWidget {
+  final Color color;
+  const _PulsingDot({required this.color});
+
+  @override
+  State<_PulsingDot> createState() => _PulsingDotState();
+}
+
+class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.3, end: 1.0).animate(_controller),
+      child: Container(
+        width: 10,
+        height: 10,
+        decoration: BoxDecoration(
+          color: widget.color,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: widget.color.withValues(alpha: 0.4),
+              blurRadius: 4,
+              spreadRadius: 1,
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ProgressBar extends StatelessWidget {
-  final SyncProgress progress;
-
-  const _ProgressBar({required this.progress});
-
-  @override
-  Widget build(BuildContext context) {
-    final pct = progress.total > 0 ? progress.current / progress.total : 0.0;
-    return Card(
-      color: const Color(0xFF16213E),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              progress.message ?? 'Syncing...',
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-            const SizedBox(height: 8),
-            LinearProgressIndicator(value: pct, backgroundColor: const Color(0xFF1A1A2E)),
-            const SizedBox(height: 4),
-            Text(
-              '${progress.current}/${progress.total}',
-              style: const TextStyle(color: Colors.white38, fontSize: 11),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ErrorCard extends StatelessWidget {
-  final String error;
-
-  const _ErrorCard({required this.error});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: Colors.redAccent.withOpacity(0.15),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(error, style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ConflictList extends StatelessWidget {
-  final List<SyncConflict> conflicts;
-  final Future<void> Function(SyncConflict, String) onResolve;
-
-  const _ConflictList({required this.conflicts, required this.onResolve});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFF16213E),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Conflicts (${conflicts.length})',
-              style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-            ...conflicts.map((c) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(c.name, style: const TextStyle(color: Colors.white70)),
-                      ),
-                      TextButton(
-                        onPressed: () => onResolve(c, 'local'),
-                        child: const Text('Keep Local', style: TextStyle(color: Colors.blueAccent)),
-                      ),
-                      TextButton(
-                        onPressed: () => onResolve(c, 'cloud'),
-                        child: const Text('Use Cloud', style: TextStyle(color: Colors.greenAccent)),
-                      ),
-                    ],
-                  ),
-                )),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AutoSyncToggle extends StatelessWidget {
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
-
-  const _AutoSyncToggle({required this.enabled, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      color: const Color(0xFF16213E),
-      child: SwitchListTile(
-        title: const Text('Auto-sync after messages', style: TextStyle(color: Colors.white70)),
-        subtitle: const Text('Automatically push after every 5 messages',
-            style: TextStyle(color: Colors.white38, fontSize: 12)),
-        value: enabled,
-        onChanged: onChanged,
-        activeColor: const Color(0xFF0F3460),
       ),
     );
   }

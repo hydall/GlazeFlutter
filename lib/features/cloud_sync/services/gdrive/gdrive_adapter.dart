@@ -98,6 +98,10 @@ class GDriveAdapter implements CloudAdapter {
     return Future.value();
   }
 
+  String? get glazeFolderId => _folders.glazeFolderId;
+
+  Future<String> getGlazeFolderId() => _folders.getGlazeFolderId();
+
   Future<void> _ensureParent(String path) async {
     final parts = path.split('/').where((s) => s.isNotEmpty).toList();
     if (parts.length < 2) return;

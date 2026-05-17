@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/context_calculator.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../chat_provider.dart';
 
 const kSourceMeta = <String, SourceMeta>{
@@ -343,25 +344,31 @@ class TokenizerActionButtons extends ConsumerWidget {
     );
   }
 
-  void _confirmHide(BuildContext context, WidgetRef ref, int count) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Hide Messages'),
-        content: Text('Hide the top $count visible message${count > 1 ? 's' : ''} from prompt? They will still be visible in chat (dimmed) but excluded from generation.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              await ref.read(chatProvider(charId).notifier).hideTopMessages(count);
-              onRefresh();
-            },
-            child: Text('Hide $count'),
-          ),
-        ],
+  void _confirmHide(BuildContext context, WidgetRef ref, int count) async {
+    final confirmed = await GlazeBottomSheet.show<bool>(
+      context,
+      title: 'Hide Messages',
+      bigInfo: BottomSheetBigInfo(
+        icon: Icons.visibility_off_outlined,
+        description: 'Hide the top $count visible message${count > 1 ? 's' : ''} from prompt? They will still be visible in chat (dimmed) but excluded from generation.',
       ),
+      items: [
+        BottomSheetItem(
+          label: 'Hide $count',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+        ),
+      ],
     );
+    if (confirmed == true) {
+      await ref.read(chatProvider(charId).notifier).hideTopMessages(count);
+      onRefresh();
+    }
   }
 }
 

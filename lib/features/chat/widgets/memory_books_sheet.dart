@@ -409,16 +409,26 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   }
 
   void _deleteAllMemoryIndexes() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Memory Indexes'),
-        content: const Text('Remove all stored memory embeddings? You will need to re-index after.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete All')),
-        ],
+    final confirmed = await GlazeBottomSheet.show<bool>(
+      context,
+      title: 'Delete All Indexes',
+      bigInfo: const BottomSheetBigInfo(
+        icon: Icons.delete_outline,
+        description: 'Remove all stored memory embeddings? You will need to re-index after.',
       ),
+      items: [
+        BottomSheetItem(
+          label: 'Delete All',
+          isDestructive: true,
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+        ),
+      ],
     );
     if (confirmed != true) return;
 

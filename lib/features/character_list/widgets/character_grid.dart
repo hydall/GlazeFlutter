@@ -17,6 +17,9 @@ class CharacterGrid extends StatelessWidget {
   final double topPadding;
   final double bottomPadding;
   final Widget? tabBar;
+  final bool showOurPicksCard;
+  final VoidCallback? onOurPicksTap;
+  final VoidCallback? onOurPicksHide;
 
   const CharacterGrid({
     super.key,
@@ -28,6 +31,9 @@ class CharacterGrid extends StatelessWidget {
     this.topPadding = 0,
     this.bottomPadding = 16,
     this.tabBar,
+    this.showOurPicksCard = false,
+    this.onOurPicksTap,
+    this.onOurPicksHide,
   });
 
   @override
@@ -68,7 +74,12 @@ class CharacterGrid extends StatelessWidget {
         SliverPadding(
           padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
           sliver: SliverToBoxAdapter(
-            child: _AnimatedCharacterGrid(characters: characters),
+            child: _AnimatedCharacterGrid(
+              characters: characters,
+              showOurPicksCard: showOurPicksCard,
+              onOurPicksTap: onOurPicksTap,
+              onOurPicksHide: onOurPicksHide,
+            ),
           ),
         ),
       ],
@@ -113,8 +124,16 @@ class _SortDirButton extends StatelessWidget {
 
 class _AnimatedCharacterGrid extends StatelessWidget {
   final List<Character> characters;
+  final bool showOurPicksCard;
+  final VoidCallback? onOurPicksTap;
+  final VoidCallback? onOurPicksHide;
 
-  const _AnimatedCharacterGrid({required this.characters});
+  const _AnimatedCharacterGrid({
+    required this.characters,
+    required this.showOurPicksCard,
+    this.onOurPicksTap,
+    this.onOurPicksHide,
+  });
 
   static const _crossAxisCount = 2;
   static const _spacing = 10.0;
@@ -122,7 +141,8 @@ class _AnimatedCharacterGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (characters.isEmpty) return const SizedBox.shrink();
+    final totalCount = characters.length + (showOurPicksCard ? 1 : 0);
+    if (totalCount == 0) return const SizedBox.shrink();
 
     return LayoutBuilder(
       builder: (ctx, constraints) {
@@ -131,7 +151,7 @@ class _AnimatedCharacterGrid extends StatelessWidget {
                 _crossAxisCount;
         final cellH = cellW / _aspectRatio;
         final rows =
-            (characters.length + _crossAxisCount - 1) ~/ _crossAxisCount;
+            (totalCount + _crossAxisCount - 1) ~/ _crossAxisCount;
         final totalH = rows * cellH + (rows - 1) * _spacing;
 
         return SizedBox(
@@ -139,21 +159,277 @@ class _AnimatedCharacterGrid extends StatelessWidget {
           child: Stack(
             clipBehavior: Clip.none,
             children: [
-              for (int i = 0; i < characters.length; i++)
+              if (showOurPicksCard)
                 AnimatedPositioned(
-                  key: ValueKey(characters[i].id),
+                  key: const ValueKey('our_picks_card'),
                   duration: const Duration(milliseconds: 350),
                   curve: Curves.easeOutCubic,
-                  left: (i % _crossAxisCount) * (cellW + _spacing),
-                  top: (i ~/ _crossAxisCount) * (cellH + _spacing),
+                  left: 0,
+                  top: 0,
                   width: cellW,
                   height: cellH,
-                  child: CharacterCard(character: characters[i]),
+                  child: _OurPicksCard(
+                    onTap: onOurPicksTap,
+                    onHide: onOurPicksHide,
+                  ),
                 ),
+              for (int i = 0; i < characters.length; i++)
+                (() {
+                  final gridIndex = i + (showOurPicksCard ? 1 : 0);
+                  return AnimatedPositioned(
+                    key: ValueKey(characters[i].id),
+                    duration: const Duration(milliseconds: 350),
+                    curve: Curves.easeOutCubic,
+                    left: (gridIndex % _crossAxisCount) * (cellW + _spacing),
+                    top: (gridIndex ~/ _crossAxisCount) * (cellH + _spacing),
+                    width: cellW,
+                    height: cellH,
+                    child: CharacterCard(character: characters[i]),
+                  );
+                })(),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _OurPicksCard extends StatefulWidget {
+  final VoidCallback? onTap;
+  final VoidCallback? onHide;
+
+  const _OurPicksCard({this.onTap, this.onHide});
+
+  @override
+  State<_OurPicksCard> createState() => _OurPicksCardState();
+}
+
+class _OurPicksCardState extends State<_OurPicksCard> {
+  bool _pressed = false;
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = _pressed ? 0.96 : (_hovered ? 1.01 : 1.0);
+    final dy = _hovered && !_pressed ? -4.0 : 0.0;
+    final shadowAlpha = _hovered ? 0.3 : 0.1;
+    final shadowColor = Colors.black.withValues(alpha: shadowAlpha);
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      builder: (_, t, child) => Opacity(
+        opacity: t,
+        child: Transform.scale(
+          scale: 0.9 + 0.1 * t,
+          child: child,
+        ),
+      ),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutBack,
+            transform: Matrix4.identity()
+              ..translateByDouble(0.0, dy, 0.0, 1.0)
+              ..scaleByDouble(scale, scale, 1.0, 1.0),
+            transformAlignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: shadowColor,
+                  blurRadius: _hovered ? 24 : 6,
+                  offset: Offset(0, _hovered ? 12 : 4),
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AnimatedScale(
+                    scale: _hovered ? 1.05 : 1.0,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            context.cs.primary,
+                            context.cs.secondary,
+                          ],
+                        ),
+                      ),
+                      child: Center(
+                        child: Icon(
+                          Icons.star_rounded,
+                          size: 72,
+                          color: Colors.white.withValues(alpha: 0.25),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 150,
+                    child: _OurPicksBottomGradient(),
+                  ),
+                  const Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: _OurPicksCardInfo(),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: _OurPicksCardMenuButton(
+                      onTap: () {
+                        GlazeBottomSheet.show(
+                          context,
+                          title: 'Our Picks',
+                          items: [
+                            BottomSheetItem(
+                              icon: Icons.visibility_off_rounded,
+                              label: 'Hide',
+                              hint: 'можно вернуть из настроек приложения',
+                              onTap: () {
+                                Navigator.of(context, rootNavigator: true).pop();
+                                widget.onHide?.call();
+                              },
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            width: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OurPicksBottomGradient extends StatelessWidget {
+  const _OurPicksBottomGradient();
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Color(0xF2000000), Color(0x99000000), Colors.transparent],
+          stops: [0.0, 0.5, 1.0],
+        ),
+      ),
+    );
+  }
+}
+
+class _OurPicksCardInfo extends StatelessWidget {
+  const _OurPicksCardInfo();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  'Our Picks',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(blurRadius: 4, color: Colors.black54),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            'Hand-picked featured characters from the Glaze team!',
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.white.withValues(alpha: 0.75),
+              height: 1.3,
+              shadows: const [Shadow(blurRadius: 4, color: Colors.black87)],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OurPicksCardMenuButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _OurPicksCardMenuButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.5),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.more_vert_rounded,
+          size: 18,
+          color: Colors.white,
+        ),
+      ),
     );
   }
 }

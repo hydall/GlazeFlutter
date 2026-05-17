@@ -54,6 +54,24 @@ class SyncService {
   bool get isSyncing => _status == SyncStatus.syncing;
   bool get hasConflicts => _conflicts.isNotEmpty;
 
+  String? get gdriveFolderId {
+    if (_provider != SyncProvider.gdrive) return null;
+    final adapter = _adapter;
+    if (adapter is GDriveAdapter) {
+      return adapter.glazeFolderId;
+    }
+    return null;
+  }
+
+  Future<String?> resolveGDriveFolderId() async {
+    if (_provider != SyncProvider.gdrive) return null;
+    final adapter = _adapter;
+    if (adapter is GDriveAdapter) {
+      return await adapter.getGlazeFolderId();
+    }
+    return null;
+  }
+
   SyncService({
     required CharacterRepo characterRepo,
     required ChatRepo chatRepo,
@@ -187,6 +205,26 @@ class SyncService {
     }
   }
 
+  Future<void> wipeCloudData({
+    void Function(SyncProgress)? onProgress,
+  }) async {
+    if (_status == SyncStatus.syncing) return;
+    _status = SyncStatus.syncing;
+    _lastError = null;
+
+    try {
+      final engine = _engine;
+      await engine.wipeCloudData(
+        onProgress: onProgress ?? (_) {},
+      );
+      _status = SyncStatus.idle;
+    } catch (e) {
+      _lastError = e.toString();
+      _status = SyncStatus.error;
+      rethrow;
+    }
+  }
+
   Future<void> resolveConflict(SyncConflict conflict, String choice) async {
     final engine = SyncEngine(
       _adapter,
@@ -209,10 +247,14 @@ class SyncService {
 
   Future<void> connectDropbox() async {
     await _dropboxAuth.connect();
+    await _saveTokens();
+    _accountInfo = await _adapter.getAccountInfo();
   }
 
   Future<void> connectGDrive() async {
     await _gdriveAuth.connect();
+    await _saveTokens();
+    _accountInfo = await _adapter.getAccountInfo();
   }
 
   Future<void> disconnect() async {

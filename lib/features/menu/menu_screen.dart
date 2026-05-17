@@ -8,6 +8,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart' show GlazeAppBar;
 import '../../shared/widgets/menu_group.dart';
 import '../backup/backup_screen.dart';
+import '../cloud_sync/widgets/sync_sheet.dart';
 import 'about_overlay.dart';
 
 class MenuScreen extends ConsumerWidget {
@@ -33,7 +34,7 @@ class MenuScreen extends ConsumerWidget {
                     MenuItem(
                       icon: Icons.settings_outlined,
                       label: 'App Settings',
-                      onTap: () => context.go('/settings'),
+                      onTap: () => context.push('/settings'),
                     ),
                     MenuItem(
                       icon: Icons.replay_rounded,
@@ -59,7 +60,15 @@ class MenuScreen extends ConsumerWidget {
                     MenuItem(
                       icon: Icons.sync_rounded,
                       label: 'Cloud Sync',
-                      onTap: () => context.go('/sync'),
+                      onTap: () => showModalBottomSheet(
+                        context: context,
+                        useRootNavigator: true,
+                        useSafeArea: true,
+                        backgroundColor: Colors.transparent,
+                        barrierColor: Colors.black54,
+                        isScrollControlled: true,
+                        builder: (_) => const SyncSheet(),
+                      ),
                     ),
                   ],
                 ),

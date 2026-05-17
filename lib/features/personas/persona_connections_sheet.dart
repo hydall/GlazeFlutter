@@ -7,6 +7,7 @@ import '../../../core/state/character_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/sheet_view.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 
 class PersonaConnectionsSheet extends ConsumerStatefulWidget {
   final String personaId;
@@ -142,17 +143,15 @@ class _PersonaConnectionsSheetState
       return;
     }
 
-    final selected = await showDialog<dynamic>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Bind to Character'),
-        children: available
-            .map((c) => SimpleDialogOption(
-                  onPressed: () => Navigator.pop(ctx, c),
-                  child: Text(c.name),
-                ))
-            .toList(),
-      ),
+    final selected = await GlazeBottomSheet.show<dynamic>(
+      context,
+      title: 'Bind to Character',
+      items: available
+          .map((c) => BottomSheetItem(
+                label: c.name,
+                onTap: () => Navigator.of(context, rootNavigator: true).pop(c),
+              ))
+          .toList(),
     );
 
     if (selected != null) {
@@ -178,20 +177,17 @@ class _PersonaConnectionsSheetState
 
     final chars = ref.read(charactersProvider).value ?? [];
 
-    final selected = await showDialog<dynamic>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Bind to Chat'),
-        children: available
-            .map((s) {
-          final char = chars.where((c) => c.id == s.characterId).firstOrNull;
-          return SimpleDialogOption(
-            onPressed: () => Navigator.pop(ctx, s),
-            child:
-                Text('${char?.name ?? s.characterId} #${s.sessionIndex}'),
-          );
-        }).toList(),
-      ),
+    final selected = await GlazeBottomSheet.show<dynamic>(
+      context,
+      title: 'Bind to Chat',
+      items: available
+          .map((s) {
+        final char = chars.where((c) => c.id == s.characterId).firstOrNull;
+        return BottomSheetItem(
+          label: '${char?.name ?? s.characterId} #${s.sessionIndex}',
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(s),
+        );
+      }).toList(),
     );
 
     if (selected != null) {

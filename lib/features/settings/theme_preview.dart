@@ -1,0 +1,408 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/models/character.dart';
+import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/app_theme.dart';
+import '../../shared/theme/theme_preset.dart';
+import '../../shared/widgets/glaze_scaffold.dart';
+import '../chat/widgets/chat_header.dart';
+import '../chat/widgets/chat_input_bar.dart';
+import 'app_settings_provider.dart';
+
+/// Live preview of a theme preset, framed like the avatar card in
+/// generic_editor.dart:319. Intrinsic height; the message style follows the
+/// user's `chatLayout` setting (default = standard, no bubbles; bubble = bubbles).
+class ThemeChatPreview extends ConsumerWidget {
+  final ThemePreset preset;
+  final Color borderColor;
+
+  const ThemeChatPreview({
+    super.key,
+    required this.preset,
+    required this.borderColor,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = preset.themeMode != 'light';
+    final previewTheme = isDark ? AppTheme.dark(preset) : AppTheme.light(preset);
+    final previewCharacter = Character(
+      id: 'preview_character',
+      name: 'Rei',
+      color: preset.accentColor,
+    );
+    final chatLayout =
+        ref.watch(appSettingsProvider).valueOrNull?.chatLayout ?? 'default';
+    final isStandard = chatLayout == 'default';
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: Stack(
+        children: [
+          Theme(
+            data: previewTheme,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: previewTheme.scaffoldBackgroundColor,
+                border: Border.all(color: borderColor),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: AbsorbPointer(
+                child: _PreviewChatScene(
+                  preset: preset,
+                  character: previewCharacter,
+                  isStandard: isStandard,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.black54, Colors.transparent],
+                  ),
+                ),
+                child: const Text(
+                  'PREVIEW',
+                  style: TextStyle(
+                    color: Color(0xE6FFFFFF),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Color textOn(Color bg) {
+    return bg.computeLuminance() > 0.45
+        ? const Color(0xFF1C1D22)
+        : const Color(0xFFF4F6FA);
+  }
+}
+
+class _PreviewChatScene extends StatelessWidget {
+  final ThemePreset preset;
+  final Character character;
+  final bool isStandard;
+
+  const _PreviewChatScene({
+    required this.preset,
+    required this.character,
+    required this.isStandard,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.colors;
+    final cs = context.cs;
+    final charText = colors.charText ?? ThemeChatPreview.textOn(cs.surface);
+    final userText =
+        colors.userText ?? ThemeChatPreview.textOn(colors.userBubble);
+
+    return Material(
+      color: cs.surface,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Top padding leaves room for the "PREVIEW" label overlay drawn by
+          // the parent.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 44, 8, 0),
+            child: GlazeAppBar(
+              showBack: true,
+              onBack: () {},
+              titleWidget: ChatHeader(
+                character: character,
+                sessionName: 'Session #4',
+              ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  color: cs.primary,
+                  onPressed: () {},
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 4),
+          _PreviewDateSeparator(label: '24 March 2026'),
+          const SizedBox(height: 4),
+          if (isStandard) ...[
+            _PreviewStandardMessage(
+              character: character,
+              isUser: false,
+              metaColor: cs.onSurfaceVariant,
+              italicColor: colors.charItalic ?? cs.onSurface,
+              quoteColor: colors.charQuote ?? cs.primary,
+              text: 'Rei watches in silence, waiting for an answer.',
+              quoted: '"Lost?"',
+              index: 1,
+              time: '10:08',
+            ),
+            _PreviewStandardMessage(
+              character: Character(
+                id: 'preview_user',
+                name: 'You',
+                color: preset.accentColor,
+              ),
+              isUser: true,
+              metaColor: cs.onSurfaceVariant,
+              italicColor: colors.userItalic ?? cs.onSurface,
+              quoteColor: colors.userQuote ?? cs.primary,
+              text: 'I lean against the wall.',
+              quoted: '"Not lost. Just looking."',
+              index: 2,
+              time: '10:09',
+            ),
+          ] else ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+              child: _PreviewBubble(
+                alignment: Alignment.centerLeft,
+                color: colors.charBubble,
+                textColor: charText,
+                italicColor: colors.charItalic,
+                quoteColor: colors.charQuote ?? cs.primary,
+                text: 'Rei watches in silence, waiting for an answer.',
+                quoted: '"Lost?"',
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: _PreviewBubble(
+                alignment: Alignment.centerRight,
+                color: colors.userBubble,
+                textColor: userText,
+                italicColor: colors.userItalic,
+                quoteColor: colors.userQuote ?? cs.primary,
+                text: 'I lean against the wall.',
+                quoted: '"Not lost. Just looking."',
+              ),
+            ),
+          ],
+          ChatInputBar(
+            focusNode: FocusNode(canRequestFocus: false, skipTraversal: true),
+            isGenerating: false,
+            onSend: (_) {},
+            initialDraft: '',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreviewDateSeparator extends StatelessWidget {
+  final String label;
+  const _PreviewDateSeparator({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final line = context.cs.outlineVariant.withValues(alpha: 0.6);
+    return Row(
+      children: [
+        Expanded(child: Container(height: 1, color: line)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Expanded(child: Container(height: 1, color: line)),
+      ],
+    );
+  }
+}
+
+/// Standard ("default") chat layout — no bubble, full-width italic text,
+/// avatar + name + #index row above. Mirrors the `isStandard` branch of
+/// [Message] in chat/widgets/message.dart.
+class _PreviewStandardMessage extends StatelessWidget {
+  final Character character;
+  final bool isUser;
+  final Color metaColor;
+  final Color italicColor;
+  final Color quoteColor;
+  final String text;
+  final String? quoted;
+  final int index;
+  final String time;
+
+  const _PreviewStandardMessage({
+    required this.character,
+    required this.isUser,
+    required this.metaColor,
+    required this.italicColor,
+    required this.quoteColor,
+    required this.text,
+    required this.quoted,
+    required this.index,
+    required this.time,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final initial =
+        character.name.isNotEmpty ? character.name[0].toUpperCase() : '?';
+    final avatarBg = isUser ? context.cs.primary : const Color(0xFFCCCCCC);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 12,
+                backgroundColor: avatarBg,
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                character.name,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: metaColor,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '#$index',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: metaColor.withValues(alpha: 0.55),
+                ),
+              ),
+              const Spacer(),
+              Text(
+                time,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: metaColor.withValues(alpha: 0.55),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          RichText(
+            text: TextSpan(
+              style: TextStyle(
+                fontSize: 13.5,
+                height: 1.4,
+                fontStyle: FontStyle.italic,
+                color: italicColor,
+              ),
+              children: [
+                TextSpan(text: text),
+                if (quoted != null) ...[
+                  const TextSpan(text: ' '),
+                  TextSpan(
+                    text: quoted,
+                    style: TextStyle(
+                      color: quoteColor,
+                      fontStyle: FontStyle.normal,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Bubble" chat layout — message in a colored bubble. Mirrors the non-standard
+/// branch of [_BubbleStyle.resolve] in chat/widgets/message.dart.
+class _PreviewBubble extends StatelessWidget {
+  final Alignment alignment;
+  final Color color;
+  final Color textColor;
+  final Color? italicColor;
+  final Color quoteColor;
+  final String text;
+  final String? quoted;
+
+  const _PreviewBubble({
+    required this.alignment,
+    required this.color,
+    required this.textColor,
+    required this.italicColor,
+    required this.quoteColor,
+    required this.text,
+    required this.quoted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: alignment,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 260),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: context.cs.outline.withValues(alpha: 0.35),
+          ),
+        ),
+        child: RichText(
+          text: TextSpan(
+            style: TextStyle(
+              fontSize: 13.5,
+              height: 1.4,
+              fontStyle: FontStyle.italic,
+              color: italicColor ?? textColor,
+            ),
+            children: [
+              TextSpan(text: text),
+              if (quoted != null) ...[
+                const TextSpan(text: ' '),
+                TextSpan(
+                  text: quoted,
+                  style: TextStyle(
+                    color: quoteColor,
+                    fontStyle: FontStyle.normal,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

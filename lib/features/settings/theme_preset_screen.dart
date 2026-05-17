@@ -34,8 +34,6 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
           ListView(
             padding: const EdgeInsets.only(top: 12, bottom: 96),
             children: [
-              _buildActivePreview(context, theme.activePreset),
-              const SizedBox(height: 16),
               _buildFontToggle(context),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -58,111 +56,6 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
             child: _ThemeFab(onTap: () => _showAddSheet(context)),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildActivePreview(BuildContext context, ThemePreset preset) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: context.cs.outlineVariant),
-        ),
-        child: Column(
-          children: [
-            Container(
-              height: 80,
-              decoration: BoxDecoration(
-                color: preset.accent.withAlpha(30),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: preset.accent,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  if (preset.userBubbleParsed != null)
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: preset.userBubbleParsed,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  const SizedBox(width: 8),
-                  if (preset.charBubbleParsed != null)
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: preset.charBubbleParsed,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          preset.name,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: context.cs.onSurface,
-                          ),
-                        ),
-                        if (preset.author.isNotEmpty)
-                          Text(
-                            'by ${preset.author}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: context.cs.onSurfaceVariant,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  FilledButton.tonal(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ThemeEditorScreen()),
-                    ),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      minimumSize: const Size(0, 32),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.tune, size: 14),
-                        SizedBox(width: 4),
-                        Text('Edit', style: TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -246,7 +139,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
         decoration: BoxDecoration(
           color: preset.accent.withAlpha(30),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: preset.accent, width: isActive ? 2 : 0),
+          border: Border.all(color: preset.accent, width: isActive ? 2 : 1),
         ),
         child: Center(
           child: Container(
@@ -277,32 +170,52 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
         children: [
           if (isActive)
             Icon(Icons.check_circle, color: _contrastColor(context.colors.accent, context.cs.surface), size: 20),
-          if (!isActive)
-            IconButton(
-              icon: Icon(Icons.play_arrow, color: context.cs.onSurfaceVariant, size: 20),
-              onPressed: () => _applyPreset(preset),
-              tooltip: 'Apply',
-            ),
           IconButton(
-            icon: Icon(Icons.tune, color: context.cs.onSurfaceVariant, size: 18),
-            tooltip: 'Edit',
-            onPressed: () async {
-              if (!isActive) _applyPreset(preset);
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ThemeEditorScreen()),
-              );
-            },
+            icon: Icon(Icons.more_vert, color: context.cs.onSurfaceVariant, size: 18),
+            tooltip: 'Menu',
+            onPressed: () => _showPresetActions(context, preset, isActive),
           ),
-          if (preset.id != 'default')
-            IconButton(
-              icon: Icon(Icons.delete_outline, color: context.cs.onSurfaceVariant, size: 18),
-              onPressed: () => _deletePreset(preset.id),
-              tooltip: 'Delete',
-            ),
         ],
       ),
       onTap: isActive ? null : () => _applyPreset(preset),
+    );
+  }
+
+  void _showPresetActions(BuildContext context, ThemePreset preset, bool isActive) {
+    GlazeBottomSheet.show<void>(
+      context,
+      title: preset.name,
+      items: [
+        BottomSheetItem(
+          icon: Icons.tune,
+          label: 'Edit Theme',
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _openThemeEditor(preset, isActive: isActive);
+          },
+        ),
+        if (preset.id != 'default')
+          BottomSheetItem(
+            icon: Icons.delete_outline,
+            label: 'Delete Theme',
+            isDestructive: true,
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _deletePreset(preset.id);
+            },
+          ),
+      ],
+    );
+  }
+
+  Future<void> _openThemeEditor(ThemePreset preset, {required bool isActive}) async {
+    if (!isActive) {
+      _applyPreset(preset);
+    }
+    if (!mounted) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ThemeEditorScreen()),
     );
   }
 
@@ -361,16 +274,26 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
   }
 
   Future<void> _deletePreset(String id) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Theme'),
-        content: const Text('Are you sure you want to delete this theme?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
-        ],
+    final confirmed = await GlazeBottomSheet.show<bool>(
+      context,
+      title: 'Delete Theme',
+      bigInfo: const BottomSheetBigInfo(
+        icon: Icons.delete_outline,
+        description: 'Are you sure you want to delete this theme?',
       ),
+      items: [
+        BottomSheetItem(
+          label: 'Delete',
+          isDestructive: true,
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+        ),
+      ],
     );
     if (confirmed == true) {
       await ref.read(themeProvider.notifier).deletePreset(id);

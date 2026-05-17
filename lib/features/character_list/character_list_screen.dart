@@ -21,6 +21,7 @@ import '../../shared/widgets/glaze_toast.dart';
 import '../catalog/widgets/widgets.dart';
 import '../character_gallery/gallery_provider.dart';
 import '../picks/widgets/picks_grid.dart';
+import '../settings/app_settings_provider.dart';
 import 'widgets/widgets.dart';
 
 class CharacterListScreen extends ConsumerStatefulWidget {
@@ -36,6 +37,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   SortDir _sortDir = SortDir.desc;
   int _tabIndex = 0;
   String _searchQuery = '';
+  String _picksTitle = 'Our Picks';
+  String? _picksDescription;
+  bool _picksCanGoBack = false;
+  VoidCallback? _picksGoBackFn;
 
   @override
   Widget build(BuildContext context) {
@@ -50,69 +55,119 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: _tabIndex == 2
-                ? PicksGrid(
-                    topPadding: topPad,
-                    bottomPadding: navHeight + 20,
-                    tabBar: _buildTabBar(),
-                  )
-                : _tabIndex == 1
-                    ? CatalogGrid(
-                        topPadding: topPad,
-                        bottomPadding: navHeight + 20,
-                        tabBar: _buildTabBar(),
-                      )
-                    : characters.when(
-                    loading: () => Center(
-                      child: CircularProgressIndicator(color: context.cs.primary),
-                    ),
-                    error: (e, _) => Center(
-                      child: Text(
-                        'Error: $e',
-                        style: TextStyle(color: context.cs.onSurfaceVariant),
-                      ),
-                    ),
-                    data: (chars) {
-                      if (chars.isEmpty) {
-                        return CustomScrollView(
-                          slivers: [
-                            SliverToBoxAdapter(child: SizedBox(height: topPad)),
-                            SliverToBoxAdapter(child: _buildTabBar()),
-                            SliverFillRemaining(
-                              child: EmptyCharacterState(
-                                onImport: () => _importCharacter(context, ref),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 350),
+              reverseDuration: const Duration(milliseconds: 300),
+              switchInCurve: Curves.easeOutQuart,
+              switchOutCurve: Curves.easeInQuart,
+              transitionBuilder: (child, animation) {
+                final slide = Tween<Offset>(
+                  begin: const Offset(0.0, 0.06),
+                  end: Offset.zero,
+                ).animate(
+                  CurvedAnimation(
+                    parent: animation,
+                    curve: Curves.easeOutBack,
+                  ),
+                );
+                return FadeTransition(
+                  opacity: animation,
+                  child: SlideTransition(
+                    position: slide,
+                    child: child,
+                  ),
+                );
+              },
+              child: _tabIndex == 2
+                  ? PicksGrid(
+                      key: const ValueKey('picks_grid'),
+                      topPadding: MediaQuery.of(context).padding.top + 76.0,
+                      bottomPadding: navHeight + 20,
+                      onFolderChanged: (title, description, canGoBack, goBackFn) {
+                        setState(() {
+                          _picksTitle = title;
+                          _picksDescription = description;
+                          _picksCanGoBack = canGoBack;
+                          _picksGoBackFn = goBackFn;
+                        });
+                      },
+                    )
+                  : _tabIndex == 1
+                      ? CatalogGrid(
+                          key: const ValueKey('catalog_grid'),
+                          topPadding: topPad,
+                          bottomPadding: navHeight + 20,
+                          tabBar: _buildTabBar(),
+                        )
+                      : KeyedSubtree(
+                          key: const ValueKey('my_characters'),
+                          child: characters.when(
+                            loading: () => Center(
+                              child: CircularProgressIndicator(color: context.cs.primary),
+                            ),
+                            error: (e, _) => Center(
+                              child: Text(
+                                'Error: $e',
+                                style: TextStyle(color: context.cs.onSurfaceVariant),
                               ),
                             ),
-                          ],
-                        );
-                      }
-                      var filtered = chars;
-                      if (_searchQuery.isNotEmpty) {
-                        final q = _searchQuery.toLowerCase();
-                        filtered = filtered
-                            .where(
-                              (c) =>
-                                  c.fav || c.name.toLowerCase().contains(q),
-                            )
-                            .toList();
-                      }
-                      final sorted = _sortChars(filtered);
-                      return CharacterGrid(
-                        characters: sorted,
-                        sortBy: _sortBy,
-                        sortDir: _sortDir,
-                        topPadding: topPad,
-                        bottomPadding: navHeight + 20,
-                        tabBar: _buildTabBar(),
-                        onSortDirToggle: () => setState(() {
-                          _sortDir = _sortDir == SortDir.asc
-                              ? SortDir.desc
-                              : SortDir.asc;
-                        }),
-                        onSortTypeChanged: (t) => setState(() => _sortBy = t),
-                      );
-                    },
-                  ),
+                            data: (chars) {
+                              final showOurPicks = _searchQuery.isEmpty &&
+                                  (ref.watch(appSettingsProvider).valueOrNull?.showOurPicks ?? true);
+
+                              if (chars.isEmpty && !showOurPicks) {
+                                return CustomScrollView(
+                                  slivers: [
+                                    SliverToBoxAdapter(child: SizedBox(height: topPad)),
+                                    SliverToBoxAdapter(child: _buildTabBar()),
+                                    SliverFillRemaining(
+                                      child: EmptyCharacterState(
+                                        onImport: () => _importCharacter(context, ref),
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }
+                              var filtered = chars;
+                              if (_searchQuery.isNotEmpty) {
+                                final q = _searchQuery.toLowerCase();
+                                filtered = filtered
+                                    .where(
+                                      (c) =>
+                                          c.fav || c.name.toLowerCase().contains(q),
+                                    )
+                                    .toList();
+                              }
+                              final sorted = _sortChars(filtered);
+                              return CharacterGrid(
+                                characters: sorted,
+                                sortBy: _sortBy,
+                                sortDir: _sortDir,
+                                topPadding: topPad,
+                                bottomPadding: navHeight + 20,
+                                tabBar: _buildTabBar(),
+                                showOurPicksCard: showOurPicks,
+                                onOurPicksTap: () => setState(() => _tabIndex = 2),
+                                onOurPicksHide: () {
+                                  final s = ref.read(appSettingsProvider).valueOrNull;
+                                  if (s != null) {
+                                    ref.read(appSettingsProvider.notifier).save(
+                                      s.copyWith(showOurPicks: false),
+                                    );
+                                    GlazeToast.show(context, 'Our Picks скрыт. Восстановить можно в настройках.');
+                                  }
+                                },
+                                onSortDirToggle: () => setState(() {
+                                  _sortDir = _sortDir == SortDir.asc
+                                      ? SortDir.desc
+                                      : SortDir.asc;
+                                }),
+                                onSortTypeChanged: (t) => setState(() => _sortBy = t),
+                              );
+                            },
+                          ),
+                        ),
+            ),
           ),
           Positioned(
             top: 0,
@@ -125,25 +180,33 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                     child: GlazeAppBar(
-                      title: 'Characters',
-                      actions: [
-                        SizedBox(
-                          width: 44,
-                          height: 44,
-                          child: IconButton(
-                            icon: const Icon(Icons.search_rounded, size: 22),
-                            color: context.cs.primary,
-                            onPressed: () async {
-                              final query = await showSearch<String>(
-                                context: context,
-                                delegate: _CharacterSearchDelegate(ref),
-                              );
-                              if (query != null)
-                                setState(() => _searchQuery = query);
-                            },
-                          ),
-                        ),
-                      ],
+                      title: _tabIndex == 2 ? _picksTitle : 'Characters',
+                      showBack: _tabIndex == 2,
+                      onBack: _tabIndex == 2
+                          ? (_picksCanGoBack && _picksGoBackFn != null
+                              ? _picksGoBackFn
+                              : () => setState(() => _tabIndex = 0))
+                          : null,
+                      actions: _tabIndex == 2
+                          ? null
+                          : [
+                              SizedBox(
+                                width: 44,
+                                height: 44,
+                                child: IconButton(
+                                  icon: const Icon(Icons.search_rounded, size: 22),
+                                  color: context.cs.primary,
+                                  onPressed: () async {
+                                    final query = await showSearch<String>(
+                                      context: context,
+                                      delegate: _CharacterSearchDelegate(ref),
+                                    );
+                                    if (query != null)
+                                      setState(() => _searchQuery = query);
+                                  },
+                                ),
+                              ),
+                            ],
                     ),
                   ),
                 ),
@@ -168,9 +231,8 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
         tabs: const [
           GlazeTabItem(label: 'My Characters', icon: Icons.person_rounded),
           GlazeTabItem(label: 'Discover', icon: Icons.public_rounded),
-          GlazeTabItem(label: 'Our Picks', icon: Icons.star_rounded),
         ],
-        activeIndex: _tabIndex,
+        activeIndex: _tabIndex == 2 ? 0 : _tabIndex,
         onChanged: (i) => setState(() => _tabIndex = i),
       ),
     );

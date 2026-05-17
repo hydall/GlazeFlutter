@@ -35,6 +35,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
 
     final topPad = MediaQuery.of(context).padding.top +
         66.0 +
+        16.0 +
         (_searchQuery.isNotEmpty ? 32.0 : 0.0);
 
     return Scaffold(
@@ -121,48 +122,35 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
     }
 
     final sortedGroups = groupsMap.entries.toList()
-      ..sort((a, b) => b.value.first.lastMessageTime
-          .compareTo(a.value.first.lastMessageTime));
-
-    final displayItems = <_DisplayItem>[];
-    for (final entry in sortedGroups) {
-      final charSessions = entry.value;
-      displayItems.add(_DisplayItem.header(charSessions));
-      if (_expandedCharIds.contains(entry.key)) {
-        for (final s in charSessions) {
-          displayItems.add(_DisplayItem.session(s));
-        }
-      }
-    }
+      ..sort((a, b) => b.value.first.lastMessageTime.compareTo(
+            a.value.first.lastMessageTime,
+          ));
 
     return ListView.builder(
       padding: EdgeInsets.only(
         top: topPad,
         bottom: ref.watch(navHeightProvider) + 20,
       ),
-      itemCount: displayItems.length,
+      itemCount: sortedGroups.length,
       itemBuilder: (_, i) {
-        final item = displayItems[i];
-        if (item.isHeader) {
-          final group = item.group!;
-          final charId = group.first.characterId;
-          final isExpanded = _expandedCharIds.contains(charId);
-          return _GroupHeader(
-            sessions: group,
-            isExpanded: isExpanded,
-            onTap: () {
-              setState(() {
-                if (isExpanded) {
-                  _expandedCharIds.remove(charId);
-                } else {
-                  _expandedCharIds.add(charId);
-                }
-              });
-            },
-          );
-        } else {
-          return _SessionTile(info: item.session!, isGrouped: true);
-        }
+        final entry = sortedGroups[i];
+        final charId = entry.key;
+        final group = [...entry.value]
+          ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+        final isExpanded = _expandedCharIds.contains(charId);
+        return _ChatHistoryGroupSection(
+          sessions: group,
+          isExpanded: isExpanded,
+          onTap: () {
+            setState(() {
+              if (isExpanded) {
+                _expandedCharIds.remove(charId);
+              } else {
+                _expandedCharIds.add(charId);
+              }
+            });
+          },
+        );
       },
     );
   }
@@ -231,17 +219,113 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
   }
 }
 
-class _DisplayItem {
-  final List<ChatSessionInfo>? group;
-  final ChatSessionInfo? session;
-  final bool isHeader;
+class _ChatHistoryGroupSection extends StatefulWidget {
+  final List<ChatSessionInfo> sessions;
+  final bool isExpanded;
+  final VoidCallback onTap;
 
-  _DisplayItem.header(this.group)
-      : session = null,
-        isHeader = true;
-  _DisplayItem.session(this.session)
-      : group = null,
-        isHeader = false;
+  const _ChatHistoryGroupSection({
+    required this.sessions,
+    required this.isExpanded,
+    required this.onTap,
+  });
+
+  @override
+  State<_ChatHistoryGroupSection> createState() =>
+      _ChatHistoryGroupSectionState();
+}
+
+class _ChatHistoryGroupSectionState extends State<_ChatHistoryGroupSection>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _sizeAnimation;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<Offset> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+      reverseDuration: const Duration(milliseconds: 200),
+      value: widget.isExpanded ? 1 : 0,
+    );
+    _sizeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: const Cubic(0.2, 0.8, 0.2, 1),
+      reverseCurve: Curves.easeInOut,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
+      reverseCurve: Curves.easeIn,
+    );
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, -0.04),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Cubic(0.2, 0.8, 0.2, 1),
+        reverseCurve: Curves.easeInOut,
+      ),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatHistoryGroupSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isExpanded != oldWidget.isExpanded) {
+      if (widget.isExpanded) {
+        _controller.forward();
+      } else {
+        _controller.reverse();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _GroupHeader(
+          sessions: widget.sessions,
+          isExpanded: widget.isExpanded,
+          onTap: widget.onTap,
+        ),
+        ClipRect(
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: SizeTransition(
+              sizeFactor: _sizeAnimation,
+              axisAlignment: -1,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final session in widget.sessions)
+                        _SessionTile(info: session, isGrouped: true),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _ChatSearchDelegate extends SearchDelegate<String> {
@@ -371,6 +455,7 @@ class _SessionTile extends ConsumerWidget {
                           style: TextStyle(
                             fontWeight: FontWeight.w500,
                             fontSize: 16,
+                            height: 20 / 16,
                             color: context.cs.onSurface,
                           ),
                           maxLines: 1,
@@ -388,7 +473,6 @@ class _SessionTile extends ConsumerWidget {
                         : 'Session #${info.sessionIndex + 1}',
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
                       color: context.cs.onSurfaceVariant,
                     ),
                     maxLines: 1,
@@ -399,6 +483,7 @@ class _SessionTile extends ConsumerWidget {
                     stripHtml(info.lastMessage).replaceAll('\n', ' '),
                     style: TextStyle(
                       fontSize: 13,
+                      height: 16 / 13,
                       color: context.cs.onSurfaceVariant,
                     ),
                     maxLines: 1,
@@ -599,21 +684,23 @@ class _SessionTile extends ConsumerWidget {
   Widget _buildAvatar(BuildContext context) {
     if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
       return CircleAvatar(
+        radius: 24,
         backgroundImage: ResizeImage(
           FileImage(File(info.avatarPath!)),
-          width: 80,
-          height: 80,
+          width: 96,
+          height: 96,
         ),
         onBackgroundImageError: (_, __) {},
       );
     }
     return CircleAvatar(
+      radius: 24,
       backgroundColor: context.cs.primary,
       child: Text(
         info.characterName.isNotEmpty
             ? info.characterName[0].toUpperCase()
             : '?',
-        style: const TextStyle(color: Colors.black),
+        style: const TextStyle(color: Colors.black, fontSize: 18),
       ),
     );
   }
@@ -667,6 +754,7 @@ class _GroupHeader extends ConsumerWidget {
                           style: TextStyle(
                             fontWeight: FontWeight.w500,
                             fontSize: 16,
+                            height: 20 / 16,
                             color: context.cs.onSurface,
                           ),
                           maxLines: 1,
@@ -684,16 +772,19 @@ class _GroupHeader extends ConsumerWidget {
                       Text(
                         '${sessions.length} sessions',
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 12,
                           color: context.cs.onSurfaceVariant,
                         ),
                       ),
-                      Icon(
-                        isExpanded
-                            ? Icons.keyboard_arrow_up
-                            : Icons.keyboard_arrow_down,
-                        color: context.cs.onSurfaceVariant,
-                        size: 20,
+                      AnimatedRotation(
+                        turns: isExpanded ? 0.5 : 0,
+                        duration: const Duration(milliseconds: 200),
+                        curve: Curves.easeInOut,
+                        child: Icon(
+                          Icons.keyboard_arrow_down,
+                          color: context.cs.onSurfaceVariant,
+                          size: 20,
+                        ),
                       ),
                     ],
                   ),
@@ -701,7 +792,8 @@ class _GroupHeader extends ConsumerWidget {
                   Text(
                     stripHtml(latest.lastMessage).replaceAll('\n', ' '),
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 13,
+                      height: 16 / 13,
                       color: context.cs.onSurfaceVariant,
                     ),
                     maxLines: 1,
@@ -719,21 +811,23 @@ class _GroupHeader extends ConsumerWidget {
   Widget _buildAvatar(BuildContext context, ChatSessionInfo info) {
     if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
       return CircleAvatar(
+        radius: 24,
         backgroundImage: ResizeImage(
           FileImage(File(info.avatarPath!)),
-          width: 80,
-          height: 80,
+          width: 96,
+          height: 96,
         ),
         onBackgroundImageError: (_, __) {},
       );
     }
     return CircleAvatar(
+      radius: 24,
       backgroundColor: context.cs.primary,
       child: Text(
         info.characterName.isNotEmpty
             ? info.characterName[0].toUpperCase()
             : '?',
-        style: const TextStyle(color: Colors.black),
+        style: const TextStyle(color: Colors.black, fontSize: 18),
       ),
     );
   }

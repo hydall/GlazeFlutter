@@ -261,16 +261,26 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   }
 
   Future<void> _clearAndReindex() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Clear & Reindex'),
-        content: const Text('Delete all existing embeddings for this lorebook and reindex from scratch?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Reindex')),
-        ],
+    final confirmed = await GlazeBottomSheet.show<bool>(
+      context,
+      title: 'Clear & Reindex',
+      bigInfo: const BottomSheetBigInfo(
+        icon: Icons.delete_sweep,
+        description: 'Delete all existing embeddings for this lorebook and reindex from scratch?',
       ),
+      items: [
+        BottomSheetItem(
+          label: 'Reindex',
+          isDestructive: true,
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+        ),
+      ],
     );
     if (confirmed != true) return;
 
@@ -341,16 +351,26 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   }
 
   void _deleteAllIndexes() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete All Indexes'),
-        content: const Text('This will remove all stored embeddings for this lorebook. You will need to re-index entries after.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete All')),
-        ],
+    final confirmed = await GlazeBottomSheet.show<bool>(
+      context,
+      title: 'Delete All Indexes',
+      bigInfo: const BottomSheetBigInfo(
+        icon: Icons.delete_outline,
+        description: 'This will remove all stored embeddings for this lorebook. You will need to re-index entries after.',
       ),
+      items: [
+        BottomSheetItem(
+          label: 'Delete All',
+          isDestructive: true,
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+        ),
+      ],
     );
     if (confirmed != true) return;
 

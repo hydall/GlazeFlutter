@@ -1,5 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:ui';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -8,6 +12,9 @@ import '../../shared/theme/theme_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_tab_bar.dart';
+import '../../shared/widgets/menu_group.dart';
+import 'theme_preview.dart';
 
 // ─── Palette (mirrors Glaze JS PRESET_COLORS / PRESET_UI_COLORS) ──────────────
 
@@ -47,20 +54,12 @@ class ThemeEditorScreen extends ConsumerStatefulWidget {
   ConsumerState<ThemeEditorScreen> createState() => _ThemeEditorScreenState();
 }
 
-class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabCtrl;
+class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
+  int _activeTab = 0;
   Timer? _saveTimer;
 
   @override
-  void initState() {
-    super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
-  }
-
-  @override
   void dispose() {
-    _tabCtrl.dispose();
     _saveTimer?.cancel();
     super.dispose();
   }
@@ -90,33 +89,44 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
                   color: context.cs.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: context.cs.outlineVariant),
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, size: 16, color: context.cs.onSurfaceVariant),
+                    Icon(Icons.info_outline,
+                        size: 16, color: context.cs.onSurfaceVariant),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Default theme cannot be edited. Import or create a new theme to customise.',
-                        style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+                        style: TextStyle(
+                            fontSize: 12, color: context.cs.onSurfaceVariant),
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-          TabBar(
-            controller: _tabCtrl,
-            tabs: const [Tab(text: 'General'), Tab(text: 'Chat')],
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            child: GlazeTabBar(
+              tabs: const [
+                GlazeTabItem(label: 'General', icon: Icons.tune),
+                GlazeTabItem(
+                    label: 'Chat', icon: Icons.chat_bubble_outline),
+              ],
+              activeIndex: _activeTab,
+              onChanged: (i) => setState(() => _activeTab = i),
+            ),
           ),
           Expanded(
             child: AbsorbPointer(
               absorbing: isDefault,
               child: Opacity(
                 opacity: isDefault ? 0.45 : 1.0,
-                child: TabBarView(
-                  controller: _tabCtrl,
+                child: IndexedStack(
+                  index: _activeTab,
                   children: [
                     _GeneralTab(preset: preset, onUpdate: _update),
                     _ChatTab(preset: preset, onUpdate: _update),
@@ -144,186 +154,207 @@ class _GeneralTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
-        // ── Accent Color ──
-        _SectionHeader('Accent Color'),
-        _ColorRow(
-          label: 'Accent',
-          value: preset.accentColor,
-          palette: _presetColors,
-          allowNull: false,
-          onChanged: (v) => onUpdate((p) => p.copyWith(accentColor: v ?? '#7996CE')),
+        MenuGroup(
+          header: 'Accent Color',
+          items: [
+            _ColorRow(
+              label: 'Accent',
+              value: preset.accentColor,
+              palette: _presetColors,
+              allowNull: false,
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(accentColor: v ?? '#7996CE')),
+            ),
+          ],
         ),
-        const _Divider(),
-
-        // ── App Interface Font ──
-        _SectionHeader('App Interface Font'),
-        _FontModeRow(
-          label: 'Font',
-          mode: preset.uiFontMode,
-          modes: const ['glaze', 'system'],
-          modeLabels: const ['Glaze (Inter)', 'System'],
-          onChanged: (v) => onUpdate((p) => p.copyWith(uiFontMode: v)),
+        MenuGroup(
+          header: 'App Interface Font',
+          items: [
+            _FontModeRow(
+              label: 'Font',
+              mode: preset.uiFontMode,
+              modes: const ['glaze', 'system'],
+              modeLabels: const ['Glaze (Inter)', 'System'],
+              onChanged: (v) => onUpdate((p) => p.copyWith(uiFontMode: v)),
+            ),
+            _ColorRow(
+              label: 'Text Color',
+              value: preset.uiTextColor,
+              palette: _presetUiColors,
+              allowNull: true,
+              nullLabel: 'Auto',
+              onChanged: (v) => onUpdate((p) => p.copyWith(uiTextColor: v)),
+            ),
+            _ColorRow(
+              label: 'Secondary Text',
+              value: preset.uiTextGrayColor,
+              palette: _presetUiColors,
+              allowNull: true,
+              nullLabel: 'Auto',
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(uiTextGrayColor: v)),
+            ),
+            _FontSizeRow(
+              label: 'Font Size',
+              value: preset.uiFontSize,
+              min: 12,
+              max: 20,
+              onChanged: (v) => onUpdate((p) => p.copyWith(uiFontSize: v)),
+            ),
+            _SliderRow(
+              label: 'Letter Spacing',
+              value: preset.uiLetterSpacing,
+              min: -1,
+              max: 3,
+              divisions: 8,
+              unit: 'px',
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(uiLetterSpacing: v)),
+            ),
+          ],
         ),
-        _ColorRow(
-          label: 'Text Color',
-          value: preset.uiTextColor,
-          palette: _presetUiColors,
-          allowNull: true,
-          nullLabel: 'Auto',
-          onChanged: (v) => onUpdate((p) => p.copyWith(uiTextColor: v)),
+        MenuGroup(
+          header: 'UI Effects',
+          items: [
+            _ColorRow(
+              label: 'UI Color',
+              value: preset.uiColor,
+              palette: _presetUiColors,
+              allowNull: true,
+              nullLabel: 'Auto',
+              onChanged: (v) => onUpdate((p) => p.copyWith(uiColor: v)),
+            ),
+            _SliderRow(
+              label: 'Opacity',
+              value: preset.elementOpacity,
+              min: 0.1,
+              max: 1.0,
+              divisions: 18,
+              unit: '%',
+              displayMultiplier: 100,
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(elementOpacity: v)),
+            ),
+            _SliderRow(
+              label: 'Blur',
+              value: preset.elementBlur,
+              min: 0,
+              max: 40,
+              divisions: 40,
+              unit: 'px',
+              onChanged: (v) => onUpdate((p) => p.copyWith(elementBlur: v)),
+            ),
+          ],
         ),
-        _ColorRow(
-          label: 'Secondary Text',
-          value: preset.uiTextGrayColor,
-          palette: _presetUiColors,
-          allowNull: true,
-          nullLabel: 'Auto',
-          onChanged: (v) => onUpdate((p) => p.copyWith(uiTextGrayColor: v)),
+        MenuGroup(
+          header: 'Border',
+          items: [
+            _ColorRow(
+              label: 'Border Color',
+              value: preset.borderColor,
+              palette: _presetUiColors,
+              allowNull: true,
+              nullLabel: 'Auto',
+              onChanged: (v) => onUpdate((p) => p.copyWith(borderColor: v)),
+            ),
+            _SliderRow(
+              label: 'Border Width',
+              value: preset.borderWidth,
+              min: 0,
+              max: 5,
+              divisions: 10,
+              unit: 'px',
+              onChanged: (v) => onUpdate((p) => p.copyWith(borderWidth: v)),
+            ),
+            _SliderRow(
+              label: 'Border Opacity',
+              value: preset.borderOpacity,
+              min: 0,
+              max: 1,
+              divisions: 20,
+              unit: '%',
+              displayMultiplier: 100,
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(borderOpacity: v)),
+            ),
+          ],
         ),
-        _FontSizeRow(
-          label: 'Font Size',
-          value: preset.uiFontSize,
-          min: 12,
-          max: 20,
-          onChanged: (v) => onUpdate((p) => p.copyWith(uiFontSize: v)),
+        MenuGroup(
+          header: 'Noise Texture',
+          items: [
+            _SliderRow(
+              label: 'Noise Opacity',
+              value: preset.noiseOpacity,
+              min: 0,
+              max: 0.15,
+              divisions: 30,
+              unit: '%',
+              displayMultiplier: 100,
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(noiseOpacity: v)),
+            ),
+            _SliderRow(
+              label: 'Noise Intensity',
+              value: preset.noiseIntensity,
+              min: 0.1,
+              max: 2,
+              divisions: 19,
+              unit: '',
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(noiseIntensity: v)),
+            ),
+          ],
         ),
-        _SliderRow(
-          label: 'Letter Spacing',
-          value: preset.uiLetterSpacing,
-          min: -1,
-          max: 3,
-          divisions: 8,
-          unit: 'px',
-          onChanged: (v) => onUpdate((p) => p.copyWith(uiLetterSpacing: v)),
+        MenuGroup(
+          header: 'Background',
+          items: [
+            _BgImageRow(preset: preset, onUpdate: onUpdate),
+            if (preset.hasBgImage) ...[
+              _SliderRow(
+                label: 'Background Dimming',
+                value: preset.bgOpacity,
+                min: 0,
+                max: 1,
+                divisions: 20,
+                unit: '%',
+                displayMultiplier: 100,
+                onChanged: (v) =>
+                    onUpdate((p) => p.copyWith(bgOpacity: v)),
+              ),
+              _SliderRow(
+                label: 'Background Blur',
+                value: preset.bgBlur,
+                min: 0,
+                max: 20,
+                divisions: 20,
+                unit: 'px',
+                onChanged: (v) => onUpdate((p) => p.copyWith(bgBlur: v)),
+              ),
+            ],
+            _SliderRow(
+              label: 'BG Noise Opacity',
+              value: preset.bgNoiseOpacity,
+              min: 0,
+              max: 0.2,
+              divisions: 40,
+              unit: '%',
+              displayMultiplier: 100,
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(bgNoiseOpacity: v)),
+            ),
+            _SliderRow(
+              label: 'BG Noise Intensity',
+              value: preset.bgNoiseIntensity,
+              min: 0.1,
+              max: 2,
+              divisions: 19,
+              unit: '',
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(bgNoiseIntensity: v)),
+            ),
+          ],
         ),
-        const _Divider(),
-
-        // ── UI Effects ──
-        _SectionHeader('UI Effects'),
-        _ColorRow(
-          label: 'UI Color',
-          value: preset.uiColor,
-          palette: _presetUiColors,
-          allowNull: true,
-          nullLabel: 'Auto',
-          onChanged: (v) => onUpdate((p) => p.copyWith(uiColor: v)),
-        ),
-        _SliderRow(
-          label: 'Opacity',
-          value: preset.elementOpacity,
-          min: 0.1,
-          max: 1.0,
-          divisions: 18,
-          unit: '%',
-          displayMultiplier: 100,
-          onChanged: (v) => onUpdate((p) => p.copyWith(elementOpacity: v)),
-        ),
-        _SliderRow(
-          label: 'Blur',
-          value: preset.elementBlur,
-          min: 0,
-          max: 40,
-          divisions: 40,
-          unit: 'px',
-          onChanged: (v) => onUpdate((p) => p.copyWith(elementBlur: v)),
-        ),
-        const _Divider(),
-
-        // ── Border ──
-        _SectionHeader('Border'),
-        _ColorRow(
-          label: 'Border Color',
-          value: preset.borderColor,
-          palette: _presetUiColors,
-          allowNull: true,
-          nullLabel: 'Auto',
-          onChanged: (v) => onUpdate((p) => p.copyWith(borderColor: v)),
-        ),
-        _SliderRow(
-          label: 'Border Width',
-          value: preset.borderWidth,
-          min: 0,
-          max: 5,
-          divisions: 10,
-          unit: 'px',
-          onChanged: (v) => onUpdate((p) => p.copyWith(borderWidth: v)),
-        ),
-        _SliderRow(
-          label: 'Border Opacity',
-          value: preset.borderOpacity,
-          min: 0,
-          max: 1,
-          divisions: 20,
-          unit: '%',
-          displayMultiplier: 100,
-          onChanged: (v) => onUpdate((p) => p.copyWith(borderOpacity: v)),
-        ),
-        const _Divider(),
-
-        // ── Noise Texture ──
-        _SectionHeader('Noise Texture'),
-        _SliderRow(
-          label: 'Noise Opacity',
-          value: preset.noiseOpacity,
-          min: 0,
-          max: 0.15,
-          divisions: 30,
-          unit: '%',
-          displayMultiplier: 100,
-          onChanged: (v) => onUpdate((p) => p.copyWith(noiseOpacity: v)),
-        ),
-        _SliderRow(
-          label: 'Noise Intensity',
-          value: preset.noiseIntensity,
-          min: 0.1,
-          max: 2,
-          divisions: 19,
-          unit: '',
-          onChanged: (v) => onUpdate((p) => p.copyWith(noiseIntensity: v)),
-        ),
-        const _Divider(),
-
-        // ── Background ──
-        _SectionHeader('Background'),
-        _SliderRow(
-          label: 'Background Dimming',
-          value: preset.bgOpacity,
-          min: 0,
-          max: 1,
-          divisions: 20,
-          unit: '%',
-          displayMultiplier: 100,
-          onChanged: (v) => onUpdate((p) => p.copyWith(bgOpacity: v)),
-        ),
-        _SliderRow(
-          label: 'Background Blur',
-          value: preset.bgBlur,
-          min: 0,
-          max: 20,
-          divisions: 20,
-          unit: 'px',
-          onChanged: (v) => onUpdate((p) => p.copyWith(bgBlur: v)),
-        ),
-        _SliderRow(
-          label: 'BG Noise Opacity',
-          value: preset.bgNoiseOpacity,
-          min: 0,
-          max: 0.2,
-          divisions: 40,
-          unit: '%',
-          displayMultiplier: 100,
-          onChanged: (v) => onUpdate((p) => p.copyWith(bgNoiseOpacity: v)),
-        ),
-        _SliderRow(
-          label: 'BG Noise Intensity',
-          value: preset.bgNoiseIntensity,
-          min: 0.1,
-          max: 2,
-          divisions: 19,
-          unit: '',
-          onChanged: (v) => onUpdate((p) => p.copyWith(bgNoiseIntensity: v)),
-        ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -341,34 +372,34 @@ class _ChatTab extends StatefulWidget {
   State<_ChatTab> createState() => _ChatTabState();
 }
 
-class _ChatTabState extends State<_ChatTab> with SingleTickerProviderStateMixin {
-  late TabController _subCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _subCtrl = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _subCtrl.dispose();
-    super.dispose();
-  }
+class _ChatTabState extends State<_ChatTab> {
+  int _activeSubTab = 0;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        TabBar(
-          controller: _subCtrl,
-          tabs: const [Tab(text: 'Font'), Tab(text: 'Colors')],
-          tabAlignment: TabAlignment.start,
-          isScrollable: true,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+          child: ThemeChatPreview(
+            preset: widget.preset,
+            borderColor: context.cs.outlineVariant,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: GlazeTabBar(
+            tabs: const [
+              GlazeTabItem(label: 'Font', icon: Icons.text_fields),
+              GlazeTabItem(label: 'Colors', icon: Icons.palette_outlined),
+            ],
+            activeIndex: _activeSubTab,
+            onChanged: (i) => setState(() => _activeSubTab = i),
+          ),
         ),
         Expanded(
-          child: TabBarView(
-            controller: _subCtrl,
+          child: IndexedStack(
+            index: _activeSubTab,
             children: [
               _ChatFontTab(preset: widget.preset, onUpdate: widget.onUpdate),
               _ChatColorsTab(preset: widget.preset, onUpdate: widget.onUpdate),
@@ -393,31 +424,36 @@ class _ChatFontTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
-        _SectionHeader('Chat Messages Font'),
-        _FontModeRow(
-          label: 'Font',
-          mode: preset.chatFontMode,
-          modes: const ['ui', 'glaze', 'system'],
-          modeLabels: const ['Same as UI', 'Glaze (Inter)', 'System'],
-          onChanged: (v) => onUpdate((p) => p.copyWith(chatFontMode: v)),
+        MenuGroup(
+          header: 'Chat Messages Font',
+          items: [
+            _FontModeRow(
+              label: 'Font',
+              mode: preset.chatFontMode,
+              modes: const ['ui', 'glaze', 'system'],
+              modeLabels: const ['Same as UI', 'Glaze (Inter)', 'System'],
+              onChanged: (v) => onUpdate((p) => p.copyWith(chatFontMode: v)),
+            ),
+            _FontSizeRow(
+              label: 'Font Size',
+              value: preset.chatFontSize,
+              min: 12,
+              max: 24,
+              onChanged: (v) => onUpdate((p) => p.copyWith(chatFontSize: v)),
+            ),
+            _SliderRow(
+              label: 'Letter Spacing',
+              value: preset.chatLetterSpacing,
+              min: -1,
+              max: 3,
+              divisions: 8,
+              unit: 'px',
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(chatLetterSpacing: v)),
+            ),
+          ],
         ),
-        _FontSizeRow(
-          label: 'Font Size',
-          value: preset.chatFontSize,
-          min: 12,
-          max: 24,
-          onChanged: (v) => onUpdate((p) => p.copyWith(chatFontSize: v)),
-        ),
-        _SliderRow(
-          label: 'Letter Spacing',
-          value: preset.chatLetterSpacing,
-          min: -1,
-          max: 3,
-          divisions: 8,
-          unit: 'px',
-          onChanged: (v) => onUpdate((p) => p.copyWith(chatLetterSpacing: v)),
-        ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -437,131 +473,117 @@ class _ChatColorsTab extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
       children: [
-        // ── Bubble Colors ──
-        _SectionHeader('Bubble Colors'),
-        if (!isBubble)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Text(
-              'Switch to Bubble layout to configure bubble colors.',
-              style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+        MenuGroup(
+          header: 'Bubble Colors',
+          items: [
+            if (!isBubble)
+              Padding(
+                padding:
+                    const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                child: Text(
+                  'Switch to Bubble layout to configure bubble colors.',
+                  style: TextStyle(
+                      fontSize: 12, color: context.cs.onSurfaceVariant),
+                ),
+              )
+            else ...[
+              _ColorRow(
+                label: 'User Bubble',
+                value: preset.userBubbleColor,
+                palette: _presetColors,
+                allowNull: true,
+                nullLabel: 'Auto',
+                onChanged: (v) =>
+                    onUpdate((p) => p.copyWith(userBubbleColor: v)),
+              ),
+              _ColorRow(
+                label: 'Char Bubble',
+                value: preset.charBubbleColor,
+                palette: _presetColors,
+                allowNull: true,
+                nullLabel: 'Auto',
+                onChanged: (v) =>
+                    onUpdate((p) => p.copyWith(charBubbleColor: v)),
+              ),
+            ],
+          ],
+        ),
+        MenuGroup(
+          header: 'Reply Colors',
+          items: [
+            _ColorRow(
+              label: 'User Quote',
+              value: preset.userQuoteColor,
+              palette: _presetColors,
+              allowNull: true,
+              nullLabel: 'Auto',
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(userQuoteColor: v)),
             ),
-          )
-        else ...[
-          _ColorRow(
-            label: 'User Bubble',
-            value: preset.userBubbleColor,
-            palette: _presetColors,
-            allowNull: true,
-            nullLabel: 'Auto',
-            onChanged: (v) => onUpdate((p) => p.copyWith(userBubbleColor: v)),
-          ),
-          _ColorRow(
-            label: 'Char Bubble',
-            value: preset.charBubbleColor,
-            palette: _presetColors,
-            allowNull: true,
-            nullLabel: 'Auto',
-            onChanged: (v) => onUpdate((p) => p.copyWith(charBubbleColor: v)),
-          ),
-        ],
-        const _Divider(),
-
-        // ── Reply (Quote) Colors ──
-        _SectionHeader('Reply Colors'),
-        _ColorRow(
-          label: 'User Quote',
-          value: preset.userQuoteColor,
-          palette: _presetColors,
-          allowNull: true,
-          nullLabel: 'Auto',
-          onChanged: (v) => onUpdate((p) => p.copyWith(userQuoteColor: v)),
+            _ColorRow(
+              label: 'Char Quote',
+              value: preset.charQuoteColor,
+              palette: _presetColors,
+              allowNull: true,
+              nullLabel: 'Auto',
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(charQuoteColor: v)),
+            ),
+          ],
         ),
-        _ColorRow(
-          label: 'Char Quote',
-          value: preset.charQuoteColor,
-          palette: _presetColors,
-          allowNull: true,
-          nullLabel: 'Auto',
-          onChanged: (v) => onUpdate((p) => p.copyWith(charQuoteColor: v)),
+        MenuGroup(
+          header: 'Text Colors',
+          items: [
+            _ColorRow(
+              label: 'User Text',
+              value: preset.userTextColor,
+              palette: _presetColors,
+              allowNull: true,
+              nullLabel: 'Auto',
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(userTextColor: v)),
+            ),
+            _ColorRow(
+              label: 'Char Text',
+              value: preset.charTextColor,
+              palette: _presetColors,
+              allowNull: true,
+              nullLabel: 'Auto',
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(charTextColor: v)),
+            ),
+          ],
         ),
-        const _Divider(),
-
-        // ── Text Colors ──
-        _SectionHeader('Text Colors'),
-        _ColorRow(
-          label: 'User Text',
-          value: preset.userTextColor,
-          palette: _presetColors,
-          allowNull: true,
-          nullLabel: 'Auto',
-          onChanged: (v) => onUpdate((p) => p.copyWith(userTextColor: v)),
+        MenuGroup(
+          header: 'Italic (Action) Colors',
+          items: [
+            _ColorRow(
+              label: 'User Italic',
+              value: preset.userItalicColor,
+              palette: _presetColors,
+              allowNull: true,
+              nullLabel: 'Auto',
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(userItalicColor: v)),
+            ),
+            _ColorRow(
+              label: 'Char Italic',
+              value: preset.charItalicColor,
+              palette: _presetColors,
+              allowNull: true,
+              nullLabel: 'Auto',
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(charItalicColor: v)),
+            ),
+          ],
         ),
-        _ColorRow(
-          label: 'Char Text',
-          value: preset.charTextColor,
-          palette: _presetColors,
-          allowNull: true,
-          nullLabel: 'Auto',
-          onChanged: (v) => onUpdate((p) => p.copyWith(charTextColor: v)),
-        ),
-        const _Divider(),
-
-        // ── Italic Colors ──
-        _SectionHeader('Italic (Action) Colors'),
-        _ColorRow(
-          label: 'User Italic',
-          value: preset.userItalicColor,
-          palette: _presetColors,
-          allowNull: true,
-          nullLabel: 'Auto',
-          onChanged: (v) => onUpdate((p) => p.copyWith(userItalicColor: v)),
-        ),
-        _ColorRow(
-          label: 'Char Italic',
-          value: preset.charItalicColor,
-          palette: _presetColors,
-          allowNull: true,
-          nullLabel: 'Auto',
-          onChanged: (v) => onUpdate((p) => p.copyWith(charItalicColor: v)),
-        ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
       ],
     );
   }
 }
 
 // ─── Shared row widgets ───────────────────────────────────────────────────────
-
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader(this.title);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
-          color: context.cs.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-}
-
-class _Divider extends StatelessWidget {
-  const _Divider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Divider(height: 1, indent: 16, endIndent: 16, color: context.cs.outlineVariant);
-  }
-}
 
 // ─── Slider row ───────────────────────────────────────────────────────────────
 
@@ -598,7 +620,7 @@ class _SliderRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 130,
-            child: Text(label, style: TextStyle(fontSize: 14, color: context.cs.onSurface)),
+            child: Text(label, style: TextStyle(fontSize: 15, color: context.cs.onSurfaceVariant, fontWeight: FontWeight.w400)),
           ),
           Expanded(
             child: Slider(
@@ -653,7 +675,7 @@ class _FontSizeRow extends StatelessWidget {
             children: [
               SizedBox(
                 width: 130,
-                child: Text(label, style: TextStyle(fontSize: 14, color: context.cs.onSurface)),
+                child: Text(label, style: TextStyle(fontSize: 15, color: context.cs.onSurfaceVariant, fontWeight: FontWeight.w400)),
               ),
               const Spacer(),
               TextButton(
@@ -722,7 +744,7 @@ class _FontModeRow extends StatelessWidget {
         children: [
           SizedBox(
             width: 130,
-            child: Text(label, style: TextStyle(fontSize: 14, color: context.cs.onSurface)),
+            child: Text(label, style: TextStyle(fontSize: 15, color: context.cs.onSurfaceVariant, fontWeight: FontWeight.w400)),
           ),
           const Spacer(),
           GestureDetector(
@@ -782,47 +804,171 @@ class _ColorRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final current = value != null && value!.isNotEmpty ? _hex(value!) : null;
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-      title: Text(label, style: TextStyle(fontSize: 14, color: context.cs.onSurface)),
-      trailing: GestureDetector(
-        onTap: () => _openPicker(context),
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: current ?? Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: context.cs.outlineVariant,
-              width: current == null ? 1.5 : 1,
+    final textOnCurrent = current != null
+        ? (current.computeLuminance() > 0.5 ? Colors.black : Colors.white)
+        : context.cs.onSurfaceVariant;
+    return InkWell(
+      onTap: () => _openPicker(context),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: context.cs.onSurfaceVariant,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
             ),
-          ),
-          child: current == null
-              ? Icon(Icons.auto_awesome, size: 16, color: context.cs.onSurfaceVariant)
-              : null,
+            Container(
+              constraints: const BoxConstraints(minWidth: 48),
+              height: 24,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: current ?? Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: context.cs.outlineVariant
+                      .withValues(alpha: current == null ? 0.6 : 0.3),
+                  width: 1,
+                ),
+              ),
+              child: current == null
+                  ? Text(
+                      nullLabel,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: textOnCurrent,
+                      ),
+                    )
+                  : null,
+            ),
+          ],
         ),
       ),
-      onTap: () => _openPicker(context),
     );
   }
 
   Future<void> _openPicker(BuildContext context) async {
-    final result = await showModalBottomSheet<String?>(
+    await showModalBottomSheet<void>(
       context: context,
+      useRootNavigator: true,
+      useSafeArea: true,
       isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
       builder: (_) => _ColorPickerSheet(
         current: value,
         palette: palette,
         allowNull: allowNull,
         nullLabel: nullLabel,
+        onChanged: onChanged,
       ),
     );
-    if (result == '' && allowNull) {
-      onChanged(null);
-    } else if (result != null) {
-      onChanged(result);
+  }
+}
+
+// ─── Background image row ─────────────────────────────────────────────────────
+
+class _BgImageRow extends StatelessWidget {
+  final ThemePreset preset;
+  final void Function(ThemePreset Function(ThemePreset)) onUpdate;
+
+  const _BgImageRow({required this.preset, required this.onUpdate});
+
+  Future<void> _pick(BuildContext context) async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.image,
+        dialogTitle: 'Select Background Image',
+      );
+      if (result == null || result.files.isEmpty) return;
+      final path = result.files.first.path;
+      if (path == null) return;
+      final bytes = await File(path).readAsBytes();
+      final lower = path.toLowerCase();
+      final mime = lower.endsWith('.png')
+          ? 'image/png'
+          : lower.endsWith('.webp')
+              ? 'image/webp'
+              : lower.endsWith('.gif')
+                  ? 'image/gif'
+                  : 'image/jpeg';
+      final dataUri = 'data:$mime;base64,${base64Encode(bytes)}';
+      onUpdate((p) => p.copyWith(bgImage: dataUri));
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load image: $e')),
+        );
+      }
     }
+  }
+
+  void _reset() => onUpdate((p) => p.copyWith(bgImage: null));
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => _pick(context),
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                Icon(Icons.image_outlined,
+                    size: 22, color: const Color(0xFF99A2AD)),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    preset.hasBgImage
+                        ? 'Replace Background Image'
+                        : 'Select Background Image',
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (preset.hasBgImage)
+          InkWell(
+            onTap: _reset,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
+                children: [
+                  Icon(Icons.delete_outline,
+                      size: 22, color: Color(0xFFFF4444)),
+                  SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      'Reset Background',
+                      style: TextStyle(
+                        color: Color(0xFFFF4444),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
   }
 }
 
@@ -833,12 +979,14 @@ class _ColorPickerSheet extends StatefulWidget {
   final List<String> palette;
   final bool allowNull;
   final String nullLabel;
+  final ValueChanged<String?> onChanged;
 
   const _ColorPickerSheet({
     required this.current,
     required this.palette,
     required this.allowNull,
     required this.nullLabel,
+    required this.onChanged,
   });
 
   @override
@@ -861,19 +1009,24 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
     super.dispose();
   }
 
-  void _submit(String hex) {
+  /// Live-apply on every keystroke when the hex is valid. Empty input applies
+  /// null when `allowNull`; invalid input shows an inline error.
+  void _onHexChanged(String hex) {
     final clean = hex.trim();
     if (clean.isEmpty) {
-      if (widget.allowNull) Navigator.pop(context, '');
+      setState(() => _error = null);
+      if (widget.allowNull) widget.onChanged(null);
       return;
     }
     final h = clean.startsWith('#') ? clean : '#$clean';
     final parsed = _parseHexSafe(h);
     if (parsed == null) {
-      setState(() => _error = 'Invalid hex color');
+      // Don't show error mid-typing; only flag clearly malformed lengths.
+      setState(() => _error = clean.length >= 6 ? 'Invalid hex color' : null);
       return;
     }
-    Navigator.pop(context, _toHex(parsed));
+    setState(() => _error = null);
+    widget.onChanged(_toHex(parsed));
   }
 
   Color? _parseHexSafe(String hex) {
@@ -890,101 +1043,110 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Handle
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: cs.outlineVariant,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              // Palette
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  if (widget.allowNull)
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context, ''),
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          color: cs.surface.withValues(alpha: 0.85),
+          child: Padding(
+            padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
                       child: Container(
-                        width: 44,
-                        height: 44,
+                        width: 36,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
-                          border: Border.all(color: cs.outlineVariant, width: 1.5),
-                          borderRadius: BorderRadius.circular(10),
+                          color: cs.outlineVariant,
+                          borderRadius: BorderRadius.circular(2),
                         ),
-                        child: Icon(Icons.auto_awesome, size: 18, color: cs.onSurfaceVariant),
                       ),
                     ),
-                  ...widget.palette.map((hex) {
-                    final color = _hex(hex);
-                    final isSelected = widget.current?.toUpperCase() == hex.toUpperCase();
-                    return GestureDetector(
-                      onTap: () => Navigator.pop(context, hex.toUpperCase()),
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: color,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isSelected ? cs.primary : cs.outlineVariant,
-                            width: isSelected ? 3 : 1,
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: [
+                        if (widget.allowNull)
+                          GestureDetector(
+                            onTap: () {
+                              widget.onChanged(null);
+                              Navigator.pop(context);
+                            },
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                    color: cs.outlineVariant, width: 1.5),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(Icons.auto_awesome,
+                                  size: 18, color: cs.onSurfaceVariant),
+                            ),
                           ),
-                        ),
-                        child: isSelected
-                            ? Icon(
-                                Icons.check,
-                                size: 20,
-                                color: color.computeLuminance() > 0.4 ? Colors.black : Colors.white,
-                              )
-                            : null,
-                      ),
-                    );
-                  }),
-                ],
-              ),
-              const SizedBox(height: 16),
-              // Hex input
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
+                        ...widget.palette.map((hex) {
+                          final color = _hex(hex);
+                          final isSelected = widget.current?.toUpperCase() ==
+                              hex.toUpperCase();
+                          return GestureDetector(
+                            onTap: () {
+                              widget.onChanged(hex.toUpperCase());
+                              Navigator.pop(context);
+                            },
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? cs.primary
+                                      : cs.outlineVariant,
+                                  width: isSelected ? 3 : 1,
+                                ),
+                              ),
+                              child: isSelected
+                                  ? Icon(
+                                      Icons.check,
+                                      size: 20,
+                                      color: color.computeLuminance() > 0.4
+                                          ? Colors.black
+                                          : Colors.white,
+                                    )
+                                  : null,
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
                       controller: _hexCtrl,
                       decoration: InputDecoration(
                         hintText: '#7996CE',
                         labelText: 'Hex Color',
                         errorText: _error,
-                        prefixText: _hexCtrl.text.startsWith('#') ? null : '#',
+                        prefixText:
+                            _hexCtrl.text.startsWith('#') ? null : '#',
                         border: const OutlineInputBorder(),
                         isDense: true,
                       ),
-                      onChanged: (_) => setState(() => _error = null),
-                      onSubmitted: _submit,
+                      onChanged: _onHexChanged,
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton(
-                    onPressed: () => _submit(_hexCtrl.text),
-                    child: const Text('Apply'),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                  ],
+                ),
               ),
-              const SizedBox(height: 8),
-            ],
+            ),
           ),
         ),
       ),

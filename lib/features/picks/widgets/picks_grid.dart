@@ -14,12 +14,14 @@ class PicksGrid extends ConsumerWidget {
   final double topPadding;
   final double bottomPadding;
   final Widget? tabBar;
+  final void Function(String title, String? description, bool canGoBack, VoidCallback? onBack)? onFolderChanged;
 
   const PicksGrid({
     super.key,
     this.topPadding = 0,
     this.bottomPadding = 16,
     this.tabBar,
+    this.onFolderChanged,
   });
 
   @override
@@ -57,6 +59,7 @@ class PicksGrid extends ConsumerWidget {
         topPadding: topPadding,
         bottomPadding: bottomPadding,
         tabBar: tabBar,
+        onFolderChanged: onFolderChanged,
       ),
     );
   }
@@ -67,12 +70,14 @@ class _PicksFolderView extends StatefulWidget {
   final double topPadding;
   final double bottomPadding;
   final Widget? tabBar;
+  final void Function(String title, String? description, bool canGoBack, VoidCallback? onBack)? onFolderChanged;
 
   const _PicksFolderView({
     required this.folders,
     this.topPadding = 0,
     this.bottomPadding = 16,
     this.tabBar,
+    this.onFolderChanged,
   });
 
   @override
@@ -114,132 +119,171 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
     return folder.characters;
   }
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _notifyFolderChanged());
+  }
+
+  void _notifyFolderChanged() {
+    if (!mounted || widget.onFolderChanged == null) return;
+    final folder = _currentFolder;
+    if (folder != null) {
+      widget.onFolderChanged!(
+        folder.name,
+        folder.description,
+        _path.isNotEmpty,
+        () {
+          if (mounted) _navigateBack();
+        },
+      );
+    } else {
+      widget.onFolderChanged!(
+        'Our Picks',
+        null,
+        false,
+        null,
+      );
+    }
+  }
+
+  bool _isBackTransition = false;
+
   void _navigateInto(String folderId) {
-    setState(() => _path = [..._path, folderId]);
+    setState(() {
+      _isBackTransition = false;
+      _path = [..._path, folderId];
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _notifyFolderChanged());
   }
 
   void _navigateBack() {
     if (_path.isEmpty) return;
-    setState(() => _path = _path.sublist(0, _path.length - 1));
+    setState(() {
+      _isBackTransition = true;
+      _path = _path.sublist(0, _path.length - 1);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _notifyFolderChanged());
   }
 
   @override
   Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        if (widget.topPadding > 0)
-          SliverToBoxAdapter(child: SizedBox(height: widget.topPadding)),
-        if (widget.tabBar != null)
-          SliverToBoxAdapter(child: widget.tabBar!),
-        if (_path.isNotEmpty)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: _navigateBack,
-                    child: Icon(
-                      Icons.arrow_back_rounded,
-                      color: context.cs.primary,
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _currentFolder?.name ?? '',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                        color: context.cs.onSurface,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 320),
+      reverseDuration: const Duration(milliseconds: 280),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) {
+        final isIncoming = child.key == ValueKey(_path.join('/'));
+        
+        Offset beginOffset;
+        if (_isBackTransition) {
+          beginOffset = isIncoming ? const Offset(-0.15, 0.0) : const Offset(0.2, 0.0);
+        } else {
+          beginOffset = isIncoming ? const Offset(0.2, 0.0) : const Offset(-0.15, 0.0);
+        }
+
+        final slide = Tween<Offset>(
+          begin: beginOffset,
+          end: Offset.zero,
+        ).animate(animation);
+
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: slide,
+            child: child,
           ),
-        if (_currentFolder?.description != null)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-              child: Text(
-                _currentFolder!.description!,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: context.cs.onSurfaceVariant,
+        );
+      },
+      child: CustomScrollView(
+        key: ValueKey(_path.join('/')),
+        slivers: [
+          if (widget.topPadding > 0)
+            SliverToBoxAdapter(child: SizedBox(height: widget.topPadding)),
+          if (widget.tabBar != null)
+            SliverToBoxAdapter(child: widget.tabBar!),
+          if (_currentFolder?.description != null)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 6, 16, 8),
+                child: Text(
+                  _currentFolder!.description!,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: context.cs.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),
-          ),
-        if (_hasSubfolders)
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              _path.isEmpty ? 12 : 8,
-              16,
-              0,
-            ),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.6,
+          if (_hasSubfolders)
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                _path.isEmpty ? 12 : 8,
+                16,
+                0,
               ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final folder = _currentFolders[index];
-                  return _FolderCard(
-                    folder: folder,
-                    path: _path,
-                    onTap: () => _navigateInto(folder.id),
-                  );
-                },
-                childCount: _currentFolders.length,
-              ),
-            ),
-          ),
-        if (_currentCharacters.isNotEmpty)
-          SliverPadding(
-            padding: EdgeInsets.fromLTRB(
-              16,
-              _hasSubfolders ? 8 : 12,
-              16,
-              widget.bottomPadding,
-            ),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 2 / 3.2,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final char = _currentCharacters[index];
-                  return _PicksCharacterCard(
-                    character: char,
-                    path: _path,
-                  );
-                },
-                childCount: _currentCharacters.length,
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 2 / 3.2,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final folder = _currentFolders[index];
+                    return _FolderCard(
+                      folder: folder,
+                      path: _path,
+                      onTap: () => _navigateInto(folder.id),
+                    );
+                  },
+                  childCount: _currentFolders.length,
+                ),
               ),
             ),
-          ),
-        if (_currentCharacters.isEmpty &&
-            !_hasSubfolders &&
-            _path.isNotEmpty)
-          SliverFillRemaining(
-            child: Center(
-              child: Text(
-                'Coming soon',
-                style: TextStyle(color: context.cs.onSurfaceVariant),
+          if (_currentCharacters.isNotEmpty)
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(
+                16,
+                _hasSubfolders ? 8 : 12,
+                16,
+                widget.bottomPadding,
+              ),
+              sliver: SliverGrid(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 2 / 3.2,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final char = _currentCharacters[index];
+                    return _PicksCharacterCard(
+                      character: char,
+                      path: _path,
+                    );
+                  },
+                  childCount: _currentCharacters.length,
+                ),
               ),
             ),
-          ),
-      ],
+          if (_currentCharacters.isEmpty &&
+              !_hasSubfolders &&
+              _path.isNotEmpty)
+            SliverFillRemaining(
+              child: Center(
+                child: Text(
+                  'Coming soon',
+                  style: TextStyle(color: context.cs.onSurfaceVariant),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -256,6 +300,7 @@ class _FolderCard extends StatefulWidget {
 }
 
 class _FolderCardState extends State<_FolderCard> {
+  bool _pressed = false;
   bool _hovered = false;
   late final List<PicksCharacter> _shuffledChars;
 
@@ -270,113 +315,93 @@ class _FolderCardState extends State<_FolderCard> {
 
   @override
   Widget build(BuildContext context) {
-    final folder = widget.folder;
-    final dy = _hovered ? -2.0 : 0.0;
+    final scale = _pressed ? 0.96 : (_hovered ? 1.01 : 1.0);
+    final dy = _hovered && !_pressed ? -4.0 : 0.0;
+    final shadowAlpha = _hovered ? 0.3 : 0.1;
+    final shadowColor = Colors.black.withValues(alpha: shadowAlpha);
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          transform: Matrix4.identity()..translateByDouble(0.0, dy, 0.0, 1.0),
-          transformAlignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: context.cs.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: context.cs.primary.withValues(alpha: 0.15),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: _hovered ? 0.2 : 0.05),
-                blurRadius: _hovered ? 16 : 4,
-                offset: Offset(0, _hovered ? 8 : 2),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: folder.imageUrl != null
-                      ? CachedNetworkImage(
-                          imageUrl: folder.imageUrl!,
-                          fit: BoxFit.cover,
-                          errorWidget: (_, _, _) =>
-                              _folderGradient(context),
-                        )
-                      : _buildFolderBackground(context),
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      builder: (_, t, child) => Opacity(
+        opacity: t,
+        child: Transform.scale(
+          scale: 0.9 + 0.1 * t,
+          child: child,
+        ),
+      ),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutBack,
+            transform: Matrix4.identity()
+              ..translateByDouble(0.0, dy, 0.0, 1.0)
+              ..scaleByDouble(scale, scale, 1.0, 1.0),
+            transformAlignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: shadowColor,
+                  blurRadius: _hovered ? 24 : 6,
+                  offset: Offset(0, _hovered ? 12 : 4),
                 ),
-                Positioned.fill(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.75),
-                          Colors.black.withValues(alpha: 0.2),
-                          Colors.transparent,
-                        ],
-                        stops: const [0.0, 0.5, 1.0],
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AnimatedScale(
+                    scale: _hovered ? 1.05 : 1.0,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                    child: widget.folder.imageUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: widget.folder.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorWidget: (_, _, _) => _folderGradient(context),
+                          )
+                        : _buildFolderBackground(context),
+                  ),
+                  const Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 150,
+                    child: _PicksBottomGradient(),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: _FolderCardInfo(folder: widget.folder),
+                  ),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            width: 2,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Icon(
-                        folder.subfolders.isNotEmpty
-                            ? Icons.folder_special_rounded
-                            : Icons.folder_rounded,
-                        color: Colors.white.withValues(alpha: 0.9),
-                        size: 28,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        folder.name,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
-                        ),
-                      ),
-                      if (folder.description != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          folder.description!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.75),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 4),
-                      Builder(builder: (context) {
-                        final count = folder.characters.length +
-                            folder.subfolders.fold<int>(
-                                0, (sum, sf) => sum + sf.characters.length);
-                        return Text(
-                          '$count character${count == 1 ? '' : 's'}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.white.withValues(alpha: 0.6),
-                          ),
-                        );
-                      }),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -491,122 +516,119 @@ class _PicksCharacterCardState extends ConsumerState<_PicksCharacterCard> {
     final dy = _hovered && !_pressed ? -4.0 : 0.0;
     final imported = _isImported;
     final needsUpdate = _needsUpdate;
+    final shadowAlpha = _hovered ? 0.3 : 0.1;
+    final shadowColor = Colors.black.withValues(alpha: shadowAlpha);
 
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        onTap: _openDetail,
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapUp: (_) => setState(() => _pressed = false),
-        onTapCancel: () => setState(() => _pressed = false),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          transform: Matrix4.identity()
-            ..translateByDouble(0.0, dy, 0.0, 1.0)
-            ..scaleByDouble(scale, scale, 1.0, 1.0),
-          transformAlignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: context.cs.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: needsUpdate
-                  ? context.cs.primary.withValues(alpha: 0.5)
-                  : Colors.white.withValues(alpha: 0.05),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: _hovered ? 0.3 : 0.1),
-                blurRadius: _hovered ? 24 : 6,
-                offset: Offset(0, _hovered ? 12 : 4),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                _buildPlaceholder(),
-                Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.7),
-                      ],
-                      stops: const [0.5, 1.0],
-                    ),
-                  ),
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOut,
+      builder: (_, t, child) => Opacity(
+        opacity: t,
+        child: Transform.scale(
+          scale: 0.9 + 0.1 * t,
+          child: child,
+        ),
+      ),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: GestureDetector(
+          onTap: _openDetail,
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutBack,
+            transform: Matrix4.identity()
+              ..translateByDouble(0.0, dy, 0.0, 1.0)
+              ..scaleByDouble(scale, scale, 1.0, 1.0),
+            transformAlignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: shadowColor,
+                  blurRadius: _hovered ? 24 : 6,
+                  offset: Offset(0, _hovered ? 12 : 4),
                 ),
-                if (imported && !needsUpdate)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.green.withValues(alpha: 0.9),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.check_rounded,
-                        size: 14,
-                        color: Colors.white,
-                      ),
-                    ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(16),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  AnimatedScale(
+                    scale: _hovered ? 1.05 : 1.0,
+                    duration: const Duration(milliseconds: 500),
+                    curve: Curves.easeOut,
+                    child: _buildPlaceholder(),
                   ),
-                if (imported && needsUpdate)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.9),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.refresh_rounded,
-                        size: 14,
-                        color: Colors.white,
-                      ),
-                    ),
+                  const Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 150,
+                    child: _PicksBottomGradient(),
                   ),
-                Positioned(
-                  left: 10,
-                  right: 10,
-                  bottom: 10,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        char.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: _PicksCharacterCardInfo(char: char),
+                  ),
+                  if (imported && !needsUpdate)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withValues(alpha: 0.9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.check_rounded,
+                          size: 14,
                           color: Colors.white,
                         ),
                       ),
-                      if (char.description != null)
-                        Text(
-                          char.description!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.white.withValues(alpha: 0.7),
+                    ),
+                  if (imported && needsUpdate)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.refresh_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.05),
+                            width: 2,
                           ),
                         ),
-                    ],
+                      ),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -649,6 +671,157 @@ class _PicksCharacterCardState extends ConsumerState<_PicksCharacterCard> {
         character: char,
         imageUrl: _imageUrl,
         relativePath: _relativePath,
+      ),
+    );
+  }
+}
+
+class _PicksBottomGradient extends StatelessWidget {
+  const _PicksBottomGradient();
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.bottomCenter,
+          end: Alignment.topCenter,
+          colors: [Color(0xF2000000), Color(0x99000000), Colors.transparent],
+          stops: [0.0, 0.5, 1.0],
+        ),
+      ),
+    );
+  }
+}
+
+class _FolderCardInfo extends StatelessWidget {
+  final PicksFolder folder;
+
+  const _FolderCardInfo({required this.folder});
+
+  @override
+  Widget build(BuildContext context) {
+    final desc = folder.description;
+    final count = folder.characters.length +
+        folder.subfolders.fold<int>(0, (sum, sf) => sum + sf.characters.length);
+
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 3),
+                child: Icon(
+                  folder.subfolders.isNotEmpty
+                      ? Icons.folder_special_rounded
+                      : Icons.folder_rounded,
+                  size: 14,
+                  color: Colors.white,
+                  shadows: const [Shadow(blurRadius: 2, color: Colors.black54)],
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  folder.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(blurRadius: 4, color: Colors.black54),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          Text(
+            desc ?? '$count character${count == 1 ? '' : 's'}',
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.white.withValues(alpha: 0.75),
+              height: 1.3,
+              shadows: const [Shadow(blurRadius: 4, color: Colors.black87)],
+            ),
+          ),
+          if (desc != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              '$count character${count == 1 ? '' : 's'}',
+              style: TextStyle(
+                fontSize: 10,
+                color: Colors.white.withValues(alpha: 0.55),
+                shadows: const [Shadow(blurRadius: 4, color: Colors.black87)],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _PicksCharacterCardInfo extends StatelessWidget {
+  final PicksCharacter char;
+
+  const _PicksCharacterCardInfo({required this.char});
+
+  @override
+  Widget build(BuildContext context) {
+    final desc = char.description;
+
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  char.name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(blurRadius: 4, color: Colors.black54),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (desc != null && desc.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              desc,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                color: Colors.white.withValues(alpha: 0.75),
+                height: 1.3,
+                shadows: const [Shadow(blurRadius: 4, color: Colors.black87)],
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
