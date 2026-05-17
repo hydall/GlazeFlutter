@@ -31,7 +31,7 @@ class GenerationNotificationService {
 
   Future<void> init() async {
     const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('new_message');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -155,6 +155,7 @@ class GenerationNotificationService {
       importance: Importance.high,
       priority: Priority.high,
       autoCancel: true,
+      icon: '@drawable/new_message',
     );
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,

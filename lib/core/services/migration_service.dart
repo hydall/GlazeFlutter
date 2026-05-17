@@ -149,10 +149,12 @@ class MigrationService {
   }
 
   Future<void> _importChats(Map<String, dynamic> kv, MigrationResult result) async {
+    final validCharIds = (await _charRepo.getAll()).map((c) => c.id).toSet();
     for (final entry in kv.entries) {
       if (!entry.key.startsWith('gz_chat_')) continue;
 
       final charId = entry.key.replaceFirst('gz_chat_', '');
+      if (!validCharIds.contains(charId)) continue;
       final chatData = entry.value;
       if (chatData is! Map<String, dynamic>) continue;
 

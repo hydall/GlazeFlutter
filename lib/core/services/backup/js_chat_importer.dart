@@ -17,7 +17,9 @@ class JsChatImporter with BackupHelpers {
   JsChatImporter(this.db, this.imageStorage);
 
   Future<void> importChats(Map<String, dynamic> kv) async {
-    await importChatsFromMap(kv, 'gz_chat_');
+    final validCharIds = await _loadCharacterIds();
+
+    await importChatsFromMap(kv, 'gz_chat_', validCharIds);
 
     final topLevelChats = kv['chats'];
     if (topLevelChats is Map<String, dynamic>) {
@@ -25,19 +27,26 @@ class JsChatImporter with BackupHelpers {
         final charId = entry.key;
         final chatData = entry.value as Map<String, dynamic>?;
         if (chatData == null) continue;
+        if (!validCharIds.contains(charId)) continue;
         await importChatData(charId, chatData);
       }
     }
   }
 
+  Future<Set<String>> _loadCharacterIds() async {
+    final rows = await db.select(db.characters).get();
+    return rows.map((r) => r.charId).toSet();
+  }
+
   Future<void> importChatsFromMap(
-      Map<String, dynamic> kv, String prefix) async {
+      Map<String, dynamic> kv, String prefix, Set<String> validCharIds) async {
     final chatKeys = kv.keys.where((k) => k.startsWith(prefix));
 
     for (final key in chatKeys) {
       final charId = key.substring(prefix.length);
       final chatData = kv[key] as Map<String, dynamic>?;
       if (chatData == null) continue;
+      if (!validCharIds.contains(charId)) continue;
       await importChatData(charId, chatData);
     }
   }
