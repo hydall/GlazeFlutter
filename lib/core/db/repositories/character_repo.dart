@@ -46,6 +46,16 @@ class CharacterRepo {
   }
 
   Future<void> delete(String id) async {
+    final sessionIds = (await (_db.select(_db.chatSessions)
+              ..where((t) => t.characterId.equals(id)))
+            .get())
+        .map((r) => r.sessionId)
+        .toList();
+    for (final sid in sessionIds) {
+      await (_db.delete(_db.memoryBookRows)..where((t) => t.sessionId.equals(sid))).go();
+      await (_db.delete(_db.chatSummaries)..where((t) => t.sessionId.equals(sid))).go();
+    }
+    await (_db.delete(_db.chatSessions)..where((t) => t.characterId.equals(id))).go();
     await (_db.delete(_db.characters)..where((t) => t.charId.equals(id))).go();
   }
 
