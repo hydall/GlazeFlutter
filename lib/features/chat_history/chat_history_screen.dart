@@ -385,7 +385,7 @@ class _SessionTile extends ConsumerWidget {
                   Text(
                     info.sessionName?.isNotEmpty == true
                         ? info.sessionName!
-                        : 'Session #${info.sessionIndex}',
+                        : 'Session #${info.sessionIndex + 1}',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -438,7 +438,7 @@ class _SessionTile extends ConsumerWidget {
                     child: Text(
                       info.sessionName?.isNotEmpty == true
                           ? info.sessionName!
-                          : 'Session #${info.sessionIndex}',
+                          : 'Session #${info.sessionIndex + 1}',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
@@ -511,7 +511,7 @@ class _SessionTile extends ConsumerWidget {
   void _showRenameDialog(BuildContext context, WidgetRef ref) {
     final currentName = info.sessionName?.isNotEmpty == true
         ? info.sessionName!
-        : 'Session #${info.sessionIndex}';
+        : 'Session #${info.sessionIndex + 1}';
     GlazeBottomSheet.show(
       context,
       title: 'Rename Session',

@@ -535,7 +535,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     if (!mounted || session == null) return;
     final currentName = session.sessionVars['sessionName']?.isNotEmpty == true
         ? session.sessionVars['sessionName']!
-        : 'Session #${session.sessionIndex}';
+        : 'Session #${session.sessionIndex + 1}';
     GlazeBottomSheet.show(
       context,
       title: 'Rename Session',
@@ -849,7 +849,7 @@ class _SessionsSheetContentState extends ConsumerState<_SessionsSheetContent> {
             (session) => BottomSheetSessionItem(
               title: session.sessionVars['sessionName']?.isNotEmpty == true
                   ? session.sessionVars['sessionName']!
-                  : 'Session #${session.sessionIndex}',
+                  : 'Session #${session.sessionIndex + 1}',
               count: session.messages.length,
               time: session.updatedAt == 0
                   ? ''

@@ -127,7 +127,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
     }
     _controller.clear();
     _guidanceController.clear();
-    widget.onDraftChanged?.call('');
   }
 
   @override

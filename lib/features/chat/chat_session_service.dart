@@ -18,7 +18,7 @@ class ChatSessionService {
     final character = await charRepo.getById(charId);
     final persona = await resolvePersona(charId);
 
-    final sessionId = '${charId}_1';
+    final sessionId = '${charId}_0';
     final initialMessages = InitialMessageBuilder.build(
       character: character,
       persona: persona,
@@ -28,7 +28,7 @@ class ChatSessionService {
     final session = ChatSession(
       id: sessionId,
       characterId: charId,
-      sessionIndex: 1,
+      sessionIndex: 0,
       messages: initialMessages,
     );
     await repo.put(session);
@@ -42,7 +42,7 @@ class ChatSessionService {
 
     final charRepo = _ref.read(characterRepoProvider);
     final character = await charRepo.getById(charId);
-    final currentIdx = character?.currentSessionIndex ?? 1;
+    final currentIdx = character?.currentSessionIndex ?? 0;
     return sessions.where((s) => s.sessionIndex == currentIdx).firstOrNull ?? sessions.first;
   }
 
@@ -133,7 +133,7 @@ class ChatSessionService {
   Future<int> _nextSessionIndex(String charId) async {
     final repo = _ref.read(chatRepoProvider);
     final sessions = await repo.getByCharacterId(charId);
-    if (sessions.isEmpty) return 1;
+    if (sessions.isEmpty) return 0;
     return sessions.map((s) => s.sessionIndex).reduce((a, b) => a > b ? a : b) + 1;
   }
 }

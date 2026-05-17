@@ -193,9 +193,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final character = ref.watch(characterByIdProvider(charId));
     final title = character?.name ?? 'Chat';
     final sessionName = chatState?.session != null
-        ? 'Session #${chatState!.session!.sessionIndex}'
+        ? 'Session #${chatState!.session!.sessionIndex + 1}'
         : 'Loading...';
-    final sessionIndex = chatState?.session?.sessionIndex ?? 1;
+    final sessionIndex = chatState?.session?.sessionIndex ?? 0;
     
     final appSettings = ref.watch(appSettingsProvider).valueOrNull;
     final virtualKeyboardSend = appSettings?.virtualKeyboardSend ?? false;
