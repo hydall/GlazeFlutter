@@ -20,7 +20,10 @@ class JsBackupImporter with BackupHelpers {
 
   JsBackupImporter(this.db, this.imageStorage);
 
-  Future<void> import(Map<String, dynamic> data) async {
+  Future<void> import(
+    Map<String, dynamic> data, {
+    void Function(String stage)? onProgress,
+  }) async {
     await _ensureSchema();
     await _clearAllTables();
 
@@ -33,7 +36,8 @@ class JsBackupImporter with BackupHelpers {
     final chatImporter = JsChatImporter(db, imageStorage);
     final presetImporter = JsPresetImporter(db, imageStorage);
 
-    Future<void> step(String name, Future<void> Function() fn) async {
+    Future<void> step(String name, String label, Future<void> Function() fn) async {
+      onProgress?.call(label);
       try {
         await fn();
       } catch (e, st) {
@@ -41,18 +45,19 @@ class JsBackupImporter with BackupHelpers {
       }
     }
 
-    await step('importCharacters', () => characterImporter.importCharacters(data['characters']));
-    await step('importPersonas', () => characterImporter.importPersonas(data['personas']));
-    await step('importLorebooks', () => lorebookImporter.importLorebooks(kv));
-    await step('importCharacterBooks', () => lorebookImporter.importCharacterBooks(data['characters']));
-    await step('importApiConfigs', () => apiConfigImporter.importApiConfigs(kv, ls, data));
-    await step('importLorebookSettings', () => lorebookImporter.importLorebookSettings(kv, ls));
-    await step('importChats', () => chatImporter.importChats(kv));
-    await step('importPresets', () => presetImporter.importPresets(kv, ls));
-    await step('importJsActiveSelections', () => _importJsActiveSelections(kv, ls));
-    await step('importGalleryFromCharacters', () => characterImporter.importGalleryFromCharacters(data['characters']));
-    await step('importDeletedEntries', () => presetImporter.importDeletedEntries(ls, kv));
-    await step('importTheme', () => presetImporter.importTheme(ls, kv));
+    await step('importCharacters', 'Importing characters...', () => characterImporter.importCharacters(data['characters']));
+    await step('importPersonas', 'Importing personas...', () => characterImporter.importPersonas(data['personas']));
+    await step('importLorebooks', 'Importing lorebooks...', () => lorebookImporter.importLorebooks(kv));
+    await step('importCharacterBooks', 'Importing character books...', () => lorebookImporter.importCharacterBooks(data['characters']));
+    await step('importApiConfigs', 'Importing API configs...', () => apiConfigImporter.importApiConfigs(kv, ls, data));
+    await step('importLorebookSettings', 'Importing lorebook settings...', () => lorebookImporter.importLorebookSettings(kv, ls));
+    await step('importChats', 'Importing chats...', () => chatImporter.importChats(kv));
+    await step('importPresets', 'Importing presets...', () => presetImporter.importPresets(kv, ls));
+    await step('importJsActiveSelections', 'Importing settings...', () => _importJsActiveSelections(kv, ls));
+    await step('importGalleryFromCharacters', 'Importing gallery...', () => characterImporter.importGalleryFromCharacters(data['characters']));
+    await step('importDeletedEntries', 'Importing deleted entries...', () => presetImporter.importDeletedEntries(ls, kv));
+    await step('importTheme', 'Importing theme...', () => presetImporter.importTheme(ls, kv));
+    onProgress?.call('Finalizing...');
   }
 
   Future<void> _clearAllTables() async {

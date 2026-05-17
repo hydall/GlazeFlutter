@@ -13,7 +13,10 @@ class FlutterBackupImporter with BackupHelpers {
 
   FlutterBackupImporter(this.db, this.imageStorage);
 
-  Future<void> import(Map<String, dynamic> data) async {
+  Future<void> import(
+    Map<String, dynamic> data, {
+    void Function(String stage)? onProgress,
+  }) async {
     await _ensureSchema();
     final tables = data['tables'] as Map<String, dynamic>?;
     if (tables == null) return;
@@ -42,8 +45,10 @@ class FlutterBackupImporter with BackupHelpers {
         final rows = entry.value as List<dynamic>;
         if (rows.isEmpty) continue;
 
+        onProgress?.call('Importing $tableName...');
+
         final knownCols = existingColumns[tableName];
-        if (knownCols == null) continue; // table doesn't exist in this schema
+        if (knownCols == null) continue;
 
         try {
           await db.customStatement('DELETE FROM $tableName');

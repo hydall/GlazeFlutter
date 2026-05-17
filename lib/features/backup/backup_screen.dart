@@ -140,13 +140,22 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     try {
       if (ext == 'glz' || ext == 'json') {
         setState(() {
-          _importStage = 3;
-          _importProgressText = 'Importing Glaze data...';
+          _importStage = 1;
+          _importProgressText = 'Parsing backup...';
         });
         final file = File(path);
         final jsonString = await file.readAsString();
         final service = await ref.read(backupServiceProvider.future);
-        await service.importBackup(jsonString);
+        await service.importBackup(
+          jsonString,
+          onProgress: (stage) {
+            if (!mounted) return;
+            setState(() {
+              _importStage = (_importStage + 1).clamp(1, _totalStages - 1);
+              _importProgressText = stage;
+            });
+          },
+        );
         if (!mounted) return;
         setState(() {
           _importStage = _totalStages;

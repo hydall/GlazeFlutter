@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,12 +13,18 @@ class BackupService {
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
 
-  BackupService(this._db, this._imageStorage);
+  BackupService(this._db, _imageStorage) : _imageStorage = _imageStorage;
 
   Future<String> exportBackup() => BackupExporter(_db, _imageStorage).export();
 
-  Future<void> importBackup(String jsonString) async {
-    final data = jsonDecode(jsonString) as Map<String, dynamic>;
+  Future<void> importBackup(
+    String jsonString, {
+    void Function(String stage)? onProgress,
+  }) async {
+    onProgress?.call('Parsing backup...');
+    final data = await Isolate.run(
+      () => jsonDecode(jsonString) as Map<String, dynamic>,
+    );
     final isGlazeBackup = data['_isGlazeBackup'] == true ||
         data.containsKey('tables') ||
         data.containsKey('characters');
@@ -26,9 +33,11 @@ class BackupService {
     }
 
     if (data['_source'] == 'flutter') {
-      await FlutterBackupImporter(_db, _imageStorage).import(data);
+      await FlutterBackupImporter(_db, _imageStorage)
+          .import(data, onProgress: onProgress);
     } else {
-      await JsBackupImporter(_db, _imageStorage).import(data);
+      await JsBackupImporter(_db, _imageStorage)
+          .import(data, onProgress: onProgress);
     }
 
     await _deleteOrphanedSessions();
@@ -86,10 +95,12 @@ class BackupService {
         .toList();
     if (orphanIds.isEmpty) return;
 
-    for (final sid in orphanIds) {
-      await (_db.delete(_db.chatSessions)..where((t) => t.sessionId.equals(sid))).go();
-      await (_db.delete(_db.memoryBookRows)..where((t) => t.sessionId.equals(sid))).go();
-      await (_db.delete(_db.chatSummaries)..where((t) => t.sessionId.equals(sid))).go();
-    }
+    await _db.transaction(() async {
+      for (final sid in orphanIds) {
+        await (_db.delete(_db.chatSessions)..where((t) => t.sessionId.equals(sid))).go();
+        await (_db.delete(_db.memoryBookRows)..where((t) => t.sessionId.equals(sid))).go();
+        await (_db.delete(_db.chatSummaries)..where((t) => t.sessionId.equals(sid))).go();
+      }
+    });
   }
 }
