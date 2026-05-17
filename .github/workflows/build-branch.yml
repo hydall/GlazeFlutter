@@ -18,10 +18,10 @@ jobs:
 
       - name: Create .env from secrets
         run: |
-          echo "DROPBOX_APP_KEY=${{ secrets.VITE_DROPBOX_APP_KEY }}" >> .env
-          echo "DROPBOX_REDIRECT_NATIVE=${{ secrets.VITE_DROPBOX_REDIRECT_NATIVE }}" >> .env
-          echo "GDRIVE_CLIENT_ID=${{ secrets.VITE_GDRIVE_CLIENT_ID }}" >> .env
-          echo "GDRIVE_CLIENT_SECRET=${{ secrets.VITE_GDRIVE_CLIENT_SECRET }}" >> .env
+          echo "DROPBOX_APP_KEY=${{ secrets.DROPBOX_APP_KEY }}" >> .env
+          echo "DROPBOX_REDIRECT_NATIVE=${{ secrets.DROPBOX_REDIRECT_NATIVE }}" >> .env
+          echo "GDRIVE_CLIENT_ID=${{ secrets.GDRIVE_CLIENT_ID }}" >> .env
+          echo "GDRIVE_CLIENT_SECRET=${{ secrets.GDRIVE_CLIENT_SECRET }}" >> .env
           echo "GDRIVE_REDIRECT_NATIVE=com.hydall.glaze://oauth/gdrive" >> .env
 
       - name: Set up Java 17
@@ -86,10 +86,10 @@ jobs:
       - name: Create .env from secrets
         shell: bash
         run: |
-          echo "DROPBOX_APP_KEY=${{ secrets.VITE_DROPBOX_APP_KEY }}" >> .env
-          echo "DROPBOX_REDIRECT_NATIVE=${{ secrets.VITE_DROPBOX_REDIRECT_NATIVE }}" >> .env
-          echo "GDRIVE_CLIENT_ID=${{ secrets.VITE_GDRIVE_CLIENT_ID }}" >> .env
-          echo "GDRIVE_CLIENT_SECRET=${{ secrets.VITE_GDRIVE_CLIENT_SECRET }}" >> .env
+          echo "DROPBOX_APP_KEY=${{ secrets.DROPBOX_APP_KEY }}" >> .env
+          echo "DROPBOX_REDIRECT_NATIVE=${{ secrets.DROPBOX_REDIRECT_NATIVE }}" >> .env
+          echo "GDRIVE_CLIENT_ID=${{ secrets.GDRIVE_CLIENT_ID }}" >> .env
+          echo "GDRIVE_CLIENT_SECRET=${{ secrets.GDRIVE_CLIENT_SECRET }}" >> .env
           echo "GDRIVE_REDIRECT_NATIVE=com.hydall.glaze://oauth/gdrive" >> .env
 
       - name: Install Flutter
@@ -129,10 +129,10 @@ jobs:
 
       - name: Create .env from secrets
         run: |
-          echo "DROPBOX_APP_KEY=${{ secrets.VITE_DROPBOX_APP_KEY }}" >> .env
-          echo "DROPBOX_REDIRECT_NATIVE=${{ secrets.VITE_DROPBOX_REDIRECT_NATIVE }}" >> .env
-          echo "GDRIVE_CLIENT_ID=${{ secrets.VITE_GDRIVE_CLIENT_ID }}" >> .env
-          echo "GDRIVE_CLIENT_SECRET=${{ secrets.VITE_GDRIVE_CLIENT_SECRET }}" >> .env
+          echo "DROPBOX_APP_KEY=${{ secrets.DROPBOX_APP_KEY }}" >> .env
+          echo "DROPBOX_REDIRECT_NATIVE=${{ secrets.DROPBOX_REDIRECT_NATIVE }}" >> .env
+          echo "GDRIVE_CLIENT_ID=${{ secrets.GDRIVE_CLIENT_ID }}" >> .env
+          echo "GDRIVE_CLIENT_SECRET=${{ secrets.GDRIVE_CLIENT_SECRET }}" >> .env
           echo "GDRIVE_REDIRECT_NATIVE=com.hydall.glaze://oauth/gdrive" >> .env
 
       - name: Install Flutter
