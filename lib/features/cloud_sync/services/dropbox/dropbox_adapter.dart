@@ -162,11 +162,56 @@ class DropboxAdapter implements CloudAdapter {
 
   @override
   Future<void> deleteFolder(String path) async {
+    final stripped = _stripPrefix(path);
+    if (stripped.isEmpty) {
+      await _retryOn401(() => _deleteAllInRoot());
+      _ensuredFolders.clear();
+      return;
+    }
     await _retryOn401(() => _apiCall<dynamic>(
           '/files/delete_v2',
-          {'path': _stripPrefix(path)},
+          {'path': stripped},
         ));
-    _ensuredFolders.remove(_stripPrefix(path));
+    _ensuredFolders.remove(stripped);
+  }
+
+  Future<void> _deleteAllInRoot() async {
+    final entries = <Map<String, dynamic>>[];
+    var result = await _apiCall<Map<String, dynamic>>(
+      '/files/list_folder',
+      {'path': '', 'recursive': true},
+    );
+    entries.addAll((result['entries'] as List? ?? []).cast<Map<String, dynamic>>());
+
+    var hasMore = result['has_more'] as bool? ?? false;
+    while (hasMore) {
+      result = await _apiCall<Map<String, dynamic>>(
+        '/files/list_folder/continue',
+        {'cursor': result['cursor']},
+      );
+      entries.addAll((result['entries'] as List? ?? []).cast<Map<String, dynamic>>());
+      hasMore = result['has_more'] as bool? ?? false;
+    }
+
+    if (entries.isEmpty) return;
+
+    try {
+      await _apiCall<dynamic>('/files/delete_batch', {
+        'entries': entries
+            .map((e) => {'path': e['path_lower'] ?? e['path_display']})
+            .toList(),
+      });
+    } catch (_) {
+      for (final entry in entries) {
+        try {
+          await _apiCall<dynamic>(
+            '/files/delete_v2',
+            {'path': entry['path_lower'] ?? entry['path_display']},
+          );
+        } catch (_) {}
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
+    }
   }
 
   @override

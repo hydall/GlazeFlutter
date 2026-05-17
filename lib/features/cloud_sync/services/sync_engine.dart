@@ -193,9 +193,32 @@ class SyncEngine {
   Future<void> wipeCloudData({
     required void Function(SyncProgress) onProgress,
   }) async {
-    await _adapter.deleteFolder(cloudBase);
+    onProgress(const SyncProgress(message: 'Deleting cloud data...'));
+    try {
+      await _adapter.deleteFolder(cloudBase);
+    } catch (e) {
+      final msg = e.toString();
+      if (!msg.contains('not_found') && !msg.contains('path_not_found')) {
+        rethrow;
+      }
+    }
+
+    onProgress(const SyncProgress(message: 'Waiting for cloud to finalize...'));
+    for (var i = 0; i < 10; i++) {
+      await Future.delayed(const Duration(seconds: 2));
+      try {
+        final files = await _adapter.listFolder(cloudBase);
+        if (files == null || files.isEmpty) break;
+      } catch (_) {
+        break;
+      }
+    }
+
+    onProgress(const SyncProgress(message: 'Recreating cloud folder...'));
     await _adapter.invalidateFolderCache();
-    await _adapter.ensureFolder(cloudBase);
+    try {
+      await _adapter.ensureFolder(cloudBase);
+    } catch (_) {}
   }
 
   Future<void> _pushEntry(SyncManifestEntry entry) async {
