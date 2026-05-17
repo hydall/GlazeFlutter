@@ -28,6 +28,7 @@ import 'widgets/chat_input_bar.dart';
 import '../image_gen/widgets/image_gen_sheet.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/message_list.dart';
+import 'widgets/cached_token_breakdown.dart';
 import 'widgets/prompt_preview_screen.dart';
 import 'widgets/session_lifecycle_tracker.dart';
 
@@ -521,16 +522,20 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       return false;
                     },
                     child: RepaintBoundary(
-                      child: MessageList(
-                      messages: widget.state.messages,
-                      isGenerating: widget.state.isGenerating,
-                      generationStartTime: widget.state.generationStartTime,
-                      charId: widget.charId,
-                      bottomInset: messageListBottom,
-                      searchQuery: widget.searchQuery,
-                      searchMatches: widget.searchMatches,
-                      searchCurrentIndex: widget.searchCurrentIndex,
-                    ),
+                      child: Builder(builder: (context) {
+                        final breakdown = ref.watch(cachedTokenBreakdownProvider(widget.charId));
+                        return MessageList(
+                        messages: widget.state.messages,
+                        isGenerating: widget.state.isGenerating,
+                        generationStartTime: widget.state.generationStartTime,
+                        charId: widget.charId,
+                        bottomInset: messageListBottom,
+                        searchQuery: widget.searchQuery,
+                        searchMatches: widget.searchMatches,
+                        searchCurrentIndex: widget.searchCurrentIndex,
+                        contextCutoffIndex: breakdown?.cutoffIndex ?? -1,
+                      );
+                      }),
                     ),
                   ),
                 ),

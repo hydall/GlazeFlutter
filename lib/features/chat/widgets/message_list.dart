@@ -8,7 +8,6 @@ import '../../../core/models/chat_message.dart';
 import '../../../shared/theme/app_colors.dart';
 
 import '../chat_provider.dart';
-import '../chat_state.dart';
 import '../chat_screen.dart';
 import 'message.dart';
 
@@ -16,6 +15,21 @@ const double _kStickToBottomThreshold = 100;
 const double _kInstantScrollDistance = 3000;
 const int _kInitialRenderCount = 30;
 const int _kLoadMoreCount = 20;
+
+sealed class _ListItem {}
+
+class _MessageItem extends _ListItem {
+  final ChatMessage message;
+  final int messageIndex;
+  _MessageItem(this.message, this.messageIndex);
+}
+
+class _DaySeparatorItem extends _ListItem {
+  final DateTime date;
+  _DaySeparatorItem(this.date);
+}
+
+class _ContextCutoffItem extends _ListItem {}
 
 class MessageList extends StatefulWidget {
   final List<ChatMessage> messages;
@@ -26,6 +40,7 @@ class MessageList extends StatefulWidget {
   final String searchQuery;
   final List<SearchMatch> searchMatches;
   final int searchCurrentIndex;
+  final int contextCutoffIndex;
 
   const MessageList({
     super.key,
@@ -37,6 +52,7 @@ class MessageList extends StatefulWidget {
     this.searchQuery = '',
     this.searchMatches = const [],
     this.searchCurrentIndex = 0,
+    this.contextCutoffIndex = -1,
   });
 
   @override
@@ -158,6 +174,43 @@ class _MessageListState extends State<MessageList> {
     );
   }
 
+  List<_ListItem> _buildItems() {
+    final messages = widget.messages;
+    final cutoffIndex = widget.contextCutoffIndex;
+    final items = <_ListItem>[];
+    DateTime? lastDate;
+
+    int visibleNonHiddenCount = 0;
+
+    for (int i = 0; i < messages.length; i++) {
+      final msg = messages[i];
+      final ts = msg.timestamp;
+      if (ts != null) {
+        final msgDate = DateTime.fromMillisecondsSinceEpoch(ts);
+        final dateKey = DateTime(msgDate.year, msgDate.month, msgDate.day);
+        if (dateKey != lastDate) {
+          items.add(_DaySeparatorItem(dateKey));
+          lastDate = dateKey;
+        }
+      }
+
+      if (!msg.isHidden && !msg.isTyping) {
+        if (visibleNonHiddenCount == cutoffIndex && cutoffIndex > 0) {
+          items.add(_ContextCutoffItem());
+        }
+        visibleNonHiddenCount++;
+      }
+
+      items.add(_MessageItem(msg, i));
+    }
+
+    if (cutoffIndex >= visibleNonHiddenCount && visibleNonHiddenCount > 0) {
+      items.add(_ContextCutoffItem());
+    }
+
+    return items;
+  }
+
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     if (_isProgrammaticScrolling) return;
@@ -268,8 +321,8 @@ class _MessageListState extends State<MessageList> {
 
   @override
   Widget build(BuildContext context) {
-    final messages = widget.messages;
-    final totalCount = messages.length;
+    final allItems = _buildItems();
+    final totalCount = allItems.length;
     final renderCount = _renderCount.clamp(0, totalCount);
     final startFrom = totalCount > renderCount ? totalCount - renderCount : 0;
 
@@ -317,28 +370,32 @@ class _MessageListState extends State<MessageList> {
                 isGenerating: widget.isGenerating,
                 generationStartTime: widget.generationStartTime,
                 charId: widget.charId,
-                totalMessages: totalCount,
+                totalMessages: widget.messages.length,
                 onStreamingTick: _wasAtBottom ? _scheduleScrollToBottom : null,
               );
             }
 
-            final msgIndex = startFrom + adjustedIndex;
-            final msg = messages[msgIndex];
-            return RepaintBoundary(
-              key: ValueKey(msg.id),
-              child: _buildMessageWidget(msg, msgIndex),
-            );
+            final item = allItems[startFrom + adjustedIndex];
+
+            return switch (item) {
+              _MessageItem(:final message, :final messageIndex) => RepaintBoundary(
+                  key: ValueKey(message.id),
+                  child: _buildMessageWidget(message, messageIndex),
+                ),
+              _DaySeparatorItem(:final date) => _DaySeparator(date: date),
+              _ContextCutoffItem() => const _ContextCutoffDivider(),
+            };
            },
-         ),
-        ),
-         Positioned(
-          right: 16,
-          bottom: widget.bottomInset + 8,
-          child: _ScrollDownButton(
-            visible: _showScrollButton,
-            onTap: () => _scrollToBottom(smooth: true, force: true),
           ),
-        ),
+         ),
+          Positioned(
+           right: 16,
+           bottom: widget.bottomInset + 8,
+           child: _ScrollDownButton(
+             visible: _showScrollButton,
+             onTap: () => _scrollToBottom(smooth: true, force: true),
+           ),
+         ),
       ],
     );
   }
@@ -444,6 +501,98 @@ class _ScrollDownButton extends StatelessWidget {
                 ),
               ),
             ),
+    );
+  }
+}
+
+class _DaySeparator extends StatelessWidget {
+  final DateTime date;
+
+  const _DaySeparator({required this.date});
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final msgDay = DateTime(date.year, date.month, date.day);
+
+    final String label;
+    if (msgDay == today) {
+      label = 'Today';
+    } else if (msgDay == yesterday) {
+      label = 'Yesterday';
+    } else {
+      label = '${date.day} ${_monthName(date.month)} ${date.year}';
+    }
+
+    final color = context.cs.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(child: Container(height: 1, color: color.withValues(alpha: 0.2))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color.withValues(alpha: 0.6),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+          Expanded(child: Container(height: 1, color: color.withValues(alpha: 0.2))),
+        ],
+      ),
+    );
+  }
+
+  static String _monthName(int month) => switch (month) {
+        1 => 'January',
+        2 => 'February',
+        3 => 'March',
+        4 => 'April',
+        5 => 'May',
+        6 => 'June',
+        7 => 'July',
+        8 => 'August',
+        9 => 'September',
+        10 => 'October',
+        11 => 'November',
+        12 => 'December',
+        _ => '',
+      };
+}
+
+class _ContextCutoffDivider extends StatelessWidget {
+  const _ContextCutoffDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    final color = context.cs.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+      child: Row(
+        children: [
+          Expanded(child: Container(height: 1, color: color.withValues(alpha: 0.2))),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'CONTEXT LIMIT',
+              style: TextStyle(
+                color: color.withValues(alpha: 0.6),
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+          Expanded(child: Container(height: 1, color: color.withValues(alpha: 0.2))),
+        ],
+      ),
     );
   }
 }
