@@ -427,7 +427,11 @@ class _FolderCardState extends State<_FolderCard> {
   String _charImageUrl(PicksCharacter c, {bool useThumb = true}) {
     final parts = <String>[...widget.path, widget.folder.id];
     final base = '$kPicksBaseUrl/${parts.join('/')}';
-    if (useThumb && c.thumb != null) return '$base/${Uri.encodeComponent(c.thumb!)}';
+    if (useThumb && c.thumb != null) {
+      final segs = c.thumb!.split('/');
+      final encoded = segs.map(Uri.encodeComponent).join('/');
+      return '$base/$encoded';
+    }
     return '$base/${Uri.encodeComponent(c.fileName ?? '${c.id}.png')}';
   }
 }
@@ -475,8 +479,10 @@ class _PicksCharacterCardState extends ConsumerState<_PicksCharacterCard> {
 
   String get _imageUrl {
     final base = widget.path.join('/');
-    final name = char.thumb ?? char.fileName ?? '${char.id}.png';
-    return '$kPicksBaseUrl/$base/${Uri.encodeComponent(name)}';
+    final name = char.fileName ?? '${char.id}.png';
+    final segs = name.split('/');
+    final encoded = segs.map(Uri.encodeComponent).join('/');
+    return '$kPicksBaseUrl/$base/$encoded';
   }
 
   bool get _isImported {
