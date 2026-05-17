@@ -35,6 +35,12 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="com.hydall.glaze"/>
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="${dropboxScheme}"/>
+            </intent-filter>
         </activity>
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"

@@ -32,6 +32,7 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>com.hydall.glaze</string>
+				<string>$(DROPBOX_URL_SCHEME)</string>
 			</array>
 		</dict>
 	</array>
