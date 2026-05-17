@@ -23,7 +23,7 @@ class SyncConfig {
   static String? get dropboxAppKey => _dropboxAppKey;
   static String? get dropboxAppSecret => _dropboxAppSecret;
   static String get dropboxRedirectNative =>
-      _dropboxAppKey != null ? 'db-$_dropboxAppKey://auth' : '';
+      'com.hydall.glaze://oauth/dropbox';
   static String? get gdriveClientId => _gdriveClientId;
   static String? get gdriveClientSecret => _gdriveClientSecret;
   static String? get gdriveIosClientId => _gdriveIosClientId;
@@ -31,10 +31,7 @@ class SyncConfig {
     if (Platform.isIOS && _gdriveIosClientId != null) {
       return 'com.googleusercontent.apps.${_gdriveIosClientId!.split('-').first}:/oauth2redirect';
     }
-    if (Platform.isAndroid) {
-      return 'app.glaze.flutter:/oauth2redirect';
-    }
-    return '';
+    return 'com.hydall.glaze://oauth/gdrive';
   }
 
   static bool canStartSyncAuth(String provider) {

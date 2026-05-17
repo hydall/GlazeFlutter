@@ -43,15 +43,6 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-
-        val envFile = rootProject.file("../.env")
-        val dropboxAppKey = if (envFile.exists()) {
-            envFile.readLines()
-                .find { it.startsWith("DROPBOX_APP_KEY=") }
-                ?.substringAfter("=")?.trim() ?: ""
-        } else ""
-        val dropboxScheme = if (dropboxAppKey.isNotEmpty()) "db-$dropboxAppKey" else "db-unknown"
-        manifestPlaceholders["dropboxScheme"] = dropboxScheme
     }
 
     buildTypes {
