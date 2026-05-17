@@ -214,6 +214,22 @@ String _extractColorFromCss(String styleAttr) {
   return color;
 }
 
+final _bgColorRegex = RegExp(r'background-color\s*:\s*(#[0-9a-fA-F]{3,8}|(?:rgb|hsl)a?\([^)]+\)|[a-zA-Z]+)');
+
+String _extractBgColor(String styleAttr) {
+  final match = _bgColorRegex.firstMatch(styleAttr);
+  if (match == null) return '';
+  var color = match[1]!.trim();
+  if (color.startsWith('rgb')) color = _rgbToHex(color);
+  if (color.startsWith('hsl')) color = _hslToHex(color);
+  if (RegExp(r'^[a-zA-Z]+$').hasMatch(color)) {
+    final hex = _namedColorToHex(color.toLowerCase());
+    if (hex != null) color = hex;
+  }
+  if (!color.startsWith('#')) return '';
+  return color;
+}
+
 String _extractColorFromTextShadow(String styleAttr) {
   final match = _textShadowColorRegex.firstMatch(styleAttr);
   if (match == null) return '';
@@ -262,8 +278,17 @@ String _convertColoredSpan(String html) {
       if (text.isEmpty) return '';
 
       final cssColor = _extractColorFromCss(styleAttr);
+      final bgColor = _extractBgColor(styleAttr);
       final shadows = _extractTextShadows(styleAttr);
       final isItalic = RegExp(r'font-style\s*:\s*italic', caseSensitive: false).hasMatch(styleAttr);
+
+      if (bgColor.isNotEmpty) {
+        return text.split('\n').map((line) {
+          final trimmed = line.trim();
+          if (trimmed.isEmpty) return '';
+          return '==bg:$bgColor==$trimmed==';
+        }).join('\n');
+      }
 
       if (cssColor.isNotEmpty && shadows.isNotEmpty) {
         final shadow = shadows.first;

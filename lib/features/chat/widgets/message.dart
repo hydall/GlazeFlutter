@@ -179,6 +179,34 @@ class GradientTextMd extends InlineMd {
   }
 }
 
+class BackgroundTextMd extends InlineMd {
+  @override
+  RegExp get exp => RegExp(r'==bg:(#[0-9a-fA-F]{3,8})==(.+?)==');
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text);
+    final bgColorHex = match?[1] ?? '#333333';
+    final content = match?[2] ?? '';
+    final bgColor = _parseHexColor(bgColorHex) ?? const Color(0xFF333333);
+    final baseStyle = config.style ?? const TextStyle();
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: Container(
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        child: Text(
+          content,
+          style: baseStyle.copyWith(color: Colors.white),
+        ),
+      ),
+    );
+  }
+}
+
 class MarkMd extends InlineMd {
   final Color textColor;
 
@@ -478,7 +506,7 @@ class _MessageState extends ConsumerState<Message>
     unicode: true, dotAll: true,
   );
   static final _styledSegmentRegex = RegExp(
-    r'(==(?:hc:#[0-9a-fA-F]{3,8}|glow:#[0-9a-fA-F]{3,8},\d+|cg:#[0-9a-fA-F]{3,8},#[0-9a-fA-F]{3,8},\d+|grad:#[0-9a-fA-F]{3,8}(?:,#[0-9a-fA-F]{3,8})+)==.+?=='
+    r'(==(?:hc:#[0-9a-fA-F]{3,8}|glow:#[0-9a-fA-F]{3,8},\d+|cg:#[0-9a-fA-F]{3,8},#[0-9a-fA-F]{3,8},\d+|grad:#[0-9a-fA-F]{3,8}(?:,#[0-9a-fA-F]{3,8})+|bg:#[0-9a-fA-F]{3,8})==.+?=='
     r'|\*\*[^*]+?\*\*'
     r'|(?<!\*)\*[^*]+?\*(?!\*)'
     r'|__[^_]+?__'
@@ -496,14 +524,34 @@ class _MessageState extends ConsumerState<Message>
   }
 
   String _highlightPhrases(String content) {
+    final styledMatches = _styledSegmentRegex.allMatches(content).toList();
+
+    final quoteSpans = <({int start, int end})>[];
+    for (final m in _quoteRegex.allMatches(content)) {
+      if (m[1] == null) {
+        quoteSpans.add((start: m.start, end: m.end));
+      }
+    }
+
+    final protectedRanges = <({int start, int end, String text})>[];
+    for (final sm in styledMatches) {
+      final insideQuote = quoteSpans.any(
+        (q) => sm.start >= q.start && sm.end <= q.end,
+      );
+      if (!insideQuote) {
+        protectedRanges.add((start: sm.start, end: sm.end, text: sm[0]!));
+      }
+    }
+    protectedRanges.sort((a, b) => a.start.compareTo(b.start));
+
     final buffer = StringBuffer();
     int cursor = 0;
-    for (final match in _styledSegmentRegex.allMatches(content)) {
-      if (match.start > cursor) {
-        buffer.write(_applyQuoteHighlight(content.substring(cursor, match.start)));
+    for (final range in protectedRanges) {
+      if (range.start > cursor) {
+        buffer.write(_applyQuoteHighlight(content.substring(cursor, range.start)));
       }
-      buffer.write(match[0]);
-      cursor = match.end;
+      buffer.write(range.text);
+      cursor = range.end;
     }
     if (cursor < content.length) {
       buffer.write(_applyQuoteHighlight(content.substring(cursor)));
@@ -880,6 +928,7 @@ class _MessageState extends ConsumerState<Message>
                   GlowTextMd(),
                   ColorGlowTextMd(),
                   GradientTextMd(),
+                  BackgroundTextMd(),
                   MarkMd(
                     textColor: quoteColor,
                   ),

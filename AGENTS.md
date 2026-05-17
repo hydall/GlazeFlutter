@@ -121,6 +121,7 @@ The app extends GptMarkdown with custom `==...==` inline markers. When adding ne
 | `==glow:#hex,blur==text==` | `==glow:#ffffff,4==echo==` | Text with glow shadow (GlowTextMd) |
 | `==cg:#textHex,#glowHex,blur==text==` | `==cg:#ffb6c1,#ff6eb4,4==rosa==` | Colored text + glow shadow (ColorGlowTextMd) |
 | `==grad:#hex1,#hex2==text==` | `==grad:#ff33ff,#ff1493==text==` | Gradient text via ShaderMask (GradientTextMd) |
+| `==bg:#hex==text==` | `==bg:#333333==highlighted==` | Text with background color (BackgroundTextMd) |
 | `==mark==text==` | `==mark=="dialogue"==` | Quote-highlighted text (MarkMd) |
 | `==active==text==` | `==active==search hit==` | Active search match (ActiveMarkMd) |
 
