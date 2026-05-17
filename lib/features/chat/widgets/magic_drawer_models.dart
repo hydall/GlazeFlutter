@@ -53,8 +53,10 @@ class MagicDrawerStats {
   final List<Lorebook> lorebooks;
   final String? summaryContent;
   final String? memoryContent;
+  final String? memoryMacroContent;
   final String memoryInjectionTarget;
   final Map<String, dynamic> memoryCoverage;
+  final List<dynamic> triggeredMemories;
 
   const MagicDrawerStats({
     this.character,
@@ -78,8 +80,10 @@ class MagicDrawerStats {
     this.lorebooks = const [],
     this.summaryContent,
     this.memoryContent,
+    this.memoryMacroContent,
     this.memoryInjectionTarget = 'summary_block',
     this.memoryCoverage = const {},
+    this.triggeredMemories = const [],
   });
 
   MagicDrawerStats copyWith({
@@ -112,8 +116,10 @@ class MagicDrawerStats {
       lorebooks: lorebooks,
       summaryContent: summaryContent,
       memoryContent: memoryContent,
+      memoryMacroContent: memoryMacroContent,
       memoryInjectionTarget: memoryInjectionTarget,
       memoryCoverage: memoryCoverage,
+      triggeredMemories: triggeredMemories,
     );
   }
 }

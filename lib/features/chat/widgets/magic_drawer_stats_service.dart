@@ -1,10 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/embedding_types.dart';
+import '../../../core/llm/lorebook_providers.dart';
 import '../../../core/llm/lorebook_scanner.dart';
+import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/summary_service.dart';
+import '../../../core/models/chat_message.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
@@ -59,8 +63,10 @@ class MagicDrawerStatsService {
     var messageCount = 0;
     String? summaryContent;
     String? memoryContent;
+    String? memoryMacroContent;
     String memoryInjectionTarget = 'summary_block';
     Map<String, dynamic> memoryCoverage = {};
+    List<TriggeredEntry> triggeredMemories = [];
 
     if (session != null) {
       final summary = await _ref
@@ -68,6 +74,38 @@ class MagicDrawerStatsService {
           .getSummary(session.id);
       summaryContent = summary;
       summaryChars = summary?.length ?? 0;
+
+      final memoryService = _ref.read(memoryInjectionServiceProvider);
+      final embeddingConfig = _ref.read(embeddingConfigProvider);
+      final memoryHistory = session.messages
+          .where((m) => !m.isHidden && !m.isTyping)
+          .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
+          .toList();
+      final memoryResult = await memoryService.buildInjection(
+        sessionId: session.id,
+        historyText: session.historyText,
+        messageCount: session.messages.length,
+        summaryExcerpt: summaryContent,
+        history: memoryHistory,
+        currentText: session.messages.lastOrNull?.content ?? '',
+        embeddingConfig: embeddingConfig,
+      );
+      memoryContent = memoryResult.content.isNotEmpty ? memoryResult.content : null;
+      memoryMacroContent = memoryResult.macroContent.isNotEmpty ? memoryResult.macroContent : null;
+      memoryInjectionTarget = memoryResult.injectionTarget;
+      if (memoryResult.entries.isNotEmpty) {
+        memoryCoverage = {
+          'entryIds': memoryResult.entries.map((e) => e.id).toList(),
+          'needsRebuild': false,
+          'stale': false,
+        };
+        triggeredMemories = memoryResult.entries.map((e) => TriggeredEntry(
+          id: e.id,
+          name: e.title.isNotEmpty ? e.title : e.id,
+          source: 'memory',
+        )).toList();
+      }
+
       final memoryBook = await memoryRepo.getBySessionId(session.id);
       memoryEntries = memoryBook?.entries.length ?? 0;
       sessionCount =
@@ -114,16 +152,18 @@ class MagicDrawerStatsService {
       summaryChars: summaryChars,
       promptTokens: cached?.totalTokens ?? 0,
       contextSize: chatApi?.contextSize ?? 0,
-      characterTokens: cached?.sourceTokens['character'] ?? 0,
-      presetTokens: cached?.sourceTokens['preset'] ?? 0,
-      personaTokens: cached?.sourceTokens['persona'] ?? 0,
-      summaryTokens: cached?.sourceTokens['summary'] ?? 0,
+      characterTokens: (cached?.sourceTokens['description'] ?? 0) > 0 ? cached!.sourceTokens['description']! : (cached?.macroTokens['description'] ?? 0),
+      presetTokens: cached?.presetNetTokens ?? 0,
+      personaTokens: (cached?.sourceTokens['persona'] ?? 0) > 0 ? cached!.sourceTokens['persona']! : (cached?.macroTokens['persona'] ?? 0),
+      summaryTokens: (cached?.sourceTokens['summary'] ?? 0) > 0 ? cached!.sourceTokens['summary']! : (cached?.macroTokens['summary'] ?? 0),
       imageGenEnabled: imageGenEnabled,
       lorebooks: lorebooks,
       summaryContent: summaryContent,
       memoryContent: memoryContent,
+      memoryMacroContent: memoryMacroContent,
       memoryInjectionTarget: memoryInjectionTarget,
       memoryCoverage: memoryCoverage,
+      triggeredMemories: triggeredMemories,
     );
   }
 
@@ -146,8 +186,10 @@ class MagicDrawerStatsService {
         lorebooks: base.lorebooks,
         summaryContent: base.summaryContent,
         memoryContent: base.memoryContent,
+        memoryMacroContent: base.memoryMacroContent,
         memoryInjectionTarget: base.memoryInjectionTarget,
         memoryCoverage: base.memoryCoverage,
+        triggeredMemories: base.triggeredMemories.cast(),
         skipVectorSearch: true,
       );
       final payloadWithScan = PromptPayload(
@@ -182,10 +224,10 @@ class MagicDrawerStatsService {
 
       return base.copyWith(
         promptTokens: promptResult.breakdown.totalTokens,
-        characterTokens: sourceTokens['character'] ?? 0,
-        presetTokens: sourceTokens['preset'] ?? 0,
-        personaTokens: sourceTokens['persona'] ?? 0,
-        summaryTokens: sourceTokens['summary'] ?? 0,
+        characterTokens: (sourceTokens['description'] ?? 0) > 0 ? sourceTokens['description']! : (promptResult.breakdown.macroTokens['description'] ?? 0),
+        presetTokens: promptResult.breakdown.presetNetTokens,
+        personaTokens: (sourceTokens['persona'] ?? 0) > 0 ? sourceTokens['persona']! : (promptResult.breakdown.macroTokens['persona'] ?? 0),
+        summaryTokens: (sourceTokens['summary'] ?? 0) > 0 ? sourceTokens['summary']! : (promptResult.breakdown.macroTokens['summary'] ?? 0),
       );
     } catch (_) {
       return base;

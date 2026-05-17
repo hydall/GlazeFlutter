@@ -12,6 +12,7 @@ import 'lorebook_merger.dart';
 import 'prompt_block_resolver.dart';
 import 'fallback_prompt_builder.dart';
 import 'regex_service.dart';
+import 'tokenizer.dart';
 
 const _stToInternalBlockId = <String, String>{
   'personaDescription': 'user_persona',
@@ -271,6 +272,29 @@ PromptResult buildPrompt(PromptPayload payload) {
     }
   }
 
+  final macroTokens = <String, int>{};
+  if (currentMacroCtx.lorebooksContent != null && currentMacroCtx.lorebooksContent!.isNotEmpty) {
+    macroTokens['lorebooks'] = estimateTokens(currentMacroCtx.lorebooksContent!);
+  }
+  if (currentMacroCtx.summaryContent != null && currentMacroCtx.summaryContent!.isNotEmpty) {
+    macroTokens['summary'] = estimateTokens(currentMacroCtx.summaryContent!);
+  }
+  if (currentMacroCtx.charDescription != null && currentMacroCtx.charDescription!.isNotEmpty) {
+    macroTokens['description'] = estimateTokens(currentMacroCtx.charDescription!);
+  }
+  if (currentMacroCtx.charPersonality != null && currentMacroCtx.charPersonality!.isNotEmpty) {
+    macroTokens['personality'] = estimateTokens(currentMacroCtx.charPersonality!);
+  }
+  if (currentMacroCtx.charScenario != null && currentMacroCtx.charScenario!.isNotEmpty) {
+    macroTokens['scenario'] = estimateTokens(currentMacroCtx.charScenario!);
+  }
+  if (currentMacroCtx.personaPrompt != null && currentMacroCtx.personaPrompt!.isNotEmpty) {
+    macroTokens['persona'] = estimateTokens(currentMacroCtx.personaPrompt!);
+  }
+  if (currentMacroCtx.charMesExample != null && currentMacroCtx.charMesExample!.isNotEmpty) {
+    macroTokens['mesExamples'] = estimateTokens(currentMacroCtx.charMesExample!);
+  }
+
   return _assembleMessages(
     relativeBlocks: relativeBlocks,
     depthBlocks: depthBlocks,
@@ -286,6 +310,7 @@ PromptResult buildPrompt(PromptPayload payload) {
     persona: persona,
     triggeredLorebooks: triggeredLorebooks,
     triggeredMemories: payload.triggeredMemories,
+    macroTokens: macroTokens,
   );
 }
 
@@ -339,6 +364,7 @@ PromptResult _assembleMessages({
   Persona? persona,
   List<TriggeredEntry> triggeredLorebooks = const [],
   List<TriggeredEntry> triggeredMemories = const [],
+  Map<String, int> macroTokens = const {},
 }) {
   final messages = <PromptMessage>[];
   final attributionBlocks = <StaticBlock>[];
@@ -419,9 +445,6 @@ PromptResult _assembleMessages({
   if (mergeBuffer != null) messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer));
 
   if (payload.memoryContent != null && payload.memoryContent!.isNotEmpty) {
-    // summary_macro: append raw entry text onto the summary message in-place.
-    // Uses memoryMacroContent (plain join) not memoryContent (structured block with headers).
-    // Falls back to summary_block if no summary message exists (mirrors JS behaviour).
     final macroText = payload.memoryMacroContent ?? payload.memoryContent!;
     if (payload.memoryInjectionTarget == 'summary_macro' && macroText.isNotEmpty) {
       final msgSummaryIdx = messages.indexWhere((m) => m.isSummary);
@@ -444,13 +467,11 @@ PromptResult _assembleMessages({
         } else {
           attributionBlocks.add(StaticBlock(id: 'memory', content: macroText));
         }
-        // Done — memory appended to summary message; skip summary_block injection.
+        macroTokens['memory'] = estimateTokens(macroText);
       } else {
-        // No summary message found — fall through to summary_block behaviour.
         _injectMemoryBlock(messages, attributionBlocks, payload.memoryContent!);
       }
     } else {
-      // summary_block (default): inject as standalone system message just before history.
       _injectMemoryBlock(messages, attributionBlocks, payload.memoryContent!);
     }
   }
@@ -464,6 +485,7 @@ PromptResult _assembleMessages({
     staticBlocks: attributionBlocks,
     historyMessages: historyOnly,
     lorebookReserveTokens: lorebookReserve,
+    macroTokens: macroTokens,
   );
 
   final finalMessages = <PromptMessage>[];

@@ -6,13 +6,18 @@ import '../../../shared/theme/app_colors.dart';
 import '../chat_provider.dart';
 
 const kSourceMeta = <String, SourceMeta>{
-  'character':       SourceMeta(label: 'Character',        color: Color(0xFFFF6B6B)),
   'preset':          SourceMeta(label: 'Preset',           color: Color(0xFF4ECDC4)),
+  'description':     SourceMeta(label: 'Description',      color: Color(0xFFFF6B6B)),
+  'personality':     SourceMeta(label: 'Personality',      color: Color(0xFFD4A5E5)),
+  'scenario':        SourceMeta(label: 'Scenario',         color: Color(0xFFB8D4E3)),
+  'mesExamples':     SourceMeta(label: 'Mes Examples',     color: Color(0xFFC9B1FF)),
+  'depthPrompt':     SourceMeta(label: 'Depth Prompt',     color: Color(0xFFE8A0BF)),
   'persona':         SourceMeta(label: 'Persona',          color: Color(0xFF81ECEC)),
   'authorsNote':     SourceMeta(label: "Author's Note",    color: Color(0xFFFFD93D)),
   'summary':         SourceMeta(label: 'Summary',          color: Color(0xFF95E1D3)),
   'memory':          SourceMeta(label: 'Memory',           color: Color(0xFFA8E6CF)),
   'lorebook':        SourceMeta(label: 'Keyword Lorebook', color: Color(0xFFF4A261)),
+  'lorebooks':       SourceMeta(label: 'Lorebooks (macro)',color: Color(0xFFE8985E)),
   'vectorLore':      SourceMeta(label: 'Vector Lorebook',  color: Color(0xFFE76F51)),
   'lorebookReserve': SourceMeta(label: 'Lorebook Reserve', color: Color(0xFFA8DADC)),
   'history':         SourceMeta(label: 'History',          color: Color(0xFF6C5CE7)),
@@ -35,14 +40,21 @@ class BarRow {
 int tokensForKey(TokenBreakdown bd, String key) {
   return switch (key) {
     'lorebookReserve' => _unusedLorebookReserve(bd),
-    'memory'          => bd.memoryTokens,
     'vectorLore'      => bd.vectorLoreTokens,
-    _                 => bd.sourceTokens[key] ?? 0,
+    'preset'          => bd.presetNetTokens,
+    'summary'         => _summaryTokens(bd),
+    _                 => (bd.sourceTokens[key] ?? 0) > 0 ? bd.sourceTokens[key]! : (bd.macroTokens[key] ?? 0),
   };
 }
 
+int _summaryTokens(TokenBreakdown bd) {
+  final raw = (bd.sourceTokens['summary'] ?? 0) > 0 ? bd.sourceTokens['summary']! : (bd.macroTokens['summary'] ?? 0);
+  final memoryOverlap = (bd.sourceTokens['summary'] ?? 0) > 0 ? (bd.macroTokens['memory'] ?? 0) : 0;
+  return (raw - memoryOverlap).clamp(0, raw);
+}
+
 int _unusedLorebookReserve(TokenBreakdown bd) {
-  final actual = bd.sourceTokens['lorebook'] ?? 0;
+  final actual = (bd.sourceTokens['lorebook'] ?? 0) + (bd.macroTokens['lorebooks'] ?? 0);
   return bd.lorebookReserveTokens > actual ? bd.lorebookReserveTokens - actual : 0;
 }
 
@@ -147,8 +159,8 @@ class TokenizerLayout extends StatelessWidget {
   final int contextSize;
   const TokenizerLayout({super.key, required this.breakdown, required this.contextSize});
 
-  static const _mainKeys = ['character', 'preset', 'persona', 'authorsNote', 'summary', 'memory', 'history'];
-  static const _reserveKeys = ['lorebook', 'vectorLore', 'lorebookTotal', 'lorebookReserve'];
+  static const _mainKeys = ['description', 'personality', 'scenario', 'mesExamples', 'depthPrompt', 'preset', 'persona', 'authorsNote', 'summary', 'memory', 'history'];
+  static const _reserveKeys = ['lorebook', 'lorebooks', 'vectorLore', 'lorebookTotal', 'lorebookReserve'];
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +168,8 @@ class TokenizerLayout extends StatelessWidget {
     final reserveItems = buildOrderedRows(breakdown, _reserveKeys);
     
     final List<BarRow> combinedBreakdownItems = [...mainItems, ...reserveItems];
-    if (breakdown.lorebookTotal > 0 && (breakdown.sourceTokens['lorebook'] ?? 0) > 0 && breakdown.vectorLoreTokens > 0) {
+    final hasKeywordLore = (breakdown.sourceTokens['lorebook'] ?? 0) > 0 || (breakdown.macroTokens['lorebooks'] ?? 0) > 0;
+    if (breakdown.lorebookTotal > 0 && hasKeywordLore && breakdown.vectorLoreTokens > 0) {
       combinedBreakdownItems.add(BarRow(key: 'lorebookTotal', label: 'Lorebook Total', tokens: breakdown.lorebookTotal, color: Colors.transparent));
     }
 

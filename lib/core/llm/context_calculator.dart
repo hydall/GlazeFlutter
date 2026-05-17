@@ -24,6 +24,7 @@ class ContextCalculator {
     int lorebookReserveTokens = 0,
     int memoryTokens = 0,
     int vectorLoreTokens = 0,
+    Map<String, int> macroTokens = const {},
   }) {
     final sourceTokens = <String, int>{};
     var staticTotal = 0;
@@ -35,7 +36,7 @@ class ContextCalculator {
       staticTotal += tokens;
     }
 
-    final actualLorebook = sourceTokens['lorebook'] ?? 0;
+    final actualLorebook = (sourceTokens['lorebook'] ?? 0) + (macroTokens['lorebooks'] ?? 0);
     final effectiveReserve = lorebookReserveTokens > actualLorebook
         ? lorebookReserveTokens - actualLorebook
         : 0;
@@ -62,6 +63,7 @@ class ContextCalculator {
 
     return TokenBreakdown(
       sourceTokens: sourceTokens,
+      macroTokens: macroTokens,
       staticTotal: staticTotal,
       historyBudget: historyBudget,
       historyTokens: historyTokens,
@@ -78,7 +80,11 @@ class ContextCalculator {
 
   String _sourceForBlock(String blockId) {
     return switch (blockId) {
-      'char_card' || 'char_personality' || 'scenario' || 'example_dialogue' || 'char_depth_prompt' => 'character',
+      'char_card' => 'description',
+      'char_personality' => 'personality',
+      'scenario' => 'scenario',
+      'example_dialogue' => 'mesExamples',
+      'char_depth_prompt' => 'depthPrompt',
       'user_persona' => 'persona',
       'summary' => 'summary',
       'authors_note' => 'authorsNote',
@@ -112,6 +118,7 @@ class ContextCalculator {
 
 class TokenBreakdown {
   final Map<String, int> sourceTokens;
+  final Map<String, int> macroTokens;
   final int staticTotal;
   final int historyBudget;
   final int historyTokens;
@@ -126,6 +133,7 @@ class TokenBreakdown {
 
   const TokenBreakdown({
     required this.sourceTokens,
+    this.macroTokens = const {},
     required this.staticTotal,
     required this.historyBudget,
     required this.historyTokens,
@@ -139,9 +147,21 @@ class TokenBreakdown {
     this.remaining = 0,
   });
 
-  int get lorebookTotal => (sourceTokens['lorebook'] ?? 0) + vectorLoreTokens;
+  int get lorebookTotal => (sourceTokens['lorebook'] ?? 0) + (macroTokens['lorebooks'] ?? 0) + vectorLoreTokens;
 
   double get historyFillPercent => historyBudget > 0
       ? (historyTokens / historyBudget * 100).clamp(0, 100)
       : 0;
+
+  int get presetNetTokens {
+    final presetGross = sourceTokens['preset'] ?? 0;
+    var subtract = 0;
+    for (final entry in macroTokens.entries) {
+      if (entry.key == 'memory') continue;
+      if ((sourceTokens[entry.key] ?? 0) == 0) {
+        subtract += entry.value;
+      }
+    }
+    return (presetGross - subtract).clamp(0, presetGross);
+  }
 }
