@@ -128,7 +128,7 @@ The app extends GptMarkdown with custom `==...==` inline markers. When adding ne
 
 `_highlightPhrases()` in `message.dart` splits text on styled segments before wrapping quotes in `==mark==`. This prevents `==mark==` from being injected inside other markers (e.g. `"..."` inside `==grad:...==`). When adding a new marker, add it to `_styledSegmentRegex` so quotes inside it are left alone.
 
-Also protect markdown formatting patterns (`**bold**`, `*italic*`, `__bold__`, `_italic_`, `~~strike~~`, `'quotes'`) from quote highlighting — they are already included in `_styledSegmentRegex`.
+Also protect markdown formatting patterns (`**bold**`, `*italic*`, `__bold__`, `_italic_`, `~~strike~~`) from quote highlighting — they are already included in `_styledSegmentRegex`. Single quotes (`'...'`) are NOT protected so that nested quotes like `"...'...'..."` work — the outer quote regex captures the entire span and the inner single quotes inherit the color from the outer `==mark==` region.
 
 ## Trello Board
 

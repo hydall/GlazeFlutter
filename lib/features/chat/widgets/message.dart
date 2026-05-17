@@ -484,7 +484,6 @@ class _MessageState extends ConsumerState<Message>
     r'|__[^_]+?__'
     r'|(?<!\w)_[^_]+?_(?!\w)'
     r'|~~[^~]+?~~'
-    r"|(?<!\w)'[^']+'(?!\w)"
     r')',
     dotAll: true,
   );
