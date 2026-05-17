@@ -26,7 +26,7 @@ class SyncQueue {
     }
   }
 
-  Future<List<T>> enqueueAll<T>(
+  Future<({List<T> results, List<Object> errors})> enqueueAll<T>(
     List<Future<T> Function()> tasks, {
     int concurrency = 3,
     int delayMs = 300,
@@ -60,10 +60,7 @@ class SyncQueue {
       (_) => worker(),
     );
     await Future.wait(workers);
-    if (errors.isNotEmpty) {
-      throw SyncQueueAggregateError(errors);
-    }
-    return results;
+    return (results: results, errors: errors);
   }
 
   Future<T> _retryWithBackoff<T>(

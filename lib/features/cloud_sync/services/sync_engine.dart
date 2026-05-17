@@ -112,8 +112,10 @@ class SyncEngine {
       });
     }
 
+    List<Object>? taskErrors;
     if (tasks.isNotEmpty) {
-      await _queue.enqueueAll(tasks, concurrency: 3, delayMs: 300);
+      final result = await _queue.enqueueAll(tasks, concurrency: 3, delayMs: 300);
+      taskErrors = result.errors;
     }
 
     final cleanedEntries = Map<String, SyncManifestEntry>.from(localManifest.entries)
@@ -129,6 +131,10 @@ class SyncEngine {
     );
     await _manifestBuilder.writeLocalManifest(updatedManifest);
     await _manifestBuilder.clearDeleted();
+
+    if (taskErrors != null && taskErrors.isNotEmpty) {
+      throw SyncQueueAggregateError(taskErrors);
+    }
   }
 
   Future<void> pullEntities({
@@ -176,8 +182,10 @@ class SyncEngine {
       });
     }
 
+    List<Object>? taskErrors;
     if (tasks.isNotEmpty) {
-      await _queue.enqueueAll(tasks, concurrency: 3, delayMs: 300);
+      final result = await _queue.enqueueAll(tasks, concurrency: 3, delayMs: 300);
+      taskErrors = result.errors;
     }
 
     final cloudKeys = cloudManifest.entries.keys.toSet();
@@ -195,6 +203,10 @@ class SyncEngine {
       lastSync: DateTime.now().millisecondsSinceEpoch,
     ));
     await _manifestBuilder.clearDeleted();
+
+    if (taskErrors != null && taskErrors.isNotEmpty) {
+      throw SyncQueueAggregateError(taskErrors);
+    }
   }
 
   Future<void> resolveConflict(SyncConflict conflict, String choice) async {
