@@ -1,30 +1,41 @@
+import 'dart:io';
+
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class SyncConfig {
   static String? _dropboxAppKey;
-  static String? _dropboxRedirectNative;
+  static String? _dropboxAppSecret;
   static String? _gdriveClientId;
   static String? _gdriveClientSecret;
-  static String? _gdriveRedirectNative;
+  static String? _gdriveIosClientId;
 
   static Future<void> load() async {
     if (!dotenv.isInitialized) {
       await dotenv.load(fileName: '.env');
     }
     _dropboxAppKey = dotenv.env['DROPBOX_APP_KEY'];
-    _dropboxRedirectNative = dotenv.env['DROPBOX_REDIRECT_NATIVE'];
+    _dropboxAppSecret = dotenv.env['DROPBOX_APP_SECRET'];
     _gdriveClientId = dotenv.env['GDRIVE_CLIENT_ID'];
     _gdriveClientSecret = dotenv.env['GDRIVE_CLIENT_SECRET'];
-    _gdriveRedirectNative = dotenv.env['GDRIVE_REDIRECT_NATIVE'];
+    _gdriveIosClientId = dotenv.env['GDRIVE_IOS_CLIENT_ID'];
   }
 
   static String? get dropboxAppKey => _dropboxAppKey;
-  static String? get dropboxRedirectNative =>
-      _dropboxRedirectNative ?? 'com.hydall.glaze://oauth/dropbox';
+  static String? get dropboxAppSecret => _dropboxAppSecret;
+  static String get dropboxRedirectNative =>
+      _dropboxAppKey != null ? 'db-$_dropboxAppKey://auth' : '';
   static String? get gdriveClientId => _gdriveClientId;
   static String? get gdriveClientSecret => _gdriveClientSecret;
-  static String? get gdriveRedirectNative =>
-      _gdriveRedirectNative ?? 'com.hydall.glaze://oauth/gdrive';
+  static String? get gdriveIosClientId => _gdriveIosClientId;
+  static String get gdriveRedirectNative {
+    if (Platform.isIOS && _gdriveIosClientId != null) {
+      return 'com.googleusercontent.apps.${_gdriveIosClientId!.split('-').first}:/oauth2redirect';
+    }
+    if (Platform.isAndroid) {
+      return 'app.glaze.flutter:/oauth2redirect';
+    }
+    return '';
+  }
 
   static bool canStartSyncAuth(String provider) {
     switch (provider) {

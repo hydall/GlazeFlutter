@@ -209,10 +209,12 @@ class SyncService {
 
   Future<void> connectDropbox() async {
     await _dropboxAuth.connect();
+    await _saveTokens();
   }
 
   Future<void> connectGDrive() async {
     await _gdriveAuth.connect();
+    await _saveTokens();
   }
 
   Future<void> disconnect() async {
@@ -225,8 +227,7 @@ class SyncService {
         break;
     }
     _accountInfo = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('gz_sync_tokens');
+    await _saveTokens();
   }
 
   Future<void> setAutoSync(bool enabled, {int messageCount = 5}) async {

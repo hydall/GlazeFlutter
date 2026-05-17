@@ -34,6 +34,21 @@ class DeepLinkService {
       if (completer != null && !completer.isCompleted) {
         completer.complete(uri);
       }
+      return;
+    }
+    if (uri.scheme.startsWith('db-') && path == '/auth') {
+      final completer = _pendingOAuth.remove('dropbox');
+      if (completer != null && !completer.isCompleted) {
+        completer.complete(uri);
+      }
+      return;
+    }
+    final host = uri.host;
+    if (host.contains('googleusercontent')) {
+      final completer = _pendingOAuth.remove('gdrive');
+      if (completer != null && !completer.isCompleted) {
+        completer.complete(uri);
+      }
     }
   }
 

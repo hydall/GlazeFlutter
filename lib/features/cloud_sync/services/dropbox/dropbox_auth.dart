@@ -66,16 +66,12 @@ class DropboxAuth {
     final codeChallenge = _sha256Base64Url(_codeVerifier!);
     final state = _generateRandomString(32);
 
-    final redirectUri = Platform.isAndroid || Platform.isIOS
-        ? SyncConfig.dropboxRedirectNative!
-        : 'http://localhost';
-
-    final authUrl =
-        '$_authBase?response_type=code&client_id=$appKey&redirect_uri=${Uri.encodeComponent(redirectUri)}'
-        '&code_challenge=$codeChallenge&code_challenge_method=S256&state=$state'
-        '&token_access_type=offline';
-
     if (Platform.isAndroid || Platform.isIOS) {
+      final redirectUri = SyncConfig.dropboxRedirectNative;
+      final authUrl =
+          '$_authBase?response_type=code&client_id=$appKey&redirect_uri=${Uri.encodeComponent(redirectUri)}'
+          '&code_challenge=$codeChallenge&code_challenge_method=S256&state=$state'
+          '&token_access_type=offline';
       final deepLinkService = DeepLinkService.instance;
       await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
       final callbackUri = await deepLinkService.waitForOAuthCallback('dropbox');
@@ -87,7 +83,11 @@ class DropboxAuth {
       return;
     }
 
-    final result = await OAuthLocalServer.authenticate(authUrl);
+    final result = await OAuthLocalServer.authenticate(
+      '$_authBase?response_type=code&client_id=$appKey'
+      '&code_challenge=$codeChallenge&code_challenge_method=S256&state=$state'
+      '&token_access_type=offline',
+    );
     await _handleCodeExchange(result.code, result.redirectUri);
   }
 

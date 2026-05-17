@@ -21,10 +21,10 @@ class GDriveFiles {
   String? getCachedFileId(String path) => _fileIdCache[path];
   void clearFileIdCache() => _fileIdCache.clear();
 
-  Future<String> _getAccessToken2() => _getAccessToken2();
+  Future<String> _getToken() async => await _getAccessToken();
 
   Future<void> upload(String path, String data) async {
-    final token = await _getAccessToken2();
+    final token = await _getToken();
     final parentId = await _folders.resolvePathToParent(path);
     final fileName = path.split('/').last;
     final cacheKey = path;
@@ -88,7 +88,7 @@ class GDriveFiles {
   }
 
   Future<void> uploadBinary(String path, Uint8List data) async {
-    final token = await _getAccessToken2();
+    final token = await _getToken();
     final parentId = await _folders.resolvePathToParent(path);
     final fileName = path.split('/').last;
 
@@ -129,7 +129,7 @@ class GDriveFiles {
   }
 
   Future<String> download(String path) async {
-    final token = await _getAccessToken2();
+    final token = await _getToken();
     final fileId = await _resolveFileId(path, token);
     final response = await _dio.get<String>(
       'https://www.googleapis.com/drive/v3/files/$fileId?alt=media',
@@ -141,7 +141,7 @@ class GDriveFiles {
   }
 
   Future<Uint8List> downloadBinary(String path) async {
-    final token = await _getAccessToken2();
+    final token = await _getToken();
     final fileId = await _resolveFileId(path, token);
     final response = await _dio.get<List<int>>(
       'https://www.googleapis.com/drive/v3/files/$fileId?alt=media',
@@ -153,7 +153,7 @@ class GDriveFiles {
   }
 
   Future<void> deleteFile(String path) async {
-    final token = await _getAccessToken2();
+    final token = await _getToken();
     final fileId = await _resolveFileId(path, token);
     await _dio.delete(
       'https://www.googleapis.com/drive/v3/files/$fileId',
@@ -178,7 +178,7 @@ class GDriveFiles {
     }
   }
 
-  Future<String> _resolveFileId(String path, String token, {bool retry = true}) async {
+  Future<String> _resolveFileId(String path, String token) async {
     final cached = _fileIdCache[path];
     if (cached != null) return cached;
 

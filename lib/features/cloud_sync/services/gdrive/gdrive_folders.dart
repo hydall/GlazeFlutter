@@ -12,12 +12,13 @@ class GDriveFolders {
 
   final Map<String, String> _folderIdCache = {};
   String? _glazeFolderId;
-  Future<String> Function() _getAccessToken;
+  final Future<String> Function() _getAccessToken;
 
   GDriveFolders(this._getAccessToken);
 
   String? get glazeFolderId => _glazeFolderId;
-  set glazeFolderId(String? v) => _glazeFolderId = v;
+
+  void setGlazeFolderId(String? v) => _glazeFolderId = v;
 
   void invalidateCache() {
     _folderIdCache.clear();

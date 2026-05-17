@@ -27,7 +27,6 @@ class GDriveAuth {
 
   String? get accessToken => _accessToken;
   String? get folderId => _folderId;
-  set folderId(String? v) => _folderId = v;
   bool get isConnected => _accessToken != null && _refreshToken != null;
 
   void loadTokens(Map<String, dynamic>? tokens) {
@@ -60,16 +59,13 @@ class GDriveAuth {
     _codeVerifier = _generateRandomString(128);
     final codeChallenge = _sha256Base64Url(_codeVerifier!);
     final state = _generateRandomString(32);
-    final redirectUri = Platform.isAndroid || Platform.isIOS
-        ? SyncConfig.gdriveRedirectNative!
-        : 'http://localhost';
-
-    final authUrl =
-        '$_authBase?response_type=code&client_id=$clientId&redirect_uri=${Uri.encodeComponent(redirectUri)}'
-        '&scope=${Uri.encodeComponent(_scope)}&code_challenge=$codeChallenge&code_challenge_method=S256&state=$state'
-        '&access_type=offline&prompt=consent';
 
     if (Platform.isAndroid || Platform.isIOS) {
+      final redirectUri = SyncConfig.gdriveRedirectNative;
+      final authUrl =
+          '$_authBase?response_type=code&client_id=$clientId&redirect_uri=${Uri.encodeComponent(redirectUri)}'
+          '&scope=${Uri.encodeComponent(_scope)}&code_challenge=$codeChallenge&code_challenge_method=S256&state=$state'
+          '&access_type=offline&prompt=consent';
       final deepLinkService = DeepLinkService.instance;
       await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
       final callbackUri = await deepLinkService.waitForOAuthCallback('gdrive');
@@ -81,7 +77,11 @@ class GDriveAuth {
       return;
     }
 
-    final result = await OAuthLocalServer.authenticate(authUrl);
+    final result = await OAuthLocalServer.authenticate(
+      '$_authBase?response_type=code&client_id=$clientId'
+      '&scope=${Uri.encodeComponent(_scope)}&code_challenge=$codeChallenge&code_challenge_method=S256&state=$state'
+      '&access_type=offline&prompt=consent',
+    );
     await _handleCodeExchange(result.code, result.redirectUri);
   }
 

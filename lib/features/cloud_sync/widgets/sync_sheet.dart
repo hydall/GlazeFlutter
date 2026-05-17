@@ -342,7 +342,7 @@ class _ErrorCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      color: Colors.redAccent.withOpacity(0.15),
+      color: Colors.redAccent.withValues(alpha: 0.15),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Row(
@@ -420,7 +420,7 @@ class _AutoSyncToggle extends StatelessWidget {
             style: TextStyle(color: Colors.white38, fontSize: 12)),
         value: enabled,
         onChanged: onChanged,
-        activeColor: const Color(0xFF0F3460),
+        activeThumbColor: const Color(0xFF0F3460),
       ),
     );
   }
