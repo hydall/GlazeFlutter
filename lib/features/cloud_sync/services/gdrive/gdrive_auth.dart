@@ -78,7 +78,7 @@ class GDriveAuth {
     }
 
     final result = await OAuthLocalServer.authenticate(
-      '$_authBase?response_type=code&client_id=$clientId'
+      '$_authBase?response_type=code&client_id=$clientId&redirect_uri=http://localhost'
       '&scope=${Uri.encodeComponent(_scope)}&code_challenge=$codeChallenge&code_challenge_method=S256&state=$state'
       '&access_type=offline&prompt=consent',
     );

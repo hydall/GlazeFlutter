@@ -15,6 +15,8 @@ class SyncSheet extends ConsumerStatefulWidget {
 }
 
 class _SyncSheetState extends ConsumerState<SyncSheet> {
+  bool _connecting = false;
+
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(syncStatusProvider);
@@ -38,12 +40,13 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
         children: [
           _ProviderSelector(
             provider: provider,
-            onChanged: (p) => ref.read(syncProviderProvider.notifier).state = p,
+            onChanged: _connecting ? (_) {} : (p) => ref.read(syncProviderProvider.notifier).state = p,
           ),
           const SizedBox(height: 16),
           _ConnectButton(
             provider: provider,
             connected: connected,
+            connecting: _connecting,
             onConnect: _connect,
             onDisconnect: _disconnect,
           ),
@@ -82,9 +85,11 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   }
 
   Future<void> _connect() async {
+    if (_connecting) return;
     final service = ref.read(syncServiceProvider).value;
     if (service == null) return;
     final provider = ref.read(syncProviderProvider);
+    setState(() => _connecting = true);
     try {
       if (provider == SyncProvider.dropbox) {
         await service.connectDropbox();
@@ -96,6 +101,8 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       if (mounted) {
         GlazeToast.error(context, 'Connection failed: ', e);
       }
+    } finally {
+      if (mounted) setState(() => _connecting = false);
     }
   }
 
@@ -213,18 +220,32 @@ class _ProviderChip extends StatelessWidget {
 class _ConnectButton extends StatelessWidget {
   final SyncProvider provider;
   final bool connected;
+  final bool connecting;
   final VoidCallback onConnect;
   final VoidCallback onDisconnect;
 
   const _ConnectButton({
     required this.provider,
     required this.connected,
+    required this.connecting,
     required this.onConnect,
     required this.onDisconnect,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (connecting) {
+      return FilledButton.icon(
+        onPressed: null,
+        icon: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        ),
+        label: Text('Connecting to ${provider == SyncProvider.dropbox ? 'Dropbox' : 'Google Drive'}...'),
+        style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0F3460)),
+      );
+    }
     if (connected) {
       return OutlinedButton.icon(
         onPressed: onDisconnect,
