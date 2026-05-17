@@ -28,6 +28,11 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
     imageStorage: imageStorage,
   );
   await service.init();
+
+  ref.read(syncProviderProvider.notifier).state = service.provider;
+  ref.read(syncConnectedProvider.notifier).state = service.isConnected();
+  ref.read(syncAutoEnabledProvider.notifier).state = service.autoSyncEnabled;
+
   return service;
 });
 

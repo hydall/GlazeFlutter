@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/services/deep_link_service.dart';
@@ -117,8 +118,20 @@ class DropboxAuth {
     if (_expiresAt != null &&
         DateTime.now().millisecondsSinceEpoch >= _expiresAt!) {
       await _refreshAccessToken();
+      await _persistTokens();
     }
     return _accessToken!;
+  }
+
+  Future<void> _persistTokens() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('gz_sync_tokens');
+    final existing = raw != null
+        ? jsonDecode(raw) as Map<String, dynamic>
+        : <String, dynamic>{};
+    final saved = saveTokens();
+    if (saved != null) existing.addAll(saved);
+    await prefs.setString('gz_sync_tokens', jsonEncode(existing));
   }
 
   Future<void> _refreshAccessToken() async {
