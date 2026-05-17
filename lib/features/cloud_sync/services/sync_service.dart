@@ -210,6 +210,7 @@ class SyncService {
   Future<void> connectDropbox() async {
     await _dropboxAuth.connect();
     await _saveTokens();
+    _accountInfo = await _adapter.getAccountInfo();
   }
 
   Future<void> connectGDrive() async {

@@ -78,8 +78,8 @@ class DropboxAuth {
       final callbackUri = await deepLinkService.waitForOAuthCallback('dropbox');
       final code = callbackUri.queryParameters['code'];
       final returnedState = callbackUri.queryParameters['state'];
-      if (code == null) throw StateError('No authorization code in callback');
-      if (returnedState != state) throw StateError('OAuth state mismatch');
+      if (code == null) throw StateError('No authorization code in callback (uri=$callbackUri)');
+      if (returnedState != state) throw StateError('OAuth state mismatch (expected=$state got=$returnedState)');
       await _handleCodeExchange(code, redirectUri);
       return;
     }

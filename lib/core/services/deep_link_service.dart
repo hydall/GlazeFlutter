@@ -8,6 +8,7 @@ class DeepLinkService {
   static final DeepLinkService instance = DeepLinkService._();
 
   final Map<String, Completer<Uri>> _pendingOAuth = {};
+  final Map<String, Uri> _earlyCallbacks = {};
   late final AppLinks _appLinks;
   StreamSubscription<Uri>? _subscription;
 
@@ -33,6 +34,8 @@ class DeepLinkService {
       final completer = _pendingOAuth.remove(provider);
       if (completer != null && !completer.isCompleted) {
         completer.complete(uri);
+      } else {
+        _earlyCallbacks[provider] = uri;
       }
       return;
     }
@@ -40,6 +43,8 @@ class DeepLinkService {
       final completer = _pendingOAuth.remove('dropbox');
       if (completer != null && !completer.isCompleted) {
         completer.complete(uri);
+      } else {
+        _earlyCallbacks['dropbox'] = uri;
       }
       return;
     }
@@ -48,6 +53,8 @@ class DeepLinkService {
       final completer = _pendingOAuth.remove('gdrive');
       if (completer != null && !completer.isCompleted) {
         completer.complete(uri);
+      } else {
+        _earlyCallbacks['gdrive'] = uri;
       }
     }
   }
@@ -56,6 +63,9 @@ class DeepLinkService {
     String provider, {
     Duration timeout = const Duration(minutes: 5),
   }) async {
+    final early = _earlyCallbacks.remove(provider);
+    if (early != null) return early;
+
     final completer = Completer<Uri>();
     _pendingOAuth[provider] = completer;
     return completer.future.timeout(timeout, onTimeout: () {
