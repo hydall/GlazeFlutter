@@ -424,14 +424,9 @@ class _FolderCardState extends State<_FolderCard> {
     );
   }
 
-  String _charImageUrl(PicksCharacter c, {bool useThumb = true}) {
+  String _charImageUrl(PicksCharacter c) {
     final parts = <String>[...widget.path, widget.folder.id];
     final base = '$kPicksBaseUrl/${parts.join('/')}';
-    if (useThumb && c.thumb != null) {
-      final segs = c.thumb!.split('/');
-      final encoded = segs.map(Uri.encodeComponent).join('/');
-      return '$base/$encoded';
-    }
     return '$base/${Uri.encodeComponent(c.fileName ?? '${c.id}.png')}';
   }
 }

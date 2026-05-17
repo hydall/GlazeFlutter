@@ -24,28 +24,24 @@
               "id": "blood-of-vanquished-north",
               "name": "Blood of Vanquished North",
               "fileName": "Blood of Vanquished North.png",
-              "thumb": "thumbs/Blood of Vanquished North_thumb.jpg",
               "hash": "30dba6f094dc115df012765b0c5392dfdfb911d62e3c7e6055650b51da2bae78"
             },
             {
               "id": "hotel-petersburg",
               "name": "Hotel Petersburg",
               "fileName": "Hotel Petersburg  Westwood is not neutral ground.png",
-              "thumb": "thumbs/Hotel Petersburg  Westwood is not neutral ground_thumb.jpg",
               "hash": "dcc8ca699c18c654884d4052933bc6d97999ff1bacfa2833189253a90d574e68"
             },
             {
               "id": "project-tokyo",
               "name": "Project Tokyo",
               "fileName": "Project Tokyo.png",
-              "thumb": "thumbs/Project Tokyo_thumb.jpg",
               "hash": "8445883c72bbace445dc07c91c679ce63823ac0f325a444a9e0521bf45dac06e"
             },
             {
               "id": "vareti",
               "name": "Vareti",
               "fileName": "Vareti.png",
-              "thumb": "thumbs/Vareti_thumb.jpg",
               "hash": "e6f1bdd4f457cf3d398239a12b4d741a2eb3fbfac99cb9b042b52ac3dce4b1de"
             }
           ]
@@ -60,7 +56,6 @@
               "id": "maisie-dee-hollis-channing-paul",
               "name": "Maisie, Dee, Hollis, Channing, Paul",
               "fileName": "Maisie, Dee, Hollis, Channing, Paul.png",
-              "thumb": "thumbs/Maisie, Dee, Hollis, Channing, Paul_thumb.jpg",
               "hash": "235a88acbf441515976ef56076946a89ea67977fe7254dd3680efa7c18591b02"
             }
           ]
