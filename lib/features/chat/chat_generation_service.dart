@@ -131,11 +131,8 @@ class ChatGenerationService {
         },
         onComplete: (text, reasoning) {
           if (isAborted()) return;
-          if (accumulator.text.isEmpty && accumulator.reasoning.isEmpty && accumulator.hasInlineTags) {
-            accumulator.consumeDelta(text);
-          }
           accumulator.flush();
-          var finalText = (accumulator.text.isNotEmpty ? accumulator.text : text).trimLeft();
+          var finalText = accumulator.text.trimLeft();
           // If the model emitted <think>...</think> via reasoning_content but leaked
           // the closing tag into content, strip it from the start of finalText.
           if (finalText.startsWith(reasoningTagEnd)) {
