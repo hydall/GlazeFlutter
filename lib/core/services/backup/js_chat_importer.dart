@@ -53,7 +53,7 @@ class JsChatImporter with BackupHelpers {
         : null;
 
     for (final sessionEntry in sessions.entries) {
-      final sessionIdx = int.tryParse(sessionEntry.key) ?? 1;
+      final sessionIdx = int.tryParse(sessionEntry.key) ?? 0;
       final rawMessages = sessionEntry.value;
       if (rawMessages is! List) continue;
 

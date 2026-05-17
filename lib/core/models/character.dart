@@ -25,7 +25,7 @@ class Character with _$Character {
     String? color,
     @Default(0) int updatedAt,
     @Default([]) List<GalleryEntry> gallery,
-    @Default(1) int currentSessionIndex,
+    @Default(0) int currentSessionIndex,
     @Default(false) bool fav,
     @Default({}) Map<String, dynamic> extensions,
     @Default('1') String characterVersion,

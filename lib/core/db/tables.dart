@@ -22,7 +22,7 @@ class Characters extends Table {
   TextColumn get tagsJson => text().nullable()();
   TextColumn get alternateGreetingsJson => text().nullable()();
   TextColumn get galleryJson => text().nullable()();
-  IntColumn get currentSessionIndex => integer().withDefault(const Constant(1))();
+  IntColumn get currentSessionIndex => integer().withDefault(const Constant(0))();
   BoolColumn get fav => boolean().withDefault(const Constant(false))();
   TextColumn get extensionsJson => text().nullable()();
   TextColumn get characterVersion => text().withDefault(const Constant('1'))();
