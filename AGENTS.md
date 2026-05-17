@@ -144,8 +144,9 @@ Also protect markdown formatting patterns (`**bold**`, `*italic*`, `__bold__`, `
 |---|---|
 | features | `6a08b1a3055cd731743d9c1c` |
 | Known Bugs | `6a08b1a3055cd731743d9c29` |
+| In Progress | `6a0991fb6005f1f92f73cf44` |
 | Done, not tested | `6a08b1a3055cd731743d9c2a` |
-| Fixed | `6a08b1a3055cd731743d9c2a` → `6a08b6a98f657e17b6c33a23` |
+| Fixed | `6a08b6a98f657e17b6c33a23` |
 | later | `6a08b1a3055cd731743d9c23` |
 | ios | `6a08b1a3055cd731743d9c24` |
 | chat modes | `6a08b1a3055cd731743d9c20` |
@@ -153,9 +154,10 @@ Also protect markdown formatting patterns (`**bold**`, `*italic*`, `__bold__`, `
 
 ### Workflow
 
-- New features → **features** list
-- Move to **Done, not tested** after implementation
-- Move to **Fixed** after testing
+1. **Before starting any fix/feat** — search the Trello board for an existing card. If found, move it to **In Progress**. If not found, create a card in **In Progress** with a clear description.
+2. **After implementation** — move the card to **Done, not tested**.
+3. **After user tests immediately** — move the card to **Fixed**.
+4. New features with no card yet → create in **features** first, then move to **In Progress** when starting work.
 
 ## Cleanup Checklist After Merge
 

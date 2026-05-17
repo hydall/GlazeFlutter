@@ -7,6 +7,8 @@ import 'app.dart';
 import 'core/services/generation_notification_service.dart';
 import 'core/services/deep_link_service.dart';
 
+final appRestartKey = GlobalKey();
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await SystemChrome.setPreferredOrientations([
@@ -16,5 +18,26 @@ Future<void> main() async {
   await dotenv.load(fileName: '.env');
   await GenerationNotificationService.instance.init();
   await DeepLinkService.instance.init();
-  runApp(const ProviderScope(child: GlazeApp()));
+  runApp(const _RestartableApp());
+}
+
+class _RestartableApp extends StatefulWidget {
+  const _RestartableApp();
+
+  @override
+  State<_RestartableApp> createState() => _RestartableAppState();
+}
+
+class _RestartableAppState extends State<_RestartableApp> {
+  Key _key = UniqueKey();
+
+  void restart() => setState(() => _key = UniqueKey());
+
+  @override
+  Widget build(BuildContext context) {
+    return KeyedSubtree(
+      key: _key,
+      child: ProviderScope(child: GlazeApp(restart: restart)),
+    );
+  }
 }

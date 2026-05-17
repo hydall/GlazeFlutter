@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -164,8 +165,6 @@ class _MessageListState extends State<MessageList> {
     if (!pos.hasContentDimensions) return;
 
     final distance = pos.maxScrollExtent - pos.pixels;
-    final atBottom = distance < _kStickToBottomThreshold;
-    final wantsButton = distance > _kStickToBottomThreshold;
 
     if (pos.pixels < 200 && _renderCount < widget.messages.length) {
       setState(() {
@@ -173,12 +172,35 @@ class _MessageListState extends State<MessageList> {
       });
     }
 
-    if (atBottom != _wasAtBottom || wantsButton != _showScrollButton) {
+    final wantsButton = distance > _kStickToBottomThreshold;
+    if (wantsButton != _showScrollButton) {
       setState(() {
-        _wasAtBottom = atBottom;
         _showScrollButton = wantsButton;
       });
     }
+  }
+
+  bool _handleUserScroll(UserScrollNotification notification) {
+    if (notification.direction == ScrollDirection.reverse) {
+      if (_wasAtBottom) {
+        setState(() {
+          _wasAtBottom = false;
+        });
+      }
+    } else if (notification.direction == ScrollDirection.forward) {
+      if (!_wasAtBottom && _scrollController.hasClients) {
+        final pos = _scrollController.position;
+        if (pos.hasContentDimensions) {
+          final distance = pos.maxScrollExtent - pos.pixels;
+          if (distance < _kStickToBottomThreshold) {
+            setState(() {
+              _wasAtBottom = true;
+            });
+          }
+        }
+      }
+    }
+    return false;
   }
 
   void _beginProgrammaticScroll() {
@@ -261,7 +283,9 @@ class _MessageListState extends State<MessageList> {
 
     return Stack(
       children: [
-        ListView.builder(
+        NotificationListener<UserScrollNotification>(
+          onNotification: _handleUserScroll,
+          child: ListView.builder(
           controller: _scrollController,
           cacheExtent: 2000,
           padding: EdgeInsets.only(
@@ -304,9 +328,10 @@ class _MessageListState extends State<MessageList> {
               key: ValueKey(msg.id),
               child: _buildMessageWidget(msg, msgIndex),
             );
-          },
+           },
+         ),
         ),
-        Positioned(
+         Positioned(
           right: 16,
           bottom: widget.bottomInset + 8,
           child: _ScrollDownButton(

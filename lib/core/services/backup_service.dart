@@ -31,6 +31,8 @@ class BackupService {
       await JsBackupImporter(_db, _imageStorage).import(data);
     }
 
+    await _deleteOrphanedSessions();
+
     final prefs = await SharedPreferences.getInstance();
     final prefsData = (data['preferences'] as Map<String, dynamic>?) ??
         (data['localStorage'] as Map<String, dynamic>?);
@@ -69,6 +71,25 @@ class BackupService {
           await prefs.setString('personaConnections', jsonEncode(conns));
         } catch (_) {}
       }
+    }
+  }
+
+  Future<void> _deleteOrphanedSessions() async {
+    final charIds =
+        (await _db.select(_db.characters).get()).map((r) => r.charId).toSet();
+    if (charIds.isEmpty) return;
+
+    final sessions = await _db.select(_db.chatSessions).get();
+    final orphanIds = sessions
+        .where((s) => !charIds.contains(s.characterId))
+        .map((s) => s.sessionId)
+        .toList();
+    if (orphanIds.isEmpty) return;
+
+    for (final sid in orphanIds) {
+      await (_db.delete(_db.chatSessions)..where((t) => t.sessionId.equals(sid))).go();
+      await (_db.delete(_db.memoryBookRows)..where((t) => t.sessionId.equals(sid))).go();
+      await (_db.delete(_db.chatSummaries)..where((t) => t.sessionId.equals(sid))).go();
     }
   }
 }

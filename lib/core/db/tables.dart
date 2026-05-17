@@ -27,6 +27,7 @@ class Characters extends Table {
   TextColumn get extensionsJson => text().nullable()();
   TextColumn get characterVersion => text().withDefault(const Constant('1'))();
   TextColumn get macroName => text().nullable()();
+  TextColumn get picksHash => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {charId};

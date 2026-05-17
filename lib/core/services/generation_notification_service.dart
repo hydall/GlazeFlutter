@@ -31,7 +31,7 @@ class GenerationNotificationService {
 
   Future<void> init() async {
     const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('new_message');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -96,13 +96,13 @@ class GenerationNotificationService {
     _lifecycleState = state;
   }
 
-  Future<void> onGenerationStarted() async {
+  Future<void> onGenerationStarted(String charName) async {
     _isGenerating = true;
     if (_isMobile) {
       try {
         if (!await FlutterForegroundTask.isRunningService) {
           await FlutterForegroundTask.startService(
-            notificationTitle: 'Glaze',
+            notificationTitle: charName,
             notificationText: 'Generating response...',
             callback: _foregroundTaskCallback,
           );
@@ -115,13 +115,15 @@ class GenerationNotificationService {
 
   Future<void> onGenerationCompleted(
     String charName,
-    String charId,
-  ) async {
+    String charId, {
+    String? messagePreview,
+  }) async {
     _isGenerating = false;
     await _stopForegroundTask();
 
     if (_isMobile && _lifecycleState != AppLifecycleState.resumed) {
-      await _showMessageNotification(charName, charId);
+      await _showMessageNotification(charName, charId,
+          messagePreview: messagePreview);
     }
   }
 
@@ -146,8 +148,9 @@ class GenerationNotificationService {
 
   Future<void> _showMessageNotification(
     String charName,
-    String charId,
-  ) async {
+    String charId, {
+    String? messagePreview,
+  }) async {
     const androidDetails = AndroidNotificationDetails(
       _messageChannelId,
       _messageChannelName,
@@ -155,6 +158,7 @@ class GenerationNotificationService {
       importance: Importance.high,
       priority: Priority.high,
       autoCancel: true,
+      icon: '@drawable/new_message',
     );
     const iosDetails = DarwinNotificationDetails(
       presentAlert: true,
@@ -166,10 +170,12 @@ class GenerationNotificationService {
       iOS: iosDetails,
     );
 
+    final body = messagePreview ?? 'New message received';
+
     await _notifications.show(
       _messageNotificationId,
       charName,
-      'New message received',
+      body,
       details,
       payload: 'chat:$charId',
     );

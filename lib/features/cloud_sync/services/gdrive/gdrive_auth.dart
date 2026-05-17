@@ -62,7 +62,7 @@ class GDriveAuth {
     final state = _generateRandomString(32);
     final redirectUri = Platform.isAndroid || Platform.isIOS
         ? SyncConfig.gdriveRedirectNative!
-        : 'http://localhost:0';
+        : 'http://localhost';
 
     final authUrl =
         '$_authBase?response_type=code&client_id=$clientId&redirect_uri=${Uri.encodeComponent(redirectUri)}'
@@ -81,8 +81,8 @@ class GDriveAuth {
       return;
     }
 
-    final code = await OAuthLocalServer.authenticate(authUrl);
-    await _handleCodeExchange(code, redirectUri);
+    final result = await OAuthLocalServer.authenticate(authUrl);
+    await _handleCodeExchange(result.code, result.redirectUri);
   }
 
   Future<void> _handleCodeExchange(String code, String redirectUri) async {

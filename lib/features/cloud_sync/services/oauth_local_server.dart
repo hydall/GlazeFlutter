@@ -21,7 +21,7 @@ class OAuthLocalServer {
 <p>You can close this tab and return to Glaze.</p>
 </div></body></html>''';
 
-  static Future<String> authenticate(
+  static Future<({String code, String redirectUri})> authenticate(
     String authUrl, {
     String successPattern = 'code=',
     Duration timeout = const Duration(minutes: 5),
@@ -75,9 +75,10 @@ class OAuthLocalServer {
       throw Exception('Could not launch browser for OAuth');
     }
 
-    return codeCompleter.future.timeout(timeout, onTimeout: () {
+    final code = await codeCompleter.future.timeout(timeout, onTimeout: () {
       server.close(force: true);
       throw TimeoutException('OAuth flow timed out', timeout);
     });
+    return (code: code, redirectUri: redirectUri);
   }
 }

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../app.dart';
 import '../../core/services/file_export_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_toast.dart';
@@ -165,7 +166,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   }
 
   void _reloadApp() {
-    Navigator.of(context).pushNamedAndRemoveUntil('/', (_) => false);
+    GlazeApp.restartApp();
   }
 }
 

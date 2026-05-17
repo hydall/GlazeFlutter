@@ -1,0 +1,67 @@
+{
+  "folders": [
+    {
+      "id": "hydall",
+      "name": "Hydall",
+      "description": "Hydall's curated picks",
+      "imageUrl": "https://raw.githubusercontent.com/danvitv/GlazeFlutter/master/picks/hydall/ipuxiv.jpg",
+      "subfolders": [],
+      "characters": []
+    },
+    {
+      "id": "danvi",
+      "name": "Danvi",
+      "description": "Danvi's curated picks",
+      "imageUrl": "https://raw.githubusercontent.com/danvitv/GlazeFlutter/master/picks/danvi/fox.jpg",
+      "subfolders": [
+        {
+          "id": "crafted",
+          "name": "Crafted",
+          "description": "Hand-crafted characters made from scratch with care and attention to detail",
+          "subfolders": [],
+          "characters": [
+            {
+              "id": "blood-of-vanquished-north",
+              "name": "Blood of Vanquished North",
+              "fileName": "Blood of Vanquished North.png",
+              "hash": "30dba6f094dc115df012765b0c5392dfdfb911d62e3c7e6055650b51da2bae78"
+            },
+            {
+              "id": "hotel-petersburg",
+              "name": "Hotel Petersburg",
+              "fileName": "Hotel Petersburg  Westwood is not neutral ground.png",
+              "hash": "dcc8ca699c18c654884d4052933bc6d97999ff1bacfa2833189253a90d574e68"
+            },
+            {
+              "id": "project-tokyo",
+              "name": "Project Tokyo",
+              "fileName": "Project Tokyo.png",
+              "hash": "8445883c72bbace445dc07c91c679ce63823ac0f325a444a9e0521bf45dac06e"
+            },
+            {
+              "id": "vareti",
+              "name": "Vareti",
+              "fileName": "Vareti.png",
+              "hash": "e6f1bdd4f457cf3d398239a12b4d741a2eb3fbfac99cb9b042b52ac3dce4b1de"
+            }
+          ]
+        },
+        {
+          "id": "rebuilded",
+          "name": "Rebuilded",
+          "description": "Characters with great ideas but poor execution — rebuilt with proper craft, structure, and depth",
+          "subfolders": [],
+          "characters": [
+            {
+              "id": "maisie-dee-hollis-channing-paul",
+              "name": "Maisie, Dee, Hollis, Channing, Paul",
+              "fileName": "Maisie, Dee, Hollis, Channing, Paul.png",
+              "hash": "235a88acbf441515976ef56076946a89ea67977fe7254dd3680efa7c18591b02"
+            }
+          ]
+        }
+      ],
+      "characters": []
+    }
+  ]
+}

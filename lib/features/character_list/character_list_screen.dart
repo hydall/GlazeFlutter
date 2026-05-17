@@ -20,6 +20,7 @@ import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../catalog/widgets/widgets.dart';
 import '../character_gallery/gallery_provider.dart';
+import '../picks/widgets/picks_grid.dart';
 import 'widgets/widgets.dart';
 
 class CharacterListScreen extends ConsumerStatefulWidget {
@@ -33,7 +34,7 @@ class CharacterListScreen extends ConsumerStatefulWidget {
 class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   SortType _sortBy = SortType.date;
   SortDir _sortDir = SortDir.desc;
-  bool _showCatalog = false;
+  int _tabIndex = 0;
   String _searchQuery = '';
 
   @override
@@ -49,13 +50,19 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: _showCatalog
-                ? CatalogGrid(
+            child: _tabIndex == 2
+                ? PicksGrid(
                     topPadding: topPad,
                     bottomPadding: navHeight + 20,
                     tabBar: _buildTabBar(),
                   )
-                : characters.when(
+                : _tabIndex == 1
+                    ? CatalogGrid(
+                        topPadding: topPad,
+                        bottomPadding: navHeight + 20,
+                        tabBar: _buildTabBar(),
+                      )
+                    : characters.when(
                     loading: () => Center(
                       child: CircularProgressIndicator(color: context.cs.primary),
                     ),
@@ -143,7 +150,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
               ],
             ),
           ),
-          if (!_showCatalog)
+          if (_tabIndex == 0)
             Positioned(
               right: 16,
               bottom: navHeight + 16,
@@ -161,9 +168,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
         tabs: const [
           GlazeTabItem(label: 'My Characters', icon: Icons.person_rounded),
           GlazeTabItem(label: 'Discover', icon: Icons.public_rounded),
+          GlazeTabItem(label: 'Our Picks', icon: Icons.star_rounded),
         ],
-        activeIndex: _showCatalog ? 1 : 0,
-        onChanged: (i) => setState(() => _showCatalog = i == 1),
+        activeIndex: _tabIndex,
+        onChanged: (i) => setState(() => _tabIndex = i),
       ),
     );
   }

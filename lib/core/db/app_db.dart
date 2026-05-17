@@ -26,7 +26,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -97,6 +97,9 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               "DELETE FROM embeddings WHERE source_type = 'lorebook_entry'",
             );
+          }
+          if (from < 18) {
+            await m.addColumn(characters, characters.picksHash);
           }
         },
       );

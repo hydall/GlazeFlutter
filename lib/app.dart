@@ -145,7 +145,12 @@ final routerProvider = Provider<GoRouter>(
 );
 
 class GlazeApp extends ConsumerStatefulWidget {
-  const GlazeApp({super.key});
+  final VoidCallback? restart;
+  const GlazeApp({super.key, this.restart});
+
+  static VoidCallback? _restart;
+
+  static void restartApp() => _restart?.call();
 
   @override
   ConsumerState<GlazeApp> createState() => _GlazeAppState();
@@ -157,6 +162,7 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
   @override
   void initState() {
     super.initState();
+    GlazeApp._restart = widget.restart;
     WidgetsBinding.instance.addObserver(this);
     loadActiveSelections(ref);
     loadLorebookActivations(ref);
