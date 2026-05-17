@@ -147,7 +147,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     state = AsyncData(ChatState(session: current.session, isGenerating: true, generationStartTime: DateTime.now()));
 
     final notifService = GenerationNotificationService.instance;
-    await notifService.onGenerationStarted();
+    final charRepo = ref.read(characterRepoProvider);
+    final character = await charRepo.getById(arg);
+    await notifService.onGenerationStarted(character?.name ?? 'Unknown');
 
     final service = ChatGenerationService(ref);
     final result = await service.generate(
@@ -176,9 +178,11 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       state = AsyncData(result);
     }
 
-    final charRepo = ref.read(characterRepoProvider);
-    final character = await charRepo.getById(arg);
-    await notifService.onGenerationCompleted(character?.name ?? 'Unknown', arg);
+    final preview = _messagePreview(result.messages);
+    await notifService.onGenerationCompleted(
+      character?.name ?? 'Unknown', arg,
+      messagePreview: preview,
+    );
   }
 
   Future<void> clearChat() async {
@@ -398,7 +402,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _clearStreaming();
 
     final notifService = GenerationNotificationService.instance;
-    await notifService.onGenerationStarted();
+    final charRepo = ref.read(characterRepoProvider);
+    final character = await charRepo.getById(arg);
+    await notifService.onGenerationStarted(character?.name ?? 'Unknown');
 
     final service = ChatGenerationService(ref);
     final result = await service.generate(
@@ -459,10 +465,33 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     notifySyncMessageGenerated(ref);
 
-    final charRepo = ref.read(characterRepoProvider);
-    final character = await charRepo.getById(arg);
-    await notifService.onGenerationCompleted(character?.name ?? 'Unknown', arg);
+    final preview = _messagePreview(result.session?.messages ?? []);
+    await notifService.onGenerationCompleted(
+      character?.name ?? 'Unknown', arg,
+      messagePreview: preview,
+    );
 
     if (!completer.isCompleted) completer.complete();
+  }
+
+  String? _messagePreview(List messages) {
+    try {
+      for (final m in messages.reversed) {
+        final content = (m as dynamic).content as String?;
+        if (content != null && content.isNotEmpty) {
+          final text = content
+              .replaceAll(RegExp(r'\*\*[^*]+\*\*'), '')
+              .replaceAll(RegExp(r'\*[^*]+\*'), '')
+              .replaceAll(RegExp(r'==[^=]+=='), '')
+              .replaceAll(RegExp(r'<[^>]+>'), '')
+              .replaceAll(RegExp(r'\s+'), ' ')
+              .trim();
+          if (text.isNotEmpty) {
+            return text.length > 80 ? '${text.substring(0, 80)}...' : text;
+          }
+        }
+      }
+    } catch (_) {}
+    return null;
   }
 }
