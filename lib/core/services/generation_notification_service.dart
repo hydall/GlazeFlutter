@@ -31,7 +31,7 @@ class GenerationNotificationService {
 
   Future<void> init() async {
     const androidSettings =
-        AndroidInitializationSettings('new_message');
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -42,10 +42,14 @@ class GenerationNotificationService {
       iOS: iosSettings,
     );
 
-    await _notifications.initialize(
-      settings,
-      onDidReceiveNotificationResponse: _onNotificationTapped,
-    );
+    try {
+      await _notifications.initialize(
+        settings,
+        onDidReceiveNotificationResponse: _onNotificationTapped,
+      );
+    } catch (_) {
+      return;
+    }
 
     if (Platform.isAndroid) {
       final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
