@@ -64,7 +64,6 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/characters');
     await _adapter.ensureFolder('$cloudBase/personas');
     await _adapter.ensureFolder('$cloudBase/chats');
-    await _adapter.ensureFolder('$cloudBase/galleries');
 
     final localManifest = await _manifestBuilder.buildLocalManifest();
     SyncManifest? cloudManifest;
