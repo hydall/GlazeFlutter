@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/context_calculator.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
+import '../../../features/settings/app_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
@@ -23,15 +24,19 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   bool _loading = false;
   int _visibleCount = 0;
   int _hiddenCount = 0;
-  double _hidePercent = 30;
-  double _historyFillThreshold = 85;
   bool _showSettings = false;
 
   @override
   void initState() {
     super.initState();
+    final settings = ref.read(appSettingsProvider).valueOrNull ?? const AppSettings();
+    _hidePercent = settings.tokenizerHidePercent;
+    _historyFillThreshold = settings.tokenizerHistoryFillThreshold;
     _calculate();
   }
+
+  double _hidePercent = 30;
+  double _historyFillThreshold = 85;
 
   Future<void> _calculate() async {
     setState(() => _loading = true);
@@ -180,6 +185,14 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     );
   }
 
+  void _saveSettings() {
+    final settings = ref.read(appSettingsProvider).valueOrNull ?? const AppSettings();
+    ref.read(appSettingsProvider.notifier).save(settings.copyWith(
+      tokenizerHidePercent: _hidePercent,
+      tokenizerHistoryFillThreshold: _historyFillThreshold,
+    ));
+  }
+
   void _confirmHide(BuildContext context, int count) {
     showDialog(
       context: context,
@@ -215,7 +228,10 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
             max: 100,
             unit: '%',
             description: 'Warn when history fills this % of its budget',
-            onChanged: (v) => setState(() => _historyFillThreshold = v),
+            onChanged: (v) {
+              setState(() => _historyFillThreshold = v);
+              _saveSettings();
+            },
           ),
           const SizedBox(height: 16),
           SettingsSlider(
@@ -225,7 +241,10 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
             max: 95,
             unit: '%',
             description: 'What % of visible messages the Hide button will hide',
-            onChanged: (v) => setState(() => _hidePercent = v),
+            onChanged: (v) {
+              setState(() => _hidePercent = v);
+              _saveSettings();
+            },
           ),
         ],
       ),

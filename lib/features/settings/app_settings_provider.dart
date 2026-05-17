@@ -16,6 +16,8 @@ class AppSettings {
   final String chatLayout;
   final String language;
   final bool virtualKeyboardSend;
+  final double tokenizerHidePercent;
+  final double tokenizerHistoryFillThreshold;
 
   const AppSettings({
     this.enterToSend = true,
@@ -29,6 +31,8 @@ class AppSettings {
     this.chatLayout = 'default',
     this.language = 'en',
     this.virtualKeyboardSend = false,
+    this.tokenizerHidePercent = 30,
+    this.tokenizerHistoryFillThreshold = 85,
   });
 
   AppSettings copyWith({
@@ -43,6 +47,8 @@ class AppSettings {
     String? chatLayout,
     String? language,
     bool? virtualKeyboardSend,
+    double? tokenizerHidePercent,
+    double? tokenizerHistoryFillThreshold,
   }) {
     return AppSettings(
       enterToSend: enterToSend ?? this.enterToSend,
@@ -57,6 +63,8 @@ class AppSettings {
       chatLayout: chatLayout ?? this.chatLayout,
       language: language ?? this.language,
       virtualKeyboardSend: virtualKeyboardSend ?? this.virtualKeyboardSend,
+      tokenizerHidePercent: tokenizerHidePercent ?? this.tokenizerHidePercent,
+      tokenizerHistoryFillThreshold: tokenizerHistoryFillThreshold ?? this.tokenizerHistoryFillThreshold,
     );
   }
 }
@@ -78,6 +86,8 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
       chatLayout: prefs.getString('chatLayout') ?? 'default',
       language: prefs.getString('language') ?? 'en',
       virtualKeyboardSend: prefs.getBool('virtualKeyboardSend') ?? false,
+      tokenizerHidePercent: prefs.getDouble('tokenizerHidePercent') ?? 30,
+      tokenizerHistoryFillThreshold: prefs.getDouble('tokenizerHistoryFillThreshold') ?? 85,
     );
   }
 
@@ -94,6 +104,8 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setString('chatLayout', settings.chatLayout);
     await prefs.setString('language', settings.language);
     await prefs.setBool('virtualKeyboardSend', settings.virtualKeyboardSend);
+    await prefs.setDouble('tokenizerHidePercent', settings.tokenizerHidePercent);
+    await prefs.setDouble('tokenizerHistoryFillThreshold', settings.tokenizerHistoryFillThreshold);
     state = AsyncData(settings);
   }
 }
