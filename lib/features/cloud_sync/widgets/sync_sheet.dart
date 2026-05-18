@@ -37,6 +37,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final service = ref.read(syncServiceProvider).value;
       if (service != null) {
+        ref.read(syncStatusProvider.notifier).state = service.status;
         ref.read(syncConnectedProvider.notifier).state = service.isConnected();
         ref.read(syncProviderProvider.notifier).state = service.provider;
         ref.read(syncAutoEnabledProvider.notifier).state = service.autoSyncEnabled;
@@ -952,6 +953,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             _isWiping = true;
             _syncResult = null;
           });
+          ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
 
           try {
             await service.wipeCloudData(
@@ -972,6 +974,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               GlazeToast.show(context, 'Cloud data wiped successfully.');
             }
           } catch (e) {
+            ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
             if (mounted) {
               GlazeToast.error(context, 'Wipe failed: ', e);
             }
@@ -979,6 +982,8 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             if (mounted) {
               setState(() => _isWiping = false);
               ref.read(syncProgressProvider.notifier).state = null;
+              ref.read(syncStatusProvider.notifier).state =
+                  ref.read(syncServiceProvider).value?.status ?? SyncStatus.idle;
             }
           }
         },

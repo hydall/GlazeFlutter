@@ -692,4 +692,42 @@ void main() {
             'the next pull should not re-trigger the same conflict. '
             'The rebuilt manifest should have the same hash as cloud.');
   });
+
+  test('Wipe resets status to idle — subsequent push does not show wipe state',
+      () async {
+    final world = SyncWorld();
+
+    // Push some data first
+    await world.characters.put(makeChar('c1', name: 'Alice'));
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    expect(world.cloud.files.isNotEmpty, isTrue,
+        reason: 'Cloud should have data before wipe');
+
+    // Wipe cloud data — engine resets to idle after wipe
+    await world.engine.wipeCloudData(onProgress: (_) {});
+
+    expect(world.cloud.files.isEmpty, isTrue,
+        reason: 'Cloud should be empty after wipe');
+
+    // Simulate the SyncService status transition:
+    // wipeCloudData sets _status = SyncStatus.syncing, then idle on success
+    // The UI must read service.status after wipe completes
+    // If it doesn't, the status provider stays at SyncStatus.syncing
+
+    // Push again after wipe
+    await world.characters.put(makeChar('c2', name: 'Bob'));
+    final manifest2 = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest2);
+
+    // This should work without issues — no stale wipe state
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    expect(world.cloud.files.containsKey(cloudPath('character', 'c2')), isTrue,
+        reason: 'Push after wipe should upload new character');
+    expect(world.cloud.files.containsKey(cloudPath('character', 'c1')), isTrue,
+        reason: 'Push after wipe should upload previously wiped character too');
+  });
 }

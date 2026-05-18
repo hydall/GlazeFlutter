@@ -297,23 +297,6 @@ class SyncService {
     }
   }
 
-  Future<void> wipeCloud({
-    void Function(SyncProgress)? onProgress,
-  }) async {
-    if (_status == SyncStatus.syncing) return;
-    _status = SyncStatus.syncing;
-    _lastError = null;
-    try {
-      await _engine.wipeCloudData(
-        onProgress: onProgress ?? (_) {},
-      );
-      _status = SyncStatus.idle;
-    } catch (e) {
-      _lastError = e.toString();
-      _status = SyncStatus.error;
-    }
-  }
-
   Future<void> _saveTokens() async {
     final prefs = await SharedPreferences.getInstance();
     final dbTokens = _dropboxAuth.saveTokens();
