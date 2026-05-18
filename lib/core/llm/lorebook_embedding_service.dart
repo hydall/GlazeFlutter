@@ -4,6 +4,7 @@ import '../models/lorebook.dart';
 import '../db/repositories/embedding_repo.dart';
 import '../utils/cast_helpers.dart';
 import 'embedding_service.dart';
+import 'retrieval_hints.dart';
 
 class LorebookEmbeddingService {
   final EmbeddingRepo _repo;
@@ -140,39 +141,11 @@ class LorebookEmbeddingService {
   }
 
   static List<String> extractRetrievalHints(LorebookEntry entry) {
-    final hints = <String>{};
-
-    if (entry.comment.isNotEmpty) hints.add(entry.comment);
-
-    for (final key in entry.keys) {
-      if (key.isNotEmpty) hints.add(key);
-    }
-
-    final lines = entry.content.split('\n');
-    int lineCount = 0;
-    for (final line in lines) {
-      if (line.trim().isEmpty) continue;
-      hints.add(line.trim());
-      lineCount++;
-      if (lineCount >= 8) break;
-    }
-
-    final labelPattern = RegExp(r'^[\w\s]+:\s*(.+)$', multiLine: true);
-    for (final match in labelPattern.allMatches(entry.content)) {
-      final value = match.group(1);
-      if (value != null && value.isNotEmpty) {
-        for (final part in value.split(RegExp(r'[;,]'))) {
-          final trimmed = part.trim();
-          if (trimmed.isNotEmpty) hints.add(trimmed);
-        }
-      }
-    }
-
-    final normalized = hints.map((h) => h.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim()).toSet();
-    return hints.where((h) {
-      final n = h.toLowerCase().replaceAll(RegExp(r'[^\w\s]'), '').trim();
-      return n.isNotEmpty && normalized.contains(n);
-    }).take(32).toList();
+    return extractRetrievalHintsFrom(
+      label: entry.comment,
+      keys: entry.keys,
+      content: entry.content,
+    );
   }
 
 }
