@@ -4,7 +4,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app.dart';
-import '../../core/services/file_export_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/sheet_view.dart';
@@ -80,18 +79,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     setState(() => _isExporting = true);
     try {
       final service = await ref.read(backupServiceProvider.future);
-      final json = await service.exportBackup();
-
-      final now = DateTime.now();
-      final filename =
-          'Glaze_backup_${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}_'
-          '${now.hour.toString().padLeft(2, '0')}-${now.minute.toString().padLeft(2, '0')}-${now.second.toString().padLeft(2, '0')}.glz';
-
-      final path = await FileExportService.export(
-        data: json,
-        filename: filename,
-        subfolder: 'backup',
-      );
+      final path = await service.exportBackup();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
