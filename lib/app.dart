@@ -33,6 +33,8 @@ import 'shared/shell/shell_screen.dart';
 import 'shared/theme/app_theme.dart';
 import 'shared/theme/theme_provider.dart';
 
+import 'shared/widgets/glaze_toast.dart' show toastOverlayKey;
+
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final routerProvider = Provider<GoRouter>(
@@ -213,13 +215,23 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
         : preset.themeMode == 'dark'
             ? ThemeMode.dark
             : themeSettings.mode;
-    return MaterialApp.router(
-      title: 'Glaze',
-      theme: AppTheme.light(preset, fontFamily: uiFont),
-      darkTheme: AppTheme.dark(preset, fontFamily: uiFont),
-      themeMode: mode,
-      routerConfig: router,
-      debugShowCheckedModeBanner: false,
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: Overlay(
+        key: toastOverlayKey,
+        initialEntries: [
+          OverlayEntry(
+            builder: (_) => MaterialApp.router(
+              title: 'Glaze',
+              theme: AppTheme.light(preset, fontFamily: uiFont),
+              darkTheme: AppTheme.dark(preset, fontFamily: uiFont),
+              themeMode: mode,
+              routerConfig: router,
+              debugShowCheckedModeBanner: false,
+            ),
+          ),
+          ],
+      ),
     );
   }
 }

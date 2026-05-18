@@ -4,12 +4,13 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/models/character.dart';
 import '../../../core/services/character_book_converter.dart';
 import '../../../core/services/character_exporter.dart';
+import '../../../core/services/file_export_service.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -347,10 +348,8 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
 
   Future<void> _export(BuildContext context, String format) async {
     try {
-      final desktop = Platform.environment['USERPROFILE'] ??
-          Platform.environment['HOME'] ??
-          '.';
-      final outputDir = p.join(desktop, 'Desktop');
+      final tmpDir = await getTemporaryDirectory();
+      final outputDir = tmpDir.path;
 
       final lorebooks = ref.read(lorebooksProvider).value ?? [];
       final charLorebooks = lorebooks.where((lb) =>
@@ -360,11 +359,15 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
         final merged = <String, dynamic>{'name': charLorebooks.first.name, 'entries': <Map<String, dynamic>>[]};
         for (final lb in charLorebooks) {
           final bookJson = lorebookToCharacterBookJson(lb);
-          (merged['entries'] as List).addAll(bookJson['entries']);
+          (merged['entries'] as List<dynamic>).addAll(bookJson['entries'] as Iterable<dynamic>);
           if (lb != charLorebooks.first) merged['name'] = '${merged['name']}, ${lb.name}';
         }
         characterBookData = merged;
       }
+
+      final safeName = (character.name.isEmpty ? 'character' : character.name)
+          .replaceAll(RegExp(r'[/\\?%*:|"<>\.]'), '-')
+          .trim();
 
       if (format == 'png') {
         Uint8List? avatarBytes;
@@ -382,8 +385,14 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
           includeCharacterBook: true,
           characterBookData: characterBookData,
         );
+        final bytes = await File(result.filePath).readAsBytes();
+        final savedPath = await FileExportService.exportBytes(
+          bytes: bytes,
+          filename: '$safeName.png',
+          subfolder: 'characters',
+        );
         if (context.mounted) {
-          GlazeToast.show(context, 'Exported PNG to ${result.filePath}');
+          GlazeToast.show(context, 'Exported PNG to $savedPath');
         }
       } else if (format == 'zip') {
         Uint8List avatarBytes;
@@ -419,8 +428,14 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
           gallery: filteredEntries,
           galleryBytes: filteredBytes,
         );
+        final bytes = await File(result.filePath).readAsBytes();
+        final savedPath = await FileExportService.exportBytes(
+          bytes: bytes,
+          filename: '$safeName.zip',
+          subfolder: 'characters',
+        );
         if (context.mounted) {
-          GlazeToast.show(context, 'Exported ZIP to ${result.filePath}');
+          GlazeToast.show(context, 'Exported ZIP to $savedPath');
         }
       } else {
         final result = await exportCharacterAsJson(
@@ -429,8 +444,14 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
           includeCharacterBook: true,
           characterBookData: characterBookData,
         );
+        final jsonStr = await File(result.filePath).readAsString();
+        final savedPath = await FileExportService.export(
+          data: jsonStr,
+          filename: '$safeName.json',
+          subfolder: 'characters',
+        );
         if (context.mounted) {
-          GlazeToast.show(context, 'Exported JSON to ${result.filePath}');
+          GlazeToast.show(context, 'Exported JSON to $savedPath');
         }
       }
     } catch (e) {

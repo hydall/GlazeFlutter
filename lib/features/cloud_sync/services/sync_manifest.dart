@@ -3,34 +3,35 @@ import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/db/repositories/character_repo.dart';
-import '../../../core/db/repositories/chat_repo.dart';
-import '../../../core/db/repositories/persona_repo.dart';
-import '../../../core/db/repositories/preset_repo.dart';
-import '../../../core/db/repositories/api_config_repo.dart';
-import '../../../core/db/repositories/lorebook_repo.dart';
+import '../../../core/models/character.dart';
+import '../../../core/models/chat_message.dart';
+import '../../../core/models/persona.dart';
+import '../../../core/models/preset.dart';
+import '../../../core/models/api_config.dart';
+import '../../../core/models/lorebook.dart';
 import 'sync_serialization.dart';
 import '../sync_models.dart';
+import '../sync_repo_interfaces.dart';
 
-class SyncManifestBuilder {
-  final CharacterRepo _characterRepo;
-  final ChatRepo _chatRepo;
-  final PersonaRepo _personaRepo;
-  final PresetRepo _presetRepo;
-  final ApiConfigRepo _apiRepo;
-  final LorebookRepo _lorebookRepo;
+class SyncManifestBuilder implements SyncManifestProvider {
+  final SyncCharacterStore _characterRepo;
+  final SyncChatStore _chatRepo;
+  final SyncPersonaStore _personaRepo;
+  final SyncPresetStore _presetRepo;
+  final SyncApiConfigStore _apiRepo;
+  final SyncLorebookStore _lorebookRepo;
 
   static const _manifestKey = 'gz_sync_manifest_v2';
   static const _deviceIdKey = 'gz_sync_device_id';
   static const _deletedKey = 'gz_sync_deleted_entries';
 
   SyncManifestBuilder({
-    required CharacterRepo characterRepo,
-    required ChatRepo chatRepo,
-    required PersonaRepo personaRepo,
-    required PresetRepo presetRepo,
-    required ApiConfigRepo apiRepo,
-    required LorebookRepo lorebookRepo,
+    required SyncCharacterStore characterRepo,
+    required SyncChatStore chatRepo,
+    required SyncPersonaStore personaRepo,
+    required SyncPresetStore presetRepo,
+    required SyncApiConfigStore apiRepo,
+    required SyncLorebookStore lorebookRepo,
   })  : _characterRepo = characterRepo,
         _chatRepo = chatRepo,
         _personaRepo = personaRepo,
@@ -57,7 +58,7 @@ class SyncManifestBuilder {
 
     final characters = await _characterRepo.getAll();
     for (final c in characters) {
-      final json = _characterToJson(c);
+      final json = c.toJson();
       final hash = SyncSerialization.computeSyncHash(json);
       final key = entryKey('character', c.id);
       final prevEntry = previous.entries[key];
@@ -76,7 +77,7 @@ class SyncManifestBuilder {
 
     final personas = await _personaRepo.getAll();
     for (final p in personas) {
-      final json = _personaToJson(p);
+      final json = p.toJson();
       final hash = SyncSerialization.computeSyncHash(json);
       final key = entryKey('persona', p.id);
       final prevEntry = previous.entries[key];
@@ -129,17 +130,22 @@ class SyncManifestBuilder {
     singletons['lorebooks'] = lorebooks.map((l) => l.toJson()).toList();
 
     final apiConfigs = await _apiRepo.getAll();
-    singletons['api_presets'] = apiConfigs.map((a) => _apiConfigToJson(a)).toList();
+    singletons['api_presets'] = apiConfigs.map((a) => a.toJson()).toList();
 
     final presets = await _presetRepo.getAll();
-    singletons['theme_presets'] = presets.map((p) => _presetToJson(p)).toList();
+    singletons['theme_presets'] = presets.map((p) => p.toJson()).toList();
 
     for (final entry in singletons.entries) {
       final type = entry.key;
+      final items = entry.value as List;
       final hash = SyncSerialization.computeSyncHash(entry.value);
       final key = entryKey(type, type);
       final prevEntry = previous.entries[key];
-      final updatedAt = hash == prevEntry?.hash ? prevEntry!.updatedAt : now;
+      final updatedAt = hash == prevEntry?.hash
+          ? prevEntry!.updatedAt
+          : items.isEmpty
+              ? 0
+              : now;
 
       entries[key] = SyncManifestEntry(
         type: type,
@@ -208,28 +214,4 @@ class SyncManifestBuilder {
     await prefs.remove(_deletedKey);
   }
 
-  Map<String, dynamic> _characterToJson(dynamic c) => {
-    'id': c.id, 'name': c.name, 'description': c.description,
-    'personality': c.personality, 'scenario': c.scenario,
-    'firstMes': c.firstMes, 'mesExample': c.mesExample,
-    'systemPrompt': c.systemPrompt, 'postHistoryInstructions': c.postHistoryInstructions,
-    'creator': c.creator, 'creatorNotes': c.creatorNotes,
-    'tags': c.tags, 'alternateGreetings': c.alternateGreetings,
-  };
-
-  Map<String, dynamic> _personaToJson(dynamic p) => {
-    'id': p.id, 'name': p.name, 'prompt': p.prompt,
-  };
-
-  Map<String, dynamic> _apiConfigToJson(dynamic a) => {
-    'id': a.id, 'name': a.name, 'providerId': a.providerId,
-    'endpoint': a.endpoint, 'model': a.model,
-    'maxTokens': a.maxTokens, 'contextSize': a.contextSize,
-    'temperature': a.temperature, 'topP': a.topP,
-    'stream': a.stream,
-  };
-
-  Map<String, dynamic> _presetToJson(dynamic p) => {
-    'id': p.id, 'name': p.name, 'author': p.author,
-  };
 }

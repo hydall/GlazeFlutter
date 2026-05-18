@@ -5,30 +5,9 @@ import 'package:drift/drift.dart';
 
 import '../app_db.dart';
 import '../../models/chat_message.dart';
+import '../../../features/cloud_sync/sync_repo_interfaces.dart';
 
-class SessionMetadata {
-  final String sessionId;
-  final String characterId;
-  final int sessionIndex;
-  final int updatedAt;
-  final int messageCount;
-  final String lastMessageContent;
-  final int lastMessageTimestamp;
-  final String? sessionName;
-
-  const SessionMetadata({
-    required this.sessionId,
-    required this.characterId,
-    required this.sessionIndex,
-    required this.updatedAt,
-    required this.messageCount,
-    required this.lastMessageContent,
-    required this.lastMessageTimestamp,
-    this.sessionName,
-  });
-}
-
-class ChatRepo {
+class ChatRepo implements SyncChatStore {
   final AppDatabase _db;
   ChatRepo(this._db);
 

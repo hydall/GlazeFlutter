@@ -1,15 +1,15 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 
+import '../../../core/services/file_export_service.dart';
 import '../../../core/models/preset.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../preset_editor_screen.dart';
 import '../preset_list_provider.dart';
 
@@ -109,53 +109,18 @@ class PresetTile extends ConsumerWidget {
 
       final encoded = const JsonEncoder.withIndent('  ').convert(exportJson);
       final safeName = preset.name.replaceAll(RegExp(r'[^\w\s-]'), '').trim();
-      final desktop = Platform.environment['USERPROFILE'] ?? '.';
-      final exportDir = Directory(p.join(desktop, 'Desktop'));
-      final file = File(p.join(exportDir.path, '$safeName.json'));
-      file.writeAsStringSync(encoded);
+      final savedPath = await FileExportService.export(
+        data: encoded,
+        filename: '$safeName.json',
+        subfolder: 'presets',
+      );
 
       if (context.mounted) {
-        GlazeBottomSheet.show(
-          context,
-          title: 'Export Complete',
-          bigInfo: BottomSheetBigInfo(
-            icon: Icons.check_circle_outline,
-            description: 'Saved to:\n${file.path}',
-          ),
-          items: [
-            BottomSheetItem(
-              label: 'Open File Location',
-              centered: true,
-              onTap: () {
-                Process.run('explorer', ['/select,', file.path]);
-                Navigator.pop(context);
-              },
-            ),
-            BottomSheetItem(
-              label: 'OK',
-              centered: true,
-              onTap: () => Navigator.pop(context),
-            ),
-          ],
-        );
+        GlazeToast.show(context, 'Exported to $savedPath');
       }
     } catch (e) {
       if (context.mounted) {
-        GlazeBottomSheet.show(
-          context,
-          title: 'Export Failed',
-          bigInfo: BottomSheetBigInfo(
-            icon: Icons.error_outline,
-            description: '$e',
-          ),
-          items: [
-            BottomSheetItem(
-              label: 'OK',
-              centered: true,
-              onTap: () => Navigator.pop(context),
-            ),
-          ],
-        );
+        GlazeToast.error(context, 'Export failed: ', e);
       }
     }
   }

@@ -6,8 +6,9 @@ import 'package:path/path.dart' as p;
 
 import '../utils/cast_helpers.dart';
 import '../utils/platform_paths.dart';
+import '../../features/cloud_sync/sync_repo_interfaces.dart';
 
-class ImageStorageService {
+class ImageStorageService implements SyncImageStore {
   final String baseDir;
 
   ImageStorageService(this.baseDir);

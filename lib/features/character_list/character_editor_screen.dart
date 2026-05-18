@@ -123,7 +123,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
   }
 
   Future<void> _pickAvatar() async {
-    final result = await FilePicker.pickFiles(type: FileType.image);
+    final result = await FilePicker.pickFiles(type: FileType.image, withData: true);
     if (result == null || result.files.isEmpty) return;
 
     final filePath = result.files.first.path;

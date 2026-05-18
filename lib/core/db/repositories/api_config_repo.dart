@@ -2,8 +2,9 @@ import 'package:drift/drift.dart';
 
 import '../app_db.dart';
 import '../../models/api_config.dart';
+import '../../../features/cloud_sync/sync_repo_interfaces.dart';
 
-class ApiConfigRepo {
+class ApiConfigRepo implements SyncApiConfigStore {
   final AppDatabase _db;
   ApiConfigRepo(this._db);
 

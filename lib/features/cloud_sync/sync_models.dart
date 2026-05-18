@@ -175,3 +175,6 @@ String cloudPath(String type, String id) {
 
 String galleryCloudPath(String charId, String imgId, String ext) =>
     '$cloudBase/gallery/$charId/$imgId.$ext';
+
+String personaAvatarCloudPath(String personaId, String ext) =>
+    '$cloudBase/persona_avatars/$personaId/avatar.$ext';

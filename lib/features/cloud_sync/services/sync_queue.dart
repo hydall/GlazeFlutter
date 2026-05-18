@@ -31,7 +31,7 @@ class SyncQueue {
     int concurrency = 3,
     int delayMs = 300,
   }) async {
-    final results = <T>[];
+    final results = <int, T>{};
     final errors = <Object>[];
     var index = 0;
 
@@ -45,7 +45,7 @@ class SyncQueue {
         if (i >= tasks.length) break;
         try {
           final result = await enqueue(tasks[i]);
-          results.insert(i, result);
+          results[i] = result;
         } catch (e) {
           errors.add(e);
         }
@@ -60,7 +60,10 @@ class SyncQueue {
       (_) => worker(),
     );
     await Future.wait(workers);
-    return (results: results, errors: errors);
+
+    final sortedKeys = results.keys.toList()..sort();
+    final sortedResults = sortedKeys.map((k) => results[k] as T).toList();
+    return (results: sortedResults, errors: errors);
   }
 
   Future<T> _retryWithBackoff<T>(

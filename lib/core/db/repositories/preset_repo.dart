@@ -4,8 +4,9 @@ import 'package:drift/drift.dart';
 
 import '../app_db.dart';
 import '../../models/preset.dart';
+import '../../../features/cloud_sync/sync_repo_interfaces.dart';
 
-class PresetRepo {
+class PresetRepo implements SyncPresetStore {
   final AppDatabase _db;
   PresetRepo(this._db);
 

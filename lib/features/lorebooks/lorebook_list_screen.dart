@@ -141,6 +141,7 @@ class LorebookListScreen extends ConsumerWidget {
       type: FileType.custom,
       allowedExtensions: ['json'],
       dialogTitle: 'Import SillyTavern Lorebook',
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
     final filePath = result.files.single.path;

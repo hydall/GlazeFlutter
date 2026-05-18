@@ -561,6 +561,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       type: Platform.isIOS ? FileType.any : FileType.custom,
       allowedExtensions: Platform.isIOS ? null : ['jsonl', 'json'],
       allowMultiple: false,
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;

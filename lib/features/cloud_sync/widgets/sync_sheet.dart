@@ -37,6 +37,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final service = ref.read(syncServiceProvider).value;
       if (service != null) {
+        ref.read(syncStatusProvider.notifier).state = service.status;
         ref.read(syncConnectedProvider.notifier).state = service.isConnected();
         ref.read(syncProviderProvider.notifier).state = service.provider;
         ref.read(syncAutoEnabledProvider.notifier).state = service.autoSyncEnabled;
@@ -47,14 +48,21 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
 
   void _loadIncludeApiKeys() async {
     final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.get('gz_sync_include_api_keys');
+    final val = raw is bool ? raw : false;
+    if (!mounted) return;
     setState(() {
-      _syncIncludeApiKeys = prefs.getBool('gz_sync_include_api_keys') ?? false;
+      _syncIncludeApiKeys = val;
     });
   }
 
   void _setIncludeApiKeys(bool val) async {
     final prefs = await SharedPreferences.getInstance();
+    if (prefs.get('gz_sync_include_api_keys') is! bool) {
+      await prefs.remove('gz_sync_include_api_keys');
+    }
     await prefs.setBool('gz_sync_include_api_keys', val);
+    if (!mounted) return;
     setState(() {
       _syncIncludeApiKeys = val;
     });
@@ -297,7 +305,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 ],
 
                 // Linear Progress bar during Sync
-                if (status == SyncStatus.syncing && progress != null) ...[
+                if ((status == SyncStatus.syncing || _isWiping) && progress != null) ...[
                   _buildProgressBar(progress),
                 ],
 
@@ -752,18 +760,20 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   }
 
   Widget _buildProgressBar(SyncProgress p) {
-    final pct = p.total > 0 ? (p.current / p.total).clamp(0.0, 1.0) : 0.0;
+    final indeterminate = p.total <= 0;
+    final pct = indeterminate ? null : (p.current / p.total).clamp(0.0, 1.0);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: 12),
-        Text(
-          p.message ?? 'Syncing...',
-          style: TextStyle(
-            fontSize: 12,
-            color: context.cs.onSurfaceVariant,
+        if (p.message != null)
+          Text(
+            p.message!,
+            style: TextStyle(
+              fontSize: 12,
+              color: context.cs.onSurfaceVariant,
+            ),
           ),
-        ),
         const SizedBox(height: 6),
         ClipRRect(
           borderRadius: BorderRadius.circular(2),
@@ -774,19 +784,22 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             minHeight: 4,
           ),
         ),
-        const SizedBox(height: 4),
-        Text(
-          '${p.current}/${p.total}',
-          style: TextStyle(
-            fontSize: 11,
-            color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
+        if (!indeterminate) ...[
+          const SizedBox(height: 4),
+          Text(
+            '${p.current}/${p.total}',
+            style: TextStyle(
+              fontSize: 11,
+              color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
 
   String _getStatusLabel(SyncStatus status, SyncService? service) {
+    if (_isWiping) return 'Wiping cloud data...';
     if (status == SyncStatus.syncing) return 'Syncing...';
     if (status == SyncStatus.error) return 'Error';
     if (status == SyncStatus.conflict) return 'Conflict detected';
@@ -939,7 +952,6 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
         placeholder: providerLabel,
         confirmLabel: 'Confirm',
         onConfirm: (typed) async {
-          Navigator.of(context, rootNavigator: true).pop(); // Close input sheet
           if (typed.trim().toLowerCase() != providerLabel.toLowerCase()) {
             if (context.mounted) {
               GlazeToast.show(context, 'Wipe cancelled: Provider name did not match.', isError: true);
@@ -952,6 +964,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             _isWiping = true;
             _syncResult = null;
           });
+          ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
 
           try {
             await service.wipeCloudData(
@@ -961,6 +974,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 }
               },
             );
+            if (!mounted) return;
             ref.read(syncStatusProvider.notifier).state = service.status;
             setState(() {
               _syncResult = {
@@ -968,17 +982,17 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 'total': 'all',
               };
             });
-            if (context.mounted) {
-              GlazeToast.show(context, 'Cloud data wiped successfully.');
-            }
+            GlazeToast.show(context, 'Cloud data wiped successfully.');
           } catch (e) {
-            if (mounted) {
-              GlazeToast.error(context, 'Wipe failed: ', e);
-            }
+            if (!mounted) return;
+            ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
+            GlazeToast.error(context, 'Wipe failed: ', e);
           } finally {
             if (mounted) {
               setState(() => _isWiping = false);
               ref.read(syncProgressProvider.notifier).state = null;
+              ref.read(syncStatusProvider.notifier).state =
+                  ref.read(syncServiceProvider).value?.status ?? SyncStatus.idle;
             }
           }
         },
@@ -992,11 +1006,13 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     setState(() => _syncResult = null);
 
     int itemsCount = 0;
+    late final SyncService service;
     try {
-      final service = await ref.read(syncServiceProvider.future);
+      service = await ref.read(syncServiceProvider.future);
       switch (mode) {
         case 'push':
           await service.fullPush(
+            includeApiKeys: _syncIncludeApiKeys,
             onProgress: (p) {
               if (mounted) {
                 ref.read(syncProgressProvider.notifier).state = p;
@@ -1004,12 +1020,14 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               }
             },
           );
+          if (!mounted) return;
           setState(() {
             _syncResult = {
               'type': 'push',
               'pushed': itemsCount,
             };
           });
+          GlazeToast.show(context, 'Push completed ($itemsCount items)');
           break;
         case 'pull':
           await service.fullPull(
@@ -1020,6 +1038,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               }
             },
           );
+          if (!mounted) return;
           setState(() {
             _syncResult = {
               'type': 'pull',
@@ -1027,9 +1046,15 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               'conflictsCount': service.conflicts.length,
             };
           });
+          if (service.conflicts.isNotEmpty) {
+            GlazeToast.show(context, 'Pull completed with ${service.conflicts.length} conflicts');
+          } else {
+            GlazeToast.show(context, 'Pull completed ($itemsCount items)');
+          }
           break;
         case 'full':
           await service.fullSync(
+            includeApiKeys: _syncIncludeApiKeys,
             onProgress: (p) {
               if (mounted) {
                 ref.read(syncProgressProvider.notifier).state = p;
@@ -1037,21 +1062,24 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               }
             },
           );
+          if (!mounted) return;
           setState(() {
             _syncResult = {
               'type': 'full',
             };
           });
+          GlazeToast.show(context, 'Full sync completed');
           break;
       }
+      if (!mounted) return;
       ref.read(syncStatusProvider.notifier).state = service.status;
       ref.read(syncConflictsProvider.notifier).state = service.conflicts;
     } catch (e) {
+      if (!mounted) return;
       ref.read(syncLastErrorProvider.notifier).state = e.toString();
-      ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
-      if (mounted) {
-        GlazeToast.errorWithCopy(context, 'Sync failed: ', e);
-      }
+      ref.read(syncStatusProvider.notifier).state = service.status;
+      ref.read(syncConflictsProvider.notifier).state = service.conflicts;
+      GlazeToast.errorWithCopy(context, 'Sync failed: ', e);
     } finally {
       if (mounted) {
         ref.read(syncProgressProvider.notifier).state = null;

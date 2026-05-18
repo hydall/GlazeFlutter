@@ -230,6 +230,7 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
     final result = await FilePicker.pickFiles(
       type: FileType.image,
       allowMultiple: false,
+      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
 

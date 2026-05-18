@@ -4,8 +4,9 @@ import 'package:drift/drift.dart';
 
 import '../app_db.dart';
 import '../../models/lorebook.dart';
+import '../../../features/cloud_sync/sync_repo_interfaces.dart';
 
-class LorebookRepo {
+class LorebookRepo implements SyncLorebookStore {
   final AppDatabase _db;
   LorebookRepo(this._db);
 

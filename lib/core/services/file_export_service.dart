@@ -10,8 +10,8 @@ class FileExportService {
     required String filename,
     required String subfolder,
   }) async {
-    if (Platform.isWindows) {
-      return _saveToWindowsFolder(data: data, filename: filename);
+    if (Platform.isWindows || Platform.isLinux) {
+      return _saveWithPicker(data: data, filename: filename);
     }
     if (Platform.isAndroid) {
       return _saveToDownloads(data, filename, subfolder);
@@ -27,8 +27,8 @@ class FileExportService {
     required String filename,
     required String subfolder,
   }) async {
-    if (Platform.isWindows) {
-      return _saveBytesToWindowsFolder(bytes: bytes, filename: filename);
+    if (Platform.isWindows || Platform.isLinux) {
+      return _saveBytesWithPicker(bytes: bytes, filename: filename);
     }
     if (Platform.isAndroid) {
       return _saveBytesToDownloads(bytes, filename, subfolder);
@@ -39,28 +39,34 @@ class FileExportService {
     return _shareBytes(bytes, filename);
   }
 
-  static Future<String> _saveToWindowsFolder({
+  static Future<String> _saveWithPicker({
     required String data,
     required String filename,
   }) async {
-    final dirPath = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Choose folder to save $filename',
+    final path = await FilePicker.saveFile(
+      dialogTitle: 'Save $filename',
+      fileName: filename,
+      type: FileType.custom,
+      allowedExtensions: [filename.split('.').last],
     );
-    if (dirPath == null) throw Exception('Folder selection cancelled');
-    final file = File('$dirPath\\$filename');
+    if (path == null) throw Exception('Save cancelled');
+    final file = File(path);
     await file.writeAsString(data);
     return file.path;
   }
 
-  static Future<String> _saveBytesToWindowsFolder({
+  static Future<String> _saveBytesWithPicker({
     required List<int> bytes,
     required String filename,
   }) async {
-    final dirPath = await FilePicker.getDirectoryPath(
-      dialogTitle: 'Choose folder to save $filename',
+    final path = await FilePicker.saveFile(
+      dialogTitle: 'Save $filename',
+      fileName: filename,
+      type: FileType.custom,
+      allowedExtensions: [filename.split('.').last],
     );
-    if (dirPath == null) throw Exception('Folder selection cancelled');
-    final file = File('$dirPath\\$filename');
+    if (path == null) throw Exception('Save cancelled');
+    final file = File(path);
     await file.writeAsBytes(bytes);
     return file.path;
   }

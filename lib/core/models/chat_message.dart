@@ -118,6 +118,28 @@ class ChatSession with _$ChatSession {
       _$ChatSessionFromJson(json);
 }
 
+class SessionMetadata {
+  final String sessionId;
+  final String characterId;
+  final int sessionIndex;
+  final int updatedAt;
+  final int messageCount;
+  final String lastMessageContent;
+  final int lastMessageTimestamp;
+  final String? sessionName;
+
+  const SessionMetadata({
+    required this.sessionId,
+    required this.characterId,
+    required this.sessionIndex,
+    required this.updatedAt,
+    required this.messageCount,
+    required this.lastMessageContent,
+    required this.lastMessageTimestamp,
+    this.sessionName,
+  });
+}
+
 extension ChatSessionX on ChatSession {
   String get historyText => messages
       .where((m) => (m.role == 'user' || m.role == 'assistant') && !m.isHidden)

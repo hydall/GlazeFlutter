@@ -4,14 +4,22 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../app.dart' show rootNavigatorKey;
+final toastOverlayKey = GlobalKey<OverlayState>();
 
 enum ToastPosition { top, bottom }
 
-// ── Public API ────────────────────────────────────────────────────────────────
-
 class GlazeToast {
   static _ActiveToast? _current;
+
+  static OverlayState? _resolveOverlay(BuildContext? context) {
+    final top = toastOverlayKey.currentState;
+    if (top != null) return top;
+    if (context != null) {
+      final rootOverlay = Overlay.of(context, rootOverlay: true);
+      if (rootOverlay != null) return rootOverlay;
+    }
+    return null;
+  }
 
   static void show(
     BuildContext context,
@@ -21,11 +29,9 @@ class GlazeToast {
     bool isError = false,
     bool showCopyButton = false,
   }) {
-    final rootOverlay = rootNavigatorKey.currentState?.overlay;
-    if (rootOverlay != null) {
-      _showOnOverlay(rootOverlay, text, duration: duration, position: position, isError: isError, showCopyButton: showCopyButton);
-    } else {
-      _showOnOverlay(Overlay.of(context), text, duration: duration, position: position, isError: isError, showCopyButton: showCopyButton);
+    final overlay = _resolveOverlay(context);
+    if (overlay != null) {
+      _showOnOverlay(overlay, text, duration: duration, position: position, isError: isError, showCopyButton: showCopyButton);
     }
   }
 
@@ -74,35 +80,20 @@ class GlazeToast {
     ToastPosition position = ToastPosition.bottom,
     bool isError = false,
   }) {
-    final rootOverlay = rootNavigatorKey.currentState?.overlay;
-    if (rootOverlay != null) {
-      _showOnOverlay(rootOverlay, text, duration: duration, position: position, isError: isError);
+    final overlay = _resolveOverlay(null);
+    if (overlay != null) {
+      _showOnOverlay(overlay, text, duration: duration, position: position, isError: isError);
     }
   }
 
-  static void error(BuildContext context, String prefix, Object error) {
-    final text = '$prefix$error';
-    final ctx = rootNavigatorKey.currentContext ?? context;
-    show(
-      ctx,
-      text,
-      duration: 4000,
-      position: ToastPosition.top,
-      isError: true,
-    );
+  static void error(BuildContext context, String prefix, Object err) {
+    final text = '$prefix$err';
+    show(context, text, duration: 4000, position: ToastPosition.top, isError: true);
   }
 
-  static void errorWithCopy(BuildContext context, String prefix, Object error) {
-    final text = '$prefix$error';
-    final ctx = rootNavigatorKey.currentContext ?? context;
-    show(
-      ctx,
-      text,
-      duration: 8000,
-      position: ToastPosition.top,
-      isError: true,
-      showCopyButton: true,
-    );
+  static void errorWithCopy(BuildContext context, String prefix, Object err) {
+    final text = '$prefix$err';
+    show(context, text, duration: 8000, position: ToastPosition.top, isError: true, showCopyButton: true);
   }
 }
 

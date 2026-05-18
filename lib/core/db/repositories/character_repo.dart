@@ -7,8 +7,9 @@ import '../app_db.dart';
 import '../../models/character.dart';
 import '../../models/gallery_entry.dart';
 import '../../utils/time_helpers.dart';
+import '../../../features/cloud_sync/sync_repo_interfaces.dart';
 
-class CharacterRepo {
+class CharacterRepo implements SyncCharacterStore {
   final AppDatabase _db;
   CharacterRepo(this._db);
 

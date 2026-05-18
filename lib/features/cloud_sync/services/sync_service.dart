@@ -10,6 +10,7 @@ import '../../../core/db/repositories/api_config_repo.dart';
 import '../../../core/db/repositories/lorebook_repo.dart';
 import '../../../core/db/repositories/embedding_repo.dart';
 import '../../../core/services/image_storage_service.dart';
+import '../sync_repo_interfaces.dart';
 import 'dropbox/dropbox_adapter.dart';
 import 'dropbox/dropbox_auth.dart';
 import 'gdrive/gdrive_adapter.dart';
@@ -21,14 +22,14 @@ import '../cloud_adapter.dart';
 import '../sync_models.dart';
 
 class SyncService {
-  final CharacterRepo _characterRepo;
-  final ChatRepo _chatRepo;
-  final PersonaRepo _personaRepo;
-  final PresetRepo _presetRepo;
-  final ApiConfigRepo _apiRepo;
-  final LorebookRepo _lorebookRepo;
-  final EmbeddingRepo _embeddingRepo;
-  final ImageStorageService _imageStorage;
+  final SyncCharacterStore _characterRepo;
+  final SyncChatStore _chatRepo;
+  final SyncPersonaStore _personaRepo;
+  final SyncPresetStore _presetRepo;
+  final SyncApiConfigStore _apiRepo;
+  final SyncLorebookStore _lorebookRepo;
+  final SyncEmbeddingStore _embeddingRepo;
+  final SyncImageStore _imageStorage;
 
   SyncProvider _provider = SyncProvider.dropbox;
   SyncStatus _status = SyncStatus.idle;
@@ -73,14 +74,14 @@ class SyncService {
   }
 
   SyncService({
-    required CharacterRepo characterRepo,
-    required ChatRepo chatRepo,
-    required PersonaRepo personaRepo,
-    required PresetRepo presetRepo,
-    required ApiConfigRepo apiRepo,
-    required LorebookRepo lorebookRepo,
-    required EmbeddingRepo embeddingRepo,
-    required ImageStorageService imageStorage,
+    required SyncCharacterStore characterRepo,
+    required SyncChatStore chatRepo,
+    required SyncPersonaStore personaRepo,
+    required SyncPresetStore presetRepo,
+    required SyncApiConfigStore apiRepo,
+    required SyncLorebookStore lorebookRepo,
+    required SyncEmbeddingStore embeddingRepo,
+    required SyncImageStore imageStorage,
   })  : _characterRepo = characterRepo,
         _chatRepo = chatRepo,
         _personaRepo = personaRepo,
@@ -148,8 +149,8 @@ class SyncService {
 
   Future<void> fullPush({
     void Function(SyncProgress)? onProgress,
+    bool includeApiKeys = false,
   }) async {
-    if (_status == SyncStatus.syncing) return;
     _status = SyncStatus.syncing;
     _lastError = null;
 
@@ -157,6 +158,7 @@ class SyncService {
       final engine = _engine;
       await engine.pushEntities(
         onProgress: onProgress ?? (_) {},
+        includeApiKeys: includeApiKeys,
       );
       _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
       final prefs = await SharedPreferences.getInstance();
@@ -165,13 +167,13 @@ class SyncService {
     } catch (e) {
       _lastError = e.toString();
       _status = SyncStatus.error;
+      rethrow;
     }
   }
 
   Future<void> fullPull({
     void Function(SyncProgress)? onProgress,
   }) async {
-    if (_status == SyncStatus.syncing) return;
     _status = SyncStatus.syncing;
     _lastError = null;
     _conflicts.clear();
@@ -193,13 +195,15 @@ class SyncService {
     } catch (e) {
       _lastError = e.toString();
       _status = SyncStatus.error;
+      rethrow;
     }
   }
 
   Future<void> fullSync({
     void Function(SyncProgress)? onProgress,
+    bool includeApiKeys = false,
   }) async {
-    await fullPush(onProgress: onProgress);
+    await fullPush(onProgress: onProgress, includeApiKeys: includeApiKeys);
     if (_status != SyncStatus.error) {
       await fullPull(onProgress: onProgress);
     }
@@ -293,23 +297,6 @@ class SyncService {
         return _dropboxAuth.isConnected;
       case SyncProvider.gdrive:
         return _gdriveAuth.isConnected;
-    }
-  }
-
-  Future<void> wipeCloud({
-    void Function(SyncProgress)? onProgress,
-  }) async {
-    if (_status == SyncStatus.syncing) return;
-    _status = SyncStatus.syncing;
-    _lastError = null;
-    try {
-      await _engine.wipeCloudData(
-        onProgress: onProgress ?? (_) {},
-      );
-      _status = SyncStatus.idle;
-    } catch (e) {
-      _lastError = e.toString();
-      _status = SyncStatus.error;
     }
   }
 
