@@ -1006,7 +1006,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     setState(() => _syncResult = null);
 
     int itemsCount = 0;
-    SyncService? service;
+    late final SyncService service;
     try {
       service = await ref.read(syncServiceProvider.future);
       switch (mode) {
@@ -1042,7 +1042,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             _syncResult = {
               'type': 'pull',
               'pulled': itemsCount,
-              'conflictsCount': service!.conflicts.length,
+              'conflictsCount': service.conflicts.length,
             };
           });
           if (service.conflicts.isNotEmpty) {
@@ -1075,8 +1075,8 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     } catch (e) {
       if (!mounted) return;
       ref.read(syncLastErrorProvider.notifier).state = e.toString();
-      ref.read(syncStatusProvider.notifier).state = service?.status ?? SyncStatus.error;
-      ref.read(syncConflictsProvider.notifier).state = service?.conflicts ?? [];
+      ref.read(syncStatusProvider.notifier).state = service.status;
+      ref.read(syncConflictsProvider.notifier).state = service.conflicts;
       GlazeToast.errorWithCopy(context, 'Sync failed: ', e);
     } finally {
       if (mounted) {
