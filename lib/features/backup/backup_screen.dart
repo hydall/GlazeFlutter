@@ -100,7 +100,6 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       type: Platform.isIOS ? FileType.any : FileType.custom,
       allowMultiple: false,
       allowedExtensions: Platform.isIOS ? null : ['glz', 'json'],
-      withData: true,
     );
     if (result == null || result.files.isEmpty) return;
 
