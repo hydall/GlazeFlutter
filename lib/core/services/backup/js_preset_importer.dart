@@ -50,9 +50,9 @@ class JsPresetImporter with BackupHelpers {
         }
       } else {
         for (final entry in presetsMap.entries) {
-          if (entry.value is Map<String, dynamic> &&
-              entry.value.containsKey('name')) {
-            presetList.add(entry.value as Map<String, dynamic>);
+          final v = entry.value;
+          if (v is Map<String, dynamic> && v.containsKey('name')) {
+            presetList.add(v);
           }
         }
       }

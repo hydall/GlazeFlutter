@@ -36,9 +36,9 @@ class SyncConflictDetector {
   ) {
     switch (type) {
       case 'character':
-        return localEntity?['name'] ?? cloudEntity?['name'] ?? 'Character $id';
+        return (localEntity?['name'] ?? cloudEntity?['name'] ?? 'Character $id') as String;
       case 'persona':
-        return localEntity?['name'] ?? cloudEntity?['name'] ?? 'Persona $id';
+        return (localEntity?['name'] ?? cloudEntity?['name'] ?? 'Persona $id') as String;
       case 'chat':
         final charName = localEntity?['characterName'] ?? cloudEntity?['characterName'];
         return charName != null ? 'Chat with $charName' : 'Chat $id';

@@ -118,10 +118,10 @@ class CharacterRepo implements SyncCharacterStore {
         color: c.color,
         updatedAt: c.updatedAt,
         tags: c.tagsJson != null
-            ? List<String>.from(jsonDecode(c.tagsJson!))
+            ? List<String>.from(jsonDecode(c.tagsJson!) as List<dynamic>)
             : [],
         alternateGreetings: c.alternateGreetingsJson != null
-            ? List<String>.from(jsonDecode(c.alternateGreetingsJson!))
+            ? List<String>.from(jsonDecode(c.alternateGreetingsJson!) as List<dynamic>)
             : [],
         gallery: c.galleryJson != null
             ? (jsonDecode(c.galleryJson!) as List)

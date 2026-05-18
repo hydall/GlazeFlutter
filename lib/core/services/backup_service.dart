@@ -13,7 +13,7 @@ class BackupService {
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
 
-  BackupService(this._db, _imageStorage) : _imageStorage = _imageStorage;
+  BackupService(this._db, ImageStorageService _imageStorage) : _imageStorage = _imageStorage;
 
   Future<String> exportBackup() => BackupExporter(_db, _imageStorage).export();
 

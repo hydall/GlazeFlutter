@@ -184,7 +184,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                       if (service?.accountInfo != null && service!.accountInfo!['email'] != null) ...[
                         const SizedBox(height: 6),
                         Text(
-                          service.accountInfo!['email'],
+                          service.accountInfo!['email'] as String,
                           style: TextStyle(
                             fontSize: 13,
                             color: context.cs.onSurfaceVariant,
@@ -691,12 +691,12 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   }
 
   Widget _buildSyncResultCard(Map<String, dynamic> result) {
-    final type = result['type'];
-    final pushed = result['pushed'];
-    final pulled = result['pulled'];
-    final deleted = result['deleted'];
-    final total = result['total'];
-    final conflictsCount = result['conflictsCount'] ?? 0;
+    final type = result['type'] as String;
+    final pushed = result['pushed'] as int;
+    final pulled = result['pulled'] as int;
+    final deleted = result['deleted'] as int;
+    final total = result['total'] as String;
+    final conflictsCount = result['conflictsCount'] as int? ?? 0;
 
     String message = '';
     Color cardColor = const Color(0xFF4CAF50).withValues(alpha: 0.1);

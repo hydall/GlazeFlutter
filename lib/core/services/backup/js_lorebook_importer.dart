@@ -38,10 +38,10 @@ class JsLorebookImporter with BackupHelpers {
             .toList();
       }
       if (lb['settings'] is Map<String, dynamic>) {
-        globalSettings = lb['settings'];
+        globalSettings = lb['settings'] as Map<String, dynamic>;
       }
       if (lb['activations'] is Map<String, dynamic>) {
-        activations = lb['activations'];
+        activations = lb['activations'] as Map<String, dynamic>;
       }
     }
 

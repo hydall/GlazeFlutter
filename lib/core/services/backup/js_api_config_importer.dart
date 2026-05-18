@@ -24,7 +24,7 @@ class JsApiConfigImporter with BackupHelpers {
       final spmRaw = src['gz_service_profile_map'];
       if (spmRaw is String) {
         try {
-          serviceProfileMap = jsonDecode(spmRaw);
+          serviceProfileMap = jsonDecode(spmRaw) as Map<String, dynamic>;
           break;
         } catch (_) {}
       } else if (spmRaw is Map<String, dynamic>) {

@@ -124,7 +124,7 @@ class JsChatImporter with BackupHelpers {
           'greetingIndex':
               toInt(msg['greetingIndex'] ?? msg['greeting_index']),
           'contextRefs': msg['contextRefs'] is List
-              ? List<String>.from(msg['contextRefs'].whereType<String>())
+              ? List<String>.from((msg['contextRefs'] as List).whereType<String>())
               : <String>[],
           'swipeDirection': msg['swipeDirection'] is String
               ? msg['swipeDirection']
@@ -142,10 +142,10 @@ class JsChatImporter with BackupHelpers {
               ? msg['guidanceType'] as String
               : 'GENERATION',
           'triggeredLorebooks': msg['triggeredLorebooks'] is List
-              ? _parseTriggeredEntries(msg['triggeredLorebooks'])
+              ? _parseTriggeredEntries(msg['triggeredLorebooks'] as List)
               : <TriggeredEntry>[],
           'triggeredMemories': msg['triggeredMemories'] is List
-              ? _parseTriggeredEntries(msg['triggeredMemories'])
+              ? _parseTriggeredEntries(msg['triggeredMemories'] as List)
               : <TriggeredEntry>[],
           'swipesMeta': msg['swipesMeta'] is List
               ? (msg['swipesMeta'] as List)
@@ -153,7 +153,7 @@ class JsChatImporter with BackupHelpers {
                   .toList()
               : <Map<String, dynamic>>[],
           'memoryCoverage': msg['memoryCoverage'] is Map
-              ? Map<String, dynamic>.from(msg['memoryCoverage'])
+              ? Map<String, dynamic>.from(msg['memoryCoverage'] as Map)
               : <String, dynamic>{},
           'time':
               msg['time'] is String ? msg['time'] as String : null,
@@ -256,10 +256,10 @@ class JsChatImporter with BackupHelpers {
             ? e['title'] as String
             : (e['name'] is String ? e['name'] as String : ''),
         'keys': e['keys'] is List
-            ? List<String>.from(e['keys'].whereType<String>())
+            ? List<String>.from((e['keys'] as List).whereType<String>())
             : <String>[],
         'glazeKeys': e['glazeKeys'] is List
-            ? List<String>.from(e['glazeKeys'].whereType<String>())
+            ? List<String>.from((e['glazeKeys'] as List).whereType<String>())
             : <String>[],
         'content':
             e['content'] is String ? e['content'] as String : '',
@@ -272,7 +272,7 @@ class JsChatImporter with BackupHelpers {
         'vectorSearch': e['vectorSearch'] == true,
         'messageIds': e['messageIds'] is List
             ? List<String>.from(
-                e['messageIds'].whereType<String>())
+                (e['messageIds'] as List).whereType<String>())
             : <String>[],
         'messageRange': e['messageRange'] is Map
             ? _convertMessageRange(e['messageRange'] as Map)
@@ -363,14 +363,14 @@ class JsChatImporter with BackupHelpers {
         'title': d['title'] is String ? d['title'] as String : '',
         'content': d['content'] is String ? d['content'] as String : '',
         'keys': d['keys'] is List
-            ? List<String>.from(d['keys'].whereType<String>())
+            ? List<String>.from((d['keys'] as List).whereType<String>())
             : <String>[],
         'glazeKeys': d['glazeKeys'] is List
-            ? List<String>.from(d['glazeKeys'].whereType<String>())
+            ? List<String>.from((d['glazeKeys'] as List).whereType<String>())
             : <String>[],
         'vectorSearch': d['vectorSearch'] == true,
         'messageIds': d['messageIds'] is List
-            ? List<String>.from(d['messageIds'].whereType<String>())
+            ? List<String>.from((d['messageIds'] as List).whereType<String>())
             : <String>[],
         'messageRange': d['messageRange'] is Map
             ? _convertMessageRange(d['messageRange'] as Map)

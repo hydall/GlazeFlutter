@@ -66,8 +66,8 @@ class MigrationService {
     }
 
     final result = MigrationResult();
-    final kv = Map<String, dynamic>.from(raw['keyvalue'] ?? {});
-    final ls = Map<String, dynamic>.from(raw['localStorage'] ?? {});
+    final kv = Map<String, dynamic>.from(raw['keyvalue'] as Map? ?? {});
+    final ls = Map<String, dynamic>.from(raw['localStorage'] as Map? ?? {});
 
     await _importCharacters(raw['characters'], result);
     await _importPersonas(raw['personas'], result);

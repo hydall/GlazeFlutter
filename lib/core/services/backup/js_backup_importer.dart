@@ -27,8 +27,8 @@ class JsBackupImporter with BackupHelpers {
     await _ensureSchema();
     await _clearAllTables();
 
-    final kv = Map<String, dynamic>.from(data['keyvalue'] ?? {});
-    final ls = Map<String, dynamic>.from(data['localStorage'] ?? {});
+    final kv = Map<String, dynamic>.from(data['keyvalue'] as Map<dynamic, dynamic>? ?? {});
+    final ls = Map<String, dynamic>.from(data['localStorage'] as Map<dynamic, dynamic>? ?? {});
 
     final characterImporter = JsCharacterImporter(db, imageStorage);
     final lorebookImporter = JsLorebookImporter(db, imageStorage);

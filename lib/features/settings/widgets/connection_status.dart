@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -185,7 +187,7 @@ class _ConnectionStatusState extends State<ConnectionStatus> {
   }
 
   // To prevent import dart:ui
-  dynamic _backFilter() {
+  ImageFilter _backFilter() {
     return const ColorFilter.mode(Colors.black12, BlendMode.srcOver);
   }
 }
