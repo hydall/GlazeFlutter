@@ -8,7 +8,7 @@ import '../../utils/time_helpers.dart';
 import '../image_storage_service.dart';
 import 'backup_helpers.dart';
 
-class JsChatImporter with BackupHelpers {
+class JsChatImporter extends BackupHelpers {
   @override
   final AppDatabase db;
   @override

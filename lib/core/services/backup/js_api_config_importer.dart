@@ -7,7 +7,7 @@ import '../../db/app_db.dart';
 import '../image_storage_service.dart';
 import 'backup_helpers.dart';
 
-class JsApiConfigImporter with BackupHelpers {
+class JsApiConfigImporter extends BackupHelpers {
   @override
   final AppDatabase db;
   @override
