@@ -86,7 +86,15 @@ class SyncEngine {
 
       if (entry.deleted) {
         if (cloudEntry != null && !cloudEntry.deleted) {
-          tasks.add(() => SyncSerialization.deleteCloudFileIfExists(_adapter, entry));
+          tasks.add(() async {
+            processed++;
+            onProgress(SyncProgress(
+              current: processed,
+              total: tasks.length,
+              message: 'Deleting ${entry.type}:${entry.id}',
+            ));
+            await SyncSerialization.deleteCloudFileIfExists(_adapter, entry);
+          });
         }
         continue;
       }
@@ -99,12 +107,18 @@ class SyncEngine {
         processed++;
         onProgress(SyncProgress(
           current: processed,
-          total: entries.length,
+          total: tasks.length,
           message: 'Pushing ${entry.type}:${entry.id}',
         ));
         await _pushEntry(entry);
       });
     }
+
+    onProgress(SyncProgress(
+      current: 0,
+      total: tasks.length,
+      message: tasks.isEmpty ? 'Nothing to push' : 'Pushing ${tasks.length} items...',
+    ));
 
     List<Object>? taskErrors;
     if (tasks.isNotEmpty) {
@@ -169,12 +183,18 @@ class SyncEngine {
         processed++;
         onProgress(SyncProgress(
           current: processed,
-          total: entries.length,
+          total: tasks.length,
           message: 'Pulling ${cloudEntry.type}:${cloudEntry.id}',
         ));
         await _pullEntry(cloudEntry);
       });
     }
+
+    onProgress(SyncProgress(
+      current: 0,
+      total: tasks.length,
+      message: tasks.isEmpty ? 'Nothing to pull' : 'Pulling ${tasks.length} items...',
+    ));
 
     List<Object>? taskErrors;
     if (tasks.isNotEmpty) {

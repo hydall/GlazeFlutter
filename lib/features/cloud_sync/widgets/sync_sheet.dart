@@ -1024,6 +1024,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               'pushed': itemsCount,
             };
           });
+          GlazeToast.show(context, 'Push completed ($itemsCount items)');
           break;
         case 'pull':
           await service.fullPull(
@@ -1041,6 +1042,11 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               'conflictsCount': service.conflicts.length,
             };
           });
+          if (service.conflicts.isNotEmpty) {
+            GlazeToast.show(context, 'Pull completed with ${service.conflicts.length} conflicts');
+          } else {
+            GlazeToast.show(context, 'Pull completed ($itemsCount items)');
+          }
           break;
         case 'full':
           await service.fullSync(
@@ -1056,6 +1062,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               'type': 'full',
             };
           });
+          GlazeToast.show(context, 'Full sync completed');
           break;
       }
       if (!mounted) return;

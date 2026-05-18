@@ -730,4 +730,108 @@ void main() {
     expect(world.cloud.files.containsKey(cloudPath('character', 'c1')), isTrue,
         reason: 'Push after wipe should upload previously wiped character too');
   });
+
+  test('Push progress reports correct current/total (tasks, not entries)', () async {
+    final world = SyncWorld();
+
+    await world.characters.put(makeChar('c1', name: 'Alpha'));
+    await world.characters.put(makeChar('c2', name: 'Beta'));
+    await world.characters.put(makeChar('c3', name: 'Gamma'));
+
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    await world.characters.put(makeChar('c2', name: 'Beta Updated'));
+    final manifest2 = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest2);
+
+    final progressList = <SyncProgress>[];
+    await world.engine.pushEntities(
+      onProgress: (p) => progressList.add(p),
+    );
+
+    final initial = progressList.first;
+    expect(initial.total, equals(1),
+        reason: 'Only c2 needs pushing, so total should be 1');
+
+    final itemProgress = progressList.where((p) => p.message?.contains('c2') ?? false);
+    expect(itemProgress.length, 1);
+    expect(itemProgress.first.current, equals(1));
+    expect(itemProgress.first.total, equals(1));
+  });
+
+  test('Pull progress reports correct current/total (tasks, not entries)', () async {
+    final world = SyncWorld();
+
+    await world.characters.put(makeChar('c1', name: 'Alpha'));
+    await world.characters.put(makeChar('c2', name: 'Beta'));
+    await world.characters.put(makeChar('c3', name: 'Gamma'));
+
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    world.characters.data.clear();
+
+    final progressList = <SyncProgress>[];
+    await world.engine.pullEntities(
+      onProgress: (p) => progressList.add(p),
+      onConflict: (_) {},
+    );
+
+    final initial = progressList.first;
+    expect(initial.total, equals(3),
+        reason: 'All 3 characters need pulling');
+
+    final itemProgresses = progressList.where((p) => p.current > 0);
+    for (final p in itemProgresses) {
+      expect(p.total, equals(3));
+    }
+
+    final last = itemProgresses.last;
+    expect(last.current, equals(3));
+  });
+
+  test('Push with nothing to push reports total=0', () async {
+    final world = SyncWorld();
+
+    await world.characters.put(makeChar('c1', name: 'Alpha'));
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    final progressList = <SyncProgress>[];
+    await world.engine.pushEntities(
+      onProgress: (p) => progressList.add(p),
+    );
+
+    expect(progressList.isNotEmpty, isTrue);
+    expect(progressList.first.total, equals(0),
+        reason: 'Nothing changed, so total tasks should be 0');
+    expect(progressList.first.message, contains('Nothing to push'));
+  });
+
+  test('Wipe progress reports indeterminate (no total)', () async {
+    final world = SyncWorld();
+
+    await world.characters.put(makeChar('c1', name: 'Alpha'));
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    final progressList = <SyncProgress>[];
+    await world.engine.wipeCloudData(
+      onProgress: (p) => progressList.add(p),
+    );
+
+    expect(progressList.isNotEmpty, isTrue);
+    for (final p in progressList) {
+      expect(p.total, equals(0),
+          reason: 'Wipe progress should be indeterminate (total=0)');
+    }
+    expect(progressList.any((p) => p.message?.contains('Deleting') == true), isTrue);
+    expect(progressList.any((p) => p.message?.contains('Recreating') == true), isTrue);
+  });
 }
