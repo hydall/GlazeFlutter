@@ -1012,6 +1012,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       switch (mode) {
         case 'push':
           await service.fullPush(
+            includeApiKeys: _syncIncludeApiKeys,
             onProgress: (p) {
               if (mounted) {
                 ref.read(syncProgressProvider.notifier).state = p;
@@ -1053,6 +1054,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
           break;
         case 'full':
           await service.fullSync(
+            includeApiKeys: _syncIncludeApiKeys,
             onProgress: (p) {
               if (mounted) {
                 ref.read(syncProgressProvider.notifier).state = p;

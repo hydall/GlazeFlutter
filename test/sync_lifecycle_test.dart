@@ -996,4 +996,70 @@ void main() {
       await tmpDir.delete(recursive: true);
     } catch (_) {}
   });
+
+  test('Push strips API keys when includeApiKeys is false', () async {
+    final world = SyncWorld();
+
+    final apiConfig = ApiConfig(
+      id: 'api1',
+      name: 'Test API',
+      apiKey: 'sk-secret-key-12345',
+      embeddingApiKey: 'emb-secret-67890',
+    );
+    await world.apiConfigs.put(apiConfig);
+
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+
+    await world.engine.pushEntities(
+      onProgress: (_) {},
+      includeApiKeys: false,
+    );
+
+    final cloudData = world.cloud.files[cloudPath('api_presets', 'api_presets')];
+    expect(cloudData, isNotNull);
+
+    final decoded = jsonDecode(cloudData!) as Map<String, dynamic>;
+    final items = decoded['items'] as List;
+    expect(items, isNotEmpty);
+
+    final pushedApi = items.first as Map<String, dynamic>;
+    expect(pushedApi['apiKey'], equals(''),
+        reason: 'API key should be stripped when includeApiKeys=false');
+    expect(pushedApi['embeddingApiKey'], equals(''),
+        reason: 'Embedding API key should be stripped when includeApiKeys=false');
+    expect(pushedApi['name'], equals('Test API'),
+        reason: 'Non-key fields should be preserved');
+  });
+
+  test('Push includes API keys when includeApiKeys is true', () async {
+    final world = SyncWorld();
+
+    final apiConfig = ApiConfig(
+      id: 'api1',
+      name: 'Test API',
+      apiKey: 'sk-secret-key-12345',
+      embeddingApiKey: 'emb-secret-67890',
+    );
+    await world.apiConfigs.put(apiConfig);
+
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+
+    await world.engine.pushEntities(
+      onProgress: (_) {},
+      includeApiKeys: true,
+    );
+
+    final cloudData = world.cloud.files[cloudPath('api_presets', 'api_presets')];
+    expect(cloudData, isNotNull);
+
+    final decoded = jsonDecode(cloudData!) as Map<String, dynamic>;
+    final items = decoded['items'] as List;
+    final pushedApi = items.first as Map<String, dynamic>;
+    expect(pushedApi['apiKey'], equals('sk-secret-key-12345'),
+        reason: 'API key should be included when includeApiKeys=true');
+    expect(pushedApi['embeddingApiKey'], equals('emb-secret-67890'),
+        reason: 'Embedding API key should be included when includeApiKeys=true');
+  });
 }

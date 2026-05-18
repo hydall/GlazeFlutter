@@ -149,6 +149,7 @@ class SyncService {
 
   Future<void> fullPush({
     void Function(SyncProgress)? onProgress,
+    bool includeApiKeys = false,
   }) async {
     _status = SyncStatus.syncing;
     _lastError = null;
@@ -157,6 +158,7 @@ class SyncService {
       final engine = _engine;
       await engine.pushEntities(
         onProgress: onProgress ?? (_) {},
+        includeApiKeys: includeApiKeys,
       );
       _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
       final prefs = await SharedPreferences.getInstance();
@@ -199,8 +201,9 @@ class SyncService {
 
   Future<void> fullSync({
     void Function(SyncProgress)? onProgress,
+    bool includeApiKeys = false,
   }) async {
-    await fullPush(onProgress: onProgress);
+    await fullPush(onProgress: onProgress, includeApiKeys: includeApiKeys);
     if (_status != SyncStatus.error) {
       await fullPull(onProgress: onProgress);
     }

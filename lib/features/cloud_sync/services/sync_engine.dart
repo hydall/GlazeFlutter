@@ -37,6 +37,7 @@ class SyncEngine {
   final SyncEmbeddingStore _embeddingRepo;
   final SyncImageStore _imageStorage;
   final SyncQueue _queue = SyncQueue();
+  bool _includeApiKeys = false;
 
   SyncEngine(
     this._adapter,
@@ -53,7 +54,9 @@ class SyncEngine {
 
   Future<void> pushEntities({
     required void Function(SyncProgress) onProgress,
+    bool includeApiKeys = false,
   }) async {
+    _includeApiKeys = includeApiKeys;
     await _adapter.ensureFolder(cloudBase);
     await _adapter.ensureFolder('$cloudBase/characters');
     await _adapter.ensureFolder('$cloudBase/personas');
@@ -334,7 +337,13 @@ class SyncEngine {
           return {'__singleton': true, 'items': all.map((l) => l.toJson()).toList()};
         case 'api_presets':
           final all = await _apiRepo.getAll();
-          return {'__singleton': true, 'items': all.map((a) => a.toJson()).toList()};
+          final items = all.map((a) {
+            if (!_includeApiKeys) {
+              return a.copyWith(apiKey: '', embeddingApiKey: '').toJson();
+            }
+            return a.toJson();
+          }).toList();
+          return {'__singleton': true, 'items': items};
         case 'theme_presets':
           final all = await _presetRepo.getAll();
           return {'__singleton': true, 'items': all.map((p) => p.toJson()).toList()};
