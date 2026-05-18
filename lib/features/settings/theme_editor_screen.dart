@@ -920,8 +920,9 @@ class _BgImageRow extends StatelessWidget {
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.image,
-        dialogTitle: 'Select Background Image',
-      );
+      dialogTitle: 'Select Background Image',
+      withData: true,
+    );
       if (result == null || result.files.isEmpty) return;
       final path = result.files.first.path;
       if (path == null) return;

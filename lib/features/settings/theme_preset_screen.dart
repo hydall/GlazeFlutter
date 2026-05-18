@@ -238,8 +238,9 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
-        dialogTitle: 'Import Theme',
-      );
+      dialogTitle: 'Import Theme',
+      withData: true,
+    );
       if (result == null || result.files.isEmpty) return;
 
       final file = result.files.first;

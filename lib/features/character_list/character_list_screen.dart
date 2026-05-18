@@ -379,6 +379,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
       type: Platform.isIOS ? FileType.any : FileType.custom,
       allowedExtensions: Platform.isIOS ? null : ['png', 'json', 'charx', 'zip'],
       allowMultiple: true,
+      withData: true,
     );
     if (!context.mounted) return;
     if (result == null || result.files.isEmpty) return;
