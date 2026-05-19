@@ -5,6 +5,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../features/settings/app_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -110,10 +111,37 @@ class _MessageListState extends ConsumerState<MessageList> {
   /// position stays close to wherever they paused last.
   Timer? _anchorSaveDebounce;
 
+  bool _isAnchorLoaded = false;
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _loadPersistedAnchor();
+  }
+
+  Future<void> _loadPersistedAnchor() async {
+    final sessionId = widget.sessionId;
+    if (sessionId == null) {
+      if (mounted) setState(() => _isAnchorLoaded = true);
+      return;
+    }
+    
+    final existing = ref.read(scrollAnchorProvider(sessionId));
+    if (existing == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final messageId = prefs.getString('scroll_anchor_msg_$sessionId');
+        final offset = prefs.getDouble('scroll_anchor_offset_$sessionId');
+        if (messageId != null && offset != null && mounted) {
+          ref.read(scrollAnchorProvider(sessionId).notifier).state = ScrollAnchor(messageId, offset);
+        }
+      } catch (_) {}
+    }
+    
+    if (mounted) {
+      setState(() => _isAnchorLoaded = true);
+    }
   }
 
   @override
@@ -200,11 +228,19 @@ class _MessageListState extends ConsumerState<MessageList> {
     // useful position the user had previously.
     if (_wasAtBottom) {
       ref.read(scrollAnchorProvider(sessionId).notifier).state = null;
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.remove('scroll_anchor_msg_$sessionId');
+        prefs.remove('scroll_anchor_offset_$sessionId');
+      });
       return;
     }
     final anchor = _captureAnchor();
     if (anchor == null) return;
     ref.read(scrollAnchorProvider(sessionId).notifier).state = anchor;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('scroll_anchor_msg_$sessionId', anchor.messageId);
+      prefs.setDouble('scroll_anchor_offset_$sessionId', anchor.offsetFromViewportTop);
+    });
   }
 
   @override
@@ -223,6 +259,9 @@ class _MessageListState extends ConsumerState<MessageList> {
       _initialAnchorAttempted = false;
       _initialScrollDone = false;
       _pendingSearchScrollIndex = null;
+      
+      _isAnchorLoaded = false;
+      _loadPersistedAnchor();
       return;
     }
 
@@ -676,7 +715,7 @@ class _MessageListState extends ConsumerState<MessageList> {
     final renderCount = _renderCount.clamp(0, totalCount);
     final startFrom = totalCount > renderCount ? totalCount - renderCount : 0;
 
-    if (_needsInitialScroll && totalCount > 0) {
+    if (_needsInitialScroll && totalCount > 0 && _isAnchorLoaded) {
       _needsInitialScroll = false;
       _renderCount = totalCount;
       final savedAnchor = widget.sessionId == null
