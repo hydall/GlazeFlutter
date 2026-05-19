@@ -17,6 +17,7 @@ class ChatInputBar extends StatefulWidget {
   final VoidCallback? onImpersonate;
   final bool virtualKeyboardSend;
   final bool enterToSend;
+  final bool batterySaver;
 
   /// When true, the magic-drawer button shows the active state. The host
   /// also uses this to interpret onMagicDrawer as a toggle.
@@ -48,6 +49,7 @@ class ChatInputBar extends StatefulWidget {
     this.onImpersonate,
     this.virtualKeyboardSend = false,
     this.enterToSend = true,
+    this.batterySaver = false,
     this.isDrawerOpen = false,
     this.focusNode,
     this.initialDraft = '',
@@ -259,49 +261,90 @@ class _ChatInputBarState extends State<ChatInputBar> {
           ],
           ClipRRect(
             borderRadius: BorderRadius.circular(28),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 56),
-                decoration: BoxDecoration(
-                  color: context.cs.surface.withValues(alpha: 0.8),
-                  border: Border.all(
-                    color: _guidanceMode
-                        ? Colors.orange.withValues(alpha: 0.3)
-                        : Colors.white.withValues(alpha: 0.05),
-                  ),
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _effectiveFocusNode,
-                  maxLines: 5,
-                  minLines: 1,
-                  textCapitalization: TextCapitalization.sentences,
-                  textInputAction: widget.virtualKeyboardSend
-                      ? TextInputAction.send
-                      : TextInputAction.newline,
-                  onTap: _requestFocus,
-                  onSubmitted: widget.virtualKeyboardSend
-                      ? (_) => _handleSend()
-                      : null,
-                  style: const TextStyle(fontSize: 16),
-                  decoration: InputDecoration(
-                    hintText: _guidanceMode
-                        ? 'Message with guidance...'
-                        : 'Type a message...',
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 16,
+            child: widget.batterySaver
+                ? Container(
+                    constraints: const BoxConstraints(minHeight: 56),
+                    decoration: BoxDecoration(
+                      color: context.cs.surface.withValues(alpha: 0.8),
+                      border: Border.all(
+                        color: _guidanceMode
+                            ? Colors.orange.withValues(alpha: 0.3)
+                            : Colors.white.withValues(alpha: 0.05),
+                      ),
+                      borderRadius: BorderRadius.circular(28),
                     ),
-                    filled: false,
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _effectiveFocusNode,
+                      maxLines: 5,
+                      minLines: 1,
+                      textCapitalization: TextCapitalization.sentences,
+                      textInputAction: widget.virtualKeyboardSend
+                          ? TextInputAction.send
+                          : TextInputAction.newline,
+                      onTap: _requestFocus,
+                      onSubmitted: widget.virtualKeyboardSend
+                          ? (_) => _handleSend()
+                          : null,
+                      style: const TextStyle(fontSize: 16),
+                      decoration: InputDecoration(
+                        hintText: _guidanceMode
+                            ? 'Message with guidance...'
+                            : 'Type a message...',
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 16,
+                        ),
+                        filled: false,
+                      ),
+                    ),
+                  )
+                : BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: Container(
+                      constraints: const BoxConstraints(minHeight: 56),
+                      decoration: BoxDecoration(
+                        color: context.cs.surface.withValues(alpha: 0.8),
+                        border: Border.all(
+                          color: _guidanceMode
+                              ? Colors.orange.withValues(alpha: 0.3)
+                              : Colors.white.withValues(alpha: 0.05),
+                        ),
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                      child: TextField(
+                        controller: _controller,
+                        focusNode: _effectiveFocusNode,
+                        maxLines: 5,
+                        minLines: 1,
+                        textCapitalization: TextCapitalization.sentences,
+                        textInputAction: widget.virtualKeyboardSend
+                            ? TextInputAction.send
+                            : TextInputAction.newline,
+                        onTap: _requestFocus,
+                        onSubmitted: widget.virtualKeyboardSend
+                            ? (_) => _handleSend()
+                            : null,
+                        style: const TextStyle(fontSize: 16),
+                        decoration: InputDecoration(
+                          hintText: _guidanceMode
+                              ? 'Message with guidance...'
+                              : 'Type a message...',
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 18,
+                            vertical: 16,
+                          ),
+                          filled: false,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
           ),
           const SizedBox(height: 10),
           Row(
@@ -314,6 +357,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     icon: Icons.auto_awesome,
                     onTap: widget.onMagicDrawer,
                     color: widget.isDrawerOpen ? Colors.amber : null,
+                    batterySaver: widget.batterySaver,
                   ),
                   const SizedBox(width: 8),
                   _CircleBtn(
@@ -325,16 +369,19 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       if (!_guidanceMode) _guidanceController.clear();
                     }),
                     color: _guidanceMode ? Colors.orange : null,
+                    batterySaver: widget.batterySaver,
                   ),
                   const SizedBox(width: 8),
                   _CircleBtn(
                     icon: Icons.image_outlined,
                     onTap: widget.onImageGen,
+                    batterySaver: widget.batterySaver,
                   ),
                   const SizedBox(width: 8),
                   _CircleBtn(
                     icon: Icons.keyboard_double_arrow_right,
                     onTap: widget.onContinue,
+                    batterySaver: widget.batterySaver,
                   ),
                 ],
               ),
@@ -411,30 +458,35 @@ class _CircleBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final Color? color;
+  final bool batterySaver;
 
-  const _CircleBtn({required this.icon, this.onTap, this.color});
+  const _CircleBtn({required this.icon, this.onTap, this.color, this.batterySaver = false});
 
   @override
   Widget build(BuildContext context) {
+    final container = Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: context.cs.surface.withValues(alpha: 0.8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Icon(icon, color: color ?? context.cs.primary, size: 20),
+      ),
+    );
+
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: context.cs.surface.withValues(alpha: 0.8),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Icon(icon, color: color ?? context.cs.primary, size: 20),
-            ),
-          ),
-        ),
+        child: batterySaver
+            ? container
+            : BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: container,
+              ),
       ),
     );
   }

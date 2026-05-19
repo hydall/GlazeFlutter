@@ -3,6 +3,9 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../features/settings/app_settings_provider.dart';
 
 final toastOverlayKey = GlobalKey<OverlayState>();
 
@@ -224,7 +227,7 @@ class _ToastAnimatorState extends State<_ToastAnimator>
 
 // ── Visual chip ───────────────────────────────────────────────────────────────
 
-class _ToastChip extends StatefulWidget {
+class _ToastChip extends ConsumerStatefulWidget {
   final String text;
   final VoidCallback onTap;
   final bool isError;
@@ -238,10 +241,10 @@ class _ToastChip extends StatefulWidget {
   });
 
   @override
-  State<_ToastChip> createState() => _ToastChipState();
+  ConsumerState<_ToastChip> createState() => _ToastChipState();
 }
 
-class _ToastChipState extends State<_ToastChip> {
+class _ToastChipState extends ConsumerState<_ToastChip> {
   bool _copied = false;
 
   void _copy() {
@@ -263,69 +266,75 @@ class _ToastChipState extends State<_ToastChip> {
         },
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Container(
-              constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width - 48,
-              ),
-              padding: EdgeInsets.fromLTRB(20, 10, widget.showCopyButton ? 8 : 20, 10),
-              decoration: BoxDecoration(
-                color: widget.isError ? const Color(0xEB5C1A1A) : const Color(0xEB1E1E1E),
-                border: widget.isError ? Border.all(color: const Color(0x80FF4444), width: 1) : null,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x401A1A1A),
-                    blurRadius: 20,
-                    offset: Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Flexible(
-                    child: Text(
-                      widget.text,
-                      textAlign: TextAlign.left,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white,
-                        height: 1.3,
-                        decoration: TextDecoration.none,
-                      ),
-                    ),
-                  ),
-                  if (widget.showCopyButton) ...[
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: _copy,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: const Color(0x33FFFFFF),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          _copied ? 'Copied' : 'Copy',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                            decoration: TextDecoration.none,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ],
+          child: (ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false)
+              ? _toastContent()
+              : BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                  child: _toastContent(),
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _toastContent() {
+    return Container(
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width - 48,
+      ),
+      padding: EdgeInsets.fromLTRB(20, 10, widget.showCopyButton ? 8 : 20, 10),
+      decoration: BoxDecoration(
+        color: widget.isError ? const Color(0xEB5C1A1A) : const Color(0xEB1E1E1E),
+        border: widget.isError ? Border.all(color: const Color(0x80FF4444), width: 1) : null,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x401A1A1A),
+            blurRadius: 20,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Flexible(
+            child: Text(
+              widget.text,
+              textAlign: TextAlign.left,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: Colors.white,
+                height: 1.3,
+                decoration: TextDecoration.none,
               ),
             ),
           ),
-        ),
+          if (widget.showCopyButton) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: _copy,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0x33FFFFFF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  _copied ? 'Copied' : 'Copy',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

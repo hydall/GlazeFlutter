@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../features/settings/app_settings_provider.dart';
 import '../shell/nav_height_provider.dart';
 import '../theme/app_colors.dart';
 import 'glow_ripple.dart';
@@ -67,21 +68,30 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
+    final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
 
-    return Padding(
-      key: _key,
-      padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottomPad),
-      child: ClipRRect(
+    final navContent = Container(
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            decoration: BoxDecoration(
-              color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: context.cs.outlineVariant),
-            ),
-            child: GlowRippleOverlay(
+        border: Border.all(color: context.cs.outlineVariant),
+      ),
+      child: batterySaver
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: List.generate(
+                  _items.length,
+                  (i) => _NavButton(
+                    item: _items[i],
+                    isActive: i == widget.currentIndex,
+                    onTap: () => widget.onTap(i),
+                  ),
+                ),
+              ),
+            )
+          : GlowRippleOverlay(
               child: Stack(
                 children: [
                   Positioned.fill(
@@ -107,8 +117,19 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
                 ],
               ),
             ),
-          ),
-        ),
+    );
+
+    return Padding(
+      key: _key,
+      padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottomPad),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: batterySaver
+            ? navContent
+            : BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: navContent,
+              ),
       ),
     );
   }

@@ -8,6 +8,7 @@ class InputBar extends StatefulWidget {
   final bool isGenerating;
   final VoidCallback? onStop;
   final VoidCallback? onMagicDrawer;
+  final bool batterySaver;
 
   const InputBar({
     super.key,
@@ -15,6 +16,7 @@ class InputBar extends StatefulWidget {
     required this.isGenerating,
     this.onStop,
     this.onMagicDrawer,
+    this.batterySaver = false,
   });
 
   @override
@@ -50,8 +52,41 @@ class _InputBarState extends State<InputBar> {
     _controller.clear();
   }
 
-  @override
+@override
   Widget build(BuildContext context) {
+    final inputContainer = Container(
+      constraints: const BoxConstraints(minHeight: 56),
+      decoration: BoxDecoration(
+        color: context.cs.surface.withValues(alpha: 0.8),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.05),
+        ),
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: TextField(
+        controller: _controller,
+        focusNode: _focusNode,
+        maxLines: 5,
+        minLines: 1,
+        textCapitalization: TextCapitalization.sentences,
+        textInputAction: TextInputAction.send,
+        onTap: _requestFocus,
+        onSubmitted: (_) => _handleSend(),
+        style: const TextStyle(fontSize: 16),
+        decoration: const InputDecoration(
+          hintText: 'Type a message...',
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: 18,
+            vertical: 16,
+          ),
+          filled: false,
+        ),
+      ),
+    );
+
     return SafeArea(
       top: false,
       child: Padding(
@@ -62,41 +97,12 @@ class _InputBarState extends State<InputBar> {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(28),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: Container(
-                  constraints: const BoxConstraints(minHeight: 56),
-                  decoration: BoxDecoration(
-                    color: context.cs.surface.withValues(alpha: 0.8),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.05),
+              child: widget.batterySaver
+                  ? inputContainer
+                  : BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                      child: inputContainer,
                     ),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    maxLines: 5,
-                    minLines: 1,
-                    textCapitalization: TextCapitalization.sentences,
-                    textInputAction: TextInputAction.send,
-                    onTap: _requestFocus,
-                    onSubmitted: (_) => _handleSend(),
-                    style: const TextStyle(fontSize: 16),
-                    decoration: const InputDecoration(
-                      hintText: 'Type a message...',
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      contentPadding: EdgeInsets.symmetric(
-                        horizontal: 18,
-                        vertical: 16,
-                      ),
-                      filled: false,
-                    ),
-                  ),
-                ),
-              ),
             ),
             const SizedBox(height: 10),
             Row(
@@ -105,11 +111,11 @@ class _InputBarState extends State<InputBar> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _CircleBtn(icon: Icons.auto_awesome, onTap: widget.onMagicDrawer),
+                    _CircleBtn(icon: Icons.auto_awesome, onTap: widget.onMagicDrawer, batterySaver: widget.batterySaver),
                     const SizedBox(width: 8),
-                    _CircleBtn(icon: Icons.image_outlined),
+                    _CircleBtn(icon: Icons.image_outlined, batterySaver: widget.batterySaver),
                     const SizedBox(width: 8),
-                    _CircleBtn(icon: Icons.fullscreen_rounded),
+                    _CircleBtn(icon: Icons.fullscreen_rounded, batterySaver: widget.batterySaver),
                   ],
                 ),
                 GestureDetector(
@@ -155,26 +161,30 @@ class _InputBarState extends State<InputBar> {
 class _CircleBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
-  const _CircleBtn({required this.icon, this.onTap});
+  final bool batterySaver;
+  const _CircleBtn({required this.icon, this.onTap, this.batterySaver = false});
   @override
   Widget build(BuildContext context) {
+    final container = Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: context.cs.surface.withValues(alpha: 0.8),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        shape: BoxShape.circle,
+      ),
+      child: Center(child: Icon(icon, color: context.cs.primary, size: 20)),
+    );
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-          child: Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: context.cs.surface.withValues(alpha: 0.8),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-              shape: BoxShape.circle,
-            ),
-            child: Center(child: Icon(icon, color: context.cs.primary, size: 20)),
-          ),
-        ),
+        child: batterySaver
+            ? container
+            : BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: container,
+              ),
       ),
     );
   }

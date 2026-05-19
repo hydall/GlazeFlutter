@@ -1,8 +1,10 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gradient_blur/gradient_blur.dart';
 
 import '../theme/app_colors.dart';
+import '../../features/settings/app_settings_provider.dart';
 
 // ── Data models ───────────────────────────────────────────────────────────────
 
@@ -160,7 +162,7 @@ class GlazeBottomSheet {
 
 // ── Sheet content ─────────────────────────────────────────────────────────────
 
-class _GlazeBottomSheetContent extends StatefulWidget {
+class _GlazeBottomSheetContent extends ConsumerStatefulWidget {
   final String? title;
   final Widget? headerAction;
   final List<BottomSheetItem>? items;
@@ -186,11 +188,11 @@ class _GlazeBottomSheetContent extends StatefulWidget {
   });
 
   @override
-  State<_GlazeBottomSheetContent> createState() =>
+  ConsumerState<_GlazeBottomSheetContent> createState() =>
       _GlazeBottomSheetContentState();
 }
 
-class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
+class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetContent> {
   late final TextEditingController _inputController;
   final FocusNode _inputFocus = FocusNode();
   final ScrollController _scrollController = ScrollController();
@@ -233,73 +235,67 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
 
     _measureHeader();
 
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.95,
-          ),
-          child: Container(
-            decoration: BoxDecoration(
-              color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              border: Border(top: BorderSide(color: context.cs.outlineVariant)),
-            ),
-            child: Stack(
-              children: [
-                // Body — scrollable, shrinks to content
-                Padding(
-                  padding: EdgeInsets.only(
-                    top: _headerH,
-                    bottom: bottomInset + 10,
-                  ),
-                  child: RawScrollbar(
+    final sheetBody = ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.95,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+          border: Border(top: BorderSide(color: context.cs.outlineVariant)),
+        ),
+        child: Stack(
+          children: [
+            Padding(
+              padding: EdgeInsets.only(
+                top: _headerH,
+                bottom: bottomInset + 10,
+              ),
+              child: RawScrollbar(
+                controller: _scrollController,
+                thumbColor: Colors.white.withValues(alpha: 0.15),
+                radius: const Radius.circular(3),
+                thickness: 4,
+                padding: const EdgeInsets.only(right: 3),
+                child: ScrollConfiguration(
+                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                  child: SingleChildScrollView(
                     controller: _scrollController,
-                    thumbColor: Colors.white.withValues(alpha: 0.15),
-                    radius: const Radius.circular(3),
-                    thickness: 4,
-                    padding: const EdgeInsets.only(right: 3),
-                    child: ScrollConfiguration(
-                      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                      child: SingleChildScrollView(
-                        controller: _scrollController,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SizedBox(height: 4),
-                            if (widget.child != null) widget.child!,
-                            if (widget.bigInfo != null) _BigInfo(info: widget.bigInfo!),
-                            if (widget.items != null && widget.items!.isNotEmpty)
-                              _ItemsList(items: widget.items!),
-                            if (widget.itemsAsCards != null && widget.itemsAsCards!.isNotEmpty)
-                              _ItemsCardList(items: widget.itemsAsCards!),
-                            if (widget.sessionItems != null &&
-                                widget.sessionItems!.isNotEmpty)
-                              GlazeSessionList(items: widget.sessionItems!),
-                            if (widget.cardItems != null && widget.cardItems!.isNotEmpty)
-                              _CardList(items: widget.cardItems!),
-                            if (widget.input != null)
-                              _InputSection(
-                                input: widget.input!,
-                                controller: _inputController,
-                                focusNode: _inputFocus,
-                              ),
-                          ],
-                        ),
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const SizedBox(height: 4),
+                        if (widget.child != null) widget.child!,
+                        if (widget.bigInfo != null) _BigInfo(info: widget.bigInfo!),
+                        if (widget.items != null && widget.items!.isNotEmpty)
+                          _ItemsList(items: widget.items!),
+                        if (widget.itemsAsCards != null && widget.itemsAsCards!.isNotEmpty)
+                          _ItemsCardList(items: widget.itemsAsCards!),
+                        if (widget.sessionItems != null &&
+                            widget.sessionItems!.isNotEmpty)
+                          GlazeSessionList(items: widget.sessionItems!),
+                        if (widget.cardItems != null && widget.cardItems!.isNotEmpty)
+                          _CardList(items: widget.cardItems!),
+                        if (widget.input != null)
+                          _InputSection(
+                            input: widget.input!,
+                            controller: _inputController,
+                            focusNode: _inputFocus,
+                          ),
+                      ],
                     ),
                   ),
                 ),
+              ),
+            ),
 
-
-              // Gradient blur overlay
+            if (!batterySaver)
               Positioned(
                 top: 0,
                 left: 0,
@@ -323,31 +319,38 @@ class _GlazeBottomSheetContentState extends State<_GlazeBottomSheetContent> {
                 ),
               ),
 
-              // Header
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: KeyedSubtree(
-                  key: _headerKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _HandleBar(),
-                      if (_hasHeader)
-                        _Header(
-                          title: widget.title,
-                          action: widget.headerAction,
-                        ),
-                    ],
-                  ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: KeyedSubtree(
+                key: _headerKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _HandleBar(),
+                    if (_hasHeader)
+                      _Header(
+                        title: widget.title,
+                        action: widget.headerAction,
+                      ),
+                  ],
                 ),
               ),
-              ],
             ),
-          ),
+          ],
         ),
       ),
+    );
+
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: batterySaver
+          ? sheetBody
+          : BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: sheetBody,
+            ),
     );
   }
 }

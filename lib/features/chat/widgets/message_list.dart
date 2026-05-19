@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../features/settings/app_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 
 import '../chat_provider.dart';
@@ -460,14 +461,36 @@ class _StreamingIndicator extends ConsumerWidget {
   }
 }
 
-class _ScrollDownButton extends StatelessWidget {
+class _ScrollDownButton extends ConsumerWidget {
   final bool visible;
   final VoidCallback onTap;
 
   const _ScrollDownButton({required this.visible, required this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
+
+    final buttonContent = Material(
+      color: context.colors.charBubble.withValues(alpha: 0.78),
+      shape: CircleBorder(
+        side: BorderSide(color: context.cs.outlineVariant),
+      ),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: Icon(
+            Icons.keyboard_arrow_down_rounded,
+            color: context.cs.primary,
+            size: 24,
+          ),
+        ),
+      ),
+    );
+
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 180),
       transitionBuilder: (child, anim) => FadeTransition(
@@ -478,28 +501,12 @@ class _ScrollDownButton extends StatelessWidget {
           ? const SizedBox.shrink(key: ValueKey('hide'))
           : ClipOval(
               key: const ValueKey('show'),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-                child: Material(
-                  color: context.colors.charBubble.withValues(alpha: 0.78),
-                  shape: CircleBorder(
-                    side: BorderSide(color: context.cs.outlineVariant),
-                  ),
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: onTap,
-                    child: SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: context.cs.primary,
-                        size: 24,
-                      ),
+              child: batterySaver
+                  ? buttonContent
+                  : BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                      child: buttonContent,
                     ),
-                  ),
-                ),
-              ),
             ),
     );
   }

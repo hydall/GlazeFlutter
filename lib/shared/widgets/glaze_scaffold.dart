@@ -1,8 +1,10 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../../features/settings/app_settings_provider.dart';
 import '../theme/app_colors.dart';
 
 /// Scaffold with a floating glassmorphic header — use for screens OUTSIDE
@@ -99,15 +101,12 @@ class GlazeScaffold extends StatelessWidget {
 
 /// Standalone floating glassmorphic app bar — use this directly when you
 /// need to embed the header inside a body Column (e.g. shell-tab screens).
-class GlazeAppBar extends StatelessWidget {
+class GlazeAppBar extends ConsumerWidget {
   final String? title;
   final Widget? titleWidget;
   final List<Widget>? actions;
   final bool showBack;
   final VoidCallback? onBack;
-
-  /// Optional custom left widget (shown when showBack is false).
-  /// Defaults to the Glaze logo mark.
   final Widget? leading;
 
   const GlazeAppBar({
@@ -121,18 +120,16 @@ class GlazeAppBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-        child: Container(
-          height: 56,
-          decoration: BoxDecoration(
-            color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: context.cs.outlineVariant),
-          ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
+
+    final barContent = Container(
+      height: 56,
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: context.cs.outlineVariant),
+      ),
           child: Row(
             children: [
               // Left: back button OR logo
@@ -181,10 +178,18 @@ class GlazeAppBar extends StatelessWidget {
                 )
               else
                 const SizedBox(width: 12),
-            ],
+],
           ),
-        ),
-      ),
+    );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: batterySaver
+          ? barContent
+          : BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: barContent,
+            ),
     );
   }
 }

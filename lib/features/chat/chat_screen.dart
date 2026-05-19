@@ -487,6 +487,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   @override
   Widget build(BuildContext context) {
     final preset = ref.watch(themeProvider).activePreset;
+    final appSettings = ref.watch(appSettingsProvider).valueOrNull;
     // Reserve space below the message list for: input bar + (keyboard or
     // drawer) + the bottom safe area. We pass the FINAL inset so the list's
     // padding doesn't churn per animation frame.
@@ -633,6 +634,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                             child: ChatInputBar(
                               focusNode: widget.inputFocus,
                               initialDraft: widget.state.session?.draft ?? '',
+                              batterySaver: appSettings?.batterySaver ?? false,
                               onDraftChanged: (text) {
                                 ref.read(chatProvider(widget.charId).notifier).saveDraft(text);
                               },

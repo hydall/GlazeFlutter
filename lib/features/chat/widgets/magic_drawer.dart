@@ -13,6 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/chat_import_export.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../features/settings/app_settings_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 
@@ -725,21 +726,23 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
                 left: 0,
                 right: 0,
                 child: IgnorePointer(
-                  child: GradientBlur(
-                    maxBlur: 8,
-                    curve: Curves.easeIn,
-                    gradient: const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xEB141416),
-                        Color(0x88141416),
-                        Color(0x00141416),
-                      ],
-                      stops: [0.0, 0.55, 1.0],
-                    ),
-                    child: const SizedBox(height: 68),
-                  ),
+                  child: (ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false)
+                      ? const SizedBox(height: 68)
+                      : GradientBlur(
+                          maxBlur: 8,
+                          curve: Curves.easeIn,
+                          gradient: const LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color(0xEB141416),
+                              Color(0x88141416),
+                              Color(0x00141416),
+                            ],
+                            stops: [0.0, 0.55, 1.0],
+                          ),
+                          child: const SizedBox(height: 68),
+                        ),
                 ),
               ),
               Positioned(

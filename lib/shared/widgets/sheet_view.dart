@@ -2,9 +2,11 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gradient_blur/gradient_blur.dart';
 
 import '../theme/app_colors.dart';
+import '../../features/settings/app_settings_provider.dart';
 import 'glaze_scaffold.dart';
 
 class SheetViewAction {
@@ -35,7 +37,7 @@ class SheetViewTab {
 /// [backgroundColor: Colors.transparent] to present this widget.
 /// It manages its own height: collapsed (~55 % of screen) or expanded
 /// (full screen), with a swipe gesture and snap animation.
-class SheetView extends StatefulWidget {
+class SheetView extends ConsumerStatefulWidget {
   final String? title;
   final Widget? titleWidget;
   final bool showBack;
@@ -79,10 +81,10 @@ class SheetView extends StatefulWidget {
   });
 
   @override
-  State<SheetView> createState() => _SheetViewState();
+  ConsumerState<SheetView> createState() => _SheetViewState();
 }
 
-class _SheetViewState extends State<SheetView>
+class _SheetViewState extends ConsumerState<SheetView>
     with SingleTickerProviderStateMixin {
   bool _expanded = false;
   double _currentHeight = 0;
@@ -345,6 +347,7 @@ class _SheetViewState extends State<SheetView>
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+    final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
     final isKeyboardOpen = bottomInset > 0;
 
     if (isKeyboardOpen != _keyboardOpen) {
@@ -504,98 +507,105 @@ class _SheetViewState extends State<SheetView>
       height: _currentHeight,
       child: ClipRRect(
         borderRadius: BorderRadius.vertical(top: Radius.circular(radius)),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-          child: Container(
-            color: context.cs.surface.withValues(alpha: 0.8),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: ScrollConfiguration(
-                    behavior: ScrollConfiguration.of(
-                      context,
-                    ).copyWith(scrollbars: false),
-                    child: Builder(
-                      builder: (context) {
-                        final mediaQuery = MediaQuery.of(context);
-                        final extraTop = _hasHeader ? _headerH : topPad;
-                        final newPadding = mediaQuery.padding.copyWith(
-                          top: extraTop,
-                        );
-                        final bodyTopInset = _lockToContentHeight
-                            ? extraTop
-                            : 0.0;
+        child: batterySaver
+            ? _sheetContent(context, topPad, bottomInset, radius)
+            : BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                child: _sheetContent(context, topPad, bottomInset, radius),
+              ),
+      ),
+    );
+  }
 
-                        final innerChild = Padding(
-                          padding: EdgeInsets.only(top: bodyTopInset),
-                          child: Padding(
-                          padding: widget.bodyPadding ?? EdgeInsets.zero,
-                            child: Padding(
-                              padding: EdgeInsets.only(
-                                bottom: isKeyboardOpen ? bottomInset + 10 : 0,
-                              ),
-                              child: Align(
-                                alignment: Alignment.topCenter,
-                                child: SizedBox(
-                                  width: double.infinity,
-                                  child: KeyedSubtree(
-                                    key: _bodyKey,
-                                    child: widget.body,
-                                  ),
-                                ),
-                              ),
+  Widget _sheetContent(BuildContext context, double topPad, double bottomInset, double radius) {
+    final isKeyboardOpen = _keyboardOpen;
+    return Container(
+      color: context.cs.surface.withValues(alpha: 0.8),
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(
+                context,
+              ).copyWith(scrollbars: false),
+              child: Builder(
+                builder: (context) {
+                  final mediaQuery = MediaQuery.of(context);
+                  final extraTop = _hasHeader ? _headerH : topPad;
+                  final newPadding = mediaQuery.padding.copyWith(
+                    top: extraTop,
+                  );
+                  final bodyTopInset = _lockToContentHeight
+                      ? extraTop
+                      : 0.0;
+
+                  final innerChild = Padding(
+                    padding: EdgeInsets.only(top: bodyTopInset),
+                    child: Padding(
+                    padding: widget.bodyPadding ?? EdgeInsets.zero,
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          bottom: isKeyboardOpen ? bottomInset + 10 : 0,
+                        ),
+                        child: Align(
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: KeyedSubtree(
+                              key: _bodyKey,
+                              child: widget.body,
                             ),
                           ),
-                        );
-
-                        return MediaQuery(
-                          data: mediaQuery.copyWith(padding: newPadding),
-                          child: widget.scrollController != null
-                              ? RawScrollbar(
-                                  controller: widget.scrollController,
-                                  thumbColor: Colors.white.withValues(
-                                    alpha: 0.15,
-                                  ),
-                                  radius: const Radius.circular(3),
-                                  thickness: 4,
-                                  padding: EdgeInsets.only(
-                                    top: extraTop,
-                                    right: 3,
-                                  ),
-                                  child: innerChild,
-                                )
-                              : innerChild,
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                // Gradient blur overlay — IgnorePointer so touches pass through
-                // to the header layer above. Extends slightly past the header to
-                // fade body content in as the user scrolls.
-                if (_hasHeader)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: IgnorePointer(
-                      child: GradientBlur(
-                        maxBlur: 8,
-                        curve: Curves.easeIn,
-                        gradient: const LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Color(0xEB141416),
-                            Color(0x88141416),
-                            Color(0x00141416),
-                          ],
-                          stops: [0.0, 0.4, 0.85],
                         ),
-                        child: SizedBox(height: _headerH + 8),
                       ),
                     ),
+                  );
+
+                  return MediaQuery(
+                    data: mediaQuery.copyWith(padding: newPadding),
+                    child: widget.scrollController != null
+                        ? RawScrollbar(
+                            controller: widget.scrollController,
+                            thumbColor: Colors.white.withValues(
+                              alpha: 0.15,
+                            ),
+                            radius: const Radius.circular(3),
+                            thickness: 4,
+                            padding: EdgeInsets.only(
+                              top: extraTop,
+                              right: 3,
+                            ),
+                            child: innerChild,
+                          )
+                        : innerChild,
+                  );
+                },
+              ),
+            ),
+          ),
+          if (_hasHeader && !(ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false))
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: IgnorePointer(
+                child: GradientBlur(
+                  maxBlur: 8,
+                  curve: Curves.easeIn,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Color(0xEB141416),
+                      Color(0x88141416),
+                      Color(0x00141416),
+                    ],
+                    stops: [0.0, 0.4, 0.85],
                   ),
+                  child: SizedBox(height: _headerH + 8),
+                ),
+              ),
+            ),
                 // Interactive header — rendered above the gradient so buttons
                 // and drag handle are unobscured and fully hittable.
                 if (_hasHeader)
@@ -635,10 +645,7 @@ class _SheetViewState extends State<SheetView>
                   ),
               ],
             ),
-          ),
-        ),
-      ),
-    );
+          );
   }
 }
 
