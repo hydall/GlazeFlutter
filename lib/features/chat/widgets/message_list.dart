@@ -49,6 +49,7 @@ class MessageList extends ConsumerStatefulWidget {
   final String charId;
   final String? sessionId;
   final double bottomInset;
+  final bool isDrawerOpen;
   final String searchQuery;
   final List<SearchMatch> searchMatches;
   final int searchCurrentIndex;
@@ -62,6 +63,7 @@ class MessageList extends ConsumerStatefulWidget {
     required this.charId,
     this.sessionId,
     this.bottomInset = 180,
+    this.isDrawerOpen = false,
     this.searchQuery = '',
     this.searchMatches = const [],
     this.searchCurrentIndex = 0,
@@ -106,13 +108,6 @@ class _MessageListState extends ConsumerState<MessageList> {
   /// Debounced anchor save while the user is scrolling so the persisted
   /// position stays close to wherever they paused last.
   Timer? _anchorSaveDebounce;
-
-  /// Accumulates the target scroll position when `bottomInset` changes over
-  /// multiple frames (e.g. OS keyboard animation), so that each frame's
-  /// `animateTo` calculates the new target relative to the intended target
-  /// rather than the lagging physical scroll position.
-  double? _runningScrollTarget;
-
 
   @override
   void initState() {
@@ -263,41 +258,46 @@ class _MessageListState extends ConsumerState<MessageList> {
     // Keyboard / drawer / input-bar resize — Telegram-style: shift content up
     // by exactly the inset delta so what was just above the new panel stays
     // visible. This is `el.scrollTop += diff` from Vue's updateContentPadding.
-    //
-    // The drawer opens over ~260ms via a TweenAnimationBuilder in chat_screen,
-    // so this branch fires every frame with a small `delta`. A per-frame
-    // `jumpTo` inside a postFrame callback ends up one frame behind the
-    // drawer panel (drawer paints at progress P, scroll catches up at P-1),
-    // which reads as juddery. Replacing it with a short `animateTo` lets the
-    // ScrollController interpolate continuously toward the running target —
-    // each new call cancels the previous one and re-aims at the freshest
-    // target, smoothing the per-frame steps into one fluid motion.
     if (widget.bottomInset != oldWidget.bottomInset) {
       final delta = widget.bottomInset - oldWidget.bottomInset;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_scrollController.hasClients) return;
-        final pos = _scrollController.position;
-        if (!pos.hasContentDimensions) return;
-        final base = _runningScrollTarget ?? pos.pixels;
-        final target = (base + delta).clamp(0.0, pos.maxScrollExtent);
-        _runningScrollTarget = target;
-        
-        if ((target - pos.pixels).abs() < 0.5) return;
-        _beginProgrammaticScroll();
-        _scrollController
-            .animateTo(
-          target,
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-        )
-            .whenComplete(() {
-          if (mounted && _runningScrollTarget == target) {
-            _runningScrollTarget = null;
-          }
-          _endProgrammaticScroll(
-              delay: const Duration(milliseconds: 30));
+      
+      if (widget.isDrawerOpen != oldWidget.isDrawerOpen) {
+        // The drawer opens/closes visually over 260ms via a TweenAnimationBuilder
+        // in chat_screen, but `bottomInset` is passed as the FINAL post-animation value.
+        // We animate the scroll over 260ms to match the visual panel slide.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_scrollController.hasClients) return;
+          final pos = _scrollController.position;
+          if (!pos.hasContentDimensions) return;
+          final target = (pos.pixels + delta).clamp(0.0, pos.maxScrollExtent);
+          if ((target - pos.pixels).abs() < 0.5) return;
+          _beginProgrammaticScroll();
+          _scrollController
+              .animateTo(
+            target,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+          )
+              .whenComplete(() {
+            _endProgrammaticScroll(delay: const Duration(milliseconds: 30));
+          });
         });
-      });
+      } else {
+        // OS Keyboard resize.
+        // `bottomInset` changes frame-by-frame on mobile, or instantly on Windows.
+        // Jump synchronously so the scroll stays perfectly locked to the inset
+        // without any 1-frame lag or animation delay. We clamp to `maxScrollExtent + delta`
+        // because the layout hasn't updated `maxScrollExtent` yet for this frame's padding change.
+        if (_scrollController.hasClients) {
+          final pos = _scrollController.position;
+          if (pos.hasContentDimensions) {
+            final target = (pos.pixels + delta).clamp(0.0, pos.maxScrollExtent + math.max(0.0, delta));
+            if ((target - pos.pixels).abs() >= 0.5) {
+              pos.jumpTo(target);
+            }
+          }
+        }
+      }
     }
 
     // Search navigation: jump precisely to the target message via its
