@@ -326,7 +326,7 @@ class _MessageListState extends ConsumerState<MessageList> {
   /// total for long chats (we saw 317-message chats landing at item #20).
   /// Re-jumping a handful of times lets the extent stabilise as items are
   /// laid out around the new scroll position.
-  void _jumpToBottomNow({int remainingRetargets = 4}) {
+  void _jumpToBottomNow({int remainingRetargets = 10}) {
     if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
     if (!pos.hasContentDimensions) return;
@@ -408,7 +408,7 @@ class _MessageListState extends ConsumerState<MessageList> {
   /// rendered window if needed so the target is laid out, then uses
   /// `Scrollable.ensureVisible` for a pixel-accurate position regardless of
   /// variable item heights.
-  void _scrollToMessageIndex(int messageIndex, {double alignment = 0.5}) {
+  void _scrollToMessageIndex(int messageIndex, {double alignment = 0.5, int remainingAttempts = 15}) {
     if (messageIndex < 0 || messageIndex >= widget.messages.length) return;
     final msg = widget.messages[messageIndex];
     final keyCtx = _msgKeys[msg.id]?.currentContext;
@@ -427,17 +427,33 @@ class _MessageListState extends ConsumerState<MessageList> {
       return;
     }
 
-    // Target isn't in the rendered window — expand it then retry next frame.
+    if (remainingAttempts <= 0) return;
+
+    // Target isn't in the rendered window — expand it, coarse jump, then retry next frame.
     final totalCount = widget.messages.length;
     _pendingSearchScrollIndex = messageIndex;
     setState(() {
       _renderCount = totalCount;
     });
+
+    if (_scrollController.hasClients) {
+      final pos = _scrollController.position;
+      if (pos.hasContentDimensions && pos.maxScrollExtent > 0) {
+        final fraction = messageIndex / widget.messages.length.clamp(1, 1 << 30);
+        final estimate = (fraction * pos.maxScrollExtent).clamp(0.0, pos.maxScrollExtent);
+        _beginProgrammaticScroll();
+        _scrollController.jumpTo(estimate);
+        _endProgrammaticScroll();
+      }
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final pending = _pendingSearchScrollIndex;
       _pendingSearchScrollIndex = null;
-      if (pending != null) _scrollToMessageIndex(pending, alignment: alignment);
+      if (pending != null) {
+        _scrollToMessageIndex(pending, alignment: alignment, remainingAttempts: remainingAttempts - 1);
+      }
     });
   }
 
@@ -658,7 +674,7 @@ class _MessageListState extends ConsumerState<MessageList> {
         if (_initialAnchorAttempted) return;
         _initialAnchorAttempted = true;
         if (savedAnchor != null) {
-          _restoreSavedAnchor(savedAnchor, remainingAttempts: 3);
+          _restoreSavedAnchor(savedAnchor, remainingAttempts: 20);
         } else {
           // Inline jump so `_initialScrollDone` flips in the same frame as
           // the scroll — avoids a flash of the top of the list.
