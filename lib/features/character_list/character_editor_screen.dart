@@ -157,7 +157,49 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
               .toList() ??
           [];
 
-      final updated = Character(
+      final updated = _original?.copyWith(
+        name: (item['name'] as String).trim(),
+        avatarPath: item['avatarPath'] as String?,
+        description: (item['description'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : (item['description'] as String).trim(),
+        personality: (item['personality'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : (item['personality'] as String).trim(),
+        scenario: (item['scenario'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : (item['scenario'] as String).trim(),
+        firstMes: (item['first_mes'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : (item['first_mes'] as String).trim(),
+        mesExample: (item['mes_example'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : (item['mes_example'] as String).trim(),
+        systemPrompt: (item['system_prompt'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : (item['system_prompt'] as String).trim(),
+        postHistoryInstructions:
+            (item['post_history_instructions'] as String?)?.trim().isEmpty ?? true
+                ? null
+                : (item['post_history_instructions'] as String).trim(),
+        creator: (item['creator'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : (item['creator'] as String).trim(),
+        creatorNotes: (item['creator_notes'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : (item['creator_notes'] as String).trim(),
+        tags: tags,
+        alternateGreetings: alternateGreetings,
+        updatedAt: currentTimestampSeconds(),
+        extensions: {
+          ...?_original?.extensions,
+          'talkativeness': item['talkativeness'] is num ? (item['talkativeness'] as num).toDouble() : 1.0,
+        },
+        depthPrompt: (item['depth_prompt'] as String?)?.trim() ?? '',
+        depthPromptDepth: item['depth_prompt_depth'] as int? ?? 4,
+        depthPromptRole: item['depth_prompt_role'] as String? ?? 'system',
+        world: item['world'] as String?,
+      ) ?? Character(
         id: _effectiveId,
         name: (item['name'] as String).trim(),
         avatarPath: item['avatarPath'] as String?,
@@ -191,18 +233,14 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
             : (item['creator_notes'] as String).trim(),
         tags: tags,
         alternateGreetings: alternateGreetings,
-        color: _original?.color,
         updatedAt: currentTimestampSeconds(),
         extensions: {
-          ...?_original?.extensions,
           'talkativeness': item['talkativeness'] is num ? (item['talkativeness'] as num).toDouble() : 1.0,
         },
-        fav: _original?.fav ?? false,
         depthPrompt: (item['depth_prompt'] as String?)?.trim() ?? '',
         depthPromptDepth: item['depth_prompt_depth'] as int? ?? 4,
         depthPromptRole: item['depth_prompt_role'] as String? ?? 'system',
         world: item['world'] as String?,
-        characterVersion: _original?.characterVersion ?? '1',
       );
 
       await _repo.put(updated);
