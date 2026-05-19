@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../features/settings/app_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -49,6 +51,7 @@ class MessageList extends ConsumerStatefulWidget {
   final String charId;
   final String? sessionId;
   final double bottomInset;
+  final bool isDrawerOpen;
   final String searchQuery;
   final List<SearchMatch> searchMatches;
   final int searchCurrentIndex;
@@ -62,6 +65,7 @@ class MessageList extends ConsumerStatefulWidget {
     required this.charId,
     this.sessionId,
     this.bottomInset = 180,
+    this.isDrawerOpen = false,
     this.searchQuery = '',
     this.searchMatches = const [],
     this.searchCurrentIndex = 0,
@@ -107,10 +111,37 @@ class _MessageListState extends ConsumerState<MessageList> {
   /// position stays close to wherever they paused last.
   Timer? _anchorSaveDebounce;
 
+  bool _isAnchorLoaded = false;
+
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _loadPersistedAnchor();
+  }
+
+  Future<void> _loadPersistedAnchor() async {
+    final sessionId = widget.sessionId;
+    if (sessionId == null) {
+      if (mounted) setState(() => _isAnchorLoaded = true);
+      return;
+    }
+    
+    final existing = ref.read(scrollAnchorProvider(sessionId));
+    if (existing == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final messageId = prefs.getString('scroll_anchor_msg_$sessionId');
+        final offset = prefs.getDouble('scroll_anchor_offset_$sessionId');
+        if (messageId != null && offset != null && mounted) {
+          ref.read(scrollAnchorProvider(sessionId).notifier).state = ScrollAnchor(messageId, offset);
+        }
+      } catch (_) {}
+    }
+    
+    if (mounted) {
+      setState(() => _isAnchorLoaded = true);
+    }
   }
 
   @override
@@ -197,11 +228,19 @@ class _MessageListState extends ConsumerState<MessageList> {
     // useful position the user had previously.
     if (_wasAtBottom) {
       ref.read(scrollAnchorProvider(sessionId).notifier).state = null;
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.remove('scroll_anchor_msg_$sessionId');
+        prefs.remove('scroll_anchor_offset_$sessionId');
+      });
       return;
     }
     final anchor = _captureAnchor();
     if (anchor == null) return;
     ref.read(scrollAnchorProvider(sessionId).notifier).state = anchor;
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('scroll_anchor_msg_$sessionId', anchor.messageId);
+      prefs.setDouble('scroll_anchor_offset_$sessionId', anchor.offsetFromViewportTop);
+    });
   }
 
   @override
@@ -220,6 +259,9 @@ class _MessageListState extends ConsumerState<MessageList> {
       _initialAnchorAttempted = false;
       _initialScrollDone = false;
       _pendingSearchScrollIndex = null;
+      
+      _isAnchorLoaded = false;
+      _loadPersistedAnchor();
       return;
     }
 
@@ -256,36 +298,46 @@ class _MessageListState extends ConsumerState<MessageList> {
     // Keyboard / drawer / input-bar resize — Telegram-style: shift content up
     // by exactly the inset delta so what was just above the new panel stays
     // visible. This is `el.scrollTop += diff` from Vue's updateContentPadding.
-    //
-    // The drawer opens over ~260ms via a TweenAnimationBuilder in chat_screen,
-    // so this branch fires every frame with a small `delta`. A per-frame
-    // `jumpTo` inside a postFrame callback ends up one frame behind the
-    // drawer panel (drawer paints at progress P, scroll catches up at P-1),
-    // which reads as juddery. Replacing it with a short `animateTo` lets the
-    // ScrollController interpolate continuously toward the running target —
-    // each new call cancels the previous one and re-aims at the freshest
-    // target, smoothing the per-frame steps into one fluid motion.
     if (widget.bottomInset != oldWidget.bottomInset) {
       final delta = widget.bottomInset - oldWidget.bottomInset;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !_scrollController.hasClients) return;
-        final pos = _scrollController.position;
-        if (!pos.hasContentDimensions) return;
-        final target =
-            (pos.pixels + delta).clamp(0.0, pos.maxScrollExtent);
-        if ((target - pos.pixels).abs() < 0.5) return;
-        _beginProgrammaticScroll();
-        _scrollController
-            .animateTo(
-          target,
-          duration: const Duration(milliseconds: 120),
-          curve: Curves.easeOut,
-        )
-            .whenComplete(() {
-          _endProgrammaticScroll(
-              delay: const Duration(milliseconds: 30));
+      
+      if (widget.isDrawerOpen != oldWidget.isDrawerOpen) {
+        // The drawer opens/closes visually over 260ms via a TweenAnimationBuilder
+        // in chat_screen, but `bottomInset` is passed as the FINAL post-animation value.
+        // We animate the scroll over 260ms to match the visual panel slide.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_scrollController.hasClients) return;
+          final pos = _scrollController.position;
+          if (!pos.hasContentDimensions) return;
+          final target = (pos.pixels + delta).clamp(0.0, pos.maxScrollExtent);
+          if ((target - pos.pixels).abs() < 0.5) return;
+          _beginProgrammaticScroll();
+          _scrollController
+              .animateTo(
+            target,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+          )
+              .whenComplete(() {
+            _endProgrammaticScroll(delay: const Duration(milliseconds: 30));
+          });
         });
-      });
+      } else {
+        // OS Keyboard resize.
+        // `bottomInset` changes frame-by-frame on mobile, or instantly on Windows.
+        // Jump synchronously so the scroll stays perfectly locked to the inset
+        // without any 1-frame lag or animation delay. We clamp to `maxScrollExtent + delta`
+        // because the layout hasn't updated `maxScrollExtent` yet for this frame's padding change.
+        if (_scrollController.hasClients) {
+          final pos = _scrollController.position;
+          if (pos.hasContentDimensions) {
+            final target = (pos.pixels + delta).clamp(0.0, pos.maxScrollExtent + math.max(0.0, delta));
+            if ((target - pos.pixels).abs() >= 0.5) {
+              pos.jumpTo(target);
+            }
+          }
+        }
+      }
     }
 
     // Search navigation: jump precisely to the target message via its
@@ -326,7 +378,7 @@ class _MessageListState extends ConsumerState<MessageList> {
   /// total for long chats (we saw 317-message chats landing at item #20).
   /// Re-jumping a handful of times lets the extent stabilise as items are
   /// laid out around the new scroll position.
-  void _jumpToBottomNow({int remainingRetargets = 4}) {
+  void _jumpToBottomNow({int remainingRetargets = 10}) {
     if (!_scrollController.hasClients) return;
     final pos = _scrollController.position;
     if (!pos.hasContentDimensions) return;
@@ -408,7 +460,7 @@ class _MessageListState extends ConsumerState<MessageList> {
   /// rendered window if needed so the target is laid out, then uses
   /// `Scrollable.ensureVisible` for a pixel-accurate position regardless of
   /// variable item heights.
-  void _scrollToMessageIndex(int messageIndex, {double alignment = 0.5}) {
+  void _scrollToMessageIndex(int messageIndex, {double alignment = 0.5, int remainingAttempts = 15}) {
     if (messageIndex < 0 || messageIndex >= widget.messages.length) return;
     final msg = widget.messages[messageIndex];
     final keyCtx = _msgKeys[msg.id]?.currentContext;
@@ -427,17 +479,33 @@ class _MessageListState extends ConsumerState<MessageList> {
       return;
     }
 
-    // Target isn't in the rendered window — expand it then retry next frame.
+    if (remainingAttempts <= 0) return;
+
+    // Target isn't in the rendered window — expand it, coarse jump, then retry next frame.
     final totalCount = widget.messages.length;
     _pendingSearchScrollIndex = messageIndex;
     setState(() {
       _renderCount = totalCount;
     });
+
+    if (_scrollController.hasClients) {
+      final pos = _scrollController.position;
+      if (pos.hasContentDimensions && pos.maxScrollExtent > 0) {
+        final fraction = messageIndex / widget.messages.length.clamp(1, 1 << 30);
+        final estimate = (fraction * pos.maxScrollExtent).clamp(0.0, pos.maxScrollExtent);
+        _beginProgrammaticScroll();
+        _scrollController.jumpTo(estimate);
+        _endProgrammaticScroll();
+      }
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final pending = _pendingSearchScrollIndex;
       _pendingSearchScrollIndex = null;
-      if (pending != null) _scrollToMessageIndex(pending, alignment: alignment);
+      if (pending != null) {
+        _scrollToMessageIndex(pending, alignment: alignment, remainingAttempts: remainingAttempts - 1);
+      }
     });
   }
 
@@ -647,7 +715,7 @@ class _MessageListState extends ConsumerState<MessageList> {
     final renderCount = _renderCount.clamp(0, totalCount);
     final startFrom = totalCount > renderCount ? totalCount - renderCount : 0;
 
-    if (_needsInitialScroll && totalCount > 0) {
+    if (_needsInitialScroll && totalCount > 0 && _isAnchorLoaded) {
       _needsInitialScroll = false;
       _renderCount = totalCount;
       final savedAnchor = widget.sessionId == null
@@ -658,7 +726,7 @@ class _MessageListState extends ConsumerState<MessageList> {
         if (_initialAnchorAttempted) return;
         _initialAnchorAttempted = true;
         if (savedAnchor != null) {
-          _restoreSavedAnchor(savedAnchor, remainingAttempts: 3);
+          _restoreSavedAnchor(savedAnchor, remainingAttempts: 20);
         } else {
           // Inline jump so `_initialScrollDone` flips in the same frame as
           // the scroll — avoids a flash of the top of the list.

@@ -532,6 +532,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                         charId: widget.charId,
                         sessionId: widget.state.session?.id,
                         bottomInset: messageListBottom,
+                        isDrawerOpen: widget.drawerOpen || widget.isSwitchingToDrawer,
                         searchQuery: widget.searchQuery,
                         searchMatches: widget.searchMatches,
                         searchCurrentIndex: widget.searchCurrentIndex,
