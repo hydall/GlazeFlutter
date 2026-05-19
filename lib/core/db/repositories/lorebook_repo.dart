@@ -30,6 +30,13 @@ class LorebookRepo implements SyncLorebookStore {
     await (_db.delete(_db.lorebooks)..where((t) => t.lorebookId.equals(id))).go();
   }
 
+  Future<List<Lorebook>> getByScopeAndTarget(String scope, String targetId) async {
+    final rows = await (_db.select(_db.lorebooks)
+          ..where((t) => t.activationScope.equals(scope) & t.activationTargetId.equals(targetId)))
+        .get();
+    return rows.map(_toModel).toList();
+  }
+
   Future<void> putFromJson(Map<String, dynamic> json) async {
     final lorebook = Lorebook.fromJson(json);
     await put(lorebook);

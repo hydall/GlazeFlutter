@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:go_router/go_router.dart';
 
@@ -222,13 +223,22 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
 
   Widget _buildImage() {
     if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
+      final thumbPath = _thumbOrAvatar(character.avatarPath!);
       return Image.file(
-        File(character.avatarPath!),
+        File(thumbPath),
         fit: BoxFit.cover,
         errorBuilder: (_, _, _) => _buildPlaceholder(),
       );
     }
     return _buildPlaceholder();
+  }
+
+  static String _thumbOrAvatar(String avatarPath) {
+    final name = p.basenameWithoutExtension(avatarPath);
+    final dir = p.dirname(p.dirname(avatarPath));
+    final thumb = p.join(dir, 'thumbnails', '$name.jpg');
+    if (File(thumb).existsSync()) return thumb;
+    return avatarPath;
   }
 
   Widget _buildPlaceholder() {

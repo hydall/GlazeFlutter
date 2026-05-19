@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
 
 import '../../core/models/character.dart';
 import '../../core/services/character_book_converter.dart';
@@ -488,7 +489,7 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
           leading: CircleAvatar(
             backgroundColor: context.cs.primary.withValues(alpha: 0.15),
             backgroundImage: c.avatarPath != null
-                ? FileImage(File(c.avatarPath!))
+                ? FileImage(File(_thumbOrAvatar(c.avatarPath!)))
                 : null,
             child: c.avatarPath == null
                 ? Text(
@@ -562,3 +563,11 @@ class _AddButton extends StatelessWidget {
 }
 
 enum _ImportSource { gallery, files }
+
+String _thumbOrAvatar(String avatarPath) {
+  final name = p.basenameWithoutExtension(avatarPath);
+  final dir = p.dirname(p.dirname(avatarPath));
+  final thumb = p.join(dir, 'thumbnails', '$name.jpg');
+  if (File(thumb).existsSync()) return thumb;
+  return avatarPath;
+}

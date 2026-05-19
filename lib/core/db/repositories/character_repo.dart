@@ -52,9 +52,13 @@ class CharacterRepo implements SyncCharacterStore {
             .get())
         .map((r) => r.sessionId)
         .toList();
-    for (final sid in sessionIds) {
-      await (_db.delete(_db.memoryBookRows)..where((t) => t.sessionId.equals(sid))).go();
-      await (_db.delete(_db.chatSummaries)..where((t) => t.sessionId.equals(sid))).go();
+    if (sessionIds.isNotEmpty) {
+      await (_db.delete(_db.memoryBookRows)
+            ..where((t) => t.sessionId.isIn(sessionIds)))
+          .go();
+      await (_db.delete(_db.chatSummaries)
+            ..where((t) => t.sessionId.isIn(sessionIds)))
+          .go();
     }
     await (_db.delete(_db.chatSessions)..where((t) => t.characterId.equals(id))).go();
     await (_db.delete(_db.characters)..where((t) => t.charId.equals(id))).go();
@@ -114,10 +118,10 @@ class CharacterRepo implements SyncCharacterStore {
         color: c.color,
         updatedAt: c.updatedAt,
         tags: c.tagsJson != null
-            ? List<String>.from(jsonDecode(c.tagsJson!))
+            ? List<String>.from(jsonDecode(c.tagsJson!) as List<dynamic>)
             : [],
         alternateGreetings: c.alternateGreetingsJson != null
-            ? List<String>.from(jsonDecode(c.alternateGreetingsJson!))
+            ? List<String>.from(jsonDecode(c.alternateGreetingsJson!) as List<dynamic>)
             : [],
         gallery: c.galleryJson != null
             ? (jsonDecode(c.galleryJson!) as List)

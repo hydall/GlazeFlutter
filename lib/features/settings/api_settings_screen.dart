@@ -65,7 +65,6 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   final _scrollController = ScrollController();
   Timer? _saveTimer;
   bool _loading = false;
-  bool _hasPromptedForCreation = false;
 
   List<TextEditingController> get _ctrls => [
     _nameCtrl,
@@ -219,14 +218,6 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     }
 
     final list = asyncList.valueOrNull ?? [];
-    
-    if (asyncList.hasValue && list.isEmpty && !_hasPromptedForCreation) {
-      _hasPromptedForCreation = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _createNewPreset([]);
-      });
-    }
-    
     final activeName = _activeName(activeConfig, list);
 
     return SheetView(
@@ -737,11 +728,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             name: trimmed,
           );
+          _loadedPresetId = newConfig.id;
+          _loadFromConfig(newConfig);
           await ref.read(apiListProvider.notifier).put(newConfig);
           ref.read(activeApiPresetIdProvider.notifier).state = newConfig.id;
           _persistActiveId(newConfig.id);
-          _loadedPresetId = null;
-          _loadFromConfig(newConfig);
         },
       ),
     );

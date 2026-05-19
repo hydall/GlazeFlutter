@@ -125,10 +125,10 @@ class SseClient {
     var fullText = '';
     var fullReasoning = '';
 
-    await for (final chunk in responseStream) {
+    await for (final chunk in responseStream as Stream) {
       if (cancelToken != null && cancelToken.isCancelled) break;
 
-      buffer += utf8.decode(chunk, allowMalformed: true);
+      buffer += utf8.decode(chunk as List<int>, allowMalformed: true);
       final lines = buffer.split('\n');
       buffer = lines.removeLast();
 

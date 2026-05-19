@@ -25,6 +25,7 @@ class ImageStorageService implements SyncImageStore {
     }
     final path = p.join(dir.path, '$characterId.png');
     await File(path).writeAsBytes(imageBytes);
+    await saveThumbnail(characterId, imageBytes);
     return path;
   }
 
@@ -55,6 +56,13 @@ class ImageStorageService implements SyncImageStore {
     final thumbPath = p.join(baseDir, 'thumbnails', '$characterId.jpg');
     final thumbFile = File(thumbPath);
     if (await thumbFile.exists()) await thumbFile.delete();
+  }
+
+  String? thumbnailPath(String? avatarPath) {
+    if (avatarPath == null || avatarPath.isEmpty) return null;
+    final name = p.basenameWithoutExtension(avatarPath);
+    final thumb = p.join(baseDir, 'thumbnails', '$name.jpg');
+    return File(thumb).existsSync() ? thumb : null;
   }
 
   Future<String> saveBytes(

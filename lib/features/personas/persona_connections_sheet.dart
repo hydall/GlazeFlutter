@@ -155,7 +155,7 @@ class _PersonaConnectionsSheetState
     );
 
     if (selected != null) {
-      setPersonaConnection(ref, 'character', selected.id, widget.personaId);
+      setPersonaConnection(ref, 'character', selected.id as String, widget.personaId);
     }
   }
 
@@ -191,7 +191,7 @@ class _PersonaConnectionsSheetState
     );
 
     if (selected != null) {
-      setPersonaConnection(ref, 'chat', selected.id, widget.personaId);
+      setPersonaConnection(ref, 'chat', selected.id as String, widget.personaId);
     }
   }
 }

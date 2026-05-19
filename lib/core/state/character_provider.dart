@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import '../models/character.dart';
 import '../models/lorebook.dart';
 import '../utils/sync_deletion_tracker.dart';
@@ -56,6 +58,7 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
     final chatRepo = ref.read(chatRepoProvider);
     final lorebookRepo = ref.read(lorebookRepoProvider);
     final embeddingRepo = ref.read(embeddingRepoProvider);
+    final character = await repo.getById(id);
 
     await chatRepo.transaction(() async {
       final deletedSessionIds = await chatRepo.deleteByCharacterId(id);
@@ -63,13 +66,11 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
         await SyncDeletionTracker.record('chat', sid);
       }
 
-      final lorebooks = await lorebookRepo.getAll();
+      final lorebooks = await lorebookRepo.getByScopeAndTarget('character', id);
       for (final lb in lorebooks) {
-        if (lb.activationScope == 'character' && lb.activationTargetId == id) {
-          await lorebookRepo.delete(lb.id);
-          await embeddingRepo.deleteBySourceId(lb.id);
-          await SyncDeletionTracker.record('lorebooks', lb.id);
-        }
+        await lorebookRepo.delete(lb.id);
+        await embeddingRepo.deleteBySourceId(lb.id);
+        await SyncDeletionTracker.record('lorebooks', lb.id);
       }
 
       final activations = ref.read(lorebookActivationsProvider);
@@ -86,5 +87,31 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
       await repo.delete(id);
       await SyncDeletionTracker.record('character', id);
     });
+
+    if (character != null) {
+      await _cleanupFiles(character);
+    }
+  }
+
+  Future<void> _cleanupFiles(Character character) async {
+    try {
+      if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
+        final avatar = File(character.avatarPath!);
+        if (await avatar.exists()) await avatar.delete();
+        final name = p.basenameWithoutExtension(character.avatarPath!);
+        final dir = p.dirname(p.dirname(character.avatarPath!));
+        final thumb = File(p.join(dir, 'thumbnails', '$name.jpg'));
+        if (await thumb.exists()) await thumb.delete();
+      }
+      if (character.gallery.isNotEmpty) {
+        final avatarDir = character.avatarPath != null
+            ? p.dirname(character.avatarPath!)
+            : null;
+        if (avatarDir != null) {
+          final galleryDir = Directory(p.join(p.dirname(avatarDir), 'gallery', character.id));
+          if (await galleryDir.exists()) await galleryDir.delete(recursive: true);
+        }
+      }
+    } catch (_) {}
   }
 }

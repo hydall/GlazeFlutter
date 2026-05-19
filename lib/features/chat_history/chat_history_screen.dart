@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
 import 'package:go_router/go_router.dart';
 
 import '../../core/utils/html_to_markdown.dart';
@@ -381,11 +382,7 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
         final s = filtered[i];
         return ListTile(
           leading: s.avatarPath != null && s.avatarPath!.isNotEmpty
-              ? CircleAvatar(backgroundImage: ResizeImage(
-                  FileImage(File(s.avatarPath!)),
-                  width: 80,
-                  height: 80,
-                ))
+              ? CircleAvatar(backgroundImage: FileImage(File(_thumbOrAvatar(s.avatarPath!))))
               : CircleAvatar(
                   backgroundColor: context.cs.primary,
                   child: Text(
@@ -685,11 +682,7 @@ class _SessionTile extends ConsumerWidget {
     if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
       return CircleAvatar(
         radius: 24,
-        backgroundImage: ResizeImage(
-          FileImage(File(info.avatarPath!)),
-          width: 96,
-          height: 96,
-        ),
+        backgroundImage: FileImage(File(_thumbOrAvatar(info.avatarPath!))),
         onBackgroundImageError: (_, __) {},
       );
     }
@@ -812,11 +805,7 @@ class _GroupHeader extends ConsumerWidget {
     if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
       return CircleAvatar(
         radius: 24,
-        backgroundImage: ResizeImage(
-          FileImage(File(info.avatarPath!)),
-          width: 96,
-          height: 96,
-        ),
+        backgroundImage: FileImage(File(_thumbOrAvatar(info.avatarPath!))),
         onBackgroundImageError: (_, __) {},
       );
     }
@@ -886,4 +875,12 @@ class _GroupHeader extends ConsumerWidget {
       }
     });
   }
+}
+
+String _thumbOrAvatar(String avatarPath) {
+  final name = p.basenameWithoutExtension(avatarPath);
+  final dir = p.dirname(p.dirname(avatarPath));
+  final thumb = p.join(dir, 'thumbnails', '$name.jpg');
+  if (File(thumb).existsSync()) return thumb;
+  return avatarPath;
 }

@@ -24,7 +24,7 @@ class JsApiConfigImporter with BackupHelpers {
       final spmRaw = src['gz_service_profile_map'];
       if (spmRaw is String) {
         try {
-          serviceProfileMap = jsonDecode(spmRaw);
+          serviceProfileMap = jsonDecode(spmRaw) as Map<String, dynamic>;
           break;
         } catch (_) {}
       } else if (spmRaw is Map<String, dynamic>) {
@@ -49,6 +49,10 @@ class JsApiConfigImporter with BackupHelpers {
       final skipIds = <String>{};
       Map<String, dynamic>? embProfile;
       bool embUseSame = true;
+      Map<String, dynamic>? imggenProfile;
+      bool imggenUseSame = true;
+      Map<String, dynamic>? mbProfile;
+      bool mbUseSame = true;
 
       llmProfileId = ls['gz_active_llm_profile_id'] as String? ??
           kv['gz_active_llm_profile_id'] as String?;
@@ -77,13 +81,40 @@ class JsApiConfigImporter with BackupHelpers {
               .firstWhere((p) => p?['id'] == embProfileId,
                   orElse: () => null);
         }
+
+        final imggenConfig =
+            serviceProfileMap['image_gen'] as Map<String, dynamic>?;
+        imggenUseSame = imggenConfig?['useSameAsLLM'] as bool? ?? true;
+        final imggenProfileId = imggenConfig?['profileId'] as String?;
+        if (imggenProfileId != null && imggenProfileId != llmProfileId) {
+          imggenProfile = allProfiles
+              .cast<Map<String, dynamic>?>()
+              .firstWhere((p) => p?['id'] == imggenProfileId,
+                  orElse: () => null);
+        }
+
+        final mbConfig =
+            serviceProfileMap['memory_books'] as Map<String, dynamic>?;
+        mbUseSame = mbConfig?['useSameAsLLM'] as bool? ?? true;
+        final mbProfileId = mbConfig?['profileId'] as String?;
+        if (mbProfileId != null && mbProfileId != llmProfileId) {
+          mbProfile = allProfiles
+              .cast<Map<String, dynamic>?>()
+              .firstWhere((p) => p?['id'] == mbProfileId,
+                  orElse: () => null);
+        }
       } else {
         for (final p in allProfiles) {
           final pMode = p['mode'] as String?;
           if (pMode == 'embedding') {
             embProfile = p;
             embUseSame = false;
-            break;
+          } else if (pMode == 'image_gen') {
+            imggenProfile = p;
+            imggenUseSame = false;
+          } else if (pMode == 'memory_books') {
+            mbProfile = p;
+            mbUseSame = false;
           }
         }
       }
@@ -179,6 +210,43 @@ class JsApiConfigImporter with BackupHelpers {
             embeddingModel: embModel,
             embeddingMaxChunkTokens: embMaxChunk);
       }
+
+      final prefs = await SharedPreferences.getInstance();
+      if (imggenProfile != null) {
+        await prefs.setBool('gz_imggen_use_same', imggenUseSame);
+        if (!imggenUseSame) {
+          await prefs.setString(
+              'gz_imggen_endpoint', imggenProfile['endpoint'] as String? ?? '');
+          await prefs.setString(
+              'gz_imggen_api_key', imggenProfile['apiKey'] as String? ?? imggenProfile['key'] as String? ?? '');
+          await prefs.setString(
+              'gz_imggen_model', imggenProfile['model'] as String? ?? '');
+        }
+      }
+      if (mbProfile != null) {
+        final memSettings = <String, dynamic>{};
+        final existing = prefs.getString('memorySettings');
+        if (existing != null) {
+          try {
+            memSettings.addAll(jsonDecode(existing) as Map<String, dynamic>);
+          } catch (_) {}
+        }
+        if (mbUseSame) {
+          memSettings['generationSource'] = 'current';
+          memSettings['generationUseCurrentModelOverride'] = true;
+          memSettings['generationEndpoint'] = '';
+          memSettings['generationApiKey'] = '';
+          memSettings['generationModel'] = '';
+        } else {
+          memSettings['generationSource'] = 'custom';
+          memSettings['generationUseCurrentModelOverride'] = false;
+          memSettings['generationEndpoint'] = mbProfile['endpoint'] as String? ?? '';
+          memSettings['generationApiKey'] = mbProfile['apiKey'] as String? ?? mbProfile['key'] as String? ?? '';
+          memSettings['generationModel'] = mbProfile['model'] as String? ?? '';
+        }
+        await prefs.setString('memorySettings', jsonEncode(memSettings));
+      }
+
       return;
     }
 

@@ -1636,53 +1636,56 @@ class _MetadataRow extends StatelessWidget {
       children: [
         // Left: metadata stats
         Expanded(
-          child: Row(
-            children: [
-              if (!isStandard && messageIndex >= 0) ...[
-                Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.55))),
-                const SizedBox(width: 8),
-              ],
-              if (genTime != null) ...[
-                Icon(Icons.access_time, size: 12, color: metaColor),
-                const SizedBox(width: 4),
-                RollingNumber(value: genTime!, style: TextStyle(fontSize: 12, color: metaColor)),
-                const SizedBox(width: 12),
-              ],
-              if (tokens != null && tokens! > 0) ...[
-                Icon(Icons.description_outlined, size: 12, color: metaColor),
-                const SizedBox(width: 4),
-                Text('${tokens}t', style: TextStyle(fontSize: 12, color: metaColor)),
-              ],
-              if (memoryEntryCount > 0) ...[
-                const SizedBox(width: 8),
-                Icon(Icons.auto_stories, size: 12, color: metaColor.withValues(alpha: 0.7)),
-                const SizedBox(width: 4),
-                Text('$memoryEntryCount mem', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.7))),
-              ],
-              if (triggeredLorebooks.isNotEmpty || triggeredMemories.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: onTriggeredTap,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: scheme.surfaceContainerHighest.withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.auto_awesome, size: 12, color: metaColor.withValues(alpha: 0.8)),
-                        const SizedBox(width: 4),
-                        Text('${triggeredLorebooks.length + triggeredMemories.length}',
-                            style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.8))),
-                      ],
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                if (!isStandard && messageIndex >= 0) ...[
+                  Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.55))),
+                  const SizedBox(width: 8),
+                ],
+                if (genTime != null) ...[
+                  Icon(Icons.access_time, size: 12, color: metaColor),
+                  const SizedBox(width: 4),
+                  RollingNumber(value: genTime!, style: TextStyle(fontSize: 12, color: metaColor)),
+                  const SizedBox(width: 12),
+                ],
+                if (tokens != null && tokens! > 0) ...[
+                  Icon(Icons.description_outlined, size: 12, color: metaColor),
+                  const SizedBox(width: 4),
+                  Text('${tokens}t', style: TextStyle(fontSize: 12, color: metaColor)),
+                ],
+                if (memoryEntryCount > 0) ...[
+                  const SizedBox(width: 8),
+                  Icon(Icons.auto_stories, size: 12, color: metaColor.withValues(alpha: 0.7)),
+                  const SizedBox(width: 4),
+                  Text('$memoryEntryCount mem', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.7))),
+                ],
+                if (triggeredLorebooks.isNotEmpty || triggeredMemories.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: onTriggeredTap,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.auto_awesome, size: 12, color: metaColor.withValues(alpha: 0.8)),
+                          const SizedBox(width: 4),
+                          Text('${triggeredLorebooks.length + triggeredMemories.length}',
+                              style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.8))),
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
         if (!hideActions) ...[

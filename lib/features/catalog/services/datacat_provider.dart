@@ -260,21 +260,21 @@ Future<DownloadedCharacter> datacatGetCharacter(String uuid) async {
   final meta = (data['metadata'] ?? {}) as Map<String, dynamic>;
   return DownloadedCharacter(
     charData: CharacterData(
-      name: raw['name'] ?? raw['chatName'] ?? raw['chat_name'] ?? 'Unknown',
-      description: raw['description'] ?? '',
-      personality: raw['personality'] ?? '',
-      scenario: raw['scenario'] ?? '',
-      firstMes: raw['first_mes'] ?? raw['first_message'] ?? '',
-      mesExample: raw['mes_example'] ?? '',
-      creatorNotes: raw['creator_notes'] ?? meta['raw_description_html'] ?? '',
-      systemPrompt: raw['system_prompt'] ?? '',
-      postHistoryInstructions: raw['post_history_instructions'] ?? '',
+      name: (raw['name'] ?? raw['chatName'] ?? raw['chat_name'] ?? 'Unknown') as String,
+      description: (raw['description'] ?? '') as String,
+      personality: (raw['personality'] ?? '') as String,
+      scenario: (raw['scenario'] ?? '') as String,
+      firstMes: (raw['first_mes'] ?? raw['first_message'] ?? '') as String,
+      mesExample: (raw['mes_example'] ?? '') as String,
+      creatorNotes: (raw['creator_notes'] ?? meta['raw_description_html'] ?? '') as String,
+      systemPrompt: (raw['system_prompt'] ?? '') as String,
+      postHistoryInstructions: (raw['post_history_instructions'] ?? '') as String,
       alternateGreetings: raw['alternate_greetings'] is List
           ? (raw['alternate_greetings'] as List).cast<String>()
           : <String>[],
       tags: [],
-      creator: meta['janitor_creator_name'] ?? raw['creator'] ?? '',
-      creatorId: meta['janitor_creator_id'] ?? raw['creator_id'] ?? raw['creatorId'] ?? '',
+      creator: (meta['janitor_creator_name'] ?? raw['creator'] ?? '') as String,
+      creatorId: (meta['janitor_creator_id'] ?? raw['creator_id'] ?? raw['creatorId'] ?? '') as String,
       characterBook: raw['character_book'],
     ),
     avatarUrl: _resolveAvatarUrl(_pickAvatarSource(raw, meta)),
