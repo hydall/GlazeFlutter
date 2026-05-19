@@ -312,6 +312,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       );
     });
     await _save();
+    await _autoIndexEntry(entry);
   }
 
   void _deleteDraft(String draftId) async {
@@ -408,6 +409,21 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     }
   }
 
+  Future<void> _autoIndexEntry(MemoryEntry entry) async {
+    if (!_gs.vectorSearchEnabled) return;
+    if (entry.content.trim().isEmpty) return;
+    final config = ref.read(embeddingConfigProvider);
+    if (config.endpoint.isEmpty) return;
+    try {
+      await ref.read(memoryEmbeddingServiceProvider).indexMemoryEntry(
+        entry,
+        charId: widget.charId,
+        sessionId: widget.sessionId,
+        config: config,
+      );
+    } catch (_) {}
+  }
+
   void _deleteAllMemoryIndexes() async {
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
@@ -467,6 +483,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
         _book = _book!.copyWith(entries: [..._book!.entries, result]);
       });
       await _save();
+      await _autoIndexEntry(result);
     }
   }
 

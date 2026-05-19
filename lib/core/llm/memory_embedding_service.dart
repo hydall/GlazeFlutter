@@ -20,7 +20,6 @@ class MemoryEmbeddingService {
     required EmbeddingConfig config,
     String embeddingTarget = 'content',
   }) async {
-    if (!entry.vectorSearch) return;
     if (config.endpoint.isEmpty) return;
 
     final text = _getEmbeddingText(entry, embeddingTarget);
@@ -83,7 +82,7 @@ class MemoryEmbeddingService {
     bool rateLimited = false;
     int retryAfter = 0;
 
-    final entries = book.entries.where((e) => e.vectorSearch && e.status == 'active').toList();
+    final entries = book.entries.where((e) => e.status == 'active').toList();
 
     for (int i = 0; i < entries.length; i++) {
       onProgress?.call(i, entries.length);

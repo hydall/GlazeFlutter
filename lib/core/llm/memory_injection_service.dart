@@ -132,9 +132,6 @@ class MemoryInjectionService {
     MemoryGlobalSettings settings,
   ) async {
     try {
-      final vectorEntries = entries.where((e) => e.vectorSearch).toList();
-      if (vectorEntries.isEmpty) return {};
-
       final embeddingRows = await _embeddingRepo.getBySourceType('memory_entry');
       final embeddingMap = <String, EmbeddingRow>{};
       for (final row in embeddingRows) {
@@ -142,7 +139,7 @@ class MemoryInjectionService {
       }
 
       final candidates = <VectorCandidate>[];
-      for (final entry in vectorEntries) {
+      for (final entry in entries) {
         final row = embeddingMap[entry.id];
         if (row == null || row.vectorsBlob == null) continue;
 

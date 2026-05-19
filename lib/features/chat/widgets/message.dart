@@ -1632,126 +1632,81 @@ class _MetadataRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Left: metadata stats
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                if (!isStandard && messageIndex >= 0) ...[
-                  Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.55))),
-                  const SizedBox(width: 8),
-                ],
-                if (genTime != null) ...[
-                  Icon(Icons.access_time, size: 12, color: metaColor),
-                  const SizedBox(width: 4),
-                  RollingNumber(value: genTime!, style: TextStyle(fontSize: 12, color: metaColor)),
-                  const SizedBox(width: 12),
-                ],
-                if (tokens != null && tokens! > 0) ...[
-                  Icon(Icons.description_outlined, size: 12, color: metaColor),
-                  const SizedBox(width: 4),
-                  Text('${tokens}t', style: TextStyle(fontSize: 12, color: metaColor)),
-                ],
-                if (memoryEntryCount > 0) ...[
-                  const SizedBox(width: 8),
-                  Icon(Icons.auto_stories, size: 12, color: metaColor.withValues(alpha: 0.7)),
-                  const SizedBox(width: 4),
-                  Text('$memoryEntryCount mem', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.7))),
-                ],
-                if (triggeredLorebooks.isNotEmpty || triggeredMemories.isNotEmpty) ...[
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: onTriggeredTap,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: scheme.surfaceContainerHighest.withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.auto_awesome, size: 12, color: metaColor.withValues(alpha: 0.8)),
-                          const SizedBox(width: 4),
-                          Text('${triggeredLorebooks.length + triggeredMemories.length}',
-                              style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.8))),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        if (!hideActions) ...[
-          // Center: swipe switcher
-          if (swipeCount > 1)
-          Container(
-            height: 22,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest.withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.15)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _swipeBtn(Icons.chevron_left, onSwipeLeft),
-                SizedBox(
-                  width: 28,
-                  child: Text(
-                    '${swipeId + 1}/$swipeCount',
-                    style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.8)),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                _swipeBtn(Icons.chevron_right, onSwipeRight),
-              ],
-            ),
-          ),
-        // Center: regenerate button
-        if (onRegenerate != null)
-          InkWell(
-            onTap: onRegenerate,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: context.cs.primary.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.refresh, size: 14, color: context.cs.primary),
-                  const SizedBox(width: 4),
-                  Text('Regenerate', style: TextStyle(fontSize: 12, color: context.cs.primary)),
-                ],
-              ),
-            ),
-          ),
-        // Right: action button or edit buttons
-        Expanded(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: isEditing
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _editCircleBtn(Icons.close, const Color(0xFFFF4444), onCancelEdit),
+        Row(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    if (!isStandard && messageIndex >= 0) ...[
+                      Text('#${messageIndex + 1}', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.55))),
                       const SizedBox(width: 8),
-                      _editCircleBtn(Icons.check, const Color(0xFF4CAF50), onSaveEdit),
                     ],
-                  )
-                : InkWell(
-                    onTap: onMenuTap,
-                    borderRadius: BorderRadius.circular(16),
+                    if (genTime != null) ...[
+                      Icon(Icons.access_time, size: 12, color: metaColor),
+                      const SizedBox(width: 4),
+                      RollingNumber(value: genTime!, style: TextStyle(fontSize: 12, color: metaColor)),
+                      const SizedBox(width: 12),
+                    ],
+                    if (tokens != null && tokens! > 0) ...[
+                      Icon(Icons.description_outlined, size: 12, color: metaColor),
+                      const SizedBox(width: 4),
+                      Text('${tokens}t', style: TextStyle(fontSize: 12, color: metaColor)),
+                    ],
+                    if (memoryEntryCount > 0) ...[
+                      const SizedBox(width: 8),
+                      Icon(Icons.auto_stories, size: 12, color: metaColor.withValues(alpha: 0.7)),
+                      const SizedBox(width: 4),
+                      Text('$memoryEntryCount mem', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.7))),
+                    ],
+                    if (triggeredLorebooks.isNotEmpty || triggeredMemories.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: onTriggeredTap,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: scheme.surfaceContainerHighest.withValues(alpha: 0.8),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.auto_awesome, size: 12, color: metaColor.withValues(alpha: 0.8)),
+                              const SizedBox(width: 4),
+                              Text('${triggeredLorebooks.length + triggeredMemories.length}',
+                                  style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.8))),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            if (!hideActions)
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: isEditing
+                      ? Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _editCircleBtn(Icons.close, const Color(0xFFFF4444), onCancelEdit),
+                            const SizedBox(width: 8),
+                            _editCircleBtn(Icons.check, const Color(0xFF4CAF50), onSaveEdit),
+                          ],
+                        )
+                      : InkWell(
+                          onTap: onMenuTap,
+                          borderRadius: BorderRadius.circular(16),
                     child: Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
@@ -1761,10 +1716,64 @@ class _MetadataRow extends StatelessWidget {
                       child: Icon(Icons.menu, size: 16, color: metaColor),
                     ),
                   ),
+),
           ),
-        ),
         ],
-      ],
+      ),
+      if (!hideActions && (swipeCount > 1 || onRegenerate != null))
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            if (swipeCount > 1)
+              Container(
+                height: 22,
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: scheme.surfaceContainerHighest.withValues(alpha: 0.8),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.15)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _swipeBtn(Icons.chevron_left, onSwipeLeft),
+                    SizedBox(
+                      width: 28,
+                      child: Text(
+                        '${swipeId + 1}/$swipeCount',
+                        style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.8)),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    _swipeBtn(Icons.chevron_right, onSwipeRight),
+                  ],
+                ),
+              ),
+            if (onRegenerate != null) ...[
+              if (swipeCount > 1) const SizedBox(width: 8),
+              InkWell(
+                onTap: onRegenerate,
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: context.cs.primary.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.refresh, size: 14, color: context.cs.primary),
+                      const SizedBox(width: 4),
+                      Text('Regenerate', style: TextStyle(fontSize: 12, color: context.cs.primary)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+    ],
     );
   }
 
