@@ -245,7 +245,7 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
       ),
       child: Container(
         decoration: BoxDecoration(
-          color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
+          color: context.cs.surfaceContainerHighest.withValues(alpha: batterySaver ? 1.0 : 0.8),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           border: Border(top: BorderSide(color: context.cs.outlineVariant)),
         ),

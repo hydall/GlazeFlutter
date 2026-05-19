@@ -150,62 +150,65 @@ class _ChatInputBarState extends State<ChatInputBar> {
   @override
   Widget build(BuildContext context) {
     if (widget.showSearchControls) {
+      final searchContent = Container(
+        constraints: const BoxConstraints(minHeight: 56),
+        decoration: BoxDecoration(
+          color: context.cs.surface.withValues(alpha: widget.batterySaver ? 1.0 : 0.8),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.05),
+          ),
+          borderRadius: BorderRadius.circular(28),
+        ),
+        child: Row(
+          children: [
+            const SizedBox(width: 18),
+            Icon(Icons.search, size: 20, color: context.cs.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                widget.searchMatchCount > 0
+                    ? '${widget.searchCurrentIndex + 1} of ${widget.searchMatchCount} matches'
+                    : 'No matches found',
+                style: TextStyle(
+                  color: context.cs.onSurface,
+                  fontSize: 16,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            IconButton(
+              icon: Icon(
+                Icons.keyboard_arrow_up,
+                size: 24,
+                color: context.cs.onSurface,
+              ),
+              onPressed: widget.onSearchPrev,
+            ),
+            IconButton(
+              icon: Icon(
+                Icons.keyboard_arrow_down,
+                size: 24,
+                color: context.cs.onSurface,
+              ),
+              onPressed: widget.onSearchNext,
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+      );
       return SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(28),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: Container(
-                constraints: const BoxConstraints(minHeight: 56),
-                decoration: BoxDecoration(
-                  color: context.cs.surface.withValues(alpha: 0.8),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.05),
+            child: widget.batterySaver
+                ? searchContent
+                : BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: searchContent,
                   ),
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: Row(
-                  children: [
-                    const SizedBox(width: 18),
-                    Icon(Icons.search, size: 20, color: context.cs.primary),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        widget.searchMatchCount > 0
-                            ? '${widget.searchCurrentIndex + 1} of ${widget.searchMatchCount} matches'
-                            : 'No matches found',
-                        style: TextStyle(
-                          color: context.cs.onSurface,
-                          fontSize: 16,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.keyboard_arrow_up,
-                        size: 24,
-                        color: context.cs.onSurface,
-                      ),
-                      onPressed: widget.onSearchPrev,
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.keyboard_arrow_down,
-                        size: 24,
-                        color: context.cs.onSurface,
-                      ),
-                      onPressed: widget.onSearchNext,
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                ),
-              ),
-            ),
           ),
         ),
       );
@@ -265,7 +268,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 ? Container(
                     constraints: const BoxConstraints(minHeight: 56),
                     decoration: BoxDecoration(
-                      color: context.cs.surface.withValues(alpha: 0.8),
+                      color: context.cs.surface.withValues(alpha: 1.0),
                       border: Border.all(
                         color: _guidanceMode
                             ? Colors.orange.withValues(alpha: 0.3)
@@ -468,7 +471,7 @@ class _CircleBtn extends StatelessWidget {
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: context.cs.surface.withValues(alpha: 0.8),
+        color: context.cs.surface.withValues(alpha: batterySaver ? 1.0 : 0.8),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         shape: BoxShape.circle,
       ),

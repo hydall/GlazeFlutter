@@ -472,7 +472,7 @@ class _ScrollDownButton extends ConsumerWidget {
     final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
 
     final buttonContent = Material(
-      color: context.colors.charBubble.withValues(alpha: 0.78),
+      color: context.colors.charBubble.withValues(alpha: batterySaver ? 1.0 : 0.78),
       shape: CircleBorder(
         side: BorderSide(color: context.cs.outlineVariant),
       ),

@@ -126,7 +126,7 @@ class GlazeAppBar extends ConsumerWidget {
     final barContent = Container(
       height: 56,
       decoration: BoxDecoration(
-        color: context.cs.surfaceContainerHighest.withValues(alpha: 0.8),
+        color: context.cs.surfaceContainerHighest.withValues(alpha: batterySaver ? 1.0 : 0.8),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: context.cs.outlineVariant),
       ),

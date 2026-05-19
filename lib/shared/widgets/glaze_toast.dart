@@ -267,7 +267,7 @@ class _ToastChipState extends ConsumerState<_ToastChip> {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
           child: (ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false)
-              ? _toastContent()
+              ? _toastContent(opaque: true)
               : BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                   child: _toastContent(),
@@ -277,14 +277,17 @@ class _ToastChipState extends ConsumerState<_ToastChip> {
     );
   }
 
-  Widget _toastContent() {
+  Widget _toastContent({bool opaque = false}) {
+    final bgColor = opaque
+        ? (widget.isError ? const Color(0xFF5C1A1A) : const Color(0xFF1E1E1E))
+        : (widget.isError ? const Color(0xEB5C1A1A) : const Color(0xEB1E1E1E));
     return Container(
       constraints: BoxConstraints(
         maxWidth: MediaQuery.of(context).size.width - 48,
       ),
       padding: EdgeInsets.fromLTRB(20, 10, widget.showCopyButton ? 8 : 20, 10),
       decoration: BoxDecoration(
-        color: widget.isError ? const Color(0xEB5C1A1A) : const Color(0xEB1E1E1E),
+        color: bgColor,
         border: widget.isError ? Border.all(color: const Color(0x80FF4444), width: 1) : null,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [

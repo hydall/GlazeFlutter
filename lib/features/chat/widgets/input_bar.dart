@@ -57,7 +57,7 @@ class _InputBarState extends State<InputBar> {
     final inputContainer = Container(
       constraints: const BoxConstraints(minHeight: 56),
       decoration: BoxDecoration(
-        color: context.cs.surface.withValues(alpha: 0.8),
+        color: context.cs.surface.withValues(alpha: widget.batterySaver ? 1.0 : 0.8),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.05),
         ),
@@ -169,7 +169,7 @@ class _CircleBtn extends StatelessWidget {
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: context.cs.surface.withValues(alpha: 0.8),
+        color: context.cs.surface.withValues(alpha: batterySaver ? 1.0 : 0.8),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         shape: BoxShape.circle,
       ),

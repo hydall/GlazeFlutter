@@ -508,19 +508,19 @@ class _SheetViewState extends ConsumerState<SheetView>
       child: ClipRRect(
         borderRadius: BorderRadius.vertical(top: Radius.circular(radius)),
         child: batterySaver
-            ? _sheetContent(context, topPad, bottomInset, radius)
-            : BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: _sheetContent(context, topPad, bottomInset, radius),
+? _sheetContent(context, topPad, bottomInset, radius, opaque: true)
+                : BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                    child: _sheetContent(context, topPad, bottomInset, radius),
               ),
       ),
     );
   }
 
-  Widget _sheetContent(BuildContext context, double topPad, double bottomInset, double radius) {
+  Widget _sheetContent(BuildContext context, double topPad, double bottomInset, double radius, {bool opaque = false}) {
     final isKeyboardOpen = _keyboardOpen;
     return Container(
-      color: context.cs.surface.withValues(alpha: 0.8),
+      color: context.cs.surface.withValues(alpha: opaque ? 1.0 : 0.8),
       child: Stack(
         children: [
           Positioned.fill(
