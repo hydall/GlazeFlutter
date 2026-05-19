@@ -6,8 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../db/app_db.dart';
 import '../image_storage_service.dart';
 import 'backup_helpers.dart';
+import 'profile_resolver.dart';
+import 'service_prefs_writer.dart';
 
-class JsApiConfigImporter with BackupHelpers {
+class JsApiConfigImporter extends BackupHelpers {
   @override
   final AppDatabase db;
   @override
@@ -45,79 +47,9 @@ class JsApiConfigImporter with BackupHelpers {
       final allProfiles = <Map<String, dynamic>>[];
       extractPresetsFromRaw(profilesRaw, allProfiles);
 
-      String? llmProfileId;
-      final skipIds = <String>{};
-      Map<String, dynamic>? embProfile;
-      bool embUseSame = true;
-      Map<String, dynamic>? imggenProfile;
-      bool imggenUseSame = true;
-      Map<String, dynamic>? mbProfile;
-      bool mbUseSame = true;
-
-      llmProfileId = ls['gz_active_llm_profile_id'] as String? ??
+      final activeLlmId = ls['gz_active_llm_profile_id'] as String? ??
           kv['gz_active_llm_profile_id'] as String?;
-
-      if (serviceProfileMap != null) {
-        final spmLlm = (serviceProfileMap['llm'] as Map<String, dynamic>?)
-            ?['profileId'] as String?;
-        if (spmLlm != null) llmProfileId = spmLlm;
-
-        for (final svc in ['embedding', 'image_gen', 'memory_books']) {
-          final svcConfig =
-              serviceProfileMap[svc] as Map<String, dynamic>?;
-          final svcProfileId = svcConfig?['profileId'] as String?;
-          if (svcProfileId != null && svcProfileId != llmProfileId) {
-            skipIds.add(svcProfileId);
-          }
-        }
-
-        final embConfig =
-            serviceProfileMap['embedding'] as Map<String, dynamic>?;
-        embUseSame = embConfig?['useSameAsLLM'] as bool? ?? true;
-        final embProfileId = embConfig?['profileId'] as String?;
-        if (embProfileId != null && embProfileId != llmProfileId) {
-          embProfile = allProfiles
-              .cast<Map<String, dynamic>?>()
-              .firstWhere((p) => p?['id'] == embProfileId,
-                  orElse: () => null);
-        }
-
-        final imggenConfig =
-            serviceProfileMap['image_gen'] as Map<String, dynamic>?;
-        imggenUseSame = imggenConfig?['useSameAsLLM'] as bool? ?? true;
-        final imggenProfileId = imggenConfig?['profileId'] as String?;
-        if (imggenProfileId != null && imggenProfileId != llmProfileId) {
-          imggenProfile = allProfiles
-              .cast<Map<String, dynamic>?>()
-              .firstWhere((p) => p?['id'] == imggenProfileId,
-                  orElse: () => null);
-        }
-
-        final mbConfig =
-            serviceProfileMap['memory_books'] as Map<String, dynamic>?;
-        mbUseSame = mbConfig?['useSameAsLLM'] as bool? ?? true;
-        final mbProfileId = mbConfig?['profileId'] as String?;
-        if (mbProfileId != null && mbProfileId != llmProfileId) {
-          mbProfile = allProfiles
-              .cast<Map<String, dynamic>?>()
-              .firstWhere((p) => p?['id'] == mbProfileId,
-                  orElse: () => null);
-        }
-      } else {
-        for (final p in allProfiles) {
-          final pMode = p['mode'] as String?;
-          if (pMode == 'embedding') {
-            embProfile = p;
-            embUseSame = false;
-          } else if (pMode == 'image_gen') {
-            imggenProfile = p;
-            imggenUseSame = false;
-          } else if (pMode == 'memory_books') {
-            mbProfile = p;
-            mbUseSame = false;
-          }
-        }
-      }
+      final resolved = resolveProfiles(allProfiles, serviceProfileMap, activeLlmId);
 
       final imggenApiKeys = <String>{};
       for (final k in [
@@ -135,23 +67,23 @@ class JsApiConfigImporter with BackupHelpers {
         if (seenIds.contains(pid)) continue;
         seenIds.add(pid);
 
-        if (skipIds.contains(pid)) continue;
+        if (resolved.skipIds.contains(pid)) continue;
         final pMode = p['mode'] as String?;
         if (pMode == 'embedding' || pMode == 'image_gen' || pMode == 'memory_books') continue;
-        if (pid != llmProfileId) {
+        if (pid != resolved.llmProfileId) {
           final ep = (p['endpoint'] as String?) ?? '';
           final ak = (p['apiKey'] as String?) ?? (p['key'] as String?) ?? '';
           final mdl = (p['model'] as String?) ?? '';
           if (ep.isEmpty && mdl.isEmpty) continue;
           if (ep.isEmpty && imggenApiKeys.contains(ak)) continue;
-          if (embProfile != null) {
-            final embEp = (embProfile['endpoint'] as String?) ?? '';
-            final embMdl = (embProfile['model'] as String?) ?? '';
+          if (resolved.embedding.profile != null) {
+            final embEp = (resolved.embedding.profile!['endpoint'] as String?) ?? '';
+            final embMdl = (resolved.embedding.profile!['model'] as String?) ?? '';
             final isEmbDuplicate = (ep.isNotEmpty && embEp.isNotEmpty && ep == embEp) &&
                 (mdl.isNotEmpty && embMdl.isNotEmpty && mdl == embMdl);
             if (isEmbDuplicate) continue;
           }
-          if (embUseSame && ep.isNotEmpty) {
+          if (resolved.embedding.useSameAsLlm && ep.isNotEmpty) {
             final embEndpoint = ls['gz_embedding_endpoint'] as String? ??
                 kv['gz_embedding_endpoint'] as String? ?? '';
             final embModel = ls['gz_embedding_model'] as String? ??
@@ -164,21 +96,21 @@ class JsApiConfigImporter with BackupHelpers {
         String embEndpoint = '';
         String embApiKey = '';
         String embModel = '';
-        bool embSame = embUseSame;
+        bool embSame = resolved.embedding.useSameAsLlm;
         bool embEnabled = false;
         int embMaxChunk = 512;
 
-        if (embProfile != null &&
-            pid == llmProfileId &&
-            !embUseSame) {
-          embEndpoint = embProfile['endpoint'] as String? ?? '';
-          embApiKey = embProfile['apiKey'] as String? ??
-              embProfile['key'] as String? ??
+        if (resolved.embedding.profile != null &&
+            pid == resolved.llmProfileId &&
+            !resolved.embedding.useSameAsLlm) {
+          embEndpoint = resolved.embedding.profile!['endpoint'] as String? ?? '';
+          embApiKey = resolved.embedding.profile!['apiKey'] as String? ??
+              resolved.embedding.profile!['key'] as String? ??
               '';
-          embModel = embProfile['model'] as String? ?? '';
+          embModel = resolved.embedding.profile!['model'] as String? ?? '';
           embSame = false;
           embEnabled = true;
-        } else if (embUseSame && pid == llmProfileId) {
+        } else if (resolved.embedding.useSameAsLlm && pid == resolved.llmProfileId) {
           embSame = true;
           embEnabled = true;
         }
@@ -189,7 +121,7 @@ class JsApiConfigImporter with BackupHelpers {
             merged[e.key] = e.value;
           }
         }
-        if (pid == llmProfileId && connPreset != null) {
+        if (pid == resolved.llmProfileId && connPreset != null) {
           merged.addAll(connPreset);
           if (connPreset['key'] != null && connPreset['apiKey'] == null) {
             merged['apiKey'] = connPreset['key'];
@@ -211,41 +143,8 @@ class JsApiConfigImporter with BackupHelpers {
             embeddingMaxChunkTokens: embMaxChunk);
       }
 
-      final prefs = await SharedPreferences.getInstance();
-      if (imggenProfile != null) {
-        await prefs.setBool('gz_imggen_use_same', imggenUseSame);
-        if (!imggenUseSame) {
-          await prefs.setString(
-              'gz_imggen_endpoint', imggenProfile['endpoint'] as String? ?? '');
-          await prefs.setString(
-              'gz_imggen_api_key', imggenProfile['apiKey'] as String? ?? imggenProfile['key'] as String? ?? '');
-          await prefs.setString(
-              'gz_imggen_model', imggenProfile['model'] as String? ?? '');
-        }
-      }
-      if (mbProfile != null) {
-        final memSettings = <String, dynamic>{};
-        final existing = prefs.getString('memorySettings');
-        if (existing != null) {
-          try {
-            memSettings.addAll(jsonDecode(existing) as Map<String, dynamic>);
-          } catch (_) {}
-        }
-        if (mbUseSame) {
-          memSettings['generationSource'] = 'current';
-          memSettings['generationUseCurrentModelOverride'] = true;
-          memSettings['generationEndpoint'] = '';
-          memSettings['generationApiKey'] = '';
-          memSettings['generationModel'] = '';
-        } else {
-          memSettings['generationSource'] = 'custom';
-          memSettings['generationUseCurrentModelOverride'] = false;
-          memSettings['generationEndpoint'] = mbProfile['endpoint'] as String? ?? '';
-          memSettings['generationApiKey'] = mbProfile['apiKey'] as String? ?? mbProfile['key'] as String? ?? '';
-          memSettings['generationModel'] = mbProfile['model'] as String? ?? '';
-        }
-        await prefs.setString('memorySettings', jsonEncode(memSettings));
-      }
+      await writeImgGenPrefs(resolved.imageGen.profile, resolved.imageGen.useSameAsLlm);
+      await writeMemoryBooksPrefs(resolved.memoryBooks.profile, resolved.memoryBooks.useSameAsLlm);
 
       return;
     }

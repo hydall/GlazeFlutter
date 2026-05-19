@@ -5,7 +5,7 @@ import '../../db/app_db.dart';
 import '../image_storage_service.dart';
 import 'backup_helpers.dart';
 
-class FlutterBackupImporter with BackupHelpers {
+class FlutterBackupImporter extends BackupHelpers {
   @override
   final AppDatabase db;
   @override

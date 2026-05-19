@@ -8,7 +8,7 @@ import '../../db/app_db.dart';
 import '../image_storage_service.dart';
 import 'backup_helpers.dart';
 
-class JsPresetImporter with BackupHelpers {
+class JsPresetImporter extends BackupHelpers {
   @override
   final AppDatabase db;
   @override

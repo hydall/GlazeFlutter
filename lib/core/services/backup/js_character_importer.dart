@@ -7,7 +7,7 @@ import '../../utils/time_helpers.dart';
 import '../image_storage_service.dart';
 import 'backup_helpers.dart';
 
-class JsCharacterImporter with BackupHelpers {
+class JsCharacterImporter extends BackupHelpers {
   @override
   final AppDatabase db;
   @override

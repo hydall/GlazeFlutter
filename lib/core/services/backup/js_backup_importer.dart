@@ -12,7 +12,7 @@ import 'js_chat_importer.dart';
 import 'js_lorebook_importer.dart';
 import 'js_preset_importer.dart';
 
-class JsBackupImporter with BackupHelpers {
+class JsBackupImporter extends BackupHelpers {
   @override
   final AppDatabase db;
   @override
