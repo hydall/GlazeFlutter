@@ -35,12 +35,7 @@ class _InputBarState extends State<InputBar> {
   }
 
   void _requestFocus() {
-    if (_focusNode.hasFocus) {
-      _focusNode.unfocus();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _focusNode.requestFocus();
-      });
-    } else {
+    if (!_focusNode.hasFocus) {
       _focusNode.requestFocus();
     }
   }

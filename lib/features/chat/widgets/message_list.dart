@@ -717,41 +717,25 @@ class _MessageListState extends ConsumerState<MessageList> {
 
     if (_needsInitialScroll && totalCount > 0 && _isAnchorLoaded) {
       _needsInitialScroll = false;
-      _renderCount = totalCount;
-      final savedAnchor = widget.sessionId == null
-          ? null
-          : ref.read(scrollAnchorProvider(widget.sessionId!));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (_initialAnchorAttempted) return;
         _initialAnchorAttempted = true;
-        if (savedAnchor != null) {
-          _restoreSavedAnchor(savedAnchor, remainingAttempts: 20);
-        } else {
-          // Inline jump so `_initialScrollDone` flips in the same frame as
-          // the scroll — avoids a flash of the top of the list.
-          if (_scrollController.hasClients) {
-            final pos = _scrollController.position;
-            if (pos.hasContentDimensions) {
-              _beginProgrammaticScroll();
-              _scrollController.jumpTo(pos.maxScrollExtent);
-              _endProgrammaticScroll();
-            }
+        _markInitialScrollDone();
+        if (_scrollController.hasClients) {
+          final pos = _scrollController.position;
+          if (pos.hasContentDimensions) {
+            _beginProgrammaticScroll();
+            _scrollController.jumpTo(pos.maxScrollExtent);
+            _endProgrammaticScroll();
           }
-          _markInitialScrollDone();
         }
       });
     }
 
     return Stack(
       children: [
-        Offstage(
-          // Keep the list laid out (we need `maxScrollExtent` to be computed
-          // before the first scroll) but unpainted until the initial scroll
-          // has run. Avoids a 1–2 frame flash showing the top of the chat
-          // before we jump to the saved anchor / bottom.
-          offstage: !_initialScrollDone,
-          child: NotificationListener<UserScrollNotification>(
+          NotificationListener<UserScrollNotification>(
           onNotification: _handleUserScroll,
           child: ListView.builder(
           controller: _scrollController,
@@ -801,10 +785,9 @@ class _MessageListState extends ConsumerState<MessageList> {
               _ContextCutoffItem() => const _ContextCutoffDivider(),
             };
            },
+           ),
           ),
-         ),
-        ),
-          Positioned(
+           Positioned(
            right: 16,
            bottom: widget.bottomInset + 8,
            child: _ScrollDownButton(

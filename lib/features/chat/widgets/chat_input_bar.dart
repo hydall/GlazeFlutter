@@ -125,12 +125,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   void _requestFocus() {
     final fn = _effectiveFocusNode;
-    if (fn.hasFocus) {
-      fn.unfocus();
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        fn.requestFocus();
-      });
-    } else {
+    if (!fn.hasFocus) {
       fn.requestFocus();
     }
   }
@@ -305,20 +300,18 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       ),
                     ),
                   )
-                : BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                    child: Container(
-                      constraints: const BoxConstraints(minHeight: 56),
-                      decoration: BoxDecoration(
-                        color: context.cs.surface.withValues(alpha: 0.8),
-                        border: Border.all(
-                          color: _guidanceMode
-                              ? Colors.orange.withValues(alpha: 0.3)
-                              : Colors.white.withValues(alpha: 0.05),
-                        ),
-                        borderRadius: BorderRadius.circular(28),
+                : Container(
+                    constraints: const BoxConstraints(minHeight: 56),
+                    decoration: BoxDecoration(
+                      color: context.cs.surface.withValues(alpha: 0.95),
+                      border: Border.all(
+                        color: _guidanceMode
+                            ? Colors.orange.withValues(alpha: 0.3)
+                            : Colors.white.withValues(alpha: 0.05),
                       ),
-                      child: TextField(
+                      borderRadius: BorderRadius.circular(28),
+                    ),
+                    child: TextField(
                         controller: _controller,
                         focusNode: _effectiveFocusNode,
                         maxLines: 5,
@@ -344,7 +337,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
                             vertical: 16,
                           ),
                           filled: false,
-                        ),
                       ),
                     ),
                   ),

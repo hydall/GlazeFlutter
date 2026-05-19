@@ -61,6 +61,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final updatedMessages = [...current.messages, userMsg];
     final updatedSession = current.session!.copyWith(
       messages: updatedMessages,
+      draft: '',
       updatedAt: currentTimestampSeconds(),
     );
 
@@ -407,6 +408,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final character = await charRepo.getById(arg);
     await notifService.onGenerationStarted(character?.name ?? 'Unknown');
 
+    try {
     final service = ChatGenerationService(ref);
     final result = await service.generate(
       session: session,
@@ -473,6 +475,24 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     );
 
     if (!completer.isCompleted) completer.complete();
+    } catch (e) {
+      if (_activeGenId == genId) {
+        final current = state.value;
+        if (current != null && current.isGenerating) {
+          final restoration = _restorationMessage;
+          if (restoration != null) {
+            final msgs = <ChatMessage>[...(current.session?.messages ?? []), restoration];
+            final restored = current.session?.copyWith(messages: msgs, updatedAt: currentTimestampSeconds());
+            if (restored != null) ref.read(chatRepoProvider).put(restored);
+            state = AsyncData(ChatState(session: restored ?? current.session, isGenerating: false, error: e.toString()));
+          } else {
+            state = AsyncData(ChatState(session: current.session, isGenerating: false, error: e.toString()));
+          }
+          _restorationMessage = null;
+        }
+      }
+      if (!completer.isCompleted) completer.complete();
+    }
   }
 
   String? _messagePreview(List messages) {

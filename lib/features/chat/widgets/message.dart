@@ -708,8 +708,6 @@ class _MessageState extends ConsumerState<Message>
     final isGenerating = widget.isGenerating;
     final charId = widget.charId;
     final time = widget.time;
-    final memoryEntryIds = widget.memoryCoverage['entryIds'];
-    final memoryEntryCount = memoryEntryIds is List ? memoryEntryIds.length : 0;
 
     final scheme = Theme.of(context).colorScheme;
     final appSettings = ref.watch(appSettingsProvider).value;
@@ -968,7 +966,6 @@ class _MessageState extends ConsumerState<Message>
                 swipeId: _switcherIndex(character),
                 onSwipeLeft: isEditing ? null : _onSwitcherLeft(character),
                 onSwipeRight: isEditing ? null : _onSwitcherRight(character),
-                memoryEntryCount: memoryEntryCount,
                 triggeredLorebooks: widget.triggeredLorebooks,
                 triggeredMemories: widget.triggeredMemories,
                 onTriggeredTap: () => _showTriggeredSheet(context),
@@ -1596,7 +1593,6 @@ class _MetadataRow extends StatelessWidget {
   final int swipeId;
   final VoidCallback? onSwipeLeft;
   final VoidCallback? onSwipeRight;
-  final int memoryEntryCount;
   final List<TriggeredEntry> triggeredLorebooks;
   final List<TriggeredEntry> triggeredMemories;
   final VoidCallback? onTriggeredTap;
@@ -1619,7 +1615,6 @@ class _MetadataRow extends StatelessWidget {
     this.swipeId = 0,
     this.onSwipeLeft,
     this.onSwipeRight,
-    this.memoryEntryCount = 0,
     this.triggeredLorebooks = const [],
     this.triggeredMemories = const [],
     this.onTriggeredTap,
@@ -1657,12 +1652,6 @@ class _MetadataRow extends StatelessWidget {
                       Icon(Icons.description_outlined, size: 12, color: metaColor),
                       const SizedBox(width: 4),
                       Text('${tokens}t', style: TextStyle(fontSize: 12, color: metaColor)),
-                    ],
-                    if (memoryEntryCount > 0) ...[
-                      const SizedBox(width: 8),
-                      Icon(Icons.auto_stories, size: 12, color: metaColor.withValues(alpha: 0.7)),
-                      const SizedBox(width: 4),
-                      Text('$memoryEntryCount mem', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.7))),
                     ],
                     if (triggeredLorebooks.isNotEmpty || triggeredMemories.isNotEmpty) ...[
                       const SizedBox(width: 8),
