@@ -38,11 +38,19 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   CancelToken? _cancelToken;
+  CancelToken? _imgGenCancelToken;
   ChatMessage? _restorationMessage;
   int _activeGenId = 0;
   Completer<void>? _activeGenCompleter;
 
   void setCancelToken(CancelToken token) => _cancelToken = token;
+
+  bool get isGeneratingImage => _imgGenCancelToken != null && !(_imgGenCancelToken!.isCancelled);
+
+  void abortImageGeneration() {
+    _imgGenCancelToken?.cancel();
+    _imgGenCancelToken = null;
+  }
 
   ChatSessionService get _sessionSvc => ChatSessionService(ref);
   ChatMessageService get _messageSvc => ChatMessageService(ref);
@@ -341,6 +349,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _activeGenId++; // invalidate any in-flight onStateUpdate / final writes
     _cancelToken?.cancel();
     _cancelToken = null;
+    _imgGenCancelToken?.cancel();
+    _imgGenCancelToken = null;
     _clearStreaming();
 
     // Immediately clear isGenerating and restore the previous assistant message
@@ -455,11 +465,17 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _restorationMessage = null;
     _clearStreaming();
 
+    final imgCancelToken = CancelToken();
+    _imgGenCancelToken = imgCancelToken;
+
     await service.processImageTags(
       currentState: result,
       charId: arg,
+      cancelToken: imgCancelToken,
       onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
     );
+
+    _imgGenCancelToken = null;
 
     if (_activeGenId != genId) {
       if (!completer.isCompleted) completer.complete();

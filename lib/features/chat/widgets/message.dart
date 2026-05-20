@@ -726,10 +726,8 @@ class _MessageState extends ConsumerState<Message>
               _TypingIndicator(textColor: textColor, scheme: scheme)
             else if (isError)
               _ErrorWindow(text: displayContent)
-            else if (ImageContentRenderer.hasImageMarkers(displayContent))
-              ImageContentRenderer(content: displayContent, textColor: textColor)
-            else
-              Builder(builder: (_) {
+            else ...[
+              () {
                 var mdContent = _markdownCache.get(_cacheKey);
                 if (mdContent == null) {
                   mdContent = _highlightPhrases(
@@ -737,41 +735,84 @@ class _MessageState extends ConsumerState<Message>
                   );
                   _markdownCache.put(_cacheKey, mdContent);
                 }
+                if (ImageContentRenderer.hasImageMarkers(mdContent)) {
+                  return ImageContentRenderer(
+                    content: mdContent,
+                    textColor: textColor,
+                    onRegenerate: () {
+                      final notifier = ref.read(chatProvider(charId).notifier);
+                      if (notifier.isGeneratingImage) {
+                        notifier.abortImageGeneration();
+                      } else {
+                        notifier.regenerateLastAssistant();
+                      }
+                    },
+                  );
+                }
                 return GptMarkdown(
                   mdContent,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: fontStyle.fontSize,
-                  letterSpacing: fontStyle.letterSpacing,
-                  fontFamily: fontStyle.fontFamily,
-                ),
-                components: _mdComponents,
-                inlineComponents: [
-                  ATagMd(),
-                  ImageMd(),
-                  HtmlColorMd(),
-                  GlowTextMd(),
-                  ColorGlowTextMd(),
-                  GradientTextMd(),
-                  BackgroundTextMd(),
-                  MarkMd(
-                    textColor: quoteColor,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: fontStyle.fontSize,
+                    letterSpacing: fontStyle.letterSpacing,
+                    fontFamily: fontStyle.fontFamily,
                   ),
-                  ActiveMarkMd(activeKey: _activePhraseKey),
-                  TableMd(),
-                  StrikeMd(),
-                  ColoredBoldMd(color: style.italicColor),
-                  ColoredUnderscoreBoldMd(color: style.italicColor),
-                  ColoredItalicMd(color: style.italicColor),
-                  ColoredUnderscoreItalicMd(color: style.italicColor),
-                  UnderLineMd(),
-                  LatexMath(),
-                  LatexMathMultiLine(),
-                  HighlightedText(),
-                  SourceTag(),
-                ],
-              );
-            }),
+                  imageBuilder: (context, url) {
+                    if (url.startsWith('http://') || url.startsWith('https://')) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(url, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      );
+                    }
+                    if (url.startsWith('data:')) {
+                      final commaIdx = url.indexOf(',');
+                      if (commaIdx > 0) {
+                        try {
+                          final bytes = Uri.parse(url).data!.contentAsBytes();
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.memory(bytes, fit: BoxFit.contain),
+                          );
+                        } catch (_) {}
+                      }
+                    }
+                    final file = File(url);
+                    if (file.existsSync()) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.file(file, fit: BoxFit.contain),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                  components: _mdComponents,
+                  inlineComponents: [
+                    ATagMd(),
+                    ImageMd(),
+                    HtmlColorMd(),
+                    GlowTextMd(),
+                    ColorGlowTextMd(),
+                    GradientTextMd(),
+                    BackgroundTextMd(),
+                    MarkMd(
+                      textColor: quoteColor,
+                    ),
+                    ActiveMarkMd(activeKey: _activePhraseKey),
+                    TableMd(),
+                    StrikeMd(),
+                    ColoredBoldMd(color: style.italicColor),
+                    ColoredUnderscoreBoldMd(color: style.italicColor),
+                    ColoredItalicMd(color: style.italicColor),
+                    ColoredUnderscoreItalicMd(color: style.italicColor),
+                    UnderLineMd(),
+                    LatexMath(),
+                    LatexMathMultiLine(),
+                    HighlightedText(),
+                    SourceTag(),
+                  ],
+                );
+              }(),
+            ],
             if (isStreaming)
               Text('...', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
             if (!isSystem) ...[

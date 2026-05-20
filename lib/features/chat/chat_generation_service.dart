@@ -12,6 +12,7 @@ import '../../core/state/active_selection_provider.dart';
 import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import '../image_gen/image_gen_provider.dart';
 import '../settings/api_list_provider.dart';
 import '../image_gen/services/image_gen_service.dart';
@@ -186,13 +187,16 @@ class ChatGenerationService {
   Future<void> processImageTags({
     required ChatState currentState,
     required String charId,
+    CancelToken? cancelToken,
     required void Function(ChatState) onStateUpdate,
   }) async {
     final session = currentState.session;
+    debugPrint('IMGGEN processImageTags CALLED: session=${session != null}');
     if (session == null) return;
 
     final imgGenSettingsAsync = _ref.read(imageGenSettingsProvider);
     final imgGenSettings = imgGenSettingsAsync.value;
+    debugPrint('IMGGEN: settings=${imgGenSettings != null}, enabled=${imgGenSettings?.enabled}, isLoading=${imgGenSettingsAsync.isLoading}, hasError=${imgGenSettingsAsync.hasError}');
     if (imgGenSettings == null || !imgGenSettings.enabled) return;
 
     final lastIdx = session.messages.length - 1;
@@ -200,8 +204,10 @@ class ChatGenerationService {
     final lastMsg = session.messages[lastIdx];
     if (lastMsg.role != 'assistant') return;
 
-    final service = _ref.read(imageGenSettingsProvider.notifier).getService();
-    if (service == null || !service.hasImageGenTags(lastMsg.content)) return;
+    final notifier = _ref.read(imageGenSettingsProvider.notifier);
+    final service = await notifier.getServiceAsync();
+    debugPrint('IMGGEN: service ready, hasTags=${service.hasImageGenTags(lastMsg.content)}, contentLen=${lastMsg.content.length}');
+    if (!service.hasImageGenTags(lastMsg.content)) return;
 
     final apiConfig = _ref.read(activeApiConfigProvider);
     if (apiConfig == null) return;
@@ -219,6 +225,8 @@ class ChatGenerationService {
 
     final recentContexts = _collectRecentImageContexts(session.messages);
 
+    onStateUpdate(ChatState(session: session, isGeneratingImage: true));
+
     final updatedContent = await service.processMessageImages(
       text: lastMsg.content,
       settings: imgGenSettings,
@@ -228,6 +236,7 @@ class ChatGenerationService {
       character: character,
       persona: persona,
       recentImageContexts: recentContexts,
+      cancelToken: cancelToken,
       onUpdate: (updatedText) {
         final newMessages = List<ChatMessage>.from(session.messages);
         newMessages[lastIdx] = lastMsg.copyWith(content: updatedText);
@@ -236,6 +245,9 @@ class ChatGenerationService {
           updatedAt: currentTimestampSeconds(),
         );
         onStateUpdate(ChatState(session: updatedSession));
+      },
+      onError: (error) {
+        GlazeToast.showWithoutContext('Image gen: $error', isError: true, duration: 4000);
       },
     );
 
@@ -246,7 +258,7 @@ class ChatGenerationService {
       updatedAt: currentTimestampSeconds(),
     );
     await _ref.read(chatRepoProvider).put(finalSession);
-    onStateUpdate(ChatState(session: finalSession));
+    onStateUpdate(ChatState(session: finalSession, isGeneratingImage: false));
   }
 
   List<String> _collectRecentImageContexts(List<ChatMessage> messages) {

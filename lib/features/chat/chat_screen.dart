@@ -581,7 +581,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         ),
         // Animated bottom region: drawer slides up from below, the input
         // bar tracks the same reveal so they move as one piece.
-        AnimatedBuilder(
+        Positioned.fill(
+          child: AnimatedBuilder(
           animation: widget.drawerAnim,
           builder: (context, _) {
             final progress = widget.drawerAnim.value;
@@ -662,7 +663,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                     .sendMessage(text, guidanceText: guidance);
                               },
                               isGenerating: widget.state.isGenerating,
-                              onStop: widget.state.isGenerating
+                              isGeneratingImage: widget.state.isGeneratingImage,
+                              onStop: (widget.state.isGenerating || widget.state.isGeneratingImage)
                                   ? () => ref
                                         .read(chatProvider(widget.charId).notifier)
                                         .abortGeneration()
@@ -690,6 +692,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               },
             );
           },
+        ),
         ),
       ],
     );

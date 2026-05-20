@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
+
 import 'image_gen_http.dart';
 import '../image_gen_models.dart';
 
@@ -18,6 +20,7 @@ class RoutmyImageProvider {
     required String imageSize,
     required String quality,
     List<String>? referenceImages,
+    CancelToken? cancelToken,
   }) async {
     final isGemini = model.startsWith('google/');
 
@@ -30,6 +33,7 @@ class RoutmyImageProvider {
         imageSize: imageSize,
         quality: quality,
         referenceImages: referenceImages,
+        cancelToken: cancelToken,
       );
     }
     return _generateOpenAIImages(
@@ -39,6 +43,7 @@ class RoutmyImageProvider {
       aspectRatio: aspectRatio,
       quality: quality,
       referenceImages: referenceImages,
+      cancelToken: cancelToken,
     );
   }
 
@@ -49,6 +54,7 @@ class RoutmyImageProvider {
     required String aspectRatio,
     required String quality,
     List<String>? referenceImages,
+    CancelToken? cancelToken,
   }) async {
     final url = '$baseUrl/v1/images/generations';
 
@@ -82,6 +88,7 @@ class RoutmyImageProvider {
       url: url,
       apiKey: apiKey,
       body: body,
+      cancelToken: cancelToken,
       extractBase64: (json) {
         final data = json['data'] as List?;
         if (data == null || data.isEmpty) throw Exception('No image data in response');
@@ -104,6 +111,7 @@ class RoutmyImageProvider {
     required String imageSize,
     required String quality,
     List<String>? referenceImages,
+    CancelToken? cancelToken,
   }) async {
     final url = '$baseUrl/v1/chat/completions';
 
@@ -141,6 +149,7 @@ class RoutmyImageProvider {
       url: url,
       apiKey: apiKey,
       body: body,
+      cancelToken: cancelToken,
     );
 
     final choices = response['choices'] as List?;
@@ -152,7 +161,7 @@ class RoutmyImageProvider {
     if (images != null && images.isNotEmpty) {
       final imgUrl = images.first['image_url']?['url'] as String?;
       if (imgUrl != null) {
-        return _downloadImage(imgUrl);
+        return _downloadImage(imgUrl, cancelToken: cancelToken);
       }
     }
 
@@ -162,7 +171,7 @@ class RoutmyImageProvider {
         if (part is Map<String, dynamic> &&
             part['type'] == 'image_url' &&
             part['image_url']?['url'] != null) {
-          return _downloadImage(part['image_url']['url'] as String);
+          return _downloadImage(part['image_url']['url'] as String, cancelToken: cancelToken);
         }
       }
     }
@@ -170,14 +179,14 @@ class RoutmyImageProvider {
     throw Exception('No image in rout.my response');
   }
 
-  Future<Uint8List> _downloadImage(String url) async {
+  Future<Uint8List> _downloadImage(String url, {CancelToken? cancelToken}) async {
     if (url.startsWith('data:')) {
       final commaIdx = url.indexOf(',');
       if (commaIdx == -1) throw Exception('Invalid data URL');
       final b64 = url.substring(commaIdx + 1);
       return ImageGenHttp.base64ToBytes(b64);
     }
-    final response = await _http.getRaw(url);
+    final response = await _http.getRaw(url, cancelToken: cancelToken);
     return response.data!;
   }
 }

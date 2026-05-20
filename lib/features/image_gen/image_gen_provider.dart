@@ -94,6 +94,13 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
   }
 
   ImageGenService? _service;
+  Future<ImageGenService> getServiceAsync() async {
+    if (_service != null) return _service!;
+    final storage = await ref.read(imageStorageProvider.future);
+    _service = ImageGenService(storage);
+    return _service!;
+  }
+
   ImageGenService? getService() {
     if (_service != null) return _service!;
     final storage = ref.read(imageStorageProvider).value;
