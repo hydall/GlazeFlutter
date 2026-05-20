@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import 'image_gen_http.dart';
 import '../image_gen_models.dart';
@@ -22,7 +23,10 @@ class RoutmyImageProvider {
     List<String>? referenceImages,
     CancelToken? cancelToken,
   }) async {
-    final isChatModel = model.startsWith('google/') || model.startsWith('recraft/');
+    final isChatModel = model.startsWith('google/');
+    final endpoint = isChatModel ? '/v1/chat/completions' : '/v1/images/generations';
+    final fullUrl = '$baseUrl$endpoint';
+    debugPrint('ROUTMY: url=$fullUrl model=$model apiKey=${apiKey.length > 8 ? "${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}" : "SHORT"} refs=${referenceImages?.length ?? 0}');
 
     if (isChatModel) {
       return _generateChat(
@@ -70,6 +74,10 @@ class RoutmyImageProvider {
         if (quality.isNotEmpty) 'quality': quality,
       },
     };
+
+    if (referenceImages != null && referenceImages.isNotEmpty) {
+      body['image'] = referenceImages.first;
+    }
 
     final b64 = await _http.postAndExtractBase64(
       url: url,
