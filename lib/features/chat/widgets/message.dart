@@ -885,12 +885,12 @@ class _MessageState extends ConsumerState<Message>
     }
 
     return GestureDetector(
+      behavior: HitTestBehavior.translucent,
       onLongPress: () => showMessageContextMenu(
         context: context, ref: ref, charId: charId, content: content,
         messageIndex: messageIndex, isUser: isUser, isTyping: isTyping,
         isError: isError, isLast: isLast, isGenerating: isGenerating, isHidden: isHidden,
       ),
-      // Horizontal drag for swipe variants (char messages only)
       onHorizontalDragStart: canSwipe ? _onSwipeDragStart : null,
       onHorizontalDragUpdate: canSwipe ? _onSwipeDragUpdate : null,
       onHorizontalDragEnd: canSwipe ? _onSwipeDragEnd : null,

@@ -193,8 +193,9 @@ class ImageContentRenderer extends StatelessWidget {
             if (onRegenerate != null)
               Padding(
                 padding: const EdgeInsets.only(top: 6),
-                child: GestureDetector(
+                child: InkWell(
                   onTap: onRegenerate,
+                  borderRadius: BorderRadius.circular(6),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
@@ -237,8 +238,9 @@ class ImageContentRenderer extends StatelessWidget {
                       Text('Generating image...', style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 12, fontStyle: FontStyle.italic)),
                       if (onRegenerate != null) ...[
                         const SizedBox(height: 8),
-                        GestureDetector(
+                        InkWell(
                           onTap: onRegenerate,
+                          borderRadius: BorderRadius.circular(6),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
@@ -280,8 +282,9 @@ class ImageContentRenderer extends StatelessWidget {
             Flexible(child: Text('Image gen error: $errorMsg', style: const TextStyle(fontSize: 12, color: Colors.red))),
             if (onRegenerate != null) ...[
               const SizedBox(width: 8),
-              GestureDetector(
+              InkWell(
                 onTap: onRegenerate,
+                borderRadius: BorderRadius.circular(6),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
