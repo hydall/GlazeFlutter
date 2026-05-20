@@ -86,16 +86,10 @@ class _MessageListState extends ConsumerState<MessageList> {
   Timer? _scrollDebounceTimer;
 
   int _renderCount = _kInitialRenderCount;
-  bool _needsInitialScroll = true;
 
   /// GlobalKey per message id — required for anchor capture/restore via the
   /// render tree.
   final Map<String, GlobalKey> _msgKeys = {};
-
-  /// True once an anchor restore (or scroll-to-bottom fallback) has run for
-  /// the current session. Prevents the build-time fallback from firing every
-  /// frame.
-  bool _initialAnchorAttempted = false;
 
   /// True once the initial scroll position has been applied. While false, the
   /// ListView is laid out but kept invisible via `Offstage` so the user
@@ -111,8 +105,6 @@ class _MessageListState extends ConsumerState<MessageList> {
   /// position stays close to wherever they paused last.
   Timer? _anchorSaveDebounce;
 
-  bool _isAnchorLoaded = false;
-
   @override
   void initState() {
     super.initState();
@@ -123,10 +115,12 @@ class _MessageListState extends ConsumerState<MessageList> {
   Future<void> _loadPersistedAnchor() async {
     final sessionId = widget.sessionId;
     if (sessionId == null) {
-      if (mounted) setState(() => _isAnchorLoaded = true);
+      if (mounted) {
+        _initialScrollDone = true;
+      }
       return;
     }
-    
+
     final existing = ref.read(scrollAnchorProvider(sessionId));
     if (existing == null) {
       try {
@@ -138,9 +132,17 @@ class _MessageListState extends ConsumerState<MessageList> {
         }
       } catch (_) {}
     }
-    
-    if (mounted) {
-      setState(() => _isAnchorLoaded = true);
+
+    if (!mounted) return;
+
+    final anchor = ref.read(scrollAnchorProvider(sessionId));
+    if (anchor != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _restoreSavedAnchor(anchor, remainingAttempts: 15);
+      });
+    } else {
+      setState(() => _initialScrollDone = true);
     }
   }
 
@@ -255,12 +257,9 @@ class _MessageListState extends ConsumerState<MessageList> {
       _wasAtBottom = true;
       _showScrollButton = false;
       _renderCount = _kInitialRenderCount;
-      _needsInitialScroll = true;
-      _initialAnchorAttempted = false;
       _initialScrollDone = false;
       _pendingSearchScrollIndex = null;
-      
-      _isAnchorLoaded = false;
+
       _loadPersistedAnchor();
       return;
     }
@@ -383,7 +382,8 @@ class _MessageListState extends ConsumerState<MessageList> {
     final pos = _scrollController.position;
     if (!pos.hasContentDimensions) return;
     _beginProgrammaticScroll();
-    _scrollController.jumpTo(pos.maxScrollExtent);
+    // With reverse: true, bottom of chat = offset 0
+    _scrollController.jumpTo(0.0);
     _endProgrammaticScroll();
     _wasAtBottom = true;
     _showScrollButton = false;
@@ -392,9 +392,7 @@ class _MessageListState extends ConsumerState<MessageList> {
       if (!mounted || !_scrollController.hasClients) return;
       final p = _scrollController.position;
       if (!p.hasContentDimensions) return;
-      // If maxScrollExtent grew (more items got laid out below the previous
-      // estimate), bring `pixels` up to the new max.
-      if (p.maxScrollExtent - p.pixels > 0.5) {
+      if (p.pixels > 0.5) {
         _jumpToBottomNow(remainingRetargets: remainingRetargets - 1);
       }
     });
@@ -445,8 +443,10 @@ class _MessageListState extends ConsumerState<MessageList> {
     // Coarse jump based on chronological position so the target's region gets
     // laid out by the next frame.
     final fraction = idx / widget.messages.length.clamp(1, 1 << 30);
+    // With reverse: true, offset 0 = bottom (latest), maxScrollExtent = top
+    // (oldest). Higher index = newer = closer to 0.
     final estimate =
-        (fraction * pos.maxScrollExtent).clamp(0.0, pos.maxScrollExtent);
+        ((1 - fraction) * pos.maxScrollExtent).clamp(0.0, pos.maxScrollExtent);
     _beginProgrammaticScroll();
     _scrollController.jumpTo(estimate);
     _endProgrammaticScroll();
@@ -492,7 +492,7 @@ class _MessageListState extends ConsumerState<MessageList> {
       final pos = _scrollController.position;
       if (pos.hasContentDimensions && pos.maxScrollExtent > 0) {
         final fraction = messageIndex / widget.messages.length.clamp(1, 1 << 30);
-        final estimate = (fraction * pos.maxScrollExtent).clamp(0.0, pos.maxScrollExtent);
+        final estimate = ((1 - fraction) * pos.maxScrollExtent).clamp(0.0, pos.maxScrollExtent);
         _beginProgrammaticScroll();
         _scrollController.jumpTo(estimate);
         _endProgrammaticScroll();
@@ -711,7 +711,9 @@ class _MessageListState extends ConsumerState<MessageList> {
     final renderCount = _renderCount.clamp(0, totalCount);
     final startFrom = totalCount > renderCount ? totalCount - renderCount : 0;
 
-    return Stack(
+    return Offstage(
+      offstage: !_initialScrollDone,
+      child: Stack(
       children: [
           NotificationListener<UserScrollNotification>(
           onNotification: _handleUserScroll,
@@ -775,8 +777,9 @@ class _MessageListState extends ConsumerState<MessageList> {
               onTap: () => _scrollToBottom(smooth: true, force: true),
             ),
           ),
-      ],
-    );
+       ],
+     ),
+     );
   }
 }
 
