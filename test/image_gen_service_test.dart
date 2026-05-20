@@ -158,6 +158,44 @@ void main() {
     });
   });
 
+  group('resetErrorTags', () {
+    test('converts [IMG:ERROR:] back to [IMG:GEN:] with instruction', () {
+      final errorJson = jsonEncode({'error': '502', 'instruction': '{"prompt":"test"}'});
+      final result = service.resetErrorTags('[IMG:ERROR:$errorJson]');
+      expect(result, contains('[IMG:GEN:{"prompt":"test"}]'));
+      expect(result, isNot(contains('[IMG:ERROR')));
+    });
+
+    test('converts [IMG:ERROR:] without instruction to bare [IMG:GEN]', () {
+      final errorJson = jsonEncode({'error': 'timeout'});
+      final result = service.resetErrorTags('[IMG:ERROR:$errorJson]');
+      expect(result, contains('[IMG:GEN]'));
+      expect(result, isNot(contains('[IMG:ERROR')));
+    });
+
+    test('converts [IMG:RESULT:] with instruction back to [IMG:GEN:]', () {
+      final result = service.resetErrorTags('[IMG:RESULT:/path/to/img.png|{"prompt":"scene"}]');
+      expect(result, contains('[IMG:GEN:{"prompt":"scene"}]'));
+      expect(result, isNot(contains('[IMG:RESULT')));
+    });
+
+    test('converts [IMG:RESULT:] without instruction to bare [IMG:GEN]', () {
+      final result = service.resetErrorTags('[IMG:RESULT:/path/to/img.png]');
+      expect(result, contains('[IMG:GEN]'));
+      expect(result, isNot(contains('[IMG:RESULT')));
+    });
+
+    test('converts both ERROR and RESULT in same text', () {
+      final errorJson = jsonEncode({'error': '502', 'instruction': '{"prompt":"first"}'});
+      final text = '[IMG:ERROR:$errorJson] and [IMG:RESULT:/img.png|{"prompt":"second"}]';
+      final result = service.resetErrorTags(text);
+      expect(result, contains('[IMG:GEN:{"prompt":"first"}]'));
+      expect(result, contains('[IMG:GEN:{"prompt":"second"}]'));
+      expect(result, isNot(contains('[IMG:ERROR')));
+      expect(result, isNot(contains('[IMG:RESULT')));
+    });
+  });
+
   group('prompt construction', () {
     test('SCENE_PROMPT prefix is stripped and style is prepended', () {
       const json = '{"style":"cinematic manga","prompt":"SCENE_PROMPT: A group walks","aspect_ratio":"9:16"}';

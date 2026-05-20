@@ -67,7 +67,10 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final notifier = ref.read(imageGenSettingsProvider.notifier);
     final service = await notifier.getServiceAsync();
 
-    if (!service.hasImageGenTags(lastMsg.content) && !lastMsg.content.contains('[IMG:ERROR:')) return;
+    final hasRetryableContent = service.hasImageGenTags(lastMsg.content)
+        || lastMsg.content.contains('[IMG:ERROR:')
+        || lastMsg.content.contains('[IMG:RESULT:');
+    if (!hasRetryableContent) return;
 
     final resetContent = service.resetErrorTags(lastMsg.content);
     if (resetContent == lastMsg.content && !service.hasImageGenTags(resetContent)) return;
