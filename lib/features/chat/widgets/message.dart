@@ -741,11 +741,11 @@ class _MessageState extends ConsumerState<Message>
                     textColor: textColor,
                     onRegenerate: () {
                       final notifier = ref.read(chatProvider(charId).notifier);
-                      if (notifier.isGeneratingImage) {
-                        notifier.abortImageGeneration();
-                      } else {
-                        notifier.retryImageGeneration();
-                      }
+                      notifier.retryImageGeneration();
+                    },
+                    onAbort: () {
+                      final notifier = ref.read(chatProvider(charId).notifier);
+                      notifier.abortImageGeneration();
                     },
                   );
                 }

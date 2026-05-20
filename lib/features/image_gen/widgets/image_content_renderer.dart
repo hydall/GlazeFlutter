@@ -12,22 +12,26 @@ class ImageContentRenderer extends StatelessWidget {
   final String content;
   final Color textColor;
   final VoidCallback? onRegenerate;
+  final VoidCallback? onAbort;
+
+  static final _imgGenRegex = RegExp(r'\[IMG:GEN(?::(.*?))?\]');
+  static final _imgResultRegex = RegExp(r'\[IMG:RESULT:(.*?)\]');
+  static final _imgErrorRegex = RegExp(r'\[IMG:ERROR:(.*?)\]');
+
+  static bool hasImageMarkers(String? text) {
+    if (text == null) return false;
+    return _imgGenRegex.hasMatch(text) ||
+      _imgResultRegex.hasMatch(text) ||
+      _imgErrorRegex.hasMatch(text);
+  }
 
   const ImageContentRenderer({
     super.key,
     required this.content,
     required this.textColor,
     this.onRegenerate,
+    this.onAbort,
   });
-
-  static final _imgGenRegex = RegExp(r'\[IMG:GEN(?::(.*?))?\]');
-  static final _imgResultRegex = RegExp(r'\[IMG:RESULT:(.*?)\]');
-  static final _imgErrorRegex = RegExp(r'\[IMG:ERROR:(.*?)\]');
-
-  static bool hasImageMarkers(String text) =>
-      _imgGenRegex.hasMatch(text) ||
-      _imgResultRegex.hasMatch(text) ||
-      _imgErrorRegex.hasMatch(text);
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +85,7 @@ class ImageContentRenderer extends StatelessWidget {
         containerStyle: json['containerStyle'] as String? ?? '',
       );
     } catch (_) {
-      return null;
+      return _InstructionData(prompt: raw);
     }
   }
 
@@ -141,9 +145,8 @@ class ImageContentRenderer extends StatelessWidget {
   }
 
   Widget _buildCaption(String caption) {
-    if (caption.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(top: 15),
+      padding: const EdgeInsets.only(top: 8),
       child: Center(
         child: Text(
           caption,
@@ -236,10 +239,10 @@ class ImageContentRenderer extends StatelessWidget {
                       SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: context.cs.primary)),
                       const SizedBox(height: 10),
                       Text('Generating image...', style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 12, fontStyle: FontStyle.italic)),
-                      if (onRegenerate != null) ...[
+                      if (onAbort != null) ...[
                         const SizedBox(height: 8),
                         InkWell(
-                          onTap: onRegenerate,
+                          onTap: onAbort,
                           borderRadius: BorderRadius.circular(6),
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -317,10 +320,8 @@ class ImageContentRenderer extends StatelessWidget {
     }
 
     Color? bgColor;
-    if (props.containsKey('background')) {
-      bgColor = _parseCssColor(props['background']!);
-    } else if (props.containsKey('background-color')) {
-      bgColor = _parseCssColor(props['background-color']!);
+    if (props.containsKey('background-color') || props.containsKey('background')) {
+      bgColor = _parseCssColor(props['background-color'] ?? props['background'] ?? '');
     }
 
     Border? border;
@@ -353,7 +354,8 @@ class ImageContentRenderer extends StatelessWidget {
       maxWidth = _parseCssPx(props['max-width']!);
     }
 
-    if (bgColor == null && border == null && borderRadius == null && boxShadow == null && padding == null && maxWidth == null) {
+    if (bgColor == null && border == null && borderRadius == null &&
+        boxShadow == null && padding == null && margin == null && maxWidth == null) {
       return null;
     }
 
@@ -413,12 +415,9 @@ class ImageContentRenderer extends StatelessWidget {
       final trimmed = part.trim();
       if (trimmed.isEmpty) continue;
       final tokens = trimmed.split(RegExp(r'\s+'));
-      if (tokens.length < 3) continue;
 
-      double? dx, dy, blur, spread;
-      Color? color;
-      int numIndex = 0;
       final nums = <double>[];
+      Color? color;
 
       for (final token in tokens) {
         final n = double.tryParse(token);
@@ -429,14 +428,12 @@ class ImageContentRenderer extends StatelessWidget {
         }
       }
 
+      double? dx, dy, blur, spread;
       if (nums.length >= 2) {
         dx = nums[0];
         dy = nums[1];
         if (nums.length >= 3) blur = nums[2];
         if (nums.length >= 4) spread = nums[3];
-      }
-      if (color == null && tokens.length > 3) {
-        color = _parseCssColor(tokens.sublist(nums.length).join(' '));
       }
 
       shadows.add(BoxShadow(
@@ -495,12 +492,12 @@ class _InstructionData {
   final String containerStyle;
 
   _InstructionData({
-    required this.style,
+    this.style = '',
     required this.prompt,
-    required this.caption,
-    required this.aspectRatio,
-    required this.imageSize,
-    required this.containerStyle,
+    this.caption = '',
+    this.aspectRatio = '',
+    this.imageSize = '',
+    this.containerStyle = '',
   });
 }
 
