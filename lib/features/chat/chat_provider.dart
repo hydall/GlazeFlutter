@@ -11,6 +11,7 @@ import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../cloud_sync/sync_provider.dart';
 import '../chat_history/chat_history_provider.dart';
+import '../image_gen/image_gen_provider.dart';
 import 'chat_generation_service.dart';
 import 'chat_message_service.dart';
 import 'chat_session_service.dart';
@@ -38,11 +39,63 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   CancelToken? _cancelToken;
+  CancelToken? _imgGenCancelToken;
   ChatMessage? _restorationMessage;
   int _activeGenId = 0;
   Completer<void>? _activeGenCompleter;
 
   void setCancelToken(CancelToken token) => _cancelToken = token;
+
+  bool get isGeneratingImage => _imgGenCancelToken != null && !(_imgGenCancelToken!.isCancelled);
+
+  void abortImageGeneration() {
+    _imgGenCancelToken?.cancel();
+    _imgGenCancelToken = null;
+  }
+
+  Future<void> retryImageGeneration() async {
+    if (isGeneratingImage) return;
+    final current = state.value;
+    if (current == null || current.session == null) return;
+
+    final session = current.session!;
+    final lastIdx = session.messages.length - 1;
+    if (lastIdx < 0) return;
+    final lastMsg = session.messages[lastIdx];
+    if (lastMsg.role != 'assistant') return;
+
+    final notifier = ref.read(imageGenSettingsProvider.notifier);
+    final service = await notifier.getServiceAsync();
+
+    final hasRetryableContent = service.hasImageGenTags(lastMsg.content)
+        || lastMsg.content.contains('[IMG:ERROR:')
+        || lastMsg.content.contains('[IMG:RESULT:');
+    if (!hasRetryableContent) return;
+
+    final resetContent = service.resetErrorTags(lastMsg.content);
+    if (resetContent == lastMsg.content && !service.hasImageGenTags(resetContent)) return;
+
+    final newMessages = List<ChatMessage>.from(session.messages);
+    newMessages[lastIdx] = lastMsg.copyWith(content: resetContent);
+    final resetSession = session.copyWith(
+      messages: newMessages,
+      updatedAt: currentTimestampSeconds(),
+    );
+    state = AsyncData(ChatState(session: resetSession, isGeneratingImage: true));
+
+    final imgCancelToken = CancelToken();
+    _imgGenCancelToken = imgCancelToken;
+
+    final genService = ChatGenerationService(ref);
+    await genService.processImageTags(
+      currentState: state.value!,
+      charId: arg,
+      cancelToken: imgCancelToken,
+      onStateUpdate: (s) { state = AsyncData(s); },
+    );
+
+    _imgGenCancelToken = null;
+  }
 
   ChatSessionService get _sessionSvc => ChatSessionService(ref);
   ChatMessageService get _messageSvc => ChatMessageService(ref);
@@ -61,6 +114,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final updatedMessages = [...current.messages, userMsg];
     final updatedSession = current.session!.copyWith(
       messages: updatedMessages,
+      draft: '',
       updatedAt: currentTimestampSeconds(),
     );
 
@@ -337,14 +391,13 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   void abortGeneration() {
-    _activeGenId++; // invalidate any in-flight onStateUpdate / final writes
+    _activeGenId++;
     _cancelToken?.cancel();
     _cancelToken = null;
-    _clearStreaming();
+    _imgGenCancelToken?.cancel();
+    _imgGenCancelToken = null;
+    _clearStreaming();;
 
-    // Immediately clear isGenerating and restore the previous assistant message
-    // if we aborted a regeneration mid-flight.  The genId guard blocks any
-    // in-flight onError/onComplete from writing isGenerating: false on their own.
     final current = state.value;
     if (current != null && current.isGenerating) {
       final restoration = _restorationMessage;
@@ -360,10 +413,13 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         state = AsyncData(ChatState(
           session: restoredSession ?? current.session,
           isGenerating: false,
+          isGeneratingImage: false,
         ));
       } else {
-        state = AsyncData(ChatState(session: current.session, isGenerating: false));
+        state = AsyncData(ChatState(session: current.session, isGenerating: false, isGeneratingImage: false));
       }
+    } else if (current != null && current.isGeneratingImage) {
+      state = AsyncData(ChatState(session: current.session, isGeneratingImage: false));
     }
     _restorationMessage = null;
 
@@ -407,6 +463,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final character = await charRepo.getById(arg);
     await notifService.onGenerationStarted(character?.name ?? 'Unknown');
 
+    try {
     final service = ChatGenerationService(ref);
     final result = await service.generate(
       session: session,
@@ -453,11 +510,17 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _restorationMessage = null;
     _clearStreaming();
 
+    final imgCancelToken = CancelToken();
+    _imgGenCancelToken = imgCancelToken;
+
     await service.processImageTags(
       currentState: result,
       charId: arg,
+      cancelToken: imgCancelToken,
       onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
     );
+
+    _imgGenCancelToken = null;
 
     if (_activeGenId != genId) {
       if (!completer.isCompleted) completer.complete();
@@ -473,6 +536,24 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     );
 
     if (!completer.isCompleted) completer.complete();
+    } catch (e) {
+      if (_activeGenId == genId) {
+        final current = state.value;
+        if (current != null && current.isGenerating) {
+          final restoration = _restorationMessage;
+          if (restoration != null) {
+            final msgs = <ChatMessage>[...(current.session?.messages ?? []), restoration];
+            final restored = current.session?.copyWith(messages: msgs, updatedAt: currentTimestampSeconds());
+            if (restored != null) ref.read(chatRepoProvider).put(restored);
+            state = AsyncData(ChatState(session: restored ?? current.session, isGenerating: false, error: e.toString()));
+          } else {
+            state = AsyncData(ChatState(session: current.session, isGenerating: false, error: e.toString()));
+          }
+          _restorationMessage = null;
+        }
+      }
+      if (!completer.isCompleted) completer.complete();
+    }
   }
 
   String? _messagePreview(List messages) {

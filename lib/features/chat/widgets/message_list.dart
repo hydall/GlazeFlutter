@@ -589,20 +589,17 @@ class _MessageListState extends ConsumerState<MessageList> {
     final pos = _scrollController.position;
     if (!pos.hasContentDimensions) return;
 
-    final distance = pos.maxScrollExtent - pos.pixels;
+    // With reverse: true, scroll offset 0 = bottom of chat (latest messages)
+    // maxScrollExtent = top of chat (older messages)
+    final atBottom = pos.pixels <= _kStickToBottomThreshold;
+    final wantsButton = !atBottom;
 
-    if (pos.pixels < 200 && _renderCount < widget.messages.length) {
+    if (pos.pixels > pos.maxScrollExtent - 200 && _renderCount < widget.messages.length) {
       setState(() {
         _renderCount = (_renderCount + _kLoadMoreCount).clamp(0, widget.messages.length);
       });
     }
 
-    // Continuously track `_wasAtBottom` from the actual distance. The
-    // `_handleUserScroll` callback only fires during user drag, so without
-    // this the flag stays stale through ballistic / programmatic scrolling
-    // and ends up clearing/saving the wrong anchor on exit.
-    final atBottom = distance <= _kStickToBottomThreshold;
-    final wantsButton = !atBottom;
     final needsRebuild = atBottom != _wasAtBottom || wantsButton != _showScrollButton;
     if (needsRebuild) {
       setState(() {
@@ -621,18 +618,19 @@ class _MessageListState extends ConsumerState<MessageList> {
   }
 
   bool _handleUserScroll(UserScrollNotification notification) {
-    if (notification.direction == ScrollDirection.reverse) {
+    if (notification.direction == ScrollDirection.forward) {
+      // Scrolling up (towards older messages in reverse mode)
       if (_wasAtBottom) {
         setState(() {
           _wasAtBottom = false;
         });
       }
-    } else if (notification.direction == ScrollDirection.forward) {
+    } else if (notification.direction == ScrollDirection.reverse) {
+      // Scrolling down (towards latest messages in reverse mode)
       if (!_wasAtBottom && _scrollController.hasClients) {
         final pos = _scrollController.position;
         if (pos.hasContentDimensions) {
-          final distance = pos.maxScrollExtent - pos.pixels;
-          if (distance < _kStickToBottomThreshold) {
+          if (pos.pixels < _kStickToBottomThreshold) {
             setState(() {
               _wasAtBottom = true;
             });
@@ -669,8 +667,9 @@ class _MessageListState extends ConsumerState<MessageList> {
       final pos = _scrollController.position;
       if (!pos.hasContentDimensions) return;
 
-      final target = pos.maxScrollExtent;
-      final distance = target - pos.pixels;
+      // With reverse: true, bottom of chat = offset 0
+      final target = 0.0;
+      final distance = pos.pixels - target;
       if (!force && distance.abs() < 0.5) return;
 
       final useSmooth = smooth && distance.abs() < _kInstantScrollDistance;
@@ -683,9 +682,6 @@ class _MessageListState extends ConsumerState<MessageList> {
             duration: const Duration(milliseconds: 200),
             curve: Curves.easeOut,
           );
-          if (mounted && _scrollController.hasClients) {
-            _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-          }
         } else {
           _scrollController.jumpTo(target);
         }
@@ -715,54 +711,33 @@ class _MessageListState extends ConsumerState<MessageList> {
     final renderCount = _renderCount.clamp(0, totalCount);
     final startFrom = totalCount > renderCount ? totalCount - renderCount : 0;
 
-    if (_needsInitialScroll && totalCount > 0 && _isAnchorLoaded) {
-      _needsInitialScroll = false;
-      _renderCount = totalCount;
-      final savedAnchor = widget.sessionId == null
-          ? null
-          : ref.read(scrollAnchorProvider(widget.sessionId!));
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        if (_initialAnchorAttempted) return;
-        _initialAnchorAttempted = true;
-        if (savedAnchor != null) {
-          _restoreSavedAnchor(savedAnchor, remainingAttempts: 20);
-        } else {
-          // Inline jump so `_initialScrollDone` flips in the same frame as
-          // the scroll — avoids a flash of the top of the list.
-          if (_scrollController.hasClients) {
-            final pos = _scrollController.position;
-            if (pos.hasContentDimensions) {
-              _beginProgrammaticScroll();
-              _scrollController.jumpTo(pos.maxScrollExtent);
-              _endProgrammaticScroll();
-            }
-          }
-          _markInitialScrollDone();
-        }
-      });
-    }
-
     return Stack(
       children: [
-        Offstage(
-          // Keep the list laid out (we need `maxScrollExtent` to be computed
-          // before the first scroll) but unpainted until the initial scroll
-          // has run. Avoids a 1–2 frame flash showing the top of the chat
-          // before we jump to the saved anchor / bottom.
-          offstage: !_initialScrollDone,
-          child: NotificationListener<UserScrollNotification>(
+          NotificationListener<UserScrollNotification>(
           onNotification: _handleUserScroll,
           child: ListView.builder(
           controller: _scrollController,
+          reverse: true,
           cacheExtent: 2000,
           padding: EdgeInsets.only(
+            bottom: widget.bottomInset + 16,
             top: MediaQuery.paddingOf(context).top + 80,
-            bottom: widget.bottomInset,
           ),
           itemCount: renderCount + (widget.isGenerating ? 1 : 0) + (startFrom > 0 ? 1 : 0),
           itemBuilder: (context, index) {
-            if (startFrom > 0 && index == 0) {
+            if (widget.isGenerating && index == 0) {
+              return _StreamingIndicator(
+                isGenerating: widget.isGenerating,
+                generationStartTime: widget.generationStartTime,
+                charId: widget.charId,
+                totalMessages: widget.messages.length,
+                onStreamingTick: null,
+              );
+            }
+
+            final streamOffset = widget.isGenerating ? 1 : 0;
+
+            if (startFrom > 0 && index == streamOffset + renderCount) {
               return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Center(
@@ -772,25 +747,14 @@ class _MessageListState extends ConsumerState<MessageList> {
                         _renderCount = (_renderCount + _kLoadMoreCount).clamp(0, totalCount);
                       });
                     },
-                    child: Text('Load earlier messages (${startFrom} more)'),
+                    child: Text('Load earlier messages ($startFrom more)'),
                   ),
                 ),
               );
             }
 
-            final adjustedIndex = startFrom > 0 ? index - 1 : index;
-
-            if (adjustedIndex >= renderCount) {
-              return _StreamingIndicator(
-                isGenerating: widget.isGenerating,
-                generationStartTime: widget.generationStartTime,
-                charId: widget.charId,
-                totalMessages: widget.messages.length,
-                onStreamingTick: _wasAtBottom ? _scheduleScrollToBottom : null,
-              );
-            }
-
-            final item = allItems[startFrom + adjustedIndex];
+            final msgIndex = renderCount - 1 - (index - streamOffset);
+            final item = allItems[startFrom + msgIndex];
 
             return switch (item) {
               _MessageItem(:final message, :final messageIndex) => RepaintBoundary(
@@ -801,17 +765,16 @@ class _MessageListState extends ConsumerState<MessageList> {
               _ContextCutoffItem() => const _ContextCutoffDivider(),
             };
            },
-          ),
-         ),
-        ),
-          Positioned(
-           right: 16,
-           bottom: widget.bottomInset + 8,
-           child: _ScrollDownButton(
-             visible: _showScrollButton,
-             onTap: () => _scrollToBottom(smooth: true, force: true),
            ),
-         ),
+          ),
+           Positioned(
+            right: 16,
+            top: MediaQuery.paddingOf(context).top + 88,
+            child: _ScrollDownButton(
+              visible: _showScrollButton,
+              onTap: () => _scrollToBottom(smooth: true, force: true),
+            ),
+          ),
       ],
     );
   }

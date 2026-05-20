@@ -20,8 +20,7 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../features/personas/persona_list_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
 import '../../../shared/widgets/rolling_number.dart';
-import '../../../shared/widgets/colored_markdown.dart';
-import '../../../shared/widgets/image_viewer.dart';
+import '../../../shared/widgets/colored_markdown.dart';import '../../../shared/widgets/image_viewer.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../../shared/theme/theme_font_provider.dart';
 import '../../../shared/theme/theme_provider.dart';
@@ -34,178 +33,6 @@ import '../../presets/preset_list_provider.dart';
 
 import '../editing_message_provider.dart';
 import 'message_actions.dart';
-
-Color? _parseHexColor(String hex) {
-  var h = hex.replaceFirst('#', '');
-  if (h.length == 3) h = '${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}';
-  if (h.length == 4) h = '${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}${h[3]}${h[3]}';
-  if (h.length == 6) h = 'ff$h';
-  if (h.length != 8) return null;
-  final value = int.tryParse(h, radix: 16);
-  if (value == null) return null;
-  return Color(value);
-}
-
-class HtmlColorMd extends InlineMd {
-  @override
-  RegExp get exp => RegExp(r'==hc:(#[0-9a-fA-F]{3,8})==(.+?)==');
-
-  @override
-  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
-    final match = exp.firstMatch(text);
-    final colorHex = match?[1] ?? '#ffffff';
-    final content = match?[2] ?? '';
-    final color = _parseHexColor(colorHex) ?? (config.style?.color ?? Colors.white);
-    return TextSpan(
-      children: MarkdownComponent.generate(context, content, config.copyWith(
-        style: (config.style ?? const TextStyle()).copyWith(color: color),
-      ), false),
-      style: (config.style ?? const TextStyle()).copyWith(color: color),
-    );
-  }
-}
-
-class GlowTextMd extends InlineMd {
-  @override
-  RegExp get exp => RegExp(r'==glow:(#[0-9a-fA-F]{3,8}),(\d+)==(.+?)==');
-
-  @override
-  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
-    final match = exp.firstMatch(text);
-    final glowColorHex = match?[1] ?? '#ffffff';
-    final blurRadius = int.tryParse(match?[2] ?? '4') ?? 4;
-    final content = match?[3] ?? '';
-    final glowColor = _parseHexColor(glowColorHex) ?? Colors.white;
-    final baseStyle = config.style ?? const TextStyle();
-    return TextSpan(
-      children: MarkdownComponent.generate(context, content, config.copyWith(
-        style: baseStyle.copyWith(
-          shadows: [
-            Shadow(color: glowColor, blurRadius: blurRadius.toDouble()),
-            Shadow(color: glowColor, blurRadius: blurRadius.toDouble() * 0.5),
-          ],
-        ),
-      ), false),
-      style: baseStyle.copyWith(
-        shadows: [
-          Shadow(color: glowColor, blurRadius: blurRadius.toDouble()),
-          Shadow(color: glowColor, blurRadius: blurRadius.toDouble() * 0.5),
-        ],
-      ),
-    );
-  }
-}
-
-class ColorGlowTextMd extends InlineMd {
-  @override
-  RegExp get exp => RegExp(r'==cg:(#[0-9a-fA-F]{3,8}),(#[0-9a-fA-F]{3,8}),(\d+)==(.+?)==');
-
-  @override
-  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
-    final match = exp.firstMatch(text);
-    final textColorHex = match?[1] ?? '#ffffff';
-    final glowColorHex = match?[2] ?? '#ffffff';
-    final blurRadius = int.tryParse(match?[3] ?? '4') ?? 4;
-    final content = match?[4] ?? '';
-    final textColor = _parseHexColor(textColorHex) ?? Colors.white;
-    final glowColor = _parseHexColor(glowColorHex) ?? Colors.white;
-    final baseStyle = config.style ?? const TextStyle();
-    return TextSpan(
-      children: MarkdownComponent.generate(context, content, config.copyWith(
-        style: baseStyle.copyWith(
-          color: textColor,
-          shadows: [
-            Shadow(color: glowColor, blurRadius: blurRadius.toDouble()),
-            Shadow(color: glowColor, blurRadius: blurRadius.toDouble() * 0.5),
-          ],
-        ),
-      ), false),
-      style: baseStyle.copyWith(
-        color: textColor,
-        shadows: [
-          Shadow(color: glowColor, blurRadius: blurRadius.toDouble()),
-          Shadow(color: glowColor, blurRadius: blurRadius.toDouble() * 0.5),
-        ],
-      ),
-    );
-  }
-}
-
-class GradientTextMd extends InlineMd {
-  @override
-  RegExp get exp => RegExp(r'==grad:(#[0-9a-fA-F]{3,8}(?:,#[0-9a-fA-F]{3,8})+)==(.+?)==');
-
-  @override
-  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
-    final match = exp.firstMatch(text);
-    if (match == null) {
-      return TextSpan(text: text, style: config.style);
-    }
-    final colorsParam = match[1]!;
-    final content = match[2]!;
-
-    final colors = RegExp(r'#[0-9a-fA-F]{3,8}')
-        .allMatches(colorsParam)
-        .map((m) => _parseHexColor(m[0]!) ?? Colors.white)
-        .toList();
-
-    if (colors.length < 2) {
-      final baseStyle = config.style ?? const TextStyle();
-      return TextSpan(
-        children: MarkdownComponent.generate(context, content, config, false),
-        style: baseStyle,
-      );
-    }
-
-    final baseStyle = config.style ?? const TextStyle();
-    final fontSize = baseStyle.fontSize ?? 14;
-
-    return WidgetSpan(
-      alignment: PlaceholderAlignment.middle,
-      child: ShaderMask(
-        shaderCallback: (bounds) => LinearGradient(
-          colors: colors,
-        ).createShader(Rect.fromLTWH(0, 0, bounds.width, bounds.height)),
-        blendMode: BlendMode.srcIn,
-        child: Text(
-          content,
-          style: baseStyle.copyWith(
-            color: Colors.white,
-            fontSize: fontSize,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class BackgroundTextMd extends InlineMd {
-  @override
-  RegExp get exp => RegExp(r'==bg:(#[0-9a-fA-F]{3,8})==(.+?)==');
-
-  @override
-  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
-    final match = exp.firstMatch(text);
-    final bgColorHex = match?[1] ?? '#333333';
-    final content = match?[2] ?? '';
-    final bgColor = _parseHexColor(bgColorHex) ?? const Color(0xFF333333);
-    final baseStyle = config.style ?? const TextStyle();
-    return WidgetSpan(
-      alignment: PlaceholderAlignment.middle,
-      child: Container(
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-        child: Text(
-          content,
-          style: baseStyle.copyWith(color: Colors.white),
-        ),
-      ),
-    );
-  }
-}
 
 class MarkMd extends InlineMd {
   final Color textColor;
@@ -708,8 +535,6 @@ class _MessageState extends ConsumerState<Message>
     final isGenerating = widget.isGenerating;
     final charId = widget.charId;
     final time = widget.time;
-    final memoryEntryIds = widget.memoryCoverage['entryIds'];
-    final memoryEntryCount = memoryEntryIds is List ? memoryEntryIds.length : 0;
 
     final scheme = Theme.of(context).colorScheme;
     final appSettings = ref.watch(appSettingsProvider).value;
@@ -901,10 +726,8 @@ class _MessageState extends ConsumerState<Message>
               _TypingIndicator(textColor: textColor, scheme: scheme)
             else if (isError)
               _ErrorWindow(text: displayContent)
-            else if (ImageContentRenderer.hasImageMarkers(displayContent))
-              ImageContentRenderer(content: displayContent, textColor: textColor)
-            else
-              Builder(builder: (_) {
+            else ...[
+              () {
                 var mdContent = _markdownCache.get(_cacheKey);
                 if (mdContent == null) {
                   mdContent = _highlightPhrases(
@@ -912,41 +735,84 @@ class _MessageState extends ConsumerState<Message>
                   );
                   _markdownCache.put(_cacheKey, mdContent);
                 }
+                if (ImageContentRenderer.hasImageMarkers(mdContent)) {
+                  return ImageContentRenderer(
+                    content: mdContent,
+                    textColor: textColor,
+                    onRegenerate: () {
+                      final notifier = ref.read(chatProvider(charId).notifier);
+                      notifier.retryImageGeneration();
+                    },
+                    onAbort: () {
+                      final notifier = ref.read(chatProvider(charId).notifier);
+                      notifier.abortImageGeneration();
+                    },
+                  );
+                }
                 return GptMarkdown(
                   mdContent,
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: fontStyle.fontSize,
-                  letterSpacing: fontStyle.letterSpacing,
-                  fontFamily: fontStyle.fontFamily,
-                ),
-                components: _mdComponents,
-                inlineComponents: [
-                  ATagMd(),
-                  ImageMd(),
-                  HtmlColorMd(),
-                  GlowTextMd(),
-                  ColorGlowTextMd(),
-                  GradientTextMd(),
-                  BackgroundTextMd(),
-                  MarkMd(
-                    textColor: quoteColor,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: fontStyle.fontSize,
+                    letterSpacing: fontStyle.letterSpacing,
+                    fontFamily: fontStyle.fontFamily,
                   ),
-                  ActiveMarkMd(activeKey: _activePhraseKey),
-                  TableMd(),
-                  StrikeMd(),
-                  ColoredBoldMd(color: style.italicColor),
-                  ColoredUnderscoreBoldMd(color: style.italicColor),
-                  ColoredItalicMd(color: style.italicColor),
-                  ColoredUnderscoreItalicMd(color: style.italicColor),
-                  UnderLineMd(),
-                  LatexMath(),
-                  LatexMathMultiLine(),
-                  HighlightedText(),
-                  SourceTag(),
-                ],
-              );
-            }),
+                  imageBuilder: (context, url) {
+                    if (url.startsWith('http://') || url.startsWith('https://')) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(url, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      );
+                    }
+                    if (url.startsWith('data:')) {
+                      final commaIdx = url.indexOf(',');
+                      if (commaIdx > 0) {
+                        try {
+                          final bytes = Uri.parse(url).data!.contentAsBytes();
+                          return ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.memory(bytes, fit: BoxFit.contain),
+                          );
+                        } catch (_) {}
+                      }
+                    }
+                    final file = File(url);
+                    if (file.existsSync()) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.file(file, fit: BoxFit.contain),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                  components: _mdComponents,
+                  inlineComponents: [
+                    ATagMd(),
+                    ImageMd(),
+                    HtmlColorMd(),
+                    GlowTextMd(),
+                    ColorGlowTextMd(),
+                    GradientTextMd(),
+                    BackgroundTextMd(),
+                    MarkMd(
+                      textColor: quoteColor,
+                    ),
+                    ActiveMarkMd(activeKey: _activePhraseKey),
+                    TableMd(),
+                    StrikeMd(),
+                    ColoredBoldMd(color: style.italicColor),
+                    ColoredUnderscoreBoldMd(color: style.italicColor),
+                    ColoredItalicMd(color: style.italicColor),
+                    ColoredUnderscoreItalicMd(color: style.italicColor),
+                    UnderLineMd(),
+                    LatexMath(),
+                    LatexMathMultiLine(),
+                    HighlightedText(),
+                    SourceTag(),
+                  ],
+                );
+              }(),
+            ],
             if (isStreaming)
               Text('...', style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
             if (!isSystem) ...[
@@ -968,7 +834,6 @@ class _MessageState extends ConsumerState<Message>
                 swipeId: _switcherIndex(character),
                 onSwipeLeft: isEditing ? null : _onSwitcherLeft(character),
                 onSwipeRight: isEditing ? null : _onSwitcherRight(character),
-                memoryEntryCount: memoryEntryCount,
                 triggeredLorebooks: widget.triggeredLorebooks,
                 triggeredMemories: widget.triggeredMemories,
                 onTriggeredTap: () => _showTriggeredSheet(context),
@@ -1020,12 +885,12 @@ class _MessageState extends ConsumerState<Message>
     }
 
     return GestureDetector(
+      behavior: HitTestBehavior.translucent,
       onLongPress: () => showMessageContextMenu(
         context: context, ref: ref, charId: charId, content: content,
         messageIndex: messageIndex, isUser: isUser, isTyping: isTyping,
         isError: isError, isLast: isLast, isGenerating: isGenerating, isHidden: isHidden,
       ),
-      // Horizontal drag for swipe variants (char messages only)
       onHorizontalDragStart: canSwipe ? _onSwipeDragStart : null,
       onHorizontalDragUpdate: canSwipe ? _onSwipeDragUpdate : null,
       onHorizontalDragEnd: canSwipe ? _onSwipeDragEnd : null,
@@ -1596,7 +1461,6 @@ class _MetadataRow extends StatelessWidget {
   final int swipeId;
   final VoidCallback? onSwipeLeft;
   final VoidCallback? onSwipeRight;
-  final int memoryEntryCount;
   final List<TriggeredEntry> triggeredLorebooks;
   final List<TriggeredEntry> triggeredMemories;
   final VoidCallback? onTriggeredTap;
@@ -1619,7 +1483,6 @@ class _MetadataRow extends StatelessWidget {
     this.swipeId = 0,
     this.onSwipeLeft,
     this.onSwipeRight,
-    this.memoryEntryCount = 0,
     this.triggeredLorebooks = const [],
     this.triggeredMemories = const [],
     this.onTriggeredTap,
@@ -1657,12 +1520,6 @@ class _MetadataRow extends StatelessWidget {
                       Icon(Icons.description_outlined, size: 12, color: metaColor),
                       const SizedBox(width: 4),
                       Text('${tokens}t', style: TextStyle(fontSize: 12, color: metaColor)),
-                    ],
-                    if (memoryEntryCount > 0) ...[
-                      const SizedBox(width: 8),
-                      Icon(Icons.auto_stories, size: 12, color: metaColor.withValues(alpha: 0.7)),
-                      const SizedBox(width: 4),
-                      Text('$memoryEntryCount mem', style: TextStyle(fontSize: 11, color: metaColor.withValues(alpha: 0.7))),
                     ],
                     if (triggeredLorebooks.isNotEmpty || triggeredMemories.isNotEmpty) ...[
                       const SizedBox(width: 8),

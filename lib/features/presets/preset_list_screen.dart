@@ -201,44 +201,50 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
           label: 'Import from File',
           onTap: () {
             Navigator.pop(context);
-            _importPreset(context, ref);
+            _importPreset();
           },
         ),
       ],
     );
   }
 
-  Future<void> _importPreset(BuildContext context, WidgetRef ref) async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.any,
-      allowMultiple: false,
-      withData: true,
-    );
+  Future<void> _importPreset() async {
+    final ctx = context;
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.pickFiles(
+        type: Platform.isIOS ? FileType.any : FileType.custom,
+        allowedExtensions: Platform.isIOS ? null : ['json'],
+        allowMultiple: false,
+        withData: true,
+      );
+    } catch (_) {}
+    if (!mounted) return;
     if (result == null || result.files.isEmpty) return;
     final picked = result.files.first;
 
     try {
       String jsonString;
-      if (picked.bytes != null) {
+      if (picked.bytes != null && picked.bytes!.isNotEmpty) {
         jsonString = utf8.decode(picked.bytes!);
       } else if (picked.path != null && picked.path!.isNotEmpty) {
         jsonString = await File(picked.path!).readAsString();
       } else {
-        if (context.mounted) GlazeToast.show(context, 'Cannot read file');
+        if (mounted) GlazeToast.show(ctx, 'Cannot read file');
         return;
       }
 
       final json = jsonDecode(jsonString) as Map<String, dynamic>;
       final preset = parseSillyTavernPreset(json, picked.name);
-      await ref.read(presetListProvider.notifier).add(preset);
-      if (context.mounted) {
+      ref.read(presetListProvider.notifier).add(preset);
+      if (mounted) {
         GlazeToast.show(
-          context,
+          ctx,
           'Imported "${preset.name}" (${preset.blocks.length} blocks)',
         );
       }
     } catch (e) {
-      if (context.mounted) GlazeToast.error(context, 'Import failed: ', e);
+      if (mounted) GlazeToast.error(ctx, 'Import failed: ', e);
     }
   }
 }

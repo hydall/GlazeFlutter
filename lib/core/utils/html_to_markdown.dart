@@ -1,3 +1,5 @@
+import 'dart:convert' as convert;
+
 String htmlToMarkdown(String html) {
   var result = html;
 
@@ -37,6 +39,8 @@ String htmlToMarkdown(String html) {
 
   result = _convertInline(result, 'strong', '**');
   result = _convertInline(result, 'b', '**');
+  result = _extractStyledImageFrames(result);
+
   result = _convertInline(result, 'em', '*');
   result = _convertInline(result, 'i', '*');
   result = _convertInline(result, 'del', '~~');
@@ -50,8 +54,21 @@ String htmlToMarkdown(String html) {
   );
 
   result = result.replaceAllMapped(
-    RegExp(r'''<img[^>]*src=["']([^"']*)["'][^>]*>''', caseSensitive: false),
-    (m) => '![](${m[1]!})',
+    RegExp(r'<img\s[^>]*>', caseSensitive: false, dotAll: true),
+    (m) {
+      final tag = m[0]!;
+      final iigDouble = RegExp(r'''data-iig-instruction\s*=\s*"([^"]*)"''', caseSensitive: false).firstMatch(tag);
+      final iigSingle = RegExp(r"""data-iig-instruction\s*=\s*'([^']*)'""", caseSensitive: false).firstMatch(tag);
+      final iigMatch = iigDouble ?? iigSingle;
+      if (iigMatch != null) {
+        return '[IMG:GEN:${iigMatch[1]!}]';
+      }
+      final srcMatch = RegExp(r'''src\s*=\s*["']([^"']*)["']''', caseSensitive: false).firstMatch(tag);
+      if (srcMatch != null) {
+        return '![](${srcMatch[1]!})';
+      }
+      return '';
+    },
   );
 
   result = result.replaceAllMapped(
@@ -461,3 +478,60 @@ final _htmlTagRegex = RegExp(
   r'<(div|span|p|br|img|a|table|tr|td|th|ul|ol|li|h[1-6]|hr|pre|code|blockquote|style|font|center|b|i|u|s|em|strong|small|sub|sup|mark|details|summary|section|article|header|footer|nav|figure|figcaption|iframe)\b',
   caseSensitive: false,
 );
+
+String _extractStyledImageFrames(String html) {
+  final imgRegex = RegExp(r"<img\s[^>]*?data-iig-instruction\s*=\s*'([^']*)'[^>]*>", caseSensitive: false, dotAll: true);
+  final imgRegexDouble = RegExp(r'<img\s[^>]*?data-iig-instruction\s*=\s*"([^"]*)"[^>]*>', caseSensitive: false, dotAll: true);
+
+  final matches = <RegExpMatch>[];
+  matches.addAll(imgRegex.allMatches(html));
+  matches.addAll(imgRegexDouble.allMatches(html));
+  matches.sort((a, b) => a.start.compareTo(b.start));
+
+  if (matches.isEmpty) return html;
+
+  var result = html;
+  int offset = 0;
+
+  for (final m in matches) {
+    final instructionRaw = m[1]!;
+    final adjustedStart = m.start + offset;
+    final adjustedEnd = m.end + offset;
+
+    String? containerStyle;
+    int blockStart = adjustedStart;
+
+    final before = result.substring(0, adjustedStart);
+    final divOpenMatch = RegExp(r"""<div\s[^>]*?style\s*=\s*["']([^"']+)["'][^>]*>\s*$""", caseSensitive: false).firstMatch(before);
+    if (divOpenMatch != null) {
+      containerStyle = divOpenMatch[1]!;
+      blockStart = divOpenMatch.start;
+    }
+
+    String? caption;
+    int blockEnd = adjustedEnd;
+
+    final after = result.substring(adjustedEnd);
+    final captionMatch = RegExp(r'\s*(?:<div[^>]*>)?\s*<i>([\s\S]*?)</i>\s*(?:</div>)?\s*</div>', caseSensitive: false).firstMatch(after);
+    if (captionMatch != null) {
+      caption = captionMatch[1]!.trim();
+      blockEnd = adjustedEnd + captionMatch.end;
+    }
+
+    String enrichedJson;
+    try {
+      final json = Map<String, dynamic>.from(convert.jsonDecode(instructionRaw) as Map);
+      if (containerStyle != null) json['containerStyle'] = containerStyle;
+      if (caption != null) json['caption'] = caption;
+      enrichedJson = convert.jsonEncode(json);
+    } catch (_) {
+      enrichedJson = instructionRaw;
+    }
+
+    final replacement = '[IMG:GEN:$enrichedJson]';
+    result = result.substring(0, blockStart) + replacement + result.substring(blockEnd);
+    offset += replacement.length - (blockEnd - blockStart);
+  }
+
+  return result;
+}

@@ -61,6 +61,8 @@ class RoutMyConstants {
     ('openai/gpt-image-2', 'GPT Image 2'),
     ('x-ai/grok-imagine-image', 'Grok Imagine Image'),
     ('x-ai/grok-imagine-image-pro', 'Grok Imagine Image Pro'),
+    ('recraft/recraft-v4.1', 'Recraft V4.1'),
+    ('recraft/recraft-v4.1-utility', 'Recraft V4.1 Utility'),
   ];
 
   static const aspectRatios = [

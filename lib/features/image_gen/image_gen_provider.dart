@@ -81,6 +81,7 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
   Future<void> save(ImageGenSettings settings) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(_toJson(settings)));
+    state = AsyncData(settings);
   }
 
   Future<void> updateEnabled(bool enabled) async {
@@ -94,6 +95,13 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
   }
 
   ImageGenService? _service;
+  Future<ImageGenService> getServiceAsync() async {
+    if (_service != null) return _service!;
+    final storage = await ref.read(imageStorageProvider.future);
+    _service = ImageGenService(storage);
+    return _service!;
+  }
+
   ImageGenService? getService() {
     if (_service != null) return _service!;
     final storage = ref.read(imageStorageProvider).value;

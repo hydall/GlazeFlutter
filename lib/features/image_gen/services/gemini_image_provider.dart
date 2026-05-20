@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
+
 import 'image_gen_http.dart';
 
 class GeminiImageProvider {
@@ -12,6 +14,7 @@ class GeminiImageProvider {
     required String prompt,
     required String aspectRatio,
     required String imageSize,
+    CancelToken? cancelToken,
   }) async {
     String url = endpoint;
     if (!url.contains('/v1')) {
@@ -28,6 +31,7 @@ class GeminiImageProvider {
           'imageSize': imageSize,
         },
       },
+      cancelToken: cancelToken,
       extractBase64: (json) {
         final predictions = json['predictions'] as List?;
         if (predictions == null || predictions.isEmpty) throw Exception('No predictions in response');

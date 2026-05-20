@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
@@ -18,43 +19,151 @@ class ImageGenService {
 
   ImageGenService(this._imageStorage);
 
-  static final _imgGenRegex = RegExp(r'\[IMG:GEN:(.*?)\]');
+  static final _imgGenRegex = RegExp(r'\[IMG:GEN(?::(.*?))?\]');
   static final _imgResultRegex = RegExp(r'\[IMG:RESULT:(.*?)\]');
+  static final _imgErrorRegex = RegExp(r'\[IMG:ERROR:(.*?)\]');
+  static final _htmlIigTagRegex = RegExp(r"<img\s[^>]*?data-iig-instruction\s*=\s*'([^']*)'[^>]*>", caseSensitive: false, dotAll: true);
+  static final _htmlIigTagDoubleRegex = RegExp(r'''<img\s[^>]*?data-iig-instruction\s*=\s*"([^"]*)"[^>]*>''', caseSensitive: false, dotAll: true);
 
-  bool hasImageGenTags(String text) => _imgGenRegex.hasMatch(text);
+  bool hasImageGenTags(String text) {
+    if (_htmlIigTagRegex.hasMatch(text) || _htmlIigTagDoubleRegex.hasMatch(text)) return true;
+    final stripped = _stripHtmlImgTags(text);
+    return _imgGenRegex.hasMatch(stripped);
+  }
 
   List<Map<String, dynamic>> extractImageGenInstructions(String text) {
-    return _imgGenRegex
-        .allMatches(text)
-        .map((m) {
-          try {
-            return jsonDecode(m.group(1)!) as Map<String, dynamic>;
-          } catch (_) {
-            return <String, dynamic>{'prompt': m.group(1) ?? ''};
-          }
-        })
-        .toList();
+    final results = <Map<String, dynamic>>[];
+
+    for (final m in _htmlIigTagRegex.allMatches(text)) {
+      final payload = m.group(1);
+      if (payload == null || payload.isEmpty) continue;
+      try {
+        results.add(jsonDecode(payload) as Map<String, dynamic>);
+      } catch (_) {
+        results.add(<String, dynamic>{'prompt': payload});
+      }
+    }
+
+    for (final m in _htmlIigTagDoubleRegex.allMatches(text)) {
+      final payload = m.group(1);
+      if (payload == null || payload.isEmpty) continue;
+      try {
+        results.add(jsonDecode(payload) as Map<String, dynamic>);
+      } catch (_) {
+        results.add(<String, dynamic>{'prompt': payload});
+      }
+    }
+
+    final stripped = _stripHtmlImgTags(text);
+    for (final m in _imgGenRegex.allMatches(stripped)) {
+      final payload = m.group(1);
+      if (payload == null || payload.isEmpty) {
+        results.add(<String, dynamic>{'prompt': ''});
+        continue;
+      }
+      try {
+        results.add(jsonDecode(payload) as Map<String, dynamic>);
+      } catch (_) {
+        results.add(<String, dynamic>{'prompt': payload});
+      }
+    }
+
+    return results;
   }
 
   String replaceTagWithResult(String text, int index, String imagePath) {
+    final instructions = extractImageGenInstructions(text);
+    final instruction = index < instructions.length ? instructions[index] : null;
+    final payload = instruction != null && instruction.isNotEmpty
+        ? '$imagePath${instruction.isNotEmpty ? '|$instruction' : ''}'
+        : imagePath;
     int count = 0;
-    return text.replaceAllMapped(_imgGenRegex, (m) {
-      if (count++ == index) return '[IMG:RESULT:$imagePath]';
+    var result = text.replaceAllMapped(_htmlIigTagRegex, (m) {
+      if (count++ == index) return '[IMG:RESULT:$payload]';
       return m.group(0)!;
     });
+    result = result.replaceAllMapped(_htmlIigTagDoubleRegex, (m) {
+      if (count++ == index) return '[IMG:RESULT:$payload]';
+      return m.group(0)!;
+    });
+    final stripped = _stripHtmlImgTags(result);
+    final needStrip = stripped != result;
+    result = result.replaceAllMapped(_imgGenRegex, (m) {
+      if (count++ == index) return '[IMG:RESULT:$payload]';
+      return m.group(0)!;
+    });
+    if (count <= index) return text;
+    return needStrip ? _stripRemainingHtmlImgTags(result) : result;
   }
 
   String replaceTagWithError(String text, int index, String error) {
-    final encoded = jsonEncode({'error': error});
+    final instructions = extractImageGenInstructions(text);
+    final instructionJson = index < instructions.length ? jsonEncode(instructions[index]) : '';
+    final encoded = jsonEncode({'error': error, if (instructionJson.isNotEmpty) 'instruction': instructionJson});
     int count = 0;
-    return text.replaceAllMapped(_imgGenRegex, (m) {
+    var result = text.replaceAllMapped(_htmlIigTagRegex, (m) {
       if (count++ == index) return '[IMG:ERROR:$encoded]';
       return m.group(0)!;
     });
+    result = result.replaceAllMapped(_htmlIigTagDoubleRegex, (m) {
+      if (count++ == index) return '[IMG:ERROR:$encoded]';
+      return m.group(0)!;
+    });
+    final stripped = _stripHtmlImgTags(result);
+    final needStrip = stripped != result;
+    result = result.replaceAllMapped(_imgGenRegex, (m) {
+      if (count++ == index) return '[IMG:ERROR:$encoded]';
+      return m.group(0)!;
+    });
+    if (count <= index) return text;
+    return needStrip ? _stripRemainingHtmlImgTags(result) : result;
+  }
+
+  static String _stripHtmlImgTags(String text) {
+    return text.replaceAllMapped(
+      RegExp(r'<img\s[^>]*?data-iig-instruction\s*=[^>]*>', caseSensitive: false, dotAll: true),
+      (m) => '',
+    );
+  }
+
+  static String _stripRemainingHtmlImgTags(String text) {
+    return text.replaceAllMapped(
+      RegExp(r'<img\s[^>]*?data-iig-instruction\s*=[^>]*>', caseSensitive: false, dotAll: true),
+      (m) => '',
+    );
   }
 
   String resetLoadingTags(String text) {
     return text;
+  }
+
+  String resetErrorTags(String text) {
+    var result = text.replaceAllMapped(_imgErrorRegex, (m) {
+      try {
+        final json = jsonDecode(m.group(1)!) as Map<String, dynamic>;
+        final instruction = json['instruction'] as String?;
+        if (instruction != null && instruction.isNotEmpty) {
+          return '[IMG:GEN:$instruction]';
+        }
+      } catch (_) {}
+      return '[IMG:GEN]';
+    });
+    result = result.replaceAllMapped(_imgResultRegex, (m) {
+      final raw = m.group(1) ?? '';
+      final pipeIdx = raw.indexOf('|');
+      final instr = pipeIdx != -1 ? raw.substring(pipeIdx + 1) : null;
+      if (instr != null && instr.isNotEmpty) {
+        return '[IMG:GEN:$instr]';
+      }
+      return '[IMG:GEN]';
+    });
+    return result;
+  }
+
+  static String? _extractInstructionFromPath(String path) {
+    final pipeIdx = path.indexOf('|');
+    if (pipeIdx != -1) return path.substring(pipeIdx + 1);
+    return null;
   }
 
   Future<String> processMessageImages({
@@ -66,7 +175,9 @@ class ImageGenService {
     Character? character,
     Persona? persona,
     List<String>? recentImageContexts,
+    CancelToken? cancelToken,
     void Function(String updatedText)? onUpdate,
+    void Function(String error)? onError,
   }) async {
     if (!settings.enabled) return text;
 
@@ -76,10 +187,18 @@ class ImageGenService {
     String currentText = text;
 
     for (int i = 0; i < instructions.length; i++) {
-      final instruction = instructions[i];
-      final prompt = instruction['prompt'] as String? ?? '';
+      if (cancelToken?.isCancelled == true) break;
 
-      if (prompt.isEmpty) continue;
+      final instruction = instructions[i];
+      final rawPrompt = instruction['prompt'] as String? ?? '';
+
+      if (rawPrompt.isEmpty) continue;
+
+      final style = instruction['style'] as String? ?? '';
+      var cleanPrompt = rawPrompt.replaceFirst(RegExp(r'^SCENE_PROMPT:\s*'), '');
+      final prompt = style.isNotEmpty ? '$style, $cleanPrompt' : cleanPrompt;
+      final instructionAspectRatio = instruction['aspect_ratio'] as String?;
+      final instructionImageSize = instruction['image_size'] as String?;
 
       try {
         final imageBytes = await generateImage(
@@ -91,6 +210,9 @@ class ImageGenService {
           character: character,
           persona: persona,
           recentImageContexts: recentImageContexts,
+          instructionAspectRatio: instructionAspectRatio,
+          instructionImageSize: instructionImageSize,
+          cancelToken: cancelToken,
         );
 
         final filename = 'imggen_${DateTime.now().millisecondsSinceEpoch}.png';
@@ -98,14 +220,33 @@ class ImageGenService {
 
         currentText = replaceTagWithResult(currentText, i, savedPath);
         onUpdate?.call(currentText);
+      } on DioException catch (e) {
+        if (CancelToken.isCancel(e)) break;
+        debugPrint('IMAGE GEN: failed for prompt "$prompt": $e');
+        final errorMsg = _formatError(e);
+        currentText = replaceTagWithError(currentText, i, errorMsg);
+        onUpdate?.call(currentText);
+        onError?.call(errorMsg);
       } catch (e) {
         debugPrint('IMAGE GEN: failed for prompt "$prompt": $e');
-        currentText = replaceTagWithError(currentText, i, e.toString());
+        final errorMsg = _formatErrorString(e.toString());
+        currentText = replaceTagWithError(currentText, i, errorMsg);
         onUpdate?.call(currentText);
+        onError?.call(errorMsg);
       }
     }
 
     return currentText;
+  }
+
+  String _formatError(DioException e) {
+    final msg = e.message ?? e.toString();
+    return _formatErrorString(msg);
+  }
+
+  String _formatErrorString(String msg) {
+    if (msg.length > 200) msg = '${msg.substring(0, 197)}...';
+    return msg;
   }
 
   Future<Uint8List> generateImage({
@@ -117,6 +258,9 @@ class ImageGenService {
     Character? character,
     Persona? persona,
     List<String>? recentImageContexts,
+    String? instructionAspectRatio,
+    String? instructionImageSize,
+    CancelToken? cancelToken,
   }) async {
     final refs = _buildReferences(
       settings: settings,
@@ -128,20 +272,20 @@ class ImageGenService {
 
     switch (settings.apiType) {
       case ImageGenApiType.openai:
-        return _generateOpenai(settings, prompt, llmEndpoint, llmApiKey);
+        return _generateOpenai(settings, prompt, llmEndpoint, llmApiKey, cancelToken);
       case ImageGenApiType.gemini:
-        return _generateGemini(settings, prompt, llmEndpoint, llmApiKey);
+        return _generateGemini(settings, prompt, llmEndpoint, llmApiKey, cancelToken);
       case ImageGenApiType.naistera:
-        return _generateNaistera(settings, prompt, refs);
+        return _generateNaistera(settings, prompt, refs, cancelToken);
       case ImageGenApiType.routmy:
-        return _generateRoutmy(settings, prompt, refs);
+        return _generateRoutmy(settings, prompt, refs, cancelToken);
       case ImageGenApiType.ruRoutmy:
-        return _generateRuRoutmy(settings, prompt, refs);
+        return _generateRuRoutmy(settings, prompt, refs, cancelToken);
     }
   }
 
   Future<Uint8List> _generateOpenai(
-    ImageGenSettings settings, String prompt, String llmEndpoint, String llmApiKey,
+    ImageGenSettings settings, String prompt, String llmEndpoint, String llmApiKey, CancelToken? cancelToken,
   ) async {
     final endpoint = settings.useSameEndpoint ? llmEndpoint : settings.customEndpoint;
     final apiKey = settings.useSameEndpoint ? llmApiKey : settings.customApiKey;
@@ -154,11 +298,12 @@ class ImageGenService {
       prompt: prompt,
       size: settings.openaiSize,
       quality: settings.openaiQuality,
+      cancelToken: cancelToken,
     );
   }
 
   Future<Uint8List> _generateGemini(
-    ImageGenSettings settings, String prompt, String llmEndpoint, String llmApiKey,
+    ImageGenSettings settings, String prompt, String llmEndpoint, String llmApiKey, CancelToken? cancelToken,
   ) async {
     final endpoint = settings.useSameEndpoint ? llmEndpoint : settings.customEndpoint;
     final apiKey = settings.useSameEndpoint ? llmApiKey : settings.customApiKey;
@@ -171,11 +316,12 @@ class ImageGenService {
       prompt: prompt,
       aspectRatio: settings.geminiAspectRatio,
       imageSize: settings.geminiImageSize,
+      cancelToken: cancelToken,
     );
   }
 
   Future<Uint8List> _generateNaistera(
-    ImageGenSettings settings, String prompt, List<Map<String, String>> refs,
+    ImageGenSettings settings, String prompt, List<Map<String, String>> refs, CancelToken? cancelToken,
   ) async {
     return NaisteraImageProvider().generate(
       apiKey: settings.naisteraApiKey,
@@ -183,12 +329,13 @@ class ImageGenService {
       prompt: prompt,
       aspectRatio: settings.naisteraAspectRatio,
       references: refs.isNotEmpty ? refs : null,
+      cancelToken: cancelToken,
     );
   }
 
   Future<Uint8List> _generateRoutmy(
     ImageGenSettings settings, String prompt,
-    List<Map<String, String>> refs,
+    List<Map<String, String>> refs, CancelToken? cancelToken,
   ) async {
     return RoutmyImageProvider(baseUrl: RoutMyConstants.baseUrl).generate(
       apiKey: settings.routmyApiKey,
@@ -198,12 +345,13 @@ class ImageGenService {
       imageSize: settings.routmyImageSize,
       quality: settings.routmyQuality,
       referenceImages: refs.isNotEmpty ? refs.map((r) => r['image']!).where((s) => s.isNotEmpty).toList() : null,
+      cancelToken: cancelToken,
     );
   }
 
   Future<Uint8List> _generateRuRoutmy(
     ImageGenSettings settings, String prompt,
-    List<Map<String, String>> refs,
+    List<Map<String, String>> refs, CancelToken? cancelToken,
   ) async {
     return RoutmyImageProvider(baseUrl: RuRoutMyConstants.baseUrl).generate(
       apiKey: settings.ruRoutmyApiKey,
@@ -213,6 +361,7 @@ class ImageGenService {
       imageSize: settings.ruRoutmyImageSize,
       quality: settings.ruRoutmyQuality,
       referenceImages: refs.isNotEmpty ? refs.map((r) => r['image']!).where((s) => s.isNotEmpty).toList() : null,
+      cancelToken: cancelToken,
     );
   }
 

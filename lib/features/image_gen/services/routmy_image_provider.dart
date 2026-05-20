@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+
 import 'image_gen_http.dart';
 import '../image_gen_models.dart';
 
@@ -18,11 +21,15 @@ class RoutmyImageProvider {
     required String imageSize,
     required String quality,
     List<String>? referenceImages,
+    CancelToken? cancelToken,
   }) async {
-    final isGemini = model.startsWith('google/');
+    final isChatModel = model.startsWith('google/');
+    final endpoint = isChatModel ? '/v1/chat/completions' : '/v1/images/generations';
+    final fullUrl = '$baseUrl$endpoint';
+    debugPrint('ROUTMY: url=$fullUrl model=$model apiKey=${apiKey.length > 8 ? "${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}" : "SHORT"} refs=${referenceImages?.length ?? 0}');
 
-    if (isGemini) {
-      return _generateGeminiChat(
+    if (isChatModel) {
+      return _generateChat(
         apiKey: apiKey,
         model: model,
         prompt: prompt,
@@ -30,48 +37,42 @@ class RoutmyImageProvider {
         imageSize: imageSize,
         quality: quality,
         referenceImages: referenceImages,
+        cancelToken: cancelToken,
       );
     }
-    return _generateOpenAIImages(
+    return _generateImages(
       apiKey: apiKey,
       model: model,
       prompt: prompt,
       aspectRatio: aspectRatio,
+      imageSize: imageSize,
       quality: quality,
       referenceImages: referenceImages,
+      cancelToken: cancelToken,
     );
   }
 
-  Future<Uint8List> _generateOpenAIImages({
+  Future<Uint8List> _generateImages({
     required String apiKey,
     required String model,
     required String prompt,
     required String aspectRatio,
+    required String imageSize,
     required String quality,
     List<String>? referenceImages,
+    CancelToken? cancelToken,
   }) async {
     final url = '$baseUrl/v1/images/generations';
-
-    String size;
-    if (aspectRatio == '16:9') {
-      size = '1792x1024';
-    } else if (aspectRatio == '9:16') {
-      size = '1024x1792';
-    } else if (aspectRatio == '2:3') {
-      size = '768x1152';
-    } else if (aspectRatio == '3:2') {
-      size = '1152x768';
-    } else {
-      size = '1024x1024';
-    }
 
     final body = <String, dynamic>{
       'model': model,
       'prompt': prompt,
       'n': 1,
-      'size': size,
-      'quality': quality,
-      'response_format': 'b64_json',
+      'image_config': {
+        'aspect_ratio': aspectRatio,
+        'image_size': imageSize,
+        if (quality.isNotEmpty) 'quality': quality,
+      },
     };
 
     if (referenceImages != null && referenceImages.isNotEmpty) {
@@ -82,21 +83,28 @@ class RoutmyImageProvider {
       url: url,
       apiKey: apiKey,
       body: body,
+      cancelToken: cancelToken,
       extractBase64: (json) {
         final data = json['data'] as List?;
         if (data == null || data.isEmpty) throw Exception('No image data in response');
         final imageObj = data.first as Map<String, dynamic>;
         final b64 = imageObj['b64_json'] as String?;
         if (b64 != null && b64.isNotEmpty) return b64;
-        final url = imageObj['url'] as String?;
-        if (url != null) throw Exception('URL response not supported, expected b64_json');
+        final imgUrl = imageObj['url'] as String?;
+        if (imgUrl != null && imgUrl.startsWith('data:')) {
+          final commaIdx = imgUrl.indexOf(',');
+          if (commaIdx != -1) return imgUrl.substring(commaIdx + 1);
+        }
+        if (imgUrl != null) {
+          throw Exception('URL response — need to download');
+        }
         throw Exception('No image in response');
       },
     );
     return ImageGenHttp.base64ToBytes(b64);
   }
 
-  Future<Uint8List> _generateGeminiChat({
+  Future<Uint8List> _generateChat({
     required String apiKey,
     required String model,
     required String prompt,
@@ -104,6 +112,7 @@ class RoutmyImageProvider {
     required String imageSize,
     required String quality,
     List<String>? referenceImages,
+    CancelToken? cancelToken,
   }) async {
     final url = '$baseUrl/v1/chat/completions';
 
@@ -133,7 +142,7 @@ class RoutmyImageProvider {
       'image_config': {
         'aspect_ratio': aspectRatio,
         'image_size': imageSize,
-        'quality': quality,
+        if (quality.isNotEmpty) 'quality': quality,
       },
     };
 
@@ -141,6 +150,7 @@ class RoutmyImageProvider {
       url: url,
       apiKey: apiKey,
       body: body,
+      cancelToken: cancelToken,
     );
 
     final choices = response['choices'] as List?;
@@ -152,7 +162,7 @@ class RoutmyImageProvider {
     if (images != null && images.isNotEmpty) {
       final imgUrl = images.first['image_url']?['url'] as String?;
       if (imgUrl != null) {
-        return _downloadImage(imgUrl);
+        return _downloadImage(imgUrl, cancelToken: cancelToken);
       }
     }
 
@@ -162,7 +172,7 @@ class RoutmyImageProvider {
         if (part is Map<String, dynamic> &&
             part['type'] == 'image_url' &&
             part['image_url']?['url'] != null) {
-          return _downloadImage(part['image_url']['url'] as String);
+          return _downloadImage(part['image_url']['url'] as String, cancelToken: cancelToken);
         }
       }
     }
@@ -170,14 +180,14 @@ class RoutmyImageProvider {
     throw Exception('No image in rout.my response');
   }
 
-  Future<Uint8List> _downloadImage(String url) async {
+  Future<Uint8List> _downloadImage(String url, {CancelToken? cancelToken}) async {
     if (url.startsWith('data:')) {
       final commaIdx = url.indexOf(',');
       if (commaIdx == -1) throw Exception('Invalid data URL');
       final b64 = url.substring(commaIdx + 1);
       return ImageGenHttp.base64ToBytes(b64);
     }
-    final response = await _http.getRaw(url);
+    final response = await _http.getRaw(url, cancelToken: cancelToken);
     return response.data!;
   }
 }

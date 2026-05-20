@@ -8,7 +8,7 @@ class ImageGenHttp {
 
   ImageGenHttp() : _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 60),
-    receiveTimeout: const Duration(seconds: 120),
+    receiveTimeout: const Duration(seconds: 300),
   ));
 
   Future<Map<String, dynamic>> post({
@@ -16,6 +16,7 @@ class ImageGenHttp {
     required Map<String, dynamic> body,
     String? apiKey,
     Map<String, String>? extraHeaders,
+    CancelToken? cancelToken,
   }) async {
     final headers = <String, String>{
       'Content-Type': 'application/json',
@@ -27,6 +28,7 @@ class ImageGenHttp {
       url,
       data: body,
       options: Options(headers: headers),
+      cancelToken: cancelToken,
     );
     return response.data ?? {};
   }
@@ -36,9 +38,10 @@ class ImageGenHttp {
     required Map<String, dynamic> body,
     String? apiKey,
     Map<String, String>? extraHeaders,
+    CancelToken? cancelToken,
     required String Function(Map<String, dynamic>) extractBase64,
   }) async {
-    final json = await post(url: url, body: body, apiKey: apiKey, extraHeaders: extraHeaders);
+    final json = await post(url: url, body: body, apiKey: apiKey, extraHeaders: extraHeaders, cancelToken: cancelToken);
     final b64 = extractBase64(json);
     return b64;
   }
@@ -47,10 +50,11 @@ class ImageGenHttp {
     return base64Decode(b64);
   }
 
-  Future<Response<Uint8List>> getRaw(String url) async {
+  Future<Response<Uint8List>> getRaw(String url, {CancelToken? cancelToken}) async {
     return _dio.get<Uint8List>(
       url,
       options: Options(responseType: ResponseType.bytes),
+      cancelToken: cancelToken,
     );
   }
 

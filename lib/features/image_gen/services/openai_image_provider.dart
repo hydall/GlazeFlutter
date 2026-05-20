@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'package:dio/dio.dart';
+
 import 'image_gen_http.dart';
 
 class OpenaiImageProvider {
@@ -12,6 +14,7 @@ class OpenaiImageProvider {
     required String prompt,
     required String size,
     required String quality,
+    CancelToken? cancelToken,
   }) async {
     String url = endpoint;
     if (!url.contains('/v1') && !url.contains('/images')) {
@@ -31,6 +34,7 @@ class OpenaiImageProvider {
         'quality': quality,
         'response_format': 'b64_json',
       },
+      cancelToken: cancelToken,
       extractBase64: (json) {
         final data = json['data'] as List?;
         if (data == null || data.isEmpty) throw Exception('No image data in response');

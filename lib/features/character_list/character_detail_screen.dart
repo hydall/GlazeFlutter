@@ -15,6 +15,7 @@ import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../../shared/widgets/sheet_view.dart';
+import '../../shared/widgets/colored_markdown.dart';
 
 // ─── Colour tokens ─────────────────────────────────────────────────────────
 
@@ -597,6 +598,42 @@ class _InfoTab extends StatelessWidget {
                 height: 1.55,
                 color: _kText75,
               ),
+              imageBuilder: (context, url) {
+                if (url.startsWith('http://') || url.startsWith('https://')) {
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
+                  );
+                }
+                if (url.startsWith('data:')) {
+                  final commaIdx = url.indexOf(',');
+                  if (commaIdx > 0) {
+                    try {
+                      final bytes = Uri.parse(url).data!.contentAsBytes();
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.memory(bytes, fit: BoxFit.contain),
+                      );
+                    } catch (_) {}
+                  }
+                }
+                final file = File(url);
+                if (file.existsSync()) {
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.file(file, fit: BoxFit.contain),
+                  );
+                }
+                return const SizedBox.shrink();
+              },
+              inlineComponents: [
+                HtmlColorMd(),
+                GlowTextMd(),
+                ColorGlowTextMd(),
+                GradientTextMd(),
+                BackgroundTextMd(),
+                ImageMd(),
+              ],
             ),
           ),
         ],

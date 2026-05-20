@@ -3,6 +3,7 @@ import '../../core/models/chat_message.dart';
 class ChatState {
   final ChatSession? session;
   final bool isGenerating;
+  final bool isGeneratingImage;
   final String? error;
   final String? lastRawResponse;
   final DateTime? generationStartTime;
@@ -10,6 +11,7 @@ class ChatState {
   const ChatState({
     this.session,
     this.isGenerating = false,
+    this.isGeneratingImage = false,
     this.error,
     this.lastRawResponse,
     this.generationStartTime,
@@ -18,6 +20,7 @@ class ChatState {
   ChatState copyWith({
     ChatSession? session,
     bool? isGenerating,
+    bool? isGeneratingImage,
     String? error,
     String? lastRawResponse,
     DateTime? generationStartTime,
@@ -25,6 +28,7 @@ class ChatState {
     return ChatState(
       session: session ?? this.session,
       isGenerating: isGenerating ?? this.isGenerating,
+      isGeneratingImage: isGeneratingImage ?? this.isGeneratingImage,
       error: error,
       lastRawResponse: lastRawResponse ?? this.lastRawResponse,
       generationStartTime: generationStartTime ?? this.generationStartTime,
