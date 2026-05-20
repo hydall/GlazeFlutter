@@ -743,7 +743,7 @@ class _MessageState extends ConsumerState<Message>
                       final notifier = ref.read(chatProvider(charId).notifier);
                       if (notifier.isGeneratingImage) {
                         notifier.abortImageGeneration();
-                      } else if (mdContent?.contains('[IMG:ERROR:') == true) {
+                      } else {
                         notifier.retryImageGeneration();
                       }
                     },

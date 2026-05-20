@@ -6,7 +6,7 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/colored_markdown.dart';
-import '../../chat/widgets/message.dart' show MarkMd, ActiveMarkMd;
+import '../../chat/widgets/message.dart' show MarkMd, ActiveMarkMd, DetailsSummaryMd;
 
 class ImageContentRenderer extends StatelessWidget {
   final String content;
@@ -40,7 +40,10 @@ class ImageContentRenderer extends StatelessWidget {
       allMarkers.add((start: m.start, end: m.end, span: _ImgGenSpan(m.group(1) ?? '')));
     }
     for (final m in _imgResultRegex.allMatches(content)) {
-      allMarkers.add((start: m.start, end: m.end, span: _ImgResultSpan(m.group(1) ?? '')));
+      final raw = m.group(1) ?? '';
+      final pipeIdx = raw.indexOf('|');
+      final path = pipeIdx != -1 ? raw.substring(0, pipeIdx) : raw;
+      allMarkers.add((start: m.start, end: m.end, span: _ImgResultSpan(path)));
     }
     for (final m in _imgErrorRegex.allMatches(content)) {
       allMarkers.add((start: m.start, end: m.end, span: _ImgErrorSpan(m.group(1) ?? '')));
@@ -93,6 +96,28 @@ class ImageContentRenderer extends StatelessWidget {
     return 16 / 9;
   }
 
+  void _showImageDialog(BuildContext context, File file) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: GestureDetector(
+          onTap: () => Navigator.pop(context),
+          child: InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(file, fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildFrame({required Widget child, String? containerStyle}) {
     final deco = containerStyle != null && containerStyle.isNotEmpty
         ? _parseCssDecoration(containerStyle)
@@ -141,6 +166,7 @@ class ImageContentRenderer extends StatelessWidget {
         span.text,
         style: TextStyle(color: textColor),
         inlineComponents: _kInlineComponents,
+        components: _kMdComponents,
       );
     }
     if (span is _ImgResultSpan) {
@@ -151,12 +177,40 @@ class ImageContentRenderer extends StatelessWidget {
         );
       }
       return _buildFrame(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(15),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 500),
-            child: Image.file(file, fit: BoxFit.contain),
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(
+              onTap: () => _showImageDialog(context, file),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(15),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 500),
+                  child: Image.file(file, fit: BoxFit.contain),
+                ),
+              ),
+            ),
+            if (onRegenerate != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: GestureDetector(
+                  onTap: onRegenerate,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.refresh, size: 14, color: textColor.withValues(alpha: 0.7)),
+                      const SizedBox(width: 4),
+                      Text('Regenerate', style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.7), fontWeight: FontWeight.w500)),
+                    ]),
+                  ),
+                ),
+              ),
+          ],
         ),
       );
     }
@@ -458,6 +512,10 @@ final _kInlineComponents = [
   ColoredUnderscoreBoldMd(color: const Color(0xFFB39DDB)),
   ColoredItalicMd(color: const Color(0xFFB39DDB)),
   ColoredUnderscoreItalicMd(color: const Color(0xFFB39DDB)),
+];
+
+final _kMdComponents = [
+  DetailsSummaryMd(),
 ];
 
 sealed class _ContentSpan {}

@@ -113,20 +113,20 @@ void main() {
   });
 
   group('replaceTagWithResult', () {
-    test('replaces [IMG:GEN:json] with [IMG:RESULT:path]', () {
+    test('replaces [IMG:GEN:json] with [IMG:RESULT:path|instruction]', () {
       final result = service.replaceTagWithResult(
         'Hello [IMG:GEN:{"prompt":"test"}]',
         0,
         '/path/to/image.png',
       );
-      expect(result, contains('[IMG:RESULT:/path/to/image.png]'));
+      expect(result, contains('[IMG:RESULT:/path/to/image.png|'));
       expect(result, isNot(contains('[IMG:GEN')));
     });
 
     test('replaces HTML data-iig-instruction tag', () {
       const html = """<img data-iig-instruction='{"style":"manga","prompt":"test"}' src="[IMG:GEN]">""";
       final result = service.replaceTagWithResult(html, 0, '/saved/img.png');
-      expect(result, contains('[IMG:RESULT:/saved/img.png]'));
+      expect(result, contains('[IMG:RESULT:/saved/img.png|'));
       expect(result, isNot(contains('data-iig-instruction')));
     });
 
@@ -136,7 +136,7 @@ void main() {
         0,
         '/img1.png',
       );
-      expect(result, contains('[IMG:RESULT:/img1.png]'));
+      expect(result, contains('[IMG:RESULT:/img1.png|'));
       expect(result, contains('[IMG:GEN:{"prompt":"second"}]'));
     });
   });
@@ -204,7 +204,7 @@ void main() {
   <i>caption</i>
 </div>""";
       final result = service.replaceTagWithResult(html, 0, '/img.png');
-      expect(result, contains('[IMG:RESULT:/img.png]'));
+      expect(result, contains('[IMG:RESULT:/img.png|'));
       expect(result, isNot(contains('data-iig-instruction')));
       expect(result, contains('caption'));
     });

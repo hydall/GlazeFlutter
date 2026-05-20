@@ -72,19 +72,24 @@ class ImageGenService {
   }
 
   String replaceTagWithResult(String text, int index, String imagePath) {
+    final instructions = extractImageGenInstructions(text);
+    final instruction = index < instructions.length ? instructions[index] : null;
+    final payload = instruction != null && instruction.isNotEmpty
+        ? '$imagePath${instruction.isNotEmpty ? '|$instruction' : ''}'
+        : imagePath;
     int count = 0;
     var result = text.replaceAllMapped(_htmlIigTagRegex, (m) {
-      if (count++ == index) return '[IMG:RESULT:$imagePath]';
+      if (count++ == index) return '[IMG:RESULT:$payload]';
       return m.group(0)!;
     });
     result = result.replaceAllMapped(_htmlIigTagDoubleRegex, (m) {
-      if (count++ == index) return '[IMG:RESULT:$imagePath]';
+      if (count++ == index) return '[IMG:RESULT:$payload]';
       return m.group(0)!;
     });
     final stripped = _stripHtmlImgTags(result);
     final needStrip = stripped != result;
     result = result.replaceAllMapped(_imgGenRegex, (m) {
-      if (count++ == index) return '[IMG:RESULT:$imagePath]';
+      if (count++ == index) return '[IMG:RESULT:$payload]';
       return m.group(0)!;
     });
     if (count <= index) return text;
@@ -133,7 +138,7 @@ class ImageGenService {
   }
 
   String resetErrorTags(String text) {
-    return text.replaceAllMapped(_imgErrorRegex, (m) {
+    var result = text.replaceAllMapped(_imgErrorRegex, (m) {
       try {
         final json = jsonDecode(m.group(1)!) as Map<String, dynamic>;
         final instruction = json['instruction'] as String?;
@@ -143,6 +148,22 @@ class ImageGenService {
       } catch (_) {}
       return '[IMG:GEN]';
     });
+    result = result.replaceAllMapped(_imgResultRegex, (m) {
+      final raw = m.group(1) ?? '';
+      final pipeIdx = raw.indexOf('|');
+      final instr = pipeIdx != -1 ? raw.substring(pipeIdx + 1) : null;
+      if (instr != null && instr.isNotEmpty) {
+        return '[IMG:GEN:$instr]';
+      }
+      return '[IMG:GEN]';
+    });
+    return result;
+  }
+
+  static String? _extractInstructionFromPath(String path) {
+    final pipeIdx = path.indexOf('|');
+    if (pipeIdx != -1) return path.substring(pipeIdx + 1);
+    return null;
   }
 
   Future<String> processMessageImages({
