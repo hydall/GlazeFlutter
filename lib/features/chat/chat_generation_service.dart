@@ -235,29 +235,52 @@ class ChatGenerationService {
 
     onStateUpdate(ChatState(session: session, isGeneratingImage: true));
 
-    final updatedContent = await service.processMessageImages(
-      text: lastMsg.content,
-      settings: imgGenSettings,
-      llmEndpoint: apiConfig.endpoint,
-      llmApiKey: apiConfig.apiKey,
-      llmModel: apiConfig.model,
-      character: character,
-      persona: persona,
-      recentImageContexts: recentContexts,
-      cancelToken: cancelToken,
-      onUpdate: (updatedText) {
-        final newMessages = List<ChatMessage>.from(session.messages);
-        newMessages[lastIdx] = lastMsg.copyWith(content: updatedText);
-        final updatedSession = session.copyWith(
-          messages: newMessages,
-          updatedAt: currentTimestampSeconds(),
-        );
-        onStateUpdate(ChatState(session: updatedSession));
-      },
-      onError: (error) {
-        GlazeToast.showWithoutContext('Image gen: $error', isError: true, duration: 4000);
-      },
-    );
+    String updatedContent;
+    try {
+      updatedContent = await service.processMessageImages(
+        text: lastMsg.content,
+        settings: imgGenSettings,
+        llmEndpoint: apiConfig.endpoint,
+        llmApiKey: apiConfig.apiKey,
+        llmModel: apiConfig.model,
+        character: character,
+        persona: persona,
+        recentImageContexts: recentContexts,
+        cancelToken: cancelToken,
+        onUpdate: (updatedText) {
+          final newMessages = List<ChatMessage>.from(session.messages);
+          newMessages[lastIdx] = lastMsg.copyWith(content: updatedText);
+          final updatedSession = session.copyWith(
+            messages: newMessages,
+            updatedAt: currentTimestampSeconds(),
+          );
+          onStateUpdate(ChatState(session: updatedSession));
+        },
+        onError: (error) {
+          GlazeToast.showWithoutContext('Image gen: $error', isError: true, duration: 4000);
+        },
+      );
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        onStateUpdate(ChatState(session: session, isGeneratingImage: false));
+        return;
+      }
+      rethrow;
+    }
+
+    if (cancelToken?.isCancelled == true) {
+      var cancelContent = updatedContent;
+      int idx = 0;
+      while (service.hasImageGenTags(cancelContent)) {
+        cancelContent = service.replaceTagWithError(cancelContent, idx, 'Cancelled by user');
+        idx++;
+      }
+      final newMessages = List<ChatMessage>.from(session.messages);
+      newMessages[lastIdx] = lastMsg.copyWith(content: cancelContent);
+      final finalSession = session.copyWith(messages: newMessages, updatedAt: currentTimestampSeconds());
+      onStateUpdate(ChatState(session: finalSession, isGeneratingImage: false));
+      return;
+    }
 
     final newMessages = List<ChatMessage>.from(session.messages);
     newMessages[lastIdx] = lastMsg.copyWith(content: updatedContent);
