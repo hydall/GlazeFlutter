@@ -692,10 +692,10 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
 
   Widget _buildSyncResultCard(Map<String, dynamic> result) {
     final type = result['type'] as String;
-    final pushed = result['pushed'] as int;
-    final pulled = result['pulled'] as int;
-    final deleted = result['deleted'] as int;
-    final total = result['total'] as String;
+    final pushed = result['pushed'] as int? ?? 0;
+    final pulled = result['pulled'] as int? ?? 0;
+    final deleted = result['deleted'] as int? ?? 0;
+    final total = result['total'] as String?;
     final conflictsCount = result['conflictsCount'] as int? ?? 0;
 
     String message = '';
@@ -712,7 +712,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       cardColor = context.colors.accent.withValues(alpha: 0.1);
       textColor = context.colors.accent;
     } else if (type == 'wipe') {
-      message = total == 'all' ? 'Cloud data wiped' : 'Deleted: $deleted/$total items';
+      message = (total == 'all') ? 'Cloud data wiped' : 'Deleted: $deleted/${total ?? "?"} items';
     } else {
       message = 'Full sync complete';
     }
