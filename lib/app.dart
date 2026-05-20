@@ -10,6 +10,8 @@ import 'core/state/lorebook_provider.dart';
 import 'core/services/preset_seeder.dart';
 import 'shared/theme/theme_font_provider.dart';
 import 'core/services/onboarding_service.dart';
+import 'features/cloud_sync/sync_provider.dart';
+import 'features/cloud_sync/sync_models.dart';
 import 'features/character_list/character_detail_screen.dart';
 import 'features/character_list/character_editor_screen.dart';
 import 'core/utils/id_generator.dart';
@@ -194,6 +196,12 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     GenerationNotificationService.instance.updateLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      final service = ref.read(syncServiceProvider).valueOrNull;
+      if (service != null && service.status != SyncStatus.syncing) {
+        ref.read(syncStatusProvider.notifier).state = service.status;
+      }
+    }
   }
 
   void _listenNotificationNavigation() {

@@ -1020,14 +1020,15 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               }
             },
           );
-          if (!mounted) return;
-          setState(() {
-            _syncResult = {
-              'type': 'push',
-              'pushed': itemsCount,
-            };
-          });
-          GlazeToast.show(context, 'Push completed ($itemsCount items)');
+          if (mounted) {
+            setState(() {
+              _syncResult = {
+                'type': 'push',
+                'pushed': itemsCount,
+              };
+            });
+            GlazeToast.show(context, 'Push completed ($itemsCount items)');
+          }
           break;
         case 'pull':
           await service.fullPull(
@@ -1038,18 +1039,19 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               }
             },
           );
-          if (!mounted) return;
-          setState(() {
-            _syncResult = {
-              'type': 'pull',
-              'pulled': itemsCount,
-              'conflictsCount': service.conflicts.length,
-            };
-          });
-          if (service.conflicts.isNotEmpty) {
-            GlazeToast.show(context, 'Pull completed with ${service.conflicts.length} conflicts');
-          } else {
-            GlazeToast.show(context, 'Pull completed ($itemsCount items)');
+          if (mounted) {
+            setState(() {
+              _syncResult = {
+                'type': 'pull',
+                'pulled': itemsCount,
+                'conflictsCount': service.conflicts.length,
+              };
+            });
+            if (service.conflicts.isNotEmpty) {
+              GlazeToast.show(context, 'Pull completed with ${service.conflicts.length} conflicts');
+            } else {
+              GlazeToast.show(context, 'Pull completed ($itemsCount items)');
+            }
           }
           break;
         case 'full':
@@ -1062,28 +1064,27 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               }
             },
           );
-          if (!mounted) return;
-          setState(() {
-            _syncResult = {
-              'type': 'full',
-            };
-          });
-          GlazeToast.show(context, 'Full sync completed');
+          if (mounted) {
+            setState(() {
+              _syncResult = {
+                'type': 'full',
+              };
+            });
+            GlazeToast.show(context, 'Full sync completed');
+          }
           break;
       }
-      if (!mounted) return;
       ref.read(syncStatusProvider.notifier).state = service.status;
       ref.read(syncConflictsProvider.notifier).state = service.conflicts;
     } catch (e) {
-      if (!mounted) return;
       ref.read(syncLastErrorProvider.notifier).state = e.toString();
       ref.read(syncStatusProvider.notifier).state = service.status;
       ref.read(syncConflictsProvider.notifier).state = service.conflicts;
-      GlazeToast.errorWithCopy(context, 'Sync failed: ', e);
-    } finally {
       if (mounted) {
-        ref.read(syncProgressProvider.notifier).state = null;
+        GlazeToast.errorWithCopy(context, 'Sync failed: ', e);
       }
+    } finally {
+      ref.read(syncProgressProvider.notifier).state = null;
     }
   }
 
