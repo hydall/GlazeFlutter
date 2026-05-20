@@ -119,6 +119,7 @@ jobs:
         with:
           name: Glaze-release-Windows
           path: build/windows/x64/runner/Release/**
+          include-hidden-files: true
 
   build-ios:
     runs-on: macos-latest
