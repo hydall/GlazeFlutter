@@ -40,7 +40,7 @@ class MarkMd extends InlineMd {
   MarkMd({required this.textColor});
 
   @override
-  RegExp get exp => RegExp(r'==mark==(.+?)==');
+  RegExp get exp => RegExp(r'==mark==(.+?)==', dotAll: true);
 
   @override
   InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
@@ -62,7 +62,7 @@ class ActiveMarkMd extends InlineMd {
   ActiveMarkMd({this.activeKey});
 
   @override
-  RegExp get exp => RegExp(r'==active==(.+?)==');
+  RegExp get exp => RegExp(r'==active==(.+?)==', dotAll: true);
 
   @override
   InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
@@ -886,7 +886,7 @@ class _MessageState extends ConsumerState<Message>
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onLongPress: () => showMessageContextMenu(
+      onLongPress: isEditing ? null : () => showMessageContextMenu(
         context: context, ref: ref, charId: charId, content: content,
         messageIndex: messageIndex, isUser: isUser, isTyping: isTyping,
         isError: isError, isLast: isLast, isGenerating: isGenerating, isHidden: isHidden,

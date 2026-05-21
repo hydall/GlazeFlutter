@@ -34,12 +34,6 @@ class _InputBarState extends State<InputBar> {
     super.dispose();
   }
 
-  void _requestFocus() {
-    if (!_focusNode.hasFocus) {
-      _focusNode.requestFocus();
-    }
-  }
-
   void _handleSend() {
     final text = _controller.text;
     if (text.trim().isEmpty) return;
@@ -65,7 +59,6 @@ class _InputBarState extends State<InputBar> {
         minLines: 1,
         textCapitalization: TextCapitalization.sentences,
         textInputAction: TextInputAction.send,
-        onTap: _requestFocus,
         onSubmitted: (_) => _handleSend(),
         style: const TextStyle(fontSize: 16),
         decoration: const InputDecoration(
