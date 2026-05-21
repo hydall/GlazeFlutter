@@ -33,7 +33,6 @@ class PromptPayloadBuilder {
     final charRepo = _ref.read(characterRepoProvider);
     final presetRepo = _ref.read(presetRepoProvider);
     final personaRepo = _ref.read(personaRepoProvider);
-    final apiConfigRepo = _ref.read(apiConfigRepoProvider);
     final lorebookRepo = _ref.read(lorebookRepoProvider);
 
     final character = await charRepo.getById(charId);

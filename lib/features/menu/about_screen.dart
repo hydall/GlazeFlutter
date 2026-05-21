@@ -515,20 +515,3 @@ class _AuthorTile extends StatelessWidget {
     );
   }
 }
-
-class _Divider extends StatelessWidget {
-  final ColorScheme cs;
-  const _Divider({required this.cs});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Divider(
-        height: 1,
-        thickness: 0.5,
-        color: cs.outlineVariant.withValues(alpha: 0.5),
-      ),
-    );
-  }
-}

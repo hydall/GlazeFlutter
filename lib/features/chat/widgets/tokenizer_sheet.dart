@@ -24,7 +24,6 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   int? _contextSize;
   bool _loading = false;
   int _visibleCount = 0;
-  int _hiddenCount = 0;
   bool _showSettings = false;
 
   @override
@@ -51,7 +50,6 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       }
 
       _visibleCount = session.messages.where((m) => !m.isHidden).length;
-      _hiddenCount = session.messages.where((m) => m.isHidden).length;
 
       final builder = ref.read(promptPayloadBuilderProvider);
       final payload = await builder.buildFromSession(

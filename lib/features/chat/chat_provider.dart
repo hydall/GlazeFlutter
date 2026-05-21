@@ -353,9 +353,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _restorationMessage = null;
     _clearStreaming();
     final session = await _sessionSvc.switchToSession(arg, sessionIndex);
-    if (session != null) {
-      state = AsyncData(ChatState(session: session));
-    }
+    state = AsyncData(ChatState(session: session));
   }
 
   Future<void> createNewSession() async {

@@ -33,7 +33,6 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   ApiConnectionStatus _llmStatus = ApiConnectionStatus.idle;
   String _llmError = '';
   ApiConnectionStatus _embStatus = ApiConnectionStatus.idle;
-  String _embError = '';
   List<Map<String, dynamic>> _fetchedModels = [];
 
   // Text controllers
@@ -898,7 +897,6 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     }
     setState(() {
       _embStatus = ApiConnectionStatus.connecting;
-      _embError = '';
     });
     try {
       final config = EmbeddingConfig(
@@ -917,7 +915,6 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       } else {
         setState(() {
           _embStatus = ApiConnectionStatus.failed;
-          _embError = 'Empty response from embedding API';
         });
         GlazeToast.show(context, 'Empty response from embedding API');
       }
@@ -925,7 +922,6 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       if (mounted) {
         setState(() {
           _embStatus = ApiConnectionStatus.failed;
-          _embError = e.toString();
         });
         GlazeToast.error(context, 'Connection failed: ', e);
       }

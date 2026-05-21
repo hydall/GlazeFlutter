@@ -2,7 +2,6 @@ import 'dart:math';
 import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
-import 'package:flutter/rendering.dart';
 
 class NoiseOverlay extends StatefulWidget {
   final double opacity;

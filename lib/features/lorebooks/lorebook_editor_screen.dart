@@ -922,7 +922,7 @@ class _EntryTile extends StatelessWidget {
         leading: Switch(
           value: entry.enabled,
           onChanged: (_) => onToggle(),
-          activeColor: context.cs.primary,
+          activeThumbColor: context.cs.primary,
         ),
         title: Text(
           entry.comment.isNotEmpty

@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/embedding_types.dart';
 import '../../../core/llm/lorebook_coverage.dart';
 import '../../../core/llm/lorebook_providers.dart';
-import '../../../core/llm/lorebook_vector_search.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../core/state/db_provider.dart';

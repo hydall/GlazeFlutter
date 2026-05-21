@@ -543,8 +543,6 @@ class _ItemCardRow extends StatefulWidget {
 }
 
 class _ItemCardRowState extends State<_ItemCardRow> {
-  bool _pressed = false;
-
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
@@ -552,10 +550,7 @@ class _ItemCardRowState extends State<_ItemCardRow> {
       color: Colors.white.withValues(alpha: 0.06),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        onTapDown: (_) => setState(() => _pressed = true),
-        onTapCancel: () => setState(() => _pressed = false),
         onTap: () {
-          setState(() => _pressed = false);
           item.onTap();
         },
         borderRadius: BorderRadius.circular(16),

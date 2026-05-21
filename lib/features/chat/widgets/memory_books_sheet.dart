@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/lorebook_providers.dart';
-import '../../../core/llm/memory_embedding_service.dart';
 import '../../../features/settings/api_list_provider.dart';
 import '../../../core/llm/memory_injection_service.dart';
 import '../../../core/models/chat_message.dart';
@@ -101,7 +100,6 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
   String get _searchModelLabel {
     final s = _gs;
-    if (s == null) return '';
     return s.generationModel.isNotEmpty ? s.generationModel : 'Current LLM model';
   }
 

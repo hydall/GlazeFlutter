@@ -275,7 +275,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                       decoration: BoxDecoration(
                         color: c,
                         shape: BoxShape.circle,
-                        border: c.value == current.value
+                        border: c.toARGB32() == current.toARGB32()
                             ? Border.all(color: Colors.white, width: 3)
                             : Border.all(color: Colors.white24, width: 1),
                       ),

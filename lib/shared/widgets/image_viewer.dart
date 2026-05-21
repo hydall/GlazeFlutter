@@ -76,8 +76,8 @@ class _ImageViewerState extends State<ImageViewer> with SingleTickerProviderStat
       final dx = -position.dx * (scale - 1);
       final dy = -position.dy * (scale - 1);
       endMatrix = Matrix4.identity()
-        ..translate(dx, dy)
-        ..scale(scale);
+        ..translateByDouble(dx, dy, 0.0, 1.0)
+        ..scaleByDouble(scale, scale, scale, 1.0);
     }
 
     _animation = Matrix4Tween(
@@ -110,8 +110,8 @@ class _ImageViewerState extends State<ImageViewer> with SingleTickerProviderStat
       final double newDy = localPosition.dy - (localPosition.dy - dy) * scaleRatio;
       
       _transformationController.value = Matrix4.identity()
-        ..translate(newDx, newDy)
-        ..scale(newScale);
+        ..translateByDouble(newDx, newDy, 0.0, 1.0)
+        ..scaleByDouble(newScale, newScale, newScale, 1.0);
     }
   }
 

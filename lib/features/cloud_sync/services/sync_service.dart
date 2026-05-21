@@ -2,14 +2,6 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../../core/db/repositories/character_repo.dart';
-import '../../../core/db/repositories/chat_repo.dart';
-import '../../../core/db/repositories/persona_repo.dart';
-import '../../../core/db/repositories/preset_repo.dart';
-import '../../../core/db/repositories/api_config_repo.dart';
-import '../../../core/db/repositories/lorebook_repo.dart';
-import '../../../core/db/repositories/embedding_repo.dart';
-import '../../../core/services/image_storage_service.dart';
 import '../sync_repo_interfaces.dart';
 import 'dropbox/dropbox_adapter.dart';
 import 'dropbox/dropbox_auth.dart';
@@ -36,6 +28,7 @@ class SyncService {
   String? _lastError;
   int? _lastSyncTime;
   List<SyncConflict> _conflicts = [];
+  List<String> _resolvedAsCloud = [];
   Map<String, dynamic>? _accountInfo;
   bool _autoSyncEnabled = false;
   int _autoSyncMessageCount = 5;
@@ -177,6 +170,7 @@ class SyncService {
     _status = SyncStatus.syncing;
     _lastError = null;
     _conflicts.clear();
+    _resolvedAsCloud.clear();
 
     try {
       final engine = _engine;
@@ -229,6 +223,39 @@ class SyncService {
     }
   }
 
+  Future<void> resolveAllConflicts(String choice) async {
+    final engine = SyncEngine(
+      _adapter,
+      _manifestBuilder,
+      _characterRepo,
+      _chatRepo,
+      _personaRepo,
+      _presetRepo,
+      _apiRepo,
+      _lorebookRepo,
+      _embeddingRepo,
+      _imageStorage,
+    );
+    for (final conflict in _conflicts) {
+      await engine.resolveConflict(conflict, choice);
+      if (choice == 'cloud') {
+        _resolvedAsCloud.add(conflict.key);
+      }
+    }
+    _conflicts.clear();
+    if (_status == SyncStatus.conflict) {
+      await engine.applyPendingPull(
+        onProgress: (_) {},
+        resolvedAsCloud: _resolvedAsCloud,
+      );
+      _resolvedAsCloud.clear();
+      _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('gz_sync_last', _lastSyncTime!);
+      _status = SyncStatus.idle;
+    }
+  }
+
   Future<void> resolveConflict(SyncConflict conflict, String choice) async {
     final engine = SyncEngine(
       _adapter,
@@ -243,8 +270,19 @@ class SyncService {
       _imageStorage,
     );
     await engine.resolveConflict(conflict, choice);
+    if (choice == 'cloud') {
+      _resolvedAsCloud.add(conflict.key);
+    }
     _conflicts.removeWhere((c) => c.key == conflict.key);
     if (_conflicts.isEmpty && _status == SyncStatus.conflict) {
+      await engine.applyPendingPull(
+        onProgress: (_) {},
+        resolvedAsCloud: _resolvedAsCloud,
+      );
+      _resolvedAsCloud.clear();
+      _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('gz_sync_last', _lastSyncTime!);
       _status = SyncStatus.idle;
     }
   }

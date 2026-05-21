@@ -98,7 +98,7 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
   void _syncActivationToPrefs(Lorebook lorebook) {
     if (lorebook.activationTargetId == null) return;
     if (lorebook.activationScope != 'character' && lorebook.activationScope != 'chat') return;
-    final scope = lorebook.activationScope!;
+    final scope = lorebook.activationScope;
     final targetId = lorebook.activationTargetId!;
 
     final current = ref.read(lorebookActivationsProvider);

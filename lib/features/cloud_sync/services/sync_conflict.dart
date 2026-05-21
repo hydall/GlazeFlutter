@@ -25,6 +25,7 @@ class SyncConflictDetector {
   ) {
     if (localEntry == null) return false;
     if (localEntry.deleted) return false;
+    if (localEntry.hash == cloudEntry.hash) return false;
     return localEntry.updatedAt > cloudEntry.updatedAt;
   }
 

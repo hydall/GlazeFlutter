@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:io';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,7 +16,6 @@ import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/utils/html_to_markdown.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../features/personas/persona_list_provider.dart';
 import '../../../shared/widgets/pencil_animation.dart';
 import '../../../shared/widgets/rolling_number.dart';
 import '../../../shared/widgets/colored_markdown.dart';import '../../../shared/widgets/image_viewer.dart';
@@ -230,8 +228,6 @@ class _MessageState extends ConsumerState<Message>
   late final Animation<Offset> _appearanceSlide;
 
   _SlideDirection _slideDir = _SlideDirection.none;
-  int _lastSwipeId = 0;
-  int _lastGreetingIndex = 0;
 
   Timer? _genTimer;
   double _elapsedGenSeconds = 0.0;
@@ -247,9 +243,6 @@ class _MessageState extends ConsumerState<Message>
   @override
   void initState() {
     super.initState();
-    _lastSwipeId = widget.swipeId;
-    _lastGreetingIndex = widget.greetingIndex ?? 0;
-
     _swipeResetCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -309,14 +302,12 @@ class _MessageState extends ConsumerState<Message>
     if (widget.swipeId != oldWidget.swipeId) {
       setState(() {
         _slideDir = widget.swipeId > oldWidget.swipeId ? _SlideDirection.next : _SlideDirection.prev;
-        _lastSwipeId = widget.swipeId;
       });
     } else if (widget.greetingIndex != oldWidget.greetingIndex) {
       setState(() {
         final oldIdx = oldWidget.greetingIndex ?? 0;
         final newIdx = widget.greetingIndex ?? 0;
         _slideDir = newIdx > oldIdx ? _SlideDirection.next : _SlideDirection.prev;
-        _lastGreetingIndex = newIdx;
       });
     }
 
@@ -459,7 +450,6 @@ class _MessageState extends ConsumerState<Message>
   }
 
   (String, String) _reasoningTags() {
-    final charId = widget.charId;
     final activePresetId = ref.read(activePresetIdProvider);
     final presetsAsync = ref.read(presetListProvider);
     final preset = presetsAsync.valueOrNull

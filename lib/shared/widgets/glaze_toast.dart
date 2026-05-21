@@ -18,8 +18,7 @@ class GlazeToast {
     final top = toastOverlayKey.currentState;
     if (top != null) return top;
     if (context != null) {
-      final rootOverlay = Overlay.of(context, rootOverlay: true);
-      if (rootOverlay != null) return rootOverlay;
+      return Overlay.of(context, rootOverlay: true);
     }
     return null;
   }

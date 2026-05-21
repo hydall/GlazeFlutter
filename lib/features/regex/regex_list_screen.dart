@@ -220,7 +220,7 @@ class _PresetRegexItem extends ConsumerWidget {
                   Switch(
                     value: !regex.disabled,
                     onChanged: (v) => _updateRegex(ref, regex.copyWith(disabled: !v)),
-                    activeColor: context.cs.primary,
+                    activeThumbColor: context.cs.primary,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ],
@@ -279,7 +279,7 @@ class _GlobalRegexItem extends ConsumerWidget {
                   Switch(
                     value: !regex.disabled,
                     onChanged: (v) => ref.read(globalRegexProvider.notifier).updateRegex(regex.copyWith(disabled: !v)),
-                    activeColor: context.cs.primary,
+                    activeThumbColor: context.cs.primary,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                   IconButton(

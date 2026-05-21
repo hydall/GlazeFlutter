@@ -6,7 +6,7 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/colored_markdown.dart';
-import '../../chat/widgets/message.dart' show MarkMd, ActiveMarkMd, DetailsSummaryMd;
+import '../../chat/widgets/message.dart' show MarkMd, DetailsSummaryMd;
 
 class ImageContentRenderer extends StatelessWidget {
   final String content;

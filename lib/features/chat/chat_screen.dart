@@ -17,10 +17,7 @@ import '../../shared/theme/theme_provider.dart';
 
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
-import '../../shared/widgets/glaze_toast.dart';
-import '../../shared/widgets/noise_overlay.dart';
 import '../settings/app_settings_provider.dart';
-import 'chat_actions_service.dart';
 import 'chat_provider.dart';
 import 'chat_state.dart';
 import 'widgets/chat_header.dart';
@@ -29,7 +26,6 @@ import '../image_gen/widgets/image_gen_sheet.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/message_list.dart';
 import 'widgets/cached_token_breakdown.dart';
-import 'widgets/prompt_preview_screen.dart';
 import 'widgets/session_lifecycle_tracker.dart';
 
 class SearchMatch {

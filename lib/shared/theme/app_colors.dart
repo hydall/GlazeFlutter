@@ -85,16 +85,16 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
   }
 
   static Color _distinctBubble(Color bubble, Color bg, bool isDark) {
-    final diff = (bubble.red - bg.red).abs() +
-        (bubble.green - bg.green).abs() +
-        (bubble.blue - bg.blue).abs();
+    final diff = ((bubble.r * 255 - bg.r * 255).abs()).round() +
+        ((bubble.g * 255 - bg.g * 255).abs()).round() +
+        ((bubble.b * 255 - bg.b * 255).abs()).round();
     if (diff < 60) {
       final factor = isDark ? 1.25 : 0.85;
       return Color.fromARGB(
-        bubble.alpha,
-        (bubble.red * factor).clamp(0, 255).round(),
-        (bubble.green * factor).clamp(0, 255).round(),
-        (bubble.blue * factor).clamp(0, 255).round(),
+        (bubble.a * 255).round(),
+        (bubble.r * 255 * factor).round().clamp(0, 255),
+        (bubble.g * 255 * factor).round().clamp(0, 255),
+        (bubble.b * 255 * factor).round().clamp(0, 255),
       );
     }
     return bubble;
