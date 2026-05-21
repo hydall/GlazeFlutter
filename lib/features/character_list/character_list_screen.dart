@@ -245,7 +245,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
       if (a.fav != b.fav) return a.fav ? -1 : 1;
       final cmp = switch (_sortBy) {
         SortType.name => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
-        SortType.date => a.updatedAt.compareTo(b.updatedAt),
+        SortType.date => a.createdAt.compareTo(b.createdAt),
       };
       if (cmp != 0) return _sortDir == SortDir.desc ? -cmp : cmp;
       return a.id.compareTo(b.id);
