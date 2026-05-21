@@ -1,15 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:glaze_flutter/features/settings/app_settings_provider.dart';
 import 'package:glaze_flutter/shared/widgets/glaze_toast.dart';
 
 void main() {
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+  });
+
   Widget _buildTestApp({required Widget child}) {
-    return MaterialApp(
-      home: Overlay(
-        key: toastOverlayKey,
-        initialEntries: [
-          OverlayEntry(builder: (_) => Scaffold(body: child)),
-        ],
+    return ProviderScope(
+      child: MaterialApp(
+        home: Overlay(
+          key: toastOverlayKey,
+          initialEntries: [
+            OverlayEntry(builder: (_) => Scaffold(body: child)),
+          ],
+        ),
       ),
     );
   }
@@ -84,44 +95,46 @@ void main() {
   });
 
   testWidgets('Toast appears above modal bottom sheet', (tester) async {
-    await tester.pumpWidget(MaterialApp(
-      home: Overlay(
-        key: toastOverlayKey,
-        initialEntries: [
-          OverlayEntry(
-            builder: (_) => Scaffold(
-              body: Builder(
-                builder: (context) {
-                  return ElevatedButton(
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        useRootNavigator: true,
-                        builder: (sheetCtx) {
-                          return Padding(
-                            padding: const EdgeInsets.all(24),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Text('Sheet Content'),
-                                ElevatedButton(
-                                  onPressed: () =>
-                                      GlazeToast.show(sheetCtx, 'From sheet'),
-                                  child: const Text('Toast from sheet'),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      );
-                    },
-                    child: const Text('Open Sheet'),
-                  );
-                },
+    await tester.pumpWidget(ProviderScope(
+      child: MaterialApp(
+        home: Overlay(
+          key: toastOverlayKey,
+          initialEntries: [
+            OverlayEntry(
+              builder: (_) => Scaffold(
+                body: Builder(
+                  builder: (context) {
+                    return ElevatedButton(
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          useRootNavigator: true,
+                          builder: (sheetCtx) {
+                            return Padding(
+                              padding: const EdgeInsets.all(24),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Text('Sheet Content'),
+                                  ElevatedButton(
+                                    onPressed: () =>
+                                        GlazeToast.show(sheetCtx, 'From sheet'),
+                                    child: const Text('Toast from sheet'),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      child: const Text('Open Sheet'),
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     ));
 

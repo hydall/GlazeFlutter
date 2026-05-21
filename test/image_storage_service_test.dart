@@ -128,15 +128,16 @@ void main() {
     );
   });
 
-  test('thumbnail is smaller than avatar for large images', () async {
+  test('thumbnail has reduced dimensions for large images', () async {
     final png = makePng(800, 800);
     final avatarPath = await service.saveAvatar('big1', png);
     final thumbPath = service.thumbnailPath(avatarPath);
 
     expect(thumbPath, isNotNull);
-    final avatarBytes = await File(avatarPath).readAsBytes();
     final thumbBytes = await File(thumbPath!).readAsBytes();
-    expect(thumbBytes.length, lessThan(avatarBytes.length));
+    final thumbImage = img.decodeImage(thumbBytes);
+    expect(thumbImage!.width, lessThan(800));
+    expect(thumbImage.height, lessThan(800));
   });
 
   test('thumbnail for small image is still created', () async {
