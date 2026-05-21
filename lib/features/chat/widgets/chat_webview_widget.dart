@@ -1,127 +1,189 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../bridge/chat_bridge_controller.dart';
+import '../chat_provider.dart';
+import '../chat_state.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../../shared/theme/theme_provider.dart';
 
-class ChatWebViewWidget extends StatefulWidget {
-  final String assetPath;
+const String _kStreamingId = '__streaming__';
+
+class ChatWebViewWidget extends ConsumerStatefulWidget {
+  final List<ChatMessage> messages;
+  final String charId;
+  final bool isGenerating;
+  final double bottomInset;
+  final String searchQuery;
+  final int searchCurrentIndex;
 
   const ChatWebViewWidget({
     super.key,
-    this.assetPath = 'assets/chat_webview',
+    required this.messages,
+    required this.charId,
+    required this.isGenerating,
+    this.bottomInset = 0,
+    this.searchQuery = '',
+    this.searchCurrentIndex = 0,
   });
 
   @override
-  State<ChatWebViewWidget> createState() => _ChatWebViewWidgetState();
+  ConsumerState<ChatWebViewWidget> createState() => _ChatWebViewState();
 }
 
-class _ChatWebViewWidgetState extends State<ChatWebViewWidget> {
-  InAppWebViewController? _webViewController;
-  ChatBridgeController? _bridgeController;
-  bool _isLoading = true;
-  bool _isWebViewReady = false;
+class _ChatWebViewState extends ConsumerState<ChatWebViewWidget> {
+  ChatBridgeController? _bridge;
+  bool _ready = false;
+  bool _streamingSent = false;
+  bool _wasGenerating = false;
 
   @override
-  void initState() {
-    super.initState();
+  void didUpdateWidget(ChatWebViewWidget old) {
+    super.didUpdateWidget(old);
+    if (!_ready) return;
+
+    _syncMessages(old.messages);
+
+    if (_wasGenerating && !widget.isGenerating) {
+      _bridge?.removeMessage(_kStreamingId);
+      _streamingSent = false;
+    }
+    _wasGenerating = widget.isGenerating;
   }
 
-  @override
-  void dispose() {
-    _bridgeController?.dispose();
-    _webViewController = null;
-    super.dispose();
-  }
+  void _syncMessages(List<ChatMessage> oldMsgs) {
+    final oldIds = oldMsgs.map((m) => m.id).toList();
+    final newIds = widget.messages.map((m) => m.id).toList();
+    final skipLast = widget.isGenerating && _streamingSent;
+    final newLen = newIds.length - (skipLast ? 1 : 0);
 
-  void _onWebViewCreated(InAppWebViewController controller) {
-    _webViewController = controller;
-    _bridgeController = ChatBridgeController(controller);
-  }
+    if (newIds.length < oldIds.length) {
+      _bridge?.clearAll();
+      _bridge?.appendMessages(widget.messages);
+      return;
+    }
 
-  void _onLoadStop(InAppWebViewController controller, Uri? url) {
-    setState(() {
-      _isLoading = false;
-      _isWebViewReady = true;
-    });
+    if (newIds.length > oldIds.length) {
+      final oldLastId = oldIds.last;
+      final newIdx = newIds.indexOf(oldLastId);
+      if (newIdx > 0) {
+        _bridge?.prependMessages(widget.messages.sublist(0, newIdx));
+      } else if (newLen > oldIds.length) {
+        final appends = widget.messages.sublist(
+          oldIds.length,
+          newLen,
+        );
+        _bridge?.appendMessages(appends);
+      }
+    }
+
+    final minLen = newLen < oldIds.length ? newLen : oldIds.length;
+    for (int i = 0; i < minLen; i++) {
+      if (i >= newIds.length) break;
+      if (newIds[i] != oldIds[i]) {
+        _bridge?.clearAll();
+        _bridge?.appendMessages(widget.messages);
+        return;
+      }
+      final o = oldMsgs[i];
+      final n = widget.messages[i];
+      if (o.content != n.content || o.swipeId != n.swipeId) {
+        _bridge?.updateMessage(n);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<StreamingState>(
+      streamingStateProvider(widget.charId),
+      (prev, next) {
+        if (!_ready || _bridge == null) return;
+        if (next.text.isEmpty && next.reasoning == null) return;
+
+        final msg = ChatMessage(
+          id: _kStreamingId,
+          role: 'assistant',
+          content: next.text,
+          timestamp: DateTime.now().millisecondsSinceEpoch,
+        );
+
+        if (!_streamingSent) {
+          _bridge?.appendMessage(msg);
+          _streamingSent = true;
+        } else {
+          _bridge?.updateMessage(msg);
+        }
+      },
+    );
+
     return Stack(
       children: [
         InAppWebView(
-          initialFile: '${widget.assetPath}/index.html',
+          initialFile: 'assets/chat_webview/index.html',
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             domStorageEnabled: true,
-            mediaPlaybackRequiresUserGesture: false,
-            allowsInlineMediaPlayback: true,
             transparentBackground: true,
-            useWideViewPort: false,
             useHybridComposition: true,
           ),
-          onWebViewCreated: _onWebViewCreated,
-          onLoadStop: _onLoadStop,
+          onWebViewCreated: (controller) {
+            _bridge = ChatBridgeController(controller);
+            _bridge!.onReady = _onReady;
+          },
         ),
-        if (_isLoading)
-          const Center(
-            child: CircularProgressIndicator(),
+        if (widget.bottomInset > 0)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.02),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
       ],
     );
   }
 
-  bool get isReady => _isWebViewReady;
-
-  Future<void> setMessages(List<ChatMessage> messages) async {
-    if (!_isWebViewReady || _bridgeController == null) return;
-    await _bridgeController!.setMessages(messages);
+  void _onReady() {
+    _bridge!.setMessages(widget.messages);
+    final preset = ref.read(themeProvider).activePreset;
+    _bridge!.applyTheme({
+      'user-bg': preset.userBubbleColor ?? '',
+      'assistant-bg': preset.charBubbleColor ?? '',
+      'user-text': preset.userTextColor ?? '',
+      'assistant-text': preset.charTextColor ?? '',
+      'quote-color': preset.charQuoteColor ?? preset.userQuoteColor ?? '',
+      'italic-color': preset.charItalicColor ?? preset.userItalicColor ?? '',
+      'primary-color': preset.accentColor ?? '',
+    });
+    setState(() => _ready = true);
   }
 
-  Future<void> appendMessage(ChatMessage message) async {
-    if (!_isWebViewReady || _bridgeController == null) return;
-    await _bridgeController!.appendMessage(message);
+  Future<void> scrollToBottom() {
+    final b = _bridge;
+    if (b == null) return Future.value();
+    return b.scrollToBottom();
   }
 
-  Future<void> updateMessage(ChatMessage message) async {
-    if (!_isWebViewReady || _bridgeController == null) return;
-    await _bridgeController!.updateMessage(message);
+  Future<void> scrollToMessage(String id) {
+    final b = _bridge;
+    if (b == null) return Future.value();
+    return b.scrollToMessage(id);
   }
 
-  Future<void> deleteMessage(String messageId) async {
-    if (!_isWebViewReady || _bridgeController == null) return;
-    await _bridgeController!.deleteMessage(messageId);
-  }
-
-  Future<void> scrollToBottom() async {
-    if (!_isWebViewReady || _bridgeController == null) return;
-    await _bridgeController!.scrollToBottom();
-  }
-
-  Future<void> scrollToMessage(String messageId) async {
-    if (!_isWebViewReady || _bridgeController == null) return;
-    await _bridgeController!.scrollToMessage(messageId);
-  }
-
-  Future<void> setSearch({
-    required String query,
-    int activeIndex = -1,
-  }) async {
-    if (!_isWebViewReady || _bridgeController == null) return;
-    await _bridgeController!.setSearch(
-      query: query,
-      activeIndex: activeIndex,
-    );
-  }
-
-  Future<bool?> isNearBottom() async {
-    if (!_isWebViewReady || _bridgeController == null) return null;
-    return await _bridgeController!.isNearBottom();
-  }
-
-  Future<bool?> isNearTop() async {
-    if (!_isWebViewReady || _bridgeController == null) return null;
-    return await _bridgeController!.isNearTop();
+  Future<void> setSearch(String q, int i) {
+    final b = _bridge;
+    if (b == null) return Future.value();
+    return b.setSearch(query: q, activeIndex: i);
   }
 }

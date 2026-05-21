@@ -1,148 +1,106 @@
-class GlazeBridge {
+class Bridge {
   constructor(renderer, virtualList) {
     this.renderer = renderer;
     this.virtualList = virtualList;
-
-    // Register Flutter channel
-    if (window.flutter_inappwebview) {
-      window.flutter_inappwebview.callHandler = (name, ...args) => {
-        this._sendToFlutter(name, args);
-      };
-    }
-
-    // Listen for scroll events
     this._setupScrollListener();
-
-    // Listen for user interactions
     this._setupInteractionListener();
   }
 
   _sendToFlutter(name, args) {
-    if (window.flutter_inappwebview && window.flutter_inappwebview.callHandler) {
+    if (window.flutter_inappwebview) {
       window.flutter_inappwebview.callHandler(name, ...args);
     }
   }
 
   _setupScrollListener() {
-    const container = this.virtualList.container;
-    let scrollTimeout;
-
-    container.addEventListener('scroll', () => {
-      clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => {
-        // Check if near top (load more)
-        if (this.virtualList.isNearTop(100)) {
-          this._sendToFlutter('onScrollTop', []);
-        }
-      }, 100);
+    window.addEventListener('scroll', () => {
+      if (this.virtualList.isNearTop(100)) {
+        this._sendToFlutter('onLoadMore', []);
+      }
     });
   }
 
   _setupInteractionListener() {
-    document.body.addEventListener('click', (e) => {
-      // Handle link clicks
-      if (e.target.tagName === 'A' && e.target.href) {
+    document.addEventListener('click', (e) => {
+      const link = e.target.closest('a');
+      if (link) {
         e.preventDefault();
-        const href = e.target.href;
-        this._sendToFlutter('onLinkClick', [href]);
+        this._sendToFlutter('onLinkClick', [link.href]);
       }
 
-      // Handle image clicks
-      if (e.target.tagName === 'IMG') {
-        const src = e.target.src;
-        this._sendToFlutter('onImageClick', [src]);
+      const img = e.target.closest('img');
+      if (img && img.src) {
+        this._sendToFlutter('onImageClick', [img.src]);
       }
     });
   }
 
-  // Methods called from Flutter via evaluateJavascript
-  renderMessage(messageData) {
-    const element = this.renderer.renderMessage(messageData);
-
-    if (messageData.position === 'top') {
-      this.virtualList.prepend(messageData.id, element);
-    } else {
-      this.virtualList.append(messageData.id, element);
-    }
-
-    return true;
+  setMessages(messagesJson) {
+    const messages = JSON.parse(messagesJson);
+    this.virtualList.clear();
+    messages.forEach(msg => {
+      const el = this.renderer.renderMessage(msg);
+      this.virtualList.append(msg.id, el);
+    });
   }
 
-  updateMessage(messageId, newText, isUser = false) {
-    this.renderer.updateMessage(messageId, newText, isUser);
-    return true;
+  appendMessage(messageJson) {
+    const msg = JSON.parse(messageJson);
+    const el = this.renderer.renderMessage(msg);
+    this.virtualList.append(msg.id, el);
+    this.virtualList.scrollToBottom();
+  }
+
+  appendMessages(messagesJson) {
+    const messages = JSON.parse(messagesJson);
+    messages.forEach(msg => {
+      const el = this.renderer.renderMessage(msg);
+      this.virtualList.append(msg.id, el);
+    });
+  }
+
+  prependMessages(messagesJson) {
+    const messages = JSON.parse(messagesJson);
+    const scrollBefore = this.virtualList.container.scrollHeight;
+    messages.forEach(msg => {
+      const el = this.renderer.renderMessage(msg);
+      this.virtualList.prepend(msg.id, el);
+    });
+    const scrollAfter = this.virtualList.container.scrollHeight;
+    window.scrollTo(0, scrollAfter - scrollBefore);
+  }
+
+  updateMessage(messageJson) {
+    const msg = JSON.parse(messageJson);
+    this.renderer.updateMessage(msg);
   }
 
   removeMessage(messageId) {
     this.virtualList.remove(messageId);
-    return true;
   }
 
   clearAll() {
     this.virtualList.clear();
-    return true;
   }
 
   scrollToBottom() {
     this.virtualList.scrollToBottom();
-    return true;
-  }
-
-  scrollToTop() {
-    this.virtualList.scrollToTop();
-    return true;
   }
 
   scrollToMessage(messageId) {
     this.virtualList.scrollToMessage(messageId);
-    return true;
   }
 
-  setSearch(query, activeIndex = -1) {
+  setSearch(query, activeIndex) {
     this.renderer.setSearch(query, activeIndex);
-    return true;
   }
 
-  scrollToSearchMatch(index) {
-    this.renderer.scrollToSearchMatch(index);
-    return true;
-  }
-
-  applyTheme(theme) {
-    const root = document.documentElement;
-    Object.keys(theme).forEach(key => {
-      const cssVar = `--${key}`;
-      root.style.setProperty(cssVar, theme[key]);
-    });
-    return true;
-  }
-
-  getScrollInfo() {
-    const container = this.virtualList.container;
-    return {
-      scrollTop: container.scrollTop,
-      scrollHeight: container.scrollHeight,
-      clientHeight: container.clientHeight,
-      nearTop: this.virtualList.isNearTop(),
-      nearBottom: this.virtualList.isNearBottom()
-    };
-  }
-
-  isNearBottom() {
-    return this.virtualList.isNearBottom();
-  }
-
-  isNearTop() {
-    return this.virtualList.isNearTop();
+  applyTheme(themeJson) {
+    const theme = JSON.parse(themeJson);
+    for (const [key, value] of Object.entries(theme)) {
+      document.documentElement.style.setProperty(`--${key}`, value);
+    }
   }
 }
 
-// Make bridge globally accessible for flutter_inappwebview
-window.glazeBridge = null; // Will be set when ready
-
-// Auto-initialize when Flutter bridge is ready
-if (window.flutter_inappwebview) {
-  window.flutter_inappwebview.ready.then(() => {
-    console.log('Flutter InAppWebView ready');
-  });
-}
+window.bridge = null;

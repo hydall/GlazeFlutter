@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-import '../../core/models/chat_message.dart';
+import '../../../core/models/chat_message.dart';
 
 class ChatBridgeController {
   final InAppWebViewController _controller;
@@ -10,167 +10,125 @@ class ChatBridgeController {
     _setupHandlers();
   }
 
+  void Function()? onReady;
+  void Function()? onLoadMore;
+  void Function(String url)? onLinkClick;
+  void Function(String url)? onImageClick;
+
   void _setupHandlers() {
     _controller.addJavaScriptHandler(
       handlerName: 'onWebViewReady',
-      callback: (args) {
-        _onWebViewReady();
-      },
+      callback: (args) => onReady?.call(),
     );
 
     _controller.addJavaScriptHandler(
-      handlerName: 'onScrollTop',
-      callback: (args) {
-        _onScrollToTop();
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onScrollBottom',
-      callback: (args) {
-        _onScrollToBottom();
-      },
+      handlerName: 'onLoadMore',
+      callback: (args) => onLoadMore?.call(),
     );
 
     _controller.addJavaScriptHandler(
       handlerName: 'onLinkClick',
       callback: (args) {
-        if (args.isNotEmpty) {
-          _onLinkClick(args[0] as String);
-        }
+        if (args.isNotEmpty) onLinkClick?.call(args[0] as String);
       },
     );
 
     _controller.addJavaScriptHandler(
       handlerName: 'onImageClick',
       callback: (args) {
-        if (args.isNotEmpty) {
-          _onImageClick(args[0] as String);
-        }
+        if (args.isNotEmpty) onImageClick?.call(args[0] as String);
       },
     );
   }
 
-  void dispose() {
-    // Cleanup handlers if needed
+  void dispose() {}
+
+  Future<void> setMessages(List<ChatMessage> messages) {
+    final json = jsonEncode(messages.map(_toMap).toList());
+    return _callJs('setMessages', json);
   }
 
-  // Callbacks for JavaScript events
-  void Function()? onReady;
-  void Function()? onScrollToTop;
-  void Function()? onScrollBottom;
-  void Function(String url)? onLinkClick;
-  void Function(String imageUrl)? onImageClick;
-
-  void _onWebViewReady() {
-    onReady?.call();
+  Future<void> appendMessage(ChatMessage message) {
+    final json = jsonEncode(_toMap(message));
+    return _callJs('appendMessage', json);
   }
 
-  void _onScrollToTop() {
-    onScrollToTop?.call();
+  Future<void> appendMessages(List<ChatMessage> messages) {
+    final json = jsonEncode(messages.map(_toMap).toList());
+    return _callJs('appendMessages', json);
   }
 
-  void _onScrollBottom() {
-    onScrollBottom?.call();
+  Future<void> prependMessages(List<ChatMessage> messages) {
+    final json = jsonEncode(messages.map(_toMap).toList());
+    return _callJs('prependMessages', json);
   }
 
-  void _onLinkClick(String url) {
-    onLinkClick?.call(url);
+  Future<void> updateMessage(ChatMessage message) {
+    final json = jsonEncode(_toMap(message));
+    return _callJs('updateMessage', json);
   }
 
-  void _onImageClick(String url) {
-    onImageClick?.call(url);
+  Future<void> removeMessage(String messageId) {
+    return _callJs('removeMessage', messageId);
   }
 
-  // Methods to call JavaScript
-  Future<void> setMessages(List<ChatMessage> messages) async {
-    final messagesJson = messages.map((m) => _messageToJson(m)).toList();
-    await _callJs('setMessages', [jsonEncode(messagesJson)]);
+  Future<void> clearAll() {
+    return _eval('window.glazeBridge?.clearAll()');
   }
 
-  Future<void> appendMessage(ChatMessage message) async {
-    final messageJson = _messageToJson(message);
-    await _callJs('appendMessage', [jsonEncode(messageJson)]);
+  Future<void> scrollToBottom() {
+    return _eval('window.glazeBridge?.scrollToBottom()');
   }
 
-  Future<void> updateMessage(ChatMessage message) async {
-    final messageJson = _messageToJson(message);
-    await _callJs('updateMessage', [jsonEncode(messageJson)]);
-  }
-
-  Future<void> deleteMessage(String messageId) async {
-    await _callJs('deleteMessage', [messageId]);
-  }
-
-  Future<void> scrollToBottom() async {
-    await _callJs('scrollToBottom', []);
-  }
-
-  Future<void> scrollToMessage(String messageId) async {
-    await _callJs('scrollToMessage', [messageId]);
-  }
-
-  Future<void> scrollToTop() async {
-    await _callJs('scrollToTop', []);
+  Future<void> scrollToMessage(String messageId) {
+    return _eval('window.glazeBridge?.scrollToMessage("$messageId")');
   }
 
   Future<void> setSearch({
     required String query,
     int activeIndex = -1,
-  }) async {
-    await _callJs('setSearch', [query, activeIndex]);
+  }) {
+    return _eval('window.glazeBridge?.setSearch("${_escape(query)}", $activeIndex)');
   }
 
-  Future<void> scrollToSearchMatch(int index) async {
-    await _callJs('scrollToSearchMatch', [index]);
+  Future<void> applyTheme(Map<String, String> theme) {
+    final json = jsonEncode(theme);
+    return _callJs('applyTheme', json);
   }
 
-  Future<bool?> isNearBottom() async {
-    final result = await _controller.evaluateJavascript(
-      source: 'window.glazeBridge ? window.glazeBridge.isNearBottom() : false',
-    );
-    return result as bool?;
+  Future<void> _callJs(String method, String arg) {
+    return _eval('window.glazeBridge?.$method(${_escapeJsonStr(arg)})');
   }
 
-  Future<bool?> isNearTop() async {
-    final result = await _controller.evaluateJavascript(
-      source: 'window.glazeBridge ? window.glazeBridge.isNearTop() : false',
-    );
-    return result as bool?;
+  Future<void> _eval(String source) async {
+    await _controller.evaluateJavascript(source: source);
   }
 
-  Future<void> _callJs(String method, List<dynamic> args) async {
-    final argsStr = args.map((a) {
-      if (a is String) return "'${_escapeJs(a)}'";
-      if (a is bool || a is num) return a.toString();
-      return "null";
-    }).join(', ');
-
-    await _controller.evaluateJavascript(
-      source: 'window.glazeBridge?.$method($argsStr)',
-    );
+  String _escape(String s) {
+    return s.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n');
   }
 
-  String _escapeJs(String str) {
-    return str
-        .replaceAll('\\', '\\\\')
-        .replaceAll("'", "\\'")
-        .replaceAll('\n', '\\n')
-        .replaceAll('\r', '\\r')
-        .replaceAll('\t', '\\t');
+  String _escapeJsonStr(String s) {
+    return '"${jsonEncode(s).substring(1, jsonEncode(s).length - 1)}"';
   }
 
-  Map<String, dynamic> _messageToJson(ChatMessage message) {
+  Map<String, dynamic> _toMap(ChatMessage m) {
     return {
-      'id': message.id,
-      'role': message.role,
-      'text': message.content,
-      'timestamp': message.timestamp,
-      'isUser': message.role == 'user',
-      'isAssistant': message.role == 'assistant',
-      'isSystem': message.role == 'system',
-      if (message.imagePath != null) 'imagePath': message.imagePath,
-      if (message.personaName != null) 'personaName': message.personaName,
+      'id': m.id,
+      'role': m.role,
+      'text': m.content,
+      'timestamp': m.timestamp,
+      'isUser': m.role == 'user',
+      'isAssistant': m.role == 'assistant',
+      'isSystem': m.role == 'system',
+      if (m.imagePath != null) 'imagePath': m.imagePath,
+      if (m.personaName != null) 'personaName': m.personaName,
+      if (m.swipes.isNotEmpty) 'swipeIndex': m.swipeId,
+      if (m.swipes.isNotEmpty) 'swipeTotal': m.swipes.length,
+      if (m.genTime != null) 'genTime': m.genTime,
+      if (m.tokens != null) 'tokens': m.tokens,
+      if (m.isError) 'isError': true,
+      if (m.isTyping) 'isTyping': true,
     };
   }
 }

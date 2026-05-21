@@ -26,6 +26,7 @@ import '../image_gen/widgets/image_gen_sheet.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/message_list.dart';
 import 'widgets/cached_token_breakdown.dart';
+import 'widgets/chat_webview_widget.dart';
 import 'widgets/session_lifecycle_tracker.dart';
 
 class SearchMatch {
@@ -520,20 +521,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     },
                     child: RepaintBoundary(
                       child: Builder(builder: (context) {
-                        final breakdown = ref.watch(cachedTokenBreakdownProvider(widget.charId));
-                        return MessageList(
-                        messages: widget.state.messages,
-                        isGenerating: widget.state.isGenerating,
-                        generationStartTime: widget.state.generationStartTime,
-                        charId: widget.charId,
-                        sessionId: widget.state.session?.id,
-                        bottomInset: messageListBottom,
-                        isDrawerOpen: widget.drawerOpen || widget.isSwitchingToDrawer,
-                        searchQuery: widget.searchQuery,
-                        searchMatches: widget.searchMatches,
-                        searchCurrentIndex: widget.searchCurrentIndex,
-                        contextCutoffIndex: breakdown?.cutoffIndex ?? -1,
-                      );
+                        return ChatWebViewWidget(
+                          messages: widget.state.messages,
+                          charId: widget.charId,
+                          isGenerating: widget.state.isGenerating,
+                        );
                       }),
                     ),
                   ),
