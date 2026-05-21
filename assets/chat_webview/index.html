@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Glaze Chat</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="chat-container"></div>
+
+  <script src="formatter.js"></script>
+  <script src="renderer.js"></script>
+  <script src="virtual_list.js"></script>
+  <script src="bridge.js"></script>
+
+  <script>
+    // Initialize components
+    const container = document.getElementById('chat-container');
+    const virtualList = new VirtualList(container);
+    const formatter = new Formatter();
+    const renderer = new Renderer(formatter, virtualList);
+    const bridge = new Bridge(renderer, virtualList);
+
+    // Signal ready to Flutter
+    window.flutter_inappwebview.callHandler('onWebViewReady');
+  </script>
+</body>
+</html>
