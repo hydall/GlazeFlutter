@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:go_router/go_router.dart';
 
@@ -223,11 +222,10 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
 
   Widget _buildImage() {
     if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
-      final thumbPath = _thumbOrAvatar(character.avatarPath!);
       final mq = MediaQuery.of(context);
       final cacheW = (mq.size.width * mq.devicePixelRatio / 2).ceil();
       return Image.file(
-        File(thumbPath),
+        File(character.avatarPath!),
         fit: BoxFit.cover,
         cacheWidth: cacheW,
         filterQuality: FilterQuality.high,
@@ -235,14 +233,6 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
       );
     }
     return _buildPlaceholder();
-  }
-
-  static String _thumbOrAvatar(String avatarPath) {
-    final name = p.basenameWithoutExtension(avatarPath);
-    final dir = p.dirname(p.dirname(avatarPath));
-    final thumb = p.join(dir, 'thumbnails', '$name.jpg');
-    if (File(thumb).existsSync()) return thumb;
-    return avatarPath;
   }
 
   Widget _buildPlaceholder() {
