@@ -224,9 +224,13 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   Widget _buildImage() {
     if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
       final thumbPath = _thumbOrAvatar(character.avatarPath!);
+      final mq = MediaQuery.of(context);
+      final cacheW = (mq.size.width * mq.devicePixelRatio / 2).ceil();
       return Image.file(
         File(thumbPath),
         fit: BoxFit.cover,
+        cacheWidth: cacheW,
+        filterQuality: FilterQuality.high,
         errorBuilder: (_, _, _) => _buildPlaceholder(),
       );
     }
