@@ -191,6 +191,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         tags: tags,
         alternateGreetings: alternateGreetings,
         updatedAt: currentTimestampSeconds(),
+        createdAt: _original?.createdAt ?? currentTimestampSeconds(),
         extensions: {
           ...?_original?.extensions,
           'talkativeness': item['talkativeness'] is num ? (item['talkativeness'] as num).toDouble() : 1.0,
@@ -234,6 +235,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         tags: tags,
         alternateGreetings: alternateGreetings,
         updatedAt: currentTimestampSeconds(),
+        createdAt: currentTimestampSeconds(),
         extensions: {
           'talkativeness': item['talkativeness'] is num ? (item['talkativeness'] as num).toDouble() : 1.0,
         },

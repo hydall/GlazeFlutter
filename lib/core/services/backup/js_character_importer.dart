@@ -60,6 +60,7 @@ class JsCharacterImporter extends BackupHelpers {
                       ? jsonEncode(char['alternate_greetings'])
                       : null),
               updatedAt: Value(base + i),
+              createdAt: Value(_originalTimestamp(char) > 0 ? _originalTimestamp(char) : base + i),
               fav: Value(char['fav'] == true),
               extensionsJson: Value(extractExtensionsJson(char)),
               characterVersion: Value(

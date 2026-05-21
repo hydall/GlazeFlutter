@@ -124,13 +124,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   FocusNode get _effectiveFocusNode => widget.focusNode ?? _internalFocusNode;
 
-  void _requestFocus() {
-    final fn = _effectiveFocusNode;
-    if (!fn.hasFocus) {
-      fn.requestFocus();
-    }
-  }
-
   void _handleSend() {
     final text = _controller.text;
     if (text.trim().isEmpty) return;
@@ -279,7 +272,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 textInputAction: widget.virtualKeyboardSend
                     ? TextInputAction.send
                     : TextInputAction.newline,
-                onTap: _requestFocus,
                 onSubmitted: widget.virtualKeyboardSend
                     ? (_) => _handleSend()
                     : null,

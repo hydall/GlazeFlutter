@@ -24,6 +24,7 @@ class Character with _$Character {
     @Default([]) List<String> alternateGreetings,
     String? color,
     @Default(0) int updatedAt,
+    @Default(0) int createdAt,
     @Default([]) List<GalleryEntry> gallery,
     @Default(0) int currentSessionIndex,
     @Default(false) bool fav,

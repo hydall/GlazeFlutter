@@ -19,6 +19,7 @@ class Characters extends Table {
   TextColumn get creatorNotes => text().nullable()();
   TextColumn get color => text().nullable()();
   IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
   TextColumn get tagsJson => text().nullable()();
   TextColumn get alternateGreetingsJson => text().nullable()();
   TextColumn get galleryJson => text().nullable()();

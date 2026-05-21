@@ -26,15 +26,8 @@ class StreamAccumulator {
     }
 
     if (hasInlineTags && tagStart != null && tagEnd != null) {
-      // If reasoning is coming via a dedicated API field the model may still
-      // leak the closing tag into the content stream.  Strip it so it doesn't
-      // end up in the visible text.
-      var cleaned = delta;
-      if (_hasExternalReasoning && tagEnd != null && cleaned.startsWith(tagEnd!)) {
-        cleaned = cleaned.substring(tagEnd!.length);
-      }
-      if (cleaned.isNotEmpty) {
-        _pending += cleaned;
+      if (delta.isNotEmpty) {
+        _pending += delta;
         _processPending();
       }
     } else {
@@ -67,10 +60,26 @@ class StreamAccumulator {
         input = input.substring(endIdx + tag.length);
         _inReasoningBlock = false;
       } else {
+        if (_hasExternalReasoning && tagEnd != null) {
+          final endIdx = input.indexOf(tagEnd!);
+          if (endIdx != -1) {
+            textPart += input.substring(0, endIdx);
+            input = input.substring(endIdx + tagEnd!.length);
+            continue;
+          }
+          final partial = _partialSuffixLength(input, tagEnd!);
+          if (partial > 0) {
+            textPart += input.substring(0, input.length - partial);
+            _pending = input.substring(input.length - partial);
+          } else {
+            textPart += input;
+            _pending = '';
+          }
+          break;
+        }
         final tag = tagStart!;
         final startIdx = input.indexOf(tag);
         if (startIdx == -1) {
-          // Check if input ends with a partial tagStart prefix
           final partial = _partialSuffixLength(input, tag);
           if (partial > 0) {
             textPart += input.substring(0, input.length - partial);

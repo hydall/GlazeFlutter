@@ -15,7 +15,7 @@ Color? parseHexColor(String hex) {
 
 class HtmlColorMd extends InlineMd {
   @override
-  RegExp get exp => RegExp(r'==hc:(#[0-9a-fA-F]{3,8})==(.+?)==');
+  RegExp get exp => RegExp(r'==hc:(#[0-9a-fA-F]{3,8})==(.+?)==', dotAll: true);
 
   @override
   InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
@@ -34,7 +34,7 @@ class HtmlColorMd extends InlineMd {
 
 class GlowTextMd extends InlineMd {
   @override
-  RegExp get exp => RegExp(r'==glow:(#[0-9a-fA-F]{3,8}),(\d+)==(.+?)==');
+  RegExp get exp => RegExp(r'==glow:(#[0-9a-fA-F]{3,8}),(\d+)==(.+?)==', dotAll: true);
 
   @override
   InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
@@ -65,7 +65,7 @@ class GlowTextMd extends InlineMd {
 
 class ColorGlowTextMd extends InlineMd {
   @override
-  RegExp get exp => RegExp(r'==cg:(#[0-9a-fA-F]{3,8}),(#[0-9a-fA-F]{3,8}),(\d+)==(.+?)==');
+  RegExp get exp => RegExp(r'==cg:(#[0-9a-fA-F]{3,8}),(#[0-9a-fA-F]{3,8}),(\d+)==(.+?)==', dotAll: true);
 
   @override
   InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
@@ -100,7 +100,7 @@ class ColorGlowTextMd extends InlineMd {
 
 class GradientTextMd extends InlineMd {
   @override
-  RegExp get exp => RegExp(r'==grad:(#[0-9a-fA-F]{3,8}(?:,#[0-9a-fA-F]{3,8})+)==(.+?)==');
+  RegExp get exp => RegExp(r'==grad:(#[0-9a-fA-F]{3,8}(?:,#[0-9a-fA-F]{3,8})+)==(.+?)==', dotAll: true);
 
   @override
   InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
@@ -148,7 +148,7 @@ class GradientTextMd extends InlineMd {
 
 class BackgroundTextMd extends InlineMd {
   @override
-  RegExp get exp => RegExp(r'==bg:(#[0-9a-fA-F]{3,8})==(.+?)==');
+  RegExp get exp => RegExp(r'==bg:(#[0-9a-fA-F]{3,8})==(.+?)==', dotAll: true);
 
   @override
   InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {

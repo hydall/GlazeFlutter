@@ -111,6 +111,7 @@ class MigrationService {
           tags: toStringList(json['tags']),
           alternateGreetings: toStringList(json['alternate_greetings']),
           updatedAt: _importTimestamp(json),
+          createdAt: _importTimestamp(json),
         );
         await _charRepo.put(char);
         result.characters++;

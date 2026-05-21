@@ -235,6 +235,7 @@ class CharacterImporter {
       tags: toStringList(data['tags']),
       alternateGreetings: toStringList(data['alternate_greetings']),
       updatedAt: currentTimestampSeconds(),
+      createdAt: currentTimestampSeconds(),
       fav: data['fav'] as bool? ?? false,
       extensions: _extractExtensions(data),
       characterVersion: data['character_version'] is String ? data['character_version'] as String : '1',

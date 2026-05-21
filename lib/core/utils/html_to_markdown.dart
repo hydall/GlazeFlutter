@@ -27,31 +27,10 @@ String htmlToMarkdown(String html) {
     (m) => '\n${'#' * int.parse(m[1]!)} ${_inline(m[2]!)}\n',
   );
 
-  result = result.replaceAllMapped(
-    RegExp(r'<p[^>]*>(.*?)</p>', caseSensitive: false, dotAll: true),
-    (m) => '\n${_inline(m[1]!)}\n',
-  );
-
-  result = result.replaceAllMapped(
-    RegExp(r'<blockquote[^>]*>(.*?)</blockquote>', caseSensitive: false, dotAll: true),
-    (m) => _inline(m[1]!).split('\n').map((l) => '> $l').join('\n'),
-  );
-
   result = _convertInline(result, 'strong', '**');
   result = _convertInline(result, 'b', '**');
+
   result = _extractStyledImageFrames(result);
-
-  result = _convertInline(result, 'em', '*');
-  result = _convertInline(result, 'i', '*');
-  result = _convertInline(result, 'del', '~~');
-  result = _convertInline(result, 's', '~~');
-  result = _convertInlineKeep(result, 'u');
-  result = _convertInline(result, 'code', '`');
-
-  result = result.replaceAllMapped(
-    RegExp(r'''<a[^>]*href=["']([^"']*)["'][^>]*>(.*?)</a>''', caseSensitive: false, dotAll: true),
-    (m) => '[${_inline(m[2]!)}](${m[1]!})',
-  );
 
   result = result.replaceAllMapped(
     RegExp(r'<img\s[^>]*>', caseSensitive: false, dotAll: true),
@@ -70,6 +49,28 @@ String htmlToMarkdown(String html) {
       return '';
     },
   );
+
+  result = result.replaceAllMapped(
+    RegExp(r'''<a[^>]*href=["']([^"']*)["'][^>]*>(.*?)</a>''', caseSensitive: false, dotAll: true),
+    (m) => '[${_inline(m[2]!)}](${m[1]!})',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'<p[^>]*>(.*?)</p>', caseSensitive: false, dotAll: true),
+    (m) => '\n${_inline(m[1]!)}\n',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'<blockquote[^>]*>(.*?)</blockquote>', caseSensitive: false, dotAll: true),
+    (m) => _inline(m[1]!).split('\n').map((l) => '> $l').join('\n'),
+  );
+
+  result = _convertInline(result, 'em', '*');
+  result = _convertInline(result, 'i', '*');
+  result = _convertInline(result, 'del', '~~');
+  result = _convertInline(result, 's', '~~');
+  result = _convertInlineKeep(result, 'u');
+  result = _convertInline(result, 'code', '`');
 
   result = result.replaceAllMapped(
     RegExp(r'<hr\s*/?>', caseSensitive: false),

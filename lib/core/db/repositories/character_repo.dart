@@ -15,14 +15,14 @@ class CharacterRepo implements SyncCharacterStore {
 
   Future<List<Character>> getAll() async {
     final rows = await (_db.select(_db.characters)
-          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .get();
     return rows.map(_toModel).toList();
   }
 
   Stream<List<Character>> watchAll() {
     return (_db.select(_db.characters)
-          ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .watch()
         .map((rows) => rows.map(_toModel).toList());
   }
@@ -96,6 +96,7 @@ class CharacterRepo implements SyncCharacterStore {
             creator: Value(creator),
             creatorNotes: Value(creatorNotes),
             updatedAt: Value(currentTimestampSeconds()),
+            createdAt: Value(currentTimestampSeconds()),
             tagsJson: Value(jsonEncode(tags)),
             alternateGreetingsJson: Value(jsonEncode(alternateGreetings)),
           ),
@@ -117,6 +118,7 @@ class CharacterRepo implements SyncCharacterStore {
         creatorNotes: c.creatorNotes,
         color: c.color,
         updatedAt: c.updatedAt,
+        createdAt: c.createdAt,
         tags: c.tagsJson != null
             ? List<String>.from(jsonDecode(c.tagsJson!) as List<dynamic>)
             : [],
@@ -153,6 +155,7 @@ class CharacterRepo implements SyncCharacterStore {
         creatorNotes: Value(m.creatorNotes),
         color: Value(m.color),
         updatedAt: Value(m.updatedAt),
+        createdAt: Value(m.createdAt),
         tagsJson: Value(jsonEncode(m.tags)),
         alternateGreetingsJson: Value(jsonEncode(m.alternateGreetings)),
         galleryJson: Value(jsonEncode(m.gallery.map((e) => e.toJson()).toList())),
