@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/character.dart';
 import '../../core/utils/html_to_markdown.dart';
@@ -598,6 +599,10 @@ class _InfoTab extends StatelessWidget {
                 height: 1.55,
                 color: _kText75,
               ),
+              onLinkTap: (url, title) async {
+                final uri = Uri.tryParse(url);
+                if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
               imageBuilder: (context, url) {
                 if (url.startsWith('http://') || url.startsWith('https://')) {
                   return ClipRRect(
