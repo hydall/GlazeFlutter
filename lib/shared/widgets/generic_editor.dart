@@ -419,7 +419,7 @@ class _GenericEditorState extends State<GenericEditor> {
       margin: const EdgeInsets.only(bottom: 16),
       decoration: widget.useWindows
           ? BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
+              color: Colors.white.withValues(alpha: 0.03),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: context.cs.outlineVariant),
             )
@@ -432,7 +432,7 @@ class _GenericEditorState extends State<GenericEditor> {
             Container(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.03))),
+                border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.03))),
               ),
               child: Text(
                 section.title!.toUpperCase(),
@@ -462,7 +462,7 @@ class _GenericEditorState extends State<GenericEditor> {
       decoration: (isLast || !widget.useWindows)
           ? null
           : BoxDecoration(
-              border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+              border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
             ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -553,17 +553,17 @@ class _GenericEditorState extends State<GenericEditor> {
       style: TextStyle(fontSize: 15, color: context.cs.onSurface),
       decoration: InputDecoration(
         hintText: field.placeholder,
-        hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withOpacity(0.5)),
+        hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
         filled: true,
-        fillColor: Colors.black.withOpacity(0.2),
+        fillColor: Colors.black.withValues(alpha: 0.2),
         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -585,7 +585,7 @@ class _GenericEditorState extends State<GenericEditor> {
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
+              color: Colors.white.withValues(alpha: 0.03),
               border: Border.all(color: context.cs.outlineVariant),
               borderRadius: BorderRadius.circular(10),
             ),
@@ -633,7 +633,7 @@ class _GenericEditorState extends State<GenericEditor> {
                     greets[gIdx].isEmpty ? 'Empty' : greets[gIdx],
                     style: TextStyle(
                       fontSize: 14,
-                      color: context.cs.onSurface.withOpacity(0.9),
+                        color: context.cs.onSurface.withValues(alpha: 0.9),
                       height: 1.4,
                     ),
                     maxLines: 3,
@@ -689,7 +689,7 @@ class _GenericEditorState extends State<GenericEditor> {
               _getSelectedLabel(field),
               style: TextStyle(fontSize: 15, color: context.cs.onSurface),
             ),
-            Icon(Icons.arrow_drop_down, color: context.cs.onSurfaceVariant.withOpacity(0.5)),
+            Icon(Icons.arrow_drop_down, color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
           ],
         ),
       ),

@@ -286,7 +286,7 @@ class _LorebookTile extends ConsumerWidget {
             Switch(
               value: lorebook.enabled,
               onChanged: (_) => onToggle(),
-              activeColor: context.cs.primary,
+              activeThumbColor: context.cs.primary,
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 20),

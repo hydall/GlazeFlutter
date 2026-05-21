@@ -116,40 +116,21 @@ void main() {
 
   group('scroll anchor save/clear on at-bottom', () {
     test('when _wasAtBottom is true, anchor is cleared (null)', () {
-      final savedAnchor = ScrollAnchor('msg-1', 10.0);
-      final wasAtBottom = true;
-      ScrollAnchor? result;
-      if (wasAtBottom) {
-        result = null;
-      } else {
-        result = savedAnchor;
-      }
+      final result = null;
       expect(result, isNull);
     });
 
     test('when _wasAtBottom is false, anchor is saved', () {
       final savedAnchor = ScrollAnchor('msg-1', 10.0);
-      final wasAtBottom = false;
-      ScrollAnchor? result;
-      if (wasAtBottom) {
-        result = null;
-      } else {
-        result = savedAnchor;
-      }
+      final result = savedAnchor;
       expect(result, isNotNull);
-      expect(result!.messageId, 'msg-1');
+      expect(result.messageId, 'msg-1');
     });
   });
 
   group('initial scroll decision', () {
     test('no saved anchor -> open at bottom (offset 0 in reverse:true)', () {
-      ScrollAnchor? anchor;
-      double targetOffset;
-      if (anchor != null) {
-        targetOffset = 2500.0;
-      } else {
-        targetOffset = 0.0;
-      }
+      const targetOffset = 0.0;
       expect(targetOffset, 0.0);
     });
 
@@ -165,24 +146,16 @@ void main() {
     });
 
     test('first open (no SharedPreferences entry) -> anchor is null -> bottom', () {
-      String? savedMsgId;
-      double? savedOffset;
-      ScrollAnchor? anchor;
-      if (savedMsgId != null && savedOffset != null) {
-        anchor = ScrollAnchor(savedMsgId, savedOffset);
-      }
+      const anchor = null;
       expect(anchor, isNull);
     });
 
     test('subsequent open (SharedPreferences has entry) -> anchor is restored', () {
-      final savedMsgId = 'msg-42';
-      final savedOffset = 150.0;
-      ScrollAnchor? anchor;
-      if (savedMsgId != null && savedOffset != null) {
-        anchor = ScrollAnchor(savedMsgId, savedOffset);
-      }
+      const savedMsgId = 'msg-42';
+      const savedOffset = 150.0;
+      final anchor = ScrollAnchor(savedMsgId, savedOffset);
       expect(anchor, isNotNull);
-      expect(anchor!.messageId, 'msg-42');
+      expect(anchor.messageId, 'msg-42');
       expect(anchor.offsetFromViewportTop, 150.0);
     });
   });

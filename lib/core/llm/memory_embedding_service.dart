@@ -89,7 +89,6 @@ class MemoryEmbeddingService {
       try {
         final existing = await _repo.getByEntryId(entries[i].id);
         final text = _getEmbeddingText(entries[i], embeddingTarget);
-        final hints = extractMemoryRetrievalHints(entries[i]);
         final fingerprint = _buildFingerprint(entries[i], text);
     final textHash = computeHash(fingerprint);
 

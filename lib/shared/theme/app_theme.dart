@@ -139,10 +139,10 @@ Color _borderFor(Color bg, bool isDark) {
 
 Color _shiftColor(Color c, double factor) {
   return Color.fromARGB(
-    c.alpha,
-    (c.red * factor).clamp(0, 255).round(),
-    (c.green * factor).clamp(0, 255).round(),
-    (c.blue * factor).clamp(0, 255).round(),
+    (c.a * 255).round(),
+    (c.r * 255 * factor).round().clamp(0, 255),
+    (c.g * 255 * factor).round().clamp(0, 255),
+    (c.b * 255 * factor).round().clamp(0, 255),
   );
 }
 

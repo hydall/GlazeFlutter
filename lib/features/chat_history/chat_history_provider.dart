@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/db/repositories/character_repo.dart' show CharacterRepo;
-import '../../core/db/repositories/chat_repo.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/utils/sync_deletion_tracker.dart';

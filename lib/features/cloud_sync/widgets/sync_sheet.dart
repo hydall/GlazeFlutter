@@ -273,8 +273,36 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 10),
-                        ...conflicts.map((c) => Container(
+                         const SizedBox(height: 10),
+                         Row(
+                           children: [
+                             Expanded(
+                               child: TextButton(
+                                 onPressed: () => _resolveAllConflicts('local'),
+                                 style: TextButton.styleFrom(
+                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                   backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
+                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                 ),
+                                 child: const Text('Keep All Local', style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                               ),
+                             ),
+                             const SizedBox(width: 8),
+                             Expanded(
+                               child: TextButton(
+                                 onPressed: () => _resolveAllConflicts('cloud'),
+                                 style: TextButton.styleFrom(
+                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                   backgroundColor: Colors.greenAccent.withValues(alpha: 0.15),
+                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                 ),
+                                 child: const Text('Use All Cloud', style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                               ),
+                             ),
+                           ],
+                         ),
+                         const SizedBox(height: 10),
+                         ...conflicts.map((c) => Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               child: Row(
                                 children: [
@@ -381,7 +409,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                         Switch(
                           value: autoEnabled,
                           onChanged: _setAutoSync,
-                          activeColor: context.colors.accent,
+                          activeThumbColor: context.colors.accent,
                         ),
                       ],
                     ),
@@ -473,7 +501,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                         Switch(
                           value: _syncIncludeApiKeys,
                           onChanged: _setIncludeApiKeys,
-                          activeColor: context.colors.accent,
+                          activeThumbColor: context.colors.accent,
                         ),
                       ],
                     ),
@@ -1095,6 +1123,18 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
     if (service.conflicts.isEmpty) {
       ref.read(syncStatusProvider.notifier).state = SyncStatus.idle;
+    }
+  }
+
+  Future<void> _resolveAllConflicts(String choice) async {
+    final service = ref.read(syncServiceProvider).valueOrNull;
+    if (service == null) return;
+    ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
+    await service.resolveAllConflicts(choice);
+    ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
+    ref.read(syncStatusProvider.notifier).state = service.status;
+    if (mounted) {
+      GlazeToast.show(context, choice == 'cloud' ? 'All conflicts resolved: cloud versions applied' : 'All conflicts resolved: local versions kept');
     }
   }
   void _setAutoSync(bool val) async {

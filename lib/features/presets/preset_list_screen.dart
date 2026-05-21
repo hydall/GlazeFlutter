@@ -27,7 +27,6 @@ class PresetListScreen extends ConsumerStatefulWidget {
 class _PresetListScreenState extends ConsumerState<PresetListScreen> {
   Preset? _editingPreset;
   bool _isCreating = false;
-  bool _isEditingBlock = false;
   final _editorKey = GlobalKey<PresetEditorBodyState>();
 
   bool get _inEditor => _isCreating || _editingPreset != null;
@@ -43,7 +42,6 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
     setState(() {
       _editingPreset = null;
       _isCreating = false;
-      _isEditingBlock = false;
     });
   }
 
@@ -79,11 +77,6 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
               key: _editorKey,
               preset: _editingPreset,
               onDeleted: _closeEditor,
-              onEditingBlockChanged: (isEditing) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) setState(() => _isEditingBlock = isEditing);
-                });
-              },
             )
           : presets.when(
               loading: () => const Center(child: CircularProgressIndicator()),

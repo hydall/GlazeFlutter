@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/llm/embedding_service.dart';
 import '../../../core/llm/sse_client.dart';
@@ -29,7 +28,6 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
   String _selectedModel = '';
   List<Map<String, dynamic>> _fetchedModels = [];
   bool _isLoadingModels = false;
-  String? _modelsError;
   late final _maxTokensCtrl = TextEditingController(text: (widget.config?.maxTokens ?? 8000).toString());
   late final _contextSizeCtrl = TextEditingController(text: (widget.config?.contextSize ?? 32000).toString());
   late double _temperature = widget.config?.temperature ?? 0.7;
@@ -326,15 +324,15 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
     final endpoint = _endpointCtrl.text.trim();
     final apiKey = _keyCtrl.text.trim();
     if (endpoint.isEmpty || apiKey.isEmpty) { GlazeToast.show(context, 'Enter endpoint and API key first'); return; }
-    setState(() { _isLoadingModels = true; _modelsError = null; });
+    setState(() { _isLoadingModels = true; });
     try {
       final client = SseClient();
       final models = await client.fetchModels(endpoint: endpoint, apiKey: apiKey);
       if (!mounted) return;
       setState(() { _fetchedModels = models; _isLoadingModels = false; });
-      if (models.isEmpty) setState(() => _modelsError = 'No models returned by API');
+      if (models.isEmpty) GlazeToast.show(context, 'No models returned by API');
     } catch (e) {
-      if (mounted) setState(() { _modelsError = e.toString(); _isLoadingModels = false; });
+      if (mounted) setState(() { _isLoadingModels = false; });
     }
   }
 

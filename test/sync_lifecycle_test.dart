@@ -1062,4 +1062,174 @@ void main() {
     expect(pushedApi['embeddingApiKey'], equals('emb-secret-67890'),
         reason: 'Embedding API key should be included when includeApiKeys=true');
   });
+
+  test('needsConflict returns false when hashes match (same data, different timestamps)',
+      () async {
+    final world = SyncWorld();
+
+    await world.characters.put(makeChar('c1', name: 'Alice'));
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    world.characters.data.clear();
+    world.personas.data.clear();
+    world.chats.data.clear();
+
+    final conflicts = <SyncConflict>[];
+    await world.engine.pullEntities(
+      onProgress: (_) {},
+      onConflict: (c) => conflicts.add(c),
+    );
+
+    expect(conflicts, isEmpty,
+        reason: 'Pull on empty device should produce no conflicts');
+
+    await world.characters.put(makeChar('c1', name: 'Alice'));
+    final manifest2 = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest2);
+
+    final conflicts2 = <SyncConflict>[];
+    await world.engine.pullEntities(
+      onProgress: (_) {},
+      onConflict: (c) => conflicts2.add(c),
+    );
+
+    expect(conflicts2, isEmpty,
+        reason:
+            'Same data (same hash) should not conflict even if timestamps differ');
+  });
+
+  test('resolveConflict("local") preserves local data — next push uploads it', () async {
+    final world = SyncWorld();
+
+    final localChar = makeChar('c1', name: 'Local Version');
+    await world.characters.put(localChar);
+
+    final cloudChar = makeChar('c1', name: 'Cloud Version');
+    final cloudHash = SyncSerialization.computeSyncHash(cloudChar.toJson());
+    final cloudManifest = SyncManifest(
+      deviceId: 'cloud',
+      createdAt: 1000,
+      entries: {
+        'character:c1': SyncManifestEntry(
+          type: 'character',
+          id: 'c1',
+          path: cloudPath('character', 'c1'),
+          updatedAt: 500,
+          hash: cloudHash,
+        ),
+      },
+    );
+
+    world.cloud.files[cloudPath('manifest', 'manifest')] =
+        jsonEncode(cloudManifest.toJson());
+    world.cloud.files[cloudPath('character', 'c1')] =
+        jsonEncode(cloudChar.toJson());
+
+    final localManifest = await world.manifestProvider.buildLocalManifest();
+    final patchedEntries = Map<String, SyncManifestEntry>.from(localManifest.entries);
+    final charEntry = patchedEntries['character:c1'];
+    if (charEntry != null) {
+      patchedEntries['character:c1'] = charEntry.copyWith(
+        updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+      );
+    }
+    await world.manifestProvider.writeLocalManifest(
+      localManifest.copyWith(entries: patchedEntries),
+    );
+
+    final conflicts = <SyncConflict>[];
+    await world.engine.pullEntities(
+      onProgress: (_) {},
+      onConflict: (c) => conflicts.add(c),
+    );
+
+    expect(conflicts.length, 1);
+
+    await world.engine.resolveConflict(conflicts.first, 'local');
+
+    expect(world.characters.data['c1']?.name, equals('Local Version'),
+        reason: 'Keep Local should preserve local data');
+
+    final rebuiltManifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(rebuiltManifest);
+
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    final cloudData = world.cloud.files[cloudPath('character', 'c1')];
+    expect(cloudData, isNotNull);
+    final pushed = jsonDecode(cloudData!) as Map<String, dynamic>;
+    expect(pushed['name'], equals('Local Version'),
+        reason: 'After Keep Local, push should upload local version to cloud');
+  });
+
+  test('applyPendingPull downloads remaining items after conflicts resolved', () async {
+    final world = SyncWorld();
+
+    final cloudChar1 = makeChar('c1', name: 'Alice');
+    final cloudHash1 = SyncSerialization.computeSyncHash(cloudChar1.toJson());
+    final cloudChar2 = makeChar('c2', name: 'Cloud Bob');
+    final cloudHash2 = SyncSerialization.computeSyncHash(cloudChar2.toJson());
+    final localChar2 = makeChar('c2', name: 'Local Bob');
+
+    await world.characters.put(localChar2);
+
+    final cloudManifest = SyncManifest(
+      deviceId: 'cloud',
+      createdAt: 1000,
+      entries: {
+        'character:c1': SyncManifestEntry(
+          type: 'character',
+          id: 'c1',
+          path: cloudPath('character', 'c1'),
+          updatedAt: 500,
+          hash: cloudHash1,
+        ),
+        'character:c2': SyncManifestEntry(
+          type: 'character',
+          id: 'c2',
+          path: cloudPath('character', 'c2'),
+          updatedAt: 500,
+          hash: cloudHash2,
+        ),
+      },
+    );
+
+    world.cloud.files[cloudPath('manifest', 'manifest')] =
+        jsonEncode(cloudManifest.toJson());
+    world.cloud.files[cloudPath('character', 'c1')] =
+        jsonEncode(cloudChar1.toJson());
+    world.cloud.files[cloudPath('character', 'c2')] =
+        jsonEncode(cloudChar2.toJson());
+
+    final localManifest = await world.manifestProvider.buildLocalManifest();
+    final patchedEntries = Map<String, SyncManifestEntry>.from(localManifest.entries);
+    final charEntry = patchedEntries['character:c2'];
+    if (charEntry != null) {
+      patchedEntries['character:c2'] = charEntry.copyWith(
+        updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+      );
+    }
+    await world.manifestProvider.writeLocalManifest(
+      localManifest.copyWith(entries: patchedEntries),
+    );
+
+    final conflicts = <SyncConflict>[];
+    await world.engine.pullEntities(
+      onProgress: (_) {},
+      onConflict: (c) => conflicts.add(c),
+    );
+
+    expect(world.characters.data['c1'], isNotNull,
+        reason: 'Non-conflicting character should be pulled immediately');
+
+    expect(conflicts.length, 1);
+    expect(conflicts.first.id, equals('c2'));
+
+    await world.engine.resolveConflict(conflicts.first, 'cloud');
+
+    expect(world.characters.data['c2']?.name, equals('Cloud Bob'),
+        reason: 'Cloud version should be applied after resolve');
+  });
 }

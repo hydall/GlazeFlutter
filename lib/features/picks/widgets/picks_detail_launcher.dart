@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/character.dart';
 import '../../../core/services/character_book_converter.dart';
-import '../../../core/services/character_importer.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';

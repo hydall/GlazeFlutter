@@ -1,18 +1,18 @@
 import 'dart:async';
 
 class EventHub {
-  static final _controllers = <String, StreamController<_Event>>{};
+  static final _controllers = <String, StreamController<Event>>{};
 
   static void publish(String event, [dynamic data]) {
     final controller = _controllers[event];
     if (controller != null && !controller.isClosed) {
-      controller.add(_Event(event, data));
+      controller.add(Event(event, data));
     }
   }
 
-  static StreamSubscription subscribe(
+  static StreamSubscription<Event> subscribe(
       String event, void Function(dynamic data) onEvent) {
-    _controllers.putIfAbsent(event, () => StreamController<_Event>.broadcast());
+    _controllers.putIfAbsent(event, () => StreamController<Event>.broadcast());
     return _controllers[event]!.stream.listen((e) => onEvent(e.data));
   }
 
@@ -22,8 +22,8 @@ class EventHub {
   }
 }
 
-class _Event {
+class Event {
   final String name;
   final dynamic data;
-  _Event(this.name, this.data);
+  Event(this.name, this.data);
 }

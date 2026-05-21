@@ -22,7 +22,6 @@ class SummarySheet extends ConsumerStatefulWidget {
 
 class _SummarySheetState extends ConsumerState<SummarySheet> {
   late Map<String, dynamic> _localItem;
-  late bool _enabled;
   bool _isGenerating = false;
 
   @override
@@ -31,13 +30,8 @@ class _SummarySheetState extends ConsumerState<SummarySheet> {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
     final summary = session?.summary;
     
-    _enabled = summary?.content.isNotEmpty ?? false; // Summary has no enabled field by default, we just rely on content empty
     _localItem = {
       'content': summary?.content ?? '',
-      'insertionMode': summary?.insertionMode ?? 'relative',
-      'depth': summary?.depth ?? 4,
-      'role': summary?.role ?? 'system',
-      'prefix': summary?.prefix ?? 'Summary: ',
     };
   }
 

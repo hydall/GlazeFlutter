@@ -39,7 +39,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   int _tabIndex = 0;
   String _searchQuery = '';
   String _picksTitle = 'Our Picks';
-  String? _picksDescription;
   bool _picksCanGoBack = false;
   VoidCallback? _picksGoBackFn;
 
@@ -87,7 +86,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                       onFolderChanged: (title, description, canGoBack, goBackFn) {
                         setState(() {
                           _picksTitle = title;
-                          _picksDescription = description;
                           _picksCanGoBack = canGoBack;
                           _picksGoBackFn = goBackFn;
                         });

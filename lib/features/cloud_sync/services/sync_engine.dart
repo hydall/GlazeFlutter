@@ -1,13 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../cloud_adapter.dart';
 import '../sync_models.dart';
 import 'sync_conflict.dart';
-import 'sync_manifest.dart';
 import 'sync_queue.dart';
 import 'sync_serialization.dart';
-import '../../../core/services/image_storage_service.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/gallery_entry.dart';
 import '../../../core/models/persona.dart';
@@ -152,13 +152,13 @@ class SyncEngine {
     required void Function(SyncProgress) onProgress,
     required void Function(SyncConflict) onConflict,
   }) async {
-    final raw = await _adapter.download(cloudPath('manifest', 'manifest'));
-    final cloudManifest = SyncManifest.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    final cloudManifest = await _downloadCloudManifest();
+    if (cloudManifest == null) return;
     final localManifest = await _manifestBuilder.buildLocalManifest();
 
     final entries = cloudManifest.entries.values.toList();
-    final tasks = <Future<void> Function()>[];
-    var processed = 0;
+    final conflicts = <SyncConflict>[];
+    final pullEntries = <SyncManifestEntry>[];
 
     for (final cloudEntry in entries) {
       final localEntry = localManifest.entries[cloudEntry.key];
@@ -171,7 +171,7 @@ class SyncEngine {
         final name = SyncConflictDetector.getConflictName(
           cloudEntry.type, null, null, cloudEntry.id,
         );
-        onConflict(SyncConflict(
+        conflicts.add(SyncConflict(
           key: cloudEntry.key,
           type: cloudEntry.type,
           id: cloudEntry.id,
@@ -182,21 +182,90 @@ class SyncEngine {
         continue;
       }
 
+      pullEntries.add(cloudEntry);
+    }
+
+    for (final c in conflicts) {
+      onConflict(c);
+    }
+
+    if (pullEntries.isNotEmpty) {
+      await _applyPullEntries(pullEntries, localManifest, cloudManifest, onProgress);
+    } else if (conflicts.isEmpty) {
+      onProgress(const SyncProgress(current: 0, total: 0, message: 'Nothing to pull'));
+      await _finalizePull(localManifest, cloudManifest);
+    } else {
+      await _saveCloudManifestForPendingPull(cloudManifest);
+    }
+  }
+
+  Future<void> applyPendingPull({
+    required void Function(SyncProgress) onProgress,
+    List<String>? resolvedAsCloud,
+  }) async {
+    final cloudManifest = await _loadCloudManifestForPendingPull();
+    if (cloudManifest == null) return;
+    final localManifest = await _manifestBuilder.buildLocalManifest();
+
+    final pullEntries = <SyncManifestEntry>[];
+    final cloudKeys = cloudManifest.entries.keys.toSet();
+
+    for (final cloudEntry in cloudManifest.entries.values) {
+      final localEntry = localManifest.entries[cloudEntry.key];
+      if (cloudEntry.hash == localEntry?.hash && cloudEntry.deleted == localEntry?.deleted) {
+        continue;
+      }
+      if (SyncConflictDetector.needsConflict(localEntry, cloudEntry)) {
+        if (resolvedAsCloud != null && resolvedAsCloud.contains(cloudEntry.key)) {
+          pullEntries.add(cloudEntry);
+        }
+        continue;
+      }
+      pullEntries.add(cloudEntry);
+    }
+
+    for (final localEntry in localManifest.entries.values) {
+      if (localEntry.deleted) continue;
+      if (!cloudKeys.contains(localEntry.key)) {
+        await _deleteLocalEntity(localEntry.type, localEntry.id);
+      }
+    }
+
+    if (pullEntries.isNotEmpty) {
+      await _applyPullEntries(pullEntries, localManifest, cloudManifest, onProgress);
+    } else {
+      onProgress(const SyncProgress(current: 0, total: 0, message: 'Nothing to pull'));
+      await _finalizePull(localManifest, cloudManifest);
+    }
+
+    await _clearPendingPullManifest();
+  }
+
+  Future<void> _applyPullEntries(
+    List<SyncManifestEntry> pullEntries,
+    SyncManifest localManifest,
+    SyncManifest cloudManifest,
+    void Function(SyncProgress) onProgress,
+  ) async {
+    final tasks = <Future<void> Function()>[];
+    var processed = 0;
+
+    for (final entry in pullEntries) {
       tasks.add(() async {
         processed++;
         onProgress(SyncProgress(
           current: processed,
           total: tasks.length,
-          message: 'Pulling ${cloudEntry.type}:${cloudEntry.id}',
+          message: 'Pulling ${entry.type}:${entry.id}',
         ));
-        await _pullEntry(cloudEntry);
+        await _pullEntry(entry);
       });
     }
 
     onProgress(SyncProgress(
       current: 0,
       total: tasks.length,
-      message: tasks.isEmpty ? 'Nothing to pull' : 'Pulling ${tasks.length} items...',
+      message: 'Pulling ${tasks.length} items...',
     ));
 
     List<Object>? taskErrors;
@@ -206,24 +275,57 @@ class SyncEngine {
     }
 
     final cloudKeys = cloudManifest.entries.keys.toSet();
-    final previousLocal = await _manifestBuilder.readLocalManifest();
     for (final localEntry in localManifest.entries.values) {
       if (localEntry.deleted) continue;
-      if (!cloudKeys.contains(localEntry.key) &&
-          previousLocal.entries.containsKey(localEntry.key) &&
-          !previousLocal.entries[localEntry.key]!.deleted) {
+      if (!cloudKeys.contains(localEntry.key)) {
         await _deleteLocalEntity(localEntry.type, localEntry.id);
       }
     }
 
-    await _manifestBuilder.writeLocalManifest(cloudManifest.copyWith(
-      lastSync: DateTime.now().millisecondsSinceEpoch,
-    ));
-    await _manifestBuilder.clearDeleted();
+    await _finalizePull(localManifest, cloudManifest);
 
     if (taskErrors != null && taskErrors.isNotEmpty) {
       throw SyncQueueAggregateError(taskErrors);
     }
+  }
+
+  Future<void> _finalizePull(SyncManifest localManifest, SyncManifest cloudManifest) async {
+    await _manifestBuilder.writeLocalManifest(cloudManifest.copyWith(
+      lastSync: DateTime.now().millisecondsSinceEpoch,
+    ));
+    await _manifestBuilder.clearDeleted();
+  }
+
+  Future<SyncManifest?> _downloadCloudManifest() async {
+    try {
+      final raw = await _adapter.download(cloudPath('manifest', 'manifest'));
+      return SyncManifest.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static const _pendingManifestKey = 'gz_sync_pending_pull_manifest';
+
+  Future<void> _saveCloudManifestForPendingPull(SyncManifest manifest) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pendingManifestKey, jsonEncode(manifest.toJson()));
+  }
+
+  Future<SyncManifest?> _loadCloudManifestForPendingPull() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_pendingManifestKey);
+    if (raw == null) return null;
+    try {
+      return SyncManifest.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _clearPendingPullManifest() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pendingManifestKey);
   }
 
   Future<void> resolveConflict(SyncConflict conflict, String choice) async {
@@ -231,11 +333,18 @@ class SyncEngine {
       await _pullEntry(conflict.cloudEntry);
     }
 
-    final localManifest = await _manifestBuilder.readLocalManifest();
-    final updatedEntries = Map<String, SyncManifestEntry>.from(localManifest.entries);
-    updatedEntries[conflict.key] = conflict.cloudEntry;
+    final rebuiltManifest = await _manifestBuilder.buildLocalManifest();
+    final updatedEntries = Map<String, SyncManifestEntry>.from(rebuiltManifest.entries);
+    final rebuiltEntry = updatedEntries[conflict.key];
+
+    if (choice == 'local' && rebuiltEntry != null) {
+      updatedEntries[conflict.key] = rebuiltEntry.copyWith(
+        updatedAt: conflict.localEntry.updatedAt,
+      );
+    }
+
     await _manifestBuilder.writeLocalManifest(
-      localManifest.copyWith(entries: updatedEntries),
+      rebuiltManifest.copyWith(entries: updatedEntries),
     );
   }
 
@@ -266,7 +375,7 @@ class SyncEngine {
       await Future.delayed(const Duration(seconds: 2));
       try {
         final files = await _adapter.listFolder(cloudBase);
-        if (files == null || files.isEmpty) break;
+        if (files.isEmpty) break;
       } catch (_) {
         break;
       }

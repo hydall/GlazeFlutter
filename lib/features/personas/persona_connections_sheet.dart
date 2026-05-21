@@ -258,7 +258,7 @@ class _ToggleRow extends StatelessWidget {
         Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: context.cs.primary),
+            activeThumbColor: context.cs.primary),
       ],
     );
   }
