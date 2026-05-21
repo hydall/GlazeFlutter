@@ -38,9 +38,10 @@ class ImageStorageService implements SyncImageStore {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
+    final cleanBytes = _stripPngTextChunks(imageBytes);
     final path = p.join(dir.path, '$characterId.png');
-    await File(path).writeAsBytes(imageBytes);
-    await saveThumbnail(characterId, imageBytes);
+    await File(path).writeAsBytes(cleanBytes);
+    await saveThumbnail(characterId, cleanBytes);
     return path;
   }
 
@@ -118,5 +119,31 @@ class ImageStorageService implements SyncImageStore {
     } catch (_) {
       return null;
     }
+  }
+
+  Uint8List _stripPngTextChunks(Uint8List pngBytes) {
+    if (pngBytes.length < 8) return pngBytes;
+    final sig = <int>[137, 80, 78, 71, 13, 10, 26, 10];
+    for (int i = 0; i < 8; i++) {
+      if (pngBytes[i] != sig[i]) return pngBytes;
+    }
+    final data = ByteData.sublistView(pngBytes);
+    final out = BytesBuilder();
+    out.add(pngBytes.sublist(0, 8));
+    int offset = 8;
+    bool stripped = false;
+    while (offset < pngBytes.length - 4) {
+      final length = data.getUint32(offset, Endian.big);
+      final type = String.fromCharCodes(pngBytes.sublist(offset + 4, offset + 8));
+      if (type == 'tEXt' || type == 'zTXt' || type == 'iTXt') {
+        stripped = true;
+        offset += 12 + length;
+        continue;
+      }
+      out.add(pngBytes.sublist(offset, offset + 12 + length));
+      offset += 12 + length;
+      if (type == 'IEND') break;
+    }
+    return stripped ? out.toBytes() : pngBytes;
   }
 }
