@@ -872,41 +872,43 @@ WebView рисует
 
 ## Чеклист реализации
 
-### Фаза A — JS-бандл
-- [ ] **A.1** Создать `assets/chat_webview/`, добавить в `pubspec.yaml`
-- [ ] **A.2** `formatter.js` — портировать `textFormatter.js` из Glaze JS
-- [ ] **A.3** `renderer.js` — рендерер с Shadow DOM
-- [ ] **A.4** `virtual_list.js` — без виртуализации на первой итерации
-- [ ] **A.5** `bridge.js` — мост JS ↔ Flutter
-- [ ] **A.6** `styles.css` — глобальные + Shadow DOM стили из ShadowContent.vue
-- [ ] **A.7** `index.html` — точка входа
+### Фаза A — JS-бандл ✅
+- [x] **A.1** Создать `assets/chat_webview/`, добавить в `pubspec.yaml`
+- [x] **A.2** `formatter.js` — портировать `textFormatter.js` из Glaze JS
+- [x] **A.3** `renderer.js` — рендерер с Shadow DOM
+- [x] **A.4** `virtual_list.js` — без виртуализации на первой итерации
+- [x] **A.5** `bridge.js` — мост JS ↔ Flutter (класс `Bridge`, методы `setMessages`, `appendMessage`, `prependMessages`, `updateMessage`, `removeMessage`, `clearAll`, `updateStreaming`, `applyTheme`)
+- [x] **A.6** `styles.css` — глобальные + Shadow DOM стили из ShadowContent.vue
+- [x] **A.7** `index.html` — точка входа, создание `window.bridge`
 
-### Фаза B — Dart-сторона
-- [ ] **B.1** `ChatWebViewWidget` — StatefulWidget с InAppWebView
-- [ ] **B.2** `ChatBridgeController` — методы отправки команд в JS
-- [ ] **B.3** `MessageDto` — Freezed DTO + `toJson()`
-- [ ] **B.4** `ChatWebViewNotifier` — Riverpod notifier, реагирует на изменения чата
+### Фаза B — Dart-сторона ✅
+- [x] **B.1** `ChatWebViewWidget` — ConsumerStatefulWidget с InAppWebView, логика синхронизации в `_syncMessages()`
+- [x] **B.2** `ChatBridgeController` — методы отправки команд в JS (`setMessages`, `appendMessage`, `appendMessages`, `prependMessages`, `updateMessage`, `removeMessage`, `clearAll`, `scrollToBottom`, `scrollToMessage`, `setSearch`, `applyTheme`, `updateStreaming`)
+- [x] **B.3** `MessageDto` — Freezed DTO + `toJson()` (временно не используется, используется `ChatMessage`)
+- [x] **B.4** ~~`ChatWebViewNotifier`~~ — удален, логика перенесена в `ChatWebViewWidget` для упрощения архитектуры
 
-### Фаза C — Интеграция
-- [ ] **C.1** Заменить `ChatMessageList` на `ChatWebViewWidget` в экране чата
-- [ ] **C.2** Подключить стриминг (`onStreamingUpdate`, `onStreamingDone`)
-- [ ] **C.3** Пагинация вверх (`loadMore` сигнал из JS)
-- [ ] **C.4** Все действия над сообщениями через мост
+### Фаза C — Интеграция ⏳
+- [x] **C.1** Заменить `ChatMessageList` на `ChatWebViewWidget` в экране чата
+- [x] **C.2** Подключить стриминг через `ref.listen<StreamingState>()` в виджете
+- [ ] **C.3** Пагинация вверх (`loadMore` сигнал из JS) — базовая логика есть, требует тестирования
+- [ ] **C.4** Все действия над сообщениями через мост (свайп, регенерация, редактирование)
 - [ ] **C.5** Режим выделения сообщений
 
-### Фаза D — Тема
-- [ ] **D.1** `applyTheme()` в JS
+**Коммит:** `de82c5e` — feat: Phase C — интеграция ChatWebView в экран чата
+
+### Фаза D — Тема (не начата)
+- [ ] **D.1** `applyTheme()` в JS — метод есть, нужно передавать CSS-переменные для пузырей сообщений
 - [ ] **D.2** CSS-переменные в Shadow DOM через `:host`
-- [ ] **D.3** Реагировать на смену темы из Flutter
+- [ ] **D.3** Реагировать на смену темы из Flutter (через `ref.listen` в виджете)
 
-### Фаза E — Поиск
-- [ ] **E.1** `highlightSearch()` в JS через Shadow DOM
+### Фаза E — Поиск (не начата)
+- [ ] **E.1** `highlightSearch()` в JS через Shadow DOM — метод `setSearch()` есть в мосту
 - [ ] **E.2** `scrollIntoView` для активного совпадения
-- [ ] **E.3** Убрать `_highlightPhrases()` из Dart
+- [ ] **E.3** Убрать `_highlightPhrases()` из Dart после миграции
 
-### Финал — Cleanup
+### Финал — Cleanup (после всех фаз)
 - [ ] Удалить `html_block_view.dart`
-- [ ] Удалить `ChatMessageList`
+- [ ] Удалить `ChatMessageList` (уже удален из chat_screen.dart, но файл остался)
 - [ ] Удалить `GptMarkdown`-ветку из `message.dart`
 - [ ] Удалить per-message WebView настройки
 - [ ] Обновить `HTML_RENDERING_PLAN.md` — пометить фазы 3+ как замененные этим документом
