@@ -45,6 +45,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final String? chatFontDataUrl;
   final double chatFontSize;
   final double chatLetterSpacing;
+  final int lastProcessedMessageCount;
 
   const ChatWebViewWidget({
     super.key,
@@ -79,6 +80,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.chatFontDataUrl,
     this.chatFontSize = 15.0,
     this.chatLetterSpacing = 0.0,
+    this.lastProcessedMessageCount = 0,
   });
 
   @override
@@ -139,6 +141,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     );
 
     await _bridge!.setMessages(widget.messages);
+    _bridge!.lastProcessedMessageCount = widget.lastProcessedMessageCount;
     if (widget.bottomInset > 0) {
       await _bridge!.setBottomPadding(widget.bottomInset);
     }
@@ -153,6 +156,10 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
   void didUpdateWidget(ChatWebViewWidget old) {
     super.didUpdateWidget(old);
     if (!_ready || _bridge == null) return;
+
+    if (widget.lastProcessedMessageCount != old.lastProcessedMessageCount) {
+      _bridge!.lastProcessedMessageCount = widget.lastProcessedMessageCount;
+    }
 
     // Check if charId changed (switching chats)
     if (widget.charId != old.charId) {

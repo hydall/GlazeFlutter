@@ -270,6 +270,37 @@ class Renderer {
           border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));
           font-style: italic;
         }
+        .glaze-message details {
+          margin: 8px 0;
+          border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+          border-radius: 8px;
+          overflow: hidden;
+          font-size: 0.95em;
+          opacity: 0.9;
+        }
+        .glaze-message details summary {
+          padding: 8px 12px;
+          cursor: pointer;
+          background: rgba(0,0,0,0.05);
+          font-weight: 500;
+          list-style: none;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .glaze-message details summary::-webkit-details-marker {
+          display: none;
+        }
+        .glaze-message details summary::before {
+          content: '▶';
+          display: inline-block;
+          font-size: 0.8em;
+          transition: transform 0.2s;
+          flex-shrink: 0;
+        }
+        .glaze-message details[open] > summary::before {
+          transform: rotate(90deg);
+        }
         .edit-textarea {
           width: 100%;
           min-height: 80px;

@@ -65,10 +65,10 @@
       container.addEventListener('wheel', (e) => {
         if (e.deltaMode === 0) {
           e.preventDefault();
-          container.scrollTop += e.deltaY * 0.5;
+          container.scrollTop += e.deltaY * 0.3;
         } else if (e.deltaMode === 1) {
           e.preventDefault();
-          container.scrollTop += e.deltaY * 20;
+          container.scrollTop += e.deltaY * 16;
         }
       }, { passive: false });
       window.bridge._sendToFlutter('onWebViewReady', []);

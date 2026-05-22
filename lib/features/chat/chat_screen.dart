@@ -29,6 +29,7 @@ import '../image_gen/widgets/image_gen_sheet.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/chat_webview_widget.dart';
 import '../../core/models/chat_message.dart';
+import '../../core/state/db_provider.dart';
 import 'widgets/session_lifecycle_tracker.dart';
 
 class SearchMatch {
@@ -638,6 +639,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       child: Builder(builder: (context) {
                         final character = ref.watch(characterByIdProvider(widget.charId));
                         final effectivePersona = ref.watch(effectivePersonaForChatProvider(widget.charId));
+                        final memProcessed = ref.watch(memoryProcessedCountProvider(widget.state.session?.id ?? ''));
                         return ChatWebViewWidget(
                           messages: widget.state.visibleMessages,
                           charId: widget.charId,
@@ -656,6 +658,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           chatFontDataUrl: fontDataUrl,
                           chatFontSize: fontStyle.fontSize,
                           chatLetterSpacing: fontStyle.letterSpacing,
+                          lastProcessedMessageCount: memProcessed.valueOrNull ?? 0,
                           onMessageContext: (index, messageId, isUser, isSystem, content) {
                             showMessageContextMenu(
                               context: context,

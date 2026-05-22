@@ -16,6 +16,7 @@ class ChatBridgeController {
   String? _charAvatarDataUrl;
   String? _personaAvatarDataUrl;
   bool isGenerating = false;
+  int lastProcessedMessageCount = 0;
 
   ChatBridgeController(this._controller) {
     _setupHandlers();
@@ -392,19 +393,18 @@ class ChatBridgeController {
     }
 
     String? memoryStatus;
+    final isCovered = messageIndex != null && messageIndex < lastProcessedMessageCount;
     if (m.memoryCoverage.isNotEmpty) {
       final needsRebuild = m.memoryCoverage['needsRebuild'] as bool? ?? false;
       final stale = m.memoryCoverage['stale'] as bool? ?? false;
-      final injected = m.memoryCoverage['injected'] as bool? ?? false;
       if (needsRebuild) {
         memoryStatus = 'REBUILD';
       } else if (stale) {
         memoryStatus = 'STALE';
-      } else if (injected && m.triggeredMemories.isNotEmpty) {
+      } else if (isCovered) {
         memoryStatus = 'MEM';
       }
-    }
-    if (memoryStatus == null && m.triggeredMemories.isNotEmpty) {
+    } else if (isCovered) {
       memoryStatus = 'MEM';
     }
 

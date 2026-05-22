@@ -81,3 +81,9 @@ final summaryRepoProvider = Provider<SummaryRepo>((ref) {
 final memoryBookRepoProvider = Provider<MemoryBookRepo>((ref) {
   return MemoryBookRepo(ref.watch(appDbProvider), ref);
 });
+
+final memoryProcessedCountProvider = FutureProvider.family<int, String>((ref, sessionId) async {
+  final repo = ref.watch(memoryBookRepoProvider);
+  final book = await repo.getBySessionId(sessionId);
+  return book?.lastProcessedMessageCount ?? 0;
+});
