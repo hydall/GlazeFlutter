@@ -395,14 +395,15 @@ class ChatBridgeController {
     if (m.memoryCoverage.isNotEmpty) {
       final needsRebuild = m.memoryCoverage['needsRebuild'] as bool? ?? false;
       final stale = m.memoryCoverage['stale'] as bool? ?? false;
-      final entryIds = m.memoryCoverage['entryIds'] as List?;
       if (needsRebuild) {
         memoryStatus = 'REBUILD';
       } else if (stale) {
         memoryStatus = 'STALE';
-      } else if (entryIds != null && entryIds.isNotEmpty && m.triggeredMemories.isNotEmpty) {
-        memoryStatus = 'MEM';
       }
+    }
+    final isLastAssistant = isLast && m.role == 'assistant';
+    if (memoryStatus == null && m.triggeredMemories.isNotEmpty && isLastAssistant) {
+      memoryStatus = 'MEM';
     }
 
     return {

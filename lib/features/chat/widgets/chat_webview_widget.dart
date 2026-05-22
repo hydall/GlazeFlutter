@@ -146,6 +146,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       await _bridge!.setSearch(query: widget.searchQuery!, activeIndex: widget.searchCurrentIndex);
     }
     await _bridge!.scrollToBottom();
+    _ready = true;
   }
 
   @override

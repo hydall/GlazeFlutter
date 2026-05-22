@@ -268,14 +268,6 @@ class VirtualList {
     return idx >= this._renderStart && idx < this._renderEnd;
   }
 
-  _scheduleUpdate() {
-    if (this._rafId != null) return;
-    this._rafId = requestAnimationFrame(() => {
-      this._rafId = null;
-      this._applyWindow();
-    });
-  }
-
   _applyWindow() {
     const oldStart = this._renderStart;
     const oldEnd = this._renderEnd;

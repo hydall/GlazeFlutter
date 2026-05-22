@@ -410,12 +410,17 @@ class Bridge {
   }
 
   startEdit(messageId) {
-    const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
+    let msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
     if (!msgEl) {
-      this.virtualList.scrollToMessage(messageId);
-      setTimeout(() => this.startEdit(messageId), 150);
-      return;
+      const vlEl = this.virtualList.messages.get(messageId);
+      if (vlEl) {
+        if (vlEl.parentNode !== this.virtualList.container) {
+          this.virtualList.container.insertBefore(vlEl, this.virtualList._bottomSpacer);
+        }
+        msgEl = vlEl;
+      }
     }
+    if (!msgEl) return;
 
     const scrollPos = this.virtualList.container.scrollTop;
     const rawText = msgEl.dataset.rawText || '';
@@ -426,8 +431,19 @@ class Bridge {
     }
 
     const contentEl = msgEl.querySelector('.message-content');
-    if (!contentEl || !contentEl.shadowRoot) return;
-    const msgDiv = contentEl.shadowRoot.querySelector('.glaze-message');
+    if (!contentEl) return;
+    let shadowRoot = contentEl.shadowRoot;
+    if (!shadowRoot) {
+      shadowRoot = contentEl.attachShadow({ mode: 'open' });
+      const style = document.createElement('style');
+      style.textContent = `.glaze-message { word-wrap: break-word; line-height: 1.6; } .edit-textarea { width: 100%; min-height: 80px; background: var(--bg-color, #1a1a2e); color: var(--text-color, #e0e0e0); font-size: var(--font-size, 15px); font-family: inherit; resize: vertical; outline: none; line-height: 1.6; border: 1px solid var(--primary-color, #7996CE); border-radius: 6px; padding: 8px; }`;
+      shadowRoot.appendChild(style);
+      const msgDiv = document.createElement('div');
+      msgDiv.className = 'glaze-message';
+      shadowRoot.appendChild(msgDiv);
+    }
+    const msgDiv = shadowRoot.querySelector('.glaze-message');
+    if (!msgDiv) return;
 
     msgDiv.innerHTML = '';
     const textarea = document.createElement('textarea');
