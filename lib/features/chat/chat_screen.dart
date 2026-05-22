@@ -660,6 +660,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           chatLetterSpacing: fontStyle.letterSpacing,
                           memoryEntries: memBook.valueOrNull?.entries ?? [],
                           memoryDrafts: memBook.valueOrNull?.pendingDrafts ?? [],
+                          sessionId: widget.state.session?.id,
                           onMessageContext: (index, messageId, isUser, isSystem, content) {
                             showMessageContextMenu(
                               context: context,

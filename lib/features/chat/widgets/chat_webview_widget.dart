@@ -47,6 +47,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final double chatLetterSpacing;
   final List<dynamic> memoryEntries;
   final List<dynamic> memoryDrafts;
+  final String? sessionId;
 
   const ChatWebViewWidget({
     super.key,
@@ -83,6 +84,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.chatLetterSpacing = 0.0,
     this.memoryEntries = const [],
     this.memoryDrafts = const [],
+    this.sessionId,
   });
 
   @override
@@ -169,9 +171,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       );
     }
 
-    // Check if charId changed (switching chats)
-    if (widget.charId != old.charId) {
-      // Full reset: update identity, theme, bg, font, clear, set messages, scroll
+    if (widget.charId != old.charId || widget.sessionId != old.sessionId) {
       _bridge!.setIdentity(
         charName: widget.charName,
         charColor: widget.charColor,
@@ -352,6 +352,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           ),
           onWebViewCreated: (controller) async {
             _bridge = ChatBridgeController(controller);
+            controller.evaluateJavascript(source: 'if(window.bridge) window.bridge.clearAll();');
             _bridge!.onMessageContext = (id, isUser, isSystem, content) {
               final allMsgs = ref.read(chatProvider(widget.charId)).value?.messages ?? [];
               final idx = allMsgs.indexWhere((m) => m.id == id);
