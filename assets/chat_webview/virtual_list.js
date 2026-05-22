@@ -10,7 +10,7 @@ class VirtualList {
 
     this._renderStart = 0;
     this._renderEnd = 0;
-    this._bufferSize = 50;
+    this._bufferSize = Infinity;
 
     this._topSpacer = document.createElement('div');
     this._topSpacer.className = 'vl-spacer vl-spacer-top';
@@ -285,24 +285,7 @@ class VirtualList {
     if (this._renderStart === oldStart && this._renderEnd === oldEnd && !this._dirty) return;
     this._dirty = false;
 
-    const scrollTop = this.container.scrollTop;
-    const containerRect = this.container.getBoundingClientRect();
-
-    let anchorId = null;
-    let anchorOffset = 0;
-    for (let i = oldStart; i < oldEnd; i++) {
-      const id = this.messageOrder[i];
-      const el = this.messages.get(id);
-      if (el && el.parentNode === this.container) {
-        const rect = el.getBoundingClientRect();
-        const offsetFromTop = rect.top - containerRect.top;
-        if (offsetFromTop >= -10) {
-          anchorId = id;
-          anchorOffset = offsetFromTop;
-          break;
-        }
-      }
-    }
+    const scrollTopBefore = this.container.scrollTop;
 
     for (let i = oldStart; i < oldEnd; i++) {
       if (i >= this._renderStart && i < this._renderEnd) continue;
@@ -326,24 +309,11 @@ class VirtualList {
       insertBefore = el;
     }
 
-    for (let i = this._renderStart; i < this._renderEnd; i++) {
-      const id = this.messageOrder[i];
-      const el = this.messages.get(id);
-      if (el && el.parentNode === this.container && !this._heightCache.has(id)) {
-        this._heightCache.set(id, el.offsetHeight || 100);
-      }
-    }
-    this._rebuildPrefixSums();
     this._updateSpacers();
 
-    if (anchorId != null) {
-      const anchorIdx = this.messageOrder.indexOf(anchorId);
-      if (anchorIdx >= 0) {
-        const newTop = this._prefixSums[anchorIdx] - anchorOffset;
-        if (Math.abs(this.container.scrollTop - newTop) > 1) {
-          this.container.scrollTop = newTop;
-        }
-      }
+    const scrollTopAfter = this.container.scrollTop;
+    if (Math.abs(scrollTopAfter - scrollTopBefore) > 1) {
+      this.container.scrollTop = scrollTopBefore;
     }
   }
 
