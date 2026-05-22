@@ -102,9 +102,12 @@ class Formatter {
     // 4. Fix escaped HTML line breaks
     html = html.replace(/&lt;br\s*\/?&gt;/gi, '<br>');
 
-    // 5. Convert <font color="..."> to hc markers BEFORE tag extraction
-    html = html.replace(/<font\s+color=["']?(#[0-9a-fA-F]{3,8})["']?\s*>([\s\S]*?)<\/font>/gi, (_, color, text) => {
-      return `==hc:${color}==${text}==`;
+    // 5. Extract <font color="..."> blocks before quote processing
+    const fontBlocks = [];
+    html = html.replace(/<font\s+color=["']?(#[0-9a-fA-F]{3,8})["']?\s*>([\s\S]*?)<\/font>/gi, (match, color, content) => {
+      const id = this._ph('FC_', fontBlocks.length);
+      fontBlocks.push({ color, content });
+      return id;
     });
 
     // 5b. Janitor images: ![alt](url) → <span class="janitor-img-wrapper">
@@ -246,6 +249,13 @@ class Formatter {
       const content = thinkBlocks[parseInt(i)];
       const formatted = this._processText(content, isUser);
       return `<details class="reasoning-block"><summary class="reasoning-summary">💭 Reasoning</summary><div class="reasoning-content">${formatted}</div></details>`;
+    });
+
+    // 18. Restore font color blocks — content is already formatted
+    html = html.replace(/\x01FC_(\d+)\x01/g, (_, i) => {
+      const block = fontBlocks[parseInt(i)];
+      const formatted = this._processText(block.content, isUser);
+      return `<div class="font-color-block" style="color:${block.color}">${formatted}</div>`;
     });
 
     html = html.replace(/\x01[A-Z_]+\d+\x01/g, '');
