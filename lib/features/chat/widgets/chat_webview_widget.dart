@@ -336,7 +336,6 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
             mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
           ),
           onWebViewCreated: (controller) async {
-            await InAppWebViewController.clearAllCache();
             _bridge = ChatBridgeController(controller);
             _bridge!.onMessageContext = (id, isUser, isSystem, content) {
               final allMsgs = ref.read(chatProvider(widget.charId)).value?.messages ?? [];
