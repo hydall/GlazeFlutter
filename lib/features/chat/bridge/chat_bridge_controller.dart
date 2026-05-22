@@ -16,6 +16,7 @@ class ChatBridgeController {
   String? _charAvatarDataUrl;
   String? _personaAvatarDataUrl;
   bool isGenerating = false;
+  final Set<String> _coveredMemoryIds = {};
   final Set<String> _pendingMemoryIds = {};
   final Set<String> _draftMemoryIds = {};
 
@@ -262,7 +263,7 @@ class ChatBridgeController {
   Future<void> setMessages(List<ChatMessage> messages) {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
-      mapped.add(_toMap(messages[i], isLast: i == messages.length - 1));
+      mapped.add(_toMap(messages[i], isLast: i == messages.length - 1, messageIndex: i));
     }
     final json = jsonEncode(mapped);
     return _callJs('setMessages', json);
@@ -403,14 +404,16 @@ class ChatBridgeController {
         memoryStatus = 'REBUILD';
       } else if (stale) {
         memoryStatus = 'STALE';
-      } else if (hasEntries) {
+      } else if (hasEntries || _coveredMemoryIds.contains(m.id)) {
         memoryStatus = 'MEM';
       }
+    } else if (_coveredMemoryIds.contains(m.id)) {
+      memoryStatus = 'MEM';
     }
-    if (memoryStatus == null && isPendingMemory(m.id)) {
+    if (memoryStatus == null && _pendingMemoryIds.contains(m.id)) {
       memoryStatus = 'PENDING';
     }
-    if (memoryStatus == null && isDraftMemory(m.id)) {
+    if (memoryStatus == null && _draftMemoryIds.contains(m.id)) {
       memoryStatus = 'DRAFT';
     }
 
@@ -460,20 +463,22 @@ class ChatBridgeController {
     return result.trim();
   }
 
-  bool isPendingMemory(String messageId) => _pendingMemoryIds.contains(messageId);
-  bool isDraftMemory(String messageId) => _draftMemoryIds.contains(messageId);
-
   void updateMemoryBookData({
     required List<Map<String, dynamic>> entries,
     required List<Map<String, dynamic>> pendingDrafts,
   }) {
+    _coveredMemoryIds.clear();
     _pendingMemoryIds.clear();
     _draftMemoryIds.clear();
     for (final entry in entries) {
       final status = entry['status'] as String?;
-      if (status == 'pending_generation') {
-        final ids = entry['messageIds'];
-        if (ids is List) {
+      final ids = entry['messageIds'];
+      if (ids is List) {
+        if (status == 'active') {
+          for (final id in ids) {
+            _coveredMemoryIds.add(id.toString());
+          }
+        } else if (status == 'pending_generation') {
           for (final id in ids) {
             _pendingMemoryIds.add(id.toString());
           }
