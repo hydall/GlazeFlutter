@@ -136,9 +136,9 @@ class Formatter {
     html = html.replace(quoteRegex, (match, placeholder, skipQuote, openQ, closedContent, closeQ, openG, guillemetContent, closeG, openU, unclosedContent) => {
       if (placeholder) return placeholder;
       if (skipQuote) return skipQuote;
-      if (openQ !== undefined) return `<span class="chat-quote">${openQ}</span>${closedContent}<span class="chat-quote">${closeQ}</span>`;
-      if (openG !== undefined) return `<span class="chat-quote">${openG}</span>${guillemetContent}<span class="chat-quote">${closeG}</span>`;
-      if (openU !== undefined) return `<span class="chat-quote">${openU}</span>${unclosedContent}`;
+      if (openQ !== undefined) return `<span class="chat-quote">${openQ}</span><span class="chat-quote-text">${closedContent}</span><span class="chat-quote">${closeQ}</span>`;
+      if (openG !== undefined) return `<span class="chat-quote">${openG}</span><span class="chat-quote-text">${guillemetContent}</span><span class="chat-quote">${closeG}</span>`;
+      if (openU !== undefined) return `<span class="chat-quote">${openU}</span><span class="chat-quote-text">${unclosedContent}</span>`;
       return match;
     });
 

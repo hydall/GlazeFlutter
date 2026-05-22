@@ -164,6 +164,9 @@ class Renderer {
         .glaze-message .chat-quote {
           color: var(--current-quote-color, var(--quote-color, #7996CE));
         }
+        .glaze-message .chat-quote-text {
+          color: var(--current-quote-color, var(--quote-color, #7996CE));
+        }
         .glaze-message .chat-italic {
           color: var(--current-italic-color, var(--italic-color, #888));
           font-style: italic;

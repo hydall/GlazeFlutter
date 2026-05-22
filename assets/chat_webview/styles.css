@@ -536,6 +536,14 @@
   color: var(--current-quote-color, var(--quote-color)) !important;
 }
 
+.glaze-message .chat-quote-text {
+  color: var(--current-quote-color, var(--quote-color));
+}
+
+.glaze-message .chat-quote-text .chat-italic {
+  color: inherit;
+}
+
 .glaze-message .chat-quote .chat-italic {
   color: inherit !important;
 }
