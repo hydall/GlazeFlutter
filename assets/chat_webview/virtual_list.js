@@ -166,10 +166,15 @@ class VirtualList {
   }
 
   scrollToBottom() {
-    console.log(`[VL] scrollToBottom: scrollHeight=${this.container.scrollHeight}, clientHeight=${this.container.clientHeight}, scrollTop=${this.container.scrollTop}`);
     this._isUserScroll = false;
     this.container.scrollTop = this.container.scrollHeight;
-    requestAnimationFrame(() => { this._isUserScroll = true; });
+    requestAnimationFrame(() => {
+      this.container.scrollTop = this.container.scrollHeight;
+      requestAnimationFrame(() => {
+        this.container.scrollTop = this.container.scrollHeight;
+        this._isUserScroll = true;
+      });
+    });
   }
 
   scrollToTop() {

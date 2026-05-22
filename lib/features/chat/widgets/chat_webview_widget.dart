@@ -194,7 +194,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       }
       _bridge!.clearAll();
       _bridge!.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
-      _bridge!.scrollToBottom();
+      Future.delayed(const Duration(milliseconds: 100), () => _bridge?.scrollToBottom());
       _wasGenerating = widget.isGenerating;
       _streamingSent = false;
       return;
