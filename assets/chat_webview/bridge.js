@@ -300,6 +300,7 @@ class Bridge {
   }
 
   prependMessages(messagesJson) {
+    this._suppressLoadMore = true;
     const messages = JSON.parse(messagesJson);
     const scrollBefore = this.virtualList.container.scrollHeight;
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -318,6 +319,7 @@ class Bridge {
     const scrollAfter = this.virtualList.container.scrollHeight;
     this.virtualList.container.scrollTop = scrollAfter - scrollBefore;
     this._hideLoadingScreen();
+    setTimeout(() => { this._suppressLoadMore = false; }, 500);
   }
 
   updateMessage(messageJson) {

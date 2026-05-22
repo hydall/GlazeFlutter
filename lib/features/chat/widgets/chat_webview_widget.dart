@@ -270,7 +270,10 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       final oldFirstId = oldIds.first;
       final newIdx = newIds.indexOf(oldFirstId);
       if (newIdx > 0) {
-        _bridge?.prependMessages(widget.messages.sublist(0, newIdx));
+        _bridge?.prependMessages(
+          widget.messages.sublist(0, newIdx),
+          visibleStartIndex: widget.visibleStartIndex,
+        );
         return;
       }
       if (newLen > oldIds.length) {
@@ -278,7 +281,10 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           oldIds.length,
           newLen,
         );
-        _bridge?.appendMessages(appends);
+        _bridge?.appendMessages(
+          appends,
+          startIndex: widget.visibleStartIndex + oldIds.length,
+        );
         return;
       }
     }
