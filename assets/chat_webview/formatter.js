@@ -6,200 +6,181 @@ class Formatter {
 
   format(text, isUser = false) {
     const key = `${text}:${isUser}`;
+    if (this.cache.has(key)) return this.cache.get(key);
 
-    if (this.cache.has(key)) {
-      return this.cache.get(key);
+    let result;
+    try {
+      result = this._processText(text, isUser);
+    } catch (e) {
+      console.error('Formatter error:', e);
+      result = (text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
     }
 
-    let result = this._processText(text, isUser);
-
-    // Cache management
     if (this.cache.size >= this.cacheMaxSize) {
       const firstKey = this.cache.keys().next().value;
       this.cache.delete(firstKey);
     }
-
     this.cache.set(key, result);
     return result;
   }
 
+  _ph(prefix, i, isBlock) {
+    return `\x01${prefix}${isBlock ? 'BLOCK_' : ''}${i}\x01`;
+  }
+
   _processText(text, isUser) {
     if (!text) return '';
+    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 
-    // Normalize line endings
-    text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    let html = text;
 
-    // Escape HTML
-    text = this._escapeHtml(text);
-
-    // Process code blocks first (protect from other processing)
+    // 1. Extract Code Blocks
     const codeBlocks = [];
-    text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (match, lang, code) => {
-      const id = `__CODE_BLOCK_${codeBlocks.length}__`;
+    html = html.replace(/```(\w*)\n?([\s\S]*?)(?:```|$)/g, (match, lang, code) => {
+      const id = this._ph('CB_', codeBlocks.length);
       codeBlocks.push({ lang, code });
       return id;
     });
 
-    // Process inline code
-    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // 2. Extract HTML Tags — distinguish block vs inline
+    const tagBlocks = [];
+    const blockTags = new Set(['div','p','style','pre','table','ul','ol','li','h1','h2','h3','h4','h5','h6','blockquote','section','article','header','footer','hr','details','summary','figure','figcaption','svg','path','math','canvas','video','audio','form','fieldset','nav','aside','main']);
+    const TAG_REGEX = /<(?:[^"'>]|"[^"]*"|'[^']*')*?>/g;
 
-    // Process bold
-    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(TAG_REGEX, (match) => {
+      const tagMatch = match.match(/^<\/?(\w+)/);
+      const isBlock = tagMatch ? blockTags.has(tagMatch[1].toLowerCase()) : false;
+      const id = this._ph('T_', tagBlocks.length, isBlock);
+      tagBlocks.push(match);
+      return id;
+    });
 
-    // Process italic
-    text = text.replace(/\*([^*]+)\*/g, '<em class="chat-italic">$1</em>');
+    // 3. Extract Glaze custom markers BEFORE quotes
+    //    This protects styled segments from quote highlighting
+    const styledSegments = [];
+    const styledRegex = /(==hc:#[0-9a-fA-F]{3,8}==.+?==|==glow:#[0-9a-fA-F]{3,8},\d+==.+?==|==cg:#[0-9a-fA-F]{3,8},#[0-9a-fA-F]{3,8},\d+==.+?==|==grad:#[0-9a-fA-F]{3,8}(?:,#[0-9a-fA-F]{3,8})+==.+?==|==bg:#[0-9a-fA-F]{3,8}==.+?==|==mark==.+?==|==active==.+?==|\*\*[^*]+?\*\*|(?<!\*)\*[^*]+?\*(?!\*)|__[^_]+?__|(?<!\w)_[^_]+?_(?!\w)|~~[^~]+?~~)/gs;
 
-    // Process strikethrough
-    text = text.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+    html = html.replace(styledRegex, (match) => {
+      const id = this._ph('S_', styledSegments.length);
+      styledSegments.push(match);
+      return id;
+    });
 
-    // Process links
-    text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // 4. Quote formatting — skip \x01 placeholders and = prefixed "..." (HTML attributes)
+    const phGroup = '\x01[A-Z_]+\\d+\x01';
+    const quoteRegex = new RegExp(`(${phGroup})|(=[ \\t]*"(?:[^"]|\\\\")*?")|("((?:[^"]|\\\\")*?)"|«((?:[^»])*?)»)`, 'g');
+    html = html.replace(quoteRegex, (match, placeholder, skipQuote) => {
+      if (placeholder) return placeholder;
+      if (skipQuote) return skipQuote;
+      return `<span class="chat-quote">${match}</span>`;
+    });
 
-    // Process images
-    text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" loading="lazy">');
+    // 5. Restore styled segments with Glaze marker rendering
+    html = html.replace(/\x01S_(\d+)\x01/g, (_, i) => {
+      const seg = styledSegments[parseInt(i)];
+      return this._renderStyledSegment(seg);
+    });
 
-    // Process blockquotes (lines starting with >)
-    text = text.replace(/^>\s?(.+)$/gm, '<blockquote>$1</blockquote>');
+    // 6. Markdown Parsing
+    html = html.replace(/^>\s?(.*)$/gm, '<blockquote class="chat-blockquote">$1</blockquote>');
+    html = html.replace(/<\/blockquote>\n*<blockquote class="chat-blockquote">/g, '<br>');
+    html = html.replace(/^(_{3,}|-{3,}|\*{3,})$/gm, '<hr>');
+    html = html.replace(/~~([\s\S]+?)~~/g, '<del>$1</del>');
+    html = html.replace(/\*\*\*([\s\S]+?)\*\*\*/g, '<strong><em>$1</em></strong>');
+    html = html.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
+    html = html.replace(/\*([\s\S]+?)\*/g, '<em>$1</em>');
+    html = html.replace(/<em>/g, '<em class="chat-italic">');
 
-    // Process horizontal rules
-    text = text.replace(/^(-{3,}|\*{3,}|_{3,})$/gm, '<hr>');
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
 
-    // Process unordered lists
-    text = this._processUnorderedList(text);
+    // 7. Paragraphs — isolate block placeholders, don't wrap in <p>
+    const blockPh = '\x01T_BLOCK_\\d+\x01';
+    const codePh = '\x01CB_\\d+\x01';
+    html = html.replace(new RegExp(`\\n?(${codePh}|${blockPh})\\n?`, 'g'), '\n\n$1\n\n');
 
-    // Process ordered lists
-    text = this._processOrderedList(text);
+    const paragraphs = html.split(/\n\n+/);
+    html = paragraphs
+      .map(p => {
+        let trimmed = p.trim();
+        if (!trimmed) return '';
 
-    // Restore code blocks
-    text = text.replace(/__CODE_BLOCK_(\d+)__/g, (match, index) => {
-      const block = codeBlocks[parseInt(index)];
+        if (new RegExp(`^(${codePh}|${blockPh})$`).test(trimmed)) return trimmed;
+
+        const startsWithBlock = new RegExp(`^${blockPh}`).test(trimmed);
+        trimmed = trimmed.replace(new RegExp(`(\x01T_(?:BLOCK_)?\\d+\x01)\\s*\\n\\s*`, 'g'), '$1 ');
+        trimmed = trimmed.replace(new RegExp(`\\s*\\n\\s*(\x01T_(?:BLOCK_)?\\d+\x01)`, 'g'), ' $1');
+        trimmed = trimmed.replace(/\n/g, '<br>');
+        return startsWithBlock ? trimmed : `<p>${trimmed}</p>`;
+      })
+      .filter(p => p !== '')
+      .join('');
+
+    // 8. Restore HTML Tags
+    html = html.replace(/\x01T_(?:BLOCK_)?(\d+)\x01/g, (_, i) => tagBlocks[parseInt(i)]);
+
+    // 9. Restore Code Blocks
+    html = html.replace(/\x01CB_(\d+)\x01/g, (_, i) => {
+      const block = codeBlocks[parseInt(i)];
+      const escapedCode = block.code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
       const langAttr = block.lang ? ` class="language-${block.lang}"` : '';
-      return `<pre><code${langAttr}>${block.code}</code></pre>`;
+      return `<pre><code${langAttr}>${escapedCode}</code></pre>`;
     });
 
-    // Process quotes with special marker ==mark==...==
-    text = this._processQuotes(text);
-
-    // Process line breaks
-    // Single newline -> <br>, multiple newlines -> paragraph breaks
-    text = this._processLineBreaks(text);
-
-    return text;
+    return html;
   }
 
-  _escapeHtml(text) {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#039;');
-  }
+  _renderStyledSegment(seg) {
+    // ==hc:#hex==text== — colored text
+    let m = seg.match(/^==hc:(#[0-9a-fA-F]{3,8})==(.+?)==$/s);
+    if (m) return `<span class="glaze-hc" style="color:${m[1]}">${m[2]}</span>`;
 
-  _processUnorderedList(text) {
-    const lines = text.split('\n');
-    let result = [];
-    let inList = false;
-    let listItems = [];
+    // ==glow:#hex,blur==text== — glow shadow
+    m = seg.match(/^==glow:(#[0-9a-fA-F]{3,8}),(\d+)==(.+?)==$/s);
+    if (m) return `<span class="glaze-glow" style="text-shadow:${m[1]} 0 0 ${m[2]}px, ${m[1]} 0 0 ${parseInt(m[2])/2}px">${m[3]}</span>`;
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const match = line.match(/^(\s*)[-*+]\s+(.+)$/);
-
-      if (match) {
-        if (!inList) {
-          inList = true;
-          listItems = [];
-        }
-        listItems.push(match[2]);
-      } else {
-        if (inList) {
-          result.push('<ul>');
-          listItems.forEach(item => result.push(`<li>${item}</li>`));
-          result.push('</ul>');
-          inList = false;
-          listItems = [];
-        }
-        result.push(line);
-      }
+    // ==cg:#textHex,#glowHex,blur==text== — colored + glow
+    m = seg.match(/^==cg:(#[0-9a-fA-F]{3,8}),([0-9a-fA-F]{3,8}),(\d+)==(.+?)==$/s);
+    if (m) {
+      return `<span class="glaze-cg" style="color:${m[1]};text-shadow:${m[2]} 0 0 ${m[3]}px, ${m[2]} 0 0 ${parseInt(m[3])/2}px">${m[4]}</span>`;
     }
 
-    if (inList) {
-      result.push('<ul>');
-      listItems.forEach(item => result.push(`<li>${item}</li>`));
-      result.push('</ul>');
+    // ==grad:#hex1,#hex2==text== — gradient text
+    m = seg.match(/^==grad:(#[0-9a-fA-F]{3,8}(?:,#[0-9a-fA-F]{3,8})+)==(.+?)==$/s);
+    if (m) {
+      const colors = m[1].match(/#[0-9a-fA-F]{3,8}/g);
+      const gradient = colors.join(',');
+      return `<span class="glaze-grad" style="background:linear-gradient(90deg,${gradient});-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">${m[2]}</span>`;
     }
 
-    return result.join('\n');
-  }
+    // ==bg:#hex==text== — background highlight
+    m = seg.match(/^==bg:(#[0-9a-fA-F]{3,8})==(.+?)==$/s);
+    if (m) return `<span class="glaze-bg" style="background:${m[1]};padding:1px 4px;border-radius:3px">${m[2]}</span>`;
 
-  _processOrderedList(text) {
-    const lines = text.split('\n');
-    let result = [];
-    let inList = false;
-    let listItems = [];
+    // ==mark==text== — quote highlight
+    m = seg.match(/^==mark==(.+?)==$/s);
+    if (m) return `<span class="glaze-mark">${m[1]}</span>`;
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const match = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
+    // ==active==text== — active search match
+    m = seg.match(/^==active==(.+?)==$/s);
+    if (m) return `<span class="glaze-active">${m[1]}</span>`;
 
-      if (match) {
-        if (!inList) {
-          inList = true;
-          listItems = [];
-        }
-        listItems.push(match[3]);
-      } else {
-        if (inList) {
-          result.push('<ol>');
-          listItems.forEach(item => result.push(`<li>${item}</li>`));
-          result.push('</ol>');
-          inList = false;
-          listItems = [];
-        }
-        result.push(line);
-      }
-    }
+    // Markdown bold/italic/strikethrough (extracted to protect from quote highlighting)
+    m = seg.match(/^\*\*\*(.+?)\*\*\*$/s);
+    if (m) return `<strong><em>${m[1]}</em></strong>`;
+    m = seg.match(/^\*\*(.+?)\*\*$/s);
+    if (m) return `<strong>${m[1]}</strong>`;
+    m = seg.match(/^\*(.+?)\*$/s);
+    if (m) return `<em class="chat-italic">${m[1]}</em>`;
+    m = seg.match(/^__(.+?)__$/s);
+    if (m) return `<strong>${m[1]}</strong>`;
+    m = seg.match(/^_(.+?)_$/s);
+    if (m) return `<em class="chat-italic">${m[1]}</em>`;
+    m = seg.match(/^~~(.+?)~~$/s);
+    if (m) return `<del>${m[1]}</del>`;
 
-    if (inList) {
-      result.push('<ol>');
-      listItems.forEach(item => result.push(`<li>${item}</li>`));
-      result.push('</ol>');
-    }
-
-    return result.join('\n');
-  }
-
-  _processQuotes(text) {
-    // Process ==mark==...== quotes
-    text = text.replace(/==mark==([\s\S]*?)==/g, (match, content) => {
-      return `<span class="chat-quote">${content}</span>`;
-    });
-
-    // Process regular quotes "..."
-    text = text.replace(/"([^"]+)"/g, (match, content) => {
-      return `<span class="chat-quote">"${content}"</span>`;
-    });
-
-    return text;
-  }
-
-  _processLineBreaks(text) {
-    // Split into paragraphs by double newlines
-    const paragraphs = text.split(/\n\s*\n/);
-
-    return paragraphs.map(para => {
-      para = para.trim();
-
-      // Don't wrap if it's already a block element
-      if (para.match(/^<(ul|ol|li|blockquote|pre|hr|div|h[1-6])/i)) {
-        return para;
-      }
-
-      // Single newlines become <br>
-      para = para.replace(/\n/g, '<br>');
-
-      return `<p>${para}</p>`;
-    }).join('\n');
+    return seg;
   }
 }

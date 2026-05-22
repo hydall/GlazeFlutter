@@ -8,26 +8,26 @@ class Renderer {
   }
 
   renderMessage(messageData) {
-    const { id, role, text, timestamp, displayName, avatarUrl, isUser, isAssistant, isSystem } = messageData;
+    const { id, role, text, timestamp, displayName, avatarUrl, isUser, isAssistant, isSystem, isError, isTyping } = messageData;
 
     const messageEl = document.createElement('div');
-    messageEl.className = `message ${this._getRoleClass(role)}`;
+    let className = `message ${this._getRoleClass(role)}`;
+    if (isError) className += ' message-error';
+    messageEl.className = className;
     messageEl.dataset.messageId = id;
+    messageEl.dataset.rawText = text || '';
+    if (messageData.reasoning) messageEl.dataset.reasoning = messageData.reasoning;
 
-    // Create header
     const header = this._createHeader(messageData);
     messageEl.appendChild(header);
 
-    // Create content container with Shadow DOM
     const contentContainer = document.createElement('div');
     contentContainer.className = 'message-content';
     messageEl.appendChild(contentContainer);
 
-    // Attach Shadow DOM if not already attached
     if (!contentContainer.shadowRoot) {
       const shadow = contentContainer.attachShadow({ mode: 'open' });
 
-      // Inject styles into Shadow DOM
       const style = document.createElement('style');
       style.textContent = `
         :host {
@@ -38,6 +38,7 @@ class Renderer {
         .glaze-message {
           word-wrap: break-word;
           line-height: 1.6;
+          color: inherit;
         }
         .glaze-message p {
           margin-bottom: 0.8em;
@@ -72,18 +73,22 @@ class Renderer {
           background: none;
           padding: 0;
         }
-        .glaze-message blockquote {
-          border-left: 4px solid var(--quote-color, #666);
-          padding-left: 12px;
-          margin: 12px 0;
-          color: var(--quote-color, #666);
+        .glaze-message blockquote,
+        .glaze-message .chat-blockquote {
+          border-left: 3px solid var(--current-italic-color, var(--italic-color, #888));
+          margin: 4px 0;
+          padding: 2px 8px;
+          color: var(--current-italic-color, var(--italic-color, #888));
           font-style: italic;
         }
         .glaze-message .chat-quote {
-          color: var(--quote-color, #666);
+          color: var(--current-quote-color, var(--quote-color, #7996CE)) !important;
+        }
+        .glaze-message .chat-quote .chat-italic {
+          color: inherit !important;
         }
         .glaze-message .chat-italic {
-          color: var(--italic-color, #888);
+          color: var(--current-italic-color, var(--italic-color, #888));
           font-style: italic;
         }
         .glaze-message a {
@@ -104,6 +109,50 @@ class Renderer {
           background: #ff9800;
           color: white;
         }
+        .glaze-message .glaze-hc {
+          font-weight: inherit;
+        }
+        .glaze-message .glaze-glow {
+          font-weight: inherit;
+        }
+        .glaze-message .glaze-cg {
+          font-weight: inherit;
+        }
+        .glaze-message .glaze-grad {
+          font-weight: inherit;
+        }
+        .glaze-message .glaze-bg {
+          color: #fff;
+        }
+        .glaze-message .glaze-mark {
+          color: var(--current-quote-color, var(--quote-color, #7996CE));
+        }
+        .glaze-message .glaze-active {
+          background: #ffeb3b;
+          color: #000;
+          padding: 2px 4px;
+          border-radius: 4px;
+        }
+        .edit-textarea {
+          width: 100%;
+          min-height: 80px;
+          max-height: 400px;
+          padding: 8px;
+          border: 1px solid rgba(255,255,255,0.12);
+          border-radius: 8px;
+          background: var(--bg-color, #1a1a2e);
+          color: var(--text-color, #e0e0e0);
+          font-size: var(--font-size, 15px);
+          font-family: inherit;
+          resize: vertical;
+          outline: none;
+          line-height: 1.6;
+          overflow-y: auto;
+          scrollbar-width: thin;
+        }
+        .edit-textarea:focus {
+          border-color: var(--primary-color, #7996CE);
+        }
       `;
       shadow.appendChild(style);
 
@@ -112,28 +161,40 @@ class Renderer {
       shadow.appendChild(messageContent);
     }
 
-    // Format and set content
-    this.updateMessageContent(messageEl, text, isUser);
+    this.updateMessageContent(messageEl, text, isUser, isTyping);
+
+    if (role !== 'system') {
+      const meta = this._createMetadata(messageData);
+      messageEl.appendChild(meta);
+    }
 
     return messageEl;
   }
 
-  updateMessageContent(messageEl, text, isUser = false) {
+  updateMessageContent(messageEl, text, isUser = false, isTyping = false) {
     const contentContainer = messageEl.querySelector('.message-content');
     if (!contentContainer || !contentContainer.shadowRoot) return;
 
     const shadowMessage = contentContainer.shadowRoot.querySelector('.glaze-message');
     if (!shadowMessage) return;
 
-    // Format text
-    let formatted = this.formatter.format(text, isUser);
+    try {
+      if (isTyping && (!text || text.trim() === '')) {
+        shadowMessage.innerHTML = '<div class="typing-indicator"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>';
+        return;
+      }
 
-    // Apply search highlighting if active
-    if (this.searchQuery) {
-      formatted = this._applySearchHighlight(formatted);
+      let formatted = this.formatter.format(text, isUser);
+
+      if (this.searchQuery) {
+        formatted = this._applySearchHighlight(formatted);
+      }
+
+      shadowMessage.innerHTML = formatted;
+    } catch (e) {
+      shadowMessage.textContent = text || '';
+      console.error('Formatter error:', e);
     }
-
-    shadowMessage.innerHTML = formatted;
   }
 
   updateMessage(messageId, newText, isUser = false) {
@@ -144,32 +205,33 @@ class Renderer {
   }
 
   _createHeader(messageData) {
-    const { role, displayName, avatarUrl, timestamp, avatarColor } = messageData;
+    const { role, displayName, personaName, avatarUrl, timestamp, avatarColor } = messageData;
 
     const header = document.createElement('div');
     header.className = 'message-header';
 
-    // Avatar
+    const finalName = displayName || personaName || this._getDefaultName(role);
+
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
 
     if (avatarUrl) {
-      avatar.style.backgroundImage = `url(${avatarUrl})`;
-      avatar.style.backgroundSize = 'cover';
+      const img = document.createElement('img');
+      img.src = avatarUrl;
+      img.alt = finalName;
+      avatar.appendChild(img);
     } else {
-      avatar.style.backgroundColor = avatarColor || '#ccc';
-      avatar.textContent = (displayName || '?').charAt(0).toUpperCase();
+      avatar.style.backgroundColor = avatarColor || '#555';
+      avatar.textContent = (finalName || '?').charAt(0).toUpperCase();
     }
 
     header.appendChild(avatar);
 
-    // Name
-    const name = document.createElement('div');
-    name.className = 'message-name';
-    name.textContent = displayName || this._getDefaultName(role);
-    header.appendChild(name);
+    const nameEl = document.createElement('div');
+    nameEl.className = 'message-name';
+    nameEl.textContent = finalName;
+    header.appendChild(nameEl);
 
-    // Timestamp
     if (timestamp) {
       const time = document.createElement('div');
       time.className = 'message-time';
@@ -178,6 +240,79 @@ class Renderer {
     }
 
     return header;
+  }
+
+  _createMetadata(messageData) {
+    const { genTime, tokens, triggeredLorebooks, triggeredMemories, swipeIndex, swipeTotal, id } = messageData;
+    const hasLorebooks = (triggeredLorebooks || 0) + (triggeredMemories || 0) > 0;
+
+    const row = document.createElement('div');
+    row.className = 'message-meta';
+
+    const left = document.createElement('div');
+    left.className = 'message-meta-left';
+
+    if (genTime) {
+      const badge = document.createElement('span');
+      badge.className = 'meta-badge';
+      badge.textContent = `${genTime}`;
+      left.appendChild(badge);
+    }
+
+    if (tokens && tokens > 0) {
+      const badge = document.createElement('span');
+      badge.className = 'meta-badge';
+      badge.textContent = `${tokens}t`;
+      left.appendChild(badge);
+    }
+
+    if (hasLorebooks) {
+      const badge = document.createElement('span');
+      badge.className = 'meta-badge meta-badge-inject';
+      badge.textContent = `${(triggeredLorebooks || 0) + (triggeredMemories || 0)}`;
+      badge.title = `Lorebooks: ${triggeredLorebooks || 0}, Memories: ${triggeredMemories || 0}`;
+      left.appendChild(badge);
+    }
+
+    row.appendChild(left);
+
+    const right = document.createElement('div');
+    right.className = 'message-meta-right';
+
+    if (swipeTotal > 1) {
+      const swipe = document.createElement('div');
+      swipe.className = 'swipe-nav';
+      const prevBtn = document.createElement('button');
+      prevBtn.className = 'swipe-btn';
+      prevBtn.textContent = '‹';
+      prevBtn.dataset.action = 'swipe-left';
+      prevBtn.dataset.messageId = id;
+      swipe.appendChild(prevBtn);
+
+      const label = document.createElement('span');
+      label.className = 'swipe-label';
+      label.textContent = `${(swipeIndex || 0) + 1}/${swipeTotal}`;
+      swipe.appendChild(label);
+
+      const nextBtn = document.createElement('button');
+      nextBtn.className = 'swipe-btn';
+      nextBtn.textContent = '›';
+      nextBtn.dataset.action = 'swipe-right';
+      nextBtn.dataset.messageId = id;
+      swipe.appendChild(nextBtn);
+
+      right.appendChild(swipe);
+    }
+
+    const menuBtn = document.createElement('button');
+    menuBtn.className = 'meta-menu-btn';
+    menuBtn.dataset.messageId = id;
+    menuBtn.textContent = '⋮';
+    right.appendChild(menuBtn);
+
+    row.appendChild(right);
+
+    return row;
   }
 
   _getRoleClass(role) {
@@ -213,7 +348,6 @@ class Renderer {
     this.searchMatches = [];
     let matchIndex = 0;
 
-    // Escape search query for regex
     const escapedQuery = this.searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`(${escapedQuery})`, 'gi');
 
@@ -230,10 +364,8 @@ class Renderer {
     this.searchQuery = query;
     this.activeSearchIndex = activeIndex;
 
-    // Re-render all messages with search
     const messages = document.querySelectorAll('.message');
     messages.forEach(messageEl => {
-      const messageId = messageEl.dataset.messageId;
       const content = messageEl.querySelector('.message-content');
       if (content && content.shadowRoot) {
         const messageContent = content.shadowRoot.querySelector('.glaze-message');

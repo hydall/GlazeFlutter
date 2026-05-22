@@ -8,10 +8,13 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'editing_message_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/state/character_provider.dart';
+import '../../core/state/active_selection_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import 'widgets/message_actions.dart';
 import '../../shared/theme/theme_font_provider.dart';
 import '../../shared/theme/theme_provider.dart';
 
@@ -24,8 +27,6 @@ import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
 import '../image_gen/widgets/image_gen_sheet.dart';
 import 'widgets/magic_drawer.dart';
-import 'widgets/message_list.dart';
-import 'widgets/cached_token_breakdown.dart';
 import 'widgets/chat_webview_widget.dart';
 import 'widgets/session_lifecycle_tracker.dart';
 
@@ -521,10 +522,61 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     },
                     child: RepaintBoundary(
                       child: Builder(builder: (context) {
+                        final character = ref.watch(characterByIdProvider(widget.charId));
+                        final effectivePersona = ref.watch(effectivePersonaForChatProvider(widget.charId));
                         return ChatWebViewWidget(
                           messages: widget.state.messages,
                           charId: widget.charId,
                           isGenerating: widget.state.isGenerating,
+                          bottomInset: messageListBottom,
+                          charName: character?.name,
+                          charColor: character?.color,
+                          personaName: effectivePersona?.name,
+                          chatLayout: preset.chatLayout,
+                          charAvatarPath: character?.avatarPath,
+                          personaAvatarPath: effectivePersona?.avatarPath,
+                          onMessageContext: (index, isUser, isSystem, content) {
+                            showMessageContextMenu(
+                              context: context,
+                              ref: ref,
+                              charId: widget.charId,
+                              content: content,
+                              messageIndex: index,
+                              isUser: isUser,
+                              isTyping: widget.state.isGenerating && index == widget.state.messages.length - 1,
+                              isError: false,
+                              isLast: index == widget.state.messages.length - 1,
+                              isGenerating: widget.state.isGenerating,
+                              isHidden: false,
+                            );
+                          },
+                          onSwipe: (id, direction) {
+                            final idx = widget.state.messages.indexWhere((m) => m.id == id);
+                            if (idx < 0) return;
+                            final msg = widget.state.messages[idx];
+                            final currentSwipe = msg.swipeId;
+                            final newSwipe = direction == 'right'
+                                ? (currentSwipe + 1).clamp(0, msg.swipes.length - 1)
+                                : (currentSwipe - 1).clamp(0, msg.swipes.length - 1);
+                            if (newSwipe != currentSwipe) {
+                              ref.read(chatProvider(widget.charId).notifier).setSwipe(idx, newSwipe);
+                            }
+                          },
+                          onSelectionAction: (action, text) {
+                            if (action == 'copy') {
+                              Clipboard.setData(ClipboardData(text: text));
+                            }
+                          },
+                          onEditSave: (id, text) {
+                            final idx = widget.state.messages.indexWhere((m) => m.id == id);
+                            if (idx >= 0 && text.isNotEmpty) {
+                              ref.read(chatProvider(widget.charId).notifier).editMessage(idx, text);
+                            }
+                            ref.read(editingMessageIndexProvider(widget.charId).notifier).state = null;
+                          },
+                          onEditCancel: (id) {
+                            ref.read(editingMessageIndexProvider(widget.charId).notifier).state = null;
+                          },
                         );
                       }),
                     ),
@@ -686,74 +738,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
             );
           },
         ),
-        ),
-      ],
-    );
-  }
-}
-
-
-
-class _ChatSearchBar extends StatelessWidget {
-  final String query;
-  final int matchCount;
-  final int currentIndex;
-  final ValueChanged<String> onChanged;
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
-  final VoidCallback onClose;
-
-  const _ChatSearchBar({
-    required this.query,
-    required this.matchCount,
-    required this.currentIndex,
-    required this.onChanged,
-    this.onPrevious,
-    this.onNext,
-    required this.onClose,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            autofocus: true,
-            style: TextStyle(color: context.cs.onSurface, fontSize: 16),
-            decoration: InputDecoration(
-              hintText: 'Search messages...',
-              hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
-              border: InputBorder.none,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            ),
-            onChanged: onChanged,
-          ),
-        ),
-        if (query.isNotEmpty) ...[
-          Text(
-            matchCount > 0 ? '${currentIndex + 1}/$matchCount' : '0/0',
-            style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
-          ),
-          IconButton(
-            icon: Icon(Icons.keyboard_arrow_up, size: 24, color: context.cs.onSurface),
-            onPressed: onPrevious,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          IconButton(
-            icon: Icon(Icons.keyboard_arrow_down, size: 24, color: context.cs.onSurface),
-            onPressed: onNext,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-        ],
-        IconButton(
-          icon: Icon(Icons.close, size: 24, color: context.cs.onSurface),
-          onPressed: onClose,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
         ),
       ],
     );

@@ -54,6 +54,18 @@ gh pr create --repo hydall/GlazeFlutter --base master --head danvitv:feat/second
 3. `git checkout -b feat/xxx` — create feature branch
 4. `flutter analyze` — verify before committing
 
+## Running Interactive Commands
+
+**`flutter run` and `flutter test --watch` are NOT available to the agent.** Only run:
+- `flutter analyze` (with optional file path argument)
+- `flutter test` (non-watch, one-shot)
+- `dart run build_runner build` when required
+
+If you need to verify runtime behavior, describe what the user should test and ask them to run `flutter run -d <platform>` and report back.
+
+**Hot restart after JS asset changes:**
+When files in `assets/chat_webview/` are modified, the user must **hot restart** (press `R`). Hot reload (`r`) doesn't rebuild the asset bundle.
+
 ## No God Objects — Parallel Decomposition
 
 Every class/file must have a **single responsibility**. When a class grows beyond ~150 lines or takes on more than one logical role, split it before continuing.
