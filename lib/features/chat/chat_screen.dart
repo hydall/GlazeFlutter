@@ -174,6 +174,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
+  @override
+  void didUpdateWidget(ChatScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.initialSessionIndex != old.initialSessionIndex ||
+        widget.forceNewSession != old.forceNewSession ||
+        widget.charId != old.charId) {
+      _sessionApplied = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _applySessionPreference();
+      });
+    }
+  }
+
   Future<void> _applySessionPreference() async {
     if (_sessionApplied) return;
     _sessionApplied = true;
@@ -190,6 +203,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final charId = widget.charId;
     final chatStateAsync = ref.watch(chatProvider(charId));
     final chatState = chatStateAsync.value;
+
+    final sessionMismatch = !_sessionApplied &&
+        widget.initialSessionIndex != null &&
+        chatState?.session?.sessionIndex != widget.initialSessionIndex;
+    if (sessionMismatch) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     final character = ref.watch(characterByIdProvider(charId));
     final title = character?.name ?? 'Chat';
