@@ -48,7 +48,7 @@ class Bridge {
     let loadMoreCooldown = false;
     this.virtualList.container.addEventListener('scroll', () => {
       if (loadMoreCooldown) return;
-      if (this.virtualList.isNearTop(100)) {
+      if (this.virtualList.isNearTop(500)) {
         loadMoreCooldown = true;
         this._sendToFlutter('onLoadMore', []);
         setTimeout(() => { loadMoreCooldown = false; }, 500);
