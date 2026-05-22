@@ -404,11 +404,14 @@ class ChatBridgeController {
         memoryStatus = 'MEM';
       }
     }
+    if (memoryStatus == null && m.triggeredMemories.isNotEmpty) {
+      memoryStatus = 'MEM';
+    }
 
     return {
       'id': m.id,
       'role': m.role,
-      'text': m.content,
+      'text': _stripThinkTags(m.content),
       'timestamp': m.timestamp,
       'isUser': isUser,
       'isAssistant': isAssistant,
@@ -436,5 +439,18 @@ class ChatBridgeController {
       if (m.triggeredMemories.isNotEmpty) 'triggeredMemories': m.triggeredMemories.map((e) => {'name': e.name, 'lorebookName': e.lorebookName}).toList(),
       'isGenerating': isGenerating,
     };
+  }
+
+  static final _thinkTagRegex = RegExp(r'<think\b[^>]*>[\s\S]*?<\/think\b[^>]*>', caseSensitive: false);
+  static final _thinkTagAltRegex = RegExp(r'<think\b([^>]*?)(?:>|\n)([\s\S]*?)<\/think\b', caseSensitive: false);
+  static final _thinkingTagRegex = RegExp(r'<thinking\b[^>]*>[\s\S]*?<\/thinking\b[^>]*>', caseSensitive: false);
+  static final _thinkingTagAltRegex = RegExp(r'<thinking\b([^>]*?)(?:>|\n)([\s\S]*?)<\/thinking\b', caseSensitive: false);
+
+  static String _stripThinkTags(String text) {
+    var result = text.replaceAll(_thinkTagRegex, '');
+    result = result.replaceAll(_thinkTagAltRegex, '');
+    result = result.replaceAll(_thinkingTagRegex, '');
+    result = result.replaceAll(_thinkingTagAltRegex, '');
+    return result.trim();
   }
 }

@@ -298,7 +298,7 @@ class Renderer {
       shadow.appendChild(messageContent);
     }
 
-    this.updateMessageContent(messageEl, text, isUser, isTyping);
+    this.updateMessageContent(messageEl, text, messageData.reasoning || null, isUser, isTyping);
 
     if (role !== 'system') {
       const meta = this._createMetadata(messageData);
@@ -309,7 +309,7 @@ class Renderer {
     return elements.length > 1 ? elements : messageEl;
   }
 
-  updateMessageContent(messageEl, text, isUser = false, isTyping = false, animate = false) {
+  updateMessageContent(messageEl, text, reasoning = null, isUser = false, isTyping = false, animate = false) {
     const contentContainer = messageEl.querySelector('.message-content');
     if (!contentContainer || !contentContainer.shadowRoot) return;
 
@@ -317,12 +317,17 @@ class Renderer {
     if (!shadowMessage) return;
 
     try {
-      if (isTyping && (!text || text.trim() === '')) {
+      if (isTyping && (!text || text.trim() === '') && (!reasoning || reasoning.trim() === '')) {
         shadowMessage.innerHTML = '<div class="typing-indicator"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>';
         return;
       }
 
       let formatted = this.formatter.format(text, isUser);
+
+      if (reasoning && reasoning.trim()) {
+        const reasoningHtml = this.formatter.format(reasoning, isUser);
+        formatted = `<details class="reasoning-block"><summary class="reasoning-summary">💭 Reasoning</summary><div class="reasoning-content">${reasoningHtml}</div></details>` + formatted;
+      }
 
       if (this.searchQuery) {
         formatted = this._applySearchHighlight(formatted);
@@ -353,10 +358,10 @@ class Renderer {
     }
   }
 
-  updateMessage(messageId, newText, isUser = false) {
+  updateMessage(messageId, newText, isUser = false, reasoning = null) {
     const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
     if (messageEl) {
-      this.updateMessageContent(messageEl, newText, isUser);
+      this.updateMessageContent(messageEl, newText, reasoning || messageEl.dataset.reasoning || null, isUser);
     }
   }
 

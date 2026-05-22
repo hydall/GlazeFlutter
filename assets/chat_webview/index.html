@@ -63,9 +63,12 @@
       const renderer = new Renderer(formatter, virtualList);
       window.bridge = new Bridge(renderer, virtualList);
       container.addEventListener('wheel', (e) => {
-        if (e.deltaMode === 1) {
+        if (e.deltaMode === 0) {
           e.preventDefault();
-          container.scrollTop += e.deltaY * 0.4;
+          container.scrollTop += e.deltaY * 0.5;
+        } else if (e.deltaMode === 1) {
+          e.preventDefault();
+          container.scrollTop += e.deltaY * 20;
         }
       }, { passive: false });
       window.bridge._sendToFlutter('onWebViewReady', []);

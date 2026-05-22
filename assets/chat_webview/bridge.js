@@ -310,7 +310,13 @@ class Bridge {
       msgEl.dataset.swipeDirection = msg.swipeDirection;
     }
 
-    this.renderer.updateMessageContent(msgEl, msg.text, msg.isUser, msg.isTyping, animate);
+    if (msg.reasoning) {
+      msgEl.dataset.reasoning = msg.reasoning;
+    } else if (msg.reasoning === null || msg.reasoning === '') {
+      delete msgEl.dataset.reasoning;
+    }
+
+    this.renderer.updateMessageContent(msgEl, msg.text, msg.reasoning || null, msg.isUser, msg.isTyping, animate);
 
     if (msg.isHidden !== undefined) {
       msgEl.classList.toggle('message-hidden', !!msg.isHidden);

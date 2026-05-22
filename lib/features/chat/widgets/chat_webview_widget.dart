@@ -306,6 +306,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           id: _kStreamingId,
           role: 'assistant',
           content: next.text,
+          reasoning: next.reasoning,
           timestamp: DateTime.now().millisecondsSinceEpoch,
         );
 
