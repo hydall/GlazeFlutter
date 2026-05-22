@@ -11,7 +11,7 @@ class ChatState {
   final bool isLoadingOlder;
 
   static const int initialPageSize = 20;
-  static const int olderPageSize = 30;
+  static const int olderPageSize = 20;
 
   const ChatState({
     this.session,
