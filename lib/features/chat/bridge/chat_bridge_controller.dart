@@ -401,8 +401,7 @@ class ChatBridgeController {
         memoryStatus = 'STALE';
       }
     }
-    final isLastAssistant = isLast && m.role == 'assistant';
-    if (memoryStatus == null && m.triggeredMemories.isNotEmpty && isLastAssistant) {
+    if (memoryStatus == null && m.triggeredMemories.isNotEmpty) {
       memoryStatus = 'MEM';
     }
 
