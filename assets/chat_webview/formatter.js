@@ -102,7 +102,12 @@ class Formatter {
     // 4. Fix escaped HTML line breaks
     html = html.replace(/&lt;br\s*\/?&gt;/gi, '<br>');
 
-    // 5. Janitor images: ![alt](url) → <span class="janitor-img-wrapper">
+    // 5. Convert <font color="..."> to hc markers BEFORE tag extraction
+    html = html.replace(/<font\s+color=["']?(#[0-9a-fA-F]{3,8})["']?\s*>([\s\S]*?)<\/font>/gi, (_, color, text) => {
+      return `==hc:${color}==${text}==`;
+    });
+
+    // 5b. Janitor images: ![alt](url) → <span class="janitor-img-wrapper">
     html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
       return `<span class="janitor-img-wrapper"><img src="${url}" alt="${alt}" class="janitor-img" loading="lazy"></span>`;
     });

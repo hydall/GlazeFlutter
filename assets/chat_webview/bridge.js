@@ -466,6 +466,9 @@ class Bridge {
       textarea.style.height = 'auto';
       textarea.style.height = Math.max(80, textarea.scrollHeight) + 'px';
     });
+    textarea.addEventListener('wheel', (e) => {
+      e.stopPropagation();
+    }, { passive: true });
     textarea.style.height = Math.max(80, textarea.scrollHeight + 20) + 'px';
     textarea.focus();
 
