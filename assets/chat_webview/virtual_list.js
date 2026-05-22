@@ -47,12 +47,18 @@ class VirtualList {
 
     this.container.addEventListener('scroll', () => {
       if (this._isUserScroll) {
-        this._scheduleUpdate();
+        if (this._rafId == null) {
+          this._rafId = requestAnimationFrame(() => {
+            this._rafId = null;
+            this._applyWindow();
+          });
+        }
       }
     }, { passive: true });
   }
 
   clear() {
+    console.log(`[VL] clear: removing ${this.messages.size} messages`);
     for (const el of this.messages.values()) {
       this._resizeObserver.unobserve(el);
       el.remove();
@@ -80,6 +86,8 @@ class VirtualList {
 
     const idx = this.messageOrder.length - 1;
     this._heightCache.set(messageId, this._estimateHeight(messageElement));
+
+    this._computeWindow();
 
     if (this._isInWindow(idx)) {
       this.container.insertBefore(messageElement, this._bottomSpacer);
@@ -110,6 +118,8 @@ class VirtualList {
     this._dirty = true;
 
     this._heightCache.set(messageId, this._estimateHeight(messageElement));
+
+    this._computeWindow();
 
     if (this._isInWindow(0)) {
       this.container.insertBefore(messageElement, this._topSpacer.nextSibling);
@@ -156,6 +166,7 @@ class VirtualList {
   }
 
   scrollToBottom() {
+    console.log(`[VL] scrollToBottom: scrollHeight=${this.container.scrollHeight}, clientHeight=${this.container.clientHeight}, scrollTop=${this.container.scrollTop}`);
     this._isUserScroll = false;
     this.container.scrollTop = this.container.scrollHeight;
     requestAnimationFrame(() => { this._isUserScroll = true; });
@@ -321,6 +332,8 @@ class VirtualList {
 
     this._topSpacer.style.height = `${topH}px`;
     this._bottomSpacer.style.height = `${bottomH}px`;
+
+    console.log(`[VL] updateSpacers: ${this.messageOrder.length} msgs, window ${this._renderStart}-${this._renderEnd}, topH=${topH.toFixed(0)}, botH=${bottomH.toFixed(0)}, totalH=${totalH.toFixed(0)}, scrollTop=${this.container.scrollTop.toFixed(0)}`);
   }
 
   _ensureRendered(targetIdx) {
@@ -378,6 +391,17 @@ class VirtualList {
 
     this._rebuildPrefixSums();
     this._computeWindow();
+
+    const topH = this._renderStart < this._prefixSums.length
+      ? this._prefixSums[this._renderStart]
+      : 0;
+    const totalH = this._getTotalHeight();
+    const bottomStart = this._renderEnd < this._prefixSums.length
+      ? this._prefixSums[this._renderEnd]
+      : totalH;
+    const bottomH = Math.max(0, totalH - bottomStart);
+
+    console.log(`[VL] setMessagesBatch: ${ids.length} msgs, window ${this._renderStart}-${this._renderEnd}, topH=${topH.toFixed(0)}, botH=${bottomH.toFixed(0)}, totalH=${totalH.toFixed(0)}`);
 
     for (let i = this._renderStart; i < this._renderEnd; i++) {
       const el = this.messages.get(this.messageOrder[i]);

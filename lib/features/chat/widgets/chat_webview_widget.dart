@@ -48,6 +48,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final List<dynamic> memoryEntries;
   final List<dynamic> memoryDrafts;
   final String? sessionId;
+  final int visibleStartIndex;
 
   const ChatWebViewWidget({
     super.key,
@@ -85,6 +86,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.memoryEntries = const [],
     this.memoryDrafts = const [],
     this.sessionId,
+    this.visibleStartIndex = 0,
   });
 
   @override
@@ -144,7 +146,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       letterSpacing: widget.chatLetterSpacing,
     );
 
-    await _bridge!.setMessages(widget.messages);
+    await _bridge!.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
     _bridge!.updateMemoryBookData(
       entries: widget.memoryEntries.map((e) => {'status': e.status, 'messageIds': e.messageIds}).toList(),
       pendingDrafts: widget.memoryDrafts.map((e) => {'messageIds': e.messageIds}).toList(),
@@ -191,7 +193,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
         );
       }
       _bridge!.clearAll();
-      _bridge!.setMessages(widget.messages);
+      _bridge!.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
       _bridge!.scrollToBottom();
       _wasGenerating = widget.isGenerating;
       _streamingSent = false;
@@ -255,7 +257,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     final newLen = newIds.length - (skipLast ? 1 : 0);
 
     if (oldIds.isEmpty) {
-      _bridge?.setMessages(widget.messages);
+      _bridge?.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
       return;
     }
 
@@ -291,7 +293,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
         return;
       }
       _bridge?.clearAll();
-      _bridge?.setMessages(widget.messages);
+      _bridge?.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
       return;
     }
 
@@ -300,7 +302,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       if (i >= newIds.length) break;
       if (newIds[i] != oldIds[i]) {
         _bridge?.clearAll();
-        _bridge?.setMessages(widget.messages);
+        _bridge?.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
         return;
       }
       final o = oldMsgs[i];
@@ -376,6 +378,9 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
             allowUniversalAccessFromFileURLs: true,
             mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
           ),
+          onConsoleMessage: (controller, consoleMessage) {
+            debugPrint('[WebView] ${consoleMessage.message}');
+          },
           onWebViewCreated: (controller) async {
             _bridge = ChatBridgeController(controller);
             controller.evaluateJavascript(source: 'if(window.bridge) window.bridge.clearAll();');

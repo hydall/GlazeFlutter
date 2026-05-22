@@ -47,7 +47,7 @@ class Bridge {
   _setupScrollListener() {
     let loadMoreCooldown = false;
     this.virtualList.container.addEventListener('scroll', () => {
-      if (loadMoreCooldown) return;
+      if (loadMoreCooldown || this._suppressLoadMore) return;
       if (this.virtualList.isNearTop(500)) {
         loadMoreCooldown = true;
         this._sendToFlutter('onLoadMore', []);
@@ -233,6 +233,7 @@ class Bridge {
   }
 
   setMessages(messagesJson) {
+    this._suppressLoadMore = true;
     const container = document.getElementById('chat-container') || document.body;
     if (!container.classList.contains('layout-bubble') &&
         !container.classList.contains('layout-standard') &&
@@ -266,6 +267,7 @@ class Bridge {
     
     this.virtualList.setMessagesBatch(ids, elements);
     this._hideLoadingScreen();
+    setTimeout(() => { this._suppressLoadMore = false; }, 300);
   }
 
   appendMessage(messageJson) {

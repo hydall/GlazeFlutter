@@ -674,6 +674,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           memoryEntries: memBook.valueOrNull?.entries ?? [],
                           memoryDrafts: memBook.valueOrNull?.pendingDrafts ?? [],
                           sessionId: widget.state.session?.id,
+                          visibleStartIndex: widget.state.visibleStartIndex,
                           onMessageContext: (index, messageId, isUser, isSystem, content) {
                             showMessageContextMenu(
                               context: context,
