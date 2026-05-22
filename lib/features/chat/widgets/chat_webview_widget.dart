@@ -135,6 +135,9 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     );
 
     await _bridge!.setMessages(widget.messages);
+    if (widget.bottomInset > 0) {
+      await _bridge!.setBottomPadding(widget.bottomInset);
+    }
     if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
       await _bridge!.setSearch(query: widget.searchQuery!, activeIndex: widget.searchCurrentIndex);
     }
@@ -205,9 +208,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     }
 
     if (widget.bottomInset != old.bottomInset) {
-      if ((widget.bottomInset - old.bottomInset).abs() > 5) {
-        _bridge!.setBottomPadding(widget.bottomInset);
-      }
+      _bridge!.setBottomPadding(widget.bottomInset);
     }
 
     if (widget.isGenerating != old.isGenerating) {
