@@ -47,6 +47,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final current = state.value;
     if (current == null || !current.hasMoreOlder || current.isLoadingOlder) return;
 
+    state = AsyncData(current.copyWith(isLoadingOlder: true));
     final newStart = current.visibleStartIndex > ChatState.olderPageSize
         ? current.visibleStartIndex - ChatState.olderPageSize
         : 0;

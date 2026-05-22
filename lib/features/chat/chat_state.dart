@@ -10,7 +10,7 @@ class ChatState {
   final int visibleStartIndex;
   final bool isLoadingOlder;
 
-  static const int initialPageSize = 50;
+  static const int initialPageSize = 20;
   static const int olderPageSize = 30;
 
   const ChatState({
