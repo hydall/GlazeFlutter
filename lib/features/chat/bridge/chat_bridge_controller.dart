@@ -398,16 +398,13 @@ class ChatBridgeController {
     if (m.memoryCoverage.isNotEmpty) {
       final needsRebuild = m.memoryCoverage['needsRebuild'] as bool? ?? false;
       final stale = m.memoryCoverage['stale'] as bool? ?? false;
-      final entryIds = m.memoryCoverage['entryIds'];
-      final hasEntries = entryIds is List && entryIds.isNotEmpty;
       if (needsRebuild) {
         memoryStatus = 'REBUILD';
       } else if (stale) {
         memoryStatus = 'STALE';
-      } else if (hasEntries || _coveredMemoryIds.contains(m.id)) {
-        memoryStatus = 'MEM';
       }
-    } else if (_coveredMemoryIds.contains(m.id)) {
+    }
+    if (memoryStatus == null && _coveredMemoryIds.contains(m.id)) {
       memoryStatus = 'MEM';
     }
     if (memoryStatus == null && _pendingMemoryIds.contains(m.id)) {
