@@ -108,12 +108,13 @@ class Formatter {
 
     // 8. Quote formatting — with unclosed quote handling for streaming
     const phGroup = '\x01[A-Z_]+\\d+\x01';
-    const quoteRegex = new RegExp(`(${phGroup})|(=[ \\t]*"(?:[^"]|\\\\")*?")|("((?:[^"]|\\\\")*?)"|«((?:[^»])*?)»)|("(?:[^"]*)$|«(?:[^»]*)$)`, 'gm');
-    html = html.replace(quoteRegex, (match, placeholder, skipQuote, closedQuote, closedContent, guillemetContent, unclosedQuote) => {
+    const quoteRegex = new RegExp(`(${phGroup})|(=[ \\t]*"(?:[^"]|\\\\")*?")|(")((?:[^"]|\\\\")*?)(")|(«)((?:[^»])*?)(»)|(")((?:[^"]*)$)`, 'gm');
+    html = html.replace(quoteRegex, (match, placeholder, skipQuote, openQ, closedContent, closeQ, openG, guillemetContent, closeG, openU, unclosedContent) => {
       if (placeholder) return placeholder;
       if (skipQuote) return skipQuote;
-      if (closedQuote) return `<span class="chat-quote">${match}</span>`;
-      if (unclosedQuote) return `<span class="chat-quote chat-quote-unclosed">${match}</span>`;
+      if (openQ !== undefined) return `<span class="chat-quote">${openQ}</span>${closedContent}<span class="chat-quote">${closeQ}</span>`;
+      if (openG !== undefined) return `<span class="chat-quote">${openG}</span>${guillemetContent}<span class="chat-quote">${closeG}</span>`;
+      if (openU !== undefined) return `<span class="chat-quote">${openU}</span>${unclosedContent}`;
       return match;
     });
 

@@ -115,6 +115,12 @@ class Bridge {
         return;
       }
 
+      const injectBadge = e.target.closest('[data-action="inject-click"]');
+      if (injectBadge) {
+        this._sendToFlutter('onInjectClick', [injectBadge.dataset.messageId]);
+        return;
+      }
+
       const hiddenToggle = e.target.closest('[data-action="toggle-hidden"]');
       if (hiddenToggle) {
         this._sendToFlutter('onToggleHidden', [hiddenToggle.dataset.messageId]);
@@ -404,15 +410,19 @@ class Bridge {
   }
 
   startEdit(messageId) {
-    const scrollPos = this.virtualList.container.scrollTop;
     const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!msgEl) return;
+    if (!msgEl) {
+      this.virtualList.scrollToMessage(messageId);
+      setTimeout(() => this.startEdit(messageId), 150);
+      return;
+    }
 
+    const scrollPos = this.virtualList.container.scrollTop;
     const rawText = msgEl.dataset.rawText || '';
     const reasoning = msgEl.dataset.reasoning || '';
     let editText = rawText;
     if (reasoning) {
-      editText = `<think>\n${reasoning}\n</think>\n${rawText}`;
+      editText = '<' + 'think>\n' + reasoning + '\n</' + 'think>\n' + rawText;
     }
 
     const contentEl = msgEl.querySelector('.message-content');

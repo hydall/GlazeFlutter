@@ -725,6 +725,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                               );
                             }
                           },
+                          onInjectClick: (id) {
+                            final idx = widget.state.messages.indexWhere((m) => m.id == id);
+                            if (idx < 0) return;
+                            final msg = widget.state.messages[idx];
+                            final all = [...msg.triggeredLorebooks, ...msg.triggeredMemories];
+                            if (all.isNotEmpty) {
+                              _showTriggeredItemsSheet(context, all, 'Triggered Entries');
+                            }
+                          },
                         );
                       }),
                     ),

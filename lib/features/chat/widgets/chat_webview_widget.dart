@@ -40,6 +40,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final void Function(String id, String guidanceText)? onGuidedSwipe;
   final void Function(String id)? onMemoryClick;
   final void Function(String id)? onToggleHidden;
+  final void Function(String id)? onInjectClick;
   final String? chatFontName;
   final String? chatFontDataUrl;
   final double chatFontSize;
@@ -73,6 +74,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.onGuidedSwipe,
     this.onMemoryClick,
     this.onToggleHidden,
+    this.onInjectClick,
     this.chatFontName,
     this.chatFontDataUrl,
     this.chatFontSize = 15.0,
@@ -232,7 +234,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
 
     if (newIds.length < oldIds.length) {
       _bridge?.clearAll();
-      _bridge?.appendMessages(widget.messages);
+      _bridge?.setMessages(widget.messages);
       return;
     }
 
@@ -255,7 +257,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       if (i >= newIds.length) break;
       if (newIds[i] != oldIds[i]) {
         _bridge?.clearAll();
-        _bridge?.appendMessages(widget.messages);
+        _bridge?.setMessages(widget.messages);
         return;
       }
       final o = oldMsgs[i];
@@ -363,6 +365,9 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
             };
             _bridge!.onToggleHidden = (id) {
               widget.onToggleHidden?.call(id);
+            };
+            _bridge!.onInjectClick = (id) {
+              widget.onInjectClick?.call(id);
             };
             _bridge!.onLinkClick = (url) {
               launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);

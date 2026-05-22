@@ -103,6 +103,7 @@ class ChatBridgeController {
   void Function(String id)? onMemoryClick;
   void Function(String id)? onToggleHidden;
   void Function(List<String> ids)? onSelectionChange;
+  void Function(String id)? onInjectClick;
 
   void _setupHandlers() {
     _controller.addJavaScriptHandler(
@@ -228,6 +229,14 @@ class ChatBridgeController {
           final list = jsonDecode(args[0] as String) as List;
           onSelectionChange?.call(list.cast<String>());
         } catch (_) {}
+      },
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onInjectClick',
+      callback: (args) {
+        if (args.isEmpty) return;
+        onInjectClick?.call(args[0] as String);
       },
     );
 

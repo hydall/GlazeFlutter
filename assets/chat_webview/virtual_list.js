@@ -205,6 +205,20 @@ class VirtualList {
     if (el.classList.contains('date-separator')) return 32;
     const role = el.classList.contains('message-user') ? 'user' :
                  el.classList.contains('message-system') ? 'system' : 'assistant';
+    const content = el.querySelector('.message-content');
+    if (content && content.shadowRoot) {
+      const shadowDiv = content.shadowRoot.querySelector('.glaze-message');
+      if (shadowDiv) {
+        const textLen = (el.dataset.rawText || '').length;
+        const hasCode = shadowDiv.querySelector('pre, .code-block-wrapper');
+        const hasImg = shadowDiv.querySelector('img, .janitor-img-wrapper');
+        if (hasImg) return 320;
+        if (hasCode) return 250;
+        if (textLen > 2000) return 500;
+        if (textLen > 500) return 250;
+        return 120;
+      }
+    }
     return role === 'system' ? 60 : 120;
   }
 

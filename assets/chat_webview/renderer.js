@@ -162,10 +162,7 @@ class Renderer {
           font-style: italic;
         }
         .glaze-message .chat-quote {
-          color: var(--current-quote-color, var(--quote-color, #7996CE)) !important;
-        }
-        .glaze-message .chat-quote .chat-italic {
-          color: inherit !important;
+          color: var(--current-quote-color, var(--quote-color, #7996CE));
         }
         .glaze-message .chat-italic {
           color: var(--current-italic-color, var(--italic-color, #888));
@@ -479,6 +476,9 @@ class Renderer {
       if (lorebooks.length) parts.push(`WI: ${lorebooks.map(e => e.name).join(', ')}`);
       if (memories.length) parts.push(`Mem: ${memories.map(e => e.name).join(', ')}`);
       badge.title = parts.join('\n');
+      badge.style.cursor = 'pointer';
+      badge.dataset.messageId = messageData.id;
+      badge.dataset.action = 'inject-click';
       left.appendChild(badge);
     }
 
