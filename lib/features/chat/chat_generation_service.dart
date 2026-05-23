@@ -166,12 +166,11 @@ class ChatGenerationService {
         },
         onError: (error) {
           final isCancelled = error is DioException && error.type == DioExceptionType.cancel;
+          debugPrint('[gen] SSE onError: isCancelled=$isCancelled errorType=${error.runtimeType} regenTargetId=$regenTargetId');
           if (isCancelled) {
-            // User aborted — discard partial text, restore prior state.
             finalState = ChatState(session: session, isGenerating: false);
           } else {
-            // Server dropped connection (499, network error, etc.) —
-            // do not save partial text as a real message.
+            debugPrint('[gen] SSE error details: $error');
             finalState = _saveErrorMessage(error.toString(), session, pendingSessionVars: pendingSessionVars);
           }
         },
@@ -179,8 +178,7 @@ class ChatGenerationService {
 
       return finalState ?? ChatState(session: session, isGenerating: false);
     } catch (e) {
-      // If aborted, don't write an error message to the DB — the provider will
-      // restore the previous assistant message via _restorationMessage.
+      debugPrint('[gen] generate() caught exception: $e regenTargetId=$regenTargetId isAborted=${isAborted()}');
       if (isAborted()) return ChatState(session: session, isGenerating: false);
       return _saveErrorMessage(e.toString(), session);
     }
@@ -365,6 +363,7 @@ class ChatGenerationService {
 
     if (regenTargetId != null) {
       final idx = currentSession.messages.indexWhere((m) => m.id == regenTargetId);
+      debugPrint('[gen] _saveAssistantMessage regenTargetId=$regenTargetId idx=$idx swipes=${swipes.length} swipeId=$swipeId');
       if (idx >= 0) {
         final updated = currentSession.messages[idx].copyWith(
           content: text,
