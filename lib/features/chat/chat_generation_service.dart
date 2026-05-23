@@ -250,7 +250,11 @@ class ChatGenerationService {
         cancelToken: cancelToken,
         onUpdate: (updatedText) {
           final newMessages = List<ChatMessage>.from(session.messages);
-          newMessages[lastIdx] = lastMsg.copyWith(content: updatedText);
+          final swipeIdx = lastMsg.swipeId;
+          final updatedSwipes = lastMsg.swipes.isNotEmpty && swipeIdx >= 0 && swipeIdx < lastMsg.swipes.length
+              ? (List<String>.from(lastMsg.swipes)..[swipeIdx] = updatedText)
+              : lastMsg.swipes;
+          newMessages[lastIdx] = lastMsg.copyWith(content: updatedText, swipes: updatedSwipes);
           final updatedSession = session.copyWith(
             messages: newMessages,
             updatedAt: currentTimestampSeconds(),
@@ -277,14 +281,23 @@ class ChatGenerationService {
         idx++;
       }
       final newMessages = List<ChatMessage>.from(session.messages);
-      newMessages[lastIdx] = lastMsg.copyWith(content: cancelContent);
+      final cancelSwipeIdx = lastMsg.swipeId;
+      final cancelSwipes = lastMsg.swipes.isNotEmpty && cancelSwipeIdx >= 0 && cancelSwipeIdx < lastMsg.swipes.length
+          ? (List<String>.from(lastMsg.swipes)..[cancelSwipeIdx] = cancelContent)
+          : lastMsg.swipes;
+      newMessages[lastIdx] = lastMsg.copyWith(content: cancelContent, swipes: cancelSwipes);
       final finalSession = session.copyWith(messages: newMessages, updatedAt: currentTimestampSeconds());
       onStateUpdate(ChatState(session: finalSession, isGeneratingImage: false));
       return;
     }
 
     final newMessages = List<ChatMessage>.from(session.messages);
-    newMessages[lastIdx] = lastMsg.copyWith(content: updatedContent);
+    final finalSwipeIdx = lastMsg.swipeId;
+    final finalSwipes = lastMsg.swipes.isNotEmpty && finalSwipeIdx >= 0 && finalSwipeIdx < lastMsg.swipes.length
+        ? (List<String>.from(lastMsg.swipes)..[finalSwipeIdx] = updatedContent)
+        : lastMsg.swipes;
+    newMessages[lastIdx] = lastMsg.copyWith(content: updatedContent, swipes: finalSwipes);
+    debugPrint('IMGGEN: final persist swipeId=$finalSwipeIdx contentHasResult=${updatedContent.contains('[IMG:RESULT')} swipeHasResult=${finalSwipeIdx < finalSwipes.length && finalSwipes[finalSwipeIdx].contains('[IMG:RESULT')}');
     final finalSession = session.copyWith(
       messages: newMessages,
       updatedAt: currentTimestampSeconds(),

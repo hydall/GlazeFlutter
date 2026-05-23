@@ -607,7 +607,14 @@ class Renderer {
       right.appendChild(swipe);
     }
 
-    if (messageData.role === 'assistant' && isLast && !isGenerating) {
+    if (messageData.role === 'assistant' && isLast && isGenerating) {
+      const stopBtn = document.createElement('button');
+      stopBtn.className = 'stop-btn';
+      stopBtn.dataset.messageId = id;
+      stopBtn.textContent = '⏹';
+      stopBtn.title = 'Stop generation';
+      right.appendChild(stopBtn);
+    } else if (messageData.role === 'assistant' && isLast && !isGenerating) {
       const regenBtn = document.createElement('button');
       regenBtn.className = 'regen-btn';
       regenBtn.dataset.messageId = id;

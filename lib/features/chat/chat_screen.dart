@@ -657,6 +657,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           messages: widget.state.visibleMessages,
                           charId: widget.charId,
                           isGenerating: widget.state.isGenerating,
+                          isGeneratingImage: widget.state.isGeneratingImage,
                           regenTargetId: widget.state.regenTargetId,
                           bottomInset: messageListBottom,
                           charName: character?.name,
@@ -706,6 +707,24 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           },
                           onRegenerate: (id) {
                             ref.read(chatProvider(widget.charId).notifier).regenerateLastAssistant();
+                          },
+                          onStop: () {
+                            final notifier = ref.read(chatProvider(widget.charId).notifier);
+                            if (widget.state.isGeneratingImage && !widget.state.isGenerating) {
+                              notifier.abortImageGeneration();
+                            } else {
+                              notifier.abortGeneration();
+                            }
+                          },
+                          onImgRetry: (instruction, messageId) {
+                            final allMsgs = widget.state.messages;
+                            final idx = allMsgs.indexWhere((m) => m.id == messageId);
+                            if (idx >= 0) {
+                              ref.read(chatProvider(widget.charId).notifier).retryImageGenerationForMessage(idx);
+                            }
+                          },
+                          onImgFind: (instruction, messageId) {
+                            ref.read(chatProvider(widget.charId).notifier).findImageOnDisk(messageId, instruction);
                           },
                           onSelectionAction: (action, text) {
                             if (action == 'copy') {

@@ -27,8 +27,9 @@ gh pr create --repo hydall/GlazeFlutter --base master --head danvitv:feat/second
 
 ### Rules
 
-- **No direct commits to `master`** — always use feature branches
-- **Stack while catching up** — branch off the latest unmerged branch if needed
+- **No direct commits to `master`** — always use feature branches for anything that will be pushed or PR'd
+- **Small/local changes** — you may edit directly in the current branch without creating a new one (typos, one-liners, experiments, quick debugging)
+- **Stack while catching up** — branch off the latest unmerged branch if needed for larger features
 - **Run `dart run build_runner build`** after changing freezed/drift models
 - **Every sub-screen must have a back button** — use `leading: BackButton(onPressed: () => context.go('/parent'))` in AppBar since GoRouter `go()` replaces the stack and doesn't auto-provide one
 
@@ -47,34 +48,42 @@ gh pr create --repo hydall/GlazeFlutter --base master --head danvitv:feat/second
 4. If it passes — remove this section from AGENTS.md
 5. If it fails — keep the override, check again later
 
-## Before Starting Work
+## Before Starting Work (recommended for significant changes)
+
+For **new features** or **larger refactors**, follow this ritual to stay in sync:
 
 1. `git branch --show-current` — make sure you're on the right branch
 2. Sync with latest: `git checkout master && git pull upstream master`
 3. `git checkout -b feat/xxx` — create feature branch
 4. `flutter analyze` — verify before committing
 
+For **small fixes**, **typos**, **one-file tweaks** or **quick experiments** — you may work directly in the current branch. Just run `flutter analyze` before asking the user to commit.
+
 ## Running Interactive Commands
 
-**`flutter run` and `flutter test --watch` are NOT available to the agent.** Only run:
+**`flutter run` and `flutter test --watch` are permanently unavailable to the agent.**
+
+Reason: both commands are **long-running / blocking**. `flutter run` starts a persistent dev server and keeps the terminal occupied until the app is manually closed. The agent session would freeze indefinitely, unable to continue any work, issue further commands, or report results.
+
+Only run one-shot, non-interactive commands:
 - `flutter analyze` (with optional file path argument)
 - `flutter test` (non-watch, one-shot)
 - `dart run build_runner build` when required
 
-If you need to verify runtime behavior, describe what the user should test and ask them to run `flutter run -d <platform>` and report back.
+If you need to verify runtime behavior or hot-reload changes, ask the user to run `flutter run -d <platform>` (or `flutter run -d chrome`) in a separate terminal and report back. The agent cannot drive or observe a live Flutter session.
 
 **Hot restart after JS asset changes:**
 When files in `assets/chat_webview/` are modified, the user must **hot restart** (press `R`). Hot reload (`r`) doesn't rebuild the asset bundle.
 
 ## No God Objects — Parallel Decomposition
 
-Every class/file must have a **single responsibility**. When a class grows beyond ~150 lines or takes on more than one logical role, split it before continuing.
+Every class/file must have a **single responsibility**. When a class grows beyond ~200-250 lines or takes on more than one logical role, consider splitting.
 
 ### Rules
 
 1. **One class = one job.** If the class name needs "and" to describe it (`CharacterImportAndNormalization`), it's two classes.
 2. **Thin orchestrator, fat specialists.** The top-level class (e.g. `PromptBuilder`) only calls other classes in order — it contains zero business logic itself. All logic lives in focused components below.
-3. **Split before extend.** When adding a new feature to an existing file, check: does it belong there, or does it need its own file? If the file is already >150 lines, the answer is almost always "new file."
+3. **Split when it hurts.** When adding a new feature to an existing file, check: does it belong there, or does it need its own file? If the file is already >250 lines **and** the new logic is clearly separable, extract. Don't split just to hit an arbitrary line count.
 4. **No circular dependencies.** Lower layers never import from higher layers. Direction: `UI → Providers → Services/Repos → Models/DB`. Data flows down, events flow up.
 5. **Extract during implementation, not after.** If while writing a method you realize "this chunk could be its own class," extract it immediately. Don't leave a TODO to refactor later.
 6. **Constructor injection only.** Dependencies are passed in, not looked up. This keeps classes testable and boundaries visible.
@@ -170,6 +179,8 @@ Also protect markdown formatting patterns (`**bold**`, `*italic*`, `__bold__`, `
 2. **After implementation** — move the card to **Done, not tested**.
 3. **After user tests immediately** — move the card to **Fixed**.
 4. New features with no card yet → create in **features** first, then move to **In Progress** when starting work.
+
+**Note:** Trello tracking is recommended for visibility but not strictly required for every small change.
 
 ## Cleanup Checklist After Merge
 

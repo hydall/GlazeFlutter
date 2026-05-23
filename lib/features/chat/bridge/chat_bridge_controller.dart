@@ -16,6 +16,7 @@ class ChatBridgeController {
   String? _charAvatarDataUrl;
   String? _personaAvatarDataUrl;
   bool isGenerating = false;
+  bool isGeneratingImage = false;
   final Set<String> _coveredMemoryIds = {};
   final Set<String> _pendingMemoryIds = {};
   final Set<String> _draftMemoryIds = {};
@@ -145,6 +146,10 @@ class ChatBridgeController {
   void Function(String id)? onToggleHidden;
   void Function(List<String> ids)? onSelectionChange;
   void Function(String id)? onInjectClick;
+  void Function(String instruction, String messageId)? onImgRetry;
+  void Function(String instruction, String messageId)? onImgFind;
+  void Function(String instruction, String messageId)? onImgRegen;
+  void Function()? onStop;
 
   void _setupHandlers() {
     _controller.addJavaScriptHandler(
@@ -279,6 +284,61 @@ class ChatBridgeController {
         if (args.isEmpty) return;
         onInjectClick?.call(args[0] as String);
       },
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onImgRetry',
+      callback: (args) {
+        if (args.length < 2) return;
+        onImgRetry?.call(args[0] as String, args[1] as String);
+      },
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onImgFind',
+      callback: (args) {
+        if (args.length < 2) return;
+        onImgFind?.call(args[0] as String, args[1] as String);
+      },
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onImgRegen',
+      callback: (args) {
+        if (args.length < 2) return;
+        onImgRegen?.call(args[0] as String, args[1] as String);
+      },
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onStop',
+      callback: (args) => onStop?.call(),
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onImgRegen',
+      callback: (args) {
+        if (args.length < 2) return;
+        onImgRegen?.call(args[0] as String, args[1] as String);
+      },
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onStop',
+      callback: (args) => onStop?.call(),
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onImgRegen',
+      callback: (args) {
+        if (args.length < 2) return;
+        onImgRegen?.call(args[0] as String, args[1] as String);
+      },
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onStop',
+      callback: (args) => onStop?.call(),
     );
 
     _controller.addJavaScriptHandler(

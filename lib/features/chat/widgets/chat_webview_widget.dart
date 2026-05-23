@@ -26,6 +26,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final double bgOpacity;
   final List<ChatMessage> messages;
   final bool isGenerating;
+  final bool isGeneratingImage;
   final double bottomInset;
   final String? searchQuery;
   final int searchCurrentIndex;
@@ -33,6 +34,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final void Function(int index, String messageId, bool isUser, bool isSystem, String content)? onMessageContext;
   final void Function(String id, String direction)? onSwipe;
   final void Function(String id)? onRegenerate;
+  final void Function()? onStop;
   final void Function(String action, String text)? onSelectionAction;
   final void Function(String id, String text)? onEditSave;
   final void Function(String id)? onEditCancel;
@@ -41,6 +43,9 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final void Function(String id)? onMemoryClick;
   final void Function(String id)? onToggleHidden;
   final void Function(String id)? onInjectClick;
+  final void Function(String instruction, String messageId)? onImgRetry;
+  final void Function(String instruction, String messageId)? onImgFind;
+  final void Function(String instruction, String messageId)? onImgRegen;
   final String? chatFontName;
   final String? chatFontDataUrl;
   final double chatFontSize;
@@ -65,6 +70,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.bgOpacity = 1.0,
     required this.messages,
     required this.isGenerating,
+    this.isGeneratingImage = false,
     this.bottomInset = 0,
     this.searchQuery,
     this.searchCurrentIndex = 0,
@@ -72,6 +78,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.onMessageContext,
     this.onSwipe,
     this.onRegenerate,
+    this.onStop,
     this.onSelectionAction,
     this.onEditSave,
     this.onEditCancel,
@@ -80,6 +87,9 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.onMemoryClick,
     this.onToggleHidden,
     this.onInjectClick,
+    this.onImgRetry,
+    this.onImgFind,
+    this.onImgRegen,
     this.chatFontName,
     this.chatFontDataUrl,
     this.chatFontSize = 15.0,
@@ -162,7 +172,9 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       await _bridge!.setSearch(query: widget.searchQuery!, activeIndex: widget.searchCurrentIndex);
     }
     await _bridge!.scrollToBottom();
-    _bridge!.isGenerating = widget.isGenerating;
+    final initialAnyGen = widget.isGenerating || widget.isGeneratingImage;
+    _bridge!.isGenerating = initialAnyGen;
+    _bridge!.evalJs('if (window.bridge) window.bridge.isGenerating = ${initialAnyGen};');
     _ready = true;
   }
 
@@ -246,16 +258,25 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       _bridge!.setBottomPadding(widget.bottomInset);
     }
 
-    if (widget.isGenerating != old.isGenerating) {
-      _bridge!.isGenerating = widget.isGenerating;
-      if (!widget.isGenerating && widget.messages.isNotEmpty) {
+    final anyGenerating = widget.isGenerating || widget.isGeneratingImage;
+    final oldAnyGenerating = old.isGenerating || old.isGeneratingImage;
+    if (anyGenerating != oldAnyGenerating || widget.isGenerating != old.isGenerating) {
+      _bridge!.isGenerating = anyGenerating;
+      // Push the combined generating flag to the JS Bridge instance so setLastMessage / renderer
+      // can decide between ⏹ Stop and ↻ Regen buttons for image generation as well as text generation.
+      _bridge!.evalJs('if (window.bridge) window.bridge.isGenerating = ${anyGenerating};');
+      if (!anyGenerating && widget.messages.isNotEmpty) {
         final lastAssistant = widget.messages.lastWhere(
           (m) => m.role == 'assistant',
           orElse: () => widget.messages.last,
         );
         _bridge?.setLastMessage(lastAssistant.id);
-      } else if (widget.isGenerating) {
-        _bridge?.setLastMessage(null);
+      } else if (anyGenerating) {
+        final lastAssistant = widget.messages.lastWhere(
+          (m) => m.role == 'assistant',
+          orElse: () => widget.messages.last,
+        );
+        _bridge?.setLastMessage(lastAssistant.id);
       }
     }
 
@@ -486,6 +507,18 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
             };
             _bridge!.onInjectClick = (id) {
               widget.onInjectClick?.call(id);
+            };
+            _bridge!.onImgRetry = (instruction, messageId) {
+              widget.onImgRetry?.call(instruction, messageId);
+            };
+            _bridge!.onImgFind = (instruction, messageId) {
+              widget.onImgFind?.call(instruction, messageId);
+            };
+            _bridge!.onImgRegen = (instruction, messageId) {
+              widget.onImgRegen?.call(instruction, messageId);
+            };
+            _bridge!.onStop = () {
+              widget.onStop?.call();
             };
             _bridge!.onLinkClick = (url) {
               launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);

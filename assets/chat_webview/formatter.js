@@ -34,7 +34,7 @@ class Formatter {
     return `\x01${prefix}${isBlock ? 'BLOCK_' : ''}${i}\x01`;
   }
 
-  _processText(text, isUser) {
+  _processText(text, isUser, skipQuotes = false) {
     if (!text) return '';
     text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim();
 
@@ -106,7 +106,19 @@ class Formatter {
     const fontBlocks = [];
     html = html.replace(/<font\s+color=["']?(#[0-9a-fA-F]{3,8})["']?\s*>([\s\S]*?)<\/font>/gi, (match, color, content) => {
       const id = this._ph('FC_', fontBlocks.length);
-      fontBlocks.push({ color, content });
+      fontBlocks.push({ type: 'color', color, content });
+      return id;
+    });
+    // font style with double-quoted attribute value
+    html = html.replace(/<font\s+style\s*=\s*"([^"]*)"['"]*\s*>([\s\S]*?)<\/font>/gi, (match, style, content) => {
+      const id = this._ph('FC_', fontBlocks.length);
+      fontBlocks.push({ type: 'style', style, content });
+      return id;
+    });
+    // font style with single-quoted attribute value
+    html = html.replace(/<font\s+style\s*=\s*'([^']*)'\s*>([\s\S]*?)<\/font>/gi, (match, style, content) => {
+      const id = this._ph('FC_', fontBlocks.length);
+      fontBlocks.push({ type: 'style', style, content });
       return id;
     });
 
@@ -138,7 +150,7 @@ class Formatter {
     // 6. Extract HTML Tags — distinguish block vs inline
     const tagBlocks = [];
     const blockTags = new Set(['div','p','style','pre','table','ul','ol','li','h1','h2','h3','h4','h5','h6','blockquote','section','article','header','footer','hr','details','summary','figure','figcaption','svg','path','math','canvas','video','audio','form','fieldset','nav','aside','main','img','br']);
-    const TAG_REGEX = /<(?:[^"'>]|"[^"]*"|'[^']*')*?>/g;
+    const TAG_REGEX = /<(?:[^"'>]|"[^"]*"|'[^']*')*>/g;
 
     html = html.replace(TAG_REGEX, (match) => {
       const tagMatch = match.match(/^<\/?(\w+)/);
@@ -159,16 +171,18 @@ class Formatter {
     });
 
     // 8. Quote formatting — with unclosed quote handling for streaming
-    const phGroup = '\x01[A-Z_]+\\d+\x01';
-    const quoteRegex = new RegExp(`(${phGroup})|(=[ \\t]*"(?:[^"]|\\\\")*?")|(")((?:[^"]|\\\\")*?)(")|(«)((?:[^»])*?)(»)|(")((?:[^"]*)$)`, 'gm');
-    html = html.replace(quoteRegex, (match, placeholder, skipQuote, openQ, closedContent, closeQ, openG, guillemetContent, closeG, openU, unclosedContent) => {
-      if (placeholder) return placeholder;
-      if (skipQuote) return skipQuote;
-      if (openQ !== undefined) return `<span class="chat-quote">${openQ}</span><span class="chat-quote-text">${closedContent}</span><span class="chat-quote">${closeQ}</span>`;
-      if (openG !== undefined) return `<span class="chat-quote">${openG}</span><span class="chat-quote-text">${guillemetContent}</span><span class="chat-quote">${closeG}</span>`;
-      if (openU !== undefined) return `<span class="chat-quote">${openU}</span><span class="chat-quote-text">${unclosedContent}</span>`;
-      return match;
-    });
+    if (!skipQuotes) {
+      const phGroup = '\x01[A-Z_]+\\d+\x01';
+      const quoteRegex = new RegExp(`(${phGroup})|(=[ \\t]*"(?:[^"]|\\\\")*?")|(")((?:[^"]|\\\\")*?)(")|(«)((?:[^»])*?)(»)|(")((?:[^"]*)$)`, 'gm');
+      html = html.replace(quoteRegex, (match, placeholder, skipQuote, openQ, closedContent, closeQ, openG, guillemetContent, closeG, openU, unclosedContent) => {
+        if (placeholder) return placeholder;
+        if (skipQuote) return skipQuote;
+        if (openQ !== undefined) return `<span class="chat-quote">${openQ}</span><span class="chat-quote-text">${closedContent}</span><span class="chat-quote">${closeQ}</span>`;
+        if (openG !== undefined) return `<span class="chat-quote">${openG}</span><span class="chat-quote-text">${guillemetContent}</span><span class="chat-quote">${closeG}</span>`;
+        if (openU !== undefined) return `<span class="chat-quote">${openU}</span><span class="chat-quote-text">${unclosedContent}</span>`;
+        return match;
+      });
+    }
 
     // 9. Restore styled segments with Glaze marker rendering
     html = html.replace(/\x01S_(\d+)\x01/g, (_, i) => {
@@ -272,11 +286,43 @@ class Formatter {
       return `<details class="reasoning-block"><summary class="reasoning-summary">💭 Reasoning</summary><div class="reasoning-content">${formatted}</div></details>`;
     });
 
-    // 18. Restore font color blocks — content is already formatted
+    // 18. Restore font color/style blocks
+    // skipQuotes=true: quotes inside styled spans keep their visual style intact
+    // (chat-quote color would override gradient/color fills)
     html = html.replace(/\x01FC_(\d+)\x01/g, (_, i) => {
       const block = fontBlocks[parseInt(i)];
-      const formatted = this._processText(block.content, isUser);
-      return `<div class="font-color-block" style="color:${block.color}">${formatted}</div>`;
+      if (block.type === 'style') {
+        let formatted = this._processText(block.content, isUser, true);
+        formatted = formatted.replace(/^\s*<p>([\s\S]*?)<\/p>\s*$/i, '$1');
+
+        // Propagate gradient / text-fill / clip styles down to the first nested inline element
+        // when the LLM put the visible text inside <span style="transform..."> inside the <font>.
+        // Without this the background-clip:text on the outer span has no text to clip.
+        const hasGradientClip = /background-clip\s*:\s*text/i.test(block.style) ||
+                                /-webkit-background-clip\s*:\s*text/i.test(block.style) ||
+                                /-webkit-text-fill-color\s*:\s*transparent/i.test(block.style);
+        if (hasGradientClip) {
+          const toMerge = [];
+          const bg = block.style.match(/background-image\s*:\s*[^;]+/i);
+          const clip = block.style.match(/-webkit-background-clip\s*:\s*[^;]+/i);
+          const fill = block.style.match(/-webkit-text-fill-color\s*:\s*[^;]+/i);
+          const stroke = block.style.match(/-webkit-text-stroke\s*:\s*[^;]+/i);
+          const filter = block.style.match(/filter\s*:\s*[^;]+/i);
+          for (const m of [bg, clip, fill, stroke, filter]) if (m) toMerge.push(m[0]);
+          if (toMerge.length) {
+            const extra = toMerge.join('; ');
+            formatted = formatted.replace(/^(\s*<span)(\s+style=")([^"]*)(")/i, (m, tagOpen, styleOpen, inner, styleClose) => {
+              const merged = (inner || '').replace(/;?\s*$/, '') + '; ' + extra;
+              return `${tagOpen}${styleOpen}${merged}${styleClose}`;
+            });
+          }
+        }
+
+        return `<span class="font-style-block" style="${block.style}">${formatted}</span>`;
+      }
+      let formatted = this._processText(block.content, isUser, true);
+      formatted = formatted.replace(/^\s*<p>([\s\S]*?)<\/p>\s*$/i, '$1');
+      return `<span class="font-color-block" style="color:${block.color}">${formatted}</span>`;
     });
 
     // 19. Restore image gen blocks
@@ -285,15 +331,24 @@ class Formatter {
       if (block.type === 'result') {
         const isDataUrl = block.path.startsWith('data:');
         const src = isDataUrl ? block.path : `file:///${block.path.replace(/\\/g, '/')}`;
-        return `<div class="img-result-frame"><img src="${src}" class="img-result" loading="lazy" data-action="image-click" data-src="${src}"></div>`;
+        const pipeIdx = block.path.indexOf('|');
+        const instrRaw = pipeIdx !== -1 ? block.path.substring(pipeIdx + 1) : '';
+        const encInstr = encodeURIComponent(instrRaw);
+        return `<div class="img-result-frame img-result-wrapper"><img src="${src}" class="img-result" loading="lazy" data-action="image-click" data-src="${src}"><button class="img-regen-btn" data-action="img-regen" data-instruction="${encInstr}" title="Regenerate image">↻</button></div>`;
       }
       if (block.type === 'gen') {
         return `<div class="img-gen-frame"><div class="img-gen-spinner"></div><span class="img-gen-label">Generating image...</span></div>`;
       }
       if (block.type === 'error') {
         let errorMsg = 'Unknown error';
-        try { errorMsg = JSON.parse(block.data).error || errorMsg; } catch(_) {}
-        return `<div class="img-error-frame"><span class="img-error-icon">⚠</span> Image error: ${errorMsg}</div>`;
+        let instruction = '';
+        try {
+          const parsed = JSON.parse(block.data);
+          errorMsg = parsed.error || errorMsg;
+          instruction = parsed.instruction || '';
+        } catch(_) {}
+        const encData = encodeURIComponent(block.data);
+        return `<div class="img-error-frame"><span class="img-error-icon">⚠</span> Image error: ${errorMsg}<div class="img-error-actions"><button class="img-error-retry-btn" data-action="img-retry" data-instruction="${instruction}">Retry</button><button class="img-error-find-btn" data-action="img-find" data-instruction="${instruction}">Find on disk</button></div></div>`;
       }
       return '';
     });

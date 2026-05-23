@@ -105,6 +105,12 @@ class Bridge {
         return;
       }
 
+      const stopBtn = e.target.closest('.stop-btn');
+      if (stopBtn) {
+        this._sendToFlutter('onStop', []);
+        return;
+      }
+
       const regenBtn = e.target.closest('.regen-btn');
       if (regenBtn) {
         const id = regenBtn.dataset.messageId;
@@ -137,6 +143,30 @@ class Bridge {
         return;
       }
 
+      const imgRetryBtn = e.target.closest('[data-action="img-retry"]');
+      if (imgRetryBtn) {
+        const msgEl = imgRetryBtn.closest('[data-message-id]');
+        const messageId = msgEl ? msgEl.dataset.messageId : '';
+        this._sendToFlutter('onImgRetry', [imgRetryBtn.dataset.instruction || '', messageId]);
+        return;
+      }
+
+      const imgFindBtn = e.target.closest('[data-action="img-find"]');
+      if (imgFindBtn) {
+        const msgEl = imgFindBtn.closest('[data-message-id]');
+        const messageId = msgEl ? msgEl.dataset.messageId : '';
+        this._sendToFlutter('onImgFind', [imgFindBtn.dataset.instruction || '', messageId]);
+        return;
+      }
+
+      const imgRegenBtn = e.target.closest('[data-action="img-regen"]');
+      if (imgRegenBtn) {
+        const msgEl = imgRegenBtn.closest('[data-message-id]');
+        const messageId = msgEl ? msgEl.dataset.messageId : '';
+        this._sendToFlutter('onImgRegen', [imgRegenBtn.dataset.instruction || '', messageId]);
+        return;
+      }
+
       const errorCopyBtn = e.target.closest('.error-copy-btn');
       if (errorCopyBtn) {
         const msgEl = document.querySelector(`[data-message-id="${errorCopyBtn.dataset.messageId}"]`);
@@ -162,9 +192,27 @@ class Bridge {
     });
 
     document.addEventListener('selectionchange', () => {
+      // Check light DOM selection first
+      let selText = '';
       const sel = window.getSelection();
       if (sel && sel.toString().trim().length > 0) {
-        this._showSelectionBar(sel.toString().trim());
+        selText = sel.toString().trim();
+      }
+      // Also check shadow roots (Chromium supports shadowRoot.getSelection in some versions)
+      if (!selText) {
+        const contentEls = document.querySelectorAll('.message-content');
+        for (const el of contentEls) {
+          if (el.shadowRoot) {
+            const shadowSel = el.shadowRoot.getSelection ? el.shadowRoot.getSelection() : null;
+            if (shadowSel && shadowSel.toString().trim().length > 0) {
+              selText = shadowSel.toString().trim();
+              break;
+            }
+          }
+        }
+      }
+      if (selText) {
+        this._showSelectionBar(selText);
       } else {
         this._hideSelectionBar();
       }
@@ -421,35 +469,41 @@ class Bridge {
     }
     if (!newLastId) return;
     const newLast = document.querySelector(`[data-message-id="${newLastId}"]`);
-    if (newLast && newLast.classList.contains('message-assistant') && !this.isGenerating) {
-      newLast.dataset.isLast = 'true';
-      const right = newLast.querySelector('.message-meta-right');
-      if (right && !right.querySelector('.regen-btn')) {
-        const regenBtn = document.createElement('button');
-        regenBtn.className = 'regen-btn';
-        regenBtn.dataset.messageId = newLastId;
-        regenBtn.textContent = '↻';
-        regenBtn.title = 'Regenerate';
-        const menuBtn = right.querySelector('.meta-menu-btn');
-        if (menuBtn) {
-          right.insertBefore(regenBtn, menuBtn);
-        } else {
-          right.appendChild(regenBtn);
-        }
-      }
-      if (right && !right.querySelector('.guided-swipe-btn')) {
-        const guidedBtn = document.createElement('button');
-        guidedBtn.className = 'guided-swipe-btn';
-        guidedBtn.dataset.messageId = newLastId;
-        guidedBtn.textContent = '🎯';
-        guidedBtn.title = 'Guided swipe';
-        const menuBtn = right.querySelector('.meta-menu-btn');
-        if (menuBtn) {
-          right.insertBefore(guidedBtn, menuBtn);
-        } else {
-          right.appendChild(guidedBtn);
-        }
-      }
+    if (!newLast || !newLast.classList.contains('message-assistant')) return;
+    newLast.dataset.isLast = 'true';
+    const right = newLast.querySelector('.message-meta-right');
+    if (!right) return;
+    const menuBtn = right.querySelector('.meta-menu-btn');
+
+    // Remove stale action buttons before re-adding
+    right.querySelector('.stop-btn')?.remove();
+    right.querySelector('.regen-btn')?.remove();
+    right.querySelector('.guided-swipe-btn')?.remove();
+
+    if (this.isGenerating) {
+      const stopBtn = document.createElement('button');
+      stopBtn.className = 'stop-btn';
+      stopBtn.dataset.messageId = newLastId;
+      stopBtn.textContent = '⏹';
+      stopBtn.title = 'Stop generation';
+      if (menuBtn) right.insertBefore(stopBtn, menuBtn);
+      else right.appendChild(stopBtn);
+    } else {
+      const regenBtn = document.createElement('button');
+      regenBtn.className = 'regen-btn';
+      regenBtn.dataset.messageId = newLastId;
+      regenBtn.textContent = '↻';
+      regenBtn.title = 'Regenerate';
+      if (menuBtn) right.insertBefore(regenBtn, menuBtn);
+      else right.appendChild(regenBtn);
+
+      const guidedBtn = document.createElement('button');
+      guidedBtn.className = 'guided-swipe-btn';
+      guidedBtn.dataset.messageId = newLastId;
+      guidedBtn.textContent = '🎯';
+      guidedBtn.title = 'Guided swipe';
+      if (menuBtn) right.insertBefore(guidedBtn, menuBtn);
+      else right.appendChild(guidedBtn);
     }
   }
 
@@ -553,7 +607,7 @@ class Bridge {
     if (!shadowRoot) {
       shadowRoot = contentEl.attachShadow({ mode: 'open' });
       const style = document.createElement('style');
-      style.textContent = `.glaze-message { word-wrap: break-word; line-height: 1.6; } .edit-textarea { width: 100%; min-height: 80px; background: var(--bg-color, #1a1a2e); color: var(--text-color, #e0e0e0); font-size: var(--font-size, 15px); font-family: inherit; resize: vertical; outline: none; line-height: 1.6; border: 1px solid var(--primary-color, #7996CE); border-radius: 6px; padding: 8px; }`;
+      style.textContent = `.glaze-message { word-wrap: break-word; line-height: 1.6; } .edit-textarea { width: 100%; min-height: 80px; max-height: 60vh; overflow-y: auto; background: var(--bg-color, #1a1a2e); color: var(--text-color, #e0e0e0); font-size: var(--font-size, 15px); font-family: inherit; resize: vertical; outline: none; line-height: 1.6; border: 1px solid var(--primary-color, #7996CE); border-radius: 6px; padding: 8px; }`;
       shadowRoot.appendChild(style);
       const msgDiv = document.createElement('div');
       msgDiv.className = 'glaze-message';
@@ -575,6 +629,8 @@ class Bridge {
     });
     textarea.addEventListener('wheel', (e) => {
       e.stopPropagation();
+      // Native textarea scroll is used; extreme speed on Windows WebView is a platform quirk.
+      // We only prevent the event from reaching the virtual list.
     }, { passive: true });
     textarea.style.height = Math.max(80, textarea.scrollHeight + 20) + 'px';
     textarea.focus();
