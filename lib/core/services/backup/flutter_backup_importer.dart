@@ -123,6 +123,9 @@ class FlutterBackupImporter extends BackupHelpers {
         'extensions_json': 'TEXT',
         'gallery_json': 'TEXT',
         'character_version': 'TEXT',
+        'macro_name': 'TEXT',
+        'picks_hash': 'TEXT',
+        'created_at': 'INTEGER NOT NULL DEFAULT 0',
       },
       'lorebooks': {
         'settings_json': 'TEXT',
@@ -143,6 +146,8 @@ class FlutterBackupImporter extends BackupHelpers {
         }
       }
     }
+
+    await db.customStatement('PRAGMA user_version = 19');
   }
 
   Future<void> restoreGalleryImages(Map<String, dynamic>? galleryData) async {
