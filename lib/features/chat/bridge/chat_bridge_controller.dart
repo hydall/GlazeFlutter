@@ -19,6 +19,8 @@ class ChatBridgeController {
   final Set<String> _coveredMemoryIds = {};
   final Set<String> _pendingMemoryIds = {};
   final Set<String> _draftMemoryIds = {};
+  final Map<String, String> _imgBase64Cache = {};
+  static final _imgResultRegex = RegExp(r'\[IMG:RESULT:(.*?)\]');
 
   ChatBridgeController(this._controller) {
     _setupHandlers();
@@ -85,6 +87,42 @@ class ChatBridgeController {
         else _personaAvatarDataUrl = dataUrl;
       }
     } catch (_) {}
+  }
+
+  Future<String> _resolveImgResults(String text) async {
+    final matches = _imgResultRegex.allMatches(text).toList();
+    if (matches.isEmpty) return text;
+    for (final m in matches) {
+      final payload = m.group(1) ?? '';
+      final pipeIdx = payload.indexOf('|');
+      final path = pipeIdx != -1 ? payload.substring(0, pipeIdx) : payload;
+      if (_imgBase64Cache.containsKey(path)) continue;
+      try {
+        final file = File(path);
+        if (await file.exists()) {
+          final bytes = await file.readAsBytes();
+          final b64 = base64Encode(bytes);
+          final ext = path.toLowerCase();
+          final mime = ext.endsWith('.jpg') || ext.endsWith('.jpeg')
+              ? 'image/jpeg'
+              : ext.endsWith('.gif') ? 'image/gif'
+              : ext.endsWith('.webp') ? 'image/webp'
+              : 'image/png';
+          _imgBase64Cache[path] = 'data:$mime;base64,$b64';
+        }
+      } catch (_) {}
+    }
+    return text.replaceAllMapped(_imgResultRegex, (m) {
+      final payload = m.group(1) ?? '';
+      final pipeIdx = payload.indexOf('|');
+      final path = pipeIdx != -1 ? payload.substring(0, pipeIdx) : payload;
+      final dataUrl = _imgBase64Cache[path];
+      if (dataUrl != null) {
+        final rest = pipeIdx != -1 ? payload.substring(pipeIdx) : '';
+        return '[IMG:RESULT:$dataUrl$rest]';
+      }
+      return m.group(0)!;
+    });
   }
 
   Future<void> applyLayout(String layout) {
@@ -260,40 +298,50 @@ class ChatBridgeController {
     );
   }
 
-  Future<void> setMessages(List<ChatMessage> messages, {int visibleStartIndex = 0}) {
+  Future<void> setMessages(List<ChatMessage> messages, {int visibleStartIndex = 0}) async {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
-      mapped.add(_toMap(messages[i], isLast: i == messages.length - 1, messageIndex: visibleStartIndex + i));
+      final map = _toMap(messages[i], isLast: i == messages.length - 1, messageIndex: visibleStartIndex + i);
+      map['text'] = await _resolveImgResults(map['text'] as String);
+      mapped.add(map);
     }
     final json = jsonEncode(mapped);
     return _callJs('setMessages', json);
   }
 
-  Future<void> appendMessage(ChatMessage message) {
-    final json = jsonEncode(_toMap(message));
+  Future<void> appendMessage(ChatMessage message) async {
+    final map = _toMap(message);
+    map['text'] = await _resolveImgResults(map['text'] as String);
+    final json = jsonEncode(map);
     return _callJs('appendMessage', json);
   }
 
-  Future<void> appendMessages(List<ChatMessage> messages, {int startIndex = 0}) {
+  Future<void> appendMessages(List<ChatMessage> messages, {int startIndex = 0}) async {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
-      mapped.add(_toMap(messages[i], isLast: i == messages.length - 1, messageIndex: startIndex + i));
+      final map = _toMap(messages[i], isLast: i == messages.length - 1, messageIndex: startIndex + i);
+      map['text'] = await _resolveImgResults(map['text'] as String);
+      mapped.add(map);
     }
     final json = jsonEncode(mapped);
     return _callJs('appendMessages', json);
   }
 
-  Future<void> prependMessages(List<ChatMessage> messages, {int visibleStartIndex = 0}) {
+  Future<void> prependMessages(List<ChatMessage> messages, {int visibleStartIndex = 0}) async {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
-      mapped.add(_toMap(messages[i], messageIndex: visibleStartIndex + i));
+      final map = _toMap(messages[i], messageIndex: visibleStartIndex + i);
+      map['text'] = await _resolveImgResults(map['text'] as String);
+      mapped.add(map);
     }
     final json = jsonEncode(mapped);
     return _callJs('prependMessages', json);
   }
 
-  Future<void> updateMessage(ChatMessage message) {
-    final json = jsonEncode(_toMap(message));
+  Future<void> updateMessage(ChatMessage message) async {
+    final map = _toMap(message);
+    map['text'] = await _resolveImgResults(map['text'] as String);
+    final json = jsonEncode(map);
     return _callJs('updateMessage', json);
   }
 
@@ -357,8 +405,9 @@ class ChatBridgeController {
     return _eval('window.bridge?.setChatFont($name, $url, ${fontSize.toStringAsFixed(1)}, ${letterSpacing.toStringAsFixed(2)})');
   }
 
-  Future<void> updateMessageContent(String messageId, String text, bool isUser) {
-    final json = jsonEncode({'id': messageId, 'text': text, 'isUser': isUser});
+  Future<void> updateMessageContent(String messageId, String text, bool isUser) async {
+    final resolved = await _resolveImgResults(text);
+    final json = jsonEncode({'id': messageId, 'text': resolved, 'isUser': isUser});
     return _callJs('updateMessage', json);
   }
 

@@ -283,7 +283,9 @@ class Formatter {
     html = html.replace(/\x01IG_BLOCK_(\d+)\x01/g, (_, i) => {
       const block = imgBlocks[parseInt(i)];
       if (block.type === 'result') {
-        return `<div class="img-result-frame"><img src="file:///${block.path.replace(/\\/g, '/')}" class="img-result" loading="lazy" data-action="image-click" data-src="file:///${block.path.replace(/\\/g, '/')}"></div>`;
+        const isDataUrl = block.path.startsWith('data:');
+        const src = isDataUrl ? block.path : `file:///${block.path.replace(/\\/g, '/')}`;
+        return `<div class="img-result-frame"><img src="${src}" class="img-result" loading="lazy" data-action="image-click" data-src="${src}"></div>`;
       }
       if (block.type === 'gen') {
         return `<div class="img-gen-frame"><div class="img-gen-spinner"></div><span class="img-gen-label">Generating image...</span></div>`;

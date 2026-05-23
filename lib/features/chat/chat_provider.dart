@@ -231,6 +231,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       isGenerating: true,
       generationStartTime: DateTime.now(),
       regenTargetId: regenTargetId,
+      visibleStartIndex: current.visibleStartIndex,
     ));
 
     final promptMessages = [...current.messages];
