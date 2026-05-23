@@ -150,7 +150,7 @@ class Formatter {
 
     // 6. Extract HTML Tags — distinguish block vs inline
     const tagBlocks = [];
-    const blockTags = new Set(['div','p','style','pre','table','ul','ol','li','h1','h2','h3','h4','h5','h6','blockquote','section','article','header','footer','hr','details','summary','figure','figcaption','svg','path','math','canvas','video','audio','form','fieldset','nav','aside','main','img','br']);
+    const blockTags = new Set(['div','p','style','pre','table','ul','ol','li','h1','h2','h3','h4','h5','h6','blockquote','section','article','header','footer','hr','details','summary','figure','figcaption','svg','path','math','canvas','video','audio','form','fieldset','nav','aside','main','img','br','loomledger']);
     const TAG_REGEX = /<(?:[^"'>]|"[^"]*"|'[^']*')*>/g;
 
     html = html.replace(TAG_REGEX, (match) => {

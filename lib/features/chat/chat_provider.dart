@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -256,7 +255,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
-    debugPrint('[regen] regenerateLastAssistant called guidanceText=$guidanceText');
     if (_activeGenCompleter != null && !_activeGenCompleter!.isCompleted) {
       await _abortAndWait();
     }
@@ -268,10 +266,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     final lastMsg = current.messages[lastIdx];
     ChatMessage? prevAssistant;
-
-    debugPrint('[regen] lastMsg.role=${lastMsg.role} isError=${lastMsg.isError} '
-        'swipes=${lastMsg.swipes.length} swipeId=${lastMsg.swipeId} '
-        'totalMessages=${current.messages.length}');
 
     if (lastMsg.role == 'assistant') {
       prevAssistant = lastMsg;
@@ -563,7 +557,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   void abortGeneration() {
-    debugPrint('[gen] abortGeneration called _activeGenId=$_activeGenId isGenerating=${state.value?.isGenerating} regenTargetId=${state.value?.regenTargetId}');
     _activeGenId++;
     final partialStreaming = ref.read(streamingStateProvider(arg));
     _cancelToken?.cancel();
@@ -680,7 +673,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     String? regenTargetId,
   }) async {
     final genId = ++_activeGenId;
-    debugPrint('[gen] _runGeneration start genId=$genId regenTargetId=$regenTargetId session.msgCount=${session.messages.length}');
     final completer = Completer<void>();
     _activeGenCompleter = completer;
     _clearStreaming();
@@ -692,7 +684,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     try {
     final service = ChatGenerationService(ref);
-    debugPrint('[gen] calling service.generate() genId=$genId isAborted=${_activeGenId != genId}');
     final result = await service.generate(
       session: session,
       saveSession: saveSession,
@@ -709,7 +700,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       guidanceText: guidanceText,
       regenTargetId: regenTargetId,
     );
-    debugPrint('[gen] service.generate() returned genId=$genId activeGenId=$_activeGenId result.regenTargetId=${result.regenTargetId} result.session.msgCount=${result.session?.messages.length} result.error=${result.error}');
 
     // A newer generation started while we were awaiting — discard this result.
     if (_activeGenId != genId) {

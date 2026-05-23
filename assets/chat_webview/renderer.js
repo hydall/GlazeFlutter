@@ -117,19 +117,24 @@ const SHADOW_STYLE = `
     background: rgba(0,0,0,0.18);
     font-weight: 500;
     list-style: none !important;
-    display: flex !important;
-    align-items: center !important;
-    gap: 6px;
+    list-style-type: none !important;
     line-height: 1.4;
   }
   .glaze-message details summary::-webkit-details-marker { display: none !important; }
-  .glaze-message details summary::marker { content: '' !important; }
-  .glaze-message details summary::before {
-    content: '▶'; font-size: 0.75em;
-    transition: transform 0.2s; flex-shrink: 0;
-    line-height: 1; vertical-align: middle;
+  .glaze-message details summary::marker { display: none !important; content: '' !important; }
+  .glaze-message details summary::before { display: none !important; content: '' !important; }
+  .glaze-message .glaze-arrow {
+    display: inline;
+    flex-shrink: 0;
+    font-size: 1em;
+    transition: transform 0.2s;
+    opacity: 0.7;
+    font-style: normal;
+    font-weight: normal;
+    user-select: none;
+    -webkit-user-select: none;
   }
-  .glaze-message details[open] > summary::before { transform: rotate(90deg); }
+  .glaze-message .glaze-arrow.glaze-arrow-open { transform: rotate(90deg); }
   .search-highlight-text {
     background-color: rgba(255,215,0,0.4);
     border-radius: 4px;
@@ -770,10 +775,41 @@ class Renderer {
       let formatted = this.formatter.format(text || '', isUser);
       if (this.searchQuery) formatted = this._applySearchHighlight(formatted);
       root.innerHTML = formatted;
+      this._fixDetailsSummaryArrows(root);
     } catch (e) {
       root.textContent = text || '';
       console.error('Formatter error:', e);
     }
+  }
+
+  _fixDetailsSummaryArrows(root) {
+    root.querySelectorAll('details').forEach(details => {
+      const summary = details.querySelector('summary');
+      if (!summary || summary.querySelector('.glaze-flex-wrap')) return;
+
+      // Wrap all existing summary children in a flex container.
+      // This works even if WebView overrides display:flex on <summary> itself.
+      const wrap = document.createElement('span');
+      wrap.className = 'glaze-flex-wrap';
+      wrap.style.cssText = 'display:flex;align-items:baseline;gap:6px;width:100%;';
+
+      const arrow = document.createElement('span');
+      arrow.className = 'glaze-arrow';
+      arrow.setAttribute('aria-hidden', 'true');
+      arrow.textContent = '▶';
+
+      // Move all current children into wrap
+      while (summary.firstChild) {
+        wrap.appendChild(summary.firstChild);
+      }
+      // Prepend arrow inside wrap, then put wrap into summary
+      wrap.insertBefore(arrow, wrap.firstChild);
+      summary.appendChild(wrap);
+
+      details.addEventListener('toggle', () => {
+        arrow.classList.toggle('glaze-arrow-open', details.open);
+      }, { once: false });
+    });
   }
 
   /* ----- Public mutation API ----- */
@@ -844,6 +880,146 @@ class Renderer {
     const el = document.querySelector(`[data-message-id="${messageId}"]`);
     if (el) {
       this.updateMessageContent(el, newText, reasoning || el.dataset.reasoning || null, isUser, false, false);
+    }
+  }
+
+  updateMessageMeta(sectionEl, msg) {
+    if (!sectionEl) return;
+
+    const hasGen = msg.genTime && msg.genTime !== '0s';
+    const hasTokens = msg.tokens && msg.tokens > 0 && !msg.isTyping;
+    const hasTrigger = (msg.triggeredLorebooks && msg.triggeredLorebooks.length) ||
+                       (msg.triggeredMemories && msg.triggeredMemories.length);
+    const hasMemoryStatus = !!msg.memoryStatus;
+
+    let bubbleMeta = sectionEl.querySelector('.bubble-meta');
+    let footerMeta = sectionEl.querySelector('.msg-meta');
+
+    if (hasGen || hasTokens) {
+      let genStatBubble = bubbleMeta?.querySelector('.gen-stat');
+      let genStatFooter = footerMeta?.querySelector('.gen-stat');
+
+      if (hasGen) {
+        const timeStr = msg.genTime;
+        if (genStatBubble) {
+          const badge = genStatBubble.querySelector('.gen-time-badge');
+          if (badge) badge.textContent = timeStr;
+        }
+        if (genStatFooter) {
+          const badge = genStatFooter.querySelector('.gen-time-badge');
+          if (badge) badge.textContent = timeStr;
+        }
+      }
+
+      if (hasTokens) {
+        const tokenStr = `${msg.tokens}t`;
+        if (genStatBubble) {
+          const tc = genStatBubble.querySelector('.token-count-inline span:last-child');
+          if (tc) tc.textContent = tokenStr;
+        }
+        if (genStatFooter) {
+          const tc = genStatFooter.querySelector('.token-count-inline span:last-child');
+          if (tc) tc.textContent = tokenStr;
+        }
+      }
+
+      if (!genStatBubble && bubbleMeta && (hasGen || hasTokens)) {
+        const stat = document.createElement('div');
+        stat.className = 'gen-stat';
+        stat.style.marginRight = 'auto';
+        if (hasGen) {
+          const clock = document.createElement('span');
+          clock.innerHTML = ICON.clock;
+          clock.firstChild.style.cssText = 'width:12px;height:12px;fill:currentColor;margin-right:2px;';
+          stat.appendChild(clock.firstChild);
+          const gw = document.createElement('span');
+          gw.className = 'gen-time-wrapper';
+          const gt = document.createElement('span');
+          gt.className = 'gen-time gen-time-badge';
+          gt.textContent = msg.genTime;
+          gw.appendChild(gt);
+          stat.appendChild(gw);
+        }
+        if (hasTokens) {
+          const tc = document.createElement('div');
+          tc.className = 'token-count-inline';
+          if (hasGen) tc.style.marginLeft = '6px';
+          const doc = document.createElement('span');
+          doc.innerHTML = ICON.doc;
+          doc.firstChild.style.cssText = 'width:12px;height:12px;fill:currentColor;margin-right:2px;';
+          tc.appendChild(doc.firstChild);
+          const t = document.createElement('span');
+          t.textContent = `${msg.tokens}t`;
+          tc.appendChild(t);
+          stat.appendChild(tc);
+        }
+        bubbleMeta.appendChild(stat);
+      }
+
+      if (!genStatFooter && footerMeta && (hasGen || hasTokens)) {
+        const stat = document.createElement('div');
+        stat.className = 'gen-stat';
+        if (hasGen) {
+          const clock = document.createElement('span');
+          clock.innerHTML = ICON.clock;
+          clock.firstChild.style.cssText = 'width:12px;height:12px;fill:currentColor;margin-right:4px;';
+          stat.appendChild(clock.firstChild);
+          const gw = document.createElement('span');
+          gw.className = 'gen-time-wrapper';
+          const gt = document.createElement('span');
+          gt.className = 'gen-time gen-time-badge';
+          gt.textContent = msg.genTime;
+          gw.appendChild(gt);
+          stat.appendChild(gw);
+        }
+        if (hasTokens) {
+          const tc = document.createElement('div');
+          tc.className = 'token-count-inline';
+          if (hasGen) tc.style.marginLeft = '6px';
+          const doc = document.createElement('span');
+          doc.innerHTML = ICON.doc;
+          doc.firstChild.style.cssText = 'width:12px;height:12px;fill:currentColor;margin-right:2px;';
+          tc.appendChild(doc.firstChild);
+          const t = document.createElement('span');
+          t.textContent = `${msg.tokens}t`;
+          tc.appendChild(t);
+          stat.appendChild(tc);
+        }
+        footerMeta.appendChild(stat);
+      }
+    }
+
+    if (hasTrigger) {
+      const nameEl = sectionEl.querySelector('.msg-name');
+      if (nameEl) {
+        let trig = nameEl.querySelector('.msg-lb-trigger-menu');
+        if (!trig) {
+          trig = document.createElement('div');
+          trig.className = 'msg-lb-trigger-menu';
+          trig.dataset.action = 'inject-click';
+          trig.dataset.messageId = msg.id;
+          trig.innerHTML = ICON.lbTrigger;
+          nameEl.appendChild(trig);
+        }
+      }
+    }
+
+    if (hasMemoryStatus) {
+      const nameEl = sectionEl.querySelector('.msg-name');
+      if (nameEl) {
+        let badge = nameEl.querySelector('.msg-memory-badge');
+        if (!badge) {
+          badge = document.createElement('button');
+          badge.type = 'button';
+          badge.className = 'msg-memory-badge';
+          badge.dataset.action = 'memory-click';
+          badge.dataset.messageId = msg.id;
+          nameEl.appendChild(badge);
+        }
+        const cls = this._memoryStatusClass(msg.memoryStatus);
+        badge.className = `msg-memory-badge ${cls}`;
+        badge.textContent = msg.memoryStatus;
+      }
     }
   }
 

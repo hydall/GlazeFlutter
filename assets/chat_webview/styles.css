@@ -538,6 +538,8 @@
   min-height: 80px;
   max-height: 60vh;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 .edit-textarea:focus { border-color: var(--primary-color, #7996CE); }
 

@@ -484,6 +484,8 @@ class Bridge {
       const switcher = section.querySelector('.msg-switcher .msg-switcher-count');
       if (switcher) switcher.textContent = `${(msg.swipeIndex || 0) + 1}/${msg.swipeTotal}`;
     }
+
+    this.renderer.updateMessageMeta(section, msg);
   }
 
   setLastMessage(newLastId) {
@@ -601,7 +603,17 @@ class Bridge {
       textarea.style.height = 'auto';
       textarea.style.height = Math.max(80, textarea.scrollHeight) + 'px';
     });
-    textarea.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
+    textarea.addEventListener('wheel', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (e.deltaMode === 0) {
+        textarea.scrollTop += e.deltaY * 0.3;
+      } else if (e.deltaMode === 1) {
+        textarea.scrollTop += e.deltaY * 16;
+      } else {
+        textarea.scrollTop += e.deltaY * 100;
+      }
+    }, { passive: false });
     textarea.style.height = Math.max(80, textarea.scrollHeight + 20) + 'px';
     textarea.focus();
 

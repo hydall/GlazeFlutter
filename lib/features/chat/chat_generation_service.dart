@@ -150,6 +150,7 @@ class ChatGenerationService {
           final tokenCount = (finalText.length / 4).round();
           finalState = _saveAssistantMessage(
             finalText, finalReasoning, saveSession ?? session,
+            isAborted: isAborted,
             pendingSessionVars: pendingSessionVars,
             genTime: timeStr, tokens: tokenCount,
             rawResponse: text,
@@ -170,11 +171,9 @@ class ChatGenerationService {
         },
         onError: (error) {
           final isCancelled = error is DioException && error.type == DioExceptionType.cancel;
-          debugPrint('[gen] SSE onError: isCancelled=$isCancelled errorType=${error.runtimeType} regenTargetId=$regenTargetId');
           if (isCancelled) {
             finalState = ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
           } else {
-            debugPrint('[gen] SSE error details: $error');
             finalState = _saveErrorMessage(error.toString(), session, pendingSessionVars: pendingSessionVars, visibleStartIndex: vsi);
           }
         },
@@ -182,7 +181,6 @@ class ChatGenerationService {
 
       return finalState ?? ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
     } catch (e) {
-      debugPrint('[gen] generate() caught exception: $e regenTargetId=$regenTargetId isAborted=${isAborted()}');
       if (isAborted()) return ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
       return _saveErrorMessage(e.toString(), session, visibleStartIndex: vsi);
     }
@@ -332,6 +330,7 @@ class ChatGenerationService {
     String text,
     String? reasoning,
     ChatSession currentSession, {
+    required bool Function() isAborted,
     Map<String, String>? pendingSessionVars,
     String? genTime,
     int? tokens,
@@ -390,8 +389,10 @@ class ChatGenerationService {
     }
 
     if (regenTargetId != null) {
+      if (isAborted()) {
+        return ChatState(session: currentSession, isGenerating: false, visibleStartIndex: visibleStartIndex);
+      }
       final idx = currentSession.messages.indexWhere((m) => m.id == regenTargetId);
-      debugPrint('[gen] _saveAssistantMessage regenTargetId=$regenTargetId idx=$idx swipes=${swipes.length} swipeId=$swipeId');
       if (idx >= 0) {
         final updated = currentSession.messages[idx].copyWith(
           content: text,
@@ -417,6 +418,10 @@ class ChatGenerationService {
         _ref.read(chatRepoProvider).put(finalSession);
         return ChatState(session: finalSession, lastRawResponse: rawResponse, regenTargetId: regenTargetId, visibleStartIndex: visibleStartIndex);
       }
+    }
+
+    if (isAborted()) {
+      return ChatState(session: currentSession, isGenerating: false, visibleStartIndex: visibleStartIndex);
     }
 
     final assistantMsg = ChatMessage(

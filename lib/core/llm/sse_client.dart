@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 typedef SseOnUpdate = void Function(String delta, String? reasoningDelta);
 typedef SseOnComplete = void Function(String text, String? reasoning);
@@ -126,7 +127,11 @@ class SseClient {
     var fullReasoning = '';
 
     await for (final chunk in responseStream as Stream) {
-      if (cancelToken != null && cancelToken.isCancelled) break;
+      if (cancelToken != null && cancelToken.isCancelled) {
+        debugPrint('[SSE] cancel detected in await-for, breaking; accumulated ${fullText.length} chars');
+        // break out of await-for; Dart automatically cancels the stream subscription
+        break;
+      }
 
       buffer += utf8.decode(chunk as List<int>, allowMalformed: true);
       final lines = buffer.split('\n');
@@ -137,6 +142,12 @@ class SseClient {
         if (!trimmed.startsWith('data: ')) continue;
         final data = trimmed.substring(6).trim();
         if (data == '[DONE]') {
+          // Check cancel BEFORE calling onComplete to prevent race condition
+          // where server sent [DONE] just before client cancelled
+          if (cancelToken != null && cancelToken.isCancelled) {
+            debugPrint('[SSE] cancel detected at [DONE], suppressing onComplete; accumulated ${fullText.length} chars');
+            return;
+          }
           // Normal completion — call onComplete and return.
           onComplete?.call(fullText, fullReasoning.isNotEmpty ? fullReasoning : null);
           return;
@@ -170,7 +181,14 @@ class SseClient {
     // Do NOT call onComplete here; the outer catch will invoke onError instead.
     // If the client cancelled cleanly, onError handles it via DioException.cancel.
     // If text accumulated, we throw so onError can decide what to save.
-    if (cancelToken != null && cancelToken.isCancelled) return;
+    
+    // CRITICAL: Double-check cancel status AFTER stream completes to prevent race condition
+    // where cancel() was called but buffered data was still processed in the await-for loop.
+    if (cancelToken != null && cancelToken.isCancelled) {
+      debugPrint('[SSE] cancel detected after stream ended, suppressing onComplete; accumulated ${fullText.length} chars');
+      return;
+    }
+    
     // Server dropped connection without [DONE] — treat as normal completion
     // if any text was accumulated (provider returned 200 but omitted [DONE]).
     if (fullText.isNotEmpty || fullReasoning.isNotEmpty) {

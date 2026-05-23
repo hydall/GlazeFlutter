@@ -272,7 +272,6 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     final anyGenerating = widget.isGenerating || widget.isGeneratingImage;
     final oldAnyGenerating = old.isGenerating || old.isGeneratingImage;
     if (anyGenerating != oldAnyGenerating || widget.isGenerating != old.isGenerating) {
-      final sw = Stopwatch()..start();
       _bridge!.isGenerating = widget.isGenerating;
       _bridge!.isGeneratingImage = widget.isGeneratingImage;
       _bridge!.evalJs('if (window.bridge) { window.bridge.isGenerating = ${widget.isGenerating}; window.bridge.isGeneratingImage = ${widget.isGeneratingImage}; }');
@@ -289,7 +288,6 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
         );
         _bridge?.setLastMessage(lastAssistant.id);
       }
-      debugPrint('[PERF] generating flags update: ${sw.elapsedMilliseconds}ms');
     }
 
     if (_wasGenerating && !widget.isGenerating) {
@@ -303,9 +301,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
 
     if (!identical(old.messages, widget.messages) &&
         !_listsEqual(old.messages, widget.messages)) {
-      final sw = Stopwatch()..start();
       _syncMessages(old.messages);
-      debugPrint('[PERF] _syncMessages: ${sw.elapsedMilliseconds}ms');
     }
   }
 
@@ -385,6 +381,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       return;
     }
 
+    // Same length - check for updates
     final minLen = newLen < oldIds.length ? newLen : oldIds.length;
     for (int i = 0; i < minLen; i++) {
       if (i >= newIds.length) break;
@@ -395,11 +392,19 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       }
       final o = oldMsgs[i];
       final n = widget.messages[i];
-      if (o.content != n.content ||
-          o.swipeId != n.swipeId ||
-          o.isHidden != n.isHidden ||
-          o.guidanceText != n.guidanceText ||
-          o.greetingIndex != n.greetingIndex) {
+      
+      final contentChanged = o.content != n.content;
+      final swipeChanged = o.swipeId != n.swipeId;
+      final hiddenChanged = o.isHidden != n.isHidden;
+      final typingChanged = o.isTyping != n.isTyping;
+      final errorChanged = o.isError != n.isError;
+      final guidanceChanged = o.guidanceText != n.guidanceText;
+      final greetingChanged = o.greetingIndex != n.greetingIndex;
+      
+      final needsUpdate = contentChanged || swipeChanged || hiddenChanged || 
+                         typingChanged || errorChanged || guidanceChanged || greetingChanged;
+      
+      if (needsUpdate) {
         _bridge?.updateMessage(n);
       }
     }

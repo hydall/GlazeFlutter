@@ -95,7 +95,6 @@ class ChatBridgeController {
   Future<String> _resolveImgResults(String text) async {
     final matches = _imgResultRegex.allMatches(text).toList();
     if (matches.isEmpty) return text;
-    final sw = Stopwatch()..start();
     final uncached = <int, String>{};
     for (int i = 0; i < matches.length; i++) {
       final payload = matches[i].group(1) ?? '';
@@ -106,7 +105,6 @@ class ChatBridgeController {
       }
     }
     if (uncached.isNotEmpty) {
-      debugPrint('[PERF] _resolveImgResults: ${uncached.length} uncached images to read');
       await Future.wait(uncached.entries.map((e) async {
         final path = e.value;
         try {
@@ -124,7 +122,6 @@ class ChatBridgeController {
           }
         } catch (_) {}
       }));
-      debugPrint('[PERF] _resolveImgResults disk read: ${sw.elapsedMilliseconds}ms');
     }
     final result = text.replaceAllMapped(_imgResultRegex, (m) {
       final payload = m.group(1) ?? '';
@@ -137,7 +134,6 @@ class ChatBridgeController {
       }
       return m.group(0)!;
     });
-    debugPrint('[PERF] _resolveImgResults total: ${sw.elapsedMilliseconds}ms (cached=${matches.length - uncached.length}/${matches.length})');
     return result;
   }
 
@@ -407,13 +403,9 @@ class ChatBridgeController {
   }
 
   Future<void> updateMessage(ChatMessage message) async {
-    final sw = Stopwatch()..start();
     final map = _toMap(message);
-    debugPrint('[PERF] updateMessage _toMap: ${sw.elapsedMilliseconds}ms');
     map['text'] = await _resolveImgResults(map['text'] as String);
-    debugPrint('[PERF] updateMessage after resolve: ${sw.elapsedMilliseconds}ms');
     final json = jsonEncode(map);
-    debugPrint('[PERF] updateMessage total (json ${json.length} chars): ${sw.elapsedMilliseconds}ms');
     return _callJs('updateMessage', json);
   }
 
@@ -520,7 +512,7 @@ class ChatBridgeController {
     return '"${jsonEncode(s).substring(1, jsonEncode(s).length - 1)}"';
   }
 
-  Map<String, dynamic> _toMap(ChatMessage m, {bool isLast = false, int? messageIndex}) {
+  Map<String, dynamic> _toMap(ChatMessage m, {bool isLast = false, int? messageIndex, bool isStreamingUpdate = false}) {
     final isAssistant = m.role == 'assistant' || m.role == 'character';
     final isUser = m.role == 'user';
 
@@ -531,10 +523,10 @@ class ChatBridgeController {
     if (isAssistant) {
       displayName = currentCharName ?? m.personaName ?? 'Character';
       avatarColor = currentCharColor;
-      avatarUrl = _charAvatarDataUrl;
+      if (!isStreamingUpdate) avatarUrl = _charAvatarDataUrl;
     } else if (isUser) {
       displayName = m.personaName ?? currentPersonaName ?? 'You';
-      avatarUrl = _personaAvatarDataUrl;
+      if (!isStreamingUpdate) avatarUrl = _personaAvatarDataUrl;
     } else {
       displayName = m.personaName ?? 'System';
     }
