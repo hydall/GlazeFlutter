@@ -243,10 +243,11 @@ class _GeneralTab extends StatelessWidget {
           ],
         ),
         MenuGroup(
-          header: 'UI Effects',
+          header: 'UI Elements',
           items: [
+            const MenuSubHeader('Background'),
             _ColorRow(
-              label: 'UI Color',
+              label: 'Color',
               value: preset.uiColor,
               palette: _presetUiColors,
               allowNull: true,
@@ -273,44 +274,6 @@ class _GeneralTab extends StatelessWidget {
               unit: 'px',
               onChanged: (v) => onUpdate((p) => p.copyWith(elementBlur: v)),
             ),
-          ],
-        ),
-        MenuGroup(
-          header: 'Border',
-          items: [
-            _ColorRow(
-              label: 'Border Color',
-              value: preset.borderColor,
-              palette: _presetUiColors,
-              allowNull: true,
-              nullLabel: 'Auto',
-              onChanged: (v) => onUpdate((p) => p.copyWith(borderColor: v)),
-            ),
-            _SliderRow(
-              label: 'Border Width',
-              value: preset.borderWidth,
-              min: 0,
-              max: 5,
-              divisions: 10,
-              unit: 'px',
-              onChanged: (v) => onUpdate((p) => p.copyWith(borderWidth: v)),
-            ),
-            _SliderRow(
-              label: 'Border Opacity',
-              value: preset.borderOpacity,
-              min: 0,
-              max: 1,
-              divisions: 20,
-              unit: '%',
-              displayMultiplier: 100,
-              onChanged: (v) =>
-                  onUpdate((p) => p.copyWith(borderOpacity: v)),
-            ),
-          ],
-        ),
-        MenuGroup(
-          header: 'Noise Texture',
-          items: [
             _SliderRow(
               label: 'Noise Opacity',
               value: preset.noiseOpacity,
@@ -332,11 +295,49 @@ class _GeneralTab extends StatelessWidget {
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(noiseIntensity: v)),
             ),
+            const MenuSubHeader('Border'),
+            _ColorRow(
+              label: 'Color',
+              value: preset.borderColor,
+              palette: _presetUiColors,
+              allowNull: true,
+              nullLabel: 'Auto',
+              onChanged: (v) => onUpdate((p) => p.copyWith(borderColor: v)),
+            ),
+            _SliderRow(
+              label: 'Width',
+              value: preset.borderWidth,
+              min: 0,
+              max: 5,
+              divisions: 10,
+              unit: 'px',
+              onChanged: (v) => onUpdate((p) => p.copyWith(borderWidth: v)),
+            ),
+            _SliderRow(
+              label: 'Opacity',
+              value: preset.borderOpacity,
+              min: 0,
+              max: 1,
+              divisions: 20,
+              unit: '%',
+              displayMultiplier: 100,
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(borderOpacity: v)),
+            ),
           ],
         ),
         MenuGroup(
           header: 'Background',
           items: [
+            if (!preset.hasBgImage)
+              _ColorRow(
+                label: 'Color',
+                value: preset.bgColor,
+                palette: _presetUiColors,
+                allowNull: true,
+                nullLabel: 'Auto',
+                onChanged: (v) => onUpdate((p) => p.copyWith(bgColor: v)),
+              ),
             _BgImageRow(preset: preset, onUpdate: onUpdate),
             if (preset.hasBgImage) ...[
               _SliderRow(

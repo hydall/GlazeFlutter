@@ -40,12 +40,19 @@ TextTheme _applySafe(TextTheme theme, {
   );
 }
 
+// Vue base colors (src/assets/css/base.css, variables.css)
+const _vueAppBg = Color(0xFF19191A); // --app-bg / --vk-header-bg
+const _vueUiBg = Color(0xFF1E1E1E); // --ui-bg-default-rgb: 30,30,30
+
 ColorScheme _buildColorScheme(ThemePreset preset, {required bool isDark}) {
   final accent = preset.accent;
-  final uiColor = preset.uiColorParsed ?? _deriveUiColor(accent, isDark);
+  final uiColor =
+      preset.uiColorParsed ?? (isDark ? _vueUiBg : _deriveUiColor(accent, isDark));
+  final bgColor =
+      preset.bgColorParsed ?? (isDark ? _vueAppBg : uiColor);
   final onBg = _contrastFor(uiColor);
   final onBgVariant = _contrastFor(uiColor, secondary: true);
-  final surfaceHigh = _shiftColor(uiColor, isDark ? 1.08 : 0.96);
+  final surfaceHigh = uiColor;
   final outlineColor = _borderFor(uiColor, isDark);
   final outlineVariant = isDark
       ? Colors.white.withValues(alpha: 0.1)
@@ -54,18 +61,30 @@ ColorScheme _buildColorScheme(ThemePreset preset, {required bool isDark}) {
       ? const Color(0xFF1A1A1B)
       : const Color(0xFFE1E3E6);
 
+  const defaultSecondary = Color(0xFF828282);
   return ColorScheme(
     brightness: isDark ? Brightness.dark : Brightness.light,
     primary: accent,
     onPrimary: btnFg,
-    secondary: accent,
-    onSecondary: btnFg,
+    secondary: defaultSecondary,
+    onSecondary: Colors.white,
     tertiary: accent,
     onTertiary: btnFg,
     error: const Color(0xFFCF6679),
     onError: Colors.white,
-    surface: uiColor,
+    surface: bgColor,
     onSurface: onBg,
+    // Neutralize M3 surface tint so all surface roles stay free of accent blue.
+    surfaceTint: bgColor,
+    // Explicitly pin every surface container role to uiColor — otherwise
+    // ColorScheme derives them via surface + surfaceTint blending and
+    // sheets/dialogs end up accent-tinted (e.g. blue-tinted #14141C over #19191A).
+    surfaceDim: bgColor,
+    surfaceBright: surfaceHigh,
+    surfaceContainerLowest: bgColor,
+    surfaceContainerLow: surfaceHigh,
+    surfaceContainer: surfaceHigh,
+    surfaceContainerHigh: surfaceHigh,
     surfaceContainerHighest: surfaceHigh,
     onSurfaceVariant: onBgVariant,
     outline: outlineColor,
@@ -137,22 +156,13 @@ Color _borderFor(Color bg, bool isDark) {
       : const Color(0xFFD8D9DA);
 }
 
-Color _shiftColor(Color c, double factor) {
-  return Color.fromARGB(
-    (c.a * 255).round(),
-    (c.r * 255 * factor).round().clamp(0, 255),
-    (c.g * 255 * factor).round().clamp(0, 255),
-    (c.b * 255 * factor).round().clamp(0, 255),
-  );
-}
-
 class AppTheme {
   static ThemeData dark(ThemePreset preset, {String? fontFamily}) {
     final colorScheme = _buildColorScheme(preset, isDark: true);
     final effectiveFont = fontFamily ?? GoogleFonts.inter().fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
-    final scaleFactor = preset.uiFontSize is num ? uiSize / 14.0 : 1.0;
+    final scaleFactor = preset.uiFontSize is num ? uiSize / 15.0 : 1.0;
     final glazeColors = GlazeColors.fromPreset(preset, isDark: true);
     final btnBg = _ensureButtonContrast(
         colorScheme.primary, colorScheme.surface, isDark: true);
@@ -161,13 +171,8 @@ class AppTheme {
         : const Color(0xFFE1E3E6);
 
     final base = FlexThemeData.dark(
-      colors: FlexSchemeColor.from(
-        primary: colorScheme.primary,
-        secondary: colorScheme.primary,
-        tertiary: colorScheme.primary,
-      ),
+      colorScheme: colorScheme,
       useMaterial3: true,
-      surfaceMode: FlexSurfaceMode.levelSurfacesLowScaffold,
       blendLevel: 0,
       subThemesData: const FlexSubThemesData(
         inputDecoratorIsFilled: true,
@@ -182,6 +187,19 @@ class AppTheme {
     return base.copyWith(
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
+      canvasColor: colorScheme.surface,
+      dialogTheme: DialogThemeData(
+        backgroundColor: colorScheme.surfaceContainerHighest,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colorScheme.surfaceContainerHighest,
+        modalBackgroundColor: colorScheme.surfaceContainerHighest,
+        surfaceTintColor: colorScheme.surface,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: colorScheme.surfaceContainerHighest,
+        surfaceTintColor: colorScheme.surface,
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         foregroundColor: colorScheme.onSurface,
@@ -266,7 +284,7 @@ class AppTheme {
     final effectiveFont = fontFamily ?? GoogleFonts.inter().fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
-    final scaleFactor = preset.uiFontSize is num ? uiSize / 14.0 : 1.0;
+    final scaleFactor = preset.uiFontSize is num ? uiSize / 15.0 : 1.0;
     final glazeColors = GlazeColors.fromPreset(preset, isDark: false);
     final btnBg = _ensureButtonContrast(
         colorScheme.primary, colorScheme.surface, isDark: false);
@@ -275,13 +293,8 @@ class AppTheme {
         : const Color(0xFFE1E3E6);
 
     final base = FlexThemeData.light(
-      colors: FlexSchemeColor.from(
-        primary: colorScheme.primary,
-        secondary: colorScheme.primary,
-        tertiary: colorScheme.primary,
-      ),
+      colorScheme: colorScheme,
       useMaterial3: true,
-      surfaceMode: FlexSurfaceMode.levelSurfacesLowScaffold,
       blendLevel: 0,
       subThemesData: const FlexSubThemesData(
         inputDecoratorIsFilled: true,
@@ -296,6 +309,19 @@ class AppTheme {
     return base.copyWith(
       colorScheme: colorScheme,
       scaffoldBackgroundColor: colorScheme.surface,
+      canvasColor: colorScheme.surface,
+      dialogTheme: DialogThemeData(
+        backgroundColor: colorScheme.surfaceContainerHighest,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: colorScheme.surfaceContainerHighest,
+        modalBackgroundColor: colorScheme.surfaceContainerHighest,
+        surfaceTintColor: colorScheme.surface,
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: colorScheme.surfaceContainerHighest,
+        surfaceTintColor: colorScheme.surface,
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         foregroundColor: colorScheme.onSurface,

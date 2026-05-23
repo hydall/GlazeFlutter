@@ -59,8 +59,11 @@ class PersonaListScreen extends ConsumerWidget {
               )
             : Builder(
                 builder: (context) => ListView.builder(
-                  padding: EdgeInsets.fromLTRB(16, startExpanded ? 16 : 0, 16, 24).add(
-                    EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+                  padding: EdgeInsets.fromLTRB(16, startExpanded ? 16 : 0, 16, 16).add(
+                    EdgeInsets.only(
+                      top: MediaQuery.paddingOf(context).top,
+                      bottom: MediaQuery.paddingOf(context).bottom,
+                    ),
                   ),
                   itemCount: list.length,
                   itemBuilder: (_, i) => _PersonaTile(persona: list[i]),

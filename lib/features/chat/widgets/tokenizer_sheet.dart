@@ -88,6 +88,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     return SheetView(
       title: _showSettings ? 'Context Settings' : 'Context',
       showBack: true,
+      fitContent: true,
       onBack: () => _showSettings
           ? setState(() => _showSettings = false)
           : Navigator.of(context).maybePop(),
@@ -129,6 +130,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
 
     return Builder(
       builder: (context) => ListView(
+        shrinkWrap: true,
         padding: const EdgeInsets.all(
           16,
         ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
@@ -222,6 +224,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   Widget _buildSettings() {
     return Builder(
       builder: (context) => ListView(
+        shrinkWrap: true,
         padding: const EdgeInsets.all(
           16,
         ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),

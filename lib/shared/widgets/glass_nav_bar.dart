@@ -180,7 +180,7 @@ class _NavButton extends StatelessWidget {
         duration: const Duration(milliseconds: 125),
         curve: Curves.easeInOut,
         builder: (context, t, _) {
-          final inactive = context.cs.onSurfaceVariant;
+          final inactive = context.cs.secondary;
           final active = context.colors.accent;
           final inactiveLum = inactive.computeLuminance();
           final activeLum = active.computeLuminance();

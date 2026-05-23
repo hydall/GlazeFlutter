@@ -98,8 +98,11 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
           16,
           12,
           16,
-          24,
-        ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+          16,
+        ).add(EdgeInsets.only(
+          top: MediaQuery.paddingOf(context).top,
+          bottom: MediaQuery.paddingOf(context).bottom,
+        )),
         itemCount: list.length + 1,
         itemBuilder: (_, i) {
           if (i == list.length) return _buildAddButton(context, ref);

@@ -48,10 +48,12 @@ class _PersonaConnectionsSheetState
         return SheetView(
           title: 'Connections: ${persona.name}',
           showBack: true,
+          fitContent: true,
           body: ListView(
+            shrinkWrap: true,
             padding: EdgeInsets.only(
               top: MediaQuery.paddingOf(context).top + 4,
-              bottom: MediaQuery.paddingOf(context).bottom + 24,
+              bottom: 16 + MediaQuery.paddingOf(context).bottom,
             ),
             children: [
               _Section(

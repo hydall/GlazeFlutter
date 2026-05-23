@@ -105,9 +105,11 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       child: SheetView(
         title: 'Cloud Sync',
         showBack: true,
+        fitContent: true,
         onBack: _goBack,
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        body: Builder(
+          builder: (innerContext) => SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(16, 12 + MediaQuery.paddingOf(innerContext).top, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -527,6 +529,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               ],
             ],
           ),
+        ),
         ),
 
       ),

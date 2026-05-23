@@ -27,11 +27,33 @@ class MenuGroup extends StatelessWidget {
                     style: TextStyle(
                         color: context.cs.onSurface,
                         fontWeight: FontWeight.w700,
-                        fontSize: 16)),
+                        fontSize: 18)),
               ),
             ...items,
             const SizedBox(height: 6),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class MenuSubHeader extends StatelessWidget {
+  final String label;
+
+  const MenuSubHeader(this.label, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: context.cs.onSurface,
+          fontWeight: FontWeight.w600,
+          fontSize: 13,
+          letterSpacing: 0.3,
         ),
       ),
     );
@@ -90,13 +112,13 @@ class _MenuItemState extends State<MenuItem> {
               child: Text(widget.label,
                   style: TextStyle(
                       color: context.cs.onSurfaceVariant,
-                      fontSize: 15,
+                      fontSize: 16,
                       fontWeight: FontWeight.w400)),
             ),
             if (widget.value != null)
               Text(widget.value!,
                   style: TextStyle(
-                      color: context.cs.onSurfaceVariant, fontSize: 15)),
+                      color: context.cs.onSurfaceVariant, fontSize: 14)),
             if (widget.trailing != null) widget.trailing!,
             if (widget.value != null || widget.trailing != null)
               const SizedBox(width: 4),
@@ -136,14 +158,14 @@ class MenuSwitchItem extends StatelessWidget {
                   Text(label,
                       style: TextStyle(
                           color: context.cs.onSurfaceVariant,
-                          fontSize: 15,
+                          fontSize: 16,
                           fontWeight: FontWeight.w400)),
                   if (description != null) ...[
                     const SizedBox(height: 1),
                     Text(description!,
                         style: const TextStyle(
                             color: Color(0xFF99A2AD),
-                            fontSize: 11,
+                            fontSize: 12,
                             fontWeight: FontWeight.normal)),
                   ],
                 ],

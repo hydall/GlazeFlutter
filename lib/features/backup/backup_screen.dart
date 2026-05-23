@@ -26,24 +26,51 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   int _importStage = 0;
   String _importProgressText = '';
 
+  bool get _isBusy => _isExporting || (_isImporting && !_importComplete);
+
+  void _blockClose() {
+    GlazeToast.show(
+      context,
+      _isExporting ? 'Export in progress' : 'Import in progress',
+      isError: true,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return SheetView(
-      title: 'Backups',
-      showBack: true,
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 200),
-        layoutBuilder: (currentChild, previousChildren) {
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ...previousChildren,
-              if (currentChild != null) currentChild,
-            ],
-          );
+    return PopScope(
+      canPop: !_isBusy,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _blockClose();
+      },
+      child: SheetView(
+        title: 'Backups',
+        showBack: true,
+        fitContent: true,
+        onBack: () {
+          if (_isBusy) {
+            _blockClose();
+            return;
+          }
+          Navigator.of(context).maybePop();
         },
-        child: _buildContent(context),
+        body: Builder(
+          builder: (innerContext) => AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            layoutBuilder: (currentChild, previousChildren) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ...previousChildren,
+                  if (currentChild != null) currentChild,
+                ],
+              );
+            },
+            child: _buildContent(innerContext),
+          ),
+        ),
       ),
     );
   }
@@ -196,7 +223,7 @@ class _NormalView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      padding: EdgeInsets.fromLTRB(16, 12 + MediaQuery.paddingOf(context).top, 16, 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -424,7 +451,7 @@ class _ProgressView extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = context.cs.primary;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+      padding: EdgeInsets.fromLTRB(16, 32 + MediaQuery.paddingOf(context).top, 16, 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -511,7 +538,7 @@ class _SuccessView extends StatelessWidget {
   Widget build(BuildContext context) {
     final accent = context.cs.primary;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 32, 16, 16),
+      padding: EdgeInsets.fromLTRB(16, 32 + MediaQuery.paddingOf(context).top, 16, 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,

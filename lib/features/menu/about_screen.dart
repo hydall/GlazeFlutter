@@ -223,6 +223,7 @@ class _AuthorsSection extends StatelessWidget {
             role: 'Project Lead, UX/UI Designer, Programmer',
             initial: 'H',
             accentColor: const Color(0xFF7996CE),
+            imageAsset: 'assets/hydall.jpg',
           ),
           _AuthorTile(
             cs: cs,
@@ -447,6 +448,7 @@ class _AuthorTile extends StatelessWidget {
   final String role;
   final String initial;
   final Color accentColor;
+  final String? imageAsset;
 
   const _AuthorTile({
     required this.cs,
@@ -454,6 +456,7 @@ class _AuthorTile extends StatelessWidget {
     required this.role,
     required this.initial,
     required this.accentColor,
+    this.imageAsset,
   });
 
   @override
@@ -466,25 +469,38 @@ class _AuthorTile extends StatelessWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  accentColor,
-                  accentColor.withValues(alpha: 0.6),
-                ],
-              ),
+              gradient: imageAsset == null
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        accentColor,
+                        accentColor.withValues(alpha: 0.6),
+                      ],
+                    )
+                  : null,
+              image: imageAsset != null
+                  ? DecorationImage(
+                      image: AssetImage(imageAsset!),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
               borderRadius: BorderRadius.circular(10),
+              border: imageAsset != null
+                  ? Border.all(color: accentColor.withValues(alpha: 0.4))
+                  : null,
             ),
             alignment: Alignment.center,
-            child: Text(
-              initial,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+            child: imageAsset != null
+                ? null
+                : Text(
+                    initial,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
           ),
           const SizedBox(width: 14),
           Expanded(

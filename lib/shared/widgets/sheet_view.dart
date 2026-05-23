@@ -2,10 +2,10 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gradient_blur/gradient_blur.dart';
-
 import '../theme/app_colors.dart';
+import '../shell/nav_height_provider.dart';
 import '../../features/settings/app_settings_provider.dart';
+import 'package:soft_edge_blur/soft_edge_blur.dart';
 import 'glaze_scaffold.dart';
 
 class SheetViewAction {
@@ -57,6 +57,7 @@ class SheetView extends ConsumerStatefulWidget {
   /// Fraction of screen height for the collapsed snap point (0.0–1.0).
   /// When null, defaults to `min(0.55 * h, 500)`.
   final double? collapsedFraction;
+  final bool fitContent;
 
   const SheetView({
     super.key,
@@ -77,6 +78,7 @@ class SheetView extends ConsumerStatefulWidget {
     this.startExpanded = false,
     this.scrollController,
     this.collapsedFraction,
+    this.fitContent = false,
   });
 
   @override
@@ -88,7 +90,6 @@ class _SheetViewState extends ConsumerState<SheetView>
   bool _expanded = false;
   double _currentHeight = 0;
   bool _heightInit = false;
-  bool _lockToContentHeight = false;
 
   /// Whether this SheetView is hosted inside [showModalBottomSheet]. When
   /// false (e.g. opened as a route via GoRouter), we behave as a regular
@@ -102,9 +103,7 @@ class _SheetViewState extends ConsumerState<SheetView>
   Animation<double>? _anim;
 
   final _headerKey = GlobalKey();
-  final _bodyKey = GlobalKey();
   double _headerH = 0;
-  double _bodyH = 0;
 
   double _dragStartY = 0;
   double _dragStartH = 0;
@@ -120,64 +119,6 @@ class _SheetViewState extends ConsumerState<SheetView>
   }
 
   double _full(BuildContext ctx) => MediaQuery.of(ctx).size.height;
-
-  double _resolvedBodyVerticalPadding(BuildContext ctx) {
-    final padding =
-        widget.bodyPadding?.resolve(Directionality.of(ctx)) ?? EdgeInsets.zero;
-    return padding.vertical;
-  }
-
-  double _contentHeight(BuildContext ctx) {
-    final full = _full(ctx);
-    final content = (_headerH + _bodyH + _resolvedBodyVerticalPadding(ctx))
-        .clamp(0.0, full);
-    return content;
-  }
-
-  bool _shouldLockToContentHeight(BuildContext ctx) {
-    if (!_inModalSheet || widget.startExpanded) {
-      return false;
-    }
-    if (_bodyH <= 0) {
-      return false;
-    }
-
-    return _contentHeight(ctx) <= _collapsed(ctx);
-  }
-
-  void _syncHeightMode({bool force = false}) {
-    if (!mounted || !_heightInit) {
-      return;
-    }
-
-    final shouldLock = _shouldLockToContentHeight(context);
-    final target = shouldLock ? _contentHeight(context) : _collapsed(context);
-
-    if (_lockToContentHeight != shouldLock) {
-      _lockToContentHeight = shouldLock;
-    }
-
-    if (force) {
-      if (shouldLock) {
-        _expanded = false;
-        _currentHeight = target;
-      } else if (!_expanded) {
-        _currentHeight = target;
-      }
-      return;
-    }
-
-    if (_expanded || _ctrl.isAnimating) {
-      return;
-    }
-
-    if ((_currentHeight - target).abs() > 1) {
-      setState(() {
-        _expanded = false;
-        _currentHeight = target;
-      });
-    }
-  }
 
   @override
   void initState() {
@@ -224,24 +165,6 @@ class _SheetViewState extends ConsumerState<SheetView>
       final h = box.size.height;
       if (h != _headerH) {
         setState(() => _headerH = h);
-        _syncHeightMode();
-      }
-    });
-  }
-
-  void _measureBody() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      final box = _bodyKey.currentContext?.findRenderObject() as RenderBox?;
-      if (box == null || !box.hasSize) {
-        return;
-      }
-      final h = box.size.height;
-      if ((h - _bodyH).abs() > 1) {
-        setState(() => _bodyH = h);
-        _syncHeightMode();
       }
     });
   }
@@ -256,7 +179,6 @@ class _SheetViewState extends ConsumerState<SheetView>
           : _collapsed(context);
       _expanded = widget.startExpanded || !_inModalSheet;
       _heightInit = true;
-      _syncHeightMode(force: true);
     }
   }
 
@@ -268,9 +190,7 @@ class _SheetViewState extends ConsumerState<SheetView>
   }
 
   void _toggle() {
-    if (_lockToContentHeight) {
-      return;
-    }
+    if (widget.fitContent) return;
     final target = _expanded ? _collapsed(context) : _full(context);
     _animateTo(target, expanding: !_expanded);
   }
@@ -296,12 +216,10 @@ class _SheetViewState extends ConsumerState<SheetView>
 
   void _onDragUpdate(DragUpdateDetails d) {
     final dy = d.globalPosition.dy - _dragStartY;
-    final minHeight = _lockToContentHeight
-        ? _contentHeight(context) * 0.3
-        : _collapsed(context) * 0.3;
+    final minHeight = _collapsed(context) * 0.3;
     final h = (_dragStartH - dy).clamp(
       minHeight,
-      _full(context),
+      widget.fitContent ? _collapsed(context) : _full(context),
     );
     setState(() => _currentHeight = h);
   }
@@ -309,15 +227,14 @@ class _SheetViewState extends ConsumerState<SheetView>
   void _onDragEnd(DragEndDetails d) {
     final vy = d.velocity.pixelsPerSecond.dy;
     final collapsed = _collapsed(context);
-    final content = _contentHeight(context);
     final full = _full(context);
     final mid = (collapsed + full) / 2;
 
-    if (_lockToContentHeight) {
-      if (vy > 600 || _currentHeight < content * 0.6) {
+    if (widget.fitContent) {
+      if (vy > 600 || _currentHeight < collapsed * 0.6) {
         Navigator.of(context).maybePop();
       } else {
-        _animateTo(content, expanding: false);
+        _animateTo(collapsed, expanding: false);
       }
       return;
     }
@@ -352,7 +269,7 @@ class _SheetViewState extends ConsumerState<SheetView>
     if (isKeyboardOpen != _keyboardOpen) {
       _keyboardOpen = isKeyboardOpen;
       if (isKeyboardOpen) {
-        if (!_expanded && !_lockToContentHeight) {
+        if (!_expanded && !widget.fitContent) {
           _wasExpandedBeforeKeyboard = false;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && !_expanded) _animateTo(_full(context), expanding: true);
@@ -361,7 +278,7 @@ class _SheetViewState extends ConsumerState<SheetView>
           _wasExpandedBeforeKeyboard = true;
         }
       } else {
-        if (!_wasExpandedBeforeKeyboard && !_lockToContentHeight) {
+        if (!_wasExpandedBeforeKeyboard) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && _expanded) _animateTo(_collapsed(context), expanding: false);
           });
@@ -376,6 +293,14 @@ class _SheetViewState extends ConsumerState<SheetView>
 
       final backHandler =
           widget.onBack ?? () => Navigator.of(context).maybePop();
+      // When the sheet is rendered as a page route inside the Shell, the
+      // GlassNavBar overlaps the body (Shell uses extendBody: true). Inject
+      // its measured height into MediaQuery.padding.bottom so the body's
+      // ListView can pick it up the same way it consumes paddingOf(...).top.
+      // navHeight already includes the system safe-area inset (the nav bar
+      // pads its own bottom by 16 + bottomPad), so use max() — not addition —
+      // to avoid double-counting the inset on screens outside the Shell.
+      final navHeight = ref.watch(navHeightProvider);
 
       return PopScope(
         canPop: !widget.showBack,
@@ -393,8 +318,13 @@ class _SheetViewState extends ConsumerState<SheetView>
                 builder: (context) {
                   final mediaQuery = MediaQuery.of(context);
                   final extraTop = _hasHeader ? (mediaQuery.padding.top + 10 + _headerH) : mediaQuery.padding.top;
-                  final newPadding = mediaQuery.padding.copyWith(top: extraTop);
-                  
+                  final newPadding = mediaQuery.padding.copyWith(
+                    top: extraTop,
+                    bottom: navHeight > mediaQuery.padding.bottom
+                        ? navHeight
+                        : mediaQuery.padding.bottom,
+                  );
+
                   final innerChild = Padding(
                     padding: widget.bodyPadding ?? EdgeInsets.zero,
                     child: Padding(
@@ -500,18 +430,22 @@ class _SheetViewState extends ConsumerState<SheetView>
     if (_hasHeader) {
       _measureHeader();
     }
-    _measureBody();
 
-    return SizedBox(
-      height: _currentHeight,
-      child: ClipRRect(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(radius)),
-        child: batterySaver
-? _sheetContent(context, topPad, bottomInset, radius, opaque: true)
-                : BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                    child: _sheetContent(context, topPad, bottomInset, radius),
-              ),
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: widget.fitContent ? _full(context) * 0.95 : double.infinity,
+      ),
+      child: SizedBox(
+        height: widget.fitContent ? null : _currentHeight,
+        child: ClipRRect(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(radius)),
+          child: batterySaver
+              ? _sheetContent(context, topPad, bottomInset, radius, opaque: true)
+              : BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+                  child: _sheetContent(context, topPad, bottomInset, radius),
+                ),
+        ),
       ),
     );
   }
@@ -522,89 +456,12 @@ class _SheetViewState extends ConsumerState<SheetView>
       color: context.cs.surface.withValues(alpha: opaque ? 1.0 : 0.8),
       child: Stack(
         children: [
-          Positioned.fill(
-            child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(
-                context,
-              ).copyWith(scrollbars: false),
-              child: Builder(
-                builder: (context) {
-                  final mediaQuery = MediaQuery.of(context);
-                  final extraTop = _hasHeader ? _headerH : topPad;
-                  final newPadding = mediaQuery.padding.copyWith(
-                    top: extraTop,
-                  );
-                  final bodyTopInset = _lockToContentHeight
-                      ? extraTop
-                      : 0.0;
-
-                  final innerChild = Padding(
-                    padding: EdgeInsets.only(top: bodyTopInset),
-                    child: Padding(
-                    padding: widget.bodyPadding ?? EdgeInsets.zero,
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          bottom: isKeyboardOpen ? bottomInset + 10 : 0,
-                        ),
-                        child: Align(
-                          alignment: Alignment.topCenter,
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: KeyedSubtree(
-                              key: _bodyKey,
-                              child: widget.body,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-
-                  return MediaQuery(
-                    data: mediaQuery.copyWith(padding: newPadding),
-                    child: widget.scrollController != null
-                        ? RawScrollbar(
-                            controller: widget.scrollController,
-                            thumbColor: Colors.white.withValues(
-                              alpha: 0.15,
-                            ),
-                            radius: const Radius.circular(3),
-                            thickness: 4,
-                            padding: EdgeInsets.only(
-                              top: extraTop,
-                              right: 3,
-                            ),
-                            child: innerChild,
-                          )
-                        : innerChild,
-                  );
-                },
-              ),
-            ),
-          ),
-          if (_hasHeader && !(ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false))
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: IgnorePointer(
-                child: GradientBlur(
-                  maxBlur: 8,
-                  curve: Curves.easeIn,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Color(0xEB141416),
-                      Color(0x88141416),
-                      Color(0x00141416),
-                    ],
-                    stops: [0.0, 0.4, 0.85],
-                  ),
-                  child: SizedBox(height: _headerH + 8),
+          widget.fitContent
+              ? _buildBodyChild(context, topPad, bottomInset, isKeyboardOpen)
+              : Positioned.fill(
+                  child: _buildBodyChild(context, topPad, bottomInset, isKeyboardOpen),
                 ),
-              ),
-            ),
+
                 // Interactive header — rendered above the gradient so buttons
                 // and drag handle are unobscured and fully hittable.
                 if (_hasHeader)
@@ -628,9 +485,9 @@ class _SheetViewState extends ConsumerState<SheetView>
                         expanded: _expanded,
                         topPad: topPad,
                         onHandleTap: _toggle,
-                        onDragStart: _onDragStart,
-                        onDragUpdate: _onDragUpdate,
-                        onDragEnd: _onDragEnd,
+                        onDragStart: widget.fitContent ? null : _onDragStart,
+                        onDragUpdate: widget.fitContent ? null : _onDragUpdate,
+                        onDragEnd: widget.fitContent ? null : _onDragEnd,
                       ),
                     ),
                   ),
@@ -645,6 +502,71 @@ class _SheetViewState extends ConsumerState<SheetView>
               ],
             ),
           );
+  }
+
+  Widget _buildBodyChild(BuildContext context, double topPad, double bottomInset, bool isKeyboardOpen) {
+    return (_hasHeader && !(ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false))
+        ? SoftEdgeBlur(
+            edges: [
+              EdgeBlur(
+                type: EdgeType.topEdge,
+                size: _headerH + 8,
+                sigma: 24,
+                tintColor: context.cs.surface.withValues(alpha: 0.4),
+                controlPoints: [
+                  ControlPoint(position: 0.5, type: ControlPointType.visible),
+                  ControlPoint(position: 1.0, type: ControlPointType.transparent),
+                ],
+              )
+            ],
+            child: _buildScrollConfig(context, topPad, bottomInset, isKeyboardOpen),
+          )
+        : _buildScrollConfig(context, topPad, bottomInset, isKeyboardOpen);
+  }
+
+  Widget _buildScrollConfig(BuildContext context, double topPad, double bottomInset, bool isKeyboardOpen) {
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+      child: Builder(
+        builder: (context) {
+          final mediaQuery = MediaQuery.of(context);
+          final extraTop = _hasHeader ? _headerH : topPad;
+          final newPadding = mediaQuery.padding.copyWith(top: extraTop);
+
+          final safeBottom = widget.fitContent ? mediaQuery.padding.bottom : 0.0;
+          final innerChild = Padding(
+            padding: widget.bodyPadding ?? EdgeInsets.zero,
+            child: Padding(
+              padding: EdgeInsets.only(
+                bottom: isKeyboardOpen ? bottomInset + 10 : safeBottom,
+              ),
+              child: Align(
+                alignment: Alignment.topCenter,
+                heightFactor: widget.fitContent ? 1.0 : null,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: widget.body,
+                ),
+              ),
+            ),
+          );
+
+          return MediaQuery(
+            data: mediaQuery.copyWith(padding: newPadding),
+            child: widget.scrollController != null
+                ? RawScrollbar(
+                    controller: widget.scrollController,
+                    thumbColor: Colors.white.withValues(alpha: 0.15),
+                    radius: const Radius.circular(3),
+                    thickness: 4,
+                    padding: EdgeInsets.only(top: extraTop, right: 3),
+                    child: innerChild,
+                  )
+                : innerChild,
+          );
+        },
+      ),
+    );
   }
 }
 
@@ -662,9 +584,9 @@ class _SheetViewHeader extends StatelessWidget {
   final bool expanded;
   final double topPad;
   final VoidCallback onHandleTap;
-  final GestureDragStartCallback onDragStart;
-  final GestureDragUpdateCallback onDragUpdate;
-  final GestureDragEndCallback onDragEnd;
+  final GestureDragStartCallback? onDragStart;
+  final GestureDragUpdateCallback? onDragUpdate;
+  final GestureDragEndCallback? onDragEnd;
 
   const _SheetViewHeader({
     this.title,
@@ -680,9 +602,9 @@ class _SheetViewHeader extends StatelessWidget {
     required this.expanded,
     required this.topPad,
     required this.onHandleTap,
-    required this.onDragStart,
-    required this.onDragUpdate,
-    required this.onDragEnd,
+    this.onDragStart,
+    this.onDragUpdate,
+    this.onDragEnd,
   });
 
   @override
@@ -904,3 +826,4 @@ class _SheetTabButton extends StatelessWidget {
     );
   }
 }
+

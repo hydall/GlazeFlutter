@@ -604,6 +604,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
     return SheetView(
       title: 'Statistics',
       showHandle: true,
+      fitContent: true,
       headerBottom: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: GlazeTabBar(
@@ -622,6 +623,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
       ),
       body: Builder(
         builder: (context) => ListView(
+          shrinkWrap: true,
           padding: EdgeInsets.fromLTRB(
             16,
             MediaQuery.of(context).padding.top + 12,

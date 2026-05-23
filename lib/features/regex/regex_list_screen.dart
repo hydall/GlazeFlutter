@@ -62,8 +62,12 @@ class RegexListScreen extends ConsumerWidget {
           return Builder(
             builder: (context) => ListView(
               key: const PageStorageKey('regex_list'),
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24)
-                  .add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16).add(
+                EdgeInsets.only(
+                  top: MediaQuery.paddingOf(context).top,
+                  bottom: MediaQuery.paddingOf(context).bottom,
+                ),
+              ),
               children: [
                 if (presetRegexes.isNotEmpty) ...[
                   _sectionHeader(

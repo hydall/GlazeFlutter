@@ -1,7 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gradient_blur/gradient_blur.dart';
+import 'package:soft_edge_blur/soft_edge_blur.dart';
 
 import '../theme/app_colors.dart';
 import '../../features/settings/app_settings_provider.dart';
@@ -251,73 +251,111 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
         ),
         child: Stack(
           children: [
-            Padding(
-              padding: EdgeInsets.only(
-                top: _headerH,
-                bottom: bottomInset + 10,
-              ),
-              child: RawScrollbar(
-                controller: _scrollController,
-                thumbColor: Colors.white.withValues(alpha: 0.15),
-                radius: const Radius.circular(3),
-                thickness: 4,
-                padding: const EdgeInsets.only(right: 3),
-                child: ScrollConfiguration(
-                  behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
-                  child: SingleChildScrollView(
-                    controller: _scrollController,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const SizedBox(height: 4),
-                        if (widget.child != null) widget.child!,
-                        if (widget.bigInfo != null) _BigInfo(info: widget.bigInfo!),
-                        if (widget.items != null && widget.items!.isNotEmpty)
-                          _ItemsList(items: widget.items!),
-                        if (widget.itemsAsCards != null && widget.itemsAsCards!.isNotEmpty)
-                          _ItemsCardList(items: widget.itemsAsCards!),
-                        if (widget.sessionItems != null &&
-                            widget.sessionItems!.isNotEmpty)
-                          GlazeSessionList(items: widget.sessionItems!),
-                        if (widget.cardItems != null && widget.cardItems!.isNotEmpty)
-                          _CardList(items: widget.cardItems!),
-                        if (widget.input != null)
-                          _InputSection(
-                            input: widget.input!,
-                            controller: _inputController,
-                            focusNode: _inputFocus,
+            (!batterySaver)
+                ? SoftEdgeBlur(
+                    edges: [
+                      EdgeBlur(
+                        type: EdgeType.topEdge,
+                        size: _headerH + 8,
+                        sigma: 24,
+                        tintColor: context.cs.surface.withValues(alpha: 0.4),
+                        controlPoints: [
+                          ControlPoint(
+                              position: 0.5, type: ControlPointType.visible),
+                          ControlPoint(
+                              position: 1.0, type: ControlPointType.transparent),
+                        ],
+                      )
+                    ],
+                    child: Padding(
+                      padding: EdgeInsets.only(
+                        top: _headerH,
+                        bottom: bottomInset + 10,
+                      ),
+                      child: RawScrollbar(
+                        controller: _scrollController,
+                        thumbColor: Colors.white.withValues(alpha: 0.15),
+                        radius: const Radius.circular(3),
+                        thickness: 4,
+                        padding: const EdgeInsets.only(right: 3),
+                        child: ScrollConfiguration(
+                          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                          child: SingleChildScrollView(
+                            controller: _scrollController,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(height: 4),
+                                if (widget.child != null) widget.child!,
+                                if (widget.bigInfo != null) _BigInfo(info: widget.bigInfo!),
+                                if (widget.items != null && widget.items!.isNotEmpty)
+                                  _ItemsList(items: widget.items!),
+                                if (widget.itemsAsCards != null && widget.itemsAsCards!.isNotEmpty)
+                                  _ItemsCardList(items: widget.itemsAsCards!),
+                                if (widget.sessionItems != null &&
+                                    widget.sessionItems!.isNotEmpty)
+                                  GlazeSessionList(items: widget.sessionItems!),
+                                if (widget.cardItems != null && widget.cardItems!.isNotEmpty)
+                                  _CardList(items: widget.cardItems!),
+                                if (widget.input != null)
+                                  _InputSection(
+                                    input: widget.input!,
+                                    controller: _inputController,
+                                    focusNode: _inputFocus,
+                                  ),
+                              ],
+                            ),
                           ),
-                      ],
+                        ),
+                      ),
+                    ),
+                  )
+                : Padding(
+                    padding: EdgeInsets.only(
+                      top: _headerH,
+                      bottom: bottomInset + 10,
+                    ),
+                    child: RawScrollbar(
+                      controller: _scrollController,
+                      thumbColor: Colors.white.withValues(alpha: 0.15),
+                      radius: const Radius.circular(3),
+                      thickness: 4,
+                      padding: const EdgeInsets.only(right: 3),
+                      child: ScrollConfiguration(
+                        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const SizedBox(height: 4),
+                              if (widget.child != null) widget.child!,
+                              if (widget.bigInfo != null) _BigInfo(info: widget.bigInfo!),
+                              if (widget.items != null && widget.items!.isNotEmpty)
+                                _ItemsList(items: widget.items!),
+                              if (widget.itemsAsCards != null && widget.itemsAsCards!.isNotEmpty)
+                                _ItemsCardList(items: widget.itemsAsCards!),
+                              if (widget.sessionItems != null &&
+                                  widget.sessionItems!.isNotEmpty)
+                                GlazeSessionList(items: widget.sessionItems!),
+                              if (widget.cardItems != null && widget.cardItems!.isNotEmpty)
+                                _CardList(items: widget.cardItems!),
+                              if (widget.input != null)
+                                _InputSection(
+                                  input: widget.input!,
+                                  controller: _inputController,
+                                  focusNode: _inputFocus,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
-              ),
-            ),
 
-            if (!batterySaver)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: IgnorePointer(
-                  child: GradientBlur(
-                    maxBlur: 8,
-                    curve: Curves.easeIn,
-                    gradient: const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xEB141416),
-                        Color(0x88141416),
-                        Color(0x00141416),
-                      ],
-                      stops: [0.0, 0.4, 0.85],
-                    ),
-                    child: SizedBox(height: _headerH + 8),
-                  ),
-                ),
-              ),
+
 
             Positioned(
               top: 0,
@@ -1105,8 +1143,10 @@ class _InputSection extends StatelessWidget {
   void _confirm(BuildContext context) {
     final value = controller.text.trim();
     if (value.isNotEmpty) {
+      // Callers of BottomSheetInput.onConfirm are responsible for popping
+      // the sheet themselves (so they can do it before/after their work as
+      // needed). Don't pop here or we'd double-pop and unwind a real route.
       input.onConfirm(value);
-      Navigator.of(context).pop();
     }
   }
 

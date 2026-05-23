@@ -17,6 +17,7 @@ class ThemePreset with _$ThemePreset {
     @Default(0.8) double elementOpacity,
     @Default(12) double elementBlur,
     String? uiColor,
+    String? bgColor,
     @Default('default') String chatLayout,
     String? userBubbleColor,
     String? charBubbleColor,
@@ -55,6 +56,7 @@ class ThemePreset with _$ThemePreset {
 extension ThemePresetX on ThemePreset {
   Color get accent => _parseHex(accentColor);
   Color? get uiColorParsed => _parseNullableHex(uiColor);
+  Color? get bgColorParsed => _parseNullableHex(bgColor);
   Color? get userBubbleParsed => _parseNullableHex(userBubbleColor);
   Color? get charBubbleParsed => _parseNullableHex(charBubbleColor);
   Color? get userQuoteParsed => _parseNullableHex(userQuoteColor);
@@ -76,7 +78,7 @@ extension ThemePresetX on ThemePreset {
   double get uiFontSizeValue {
     final v = uiFontSize;
     if (v is num) return v.toDouble();
-    return 14.0;
+    return 15.0;
   }
 
   bool get hasCustomFont => customFont != null && customFont!.isNotEmpty;

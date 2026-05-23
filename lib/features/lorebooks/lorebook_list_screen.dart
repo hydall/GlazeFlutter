@@ -94,8 +94,11 @@ class LorebookListScreen extends ConsumerWidget {
                 16,
                 0,
                 16,
-                100,
-              ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+                16,
+              ).add(EdgeInsets.only(
+                top: MediaQuery.paddingOf(context).top,
+                bottom: MediaQuery.paddingOf(context).bottom,
+              )),
               itemCount: lorebooks.length,
               itemBuilder: (_, i) => _LorebookTile(
                 lorebook: lorebooks[i],

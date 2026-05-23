@@ -50,9 +50,14 @@ final routerProvider = Provider<GoRouter>(
       router.go('/');
     },
     routes: [
-      StatefulShellRoute.indexedStack(
+      StatefulShellRoute(
         builder: (_, __, navigationShell) =>
             ShellScreen(navigationShell: navigationShell),
+        navigatorContainerBuilder: (_, navigationShell, children) =>
+            FadeBranchContainer(
+          currentIndex: navigationShell.currentIndex,
+          children: children,
+        ),
         branches: [
           StatefulShellBranch(
             routes: [

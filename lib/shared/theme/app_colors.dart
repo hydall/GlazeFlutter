@@ -41,10 +41,14 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
   static const _defaultQuote = Color(0xFF7996CE);
   static const _defaultItalic = Color(0xFF888888);
 
+  // Vue base UI element bg (src/assets/css/base.css: --ui-bg-default-rgb)
+  static const _vueUiBg = Color(0xFF1E1E1E);
+
   static GlazeColors fromPreset(ThemePreset preset, {required bool isDark}) {
     final base = isDark ? dark : light;
     final accent = preset.accent;
-    final uiColor = preset.uiColorParsed ?? _deriveUiColor(accent, isDark);
+    final uiColor = preset.uiColorParsed ??
+        (isDark ? _vueUiBg : _deriveUiColor(accent, isDark));
     final effectiveBg = uiColor;
 
     final userBubble = preset.userBubbleParsed ?? accent;

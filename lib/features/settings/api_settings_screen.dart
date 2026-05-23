@@ -343,7 +343,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         controller: _scrollController,
         padding: EdgeInsets.only(
           top: MediaQuery.paddingOf(context).top + 12,
-          bottom: 32,
+          bottom: MediaQuery.paddingOf(context).bottom + 16,
         ),
         children: [
           Padding(
@@ -530,7 +530,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         controller: _scrollController,
         padding: EdgeInsets.only(
           top: MediaQuery.paddingOf(context).top + 12,
-          bottom: 32,
+          bottom: MediaQuery.paddingOf(context).bottom + 16,
         ),
         children: [
           Padding(
@@ -727,11 +727,15 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             name: trimmed,
           );
-          _loadedPresetId = newConfig.id;
-          _loadFromConfig(newConfig);
-          await ref.read(apiListProvider.notifier).put(newConfig);
+          // Set active id BEFORE put() so the rebuild triggered by
+          // invalidateSelf() picks the new config (and the build's
+          // _loadedPresetId check below doesn't schedule a reload of
+          // the previous active config, which would clobber our data).
           ref.read(activeApiPresetIdProvider.notifier).state = newConfig.id;
           _persistActiveId(newConfig.id);
+          _loadedPresetId = null;
+          _loadFromConfig(newConfig);
+          await ref.read(apiListProvider.notifier).put(newConfig);
         },
       ),
     );
