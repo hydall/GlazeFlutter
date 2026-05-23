@@ -398,6 +398,8 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       if (o.content != n.content ||
           o.swipeId != n.swipeId ||
           o.isHidden != n.isHidden ||
+          o.isTyping != n.isTyping ||
+          o.isError != n.isError ||
           o.guidanceText != n.guidanceText ||
           o.greetingIndex != n.greetingIndex) {
         _bridge?.updateMessage(n);
@@ -429,11 +431,15 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     ref.listen<StreamingState>(
       streamingStateProvider(widget.charId),
       (prev, next) {
-        if (!_ready || _bridge == null) return;
+        if (!_ready || _bridge == null) {
+          debugPrint('[JS_STREAM] skip: _ready=$_ready _bridge=${_bridge != null}');
+          return;
+        }
         if (next.text.isEmpty && next.reasoning == null) return;
 
         final regenId = widget.regenTargetId;
         if (regenId != null) {
+          debugPrint('[JS_STREAM] regen: regenTarget=$regenId text_len=${next.text.length}');
           final idx = widget.messages.indexWhere((m) => m.id == regenId);
           if (idx >= 0) {
             final original = widget.messages[idx];
@@ -457,9 +463,11 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
         );
 
         if (!_streamingSent) {
+          debugPrint('[JS_STREAM] appendMessage id=${msg.id} text_len=${msg.content.length}');
           _bridge?.appendMessage(msg);
           _streamingSent = true;
         } else {
+          debugPrint('[JS_STREAM] updateMessage id=${msg.id} text_len=${msg.content.length}');
           _bridge?.updateMessage(msg);
         }
       },

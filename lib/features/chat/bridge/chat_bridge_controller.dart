@@ -372,6 +372,7 @@ class ChatBridgeController {
   }
 
   Future<void> appendMessage(ChatMessage message) async {
+    debugPrint('[JS_BRIDGE] appendMessage id=${message.id}');
     final map = _toMap(message);
     map['text'] = await _resolveImgResults(map['text'] as String);
     final json = jsonEncode(map);
@@ -407,6 +408,7 @@ class ChatBridgeController {
   }
 
   Future<void> updateMessage(ChatMessage message) async {
+    debugPrint('[JS_BRIDGE] updateMessage id=${message.id} isTyping=${message.isTyping}');
     final sw = Stopwatch()..start();
     final map = _toMap(message);
     debugPrint('[PERF] updateMessage _toMap: ${sw.elapsedMilliseconds}ms');
@@ -422,11 +424,13 @@ class ChatBridgeController {
   }
 
   Future<void> setLastMessage(String? messageId) {
+    debugPrint('[JS_BRIDGE] setLastMessage id=$messageId');
     if (messageId != null) {
       return _eval('window.bridge?.setLastMessage("${_escape(messageId)}")');
     } else {
       return _eval('window.bridge?.setLastMessage(null)');
     }
+  }
   }
 
   Future<void> clearAll() {
@@ -482,6 +486,7 @@ class ChatBridgeController {
   }
 
   Future<void> updateMessageContent(String messageId, String text, bool isUser) async {
+    debugPrint('[JS_BRIDGE] updateMessageContent id=$messageId isUser=$isUser textLen=${text.length}');
     final resolved = await _resolveImgResults(text);
     final json = jsonEncode({'id': messageId, 'text': resolved, 'isUser': isUser});
     return _callJs('updateMessage', json);
@@ -501,11 +506,24 @@ class ChatBridgeController {
   }
 
   Future<void> _callJs(String method, String arg) {
+    debugPrint('[JS_BRIDGE] >> $method (payload: ${arg.length} chars)');
     return _eval('window.bridge?.$method(${_escapeJsonStr(arg)})');
   }
 
   Future<void> _eval(String source) async {
-    await _controller.evaluateJavascript(source: source);
+    final sw = Stopwatch()..start();
+    try {
+      final result = await _controller.evaluateJavascript(source: source);
+      final snippet = source.length > 150 ? '${source.substring(0, 150)}...' : source;
+      final resultStr = result?.toString() ?? 'null';
+      final shortResult = resultStr.length > 200 ? '${resultStr.substring(0, 200)}...' : resultStr;
+      debugPrint('[JS_BRIDGE] OK $snippet => $shortResult (${sw.elapsedMilliseconds}ms)');
+    } catch (e, st) {
+      final snippet = source.length > 150 ? '${source.substring(0, 150)}...' : source;
+      debugPrint('[JS_BRIDGE] ERR $snippet => $e (${sw.elapsedMilliseconds}ms)');
+      debugPrint('$st');
+      rethrow;
+    }
   }
 
   Future<void> evalJs(String source) async {
@@ -520,7 +538,7 @@ class ChatBridgeController {
     return '"${jsonEncode(s).substring(1, jsonEncode(s).length - 1)}"';
   }
 
-  Map<String, dynamic> _toMap(ChatMessage m, {bool isLast = false, int? messageIndex}) {
+  Map<String, dynamic> _toMap(ChatMessage m, {bool isLast = false, int? messageIndex, bool isStreamingUpdate = false}) {
     final isAssistant = m.role == 'assistant' || m.role == 'character';
     final isUser = m.role == 'user';
 
@@ -531,10 +549,10 @@ class ChatBridgeController {
     if (isAssistant) {
       displayName = currentCharName ?? m.personaName ?? 'Character';
       avatarColor = currentCharColor;
-      avatarUrl = _charAvatarDataUrl;
+      if (!isStreamingUpdate) avatarUrl = _charAvatarDataUrl;
     } else if (isUser) {
       displayName = m.personaName ?? currentPersonaName ?? 'You';
-      avatarUrl = _personaAvatarDataUrl;
+      if (!isStreamingUpdate) avatarUrl = _personaAvatarDataUrl;
     } else {
       displayName = m.personaName ?? 'System';
     }
