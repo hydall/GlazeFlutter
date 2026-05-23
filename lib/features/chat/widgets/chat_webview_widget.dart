@@ -159,6 +159,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       await _bridge!.setSearch(query: widget.searchQuery!, activeIndex: widget.searchCurrentIndex);
     }
     await _bridge!.scrollToBottom();
+    _bridge!.isGenerating = widget.isGenerating;
     _ready = true;
   }
 
@@ -244,15 +245,24 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
 
     if (widget.isGenerating != old.isGenerating) {
       _bridge!.isGenerating = widget.isGenerating;
+      if (!widget.isGenerating && widget.messages.isNotEmpty) {
+        final lastAssistant = widget.messages.lastWhere(
+          (m) => m.role == 'assistant',
+          orElse: () => widget.messages.last,
+        );
+        _bridge?.setLastMessage(lastAssistant.id);
+      } else if (widget.isGenerating) {
+        _bridge?.setLastMessage(null);
+      }
     }
-
-    _syncMessages(old.messages);
 
     if (_wasGenerating && !widget.isGenerating) {
       _bridge?.removeMessage(_kStreamingId);
       _streamingSent = false;
     }
     _wasGenerating = widget.isGenerating;
+
+    _syncMessages(old.messages);
   }
 
   void _syncMessages(List<ChatMessage> oldMsgs) {
@@ -291,6 +301,9 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           appends,
           startIndex: widget.visibleStartIndex + oldIds.length,
         );
+        if (appends.isNotEmpty && !widget.isGenerating) {
+          _bridge?.setLastMessage(appends.last.id);
+        }
         return;
       }
     }
@@ -301,6 +314,17 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       if (oldIdx > 0) {
         for (int i = 0; i < oldIdx; i++) {
           _bridge?.removeMessage(oldIds[i]);
+        }
+        return;
+      }
+      final newLastId = newIds.last;
+      final oldLastIdx = oldIds.indexOf(newLastId);
+      if (oldLastIdx >= 0 && newIds.length == oldLastIdx + 1) {
+        for (int i = oldIds.length - 1; i > oldLastIdx; i--) {
+          _bridge?.removeMessage(oldIds[i]);
+        }
+        if (!widget.isGenerating) {
+          _bridge?.setLastMessage(newLastId);
         }
         return;
       }

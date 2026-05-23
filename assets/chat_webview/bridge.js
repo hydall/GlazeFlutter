@@ -4,6 +4,7 @@ class Bridge {
     this.virtualList = virtualList;
     this._pendingRequests = new Map();
     this._requestCounter = 0;
+    this.isGenerating = false;
     this._setupScrollListener();
     this._setupInteractionListener();
     this._setupImageClickForward();
@@ -366,6 +367,52 @@ class Bridge {
         }
       } else if (!msg.isHidden && eye) {
         eye.remove();
+      }
+    }
+  }
+
+  setLastMessage(newLastId) {
+    const prevLast = document.querySelector('.message-assistant[data-is-last="true"]');
+    if (prevLast) {
+      delete prevLast.dataset.isLast;
+      const right = prevLast.querySelector('.message-meta-right');
+      if (right) {
+        const regen = right.querySelector('.regen-btn');
+        const guided = right.querySelector('.guided-swipe-btn');
+        if (regen) regen.remove();
+        if (guided) guided.remove();
+      }
+    }
+    if (!newLastId) return;
+    const newLast = document.querySelector(`[data-message-id="${newLastId}"]`);
+    if (newLast && newLast.classList.contains('message-assistant') && !this.isGenerating) {
+      newLast.dataset.isLast = 'true';
+      const right = newLast.querySelector('.message-meta-right');
+      if (right && !right.querySelector('.regen-btn')) {
+        const regenBtn = document.createElement('button');
+        regenBtn.className = 'regen-btn';
+        regenBtn.dataset.messageId = newLastId;
+        regenBtn.textContent = '↻';
+        regenBtn.title = 'Regenerate';
+        const menuBtn = right.querySelector('.meta-menu-btn');
+        if (menuBtn) {
+          right.insertBefore(regenBtn, menuBtn);
+        } else {
+          right.appendChild(regenBtn);
+        }
+      }
+      if (right && !right.querySelector('.guided-swipe-btn')) {
+        const guidedBtn = document.createElement('button');
+        guidedBtn.className = 'guided-swipe-btn';
+        guidedBtn.dataset.messageId = newLastId;
+        guidedBtn.textContent = '🎯';
+        guidedBtn.title = 'Guided swipe';
+        const menuBtn = right.querySelector('.meta-menu-btn');
+        if (menuBtn) {
+          right.insertBefore(guidedBtn, menuBtn);
+        } else {
+          right.appendChild(guidedBtn);
+        }
       }
     }
   }

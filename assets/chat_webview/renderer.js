@@ -69,6 +69,7 @@ class Renderer {
     messageEl.dataset.messageId = id;
     messageEl.dataset.rawText = text || '';
     if (messageData.reasoning) messageEl.dataset.reasoning = messageData.reasoning;
+    if (messageData.isLast && messageData.role === 'assistant') messageEl.dataset.isLast = 'true';
 
     const header = this._createHeader(messageData);
     messageEl.appendChild(header);

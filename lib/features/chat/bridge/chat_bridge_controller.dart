@@ -277,7 +277,7 @@ class ChatBridgeController {
   Future<void> appendMessages(List<ChatMessage> messages, {int startIndex = 0}) {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
-      mapped.add(_toMap(messages[i], messageIndex: startIndex + i));
+      mapped.add(_toMap(messages[i], isLast: i == messages.length - 1, messageIndex: startIndex + i));
     }
     final json = jsonEncode(mapped);
     return _callJs('appendMessages', json);
@@ -299,6 +299,14 @@ class ChatBridgeController {
 
   Future<void> removeMessage(String messageId) {
     return _callJs('removeMessage', messageId);
+  }
+
+  Future<void> setLastMessage(String? messageId) {
+    if (messageId != null) {
+      return _eval('window.bridge?.setLastMessage("${_escape(messageId)}")');
+    } else {
+      return _eval('window.bridge?.setLastMessage(null)');
+    }
   }
 
   Future<void> clearAll() {
@@ -372,6 +380,10 @@ class ChatBridgeController {
   }
 
   Future<void> _eval(String source) async {
+    await _controller.evaluateJavascript(source: source);
+  }
+
+  Future<void> evalJs(String source) async {
     await _controller.evaluateJavascript(source: source);
   }
 
