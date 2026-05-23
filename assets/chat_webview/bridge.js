@@ -46,8 +46,13 @@ class Bridge {
 
   _setupScrollListener() {
     let loadMoreCooldown = false;
+    let lastScrollTop = 0;
     this.virtualList.container.addEventListener('scroll', () => {
       if (loadMoreCooldown || this._suppressLoadMore) return;
+      const st = this.virtualList.container.scrollTop;
+      const scrollingUp = st < lastScrollTop;
+      lastScrollTop = st;
+      if (!scrollingUp) return;
       if (this.virtualList.isNearTop(500)) {
         loadMoreCooldown = true;
         this._sendToFlutter('onLoadMore', []);
@@ -267,7 +272,7 @@ class Bridge {
     
     this.virtualList.setMessagesBatch(ids, elements);
     this._hideLoadingScreen();
-    setTimeout(() => { this._suppressLoadMore = false; }, 300);
+    setTimeout(() => { this._suppressLoadMore = false; }, 1000);
   }
 
   appendMessage(messageJson) {
@@ -317,7 +322,7 @@ class Bridge {
       }
     }
     const scrollAfter = this.virtualList.container.scrollHeight;
-    this.virtualList.container.scrollTop = scrollAfter - scrollBefore;
+    this.virtualList.container.scrollTop += scrollAfter - scrollBefore;
     this._hideLoadingScreen();
     setTimeout(() => { this._suppressLoadMore = false; }, 500);
   }
