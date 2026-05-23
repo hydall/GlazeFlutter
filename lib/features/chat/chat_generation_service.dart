@@ -27,6 +27,7 @@ class ChatGenerationService {
 
   Future<ChatState> generate({
     required ChatSession session,
+    ChatSession? saveSession,
     required String charId,
     required ChatState currentState,
     required void Function(ChatState) onStateUpdate,
@@ -146,7 +147,7 @@ class ChatGenerationService {
           final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
           final tokenCount = (finalText.length / 4).round();
           finalState = _saveAssistantMessage(
-            finalText, finalReasoning, session,
+            finalText, finalReasoning, saveSession ?? session,
             pendingSessionVars: pendingSessionVars,
             genTime: timeStr, tokens: tokenCount,
             rawResponse: text,

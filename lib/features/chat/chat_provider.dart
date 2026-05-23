@@ -242,6 +242,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     await _runGeneration(
       promptSession, current,
+      saveSession: current.session!,
       guidanceText: guidanceText,
       regenTargetId: regenTargetId,
       previousSwipes: prevAssistant.swipes.isNotEmpty
@@ -580,6 +581,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   Future<void> _runGeneration(
     ChatSession session,
     ChatState current, {
+    ChatSession? saveSession,
     String? guidanceText,
     List<String>? previousSwipes,
     int previousSwipeId = 0,
@@ -605,6 +607,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     debugPrint('[gen] calling service.generate() genId=$genId isAborted=${_activeGenId != genId}');
     final result = await service.generate(
       session: session,
+      saveSession: saveSession,
       charId: arg,
       currentState: current,
       onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
