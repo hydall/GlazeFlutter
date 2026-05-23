@@ -452,6 +452,10 @@ class ChatBridgeController {
     return _eval('window.bridge?.setBottomPadding(${px.toStringAsFixed(1)})');
   }
 
+  Future<void> setTopPadding(double px) {
+    return _eval('window.bridge?.setTopPadding(${px.toStringAsFixed(1)})');
+  }
+
   Future<void> startEdit(String messageId) {
     return _eval('window.bridge?.startEdit("${_escape(messageId)}")');
   }

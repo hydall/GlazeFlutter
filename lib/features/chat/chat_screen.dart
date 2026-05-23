@@ -625,6 +625,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     // drawer) + the bottom safe area. We pass the FINAL inset so the list's
     // padding doesn't churn per animation frame.
     final safeBottom = MediaQuery.paddingOf(context).bottom;
+    // Top inset for the chat list: safe area + GlazeScaffold wrap padding (10)
+    // + GlazeAppBar height (56). Matches the floating header above the webview.
+    final messageListTop = MediaQuery.paddingOf(context).top + 10 + 56;
             // ...
             final targetDrawerInset = widget.drawerOpen ? widget.drawerHeight : 0.0;
             final panelHeight = math.max(targetDrawerInset, widget.keyboardHeight);
@@ -660,10 +663,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           isGeneratingImage: widget.state.isGeneratingImage,
                           regenTargetId: widget.state.regenTargetId,
                           bottomInset: messageListBottom,
+                          topInset: messageListTop,
                           charName: character?.name,
                           charColor: character?.color,
                           personaName: effectivePersona?.name,
-                          chatLayout: preset.chatLayout,
+                          chatLayout: appSettings?.chatLayout ?? 'default',
                           charAvatarPath: character?.avatarPath,
                           personaAvatarPath: effectivePersona?.avatarPath,
                           bgImagePath: bgPath,

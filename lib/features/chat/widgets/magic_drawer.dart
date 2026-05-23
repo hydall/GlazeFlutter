@@ -6,7 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gradient_blur/gradient_blur.dart';
+import 'package:soft_edge_blur/soft_edge_blur.dart';
 
 import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -619,6 +619,100 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     });
 
     final items = _displayItems;
+    final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
+
+    final scrollable = RawScrollbar(
+      controller: _scrollController,
+      padding: const EdgeInsets.only(top: 60),
+      thickness: 3,
+      radius: const Radius.circular(3),
+      thumbColor: Colors.white24,
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final itemWidth = (constraints.maxWidth - 24 - 12) / 3;
+            return SingleChildScrollView(
+              controller: _scrollController,
+              padding: EdgeInsets.fromLTRB(
+                12,
+                60,
+                12,
+                16 + MediaQuery.of(context).padding.bottom,
+              ),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 8,
+                children: List.generate(items.length, (index) {
+                  final item = items[index];
+                  if (item.isAddButton) {
+                    return SizedBox(
+                      width: itemWidth,
+                      child: AddMagicCard(onTap: _showAddItemSheet),
+                    );
+                  }
+                  final card = MagicCard(
+                    item: item,
+                    editing: _editing,
+                    hovered:
+                        _hoverIndex == index && _draggingIndex != index,
+                    onTap: () => _handleTap(item.def),
+                    onDelete: () => _removeItem(item.def.id),
+                  );
+
+                  return SizedBox(
+                    width: itemWidth,
+                    child: DragTarget<int>(
+                      onWillAcceptWithDetails: (details) {
+                        setState(() => _hoverIndex = index);
+                        return details.data != index;
+                      },
+                      onLeave: (_) {
+                        if (_hoverIndex == index) {
+                          setState(() => _hoverIndex = null);
+                        }
+                      },
+                      onAcceptWithDetails: (details) {
+                        _moveItem(details.data, index);
+                      },
+                      builder: (context, _, _) {
+                        return LongPressDraggable<int>(
+                          data: index,
+                          delay: const Duration(milliseconds: 300),
+                          onDragStarted: () {
+                            HapticFeedback.mediumImpact();
+                            setState(() {
+                              if (!_editing) _editing = true;
+                              _draggingIndex = index;
+                            });
+                          },
+                          onDragEnd: (_) {
+                            setState(() {
+                              _draggingIndex = null;
+                              _hoverIndex = null;
+                            });
+                          },
+                          feedback: SizedBox(
+                            width: itemWidth,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: Opacity(opacity: 0.92, child: card),
+                            ),
+                          ),
+                          childWhenDragging:
+                              Opacity(opacity: 0.25, child: card),
+                          child: card,
+                        );
+                      },
+                    ),
+                  );
+                }),
+              ),
+            );
+          },
+        ),
+      ),
+    );
 
     return Container(
       decoration: BoxDecoration(
@@ -626,169 +720,67 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         border: Border(top: BorderSide(color: context.cs.outlineVariant)),
       ),
       child: Stack(
-          children: [
-            Positioned.fill(
-              child: RawScrollbar(
-                controller: _scrollController,
-                padding: const EdgeInsets.only(top: 60),
-                  thickness: 3,
-                  radius: const Radius.circular(3),
-                  thumbColor: Colors.white24,
-                  child: ScrollConfiguration(
-                    behavior: ScrollConfiguration.of(
-                      context,
-                    ).copyWith(scrollbars: false),
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final itemWidth = (constraints.maxWidth - 24 - 12) / 3;
-                        return SingleChildScrollView(
-                          controller: _scrollController,
-                          padding: EdgeInsets.fromLTRB(
-                            12,
-                            60,
-                            12,
-                            16 + MediaQuery.of(context).padding.bottom,
-                          ),
-                          child: Wrap(
-                            spacing: 6,
-                            runSpacing: 8,
-                            children: List.generate(items.length, (index) {
-                              final item = items[index];
-                              if (item.isAddButton) {
-                                return SizedBox(
-                                  width: itemWidth,
-                                  child: AddMagicCard(onTap: _showAddItemSheet),
-                                );
-                              }
-                              final card = MagicCard(
-                                item: item,
-                                editing: _editing,
-                                hovered:
-                                    _hoverIndex == index &&
-                                    _draggingIndex != index,
-                                onTap: () => _handleTap(item.def),
-                                onDelete: () => _removeItem(item.def.id),
-                              );
-
-                              return SizedBox(
-                                width: itemWidth,
-                                child: DragTarget<int>(
-                                  onWillAcceptWithDetails: (details) {
-                                    setState(() => _hoverIndex = index);
-                                    return details.data != index;
-                                  },
-                                  onLeave: (_) {
-                                    if (_hoverIndex == index) {
-                                      setState(() => _hoverIndex = null);
-                                    }
-                                  },
-                                  onAcceptWithDetails: (details) {
-                                    _moveItem(details.data, index);
-                                  },
-                                  builder: (context, _, _) {
-                                    return LongPressDraggable<int>(
-                                      data: index,
-                                      delay: const Duration(milliseconds: 300),
-                                      onDragStarted: () {
-                                        HapticFeedback.mediumImpact();
-                                        setState(() {
-                                          if (!_editing) _editing = true;
-                                          _draggingIndex = index;
-                                        });
-                                      },
-                                      onDragEnd: (_) {
-                                        setState(() {
-                                          _draggingIndex = null;
-                                          _hoverIndex = null;
-                                        });
-                                      },
-                                      feedback: SizedBox(
-                                        width: itemWidth,
-                                        child: Material(
-                                          color: Colors.transparent,
-                                          child: Opacity(
-                                            opacity: 0.92,
-                                            child: card,
-                                          ),
-                                        ),
-                                      ),
-                                      childWhenDragging: Opacity(
-                                        opacity: 0.25,
-                                        child: card,
-                                      ),
-                                      child: card,
-                                    );
-                                  },
-                                ),
-                              );
-                            }),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: IgnorePointer(
-                  child: (ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false)
-                      ? const SizedBox(height: 68)
-                      : GradientBlur(
-                          maxBlur: 8,
-                          curve: Curves.easeIn,
-                          gradient: const LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Color(0xEB141416),
-                              Color(0x88141416),
-                              Color(0x00141416),
-                            ],
-                            stops: [0.0, 0.55, 1.0],
-                          ),
-                          child: const SizedBox(height: 68),
-                        ),
-                ),
-              ),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: IgnorePointer(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Center(
-                      child: Container(
-                        width: 32,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[600],
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+        children: [
+          Positioned.fill(
+            child: batterySaver
+                ? scrollable
+                : SoftEdgeBlur(
+                    edges: [
+                      EdgeBlur(
+                        type: EdgeType.topEdge,
+                        size: 68,
+                        sigma: 24,
+                        tintColor:
+                            context.cs.surface.withValues(alpha: 0.4),
+                        controlPoints: [
+                          ControlPoint(
+                              position: 0.5,
+                              type: ControlPointType.visible),
+                          ControlPoint(
+                              position: 1.0,
+                              type: ControlPointType.transparent),
+                        ],
                       ),
+                    ],
+                    child: scrollable,
+                  ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Center(
+                  child: Container(
+                    width: 32,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[600],
+                      borderRadius: BorderRadius.circular(2),
                     ),
                   ),
                 ),
               ),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: MagicDrawerHeader(
-                  editing: _editing,
-                  onToggleEditing: _toggleEditing,
-                ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: MagicDrawerHeader(
+              editing: _editing,
+              onToggleEditing: _toggleEditing,
+            ),
+          ),
+          if (_loading)
+            const Positioned.fill(
+              child: ColoredBox(
+                color: Color(0x22000000),
+                child: Center(child: CircularProgressIndicator()),
               ),
-              if (_loading)
-                const Positioned.fill(
-                  child: ColoredBox(
-                    color: Color(0x22000000),
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-                ),
+            ),
         ],
       ),
     );

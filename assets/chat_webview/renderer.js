@@ -1,3 +1,164 @@
+/* ============================================================
+ * Renderer — produces DOM matching Glaze/src/components/chat/ChatMessage.vue
+ *
+ * Root           .message-section[.user|.char|.system][.error][.selected][.selection-mode][.msg-hidden][.native-lite].layout-{bubble|standard|default|system}
+ *   .msg-header    .msg-avatar  .msg-name (>.msg-name-label .msg-index.header-idx .item-version .msg-memory-badge .msg-lb-trigger-menu)  .msg-time
+ *   .msg-guidance-block (optional)
+ *   .msg-reasoning (optional) > .msg-reasoning-header / .msg-reasoning-content > .msg-transition-wrapper > .msg-reasoning-inner
+ *   .msg-content-stack
+ *     .msg-transition-wrapper > .msg-body (.error-window for errors, .typing-container for typing)
+ *       (bubble layout) .bubble-meta — gen-stat / token-count-inline / bubble-time
+ *     .msg-footer
+ *       .msg-meta            — gen-stat (full layout only)
+ *       .msg-center-controls — .msg-switcher / .msg-regenerate / .msg-guided-swipe-btn / .stop-btn
+ *       .msg-actions-btn or .edit-buttons
+ *   .guided-swipe-container (toggled by bridge)
+ * ============================================================ */
+
+/* SVG icon library — re-used from ChatMessage.vue */
+const ICON = {
+  hidden:    '<svg viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>',
+  eye:       '<svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>',
+  lbTrigger: '<svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z"/></svg>',
+  swipeLeft: '<svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>',
+  swipeRight:'<svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>',
+  regen:     '<svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>',
+  guided:    '<svg viewBox="0 0 24 24"><path d="M9 5v2h6.59L4 18.59 5.41 20 17 8.41V15h2V5H9z"/></svg>',
+  menu:      '<svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>',
+  stop:      '<svg viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>',
+  edit:      '<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>',
+  save:      '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>',
+  cancel:    '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>',
+  copy:      '<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>',
+  clock:     '<svg viewBox="0 0 24 24"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>',
+  doc:       '<svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>',
+  chevron:   '<svg class="reasoning-arrow" viewBox="0 0 24 24" style="width:16px;height:16px;fill:currentColor"><path d="M7 10l5 5 5-5z"/></svg>',
+};
+
+/* Style block injected into every shadow root */
+const SHADOW_STYLE = `
+  :host { display: block; font-size: inherit; color: inherit; }
+  .glaze-message { word-wrap: break-word; line-height: 1.6; color: inherit; }
+  .glaze-message p { margin-bottom: 0.8em; }
+  .glaze-message p:last-child { margin-bottom: 0; }
+  .glaze-message strong { font-weight: 700; }
+  .glaze-message em { font-style: italic; }
+  .glaze-message del { text-decoration: line-through; }
+  .glaze-message code {
+    background: rgba(0,0,0,0.18);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Consolas','Monaco','Courier New',monospace;
+    font-size: 0.9em;
+  }
+  .glaze-message pre {
+    background: rgba(0,0,0,0.18);
+    padding: 12px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+  .glaze-message pre code { background: none; padding: 0; }
+  .glaze-message blockquote,
+  .glaze-message .chat-blockquote {
+    border-left: 3px solid var(--current-italic-color, var(--italic-color, #888));
+    margin: 4px 0;
+    padding: 2px 8px;
+    color: var(--current-italic-color, var(--italic-color, #888));
+    font-style: italic;
+  }
+  .glaze-message .chat-quote,
+  .glaze-message .chat-quote-text {
+    color: var(--current-quote-color, var(--quote-color, #7996CE));
+  }
+  .glaze-message .font-color-block .chat-quote,
+  .glaze-message .font-color-block .chat-quote-text,
+  .glaze-message .font-color-block .chat-italic { color: inherit; }
+  .glaze-message .chat-italic {
+    color: var(--current-italic-color, var(--italic-color, #888));
+    font-style: italic;
+  }
+  .glaze-message a { color: var(--primary-color, #7996CE); text-decoration: underline; }
+  .glaze-message img { max-width: 100%; height: auto; border-radius: 8px; margin: 8px 0; }
+  .glaze-message .chat-quote-unclosed {
+    color: var(--current-quote-color, var(--quote-color, #7996CE));
+    opacity: 0.7;
+  }
+  .glaze-message .glaze-hc,
+  .glaze-message .glaze-glow,
+  .glaze-message .glaze-cg,
+  .glaze-message .glaze-grad { font-weight: inherit; }
+  .glaze-message .glaze-bg { color: #fff; }
+  .glaze-message .glaze-mark { color: var(--current-quote-color, var(--quote-color, #7996CE)); }
+  .glaze-message .glaze-active { background: #ffeb3b; color: #000; padding: 2px 4px; border-radius: 4px; }
+  .glaze-message .font-style-block,
+  .glaze-message .font-color-block { display: inline-block; vertical-align: baseline; color: inherit; }
+  .glaze-message .code-block-wrapper { position: relative; margin: 8px 0; }
+  .glaze-message .code-lang {
+    position: absolute; top: 4px; right: 8px;
+    font-size: 10px; opacity: 0.4;
+    text-transform: uppercase; font-family: monospace;
+  }
+  .glaze-message .janitor-img-wrapper { display: inline-block; max-width: 100%; margin: 4px 0; }
+  .glaze-message .janitor-img-wrapper .janitor-img {
+    max-width: 100%; border-radius: 8px; cursor: pointer;
+  }
+  .glaze-message details {
+    margin: 8px 0;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 0.95em;
+    opacity: 0.9;
+  }
+  .glaze-message details summary {
+    padding: 8px 12px;
+    cursor: pointer;
+    background: rgba(0,0,0,0.18);
+    font-weight: 500;
+    list-style: none !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px;
+    line-height: 1.4;
+  }
+  .glaze-message details summary::-webkit-details-marker { display: none !important; }
+  .glaze-message details summary::marker { content: '' !important; }
+  .glaze-message details summary::before {
+    content: '▶'; font-size: 0.75em;
+    transition: transform 0.2s; flex-shrink: 0;
+    line-height: 1; vertical-align: middle;
+  }
+  .glaze-message details[open] > summary::before { transform: rotate(90deg); }
+  .search-highlight-text {
+    background-color: rgba(255,215,0,0.4);
+    border-radius: 4px;
+    padding: 0 2px;
+  }
+  .search-highlight-text.active-search-match {
+    background-color: rgba(244,67,54,0.8);
+    color: #fff;
+  }
+  .edit-textarea {
+    display: block;
+    width: 100%;
+    min-height: 80px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 8px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    background: var(--bg-color, #1a1a2e);
+    color: var(--text-color, #e0e0e0);
+    font-size: var(--font-size, 15px);
+    font-family: inherit;
+    resize: none;
+    outline: none;
+    line-height: 1.6;
+  }
+  .edit-textarea:focus { border-color: var(--primary-color, #7996CE); }
+`;
+
 class Renderer {
   constructor(formatter, virtualList) {
     this.formatter = formatter;
@@ -10,10 +171,11 @@ class Renderer {
     this._selectedIds = new Set();
   }
 
+  /* ----- Selection mode ----- */
   setSelectionMode(enabled) {
     this._selectionMode = !!enabled;
     if (!enabled) this._selectedIds.clear();
-    document.querySelectorAll('.message').forEach(msgEl => {
+    document.querySelectorAll('.message-section').forEach(msgEl => {
       msgEl.classList.toggle('selection-mode', this._selectionMode);
       const cb = msgEl.querySelector('.selection-checkbox');
       if (enabled && !cb) {
@@ -31,11 +193,8 @@ class Renderer {
   }
 
   toggleMessageSelection(messageId) {
-    if (this._selectedIds.has(messageId)) {
-      this._selectedIds.delete(messageId);
-    } else {
-      this._selectedIds.add(messageId);
-    }
+    if (this._selectedIds.has(messageId)) this._selectedIds.delete(messageId);
+    else this._selectedIds.add(messageId);
     const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
     if (msgEl) {
       msgEl.classList.toggle('selected', this._selectedIds.has(messageId));
@@ -44,649 +203,704 @@ class Renderer {
     }
   }
 
-  getSelectedIds() {
-    return [...this._selectedIds];
-  }
+  getSelectedIds() { return [...this._selectedIds]; }
 
+  /* ----- Public: render a message ----- */
   renderMessage(messageData) {
-    const { id, role, text, timestamp, displayName, avatarUrl, isUser, isAssistant, isSystem, isError, isTyping } = messageData;
-
     const elements = [];
 
-    if (timestamp) {
-      const dateStr = this._formatDate(timestamp);
+    if (messageData.timestamp) {
+      const dateStr = this._formatDate(messageData.timestamp);
       if (dateStr && dateStr !== this._lastTimestamps.date) {
         elements.push(this._createDateSeparator(dateStr));
         this._lastTimestamps = { date: dateStr, idx: 0 };
       }
     }
 
-    const messageEl = document.createElement('div');
-    let className = `message ${this._getRoleClass(role)}`;
-    if (isError) className += ' message-error';
-    if (messageData.isHidden) className += ' message-hidden';
-    messageEl.className = className;
-    messageEl.dataset.messageId = id;
-    messageEl.dataset.rawText = text || '';
-    if (messageData.reasoning) messageEl.dataset.reasoning = messageData.reasoning;
-    if (messageData.isLast && messageData.role === 'assistant') messageEl.dataset.isLast = 'true';
-
-    const header = this._createHeader(messageData);
-    messageEl.appendChild(header);
-
-    if (messageData.imagePath) {
-      const imgWrap = document.createElement('div');
-      imgWrap.className = 'message-image-wrapper';
-      const img = document.createElement('img');
-      img.className = 'message-image';
-      img.src = messageData.imagePath;
-      img.loading = 'lazy';
-      img.addEventListener('click', () => {
-        this.virtualList.container.dispatchEvent(new CustomEvent('image-click', { detail: { src: messageData.imagePath } }));
-      });
-      imgWrap.appendChild(img);
-      messageEl.appendChild(imgWrap);
-    }
-
-    if (messageData.guidanceText) {
-      const guidanceBlock = document.createElement('div');
-      guidanceBlock.className = 'guidance-block';
-      const icon = document.createElement('span');
-      icon.className = 'guidance-icon';
-      icon.textContent = '🎯';
-      guidanceBlock.appendChild(icon);
-      const textEl = document.createElement('span');
-      textEl.className = 'guidance-text';
-      textEl.textContent = messageData.guidanceText;
-      guidanceBlock.appendChild(textEl);
-      messageEl.appendChild(guidanceBlock);
-    }
-
-    const contentContainer = document.createElement('div');
-    contentContainer.className = 'message-content';
-    messageEl.appendChild(contentContainer);
-
-    if (!contentContainer.shadowRoot) {
-      const shadow = contentContainer.attachShadow({ mode: 'open' });
-
-      const style = document.createElement('style');
-      style.textContent = `
-        :host {
-          display: block;
-          font-size: inherit;
-          color: inherit;
-        }
-        .glaze-message {
-          word-wrap: break-word;
-          line-height: 1.6;
-          color: inherit;
-        }
-        .glaze-message p {
-          margin-bottom: 0.8em;
-        }
-        .glaze-message p:last-child {
-          margin-bottom: 0;
-        }
-        .glaze-message strong {
-          font-weight: 700;
-        }
-        .glaze-message em {
-          font-style: italic;
-        }
-        .glaze-message del {
-          text-decoration: line-through;
-        }
-        .glaze-message code {
-          background: rgba(0, 0, 0, 0.1);
-          padding: 2px 6px;
-          border-radius: 4px;
-          font-family: monospace;
-          font-size: 0.9em;
-        }
-        .glaze-message pre {
-          background: rgba(0, 0, 0, 0.1);
-          padding: 12px;
-          border-radius: 8px;
-          overflow-x: auto;
-          margin: 12px 0;
-        }
-        .glaze-message pre code {
-          background: none;
-          padding: 0;
-        }
-        .glaze-message blockquote,
-        .glaze-message .chat-blockquote {
-          border-left: 3px solid var(--current-italic-color, var(--italic-color, #888));
-          margin: 4px 0;
-          padding: 2px 8px;
-          color: var(--current-italic-color, var(--italic-color, #888));
-          font-style: italic;
-        }
-        .glaze-message .chat-quote {
-          color: var(--current-quote-color, var(--quote-color, #7996CE));
-        }
-        .glaze-message .chat-quote-text {
-          color: var(--current-quote-color, var(--quote-color, #7996CE));
-        }
-        .glaze-message .font-color-block .chat-quote,
-        .glaze-message .font-color-block .chat-quote-text {
-          color: inherit;
-        }
-        .glaze-message .font-color-block .chat-italic {
-          color: inherit;
-        }
-        .glaze-message .chat-italic {
-          color: var(--current-italic-color, var(--italic-color, #888));
-          font-style: italic;
-        }
-        .glaze-message a {
-          color: var(--primary-color, #2196f3);
-          text-decoration: underline;
-        }
-        .glaze-message img {
-          max-width: 100%;
-          height: auto;
-          border-radius: 8px;
-        }
-        .glaze-message .search-highlight {
-          background: #ffeb3b;
-          padding: 2px 4px;
-          border-radius: 4px;
-        }
-        .glaze-message .search-highlight.active {
-          background: #ff9800;
-          color: white;
-        }
-        .glaze-message .glaze-hc {
-          font-weight: inherit;
-        }
-        .glaze-message .glaze-glow {
-          font-weight: inherit;
-        }
-        .glaze-message .glaze-cg {
-          font-weight: inherit;
-        }
-        .glaze-message .glaze-grad {
-          font-weight: inherit;
-        }
-        .glaze-message .glaze-bg {
-          color: #fff;
-        }
-        .glaze-message .glaze-mark {
-          color: var(--current-quote-color, var(--quote-color, #7996CE));
-        }
-        .glaze-message .glaze-active {
-          background: #ffeb3b;
-          color: #000;
-          padding: 2px 4px;
-          border-radius: 4px;
-        }
-        .glaze-message .chat-quote-unclosed {
-          color: var(--current-quote-color, var(--quote-color, #7996CE));
-          opacity: 0.7;
-        }
-        .glaze-message .code-block-wrapper {
-          position: relative;
-          margin: 8px 0;
-        }
-        .glaze-message .code-lang {
-          position: absolute;
-          top: 4px;
-          right: 8px;
-          font-size: 10px;
-          opacity: 0.4;
-          text-transform: uppercase;
-          font-family: monospace;
-        }
-        .glaze-message .janitor-img-wrapper {
-          display: inline-block;
-          max-width: 100%;
-          margin: 4px 0;
-        }
-        .glaze-message .janitor-img-wrapper .janitor-img {
-          max-width: 100%;
-          border-radius: 8px;
-          cursor: pointer;
-        }
-        .reasoning-block {
-          margin: 8px 0;
-          border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-          border-radius: 8px;
-          overflow: hidden;
-          font-size: 0.9em;
-          opacity: 0.85;
-        }
-        .reasoning-summary {
-          padding: 8px 12px;
-          cursor: pointer;
-          background: rgba(0,0,0,0.05);
-          font-weight: 500;
-          list-style: none;
-        }
-        .reasoning-summary::-webkit-details-marker {
-          display: none;
-        }
-        .reasoning-summary::before {
-          content: '▶';
-          display: inline-block;
-          margin-right: 6px;
-          transition: transform 0.2s;
-          font-size: 0.8em;
-        }
-        .reasoning-block[open] > .reasoning-summary::before {
-          transform: rotate(90deg);
-        }
-        .reasoning-content {
-          padding: 8px 12px;
-          border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));
-          font-style: italic;
-        }
-        .glaze-message details {
-          margin: 8px 0;
-          border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-          border-radius: 8px;
-          overflow: hidden;
-          font-size: 0.95em;
-          opacity: 0.9;
-        }
-        .glaze-message details summary {
-          padding: 8px 12px;
-          cursor: pointer;
-          background: rgba(0,0,0,0.05);
-          font-weight: 500;
-          list-style: none !important;
-          display: flex !important;
-          align-items: center !important;
-          gap: 6px;
-          line-height: 1.4;
-        }
-        .glaze-message details summary::-webkit-details-marker {
-          display: none !important;
-        }
-        .glaze-message details summary::marker {
-          content: '' !important;
-        }
-        .glaze-message details summary::before {
-          content: '▶';
-          font-size: 0.75em;
-          transition: transform 0.2s;
-          flex-shrink: 0;
-          line-height: 1;
-          vertical-align: middle;
-        }
-        .glaze-message details summary > * {
-          margin: 0;
-        }
-        .glaze-message details[open] > summary::before {
-          transform: rotate(90deg);
-        }
-        .edit-textarea {
-          width: 100%;
-          min-height: 80px;
-          max-height: 400px;
-          padding: 8px;
-          border: 1px solid rgba(255,255,255,0.12);
-          border-radius: 8px;
-          background: var(--bg-color, #1a1a2e);
-          color: var(--text-color, #e0e0e0);
-          font-size: var(--font-size, 15px);
-          font-family: inherit;
-          resize: vertical;
-          outline: none;
-          line-height: 1.6;
-          overflow-y: auto;
-          scrollbar-width: thin;
-        }
-        .edit-textarea:focus {
-          border-color: var(--primary-color, #7996CE);
-        }
-      `;
-      shadow.appendChild(style);
-
-      const messageContent = document.createElement('div');
-      messageContent.className = 'glaze-message';
-      shadow.appendChild(messageContent);
-    }
-
-    this.updateMessageContent(messageEl, text, messageData.reasoning || null, isUser, isTyping);
-
-    if (role !== 'system') {
-      const meta = this._createMetadata(messageData);
-      messageEl.appendChild(meta);
-    }
-
+    const messageEl = this._createSection(messageData);
     elements.push(messageEl);
     return elements.length > 1 ? elements : messageEl;
   }
 
-  updateMessageContent(messageEl, text, reasoning = null, isUser = false, isTyping = false, animate = false) {
-    const contentContainer = messageEl.querySelector('.message-content');
-    if (!contentContainer || !contentContainer.shadowRoot) return;
+  _createSection(messageData) {
+    const {
+      id, role, text, reasoning,
+      isError, isHidden, isLast, isTyping,
+      guidanceText, guidanceType,
+      imagePath, imageHidden,
+    } = messageData;
 
-    const shadowMessage = contentContainer.shadowRoot.querySelector('.glaze-message');
-    if (!shadowMessage) return;
+    const layout = this._currentLayout();
 
-    try {
-      if (isTyping && (!text || text.trim() === '') && (!reasoning || reasoning.trim() === '')) {
-        shadowMessage.innerHTML = '<div class="typing-indicator"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></div>';
-        return;
-      }
+    const section = document.createElement('div');
+    section.dataset.messageId = id;
+    section.dataset.rawText = text || '';
+    if (reasoning) section.dataset.reasoning = reasoning;
+    if (isLast && this._roleKey(role) === 'char') section.dataset.isLast = 'true';
 
-      let formatted = this.formatter.format(text, isUser);
+    const classes = ['message-section', this._roleKey(role), `layout-${layout}`];
+    if (isError) classes.push('error');
+    if (isHidden) classes.push('msg-hidden');
+    if (this._selectionMode) classes.push('selection-mode');
+    if (this._selectedIds.has(id)) classes.push('selected');
+    section.className = classes.join(' ');
 
-      if (reasoning && reasoning.trim()) {
-        const reasoningHtml = this.formatter.format(reasoning, isUser);
-        formatted = `<details class="reasoning-block"><summary class="reasoning-summary">💭 Reasoning</summary><div class="reasoning-content">${reasoningHtml}</div></details>` + formatted;
-      }
-
-      if (this.searchQuery) {
-        formatted = this._applySearchHighlight(formatted);
-      }
-
-      if (animate) {
-        messageEl.classList.add('swipe-animating');
-        const dir = messageEl.dataset.swipeDirection || 'left';
-        messageEl.style.transform = dir === 'left' ? 'translateX(-30px)' : 'translateX(30px)';
-        messageEl.style.opacity = '0.3';
-        requestAnimationFrame(() => {
-          messageEl.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-          shadowMessage.innerHTML = formatted;
-          messageEl.style.transform = '';
-          messageEl.style.opacity = '';
-          setTimeout(() => {
-            messageEl.classList.remove('swipe-animating');
-            messageEl.style.transition = '';
-            delete messageEl.dataset.swipeDirection;
-          }, 220);
-        });
-      } else {
-        shadowMessage.innerHTML = formatted;
-      }
-    } catch (e) {
-      shadowMessage.textContent = text || '';
-      console.error('Formatter error:', e);
+    if (this._selectionMode) {
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.className = 'selection-checkbox';
+      cb.dataset.messageId = id;
+      cb.checked = this._selectedIds.has(id);
+      section.appendChild(cb);
     }
+
+    /* --- Header --- */
+    section.appendChild(this._createHeader(messageData));
+
+    /* --- Guidance block (header-level) --- */
+    if (guidanceText) {
+      section.appendChild(this._createGuidanceBlock(guidanceText, guidanceType));
+    }
+
+    /* --- Reasoning --- */
+    if (reasoning && reasoning.trim()) {
+      section.appendChild(this._createReasoningBlock(reasoning, this._isUser(role)));
+    }
+
+    /* --- Content stack --- */
+    const stack = document.createElement('div');
+    stack.className = 'msg-content-stack';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'msg-transition-wrapper';
+
+    const body = document.createElement('div');
+    body.className = 'msg-body';
+
+    if (isTyping && (!text || !text.trim())) {
+      body.appendChild(this._createTypingContainer());
+    } else if (isError) {
+      body.appendChild(this._createErrorWindow(messageData));
+    } else {
+      const content = this._createContentContainer();
+      body.appendChild(content);
+      this._writeShadowContent(content, text, this._isUser(role), false);
+    }
+
+    if (imagePath) {
+      body.appendChild(this._createImageAttachment(imagePath, imageHidden));
+    }
+
+    if (layout === 'bubble') {
+      body.appendChild(this._createBubbleMeta(messageData));
+    }
+
+    wrapper.appendChild(body);
+    stack.appendChild(wrapper);
+
+    /* --- Footer --- */
+    stack.appendChild(this._createFooter(messageData));
+    section.appendChild(stack);
+
+    return section;
   }
 
-  updateMessage(messageId, newText, isUser = false, reasoning = null) {
-    const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (messageEl) {
-      this.updateMessageContent(messageEl, newText, reasoning || messageEl.dataset.reasoning || null, isUser);
-    }
-  }
-
-  _createHeader(messageData) {
-    const { role, displayName, personaName, avatarUrl, timestamp, avatarColor, messageIndex, isHidden, memoryStatus, modelVersion } = messageData;
-
+  /* ----- Header ----- */
+  _createHeader(m) {
     const header = document.createElement('div');
-    header.className = 'message-header';
+    header.className = 'msg-header';
 
-    const finalName = displayName || personaName || this._getDefaultName(role);
-
+    /* Avatar */
     const avatar = document.createElement('div');
-    avatar.className = 'message-avatar';
-
-    if (avatarUrl) {
+    avatar.className = 'msg-avatar';
+    const finalName = m.displayName || m.personaName || this._getDefaultName(m.role);
+    if (m.avatarUrl) {
       const img = document.createElement('img');
-      img.src = avatarUrl;
+      img.src = m.avatarUrl;
       img.alt = finalName;
       avatar.appendChild(img);
     } else {
-      avatar.style.backgroundColor = avatarColor || '#555';
+      avatar.style.backgroundColor = m.avatarColor || '#555';
       avatar.textContent = (finalName || '?').charAt(0).toUpperCase();
     }
-
     header.appendChild(avatar);
 
-    const nameEl = document.createElement('div');
-    nameEl.className = 'message-name';
-    nameEl.textContent = finalName;
+    /* Name span */
+    const nameEl = document.createElement('span');
+    nameEl.className = 'msg-name';
+
+    const label = document.createElement('span');
+    label.className = 'msg-name-label';
+    label.textContent = finalName;
+    nameEl.appendChild(label);
+
+    if (m.messageIndex != null) {
+      const idx = document.createElement('span');
+      idx.className = 'msg-index gen-stat header-idx';
+      idx.textContent = `#${m.messageIndex + 1}`;
+      nameEl.appendChild(idx);
+    }
+
+    if (m.modelVersion) {
+      const ver = document.createElement('sup');
+      ver.className = 'item-version';
+      ver.textContent = `#${m.modelVersion}`;
+      nameEl.appendChild(ver);
+    }
+
+    if (m.memoryStatus) {
+      const badge = document.createElement('button');
+      badge.type = 'button';
+      const cls = this._memoryStatusClass(m.memoryStatus);
+      badge.className = `msg-memory-badge ${cls}`;
+      badge.dataset.action = 'memory-click';
+      badge.dataset.messageId = m.id;
+      badge.textContent = m.memoryStatus;
+      nameEl.appendChild(badge);
+    }
+
+    const hasTriggers =
+      (m.triggeredLorebooks && m.triggeredLorebooks.length) ||
+      (m.triggeredMemories && m.triggeredMemories.length);
+    if (hasTriggers) {
+      const trig = document.createElement('div');
+      trig.className = 'msg-lb-trigger-menu';
+      trig.dataset.action = 'inject-click';
+      trig.dataset.messageId = m.id;
+      trig.innerHTML = ICON.lbTrigger;
+      nameEl.appendChild(trig);
+    }
+
     header.appendChild(nameEl);
 
-    if (messageIndex != null) {
-      const idx = document.createElement('span');
-      idx.className = 'message-index';
-      idx.textContent = `#${messageIndex + 1}`;
-      header.appendChild(idx);
-    }
-
-    if (modelVersion) {
-      const ver = document.createElement('sup');
-      ver.className = 'version-badge';
-      ver.textContent = modelVersion;
-      header.appendChild(ver);
-    }
-
-    if (memoryStatus) {
-      const badge = document.createElement('span');
-      badge.className = `memory-badge memory-badge-${memoryStatus.toLowerCase()}`;
-      badge.textContent = memoryStatus;
-      if (messageData.triggeredMemories && messageData.triggeredMemories.length > 0) {
-        badge.title = messageData.triggeredMemories.map(m => m.name).join(', ');
-        badge.style.cursor = 'pointer';
-        badge.dataset.messageId = messageData.id;
-        badge.dataset.action = 'memory-click';
-      }
-      header.appendChild(badge);
-    }
-
-    if (isHidden) {
+    /* Time */
+    const time = document.createElement('span');
+    time.className = 'msg-time';
+    if (m.isHidden) {
       const eye = document.createElement('span');
-      eye.className = 'hidden-indicator';
-      eye.textContent = '👁';
-      eye.title = 'Hidden message — click to unhide';
-      eye.dataset.messageId = messageData.id;
-      eye.dataset.action = 'toggle-hidden';
-      header.appendChild(eye);
+      eye.innerHTML = ICON.hidden;
+      const svg = eye.firstChild;
+      svg.classList.add('msg-hidden-badge');
+      svg.dataset.action = 'toggle-hidden';
+      svg.dataset.messageId = m.id;
+      time.appendChild(svg);
     }
-
-    if (timestamp) {
-      const time = document.createElement('div');
-      time.className = 'message-time';
-      time.textContent = this._formatTime(timestamp);
-      header.appendChild(time);
+    if (m.timestamp) {
+      time.appendChild(document.createTextNode(this._formatTime(m.timestamp)));
     }
+    header.appendChild(time);
 
     return header;
   }
 
-  _createMetadata(messageData) {
-    const { genTime, tokens, triggeredLorebooks, triggeredMemories, swipeIndex, swipeTotal, id, guidanceText, greetingIndex, isLast, isGenerating, isError, providerName } = messageData;
-    const lorebooks = triggeredLorebooks || [];
-    const memories = triggeredMemories || [];
-    const hasInjects = lorebooks.length + memories.length > 0;
+  /* ----- Guidance block ----- */
+  _createGuidanceBlock(text, type) {
+    const block = document.createElement('div');
+    block.className = 'msg-guidance-block';
 
-    const row = document.createElement('div');
-    row.className = 'message-meta';
+    const label = document.createElement('div');
+    label.className = 'guidance-label';
+    const labelText = document.createElement('span');
+    labelText.textContent = `GUIDED ${(type || 'SWIPE').toUpperCase()}`;
+    label.appendChild(labelText);
 
-    const left = document.createElement('div');
-    left.className = 'message-meta-left';
+    const body = document.createElement('div');
+    body.className = 'guidance-content';
+    body.textContent = text;
 
-    if (genTime) {
-      const badge = document.createElement('span');
-      badge.className = 'meta-badge gen-time-badge';
-      badge.textContent = `${genTime}`;
-      left.appendChild(badge);
-    }
-
-    if (tokens && tokens > 0) {
-      const badge = document.createElement('span');
-      badge.className = 'meta-badge';
-      badge.textContent = `${tokens}t`;
-      left.appendChild(badge);
-    }
-
-    if (providerName) {
-      const chip = document.createElement('span');
-      chip.className = 'meta-badge provider-chip';
-      chip.textContent = providerName;
-      left.appendChild(chip);
-    }
-
-    if (hasInjects) {
-      const badge = document.createElement('span');
-      badge.className = 'meta-badge meta-badge-inject';
-      badge.textContent = `${lorebooks.length + memories.length}`;
-      const parts = [];
-      if (lorebooks.length) parts.push(`WI: ${lorebooks.map(e => e.name).join(', ')}`);
-      if (memories.length) parts.push(`Mem: ${memories.map(e => e.name).join(', ')}`);
-      badge.title = parts.join('\n');
-      badge.style.cursor = 'pointer';
-      badge.dataset.messageId = messageData.id;
-      badge.dataset.action = 'inject-click';
-      left.appendChild(badge);
-    }
-
-    if (guidanceText) {
-      const badge = document.createElement('span');
-      badge.className = 'meta-badge meta-badge-guidance';
-      badge.textContent = '🎯';
-      badge.title = `Guidance: ${guidanceText}`;
-      left.appendChild(badge);
-    }
-
-    row.appendChild(left);
-
-    const right = document.createElement('div');
-    right.className = 'message-meta-right';
-
-    if (isError) {
-      const copyBtn = document.createElement('button');
-      copyBtn.className = 'error-copy-btn';
-      copyBtn.dataset.messageId = id;
-      copyBtn.textContent = '📋';
-      copyBtn.title = 'Copy error';
-      right.appendChild(copyBtn);
-    }
-
-    if (greetingIndex != null && swipeTotal > 1) {
-      const greetNav = document.createElement('div');
-      greetNav.className = 'swipe-nav greeting-nav';
-      const prevBtn = document.createElement('button');
-      prevBtn.className = 'swipe-btn';
-      prevBtn.textContent = '‹';
-      prevBtn.dataset.action = 'swipe-left';
-      prevBtn.dataset.messageId = id;
-      greetNav.appendChild(prevBtn);
-
-      const label = document.createElement('span');
-      label.className = 'swipe-label';
-      label.textContent = `${(swipeIndex || 0) + 1}/${swipeTotal}`;
-      greetNav.appendChild(label);
-
-      const nextBtn = document.createElement('button');
-      nextBtn.className = 'swipe-btn';
-      nextBtn.textContent = '›';
-      nextBtn.dataset.action = 'swipe-right';
-      nextBtn.dataset.messageId = id;
-      greetNav.appendChild(nextBtn);
-
-      right.appendChild(greetNav);
-    } else if (swipeTotal > 1) {
-      const swipe = document.createElement('div');
-      swipe.className = 'swipe-nav';
-      const prevBtn = document.createElement('button');
-      prevBtn.className = 'swipe-btn';
-      prevBtn.textContent = '‹';
-      prevBtn.dataset.action = 'swipe-left';
-      prevBtn.dataset.messageId = id;
-      swipe.appendChild(prevBtn);
-
-      const label = document.createElement('span');
-      label.className = 'swipe-label';
-      label.textContent = `${(swipeIndex || 0) + 1}/${swipeTotal}`;
-      swipe.appendChild(label);
-
-      const nextBtn = document.createElement('button');
-      nextBtn.className = 'swipe-btn';
-      nextBtn.textContent = '›';
-      nextBtn.dataset.action = 'swipe-right';
-      nextBtn.dataset.messageId = id;
-      swipe.appendChild(nextBtn);
-
-      right.appendChild(swipe);
-    }
-
-    if (messageData.role === 'assistant' && isLast && isGenerating) {
-      const stopBtn = document.createElement('button');
-      stopBtn.className = 'stop-btn';
-      stopBtn.dataset.messageId = id;
-      stopBtn.textContent = '⏹';
-      stopBtn.title = 'Stop generation';
-      right.appendChild(stopBtn);
-    } else if (messageData.role === 'assistant' && isLast && !isGenerating) {
-      const regenBtn = document.createElement('button');
-      regenBtn.className = 'regen-btn';
-      regenBtn.dataset.messageId = id;
-      regenBtn.textContent = '↻';
-      regenBtn.title = 'Regenerate';
-      right.appendChild(regenBtn);
-
-      const guidedBtn = document.createElement('button');
-      guidedBtn.className = 'guided-swipe-btn';
-      guidedBtn.dataset.messageId = id;
-      guidedBtn.textContent = '🎯';
-      guidedBtn.title = 'Guided swipe';
-      right.appendChild(guidedBtn);
-    }
-
-    const menuBtn = document.createElement('button');
-    menuBtn.className = 'meta-menu-btn';
-    menuBtn.dataset.messageId = id;
-    menuBtn.textContent = '⋮';
-    right.appendChild(menuBtn);
-
-    row.appendChild(right);
-
-    return row;
+    block.appendChild(label);
+    block.appendChild(body);
+    return block;
   }
 
-  _getRoleClass(role) {
-    switch (role) {
-      case 'user': return 'message-user';
-      case 'assistant': return 'message-assistant';
-      case 'system': return 'message-system';
-      default: return 'message-assistant';
+  /* ----- Reasoning ----- */
+  _createReasoningBlock(reasoning, isUser) {
+    const block = document.createElement('div');
+    block.className = 'msg-reasoning collapsed';
+
+    const header = document.createElement('div');
+    header.className = 'msg-reasoning-header';
+    header.dataset.action = 'toggle-reasoning';
+    header.innerHTML = `<span>Reasoning</span>${ICON.chevron}`;
+
+    const content = document.createElement('div');
+    content.className = 'msg-reasoning-content';
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-transition-wrapper';
+    const inner = document.createElement('div');
+    inner.className = 'msg-reasoning-inner';
+
+    const shadowHost = this._createContentContainer();
+    inner.appendChild(shadowHost);
+    this._writeShadowContent(shadowHost, reasoning, isUser, false);
+
+    wrap.appendChild(inner);
+    content.appendChild(wrap);
+
+    block.appendChild(header);
+    block.appendChild(content);
+    return block;
+  }
+
+  /* ----- Error window ----- */
+  _createErrorWindow(m) {
+    const win = document.createElement('div');
+    win.className = 'error-window';
+
+    const hdr = document.createElement('div');
+    hdr.className = 'error-header';
+
+    const label = document.createElement('span');
+    label.textContent = 'ERROR';
+    hdr.appendChild(label);
+
+    if (m.providerName) {
+      const chip = document.createElement('span');
+      chip.className = 'error-provider-chip';
+      chip.textContent = `${m.providerName} API`;
+      hdr.appendChild(chip);
     }
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'error-copy-btn';
+    copyBtn.dataset.messageId = m.id;
+    copyBtn.innerHTML = ICON.copy;
+    hdr.appendChild(copyBtn);
+
+    win.appendChild(hdr);
+
+    const content = document.createElement('div');
+    content.className = 'error-content';
+    const host = this._createContentContainer();
+    content.appendChild(host);
+    this._writeShadowContent(host, m.text || '', this._isUser(m.role), false);
+    win.appendChild(content);
+    return win;
+  }
+
+  /* ----- Image attachment ----- */
+  _createImageAttachment(src, hidden) {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-image-attachment' + (hidden ? ' image-hidden' : '');
+
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = 'attachment';
+    img.loading = 'lazy';
+    wrap.appendChild(img);
+
+    const toggle = document.createElement('div');
+    toggle.className = 'image-ctx-toggle';
+    toggle.dataset.action = 'toggle-image-hidden';
+    toggle.innerHTML = hidden ? ICON.hidden : ICON.eye;
+    wrap.appendChild(toggle);
+
+    return wrap;
+  }
+
+  /* ----- Typing container ----- */
+  _createTypingContainer() {
+    const wrap = document.createElement('div');
+    wrap.className = 'typing-container';
+    wrap.innerHTML = `
+      <svg class="typing-icon" viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+      <span class="typing-text">typing</span>
+      <span class="typing-dots-bounce"><span>.</span><span>.</span><span>.</span></span>
+    `;
+    return wrap;
+  }
+
+  /* ----- Bubble meta (inside body) ----- */
+  _createBubbleMeta(m) {
+    const meta = document.createElement('div');
+    meta.className = 'bubble-meta';
+
+    if (m.messageIndex != null) {
+      const idx = document.createElement('span');
+      idx.className = 'msg-index gen-stat';
+      idx.textContent = `#${m.messageIndex + 1}`;
+      meta.appendChild(idx);
+    }
+
+    const hasGen = m.genTime && m.genTime !== '0s';
+    const hasTokens = m.tokens && m.tokens > 0 && !m.isTyping;
+    if (hasGen || hasTokens) {
+      const stat = document.createElement('div');
+      stat.className = 'gen-stat';
+      stat.style.marginRight = 'auto';
+      if (hasGen) {
+        const clock = document.createElement('span');
+        clock.innerHTML = ICON.clock;
+        clock.firstChild.style.cssText = 'width:12px;height:12px;fill:currentColor;margin-right:2px;';
+        stat.appendChild(clock.firstChild);
+        const gw = document.createElement('span');
+        gw.className = 'gen-time-wrapper';
+        const gt = document.createElement('span');
+        gt.className = 'gen-time gen-time-badge';
+        gt.textContent = m.genTime;
+        gw.appendChild(gt);
+        stat.appendChild(gw);
+      }
+      if (hasTokens) {
+        const tc = document.createElement('div');
+        tc.className = 'token-count-inline';
+        if (hasGen) tc.style.marginLeft = '6px';
+        const doc = document.createElement('span');
+        doc.innerHTML = ICON.doc;
+        doc.firstChild.style.cssText = 'width:12px;height:12px;fill:currentColor;margin-right:2px;';
+        tc.appendChild(doc.firstChild);
+        const t = document.createElement('span');
+        t.textContent = `${m.tokens}t`;
+        tc.appendChild(t);
+        stat.appendChild(tc);
+      }
+      meta.appendChild(stat);
+    }
+
+    const time = document.createElement('span');
+    time.className = 'bubble-time';
+    if (!hasGen && !hasTokens) time.style.marginLeft = 'auto';
+    if (m.isHidden) {
+      const hi = document.createElement('span');
+      hi.innerHTML = ICON.hidden;
+      hi.firstChild.classList.add('msg-hidden-badge');
+      time.appendChild(hi.firstChild);
+    }
+    if (m.timestamp) {
+      time.appendChild(document.createTextNode(this._formatTime(m.timestamp)));
+    }
+    meta.appendChild(time);
+
+    return meta;
+  }
+
+  /* ----- Footer / controls ----- */
+  _createFooter(m) {
+    const footer = document.createElement('div');
+    footer.className = 'msg-footer';
+
+    /* --- Left meta (standard layout shows it; bubble hides via CSS) --- */
+    const metaCol = document.createElement('div');
+    metaCol.className = 'msg-meta';
+    const hasGen = m.genTime && m.genTime !== '0s';
+    const hasTokens = m.tokens && m.tokens > 0 && !m.isTyping;
+    if (hasGen || hasTokens) {
+      const stat = document.createElement('div');
+      stat.className = 'gen-stat';
+      if (hasGen) {
+        const clock = document.createElement('span');
+        clock.innerHTML = ICON.clock;
+        clock.firstChild.style.cssText = 'width:12px;height:12px;fill:currentColor;margin-right:4px;';
+        stat.appendChild(clock.firstChild);
+        const gw = document.createElement('span');
+        gw.className = 'gen-time-wrapper';
+        const gt = document.createElement('span');
+        gt.className = 'gen-time gen-time-badge';
+        gt.textContent = m.genTime;
+        gw.appendChild(gt);
+        stat.appendChild(gw);
+      }
+      if (hasTokens) {
+        const tc = document.createElement('div');
+        tc.className = 'token-count-inline';
+        if (hasGen) tc.style.marginLeft = '6px';
+        const doc = document.createElement('span');
+        doc.innerHTML = ICON.doc;
+        doc.firstChild.style.cssText = 'width:12px;height:12px;fill:currentColor;margin-right:2px;';
+        tc.appendChild(doc.firstChild);
+        const t = document.createElement('span');
+        t.textContent = `${m.tokens}t`;
+        tc.appendChild(t);
+        stat.appendChild(tc);
+      }
+      metaCol.appendChild(stat);
+    }
+    footer.appendChild(metaCol);
+
+    /* --- Center controls --- */
+    const center = document.createElement('div');
+    center.className = 'msg-center-controls';
+
+    const isChar = this._roleKey(m.role) === 'char';
+    const hasSwipes = isChar && m.swipeTotal && m.swipeTotal > 1;
+    const hasGreetings = isChar && m.messageIndex === 0 && m.greetingTotal && m.greetingTotal > 1;
+    const showRegen = ((!isChar && m.isLast) || m.isError) && !m.isGenerating && !m.isEditing;
+
+    if (hasSwipes) {
+      center.appendChild(this._createSwitcher(m.id, m.swipeIndex || 0, m.swipeTotal, 'swipe'));
+    } else if (hasGreetings) {
+      center.appendChild(this._createSwitcher(m.id, m.greetingIndex || 0, m.greetingTotal, 'greeting'));
+    }
+
+    if (isChar && m.isLast && !m.isGenerating && !m.isEditing) {
+      const guided = document.createElement('div');
+      guided.className = 'msg-guided-swipe-btn';
+      guided.dataset.action = 'toggle-guided';
+      guided.dataset.messageId = m.id;
+      guided.title = 'Guided swipe';
+      guided.innerHTML = ICON.guided;
+      center.appendChild(guided);
+    }
+
+    if (isChar && m.isLast && m.isGenerating) {
+      const stop = document.createElement('button');
+      stop.className = 'stop-btn';
+      stop.dataset.action = 'stop';
+      stop.dataset.messageId = m.id;
+      stop.title = 'Stop';
+      stop.innerHTML = ICON.stop;
+      center.appendChild(stop);
+    }
+
+    if (showRegen) {
+      const regen = document.createElement('div');
+      regen.className = 'msg-regenerate';
+      if (hasSwipes || hasGreetings) regen.classList.add('icon-only');
+      regen.dataset.action = 'regenerate';
+      regen.dataset.messageId = m.id;
+      regen.dataset.mode = 'magic';
+      regen.innerHTML = ICON.regen;
+      if (!hasSwipes && !hasGreetings) {
+        const span = document.createElement('span');
+        span.textContent = '↻';
+        // text label; Flutter side may localize
+        span.textContent = 'Regenerate';
+        regen.appendChild(span);
+      }
+      center.appendChild(regen);
+    }
+
+    footer.appendChild(center);
+
+    /* --- Right: actions / edit buttons --- */
+    if (m.isEditing) {
+      footer.appendChild(this._createEditButtons(m.id));
+    } else if (!this._selectionMode) {
+      const actions = document.createElement('div');
+      actions.className = 'msg-actions-btn';
+      actions.dataset.action = 'open-actions';
+      actions.dataset.messageId = m.id;
+      actions.innerHTML = ICON.menu;
+      footer.appendChild(actions);
+    } else {
+      // empty grid cell placeholder
+      const ph = document.createElement('div');
+      ph.style.gridColumn = '3';
+      footer.appendChild(ph);
+    }
+
+    return footer;
+  }
+
+  _createSwitcher(messageId, index, total, kind) {
+    const wrap = document.createElement('div');
+    wrap.className = 'msg-switcher';
+    wrap.dataset.kind = kind;
+
+    const prev = document.createElement('div');
+    prev.className = 'msg-switcher-btn prev';
+    prev.dataset.action = kind === 'greeting' ? 'greeting-prev' : 'swipe-left';
+    prev.dataset.messageId = messageId;
+    prev.innerHTML = ICON.swipeLeft;
+    wrap.appendChild(prev);
+
+    const count = document.createElement('div');
+    count.className = 'msg-switcher-count';
+    count.textContent = `${index + 1}/${total}`;
+    wrap.appendChild(count);
+
+    const next = document.createElement('div');
+    next.className = 'msg-switcher-btn next';
+    next.dataset.action = kind === 'greeting' ? 'greeting-next' : 'swipe-right';
+    next.dataset.messageId = messageId;
+    next.innerHTML = ICON.swipeRight;
+    wrap.appendChild(next);
+
+    return wrap;
+  }
+
+  _createEditButtons(id) {
+    const box = document.createElement('div');
+    box.className = 'edit-buttons';
+
+    const cancel = document.createElement('div');
+    cancel.className = 'edit-btn cancel';
+    cancel.dataset.action = 'edit-cancel';
+    cancel.dataset.messageId = id;
+    cancel.title = 'Cancel';
+    cancel.innerHTML = ICON.cancel;
+    box.appendChild(cancel);
+
+    const save = document.createElement('div');
+    save.className = 'edit-btn save';
+    save.dataset.action = 'edit-save';
+    save.dataset.messageId = id;
+    save.title = 'Save';
+    save.innerHTML = ICON.save;
+    box.appendChild(save);
+
+    return box;
+  }
+
+  /* ----- Shadow DOM content host ----- */
+  _createContentContainer() {
+    const host = document.createElement('div');
+    host.className = 'message-content';
+    if (!host.shadowRoot) {
+      const shadow = host.attachShadow({ mode: 'open' });
+      const style = document.createElement('style');
+      style.textContent = SHADOW_STYLE;
+      shadow.appendChild(style);
+      const root = document.createElement('div');
+      root.className = 'glaze-message';
+      shadow.appendChild(root);
+    }
+    return host;
+  }
+
+  _writeShadowContent(host, text, isUser, isTyping) {
+    if (!host || !host.shadowRoot) return;
+    const root = host.shadowRoot.querySelector('.glaze-message');
+    if (!root) return;
+    try {
+      if (isTyping && (!text || !text.trim())) {
+        root.innerHTML = '';
+        return;
+      }
+      let formatted = this.formatter.format(text || '', isUser);
+      if (this.searchQuery) formatted = this._applySearchHighlight(formatted);
+      root.innerHTML = formatted;
+    } catch (e) {
+      root.textContent = text || '';
+      console.error('Formatter error:', e);
+    }
+  }
+
+  /* ----- Public mutation API ----- */
+  updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate) {
+    if (!sectionEl) return;
+    const body = sectionEl.querySelector('.msg-body');
+    if (!body) return;
+
+    /* Replace typing/error/normal as needed */
+    const isError = sectionEl.classList.contains('error');
+
+    /* Clear non-meta children of body, preserving image + bubble-meta */
+    const meta = body.querySelector('.bubble-meta');
+    const image = body.querySelector('.msg-image-attachment');
+    body.innerHTML = '';
+
+    if (isTyping && (!text || !text.trim())) {
+      body.appendChild(this._createTypingContainer());
+    } else if (isError) {
+      body.appendChild(this._createErrorWindow({
+        id: sectionEl.dataset.messageId,
+        text: text,
+        role: sectionEl.classList.contains('user') ? 'user' : 'char',
+      }));
+    } else {
+      const host = this._createContentContainer();
+      body.appendChild(host);
+      this._writeShadowContent(host, text, isUser, false);
+    }
+
+    if (image) body.appendChild(image);
+    if (meta) body.appendChild(meta);
+
+    /* Reasoning is rendered outside body — handle separately */
+    let reasoningEl = sectionEl.querySelector('.msg-reasoning');
+    if (reasoning && reasoning.trim()) {
+      if (!reasoningEl) {
+        reasoningEl = this._createReasoningBlock(reasoning, isUser);
+        const guidance = sectionEl.querySelector('.msg-guidance-block');
+        sectionEl.insertBefore(reasoningEl, guidance ? guidance.nextSibling : sectionEl.querySelector('.msg-content-stack'));
+      } else {
+        const host = reasoningEl.querySelector('.msg-reasoning-inner .message-content');
+        if (host) this._writeShadowContent(host, reasoning, isUser, false);
+      }
+    } else if (reasoningEl) {
+      reasoningEl.remove();
+    }
+
+    if (animate) {
+      sectionEl.classList.add('swipe-animating');
+      const dir = sectionEl.dataset.swipeDirection || 'left';
+      sectionEl.style.transform = dir === 'left' ? 'translateX(-30px)' : 'translateX(30px)';
+      sectionEl.style.opacity = '0.3';
+      requestAnimationFrame(() => {
+        sectionEl.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+        sectionEl.style.transform = '';
+        sectionEl.style.opacity = '';
+        setTimeout(() => {
+          sectionEl.classList.remove('swipe-animating');
+          sectionEl.style.transition = '';
+          delete sectionEl.dataset.swipeDirection;
+        }, 220);
+      });
+    }
+  }
+
+  updateMessage(messageId, newText, isUser = false, reasoning = null) {
+    const el = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (el) {
+      this.updateMessageContent(el, newText, reasoning || el.dataset.reasoning || null, isUser, false, false);
+    }
+  }
+
+  /* ----- Helpers ----- */
+  _roleKey(role) {
+    if (role === 'user') return 'user';
+    if (role === 'system') return 'system';
+    return 'char';
+  }
+  _isUser(role) { return role === 'user'; }
+
+  _currentLayout() {
+    const c = document.getElementById('chat-container');
+    if (!c) return 'default';
+    for (const cls of c.classList) {
+      if (cls.startsWith('layout-')) return cls.slice(7);
+    }
+    return 'default';
+  }
+
+  _memoryStatusClass(status) {
+    const s = (status || '').toLowerCase();
+    if (s === 'mem')     return 'covered';
+    if (s === 'pending') return 'pending';
+    if (s === 'draft')   return 'draft-memory';
+    if (s === 'stale')   return 'stale';
+    if (s === 'rebuild') return 'needs-rebuild';
+    return 'covered';
   }
 
   _getDefaultName(role) {
-    switch (role) {
-      case 'user': return 'You';
-      case 'assistant': return 'Assistant';
-      case 'system': return 'System';
-      default: return 'Unknown';
-    }
+    if (role === 'user')   return 'You';
+    if (role === 'system') return 'System';
+    return 'Character';
   }
 
   _formatTime(timestamp) {
     if (!timestamp) return '';
-
-    const date = new Date(timestamp);
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${hours}:${minutes}`;
+    const d = new Date(timestamp);
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${hh}:${mm}`;
   }
 
   _formatDate(timestamp) {
     if (!timestamp) return null;
-    const date = new Date(timestamp);
-    const y = date.getFullYear();
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    const d = date.getDate().toString().padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    const d = new Date(timestamp);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
   _formatDateDisplay(dateStr) {
     const date = new Date(dateStr + 'T00:00:00');
     const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (date.toDateString() === today.toDateString()) return 'Today';
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === today.toDateString())     return 'Today';
     if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
   }
 
@@ -694,83 +908,52 @@ class Renderer {
     const el = document.createElement('div');
     el.className = 'date-separator';
     el.dataset.dateSeparator = dateStr;
-
-    const line = document.createElement('div');
-    line.className = 'date-separator-line';
-    el.appendChild(line);
-
-    const label = document.createElement('span');
-    label.className = 'date-separator-label';
-    label.textContent = this._formatDateDisplay(dateStr);
-    el.appendChild(label);
-
-    const line2 = document.createElement('div');
-    line2.className = 'date-separator-line';
-    el.appendChild(line2);
-
+    el.innerHTML = `<div class="date-separator-line"></div><span class="date-separator-label">${this._formatDateDisplay(dateStr)}</span><div class="date-separator-line"></div>`;
     return el;
   }
 
-  resetDateTracking() {
-    this._lastTimestamps = { date: null, idx: -1 };
-  }
+  resetDateTracking() { this._lastTimestamps = { date: null, idx: -1 }; }
 
   _applySearchHighlight(html) {
     if (!this.searchQuery) return html;
-
     this.searchMatches = [];
     let matchIndex = 0;
-
     const escapedQuery = this.searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(`(${escapedQuery})(?![^<]*>)`, 'gi');
-
     return html.replace(regex, (match) => {
       const isActive = matchIndex === this.activeSearchIndex;
       this.searchMatches.push(matchIndex);
       matchIndex++;
-
-      return `<span class="search-highlight${isActive ? ' active' : ''}">${match}</span>`;
+      return `<span class="search-highlight-text${isActive ? ' active-search-match' : ''}">${match}</span>`;
     });
   }
 
   setSearch(query, activeIndex = -1) {
     this.searchQuery = query;
     this.activeSearchIndex = activeIndex;
-
-    const messages = document.querySelectorAll('.message');
-    messages.forEach(messageEl => {
-      const content = messageEl.querySelector('.message-content');
-      if (content && content.shadowRoot) {
-        const messageContent = content.shadowRoot.querySelector('.glaze-message');
-        if (messageContent) {
-          const rawText = messageEl.dataset.rawText || '';
-          const isUser = messageEl.classList.contains('message-user');
+    document.querySelectorAll('.message-section').forEach(section => {
+      const host = section.querySelector('.msg-body .message-content');
+      if (host && host.shadowRoot) {
+        const root = host.shadowRoot.querySelector('.glaze-message');
+        if (root) {
+          const rawText = section.dataset.rawText || '';
+          const isUser = section.classList.contains('user');
           const formatted = this.formatter.format(rawText, isUser);
-          const highlighted = this._applySearchHighlight(formatted);
-          messageContent.innerHTML = highlighted;
+          root.innerHTML = this._applySearchHighlight(formatted);
         }
       }
     });
-
-    if (activeIndex >= 0) {
-      this._scrollToActiveMatch();
-    }
+    if (activeIndex >= 0) this._scrollToActiveMatch();
   }
 
   _scrollToActiveMatch() {
-    const messages = document.querySelectorAll('.message-content');
-    for (const msgContent of messages) {
-      if (msgContent.shadowRoot) {
-        const active = msgContent.shadowRoot.querySelector('.search-highlight.active');
-        if (active) {
-          active.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          return;
-        }
+    document.querySelectorAll('.message-content').forEach(host => {
+      if (host.shadowRoot) {
+        const active = host.shadowRoot.querySelector('.search-highlight-text.active-search-match');
+        if (active) active.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
-    }
+    });
   }
 
-  scrollToSearchMatch(index) {
-    this.setSearch(this.searchQuery, index);
-  }
+  scrollToSearchMatch(index) { this.setSearch(this.searchQuery, index); }
 }

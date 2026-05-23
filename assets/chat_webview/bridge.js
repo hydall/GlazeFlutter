@@ -1,3 +1,9 @@
+/* ============================================================
+ * Bridge — communication with Flutter side.
+ * Selectors follow ChatMessage.vue's class naming (.message-section, .msg-*).
+ * Flutter callHandler contract is preserved — useMessageActions lives in Dart.
+ * ============================================================ */
+
 class Bridge {
   constructor(renderer, virtualList) {
     this.renderer = renderer;
@@ -11,6 +17,7 @@ class Bridge {
     this._setupImageClickForward();
   }
 
+  /* ---------- Flutter transport ---------- */
   _sendToFlutter(name, args) {
     if (window.flutter_inappwebview) {
       window.flutter_inappwebview.callHandler(name, ...args);
@@ -24,7 +31,6 @@ class Bridge {
         this._pendingRequests.delete(requestId);
         reject(new Error(`Bridge request "${name}" timed out after ${timeoutMs}ms`));
       }, timeoutMs);
-
       this._pendingRequests.set(requestId, { resolve, reject, timer });
       this._sendToFlutter(name, [requestId, ...args]);
     });
@@ -46,6 +52,7 @@ class Bridge {
     pending.reject(new Error(error));
   }
 
+  /* ---------- Scroll / load-more ---------- */
   _setupScrollListener() {
     let loadMoreCooldown = false;
     let lastScrollTop = 0;
@@ -63,130 +70,181 @@ class Bridge {
     });
   }
 
+  /* ---------- Interaction dispatch ---------- */
   _setupInteractionListener() {
     document.addEventListener('click', (e) => {
+      /* Selection checkbox */
       if (e.target.closest('.selection-checkbox')) {
         this._handleSelectionCheckbox(e);
         return;
       }
 
+      /* Reasoning collapse */
+      const reasoningHdr = e.target.closest('[data-action="toggle-reasoning"]');
+      if (reasoningHdr) {
+        const block = reasoningHdr.closest('.msg-reasoning');
+        if (block) block.classList.toggle('collapsed');
+        return;
+      }
+
+      /* External links */
       const link = e.target.closest('a');
       if (link) {
         e.preventDefault();
         this._sendToFlutter('onLinkClick', [link.href]);
-      }
-
-      const img = e.target.closest('img');
-      if (img && img.src) {
-        this._sendToFlutter('onImageClick', [img.src]);
-      }
-
-      const menuBtn = e.target.closest('.meta-menu-btn');
-      if (menuBtn) {
-        const id = menuBtn.dataset.messageId;
-        const msgEl = document.querySelector(`[data-message-id="${id}"]`);
-        if (msgEl) {
-          const isUser = msgEl.classList.contains('message-user');
-          const contentEl = msgEl.querySelector('.message-content');
-          let content = '';
-          if (contentEl && contentEl.shadowRoot) {
-            const msgDiv = contentEl.shadowRoot.querySelector('.glaze-message');
-            content = msgDiv ? msgDiv.textContent : '';
-          }
-          this._sendToFlutter('onMessageContext', [JSON.stringify({ id, isUser, isSystem: false, content })]);
-        }
         return;
       }
 
-      const swipeBtn = e.target.closest('.swipe-btn');
-      if (swipeBtn) {
-        const action = swipeBtn.dataset.action;
-        const id = swipeBtn.dataset.messageId;
-        this._sendToFlutter('onSwipe', [JSON.stringify({ id, direction: action === 'swipe-right' ? 'right' : 'left' })]);
-        return;
-      }
-
-      const stopBtn = e.target.closest('.stop-btn');
-      if (stopBtn) {
-        this._sendToFlutter('onStop', []);
-        return;
-      }
-
-      const regenBtn = e.target.closest('.regen-btn');
-      if (regenBtn) {
-        const id = regenBtn.dataset.messageId;
-        this._sendToFlutter('onRegenerate', [id]);
-        return;
-      }
-
-      const guidedBtn = e.target.closest('.guided-swipe-btn');
-      if (guidedBtn) {
-        const id = guidedBtn.dataset.messageId;
-        this._toggleGuidedSwipe(id);
-        return;
-      }
-
+      /* Memory badge → Flutter */
       const memoryBadge = e.target.closest('[data-action="memory-click"]');
       if (memoryBadge) {
         this._sendToFlutter('onMemoryClick', [memoryBadge.dataset.messageId]);
         return;
       }
 
+      /* Triggered items / inject menu */
       const injectBadge = e.target.closest('[data-action="inject-click"]');
       if (injectBadge) {
         this._sendToFlutter('onInjectClick', [injectBadge.dataset.messageId]);
         return;
       }
 
+      /* Hidden eye toggle */
       const hiddenToggle = e.target.closest('[data-action="toggle-hidden"]');
       if (hiddenToggle) {
         this._sendToFlutter('onToggleHidden', [hiddenToggle.dataset.messageId]);
         return;
       }
 
+      /* Image-context-hidden toggle */
+      const imgHiddenToggle = e.target.closest('[data-action="toggle-image-hidden"]');
+      if (imgHiddenToggle) {
+        const section = imgHiddenToggle.closest('.message-section');
+        const id = section ? section.dataset.messageId : '';
+        this._sendToFlutter('onToggleImageHidden', [id]);
+        return;
+      }
+
+      /* Swipe nav (assistant variants) */
+      const swipeBtn = e.target.closest('[data-action="swipe-left"], [data-action="swipe-right"]');
+      if (swipeBtn) {
+        const action = swipeBtn.dataset.action;
+        const id = swipeBtn.dataset.messageId;
+        this._sendToFlutter('onSwipe', [JSON.stringify({
+          id, direction: action === 'swipe-right' ? 'right' : 'left'
+        })]);
+        return;
+      }
+
+      /* Greeting nav (first message) */
+      const greetingBtn = e.target.closest('[data-action="greeting-prev"], [data-action="greeting-next"]');
+      if (greetingBtn) {
+        const dir = greetingBtn.dataset.action === 'greeting-next' ? 1 : -1;
+        this._sendToFlutter('onChangeGreeting', [greetingBtn.dataset.messageId, dir]);
+        return;
+      }
+
+      /* Stop generation */
+      const stopBtn = e.target.closest('[data-action="stop"], .stop-btn');
+      if (stopBtn) {
+        this._sendToFlutter('onStop', []);
+        return;
+      }
+
+      /* Regenerate (last user / error) */
+      const regenBtn = e.target.closest('[data-action="regenerate"], .msg-regenerate');
+      if (regenBtn) {
+        const id = regenBtn.dataset.messageId;
+        const mode = regenBtn.dataset.mode || 'magic';
+        this._sendToFlutter('onRegenerate', [id, mode]);
+        return;
+      }
+
+      /* Guided swipe toggle */
+      const guidedBtn = e.target.closest('[data-action="toggle-guided"], .msg-guided-swipe-btn');
+      if (guidedBtn) {
+        this._toggleGuidedSwipe(guidedBtn.dataset.messageId);
+        return;
+      }
+
+      /* Edit save / cancel */
+      const editSave = e.target.closest('[data-action="edit-save"]');
+      if (editSave) {
+        const section = editSave.closest('.message-section');
+        const ta = section ? section.querySelector('.edit-textarea') : null;
+        const id = editSave.dataset.messageId;
+        const text = ta ? ta.value : '';
+        this._sendToFlutter('onEditSave', [id, text]);
+        return;
+      }
+      const editCancel = e.target.closest('[data-action="edit-cancel"]');
+      if (editCancel) {
+        this._sendToFlutter('onEditCancel', [editCancel.dataset.messageId]);
+        return;
+      }
+
+      /* Actions menu (kebab) */
+      const actionsBtn = e.target.closest('[data-action="open-actions"], .msg-actions-btn');
+      if (actionsBtn) {
+        const id = actionsBtn.dataset.messageId;
+        const section = document.querySelector(`[data-message-id="${id}"]`);
+        if (section) {
+          const isUser = section.classList.contains('user');
+          const isSystem = section.classList.contains('system');
+          const content = this._extractText(section);
+          this._sendToFlutter('onMessageContext', [JSON.stringify({ id, isUser, isSystem, content })]);
+        }
+        return;
+      }
+
+      /* Image gen frames */
       const path = e.composedPath();
 
       const imgRetryBtn = path.find(el => el.matches?.('[data-action="img-retry"]'));
       if (imgRetryBtn) {
-        const msgEl = path.find(el => el.dataset?.messageId);
-        const messageId = msgEl ? msgEl.dataset.messageId : '';
-        try { var instr = decodeURIComponent(imgRetryBtn.dataset.instruction || ''); } catch(_) { var instr = imgRetryBtn.dataset.instruction || ''; }
+        const sec = path.find(el => el.dataset?.messageId);
+        const messageId = sec ? sec.dataset.messageId : '';
+        let instr = '';
+        try { instr = decodeURIComponent(imgRetryBtn.dataset.instruction || ''); }
+        catch (_) { instr = imgRetryBtn.dataset.instruction || ''; }
         this._sendToFlutter('onImgRetry', [instr, messageId]);
         return;
       }
-
       const imgFindBtn = path.find(el => el.matches?.('[data-action="img-find"]'));
       if (imgFindBtn) {
-        const msgEl = path.find(el => el.dataset?.messageId);
-        const messageId = msgEl ? msgEl.dataset.messageId : '';
-        try { var instr = decodeURIComponent(imgFindBtn.dataset.instruction || ''); } catch(_) { var instr = imgFindBtn.dataset.instruction || ''; }
+        const sec = path.find(el => el.dataset?.messageId);
+        const messageId = sec ? sec.dataset.messageId : '';
+        let instr = '';
+        try { instr = decodeURIComponent(imgFindBtn.dataset.instruction || ''); }
+        catch (_) { instr = imgFindBtn.dataset.instruction || ''; }
         this._sendToFlutter('onImgFind', [instr, messageId]);
         return;
       }
-
       const imgRegenBtn = path.find(el => el.matches?.('[data-action="img-regen"]'));
       if (imgRegenBtn) {
-        const msgEl = path.find(el => el.dataset?.messageId);
-        const messageId = msgEl ? msgEl.dataset.messageId : '';
-        try { var instr = decodeURIComponent(imgRegenBtn.dataset.instruction || ''); } catch(_) { var instr = imgRegenBtn.dataset.instruction || ''; }
+        const sec = path.find(el => el.dataset?.messageId);
+        const messageId = sec ? sec.dataset.messageId : '';
+        let instr = '';
+        try { instr = decodeURIComponent(imgRegenBtn.dataset.instruction || ''); }
+        catch (_) { instr = imgRegenBtn.dataset.instruction || ''; }
         this._sendToFlutter('onImgRegen', [instr, messageId]);
         return;
       }
-
       const imgStopBtn = path.find(el => el.matches?.('[data-action="img-stop"]'));
       if (imgStopBtn) {
         this._sendToFlutter('onImgCancel', []);
         return;
       }
 
+      /* Error copy */
       const errorCopyBtn = e.target.closest('.error-copy-btn');
       if (errorCopyBtn) {
-        const msgEl = document.querySelector(`[data-message-id="${errorCopyBtn.dataset.messageId}"]`);
-        if (msgEl) {
-          const raw = msgEl.dataset.rawText || '';
-          try {
-            navigator.clipboard.writeText(raw);
-          } catch (_) {
+        const id = errorCopyBtn.dataset.messageId;
+        const section = document.querySelector(`[data-message-id="${id}"]`);
+        if (section) {
+          const raw = section.dataset.rawText || '';
+          try { navigator.clipboard.writeText(raw); }
+          catch (_) {
             const ta = document.createElement('textarea');
             ta.value = raw;
             document.body.appendChild(ta);
@@ -194,26 +252,40 @@ class Bridge {
             document.execCommand('copy');
             ta.remove();
           }
-          errorCopyBtn.textContent = '✓';
-          setTimeout(() => { errorCopyBtn.textContent = '📋'; }, 1200);
+          errorCopyBtn.dataset.copied = '1';
+          setTimeout(() => { delete errorCopyBtn.dataset.copied; }, 1200);
         }
+        return;
+      }
+
+      /* Avatar tap */
+      const avatar = e.target.closest('.msg-avatar');
+      if (avatar) {
+        const section = avatar.closest('.message-section');
+        if (section) this._sendToFlutter('onAvatarClick', [section.dataset.messageId]);
+        return;
+      }
+
+      /* Image tap (inside body) */
+      const img = e.target.closest('.msg-image-attachment img');
+      if (img && img.src) {
+        this._sendToFlutter('onImageClick', [img.src]);
         return;
       }
 
       this._hideSelectionBar();
     });
 
+    /* Selection bar */
     document.addEventListener('selectionchange', () => {
-      // Check light DOM selection first
       let selText = '';
       const sel = window.getSelection();
       if (sel && sel.toString().trim().length > 0) {
         selText = sel.toString().trim();
       }
-      // Also check shadow roots (Chromium supports shadowRoot.getSelection in some versions)
       if (!selText) {
-        const contentEls = document.querySelectorAll('.message-content');
-        for (const el of contentEls) {
+        const hosts = document.querySelectorAll('.message-content');
+        for (const el of hosts) {
           if (el.shadowRoot) {
             const shadowSel = el.shadowRoot.getSelection ? el.shadowRoot.getSelection() : null;
             if (shadowSel && shadowSel.toString().trim().length > 0) {
@@ -223,35 +295,33 @@ class Bridge {
           }
         }
       }
-      if (selText) {
-        this._showSelectionBar(selText);
-      } else {
-        this._hideSelectionBar();
-      }
+      if (selText) this._showSelectionBar(selText);
+      else this._hideSelectionBar();
     });
 
+    /* Right-click → actions menu */
     document.addEventListener('contextmenu', (e) => {
-      const msgEl = e.target.closest('.message');
-      if (!msgEl) return;
+      const section = e.target.closest('.message-section');
+      if (!section) return;
       e.preventDefault();
-
-      const id = msgEl.dataset.messageId;
-      const isUser = msgEl.classList.contains('message-user');
-      const isSystem = msgEl.classList.contains('message-system');
-
-      const contentEl = msgEl.querySelector('.message-content');
-      let content = '';
-      if (contentEl && contentEl.shadowRoot) {
-        const msgDiv = contentEl.shadowRoot.querySelector('.glaze-message');
-        content = msgDiv ? msgDiv.textContent : '';
-      }
-
-      this._sendToFlutter('onMessageContext', [JSON.stringify({
-        id, isUser, isSystem, content
-      })]);
+      const id = section.dataset.messageId;
+      const isUser = section.classList.contains('user');
+      const isSystem = section.classList.contains('system');
+      const content = this._extractText(section);
+      this._sendToFlutter('onMessageContext', [JSON.stringify({ id, isUser, isSystem, content })]);
     });
   }
 
+  _extractText(section) {
+    const host = section.querySelector('.msg-body .message-content');
+    if (host && host.shadowRoot) {
+      const root = host.shadowRoot.querySelector('.glaze-message');
+      if (root) return root.textContent || '';
+    }
+    return section.dataset.rawText || '';
+  }
+
+  /* ---------- Selection bar ---------- */
   _showSelectionBar(text) {
     let bar = document.getElementById('selection-bar');
     if (!bar) {
@@ -278,6 +348,7 @@ class Bridge {
     if (bar) bar.style.display = 'none';
   }
 
+  /* ---------- Loading screen ---------- */
   _hideLoadingScreen() {
     const loading = document.getElementById('loading-screen');
     if (loading) {
@@ -298,39 +369,33 @@ class Bridge {
     loading.style.display = 'flex';
   }
 
+  /* ---------- Message list API ---------- */
   setMessages(messagesJson) {
     this._suppressLoadMore = true;
     const container = document.getElementById('chat-container') || document.body;
-    if (!container.classList.contains('layout-bubble') &&
-        !container.classList.contains('layout-standard') &&
-        !container.classList.contains('layout-cards')) {
-      container.classList.add('layout-bubble');
+    if (![...container.classList].some(c => c.startsWith('layout-'))) {
+      container.classList.add('layout-default');
     }
 
     this.renderer.resetDateTracking();
     const messages = JSON.parse(messagesJson);
-    
+
     const ids = [];
     const elements = [];
-    
     for (const msg of messages) {
       const rendered = this.renderer.renderMessage(msg);
       if (Array.isArray(rendered)) {
         for (const el of rendered) {
-          if (el.dataset.messageId) {
-            ids.push(el.dataset.messageId);
-            elements.push(el);
-          } else {
-            ids.push(`__date_${el.dataset.dateSeparator || Date.now()}`);
-            elements.push(el);
-          }
+          const id = el.dataset.messageId || `__date_${el.dataset.dateSeparator || Date.now()}`;
+          ids.push(id);
+          elements.push(el);
         }
       } else {
         ids.push(msg.id);
         elements.push(rendered);
       }
     }
-    
+
     this.virtualList.setMessagesBatch(ids, elements);
     this._hideLoadingScreen();
     setTimeout(() => { this._suppressLoadMore = false; }, 1000);
@@ -390,160 +455,77 @@ class Bridge {
 
   updateMessage(messageJson) {
     const msg = JSON.parse(messageJson);
-    const msgEl = document.querySelector(`[data-message-id="${msg.id}"]`);
-    if (!msgEl) return;
+    const section = document.querySelector(`[data-message-id="${msg.id}"]`);
+    if (!section) return;
 
     const animate = !!msg.swipeDirection;
-    if (msg.swipeDirection) {
-      msgEl.dataset.swipeDirection = msg.swipeDirection;
-    }
+    if (msg.swipeDirection) section.dataset.swipeDirection = msg.swipeDirection;
 
-    if (msg.reasoning) {
-      msgEl.dataset.reasoning = msg.reasoning;
-    } else if (msg.reasoning === null || msg.reasoning === '') {
-      delete msgEl.dataset.reasoning;
-    }
+    if (msg.reasoning) section.dataset.reasoning = msg.reasoning;
+    else if (msg.reasoning === null || msg.reasoning === '') delete section.dataset.reasoning;
 
-    this.renderer.updateMessageContent(msgEl, msg.text, msg.reasoning || null, msg.isUser, msg.isTyping, animate);
+    if (msg.text != null) section.dataset.rawText = msg.text;
+
+    const isUser = section.classList.contains('user');
+    this.renderer.updateMessageContent(
+      section,
+      msg.text != null ? msg.text : (section.dataset.rawText || ''),
+      msg.reasoning ?? null,
+      isUser,
+      !!msg.isTyping,
+      animate
+    );
 
     if (msg.isHidden !== undefined) {
-      msgEl.classList.toggle('message-hidden', !!msg.isHidden);
-      const eye = msgEl.querySelector('[data-action="toggle-hidden"]');
-      if (msg.isHidden && !eye) {
-        const header = msgEl.querySelector('.message-header');
-        if (header) {
-          const indicator = document.createElement('span');
-          indicator.className = 'hidden-indicator';
-          indicator.textContent = '👁';
-          indicator.title = 'Hidden message — click to unhide';
-          indicator.dataset.messageId = msg.id;
-          indicator.dataset.action = 'toggle-hidden';
-          const timeEl = header.querySelector('.message-time');
-          if (timeEl) {
-            header.insertBefore(indicator, timeEl);
-          } else {
-            header.appendChild(indicator);
-          }
-        }
-      } else if (!msg.isHidden && eye) {
-        eye.remove();
-      }
+      section.classList.toggle('msg-hidden', !!msg.isHidden);
     }
 
     if (msg.swipeTotal !== undefined && msg.swipeTotal > 1) {
-      const swipeNav = msgEl.querySelector('.swipe-nav');
-      const swipeLabel = swipeNav ? swipeNav.querySelector('.swipe-label') : null;
-      if (swipeLabel) {
-        swipeLabel.textContent = `${(msg.swipeIndex || 0) + 1}/${msg.swipeTotal}`;
-      } else if (!swipeNav) {
-        const right = msgEl.querySelector('.message-meta-right');
-        if (right) {
-          const nav = document.createElement('div');
-          nav.className = 'swipe-nav';
-          const prevBtn = document.createElement('button');
-          prevBtn.className = 'swipe-btn';
-          prevBtn.textContent = '‹';
-          prevBtn.dataset.action = 'swipe-left';
-          prevBtn.dataset.messageId = msg.id;
-          nav.appendChild(prevBtn);
-          const label = document.createElement('span');
-          label.className = 'swipe-label';
-          label.textContent = `${(msg.swipeIndex || 0) + 1}/${msg.swipeTotal}`;
-          nav.appendChild(label);
-          const nextBtn = document.createElement('button');
-          nextBtn.className = 'swipe-btn';
-          nextBtn.textContent = '›';
-          nextBtn.dataset.action = 'swipe-right';
-          nextBtn.dataset.messageId = msg.id;
-          nav.appendChild(nextBtn);
-          const menuBtn = right.querySelector('.meta-menu-btn');
-          if (menuBtn) {
-            right.insertBefore(nav, menuBtn);
-          } else {
-            right.appendChild(nav);
-          }
-        }
-      }
+      const switcher = section.querySelector('.msg-switcher .msg-switcher-count');
+      if (switcher) switcher.textContent = `${(msg.swipeIndex || 0) + 1}/${msg.swipeTotal}`;
     }
   }
 
   setLastMessage(newLastId) {
-    const prevLast = document.querySelector('.message-assistant[data-is-last="true"]');
+    const prevLast = document.querySelector('.message-section.char[data-is-last="true"]');
     if (prevLast) {
       delete prevLast.dataset.isLast;
-      const right = prevLast.querySelector('.message-meta-right');
-      if (right) {
-        const regen = right.querySelector('.regen-btn');
-        const guided = right.querySelector('.guided-swipe-btn');
-        if (regen) regen.remove();
-        if (guided) guided.remove();
+      const center = prevLast.querySelector('.msg-center-controls');
+      if (center) {
+        center.querySelector('.msg-regenerate')?.remove();
+        center.querySelector('.msg-guided-swipe-btn')?.remove();
+        center.querySelector('.stop-btn')?.remove();
       }
     }
     if (!newLastId) return;
     const newLast = document.querySelector(`[data-message-id="${newLastId}"]`);
-    if (!newLast || !newLast.classList.contains('message-assistant')) return;
+    if (!newLast || !newLast.classList.contains('char')) return;
     newLast.dataset.isLast = 'true';
-    const right = newLast.querySelector('.message-meta-right');
-    if (!right) return;
-    const menuBtn = right.querySelector('.meta-menu-btn');
-
-    // Remove stale action buttons before re-adding
-    right.querySelector('.stop-btn')?.remove();
-    right.querySelector('.regen-btn')?.remove();
-    right.querySelector('.guided-swipe-btn')?.remove();
-
-    if (this.isGenerating) {
-      const stopBtn = document.createElement('button');
-      stopBtn.className = 'stop-btn';
-      stopBtn.dataset.messageId = newLastId;
-      stopBtn.textContent = '⏹';
-      stopBtn.title = 'Stop generation';
-      if (menuBtn) right.insertBefore(stopBtn, menuBtn);
-      else right.appendChild(stopBtn);
-    } else {
-      const regenBtn = document.createElement('button');
-      regenBtn.className = 'regen-btn';
-      regenBtn.dataset.messageId = newLastId;
-      regenBtn.textContent = '↻';
-      regenBtn.title = 'Regenerate';
-      if (menuBtn) right.insertBefore(regenBtn, menuBtn);
-      else right.appendChild(regenBtn);
-
-      const guidedBtn = document.createElement('button');
-      guidedBtn.className = 'guided-swipe-btn';
-      guidedBtn.dataset.messageId = newLastId;
-      guidedBtn.textContent = '🎯';
-      guidedBtn.title = 'Guided swipe';
-      if (menuBtn) right.insertBefore(guidedBtn, menuBtn);
-      else right.appendChild(guidedBtn);
-    }
+    /* Renderer rebuilds these controls on the next render; here we ensure flag only. */
   }
 
-  removeMessage(messageId) {
-    this.virtualList.remove(messageId);
-  }
+  removeMessage(messageId) { this.virtualList.remove(messageId); }
 
   clearAll() {
     this._showLoadingScreen();
     this.virtualList.clear();
   }
 
-  scrollToBottom() {
-    this.virtualList.scrollToBottom();
-  }
+  scrollToBottom() { this.virtualList.scrollToBottom(); }
+  scrollToMessage(messageId) { this.virtualList.scrollToMessage(messageId); }
 
-  scrollToMessage(messageId) {
-    this.virtualList.scrollToMessage(messageId);
-  }
-
-  setSearch(query, activeIndex) {
-    this.renderer.setSearch(query, activeIndex);
-  }
+  setSearch(query, activeIndex) { this.renderer.setSearch(query, activeIndex); }
 
   setChatFont(fontFamily, fontDataUrl, fontSize, letterSpacing) {
     const root = document.documentElement;
-    if (fontSize != null) root.style.setProperty('--font-size', fontSize + 'px');
-    if (letterSpacing != null) root.style.setProperty('--letter-spacing', letterSpacing + 'px');
+    if (fontSize != null) {
+      root.style.setProperty('--font-size', fontSize + 'px');
+      root.style.setProperty('--chat-font-size', fontSize + 'px');
+    }
+    if (letterSpacing != null) {
+      root.style.setProperty('--letter-spacing', letterSpacing + 'px');
+      root.style.setProperty('--chat-letter-spacing', letterSpacing + 'px');
+    }
 
     let fontFace = document.getElementById('custom-font-face');
     if (fontDataUrl) {
@@ -556,11 +538,8 @@ class Bridge {
       root.style.setProperty('--font-family', `'${fontFamily || 'CustomChatFont'}', sans-serif`);
     } else {
       if (fontFace) fontFace.remove();
-      if (fontFamily) {
-        root.style.setProperty('--font-family', fontFamily);
-      } else {
-        root.style.removeProperty('--font-family');
-      }
+      if (fontFamily) root.style.setProperty('--font-family', fontFamily);
+      else root.style.removeProperty('--font-family');
     }
   }
 
@@ -570,10 +549,8 @@ class Bridge {
 
     for (const [key, value] of Object.entries(theme)) {
       if (key === 'chat-layout') {
-        container.classList.remove('layout-bubble', 'layout-standard', 'layout-cards');
-        if (value) {
-          container.classList.add(`layout-${value}`);
-        }
+        container.classList.remove('layout-bubble', 'layout-default');
+        container.classList.add(`layout-${value || 'default'}`);
         continue;
       }
       document.documentElement.style.setProperty(`--${key}`, value);
@@ -585,103 +562,93 @@ class Bridge {
     container.style.paddingBottom = px + 'px';
   }
 
-  applyLayout(layout) {
+  setTopPadding(px) {
     const container = document.getElementById('chat-container') || document.body;
-    container.classList.remove('layout-bubble', 'layout-standard', 'layout-cards', 'layout-default', 'layout-system');
-    const cls = layout || 'bubble';
-    container.classList.add(`layout-${cls}`);
+    container.style.paddingTop = px + 'px';
   }
 
+  applyLayout(layout) {
+    const container = document.getElementById('chat-container') || document.body;
+    container.classList.remove('layout-bubble', 'layout-default');
+    container.classList.add(`layout-${layout || 'default'}`);
+  }
+
+  /* ---------- Inline edit (toggle into .msg-body) ---------- */
   startEdit(messageId) {
-    let msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!msgEl) {
-      const vlEl = this.virtualList.messages.get(messageId);
-      if (vlEl) {
-        if (vlEl.parentNode !== this.virtualList.container) {
-          this.virtualList.container.insertBefore(vlEl, this.virtualList._bottomSpacer);
-        }
-        msgEl = vlEl;
-      }
-    }
-    if (!msgEl) return;
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!section) return;
 
     const scrollPos = this.virtualList.container.scrollTop;
-    const rawText = msgEl.dataset.rawText || '';
-    const reasoning = msgEl.dataset.reasoning || '';
+    section.classList.add('editing');
+
+    const rawText = section.dataset.rawText || '';
+    const reasoning = section.dataset.reasoning || '';
     let editText = rawText;
-    if (reasoning) {
-      editText = '<' + 'think>\n' + reasoning + '\n</' + 'think>\n' + rawText;
-    }
+    if (reasoning) editText = '<' + 'think>\n' + reasoning + '\n</' + 'think>\n' + rawText;
 
-    const contentEl = msgEl.querySelector('.message-content');
-    if (!contentEl) return;
-    let shadowRoot = contentEl.shadowRoot;
-    if (!shadowRoot) {
-      shadowRoot = contentEl.attachShadow({ mode: 'open' });
-      const style = document.createElement('style');
-      style.textContent = `.glaze-message { word-wrap: break-word; line-height: 1.6; } .edit-textarea { width: 100%; min-height: 80px; max-height: 60vh; overflow-y: auto; background: var(--bg-color, #1a1a2e); color: var(--text-color, #e0e0e0); font-size: var(--font-size, 15px); font-family: inherit; resize: vertical; outline: none; line-height: 1.6; border: 1px solid var(--primary-color, #7996CE); border-radius: 6px; padding: 8px; }`;
-      shadowRoot.appendChild(style);
-      const msgDiv = document.createElement('div');
-      msgDiv.className = 'glaze-message';
-      shadowRoot.appendChild(msgDiv);
-    }
-    const msgDiv = shadowRoot.querySelector('.glaze-message');
-    if (!msgDiv) return;
+    const body = section.querySelector('.msg-body');
+    if (!body) return;
 
-    msgDiv.innerHTML = '';
+    body.dataset.originalHtml = body.innerHTML;
+    body.innerHTML = '';
     const textarea = document.createElement('textarea');
     textarea.className = 'edit-textarea';
     textarea.value = editText;
     textarea.dataset.originalText = editText;
-    msgDiv.appendChild(textarea);
+    body.appendChild(textarea);
 
     textarea.addEventListener('input', () => {
       textarea.style.height = 'auto';
       textarea.style.height = Math.max(80, textarea.scrollHeight) + 'px';
     });
-    textarea.addEventListener('wheel', (e) => {
-      e.stopPropagation();
-      // Native textarea scroll is used; extreme speed on Windows WebView is a platform quirk.
-      // We only prevent the event from reaching the virtual list.
-    }, { passive: true });
+    textarea.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
     textarea.style.height = Math.max(80, textarea.scrollHeight + 20) + 'px';
     textarea.focus();
 
-    msgEl.classList.add('message-editing');
+    /* Replace center controls with edit buttons */
+    const footer = section.querySelector('.msg-footer');
+    if (footer) {
+      footer.dataset.originalHtml = footer.innerHTML;
+      footer.innerHTML = '';
 
-    const metaRow = msgEl.querySelector('.message-meta-right');
-    if (metaRow) {
-      metaRow.dataset.originalHtml = metaRow.innerHTML;
-      metaRow.innerHTML = '';
-      const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'edit-btn edit-cancel-btn';
-      cancelBtn.textContent = '✖';
-      cancelBtn.dataset.messageId = messageId;
-      cancelBtn.addEventListener('click', () => this._sendToFlutter('onEditCancel', [messageId]));
-      metaRow.appendChild(cancelBtn);
+      const metaCol = document.createElement('div');
+      metaCol.className = 'msg-meta';
+      footer.appendChild(metaCol);
 
-      const saveBtn = document.createElement('button');
-      saveBtn.className = 'edit-btn edit-save-btn';
-      saveBtn.textContent = '✔';
-      saveBtn.dataset.messageId = messageId;
-      saveBtn.addEventListener('click', () => {
-        const text = textarea.value;
-        this._sendToFlutter('onEditSave', [messageId, text]);
-      });
-      metaRow.appendChild(saveBtn);
+      const center = document.createElement('div');
+      center.className = 'msg-center-controls';
+      footer.appendChild(center);
+
+      const editBox = document.createElement('div');
+      editBox.className = 'edit-buttons';
+      editBox.innerHTML = `
+        <div class="edit-btn cancel" data-action="edit-cancel" data-message-id="${messageId}" title="Cancel">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </div>
+        <div class="edit-btn save" data-action="edit-save" data-message-id="${messageId}" title="Save">
+          <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+        </div>
+      `;
+      footer.appendChild(editBox);
     }
 
     this.virtualList.container.scrollTop = scrollPos;
   }
 
   stopEdit(messageId) {
-    const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!msgEl) return;
-    msgEl.classList.remove('message-editing');
-    const metaRow = msgEl.querySelector('.message-meta-right');
-    if (metaRow && metaRow.dataset.originalHtml !== undefined) {
-      metaRow.innerHTML = metaRow.dataset.originalHtml;
-      delete metaRow.dataset.originalHtml;
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!section) return;
+    section.classList.remove('editing');
+
+    const body = section.querySelector('.msg-body');
+    if (body && body.dataset.originalHtml !== undefined) {
+      body.innerHTML = body.dataset.originalHtml;
+      delete body.dataset.originalHtml;
+    }
+    const footer = section.querySelector('.msg-footer');
+    if (footer && footer.dataset.originalHtml !== undefined) {
+      footer.innerHTML = footer.dataset.originalHtml;
+      delete footer.dataset.originalHtml;
     }
   }
 
@@ -703,78 +670,92 @@ class Bridge {
     bg.style.opacity = opacity != null ? opacity : 1;
   }
 
+  /* ---------- Guided swipe inline ---------- */
   _toggleGuidedSwipe(messageId) {
-    const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!msgEl) return;
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!section) return;
 
-    const existing = msgEl.querySelector('.guided-swipe-container');
+    const btn = section.querySelector('.msg-guided-swipe-btn');
+    const existing = section.querySelector('.guided-swipe-container');
     if (existing) {
       existing.remove();
+      btn?.classList.remove('active');
       return;
     }
 
     const container = document.createElement('div');
     container.className = 'guided-swipe-container';
 
+    const main = document.createElement('div');
+    main.className = 'guidance-main';
+    main.innerHTML = `<div class="guidance-header">GUIDED SWIPE</div>`;
     const textarea = document.createElement('textarea');
     textarea.className = 'guided-swipe-textarea';
-    textarea.placeholder = 'Enter guidance for the next swipe...';
-    container.appendChild(textarea);
+    textarea.placeholder = 'Enter OOC instruction for swipe...';
+    textarea.rows = 1;
+    main.appendChild(textarea);
+    container.appendChild(main);
 
-    const btnRow = document.createElement('div');
-    btnRow.className = 'guided-swipe-btns';
+    const actions = document.createElement('div');
+    actions.className = 'guided-swipe-actions';
 
-    const cancelBtn = document.createElement('button');
-    cancelBtn.className = 'guided-swipe-cancel';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.addEventListener('click', () => container.remove());
-    btnRow.appendChild(cancelBtn);
-
-    const sendBtn = document.createElement('button');
-    sendBtn.className = 'guided-swipe-send';
-    sendBtn.textContent = 'Swipe →';
-    sendBtn.addEventListener('click', () => {
-      const guidance = textarea.value.trim();
-      if (guidance) {
-        this._sendToFlutter('onGuidedSwipe', [messageId, guidance]);
-      }
+    const cancel = document.createElement('div');
+    cancel.className = 'guided-btn cancel';
+    cancel.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
+    cancel.addEventListener('click', () => {
       container.remove();
+      btn?.classList.remove('active');
     });
-    btnRow.appendChild(sendBtn);
+    actions.appendChild(cancel);
 
-    container.appendChild(btnRow);
+    const confirm = document.createElement('div');
+    confirm.className = 'guided-btn confirm';
+    confirm.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+    confirm.addEventListener('click', () => {
+      const guidance = textarea.value.trim();
+      if (guidance) this._sendToFlutter('onGuidedSwipe', [messageId, guidance]);
+      container.remove();
+      btn?.classList.remove('active');
+    });
+    actions.appendChild(confirm);
 
-    const metaRow = msgEl.querySelector('.message-meta');
-    if (metaRow) {
-      metaRow.parentNode.insertBefore(container, metaRow.nextSibling);
+    container.appendChild(actions);
+
+    /* Insert after .msg-content-stack inside section (matches Vue layout) */
+    const stack = section.querySelector('.msg-content-stack');
+    if (stack && stack.parentNode === section) {
+      section.insertBefore(container, stack.nextSibling);
     } else {
-      msgEl.appendChild(container);
+      section.appendChild(container);
     }
 
+    btn?.classList.add('active');
     textarea.focus();
   }
 
   setPerformanceMode(enabled) {
     const container = document.getElementById('chat-container') || document.body;
     container.classList.toggle('perf-mode', !!enabled);
+    /* Mirror .native-lite onto each message for class-scoped styles */
+    document.querySelectorAll('.message-section').forEach(el => {
+      el.classList.toggle('native-lite', !!enabled);
+    });
   }
 
   animateGenTime(messageId, targetTime) {
-    const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!msgEl) return;
-    const badge = msgEl.querySelector('.gen-time-badge');
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!section) return;
+    const badge = section.querySelector('.gen-time-badge');
     if (!badge) return;
 
     const match = targetTime.match(/([\d.]+)(.*)/);
     if (!match) { badge.textContent = targetTime; return; }
-
     const target = parseFloat(match[1]);
     const suffix = match[2] || '';
     if (isNaN(target)) { badge.textContent = targetTime; return; }
 
     const start = performance.now();
     const duration = 600;
-
     const tick = (now) => {
       const progress = Math.min((now - start) / duration, 1);
       const eased = 1 - Math.pow(1 - progress, 3);
@@ -785,9 +766,7 @@ class Bridge {
     requestAnimationFrame(tick);
   }
 
-  setSelectionMode(enabled) {
-    this.renderer.setSelectionMode(enabled);
-  }
+  setSelectionMode(enabled) { this.renderer.setSelectionMode(enabled); }
 
   _handleSelectionCheckbox(e) {
     const cb = e.target.closest('.selection-checkbox');

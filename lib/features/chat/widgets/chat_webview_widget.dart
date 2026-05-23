@@ -28,6 +28,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final bool isGenerating;
   final bool isGeneratingImage;
   final double bottomInset;
+  final double topInset;
   final String? searchQuery;
   final int searchCurrentIndex;
   final String? chatLayout;
@@ -73,6 +74,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     required this.isGenerating,
     this.isGeneratingImage = false,
     this.bottomInset = 0,
+    this.topInset = 0,
     this.searchQuery,
     this.searchCurrentIndex = 0,
     this.chatLayout,
@@ -150,7 +152,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       'primary-color': _colorHex(cs.primary),
       'error-color': _colorHex(cs.error),
       'font-size': '${widget.chatFontSize}px',
-      'chat-layout': widget.chatLayout ?? 'bubble',
+      'chat-layout': widget.chatLayout ?? 'default',
     });
 
     await _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
@@ -169,6 +171,9 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     );
     if (widget.bottomInset > 0) {
       await _bridge!.setBottomPadding(widget.bottomInset);
+    }
+    if (widget.topInset > 0) {
+      await _bridge!.setTopPadding(widget.topInset);
     }
     if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
       await _bridge!.setSearch(query: widget.searchQuery!, activeIndex: widget.searchCurrentIndex);
@@ -203,7 +208,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           charAvatarPath: widget.charAvatarPath,
           personaAvatarPath: widget.personaAvatarPath,
         );
-        _bridge!.applyTheme({'chat-layout': widget.chatLayout ?? 'bubble'});
+        _bridge!.applyTheme({'chat-layout': widget.chatLayout ?? 'default'});
         _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
         _bridge!.setChatFont(
           fontName: widget.chatFontName,
@@ -235,7 +240,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
         charAvatarPath: widget.charAvatarPath,
         personaAvatarPath: widget.personaAvatarPath,
       );
-      _bridge!.applyTheme({'chat-layout': widget.chatLayout ?? 'bubble'});
+      _bridge!.applyTheme({'chat-layout': widget.chatLayout ?? 'default'});
     }
 
     if (widget.bgImagePath != old.bgImagePath ||
@@ -258,6 +263,10 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
 
     if (widget.bottomInset != old.bottomInset) {
       _bridge!.setBottomPadding(widget.bottomInset);
+    }
+
+    if (widget.topInset != old.topInset) {
+      _bridge!.setTopPadding(widget.topInset);
     }
 
     final anyGenerating = widget.isGenerating || widget.isGeneratingImage;
