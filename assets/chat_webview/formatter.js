@@ -115,6 +115,26 @@ class Formatter {
       return `<span class="janitor-img-wrapper"><img src="${url}" alt="${alt}" class="janitor-img" loading="lazy"></span>`;
     });
 
+    // 5c. Glaze image gen tags
+    const imgBlocks = [];
+    html = html.replace(/\[IMG:GEN(?::(.*?))?\]/g, (match, instruction) => {
+      const id = this._ph('IG_', imgBlocks.length, true);
+      imgBlocks.push({ type: 'gen', instruction: instruction || '' });
+      return '\n\n' + id + '\n\n';
+    });
+    html = html.replace(/\[IMG:RESULT:(.*?)\]/g, (match, payload) => {
+      const id = this._ph('IG_', imgBlocks.length, true);
+      const pipeIdx = payload.indexOf('|');
+      const path = pipeIdx !== -1 ? payload.substring(0, pipeIdx) : payload;
+      imgBlocks.push({ type: 'result', path });
+      return '\n\n' + id + '\n\n';
+    });
+    html = html.replace(/\[IMG:ERROR:(.*?)\]/g, (match, data) => {
+      const id = this._ph('IG_', imgBlocks.length, true);
+      imgBlocks.push({ type: 'error', data });
+      return '\n\n' + id + '\n\n';
+    });
+
     // 6. Extract HTML Tags — distinguish block vs inline
     const tagBlocks = [];
     const blockTags = new Set(['div','p','style','pre','table','ul','ol','li','h1','h2','h3','h4','h5','h6','blockquote','section','article','header','footer','hr','details','summary','figure','figcaption','svg','path','math','canvas','video','audio','form','fieldset','nav','aside','main','img','br']);
@@ -195,7 +215,8 @@ class Formatter {
     const stylePh = '\x01STY_BLOCK_\\d+\x01';
     const scriptPh = '\x01SCR_BLOCK_\\d+\x01';
     const listPh = '\x01LB_BLOCK_\\d+\x01';
-    const allBlockPh = `${codePh}|${blockPh}|${stylePh}|${scriptPh}|${listPh}`;
+    const imgPh = '\x01IG_BLOCK_\\d+\x01';
+    const allBlockPh = `${codePh}|${blockPh}|${stylePh}|${scriptPh}|${listPh}|${imgPh}`;
     html = html.replace(new RegExp(`\\n?(${allBlockPh})\\n?`, 'g'), '\n\n$1\n\n');
 
     const paragraphs = html.split(/\n\n+/);
@@ -256,6 +277,23 @@ class Formatter {
       const block = fontBlocks[parseInt(i)];
       const formatted = this._processText(block.content, isUser);
       return `<div class="font-color-block" style="color:${block.color}">${formatted}</div>`;
+    });
+
+    // 19. Restore image gen blocks
+    html = html.replace(/\x01IG_BLOCK_(\d+)\x01/g, (_, i) => {
+      const block = imgBlocks[parseInt(i)];
+      if (block.type === 'result') {
+        return `<div class="img-result-frame"><img src="file:///${block.path.replace(/\\/g, '/')}" class="img-result" loading="lazy" data-action="image-click" data-src="file:///${block.path.replace(/\\/g, '/')}"></div>`;
+      }
+      if (block.type === 'gen') {
+        return `<div class="img-gen-frame"><div class="img-gen-spinner"></div><span class="img-gen-label">Generating image...</span></div>`;
+      }
+      if (block.type === 'error') {
+        let errorMsg = 'Unknown error';
+        try { errorMsg = JSON.parse(block.data).error || errorMsg; } catch(_) {}
+        return `<div class="img-error-frame"><span class="img-error-icon">⚠</span> Image error: ${errorMsg}</div>`;
+      }
+      return '';
     });
 
     html = html.replace(/\x01[A-Z_]+\d+\x01/g, '');

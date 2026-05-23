@@ -965,3 +965,57 @@
 .message-image:hover {
   opacity: 0.85;
 }
+
+.img-result-frame {
+  max-width: 680px;
+  margin: 12px auto;
+  padding: 12px;
+  background: rgba(15,15,28,0.94);
+  border: 1px solid rgba(130,90,220,0.25);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.6), 0 0 20px rgba(120,80,210,0.15);
+}
+.img-result {
+  display: block;
+  width: 100%;
+  border-radius: 12px;
+  cursor: pointer;
+}
+.img-gen-frame {
+  max-width: 680px;
+  margin: 12px auto;
+  padding: 32px;
+  background: rgba(15,15,28,0.94);
+  border: 1px solid rgba(130,90,220,0.25);
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  text-align: center;
+}
+.img-gen-spinner {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border: 2.5px solid rgba(130,90,220,0.3);
+  border-top-color: rgba(130,90,220,0.8);
+  border-radius: 50%;
+  animation: img-spin 0.8s linear infinite;
+}
+@keyframes img-spin { to { transform: rotate(360deg); } }
+.img-gen-label {
+  display: block;
+  margin-top: 8px;
+  color: rgba(200,200,200,0.6);
+  font-size: 12px;
+  font-style: italic;
+}
+.img-error-frame {
+  max-width: 680px;
+  margin: 12px auto;
+  padding: 10px 14px;
+  background: rgba(255,0,0,0.06);
+  border: 1px solid rgba(255,0,0,0.2);
+  border-radius: 10px;
+  color: rgba(255,100,100,0.85);
+  font-size: 12px;
+}
+.img-error-icon { margin-right: 6px; }

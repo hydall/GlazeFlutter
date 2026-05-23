@@ -277,13 +277,16 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     final newIds = widget.messages.map((m) => m.id).toList();
     final skipLast = widget.isGenerating && _streamingSent;
     final newLen = newIds.length - (skipLast ? 1 : 0);
+    debugPrint('[sync] old=${oldIds.length} new=${newIds.length} skipLast=$skipLast isGenerating=${widget.isGenerating} regenTargetId=${widget.regenTargetId}');
 
     if (oldIds.isEmpty) {
+      debugPrint('[sync] path: setMessages (old empty)');
       _bridge?.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
       return;
     }
 
     if (newIds.isEmpty) {
+      debugPrint('[sync] path: clearAll (new empty)');
       _bridge?.clearAll();
       return;
     }
@@ -292,6 +295,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       final oldFirstId = oldIds.first;
       final newIdx = newIds.indexOf(oldFirstId);
       if (newIdx > 0) {
+        debugPrint('[sync] path: prepend $newIdx messages');
         _bridge?.prependMessages(
           widget.messages.sublist(0, newIdx),
           visibleStartIndex: widget.visibleStartIndex,
@@ -303,6 +307,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           oldIds.length,
           newLen,
         );
+        debugPrint('[sync] path: append ${appends.length} messages');
         _bridge?.appendMessages(
           appends,
           startIndex: widget.visibleStartIndex + oldIds.length,
@@ -318,6 +323,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       final newFirstId = newIds.first;
       final oldIdx = oldIds.indexOf(newFirstId);
       if (oldIdx > 0) {
+        debugPrint('[sync] path: remove $oldIdx from top');
         for (int i = 0; i < oldIdx; i++) {
           _bridge?.removeMessage(oldIds[i]);
         }
@@ -326,6 +332,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       final newLastId = newIds.last;
       final oldLastIdx = oldIds.indexOf(newLastId);
       if (oldLastIdx >= 0 && newIds.length == oldLastIdx + 1) {
+        debugPrint('[sync] path: remove ${oldIds.length - oldLastIdx - 1} from bottom');
         for (int i = oldIds.length - 1; i > oldLastIdx; i--) {
           _bridge?.removeMessage(oldIds[i]);
         }
@@ -334,15 +341,18 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
         }
         return;
       }
+      debugPrint('[sync] path: clearAll+setMessages (length decrease, no match)');
       _bridge?.clearAll();
       _bridge?.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
       return;
     }
 
     final minLen = newLen < oldIds.length ? newLen : oldIds.length;
+    int updates = 0;
     for (int i = 0; i < minLen; i++) {
       if (i >= newIds.length) break;
       if (newIds[i] != oldIds[i]) {
+        debugPrint('[sync] path: clearAll+setMessages (id mismatch at $i)');
         _bridge?.clearAll();
         _bridge?.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
         return;
@@ -355,8 +365,10 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           o.guidanceText != n.guidanceText ||
           o.greetingIndex != n.greetingIndex) {
         _bridge?.updateMessage(n);
+        updates++;
       }
     }
+    if (updates > 0) debugPrint('[sync] path: updateMessage x$updates');
   }
 
   @override
