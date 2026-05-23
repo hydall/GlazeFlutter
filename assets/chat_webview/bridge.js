@@ -5,6 +5,7 @@ class Bridge {
     this._pendingRequests = new Map();
     this._requestCounter = 0;
     this.isGenerating = false;
+    this.isGeneratingImage = false;
     this._setupScrollListener();
     this._setupInteractionListener();
     this._setupImageClickForward();
@@ -143,27 +144,38 @@ class Bridge {
         return;
       }
 
-      const imgRetryBtn = e.target.closest('[data-action="img-retry"]');
+      const path = e.composedPath();
+
+      const imgRetryBtn = path.find(el => el.matches?.('[data-action="img-retry"]'));
       if (imgRetryBtn) {
-        const msgEl = imgRetryBtn.closest('[data-message-id]');
+        const msgEl = path.find(el => el.dataset?.messageId);
         const messageId = msgEl ? msgEl.dataset.messageId : '';
-        this._sendToFlutter('onImgRetry', [imgRetryBtn.dataset.instruction || '', messageId]);
+        try { var instr = decodeURIComponent(imgRetryBtn.dataset.instruction || ''); } catch(_) { var instr = imgRetryBtn.dataset.instruction || ''; }
+        this._sendToFlutter('onImgRetry', [instr, messageId]);
         return;
       }
 
-      const imgFindBtn = e.target.closest('[data-action="img-find"]');
+      const imgFindBtn = path.find(el => el.matches?.('[data-action="img-find"]'));
       if (imgFindBtn) {
-        const msgEl = imgFindBtn.closest('[data-message-id]');
+        const msgEl = path.find(el => el.dataset?.messageId);
         const messageId = msgEl ? msgEl.dataset.messageId : '';
-        this._sendToFlutter('onImgFind', [imgFindBtn.dataset.instruction || '', messageId]);
+        try { var instr = decodeURIComponent(imgFindBtn.dataset.instruction || ''); } catch(_) { var instr = imgFindBtn.dataset.instruction || ''; }
+        this._sendToFlutter('onImgFind', [instr, messageId]);
         return;
       }
 
-      const imgRegenBtn = e.target.closest('[data-action="img-regen"]');
+      const imgRegenBtn = path.find(el => el.matches?.('[data-action="img-regen"]'));
       if (imgRegenBtn) {
-        const msgEl = imgRegenBtn.closest('[data-message-id]');
+        const msgEl = path.find(el => el.dataset?.messageId);
         const messageId = msgEl ? msgEl.dataset.messageId : '';
-        this._sendToFlutter('onImgRegen', [imgRegenBtn.dataset.instruction || '', messageId]);
+        try { var instr = decodeURIComponent(imgRegenBtn.dataset.instruction || ''); } catch(_) { var instr = imgRegenBtn.dataset.instruction || ''; }
+        this._sendToFlutter('onImgRegen', [instr, messageId]);
+        return;
+      }
+
+      const imgStopBtn = path.find(el => el.matches?.('[data-action="img-stop"]'));
+      if (imgStopBtn) {
+        this._sendToFlutter('onImgCancel', []);
         return;
       }
 

@@ -138,7 +138,8 @@ class Formatter {
       const id = this._ph('IG_', imgBlocks.length, true);
       const pipeIdx = payload.indexOf('|');
       const path = pipeIdx !== -1 ? payload.substring(0, pipeIdx) : payload;
-      imgBlocks.push({ type: 'result', path });
+      const instruction = pipeIdx !== -1 ? payload.substring(pipeIdx + 1) : '';
+      imgBlocks.push({ type: 'result', path, instruction });
       return '\n\n' + id + '\n\n';
     });
     html = html.replace(/\[IMG:ERROR:(.*?)\]/g, (match, data) => {
@@ -331,13 +332,13 @@ class Formatter {
       if (block.type === 'result') {
         const isDataUrl = block.path.startsWith('data:');
         const src = isDataUrl ? block.path : `file:///${block.path.replace(/\\/g, '/')}`;
-        const pipeIdx = block.path.indexOf('|');
-        const instrRaw = pipeIdx !== -1 ? block.path.substring(pipeIdx + 1) : '';
+        const instrRaw = block.instruction || '';
         const encInstr = encodeURIComponent(instrRaw);
+        console.log('[FORMATTER] IMG:RESULT render, path=', block.path.substring(0, 80), 'instruction=', instrRaw.substring(0, 80));
         return `<div class="img-result-frame img-result-wrapper"><img src="${src}" class="img-result" loading="lazy" data-action="image-click" data-src="${src}"><button class="img-regen-btn" data-action="img-regen" data-instruction="${encInstr}" title="Regenerate image">↻</button></div>`;
       }
       if (block.type === 'gen') {
-        return `<div class="img-gen-frame"><div class="img-gen-spinner"></div><span class="img-gen-label">Generating image...</span></div>`;
+        return `<div class="img-gen-frame"><div class="img-gen-spinner"></div><span class="img-gen-label">Generating image...</span><button class="img-gen-stop-btn" data-action="img-stop" title="Stop image generation">⏹</button></div>`;
       }
       if (block.type === 'error') {
         let errorMsg = 'Unknown error';

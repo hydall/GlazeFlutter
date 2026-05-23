@@ -69,14 +69,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         : 0;
     state = AsyncData(current.copyWith(
       visibleStartIndex: newStart,
-      isLoadingOlder: true,
+      isLoadingOlder: false,
     ));
-    Future.delayed(const Duration(milliseconds: 500), () {
-      final s = state.value;
-      if (s != null) {
-        state = AsyncData(s.copyWith(isLoadingOlder: false));
-      }
-    });
   }
 
   CancelToken? _cancelToken;
@@ -919,7 +913,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     if (bestMatch == null) return;
 
     final foundPath = bestMatch.path;
-    debugPrint('IMGGEN: findImageOnDisk messageId=$messageId found=$foundPath bestDiff=${bestDiff}ms');
 
     var updatedContent = msg.content;
     updatedContent = _replaceFirstImgErrorOrGen(updatedContent, foundPath);
@@ -961,13 +954,15 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
   Future<void> retryImageGenerationForMessage(int messageIndex) async {
     final current = state.value;
-    if (current == null || current.session == null || current.isGenerating || current.isGeneratingImage) return;
+    if (current == null || current.session == null || current.isGenerating || current.isGeneratingImage) {
+      return;
+    }
     if (messageIndex < 0 || messageIndex >= current.messages.length) return;
 
     final msg = current.messages[messageIndex];
     if (msg.role != 'assistant') return;
 
-    var resetContent = _replaceImgErrorsWithGen(msg.content);
+    var resetContent = _resetImgTagsToGen(msg.content);
     if (resetContent == msg.content) return;
 
     final swipeIdx = msg.swipeId;
@@ -1005,7 +1000,16 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     }
   }
 
-  String _replaceImgErrorsWithGen(String text) {
+  void cancelImageGeneration() {
+    _imgGenCancelToken?.cancel();
+    _imgGenCancelToken = null;
+    final current = state.value;
+    if (current != null && current.isGeneratingImage) {
+      state = AsyncData(current.copyWith(isGeneratingImage: false));
+    }
+  }
+
+  String _resetImgTagsToGen(String text) {
     var result = text;
     result = result.replaceAllMapped(_imgErrorRegex, (m) {
       final data = m.group(1) ?? '';
@@ -1016,6 +1020,15 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       } catch (_) {}
       if (instruction.isNotEmpty) {
         return '[IMG:GEN:$instruction]';
+      }
+      return '[IMG:GEN]';
+    });
+    result = result.replaceAllMapped(_imgResultPathRegex, (m) {
+      final raw = m.group(1) ?? '';
+      final pipeIdx = raw.indexOf('|');
+      final instr = pipeIdx != -1 ? raw.substring(pipeIdx + 1) : '';
+      if (instr.isNotEmpty) {
+        return '[IMG:GEN:$instr]';
       }
       return '[IMG:GEN]';
     });

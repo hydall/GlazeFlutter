@@ -1023,6 +1023,27 @@
   border-radius: 16px;
   box-shadow: 0 8px 30px rgba(0,0,0,0.6);
   text-align: center;
+  position: relative;
+}
+.img-gen-stop-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255,60,60,0.7);
+  border: none;
+  color: #fff;
+  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+.img-gen-stop-btn:hover {
+  background: rgba(255,60,60,0.95);
 }
 .img-gen-spinner {
   display: inline-block;

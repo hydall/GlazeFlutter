@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../../core/models/chat_message.dart';
@@ -21,6 +22,7 @@ class ChatBridgeController {
   final Set<String> _pendingMemoryIds = {};
   final Set<String> _draftMemoryIds = {};
   final Map<String, String> _imgBase64Cache = {};
+  final Map<String, String> _stripThinkCache = {};
   static final _imgResultRegex = RegExp(r'\[IMG:RESULT:(.*?)\]');
 
   ChatBridgeController(this._controller) {
@@ -93,27 +95,38 @@ class ChatBridgeController {
   Future<String> _resolveImgResults(String text) async {
     final matches = _imgResultRegex.allMatches(text).toList();
     if (matches.isEmpty) return text;
-    for (final m in matches) {
-      final payload = m.group(1) ?? '';
+    final sw = Stopwatch()..start();
+    final uncached = <int, String>{};
+    for (int i = 0; i < matches.length; i++) {
+      final payload = matches[i].group(1) ?? '';
       final pipeIdx = payload.indexOf('|');
       final path = pipeIdx != -1 ? payload.substring(0, pipeIdx) : payload;
-      if (_imgBase64Cache.containsKey(path)) continue;
-      try {
-        final file = File(path);
-        if (await file.exists()) {
-          final bytes = await file.readAsBytes();
-          final b64 = base64Encode(bytes);
-          final ext = path.toLowerCase();
-          final mime = ext.endsWith('.jpg') || ext.endsWith('.jpeg')
-              ? 'image/jpeg'
-              : ext.endsWith('.gif') ? 'image/gif'
-              : ext.endsWith('.webp') ? 'image/webp'
-              : 'image/png';
-          _imgBase64Cache[path] = 'data:$mime;base64,$b64';
-        }
-      } catch (_) {}
+      if (!_imgBase64Cache.containsKey(path)) {
+        uncached[i] = path;
+      }
     }
-    return text.replaceAllMapped(_imgResultRegex, (m) {
+    if (uncached.isNotEmpty) {
+      debugPrint('[PERF] _resolveImgResults: ${uncached.length} uncached images to read');
+      await Future.wait(uncached.entries.map((e) async {
+        final path = e.value;
+        try {
+          final file = File(path);
+          if (await file.exists()) {
+            final bytes = await file.readAsBytes();
+            final b64 = base64Encode(bytes);
+            final ext = path.toLowerCase();
+            final mime = ext.endsWith('.jpg') || ext.endsWith('.jpeg')
+                ? 'image/jpeg'
+                : ext.endsWith('.gif') ? 'image/gif'
+                : ext.endsWith('.webp') ? 'image/webp'
+                : 'image/png';
+            _imgBase64Cache[path] = 'data:$mime;base64,$b64';
+          }
+        } catch (_) {}
+      }));
+      debugPrint('[PERF] _resolveImgResults disk read: ${sw.elapsedMilliseconds}ms');
+    }
+    final result = text.replaceAllMapped(_imgResultRegex, (m) {
       final payload = m.group(1) ?? '';
       final pipeIdx = payload.indexOf('|');
       final path = pipeIdx != -1 ? payload.substring(0, pipeIdx) : payload;
@@ -124,6 +137,8 @@ class ChatBridgeController {
       }
       return m.group(0)!;
     });
+    debugPrint('[PERF] _resolveImgResults total: ${sw.elapsedMilliseconds}ms (cached=${matches.length - uncached.length}/${matches.length})');
+    return result;
   }
 
   Future<void> applyLayout(String layout) {
@@ -149,6 +164,7 @@ class ChatBridgeController {
   void Function(String instruction, String messageId)? onImgRetry;
   void Function(String instruction, String messageId)? onImgFind;
   void Function(String instruction, String messageId)? onImgRegen;
+  void Function()? onImgCancel;
   void Function()? onStop;
 
   void _setupHandlers() {
@@ -305,34 +321,17 @@ class ChatBridgeController {
     _controller.addJavaScriptHandler(
       handlerName: 'onImgRegen',
       callback: (args) {
+        debugPrint('[BRIDGE] onImgRegen called, args=$args');
         if (args.length < 2) return;
         onImgRegen?.call(args[0] as String, args[1] as String);
       },
     );
 
     _controller.addJavaScriptHandler(
-      handlerName: 'onStop',
-      callback: (args) => onStop?.call(),
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onImgRegen',
+      handlerName: 'onImgCancel',
       callback: (args) {
-        if (args.length < 2) return;
-        onImgRegen?.call(args[0] as String, args[1] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onStop',
-      callback: (args) => onStop?.call(),
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onImgRegen',
-      callback: (args) {
-        if (args.length < 2) return;
-        onImgRegen?.call(args[0] as String, args[1] as String);
+        debugPrint('[BRIDGE] onImgCancel called');
+        onImgCancel?.call();
       },
     );
 
@@ -362,8 +361,11 @@ class ChatBridgeController {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
       final map = _toMap(messages[i], isLast: i == messages.length - 1, messageIndex: visibleStartIndex + i);
-      map['text'] = await _resolveImgResults(map['text'] as String);
       mapped.add(map);
+    }
+    final resolved = await Future.wait(mapped.map((m) => _resolveImgResults(m['text'] as String)));
+    for (int i = 0; i < mapped.length; i++) {
+      mapped[i]['text'] = resolved[i];
     }
     final json = jsonEncode(mapped);
     return _callJs('setMessages', json);
@@ -380,8 +382,11 @@ class ChatBridgeController {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
       final map = _toMap(messages[i], isLast: i == messages.length - 1, messageIndex: startIndex + i);
-      map['text'] = await _resolveImgResults(map['text'] as String);
       mapped.add(map);
+    }
+    final resolved = await Future.wait(mapped.map((m) => _resolveImgResults(m['text'] as String)));
+    for (int i = 0; i < mapped.length; i++) {
+      mapped[i]['text'] = resolved[i];
     }
     final json = jsonEncode(mapped);
     return _callJs('appendMessages', json);
@@ -391,17 +396,24 @@ class ChatBridgeController {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
       final map = _toMap(messages[i], messageIndex: visibleStartIndex + i);
-      map['text'] = await _resolveImgResults(map['text'] as String);
       mapped.add(map);
+    }
+    final resolved = await Future.wait(mapped.map((m) => _resolveImgResults(m['text'] as String)));
+    for (int i = 0; i < mapped.length; i++) {
+      mapped[i]['text'] = resolved[i];
     }
     final json = jsonEncode(mapped);
     return _callJs('prependMessages', json);
   }
 
   Future<void> updateMessage(ChatMessage message) async {
+    final sw = Stopwatch()..start();
     final map = _toMap(message);
+    debugPrint('[PERF] updateMessage _toMap: ${sw.elapsedMilliseconds}ms');
     map['text'] = await _resolveImgResults(map['text'] as String);
+    debugPrint('[PERF] updateMessage after resolve: ${sw.elapsedMilliseconds}ms');
     final json = jsonEncode(map);
+    debugPrint('[PERF] updateMessage total (json ${json.length} chars): ${sw.elapsedMilliseconds}ms');
     return _callJs('updateMessage', json);
   }
 
@@ -581,12 +593,17 @@ class ChatBridgeController {
   static final _thinkingTagRegex = RegExp(r'<thinking\b[^>]*>[\s\S]*?<\/thinking\b[^>]*>', caseSensitive: false);
   static final _thinkingTagAltRegex = RegExp(r'<thinking\b([^>]*?)(?:>|\n)([\s\S]*?)<\/thinking\b', caseSensitive: false);
 
-  static String _stripThinkTags(String text) {
+  String _stripThinkTags(String text) {
+    if (_stripThinkCache.containsKey(text)) return _stripThinkCache[text]!;
+    if (text.length < 8 && !text.contains('<think')) return text;
     var result = text.replaceAll(_thinkTagRegex, '');
     result = result.replaceAll(_thinkTagAltRegex, '');
     result = result.replaceAll(_thinkingTagRegex, '');
     result = result.replaceAll(_thinkingTagAltRegex, '');
-    return result.trim();
+    result = result.trim();
+    if (_stripThinkCache.length > 500) _stripThinkCache.clear();
+    _stripThinkCache[text] = result;
+    return result;
   }
 
   void updateMemoryBookData({

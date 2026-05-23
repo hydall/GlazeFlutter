@@ -726,6 +726,16 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           onImgFind: (instruction, messageId) {
                             ref.read(chatProvider(widget.charId).notifier).findImageOnDisk(messageId, instruction);
                           },
+                          onImgRegen: (instruction, messageId) {
+                            final allMsgs = widget.state.messages;
+                            final idx = allMsgs.indexWhere((m) => m.id == messageId);
+                            if (idx >= 0) {
+                              ref.read(chatProvider(widget.charId).notifier).retryImageGenerationForMessage(idx);
+                            }
+                          },
+                          onImgCancel: () {
+                            ref.read(chatProvider(widget.charId).notifier).cancelImageGeneration();
+                          },
                           onSelectionAction: (action, text) {
                             if (action == 'copy') {
                               Clipboard.setData(ClipboardData(text: text));
