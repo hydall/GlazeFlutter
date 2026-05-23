@@ -58,7 +58,6 @@ class VirtualList {
   }
 
   clear() {
-    console.log(`[VL] clear: removing ${this.messages.size} messages`);
     for (const el of this.messages.values()) {
       this._resizeObserver.unobserve(el);
       el.remove();
@@ -337,8 +336,6 @@ class VirtualList {
 
     this._topSpacer.style.height = `${topH}px`;
     this._bottomSpacer.style.height = `${bottomH}px`;
-
-    console.log(`[VL] updateSpacers: ${this.messageOrder.length} msgs, window ${this._renderStart}-${this._renderEnd}, topH=${topH.toFixed(0)}, botH=${bottomH.toFixed(0)}, totalH=${totalH.toFixed(0)}, scrollTop=${this.container.scrollTop.toFixed(0)}`);
   }
 
   _ensureRendered(targetIdx) {
@@ -405,8 +402,6 @@ class VirtualList {
       ? this._prefixSums[this._renderEnd]
       : totalH;
     const bottomH = Math.max(0, totalH - bottomStart);
-
-    console.log(`[VL] setMessagesBatch: ${ids.length} msgs, window ${this._renderStart}-${this._renderEnd}, topH=${topH.toFixed(0)}, botH=${bottomH.toFixed(0)}, totalH=${totalH.toFixed(0)}`);
 
     for (let i = this._renderStart; i < this._renderEnd; i++) {
       const el = this.messages.get(this.messageOrder[i]);

@@ -167,8 +167,6 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     super.didUpdateWidget(old);
     if (!_ready || _bridge == null) return;
 
-    debugPrint('[WV] didUpdateWidget: sessionId=${widget.sessionId} old=${old.sessionId} msgs=${widget.messages.length} oldMsgs=${old.messages.length} switching=$_sessionSwitching');
-
     if (widget.memoryEntries != old.memoryEntries || widget.memoryDrafts != old.memoryDrafts) {
       _bridge!.updateMemoryBookData(
         entries: widget.memoryEntries.map((e) => {'status': e.status, 'messageIds': e.messageIds}).toList(),
@@ -258,25 +256,18 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
   }
 
   void _syncMessages(List<ChatMessage> oldMsgs) {
-    if (_sessionSwitching) {
-      debugPrint('[WV] _syncMessages: skipped (_sessionSwitching)');
-      return;
-    }
+    if (_sessionSwitching) return;
     final oldIds = oldMsgs.map((m) => m.id).toList();
     final newIds = widget.messages.map((m) => m.id).toList();
     final skipLast = widget.isGenerating && _streamingSent;
     final newLen = newIds.length - (skipLast ? 1 : 0);
 
-    debugPrint('[WV] _syncMessages: oldIds=${oldIds.length} newIds=${newIds.length}');
-
     if (oldIds.isEmpty) {
-      debugPrint('[WV] _syncMessages: oldIds empty → setMessages');
       _bridge?.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
       return;
     }
 
     if (newIds.isEmpty) {
-      debugPrint('[WV] _syncMessages: newIds empty → clearAll');
       _bridge?.clearAll();
       return;
     }
@@ -285,7 +276,6 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       final oldFirstId = oldIds.first;
       final newIdx = newIds.indexOf(oldFirstId);
       if (newIdx > 0) {
-        debugPrint('[WV] _syncMessages: prepend $newIdx messages');
         _bridge?.prependMessages(
           widget.messages.sublist(0, newIdx),
           visibleStartIndex: widget.visibleStartIndex,
@@ -293,7 +283,6 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
         return;
       }
       if (newLen > oldIds.length) {
-        debugPrint('[WV] _syncMessages: append ${newLen - oldIds.length} messages');
         final appends = widget.messages.sublist(
           oldIds.length,
           newLen,
@@ -310,13 +299,11 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       final newFirstId = newIds.first;
       final oldIdx = oldIds.indexOf(newFirstId);
       if (oldIdx > 0) {
-        debugPrint('[WV] _syncMessages: remove $oldIdx messages from top');
         for (int i = 0; i < oldIdx; i++) {
           _bridge?.removeMessage(oldIds[i]);
         }
         return;
       }
-      debugPrint('[WV] _syncMessages: fewer msgs, no overlap → clearAll+setMessages');
       _bridge?.clearAll();
       _bridge?.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
       return;
@@ -326,7 +313,6 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     for (int i = 0; i < minLen; i++) {
       if (i >= newIds.length) break;
       if (newIds[i] != oldIds[i]) {
-        debugPrint('[WV] _syncMessages: ID mismatch at $i → clearAll+setMessages');
         _bridge?.clearAll();
         _bridge?.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
         return;
@@ -404,9 +390,6 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
             allowUniversalAccessFromFileURLs: true,
             mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
           ),
-          onConsoleMessage: (controller, consoleMessage) {
-            debugPrint('[WebView] ${consoleMessage.message}');
-          },
           onWebViewCreated: (controller) async {
             _bridge = ChatBridgeController(controller);
             controller.evaluateJavascript(source: 'if(window.bridge) window.bridge.clearAll();');
