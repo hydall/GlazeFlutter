@@ -99,6 +99,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
   bool _ready = false;
   bool _streamingSent = false;
   bool _wasGenerating = false;
+  bool _sessionSwitching = false;
 
   @override
   bool get wantKeepAlive => true;
@@ -174,6 +175,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     }
 
     if (widget.charId != old.charId || widget.sessionId != old.sessionId) {
+      _sessionSwitching = true;
       if (widget.charId != old.charId) {
         _bridge!.setIdentity(
           charName: widget.charName,
@@ -194,7 +196,10 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       }
       _bridge!.clearAll();
       _bridge!.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
-      Future.delayed(const Duration(milliseconds: 100), () => _bridge?.scrollToBottom());
+      Future.delayed(const Duration(milliseconds: 150), () {
+        _bridge?.scrollToBottom();
+        _sessionSwitching = false;
+      });
       _wasGenerating = widget.isGenerating;
       _streamingSent = false;
       return;
@@ -251,6 +256,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
   }
 
   void _syncMessages(List<ChatMessage> oldMsgs) {
+    if (_sessionSwitching) return;
     final oldIds = oldMsgs.map((m) => m.id).toList();
     final newIds = widget.messages.map((m) => m.id).toList();
     final skipLast = widget.isGenerating && _streamingSent;
