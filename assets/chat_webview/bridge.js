@@ -489,7 +489,8 @@ class Bridge {
   }
 
   setLastMessage(newLastId) {
-    const prevLast = document.querySelector('.message-section.char[data-is-last="true"]');
+    // Clear previous last — char or user
+    const prevLast = document.querySelector('.message-section[data-is-last="true"]');
     if (prevLast) {
       delete prevLast.dataset.isLast;
       const center = prevLast.querySelector('.msg-center-controls');
@@ -501,9 +502,32 @@ class Bridge {
     }
     if (!newLastId) return;
     const newLast = document.querySelector(`[data-message-id="${newLastId}"]`);
-    if (!newLast || !newLast.classList.contains('char')) return;
+    if (!newLast) return;
     newLast.dataset.isLast = 'true';
-    /* Renderer rebuilds these controls on the next render; here we ensure flag only. */
+
+    // For user messages: inject regen button directly into DOM
+    if (newLast.classList.contains('user')) {
+      let center = newLast.querySelector('.msg-center-controls');
+      if (!center) {
+        center = document.createElement('div');
+        center.className = 'msg-center-controls';
+        const footer = newLast.querySelector('.msg-footer');
+        if (footer) footer.appendChild(center);
+      }
+      if (!center.querySelector('.msg-regenerate')) {
+        const regen = document.createElement('div');
+        regen.className = 'msg-regenerate';
+        regen.dataset.action = 'regenerate';
+        regen.dataset.messageId = newLastId;
+        regen.dataset.mode = 'magic';
+        regen.innerHTML = (typeof ICON !== 'undefined' && ICON.regen) ? ICON.regen : '<svg viewBox="0 0 24 24"><path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>';
+        const span = document.createElement('span');
+        span.textContent = 'Regenerate';
+        regen.appendChild(span);
+        center.appendChild(regen);
+      }
+    }
+    // For char messages: renderer rebuilds controls on next render; flag is enough.
   }
 
   removeMessage(messageId) { this.virtualList.remove(messageId); }

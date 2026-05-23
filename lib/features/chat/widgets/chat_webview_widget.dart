@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -276,17 +277,12 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       _bridge!.isGeneratingImage = widget.isGeneratingImage;
       _bridge!.evalJs('if (window.bridge) { window.bridge.isGenerating = ${widget.isGenerating}; window.bridge.isGeneratingImage = ${widget.isGeneratingImage}; }');
       if (!anyGenerating && widget.messages.isNotEmpty) {
-        final lastAssistant = widget.messages.lastWhere(
-          (m) => m.role == 'assistant',
-          orElse: () => widget.messages.last,
-        );
-        _bridge?.setLastMessage(lastAssistant.id);
+        // Regen button lives on the last user message
+        final lastUser = widget.messages.lastWhereOrNull((m) => m.role == 'user');
+        _bridge?.setLastMessage(lastUser?.id);
       } else if (widget.isGenerating) {
-        final lastAssistant = widget.messages.lastWhere(
-          (m) => m.role == 'assistant',
-          orElse: () => widget.messages.last,
-        );
-        _bridge?.setLastMessage(lastAssistant.id);
+        final lastUser = widget.messages.lastWhereOrNull((m) => m.role == 'user');
+        _bridge?.setLastMessage(lastUser?.id);
       }
     }
 
@@ -350,7 +346,9 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           startIndex: widget.visibleStartIndex + oldIds.length,
         );
         if (appends.isNotEmpty && !widget.isGenerating) {
-          _bridge?.setLastMessage(appends.last.id);
+          final lastUser = appends.lastWhereOrNull((m) => m.role == 'user')
+              ?? widget.messages.lastWhereOrNull((m) => m.role == 'user');
+          _bridge?.setLastMessage(lastUser?.id);
         }
         return;
       }
@@ -372,7 +370,8 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           _bridge?.removeMessage(oldIds[i]);
         }
         if (!widget.isGenerating) {
-          _bridge?.setLastMessage(newLastId);
+          final lastUser = widget.messages.lastWhereOrNull((m) => m.role == 'user');
+          _bridge?.setLastMessage(lastUser?.id);
         }
         return;
       }
