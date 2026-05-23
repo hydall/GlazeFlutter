@@ -265,14 +265,19 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     if (lastIdx < 0) return;
 
     final lastMsg = current.messages[lastIdx];
-    ChatMessage? prevAssistant;
 
-    if (lastMsg.role == 'assistant') {
-      prevAssistant = lastMsg;
+    if (lastMsg.role == 'user') {
+      state = AsyncData(current.copyWith(isGenerating: true, generationStartTime: DateTime.now()));
+      final promptSession = current.session!.copyWith(
+        messages: current.messages,
+        updatedAt: currentTimestampSeconds(),
+      );
+      await _runGeneration(promptSession, current, saveSession: current.session!);
+      return;
     }
 
-    if (prevAssistant == null) return;
-
+    // Last message is assistant → swipe (new variant)
+    final prevAssistant = lastMsg;
     final regenTargetId = prevAssistant.id;
     _restorationMessage = prevAssistant;
 
