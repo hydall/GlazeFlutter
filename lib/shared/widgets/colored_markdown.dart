@@ -285,3 +285,121 @@ class ColoredUnderscoreBoldMd extends InlineMd {
     );
   }
 }
+
+class MarkMd extends InlineMd {
+  final Color textColor;
+
+  MarkMd({required this.textColor});
+
+  @override
+  RegExp get exp => RegExp(r'==mark==(.+?)==', dotAll: true);
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text);
+    final content = match?[1] ?? '';
+    final markStyle = (config.style ?? const TextStyle()).copyWith(
+      color: textColor,
+    );
+    return TextSpan(
+      children: MarkdownComponent.generate(context, content, config.copyWith(style: markStyle), false),
+      style: markStyle,
+    );
+  }
+}
+
+class ActiveMarkMd extends InlineMd {
+  final GlobalKey? activeKey;
+
+  ActiveMarkMd({this.activeKey});
+
+  @override
+  RegExp get exp => RegExp(r'==active==(.+?)==', dotAll: true);
+
+  @override
+  InlineSpan span(BuildContext context, String text, GptMarkdownConfig config) {
+    final match = exp.firstMatch(text);
+    final content = match?[1] ?? '';
+    return WidgetSpan(
+      alignment: PlaceholderAlignment.middle,
+      child: KeyedSubtree(
+        key: activeKey,
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFFF44336).withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          child: Text.rich(
+            TextSpan(
+              children: MarkdownComponent.generate(context, content, config, false),
+              style: (config.style ?? const TextStyle()).copyWith(color: Colors.white),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DetailsSummaryMd extends BlockMd {
+  @override
+  String get expString => r'<details[^>]*>\s*<summary[^>]*>(.*?)</summary>(.*?)</details>';
+
+  @override
+  Widget build(BuildContext context, String text, GptMarkdownConfig config) {
+    final fullMatch = RegExp(r'<details[^>]*>\s*<summary[^>]*>(.*?)</summary>(.*?)</details>', dotAll: true).firstMatch(text);
+    final summary = fullMatch?[1]?.trim() ?? 'Details';
+    final body = fullMatch?[2]?.trim() ?? '';
+    return _DetailsBlock(summary: summary, body: body, config: config);
+  }
+}
+
+class _DetailsBlock extends StatefulWidget {
+  final String summary;
+  final String body;
+  final GptMarkdownConfig config;
+
+  const _DetailsBlock({required this.summary, required this.body, required this.config});
+
+  @override
+  State<_DetailsBlock> createState() => _DetailsBlockState();
+}
+
+class _DetailsBlockState extends State<_DetailsBlock> {
+  bool _isOpen = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: () => setState(() => _isOpen = !_isOpen),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(_isOpen ? Icons.expand_less : Icons.expand_more, size: 18),
+                  const SizedBox(width: 4),
+                  Flexible(child: GptMarkdown(widget.summary)),
+                ],
+              ),
+            ),
+          ),
+          if (_isOpen)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+              child: GptMarkdown(widget.body),
+            ),
+        ],
+      ),
+    );
+  }
+}

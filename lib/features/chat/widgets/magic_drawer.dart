@@ -132,8 +132,12 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _loadDrawer() async {
-    await _loadLayout();
-    await _loadStats();
+    try {
+      await _loadLayout();
+      await _loadStats();
+    } catch (e) {
+      debugPrint('[MagicDrawer] _loadDrawer error: $e');
+    }
     if (mounted) {
       setState(() => _loading = false);
     }
@@ -191,7 +195,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   /// Lightweight refresh: only stats, no layout re-read from disk.
   /// Called by the debounce timer when messages change.
   Future<void> _refreshStats() async {
-    await _loadStats();
+    try {
+      await _loadStats();
+    } catch (e) {
+      debugPrint('[MagicDrawer] _refreshStats error: $e');
+    }
     if (mounted) setState(() {});
     _loadTokenStats();
   }

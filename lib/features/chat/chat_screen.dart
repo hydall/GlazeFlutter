@@ -8,10 +8,13 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'editing_message_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/state/character_provider.dart';
+import '../../core/state/active_selection_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import 'widgets/message_actions.dart';
 import '../../shared/theme/theme_font_provider.dart';
 import '../../shared/theme/theme_provider.dart';
 
@@ -24,8 +27,9 @@ import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
 import '../image_gen/widgets/image_gen_sheet.dart';
 import 'widgets/magic_drawer.dart';
-import 'widgets/message_list.dart';
-import 'widgets/cached_token_breakdown.dart';
+import 'widgets/chat_webview_widget.dart';
+import '../../core/models/chat_message.dart';
+import '../../core/state/db_provider.dart';
 import 'widgets/session_lifecycle_tracker.dart';
 
 class SearchMatch {
@@ -170,14 +174,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
+  @override
+  void didUpdateWidget(ChatScreen old) {
+    super.didUpdateWidget(old);
+    if (widget.initialSessionIndex != old.initialSessionIndex ||
+        widget.forceNewSession != old.forceNewSession ||
+        widget.charId != old.charId) {
+      _sessionApplied = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _applySessionPreference();
+      });
+    }
+  }
+
   Future<void> _applySessionPreference() async {
     if (_sessionApplied) return;
     _sessionApplied = true;
     final notifier = ref.read(chatProvider(widget.charId).notifier);
     if (widget.forceNewSession) {
-      await notifier.createNewSession();
+      unawaited(notifier.createNewSession());
     } else if (widget.initialSessionIndex != null) {
-      await notifier.switchSession(widget.initialSessionIndex!);
+      unawaited(notifier.switchSession(widget.initialSessionIndex!));
     }
   }
 
@@ -243,7 +260,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final isIdle = keyboardHeight == 0 && !_drawerOpen && !_switchingToDrawer && _drawerAnimController.value == 0;
     final bottomPadding = isIdle ? safeBottom : 0.0;
 
-    // Final (post-animation) inset for layout-only consumers (MessageList).
+    // Final (post-animation) inset for layout-only consumers.
     // Animated visual positioning of the input + drawer is driven by
     // _drawerAnim inside _ChatBody so list paddings don't churn each frame.
     final targetDrawerInset = (_drawerOpen || _switchingToDrawer) ? _activeDrawerHeight : 0.0;
@@ -410,8 +427,8 @@ class _ChatBody extends ConsumerStatefulWidget {
   final double drawerHeight;
   final double keyboardHeight;
 
-  /// Final (post-animation) inset for layout-only consumers like
-  /// [MessageList]. Doesn't churn per frame.
+  /// Final (post-animation) inset for layout-only consumers.
+  /// Doesn't churn per frame.
   final double targetBottomPanelInset;
 
   /// 0..1 progress of the drawer reveal — drives the visual slide and the
@@ -480,6 +497,126 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     }
   }
 
+  void _showImageViewer(BuildContext context, String imageUrl) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black87,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.zero,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Center(
+                child: Image.network(imageUrl, fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => Image.file(File(imageUrl.replaceFirst('file:///', '').replaceFirst('file://', '')),
+                    fit: BoxFit.contain, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 64, color: Colors.white54)),
+                ),
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 8,
+              right: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white, size: 28),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showTriggeredItemsSheet(
+    BuildContext context,
+    List<TriggeredEntry> entries,
+    String title,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.cs.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 32, height: 4,
+                decoration: BoxDecoration(
+                  color: context.cs.outlineVariant.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: context.cs.onSurface)),
+            const SizedBox(height: 8),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: entries.map((e) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(e.name,
+                            style: TextStyle(fontSize: 13, color: context.cs.onSurface),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (e.lorebookName.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Text(e.lorebookName,
+                            style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant.withValues(alpha: 0.6)),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: e.source == 'vector'
+                                ? Colors.purple.withValues(alpha: 0.15)
+                                : e.source == 'memory'
+                                    ? Colors.teal.withValues(alpha: 0.15)
+                                    : context.cs.primaryContainer,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            e.source == 'vector' ? 'vector' : e.source == 'memory' ? 'memory' : 'keyword',
+                            style: TextStyle(
+                              fontSize: 10, fontWeight: FontWeight.w500,
+                              color: e.source == 'vector'
+                                  ? Colors.purple
+                                  : e.source == 'memory'
+                                      ? Colors.teal
+                                      : context.cs.onPrimaryContainer,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )).toList(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final preset = ref.watch(themeProvider).activePreset;
@@ -497,19 +634,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
             final bgBlur = preset.bgBlur > 0 ? preset.bgBlur : 0.0;
             final bgOpacity = preset.bgOpacity.clamp(0.0, 1.0);
+            final bgPath = ref.watch(bgImageProvider).valueOrNull;
+            final fontStyle = ref.watch(chatFontStyleProvider);
+            final fontDataUrl = ref.watch(chatFontDataProvider);
 
             return Stack(
               children: [
-                if (ref.watch(bgImageProvider).valueOrNull case final path?)
-                  Positioned.fill(
-                    child: RepaintBoundary(
-                      child: _BgImage(
-                        path: path,
-                        blur: bgBlur,
-                        opacity: bgOpacity,
-                      ),
-                    ),
-                  ),
                 Positioned.fill(
                   child: NotificationListener<UserScrollNotification>(
                     onNotification: (notification) {
@@ -520,20 +650,149 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     },
                     child: RepaintBoundary(
                       child: Builder(builder: (context) {
-                        final breakdown = ref.watch(cachedTokenBreakdownProvider(widget.charId));
-                        return MessageList(
-                        messages: widget.state.messages,
-                        isGenerating: widget.state.isGenerating,
-                        generationStartTime: widget.state.generationStartTime,
-                        charId: widget.charId,
-                        sessionId: widget.state.session?.id,
-                        bottomInset: messageListBottom,
-                        isDrawerOpen: widget.drawerOpen || widget.isSwitchingToDrawer,
-                        searchQuery: widget.searchQuery,
-                        searchMatches: widget.searchMatches,
-                        searchCurrentIndex: widget.searchCurrentIndex,
-                        contextCutoffIndex: breakdown?.cutoffIndex ?? -1,
-                      );
+                        final character = ref.watch(characterByIdProvider(widget.charId));
+                        final effectivePersona = ref.watch(effectivePersonaForChatProvider(widget.charId));
+                        final memBook = ref.watch(memoryBookProvider(widget.state.session?.id ?? ''));
+                        return ChatWebViewWidget(
+                          messages: widget.state.visibleMessages,
+                          charId: widget.charId,
+                          isGenerating: widget.state.isGenerating,
+                          isGeneratingImage: widget.state.isGeneratingImage,
+                          regenTargetId: widget.state.regenTargetId,
+                          bottomInset: messageListBottom,
+                          charName: character?.name,
+                          charColor: character?.color,
+                          personaName: effectivePersona?.name,
+                          chatLayout: preset.chatLayout,
+                          charAvatarPath: character?.avatarPath,
+                          personaAvatarPath: effectivePersona?.avatarPath,
+                          bgImagePath: bgPath,
+                          bgBlur: bgBlur,
+                          bgOpacity: bgOpacity,
+                          chatFontName: fontStyle.fontFamily,
+                          chatFontDataUrl: fontDataUrl,
+                          chatFontSize: fontStyle.fontSize,
+                          chatLetterSpacing: fontStyle.letterSpacing,
+                          memoryEntries: memBook.valueOrNull?.entries ?? [],
+                          memoryDrafts: memBook.valueOrNull?.pendingDrafts ?? [],
+                          sessionId: widget.state.session?.id,
+                          visibleStartIndex: widget.state.visibleStartIndex,
+                          onMessageContext: (index, messageId, isUser, isSystem, content) {
+                            showMessageContextMenu(
+                              context: context,
+                              ref: ref,
+                              charId: widget.charId,
+                              content: content,
+                              messageIndex: index,
+                              messageId: messageId,
+                              isUser: isUser,
+                              isTyping: widget.state.isGenerating && index == widget.state.messages.length - 1,
+                              isError: false,
+                              isLast: index == widget.state.messages.length - 1,
+                              isGenerating: widget.state.isGenerating,
+                              isHidden: false,
+                            );
+                          },
+                          onSwipe: (id, direction) {
+                            final idx = widget.state.messages.indexWhere((m) => m.id == id);
+                            if (idx < 0) return;
+                            final msg = widget.state.messages[idx];
+                            final currentSwipe = msg.swipeId;
+                            final newSwipe = direction == 'right'
+                                ? (currentSwipe + 1).clamp(0, msg.swipes.length - 1)
+                                : (currentSwipe - 1).clamp(0, msg.swipes.length - 1);
+                            if (newSwipe != currentSwipe) {
+                              ref.read(chatProvider(widget.charId).notifier).setSwipe(idx, newSwipe);
+                            }
+                          },
+                          onRegenerate: (id) {
+                            ref.read(chatProvider(widget.charId).notifier).regenerateLastAssistant();
+                          },
+                          onStop: () {
+                            final notifier = ref.read(chatProvider(widget.charId).notifier);
+                            if (widget.state.isGeneratingImage && !widget.state.isGenerating) {
+                              notifier.abortImageGeneration();
+                            } else {
+                              notifier.abortGeneration();
+                            }
+                          },
+                          onImgRetry: (instruction, messageId) {
+                            final allMsgs = widget.state.messages;
+                            final idx = allMsgs.indexWhere((m) => m.id == messageId);
+                            if (idx >= 0) {
+                              ref.read(chatProvider(widget.charId).notifier).retryImageGenerationForMessage(idx);
+                            }
+                          },
+                          onImgFind: (instruction, messageId) {
+                            ref.read(chatProvider(widget.charId).notifier).findImageOnDisk(messageId, instruction);
+                          },
+                          onImgRegen: (instruction, messageId) {
+                            final allMsgs = widget.state.messages;
+                            final idx = allMsgs.indexWhere((m) => m.id == messageId);
+                            if (idx >= 0) {
+                              ref.read(chatProvider(widget.charId).notifier).retryImageGenerationForMessage(idx);
+                            }
+                          },
+                          onImgCancel: () {
+                            ref.read(chatProvider(widget.charId).notifier).cancelImageGeneration();
+                          },
+                          onSelectionAction: (action, text) {
+                            if (action == 'copy') {
+                              Clipboard.setData(ClipboardData(text: text));
+                            }
+                          },
+                          onEditSave: (id, text) {
+                            final idx = widget.state.messages.indexWhere((m) => m.id == id);
+                            if (idx >= 0 && text.isNotEmpty) {
+                              ref.read(chatProvider(widget.charId).notifier).editMessage(idx, text);
+                            }
+                            ref.read(editingMessageIdProvider(widget.charId).notifier).state = null;
+                          },
+                          onEditCancel: (id) {
+                            ref.read(editingMessageIdProvider(widget.charId).notifier).state = null;
+                          },
+                          onImageClick: (imageUrl) {
+                            _showImageViewer(context, imageUrl);
+                          },
+                          onGuidedSwipe: (id, guidanceText) {
+                            final idx = widget.state.messages.indexWhere((m) => m.id == id);
+                            if (idx < 0) return;
+                            final msg = widget.state.messages[idx];
+                            final isLastAssistant = msg.role == 'assistant' &&
+                                idx == widget.state.messages.length - 1;
+                            if (isLastAssistant) {
+                              ref.read(chatProvider(widget.charId).notifier)
+                                  .regenerateLastAssistant(guidanceText: guidanceText);
+                            }
+                          },
+                          onToggleHidden: (id) {
+                            final idx = widget.state.messages.indexWhere((m) => m.id == id);
+                            if (idx >= 0) {
+                              ref.read(chatProvider(widget.charId).notifier).toggleMessageHidden(idx);
+                            }
+                          },
+                          onMemoryClick: (id) {
+                            final idx = widget.state.messages.indexWhere((m) => m.id == id);
+                            if (idx < 0) return;
+                            final msg = widget.state.messages[idx];
+                            if (msg.triggeredMemories.isNotEmpty) {
+                              _showTriggeredItemsSheet(
+                                context,
+                                msg.triggeredMemories,
+                                'Memories',
+                              );
+                            }
+                          },
+                          onInjectClick: (id) {
+                            final idx = widget.state.messages.indexWhere((m) => m.id == id);
+                            if (idx < 0) return;
+                            final msg = widget.state.messages[idx];
+                            final all = [...msg.triggeredLorebooks, ...msg.triggeredMemories];
+                            if (all.isNotEmpty) {
+                              _showTriggeredItemsSheet(context, all, 'Triggered Entries');
+                            }
+                          },
+                        );
                       }),
                     ),
                   ),
@@ -694,108 +953,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
             );
           },
         ),
-        ),
+         ),
       ],
     );
-  }
-}
-
-
-
-class _ChatSearchBar extends StatelessWidget {
-  final String query;
-  final int matchCount;
-  final int currentIndex;
-  final ValueChanged<String> onChanged;
-  final VoidCallback? onPrevious;
-  final VoidCallback? onNext;
-  final VoidCallback onClose;
-
-  const _ChatSearchBar({
-    required this.query,
-    required this.matchCount,
-    required this.currentIndex,
-    required this.onChanged,
-    this.onPrevious,
-    this.onNext,
-    required this.onClose,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: TextField(
-            autofocus: true,
-            style: TextStyle(color: context.cs.onSurface, fontSize: 16),
-            decoration: InputDecoration(
-              hintText: 'Search messages...',
-              hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
-              border: InputBorder.none,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 8),
-            ),
-            onChanged: onChanged,
-          ),
-        ),
-        if (query.isNotEmpty) ...[
-          Text(
-            matchCount > 0 ? '${currentIndex + 1}/$matchCount' : '0/0',
-            style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
-          ),
-          IconButton(
-            icon: Icon(Icons.keyboard_arrow_up, size: 24, color: context.cs.onSurface),
-            onPressed: onPrevious,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          IconButton(
-            icon: Icon(Icons.keyboard_arrow_down, size: 24, color: context.cs.onSurface),
-            onPressed: onNext,
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-        ],
-        IconButton(
-          icon: Icon(Icons.close, size: 24, color: context.cs.onSurface),
-          onPressed: onClose,
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-        ),
-      ],
-    );
-  }
-}
-
-class _BgImage extends StatelessWidget {
-  final String path;
-  final double blur;
-  final double opacity;
-
-  const _BgImage({required this.path, required this.blur, required this.opacity});
-
-  @override
-  Widget build(BuildContext context) {
-    if (opacity <= 0) return const SizedBox.shrink();
-    final imageProvider = FileImage(File(path));
-    Widget child = DecoratedBox(
-      decoration: BoxDecoration(
-        image: DecorationImage(
-          image: imageProvider,
-          fit: BoxFit.cover,
-          colorFilter: opacity < 1.0
-              ? ColorFilter.mode(Color.fromRGBO(0, 0, 0, 1.0 - opacity), BlendMode.dstIn)
-              : null,
-        ),
-      ),
-    );
-    if (blur > 0) {
-      child = ImageFiltered(
-        imageFilter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-        child: child,
-      );
-    }
-    return ClipRect(child: child);
   }
 }

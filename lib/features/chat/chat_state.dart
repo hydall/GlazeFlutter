@@ -7,6 +7,13 @@ class ChatState {
   final String? error;
   final String? lastRawResponse;
   final DateTime? generationStartTime;
+  final int visibleStartIndex;
+  final bool isLoadingOlder;
+
+  final String? regenTargetId;
+
+  static const int initialPageSize = 20;
+  static const int olderPageSize = 20;
 
   const ChatState({
     this.session,
@@ -15,27 +22,46 @@ class ChatState {
     this.error,
     this.lastRawResponse,
     this.generationStartTime,
+    this.visibleStartIndex = 0,
+    this.isLoadingOlder = false,
+    this.regenTargetId,
   });
+
+  bool get hasMoreOlder => visibleStartIndex > 0;
+
+  List<ChatMessage> get messages => session?.messages ?? [];
+
+  List<ChatMessage> get visibleMessages {
+    final all = messages;
+    if (visibleStartIndex >= all.length) return all;
+    return all.sublist(visibleStartIndex);
+  }
+
+  static const _unset = Object();
 
   ChatState copyWith({
     ChatSession? session,
     bool? isGenerating,
     bool? isGeneratingImage,
-    String? error,
+    Object? error = _unset,
     String? lastRawResponse,
     DateTime? generationStartTime,
+    int? visibleStartIndex,
+    bool? isLoadingOlder,
+    Object? regenTargetId = _unset,
   }) {
     return ChatState(
       session: session ?? this.session,
       isGenerating: isGenerating ?? this.isGenerating,
       isGeneratingImage: isGeneratingImage ?? this.isGeneratingImage,
-      error: error,
+      error: error == _unset ? this.error : error as String?,
       lastRawResponse: lastRawResponse ?? this.lastRawResponse,
       generationStartTime: generationStartTime ?? this.generationStartTime,
+      visibleStartIndex: visibleStartIndex ?? this.visibleStartIndex,
+      isLoadingOlder: isLoadingOlder ?? this.isLoadingOlder,
+      regenTargetId: regenTargetId == _unset ? this.regenTargetId : regenTargetId as String?,
     );
   }
-
-  List<ChatMessage> get messages => session?.messages ?? [];
 }
 
 class StreamingState {

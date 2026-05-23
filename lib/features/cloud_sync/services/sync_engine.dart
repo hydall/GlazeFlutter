@@ -440,7 +440,7 @@ class SyncEngine {
         case 'chat':
           final s = await _chatRepo.getById(id);
           if (s == null) return null;
-          return s.toJson();
+          return _stripImagesFromSession(s.toJson());
         case 'lorebooks':
           final all = await _lorebookRepo.getAll();
           return {'__singleton': true, 'items': all.map((l) => l.toJson()).toList()};
@@ -668,4 +668,53 @@ class SyncEngine {
     }
     return true;
   }
+}
+
+final _imgResultRegex = RegExp(r'\[IMG:RESULT:[^\]]*\]');
+final _imgErrorRegex = RegExp(r'\[IMG:ERROR:[^\]]*\]');
+final _imgGenRegex = RegExp(r'\[IMG:GEN[^\]]*\]');
+final _base64DataUrlRegex = RegExp(r'data:image/[^;]+;base64,[A-Za-z0-9+/=]{256,}');
+final _imgTagRegex = RegExp(r'<img\s[^>]*?src="data:image/[^"]{256,}?"[^>]*\/?>');
+
+Map<String, dynamic> _stripImagesFromSession(Map<String, dynamic> json) {
+  final messages = json['messages'];
+  if (messages is! List) return json;
+  final stripped = messages.map((m) {
+    if (m is! Map<String, dynamic>) return m;
+    var modified = false;
+    final content = m['content'];
+    String? cleanedContent;
+    if (content is String && content.length >= 10) {
+      cleanedContent = _stripImageContent(content);
+      if (!identical(cleanedContent, content)) modified = true;
+    }
+    List<dynamic>? cleanedSwipes;
+    final swipes = m['swipes'];
+    if (swipes is List && swipes.isNotEmpty) {
+      cleanedSwipes = swipes.map((s) {
+        if (s is String && s.length >= 10) {
+          final c = _stripImageContent(s);
+          if (!identical(c, s)) modified = true;
+          return c;
+        }
+        return s;
+      }).toList();
+    }
+    if (!modified) return m;
+    final result = <String, dynamic>{...m};
+    if (cleanedContent != null) result['content'] = cleanedContent;
+    if (cleanedSwipes != null) result['swipes'] = cleanedSwipes;
+    return result;
+  }).toList();
+  return {...json, 'messages': stripped};
+}
+
+String _stripImageContent(String text) {
+  var result = text;
+  result = result.replaceAll(_imgResultRegex, '');
+  result = result.replaceAll(_imgErrorRegex, '');
+  result = result.replaceAll(_imgGenRegex, '');
+  result = result.replaceAll(_imgTagRegex, '');
+  result = result.replaceAll(_base64DataUrlRegex, '');
+  return result;
 }

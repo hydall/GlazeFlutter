@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Glaze Chat</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--bg-color, #1a1a2e);
+      color: var(--text-color, #e0e0e0);
+      font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif);
+      font-size: var(--font-size, 15px);
+      letter-spacing: var(--letter-spacing, 0);
+      overflow: hidden;
+      height: 100%;
+    }
+    #chat-container {
+      width: 100%; height: 100vh;
+      overflow-y: auto; overflow-x: hidden;
+      -webkit-overflow-scrolling: touch;
+      padding: 8px 24px;
+      background: var(--bg-color, #1a1a2e);
+    }
+    #chat-container::-webkit-scrollbar {
+      width: 6px;
+    }
+    #chat-container::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    #chat-container::-webkit-scrollbar-thumb {
+      background: rgba(255,255,255,0.15);
+      border-radius: 3px;
+    }
+    #loading-screen {
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #1a1a2e; color: #e0e0e0;
+      font-size: 14px; z-index: 9999;
+      transition: opacity 0.2s;
+    }
+  </style>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="loading-screen">Loading...</div>
+  <div id="chat-container" class="layout-bubble"></div>
+
+  <script src="formatter.js"></script>
+  <script src="renderer.js"></script>
+  <script src="virtual_list.js"></script>
+  <script src="bridge.js"></script>
+
+  <script>
+    window.onerror = function(msg, src, line, col, err) {
+      document.title = 'JS_ERR: ' + msg + ' @' + line;
+      console.error('JS_ERR:', msg, src, line, err);
+    };
+    try {
+      const container = document.getElementById('chat-container');
+      const formatter = new Formatter();
+      const virtualList = new VirtualList(container);
+      const renderer = new Renderer(formatter, virtualList);
+      window.bridge = new Bridge(renderer, virtualList);
+      container.addEventListener('wheel', (e) => {
+        if (e.deltaMode === 0) {
+          e.preventDefault();
+          container.scrollTop += e.deltaY * 0.3;
+        } else if (e.deltaMode === 1) {
+          e.preventDefault();
+          container.scrollTop += e.deltaY * 16;
+        }
+      }, { passive: false });
+      window.bridge._sendToFlutter('onWebViewReady', []);
+    } catch(e) {
+      document.title = 'JS_ERR: ' + e.message;
+      document.getElementById('loading-screen').textContent = 'Error: ' + e.message;
+    }
+  </script>
+</body>
+</html>

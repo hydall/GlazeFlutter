@@ -12,6 +12,7 @@ void showMessageContextMenu({
   required String charId,
   required String content,
   required int messageIndex,
+  required String messageId,
   required bool isUser,
   required bool isTyping,
   required bool isError,
@@ -48,7 +49,7 @@ void showMessageContextMenu({
           label: 'Edit',
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
-            ref.read(editingMessageIndexProvider(charId).notifier).state = messageIndex;
+            ref.read(editingMessageIdProvider(charId).notifier).state = messageId;
           },
         ),
       if ((!isUser && isLast && !isGenerating) || isError)

@@ -1,4 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-final editingMessageIndexProvider =
-    StateProvider.family<int?, String>((ref, charId) => null);
+final editingMessageIdProvider =
+    StateProvider.family<String?, String>((ref, charId) => null);

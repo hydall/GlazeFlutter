@@ -6,6 +6,7 @@ import '../../core/db/repositories/character_repo.dart' show CharacterRepo;
 import '../../core/models/chat_message.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/utils/sync_deletion_tracker.dart';
+import '../chat/chat_session_service.dart';
 
 class ChatSessionInfo {
   final String sessionId;
@@ -111,6 +112,7 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
 
   Future<void> deleteSession(String sessionId) async {
     await ref.read(chatRepoProvider).delete(sessionId);
+    ChatSessionService.clearCache();
     await SyncDeletionTracker.record('chat', sessionId);
   }
 

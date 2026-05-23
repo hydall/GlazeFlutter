@@ -85,6 +85,8 @@ Map<String, dynamic> normalizeJsMessage(
         : <TriggeredEntry>[],
     'triggeredMemories': msg['triggeredMemories'] is List
         ? parseTriggeredEntries(msg['triggeredMemories'] as List)
+            .map((e) => TriggeredEntry(id: e.id, name: e.name, lorebookName: e.lorebookName, lorebookId: e.lorebookId, source: 'memory'))
+            .toList()
         : <TriggeredEntry>[],
     'swipesMeta': msg['swipesMeta'] is List
         ? (msg['swipesMeta'] as List)

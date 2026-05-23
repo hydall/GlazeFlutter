@@ -74,9 +74,8 @@ class ImageGenService {
   String replaceTagWithResult(String text, int index, String imagePath) {
     final instructions = extractImageGenInstructions(text);
     final instruction = index < instructions.length ? instructions[index] : null;
-    final payload = instruction != null && instruction.isNotEmpty
-        ? '$imagePath${instruction.isNotEmpty ? '|$instruction' : ''}'
-        : imagePath;
+    final instrJson = instruction != null && instruction.isNotEmpty ? jsonEncode(instruction) : '';
+    final payload = instrJson.isNotEmpty ? '$imagePath|$instrJson' : imagePath;
     int count = 0;
     var result = text.replaceAllMapped(_htmlIigTagRegex, (m) {
       if (count++ == index) return '[IMG:RESULT:$payload]';
@@ -158,12 +157,6 @@ class ImageGenService {
       return '[IMG:GEN]';
     });
     return result;
-  }
-
-  static String? _extractInstructionFromPath(String path) {
-    final pipeIdx = path.indexOf('|');
-    if (pipeIdx != -1) return path.substring(pipeIdx + 1);
-    return null;
   }
 
   Future<String> processMessageImages({

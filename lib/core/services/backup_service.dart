@@ -43,8 +43,7 @@ class BackupService {
     await _deleteOrphanedSessions();
 
     final prefs = await SharedPreferences.getInstance();
-    final prefsData = (data['preferences'] as Map<String, dynamic>?) ??
-        (data['localStorage'] as Map<String, dynamic>?);
+    final prefsData = data['preferences'] as Map<String, dynamic>?;
     if (prefsData != null) {
       final themeKeys = prefs.getKeys().where(
           (k) => k.startsWith('gz_theme_') || k.startsWith('glaze_theme_'));

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/chat_message.dart';
@@ -10,7 +12,21 @@ import 'initial_message_builder.dart';
 class ChatSessionService {
   final Ref _ref;
 
+  static final Map<String, ChatSession> _cache = {};
+
   ChatSessionService(this._ref);
+
+  static void updateCache(ChatSession session) {
+    _cache[session.id] = session;
+  }
+
+  static void clearCache({String? charId}) {
+    if (charId == null) {
+      _cache.clear();
+    } else {
+      _cache.removeWhere((k, _) => k.startsWith('${charId}_'));
+    }
+  }
 
   Future<ChatSession> createInitialSession(String charId) async {
     final repo = _ref.read(chatRepoProvider);
@@ -51,13 +67,60 @@ class ChatSessionService {
   }
 
   Future<ChatSession> switchToSession(String charId, int sessionIndex) async {
-    final repo = _ref.read(chatRepoProvider);
-    final sessions = await repo.getByCharacterId(charId);
-    final target = sessions.where((s) => s.sessionIndex == sessionIndex).firstOrNull;
-    if (target != null) {
-      await saveCurrentSessionIndex(charId, sessionIndex);
+    final cacheKey = '${charId}_$sessionIndex';
+    
+    final cached = _cache[cacheKey];
+    if (cached != null) {
+      saveCurrentSessionIndex(charId, sessionIndex);
+      _prefetchAdjacent(charId, sessionIndex);
+      return cached;
     }
-    return target!;
+    
+    final repo = _ref.read(chatRepoProvider);
+    final session = await repo.getById(cacheKey);
+    if (session == null) {
+      final sessions = await repo.getByCharacterId(charId);
+      final target = sessions.where((s) => s.sessionIndex == sessionIndex).firstOrNull;
+      if (target == null) {
+        throw StateError('Session $charId#$sessionIndex not found');
+      }
+      _cache[target.id] = target;
+      saveCurrentSessionIndex(charId, sessionIndex);
+      _prefetchAdjacent(charId, target.sessionIndex);
+      return target;
+    }
+    
+    _cache[cacheKey] = session;
+    saveCurrentSessionIndex(charId, sessionIndex);
+    _prefetchAdjacent(charId, sessionIndex);
+    return session;
+  }
+
+  void _prefetchAdjacent(String charId, int currentIdx) {
+    () async {
+      try {
+        final repo = _ref.read(chatRepoProvider);
+        final futures = <Future<void>>[];
+        
+        if (currentIdx > 0) {
+          final prevKey = '${charId}_${currentIdx - 1}';
+          if (!_cache.containsKey(prevKey)) {
+            futures.add(repo.getById(prevKey).then((s) {
+              if (s != null) _cache[prevKey] = s;
+            }));
+          }
+        }
+        
+        final nextKey = '${charId}_${currentIdx + 1}';
+        if (!_cache.containsKey(nextKey)) {
+          futures.add(repo.getById(nextKey).then((s) {
+            if (s != null) _cache[nextKey] = s;
+          }));
+        }
+        
+        if (futures.isNotEmpty) await Future.wait(futures);
+      } catch (_) {}
+    }();
   }
 
   Future<ChatSession> createNewSession(String charId) async {
@@ -79,7 +142,7 @@ class ChatSessionService {
       messages: initialMessages,
     );
     await repo.put(session);
-    await saveCurrentSessionIndex(charId, nextIndex);
+    saveCurrentSessionIndex(charId, nextIndex);
     return session;
   }
 
@@ -95,7 +158,7 @@ class ChatSessionService {
       updatedAt: currentTimestampSeconds(),
     );
     await repo.put(session);
-    await saveCurrentSessionIndex(charId, nextIndex);
+    saveCurrentSessionIndex(charId, nextIndex);
     return session;
   }
 
@@ -126,12 +189,16 @@ class ChatSessionService {
     return getEffectivePersona(personas, charId, null, activePersonaId, connections);
   }
 
-  Future<void> saveCurrentSessionIndex(String charId, int index) async {
-    final charRepo = _ref.read(characterRepoProvider);
-    final character = await charRepo.getById(charId);
-    if (character != null) {
-      await charRepo.put(character.copyWith(currentSessionIndex: index));
-    }
+  void saveCurrentSessionIndex(String charId, int index) {
+    () async {
+      try {
+        final charRepo = _ref.read(characterRepoProvider);
+        final character = await charRepo.getById(charId);
+        if (character != null) {
+          await charRepo.put(character.copyWith(currentSessionIndex: index));
+        }
+      } catch (_) {}
+    }();
   }
 
   Future<int> _nextSessionIndex(String charId) async {

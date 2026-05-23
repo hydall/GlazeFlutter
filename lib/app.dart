@@ -35,6 +35,8 @@ import 'shared/shell/shell_screen.dart';
 import 'shared/theme/app_theme.dart';
 import 'shared/theme/theme_provider.dart';
 
+
+import 'features/chat/widgets/chat_webview_preload.dart';
 import 'shared/widgets/glaze_toast.dart' show toastOverlayKey;
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -114,21 +116,31 @@ final routerProvider = Provider<GoRouter>(
               GoRoute(path: '/menu', builder: (_, __) => const MenuScreen()),
             ],
           ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/chat',
+                builder: (_, __) => const SizedBox.shrink(),
+                routes: [
+                  GoRoute(
+                    path: ':charId',
+                    builder: (_, state) {
+                      final charId = state.pathParameters['charId']!;
+                      final sessionIdx = int.tryParse(
+                          state.uri.queryParameters['session'] ?? '');
+                      final isNew = state.uri.queryParameters['new'] == '1';
+                      return ChatScreen(
+                        charId: charId,
+                        initialSessionIndex: sessionIdx,
+                        forceNewSession: isNew,
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
         ],
-      ),
-      GoRoute(
-        path: '/chat/:charId',
-        builder: (_, state) {
-          final charId = state.pathParameters['charId']!;
-          final sessionIdx = int.tryParse(
-              state.uri.queryParameters['session'] ?? '');
-          final isNew = state.uri.queryParameters['new'] == '1';
-          return ChatScreen(
-            charId: charId,
-            initialSessionIndex: sessionIdx,
-            forceNewSession: isNew,
-          );
-        },
       ),
       GoRoute(
         path: '/character/create',
@@ -235,9 +247,11 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
       themeMode: mode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
-      builder: (context, child) => Overlay(
-        key: toastOverlayKey,
-        initialEntries: [OverlayEntry(builder: (_) => child!)],
+      builder: (context, child) => ChatWebViewPreloader(
+        child: Overlay(
+          key: toastOverlayKey,
+          initialEntries: [OverlayEntry(builder: (_) => child!)],
+        ),
       ),
     );
   }

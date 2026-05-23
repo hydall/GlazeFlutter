@@ -7,6 +7,7 @@ import '../../core/llm/prompt_isolate.dart';
 import '../../core/llm/prompt_payload_builder.dart';
 import '../../core/llm/sse_client.dart';
 import '../../core/llm/stream_accumulator.dart';
+import '../../core/models/api_config.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/utils/id_generator.dart';
@@ -27,6 +28,7 @@ class ChatGenerationService {
 
   Future<ChatState> generate({
     required ChatSession session,
+    ChatSession? saveSession,
     required String charId,
     required ChatState currentState,
     required void Function(ChatState) onStateUpdate,
@@ -38,7 +40,9 @@ class ChatGenerationService {
     int? previousTokens,
     List<Map<String, dynamic>>? previousSwipesMeta,
     String? guidanceText,
+    String? regenTargetId,
   }) async {
+    final vsi = currentState.visibleStartIndex;
     try {
       final builder = _ref.read(promptPayloadBuilderProvider);
       final payload = await builder.buildFromSession(
@@ -145,7 +149,7 @@ class ChatGenerationService {
           final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
           final tokenCount = (finalText.length / 4).round();
           finalState = _saveAssistantMessage(
-            finalText, finalReasoning, session,
+            finalText, finalReasoning, saveSession ?? session,
             pendingSessionVars: pendingSessionVars,
             genTime: timeStr, tokens: tokenCount,
             rawResponse: text,
@@ -160,27 +164,27 @@ class ChatGenerationService {
             isAllReasoning: isAllReasoning,
             triggeredLorebooks: triggeredLorebooks,
             triggeredMemories: triggeredMemories,
+            regenTargetId: regenTargetId,
+            visibleStartIndex: vsi,
           );
         },
         onError: (error) {
           final isCancelled = error is DioException && error.type == DioExceptionType.cancel;
+          debugPrint('[gen] SSE onError: isCancelled=$isCancelled errorType=${error.runtimeType} regenTargetId=$regenTargetId');
           if (isCancelled) {
-            // User aborted — discard partial text, restore prior state.
-            finalState = ChatState(session: session, isGenerating: false);
+            finalState = ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
           } else {
-            // Server dropped connection (499, network error, etc.) —
-            // do not save partial text as a real message.
-            finalState = _saveErrorMessage(error.toString(), session, pendingSessionVars: pendingSessionVars);
+            debugPrint('[gen] SSE error details: $error');
+            finalState = _saveErrorMessage(error.toString(), session, pendingSessionVars: pendingSessionVars, visibleStartIndex: vsi);
           }
         },
       );
 
-      return finalState ?? ChatState(session: session, isGenerating: false);
+      return finalState ?? ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
     } catch (e) {
-      // If aborted, don't write an error message to the DB — the provider will
-      // restore the previous assistant message via _restorationMessage.
-      if (isAborted()) return ChatState(session: session, isGenerating: false);
-      return _saveErrorMessage(e.toString(), session);
+      debugPrint('[gen] generate() caught exception: $e regenTargetId=$regenTargetId isAborted=${isAborted()}');
+      if (isAborted()) return ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
+      return _saveErrorMessage(e.toString(), session, visibleStartIndex: vsi);
     }
   }
 
@@ -191,18 +195,14 @@ class ChatGenerationService {
     required void Function(ChatState) onStateUpdate,
   }) async {
     final session = currentState.session;
-    debugPrint('IMGGEN processImageTags CALLED: session=${session != null}');
     if (session == null) return;
 
     final imgGenSettingsAsync = _ref.read(imageGenSettingsProvider);
     if (imgGenSettingsAsync.isLoading) {
-      debugPrint('IMGGEN: settings still loading, waiting...');
       final imgGenSettings = await _ref.read(imageGenSettingsProvider.future);
-      debugPrint('IMGGEN: settings loaded, enabled=${imgGenSettings.enabled}');
       if (!imgGenSettings.enabled) return;
     } else {
       final imgGenSettings = imgGenSettingsAsync.value;
-      debugPrint('IMGGEN: settings=${imgGenSettings != null}, enabled=${imgGenSettings?.enabled}, isLoading=${imgGenSettingsAsync.isLoading}, hasError=${imgGenSettingsAsync.hasError}');
       if (imgGenSettings == null || !imgGenSettings.enabled) return;
     }
     final imgGenSettings = await _ref.read(imageGenSettingsProvider.future);
@@ -214,11 +214,20 @@ class ChatGenerationService {
 
     final notifier = _ref.read(imageGenSettingsProvider.notifier);
     final service = await notifier.getServiceAsync();
-    debugPrint('IMGGEN: service ready, hasTags=${service.hasImageGenTags(lastMsg.content)}, contentLen=${lastMsg.content.length}');
     if (!service.hasImageGenTags(lastMsg.content)) return;
 
-    final apiConfig = _ref.read(activeApiConfigProvider);
-    if (apiConfig == null) return;
+    final apiConfigSync = _ref.read(activeApiConfigProvider);
+    final ApiConfig apiConfig;
+    if (apiConfigSync != null) {
+      apiConfig = apiConfigSync;
+    } else {
+      final apiList = await _ref.read(apiListProvider.future);
+      if (apiList.isEmpty) return;
+      final activeId = _ref.read(activeApiPresetIdProvider);
+      apiConfig = activeId != null
+          ? apiList.firstWhere((c) => c.id == activeId, orElse: () => apiList.first)
+          : apiList.first;
+    }
 
     final charRepo = _ref.read(characterRepoProvider);
     final character = await charRepo.getById(charId);
@@ -233,7 +242,8 @@ class ChatGenerationService {
 
     final recentContexts = _collectRecentImageContexts(session.messages);
 
-    onStateUpdate(ChatState(session: session, isGeneratingImage: true));
+    debugPrint('[IMGGEN] → setting isGeneratingImage=true');
+    onStateUpdate(currentState.copyWith(session: session, isGeneratingImage: true));
 
     String updatedContent;
     try {
@@ -249,22 +259,31 @@ class ChatGenerationService {
         cancelToken: cancelToken,
         onUpdate: (updatedText) {
           final newMessages = List<ChatMessage>.from(session.messages);
-          newMessages[lastIdx] = lastMsg.copyWith(content: updatedText);
+          final swipeIdx = lastMsg.swipeId;
+          final updatedSwipes = lastMsg.swipes.isNotEmpty && swipeIdx >= 0 && swipeIdx < lastMsg.swipes.length
+              ? (List<String>.from(lastMsg.swipes)..[swipeIdx] = updatedText)
+              : lastMsg.swipes;
+          newMessages[lastIdx] = lastMsg.copyWith(content: updatedText, swipes: updatedSwipes);
           final updatedSession = session.copyWith(
             messages: newMessages,
             updatedAt: currentTimestampSeconds(),
           );
-          onStateUpdate(ChatState(session: updatedSession));
+          onStateUpdate(currentState.copyWith(session: updatedSession));
         },
         onError: (error) {
+          debugPrint('[IMGGEN] onError: $error');
           GlazeToast.showWithoutContext('Image gen: $error', isError: true, duration: 4000);
         },
       );
     } on DioException catch (e) {
       if (CancelToken.isCancel(e)) {
-        onStateUpdate(ChatState(session: session, isGeneratingImage: false));
+        onStateUpdate(currentState.copyWith(session: session, isGeneratingImage: false));
         return;
       }
+      onStateUpdate(currentState.copyWith(session: session, isGeneratingImage: false));
+      rethrow;
+    } catch (e) {
+      onStateUpdate(currentState.copyWith(session: session, isGeneratingImage: false));
       rethrow;
     }
 
@@ -276,20 +295,28 @@ class ChatGenerationService {
         idx++;
       }
       final newMessages = List<ChatMessage>.from(session.messages);
-      newMessages[lastIdx] = lastMsg.copyWith(content: cancelContent);
+      final cancelSwipeIdx = lastMsg.swipeId;
+      final cancelSwipes = lastMsg.swipes.isNotEmpty && cancelSwipeIdx >= 0 && cancelSwipeIdx < lastMsg.swipes.length
+          ? (List<String>.from(lastMsg.swipes)..[cancelSwipeIdx] = cancelContent)
+          : lastMsg.swipes;
+      newMessages[lastIdx] = lastMsg.copyWith(content: cancelContent, swipes: cancelSwipes);
       final finalSession = session.copyWith(messages: newMessages, updatedAt: currentTimestampSeconds());
-      onStateUpdate(ChatState(session: finalSession, isGeneratingImage: false));
+      onStateUpdate(currentState.copyWith(session: finalSession, isGeneratingImage: false));
       return;
     }
 
     final newMessages = List<ChatMessage>.from(session.messages);
-    newMessages[lastIdx] = lastMsg.copyWith(content: updatedContent);
+    final finalSwipeIdx = lastMsg.swipeId;
+    final finalSwipes = lastMsg.swipes.isNotEmpty && finalSwipeIdx >= 0 && finalSwipeIdx < lastMsg.swipes.length
+        ? (List<String>.from(lastMsg.swipes)..[finalSwipeIdx] = updatedContent)
+        : lastMsg.swipes;
+    newMessages[lastIdx] = lastMsg.copyWith(content: updatedContent, swipes: finalSwipes);
     final finalSession = session.copyWith(
       messages: newMessages,
       updatedAt: currentTimestampSeconds(),
     );
     await _ref.read(chatRepoProvider).put(finalSession);
-    onStateUpdate(ChatState(session: finalSession, isGeneratingImage: false));
+    onStateUpdate(currentState.copyWith(session: finalSession, isGeneratingImage: false));
   }
 
   List<String> _collectRecentImageContexts(List<ChatMessage> messages) {
@@ -320,6 +347,8 @@ class ChatGenerationService {
     bool isAllReasoning = false,
     List<TriggeredEntry> triggeredLorebooks = const [],
     List<TriggeredEntry> triggeredMemories = const [],
+    String? regenTargetId,
+    int visibleStartIndex = 0,
   }) {
     List<String> swipes;
     int swipeId;
@@ -346,8 +375,6 @@ class ChatGenerationService {
     if (previousSwipesMeta != null && previousSwipesMeta.isNotEmpty) {
       swipesMeta = [...previousSwipesMeta, currentSwipeMeta];
     } else if (previousSwipes != null && previousSwipes.isNotEmpty) {
-      // If we have previous swipes but no meta, we need to fill the meta list
-      // to maintain 1:1 alignment.
       final prevMeta = <String, dynamic>{
         'genTime': previousGenTime,
         'reasoning': previousReasoning,
@@ -360,6 +387,36 @@ class ChatGenerationService {
       swipesMeta.add(currentSwipeMeta);
     } else {
       swipesMeta = [currentSwipeMeta];
+    }
+
+    if (regenTargetId != null) {
+      final idx = currentSession.messages.indexWhere((m) => m.id == regenTargetId);
+      debugPrint('[gen] _saveAssistantMessage regenTargetId=$regenTargetId idx=$idx swipes=${swipes.length} swipeId=$swipeId');
+      if (idx >= 0) {
+        final updated = currentSession.messages[idx].copyWith(
+          content: text,
+          reasoning: reasoning,
+          isAllReasoning: isAllReasoning,
+          genTime: genTime,
+          tokens: tokens,
+          swipes: swipes,
+          swipeId: swipeId,
+          swipesMeta: swipesMeta,
+          swipeDirection: 'right',
+          memoryCoverage: memoryCoverage,
+          triggeredLorebooks: triggeredLorebooks,
+          triggeredMemories: triggeredMemories,
+        );
+        final updatedMessages = [...currentSession.messages];
+        updatedMessages[idx] = updated;
+        final finalSession = currentSession.copyWith(
+          messages: updatedMessages,
+          updatedAt: currentTimestampSeconds(),
+          sessionVars: pendingSessionVars ?? currentSession.sessionVars,
+        );
+        _ref.read(chatRepoProvider).put(finalSession);
+        return ChatState(session: finalSession, lastRawResponse: rawResponse, regenTargetId: regenTargetId, visibleStartIndex: visibleStartIndex);
+      }
     }
 
     final assistantMsg = ChatMessage(
@@ -387,13 +444,14 @@ class ChatGenerationService {
       sessionVars: sessionVars,
     );
     _ref.read(chatRepoProvider).put(finalSession);
-    return ChatState(session: finalSession, lastRawResponse: rawResponse);
+    return ChatState(session: finalSession, lastRawResponse: rawResponse, visibleStartIndex: visibleStartIndex);
   }
 
   ChatState _saveErrorMessage(
     String errorText,
     ChatSession currentSession, {
     Map<String, String>? pendingSessionVars,
+    int visibleStartIndex = 0,
   }) {
     final errorMsg = ChatMessage(
       id: generateId(),
@@ -414,6 +472,6 @@ class ChatGenerationService {
       sessionVars: sessionVars,
     );
     _ref.read(chatRepoProvider).put(finalSession);
-    return ChatState(session: finalSession);
+    return ChatState(session: finalSession, visibleStartIndex: visibleStartIndex);
   }
 }

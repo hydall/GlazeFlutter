@@ -107,6 +107,15 @@ final chatFontFamilyProvider = FutureProvider<String?>((ref) async {
   return _loadFontFromBase64(preset.chatFont!, preset.chatFontName!);
 });
 
+final chatFontDataProvider = Provider<String?>((ref) {
+  final settings = ref.watch(themeProvider);
+  if (settings.ignoreCustomFont) return null;
+  final preset = settings.activePreset;
+  if (preset.chatFontMode != 'custom') return null;
+  if (!preset.hasChatFont) return null;
+  return preset.chatFont;
+});
+
 final uiFontFamilyProvider = FutureProvider<String?>((ref) async {
   final settings = ref.watch(themeProvider);
   if (settings.ignoreCustomFont) return null;

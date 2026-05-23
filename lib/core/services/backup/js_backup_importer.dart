@@ -57,6 +57,7 @@ class JsBackupImporter extends BackupHelpers {
     await step('importGalleryFromCharacters', 'Importing gallery...', () => characterImporter.importGalleryFromCharacters(data['characters']));
     await step('importDeletedEntries', 'Importing deleted entries...', () => presetImporter.importDeletedEntries(ls, kv));
     await step('importTheme', 'Importing theme...', () => presetImporter.importTheme(ls, kv));
+    await _resetSeededFlags();
     onProgress?.call('Finalizing...');
   }
 
@@ -268,5 +269,10 @@ class JsBackupImporter extends BackupHelpers {
             .write(ChatSessionsCompanion(sessionVarsJson: Value(varsJson)));
       }
     }
+  }
+
+  Future<void> _resetSeededFlags() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('defaultPresetsSeeded');
   }
 }

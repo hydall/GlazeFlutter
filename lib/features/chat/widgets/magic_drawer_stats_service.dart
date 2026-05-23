@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/embedding_types.dart';
@@ -9,6 +10,7 @@ import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/summary_service.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../core/models/preset.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
@@ -55,7 +57,13 @@ class MagicDrawerStatsService {
     final chatApi = apiConfigs
         .where((cfg) => cfg.mode != 'embedding')
         .firstOrNull;
-    final regexes = await _ref.read(activeRegexesProvider.future);
+    List<PresetRegex> regexes;
+    try {
+      regexes = await _ref.read(activeRegexesProvider.future);
+    } catch (e) {
+      debugPrint('[MagicDrawer] activeRegexesProvider error: $e');
+      regexes = [];
+    }
 
     var summaryChars = 0;
     var memoryEntries = 0;
@@ -69,48 +77,61 @@ class MagicDrawerStatsService {
     List<TriggeredEntry> triggeredMemories = [];
 
     if (session != null) {
-      final summary = await _ref
-          .read(summaryServiceProvider)
-          .getSummary(session.id);
-      summaryContent = summary;
-      summaryChars = summary?.length ?? 0;
-
-      final memoryService = _ref.read(memoryInjectionServiceProvider);
-      final embeddingConfig = _ref.read(embeddingConfigProvider);
-      final memoryHistory = session.messages
-          .where((m) => !m.isHidden && !m.isTyping)
-          .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
-          .toList();
-      final memoryResult = await memoryService.buildInjection(
-        sessionId: session.id,
-        historyText: session.historyText,
-        messageCount: session.messages.length,
-        summaryExcerpt: summaryContent,
-        history: memoryHistory,
-        currentText: session.messages.lastOrNull?.content ?? '',
-        embeddingConfig: embeddingConfig,
-      );
-      memoryContent = memoryResult.content.isNotEmpty ? memoryResult.content : null;
-      memoryMacroContent = memoryResult.macroContent.isNotEmpty ? memoryResult.macroContent : null;
-      memoryInjectionTarget = memoryResult.injectionTarget;
-      if (memoryResult.entries.isNotEmpty) {
-        memoryCoverage = {
-          'entryIds': memoryResult.entries.map((e) => e.id).toList(),
-          'needsRebuild': false,
-          'stale': false,
-        };
-        triggeredMemories = memoryResult.entries.map((e) => TriggeredEntry(
-          id: e.id,
-          name: e.title.isNotEmpty ? e.title : e.id,
-          source: 'memory',
-        )).toList();
+      try {
+        final summary = await _ref
+            .read(summaryServiceProvider)
+            .getSummary(session.id);
+        summaryContent = summary;
+        summaryChars = summary?.length ?? 0;
+      } catch (e) {
+        debugPrint('[MagicDrawer] summary error: $e');
       }
 
-      final memoryBook = await memoryRepo.getBySessionId(session.id);
-      memoryEntries = memoryBook?.entries.length ?? 0;
-      sessionCount =
-          (await _ref.read(chatRepoProvider).getByCharacterId(charId)).length;
-      messageCount = session.messages.length;
+      try {
+        final memoryService = _ref.read(memoryInjectionServiceProvider);
+        final embeddingConfig = _ref.read(embeddingConfigProvider);
+        final memoryHistory = session.messages
+            .where((m) => !m.isHidden && !m.isTyping)
+            .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
+            .toList();
+        final memoryResult = await memoryService.buildInjection(
+          sessionId: session.id,
+          historyText: session.historyText,
+          messageCount: session.messages.length,
+          summaryExcerpt: summaryContent,
+          history: memoryHistory,
+          currentText: session.messages.lastOrNull?.content ?? '',
+          embeddingConfig: embeddingConfig,
+        );
+        memoryContent = memoryResult.content.isNotEmpty ? memoryResult.content : null;
+        memoryMacroContent = memoryResult.macroContent.isNotEmpty ? memoryResult.macroContent : null;
+        memoryInjectionTarget = memoryResult.injectionTarget;
+        if (memoryResult.entries.isNotEmpty) {
+          memoryCoverage = {
+            'entryIds': memoryResult.entries.map((e) => e.id).toList(),
+            'needsRebuild': false,
+            'stale': false,
+            'injected': memoryContent != null,
+          };
+          triggeredMemories = memoryResult.entries.map((e) => TriggeredEntry(
+            id: e.id,
+            name: e.title.isNotEmpty ? e.title : e.id,
+            source: 'memory',
+          )).toList();
+        }
+      } catch (e) {
+        debugPrint('[MagicDrawer] memory injection error: $e');
+      }
+
+      try {
+        final memoryBook = await memoryRepo.getBySessionId(session.id);
+        memoryEntries = memoryBook?.entries.length ?? 0;
+        sessionCount =
+            (await _ref.read(chatRepoProvider).getByCharacterId(charId)).length;
+        messageCount = session.messages.length;
+      } catch (e) {
+        debugPrint('[MagicDrawer] session stats error: $e');
+      }
     }
 
     final lorebookActivations = _ref.read(lorebookActivationsProvider);

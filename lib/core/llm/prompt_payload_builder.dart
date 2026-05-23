@@ -38,8 +38,6 @@ class PromptPayloadBuilder {
     final character = await charRepo.getById(charId);
     if (character == null) throw StateError('Character not found: $charId');
 
-    // Ensure apiListProvider has finished loading before reading the sync provider.
-    // On cold start, activeApiConfigProvider returns null until the async load completes.
     await _ref.read(apiListProvider.future);
     final chatApi = _ref.read(activeApiConfigProvider);
     if (chatApi == null || chatApi.mode == 'embedding') throw StateError('No chat API config available');
@@ -101,6 +99,7 @@ class PromptPayloadBuilder {
           'entryIds': memoryResult.entries.map((e) => e.id).toList(),
           'needsRebuild': false,
           'stale': false,
+          'injected': memoryContent != null,
         };
         triggeredMemories = memoryResult.entries.map((e) => TriggeredEntry(
           id: e.id,
@@ -110,7 +109,12 @@ class PromptPayloadBuilder {
       }
 
       if (!skipVectorSearch) {
-        vectorEntries = await _runVectorSearch(session.messages, session.messages.lastOrNull?.content ?? '', character.world, character, chatId: session.id);
+        try {
+          vectorEntries = await _runVectorSearch(session.messages, session.messages.lastOrNull?.content ?? '', character.world, character, chatId: session.id)
+              .timeout(const Duration(seconds: 15));
+        } catch (e) {
+          debugPrint('[VEC] vector search timed out or failed: $e');
+        }
       }
     }
 
@@ -220,8 +224,6 @@ class PromptPayloadBuilder {
           .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
           .toList();
       final activations = _ref.read(lorebookActivationsProvider);
-      // Request up to maxInjectedEntries candidates so that after deduplication
-      // with keyword entries we still have enough to fill vectorSlots.
       final overrideTopK = settings.maxInjectedEntries;
       final results = await searchService.search(
         searchHistory, currentText, lorebooks, settings, config,

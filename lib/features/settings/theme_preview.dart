@@ -235,8 +235,7 @@ class _PreviewDateSeparator extends StatelessWidget {
 }
 
 /// Standard ("default") chat layout — no bubble, full-width italic text,
-/// avatar + name + #index row above. Mirrors the `isStandard` branch of
-/// [Message] in chat/widgets/message.dart.
+/// avatar + name + #index row above. Mirrors the standard layout in WebView renderer.
 class _PreviewStandardMessage extends StatelessWidget {
   final Character character;
   final bool isUser;
@@ -343,8 +342,8 @@ class _PreviewStandardMessage extends StatelessWidget {
   }
 }
 
-/// "Bubble" chat layout — message in a colored bubble. Mirrors the non-standard
-/// branch of [_BubbleStyle.resolve] in chat/widgets/message.dart.
+/// "Bubble" chat layout — message in a colored bubble. Mirrors the bubble layout
+/// in WebView renderer.
 class _PreviewBubble extends StatelessWidget {
   final Alignment alignment;
   final Color color;
