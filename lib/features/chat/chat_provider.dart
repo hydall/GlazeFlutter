@@ -185,7 +185,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     final lastMsg = current.messages[lastIdx];
     ChatMessage? prevAssistant;
-    List<ChatMessage> baseMessages;
 
     debugPrint('[regen] lastMsg.role=${lastMsg.role} isError=${lastMsg.isError} '
         'swipes=${lastMsg.swipes.length} swipeId=${lastMsg.swipeId} '
@@ -193,33 +192,33 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
     if (lastMsg.role == 'assistant') {
       prevAssistant = lastMsg;
-      baseMessages = current.messages.sublist(0, lastIdx);
-    } else {
-      baseMessages = List<ChatMessage>.from(current.messages);
     }
 
-    final trimmedSession = current.session!.copyWith(
-      messages: baseMessages,
-      updatedAt: currentTimestampSeconds(),
-    );
-    await ref.read(chatRepoProvider).put(trimmedSession);
-    ChatSessionService.updateCache(trimmedSession);
-    _invalidateHistory();
-    state = AsyncData(ChatState(session: trimmedSession, isGenerating: true, generationStartTime: DateTime.now()));
+    if (prevAssistant == null) return;
+
+    final regenTargetId = prevAssistant.id;
     _restorationMessage = prevAssistant;
 
+    state = AsyncData(ChatState(
+      session: current.session,
+      isGenerating: true,
+      generationStartTime: DateTime.now(),
+      regenTargetId: regenTargetId,
+    ));
+
     await _runGeneration(
-      trimmedSession, current,
+      current.session!, current,
       guidanceText: guidanceText,
-      previousSwipes: prevAssistant != null
-          ? (prevAssistant.swipes.isNotEmpty ? prevAssistant.swipes : [prevAssistant.content])
-          : null,
-      previousSwipeId: prevAssistant?.swipeId ?? 0,
-      previousReasoning: prevAssistant?.reasoning,
-      previousGenTime: prevAssistant?.genTime,
-      previousTokens: prevAssistant?.tokens,
-      previousSwipesMeta: prevAssistant?.swipesMeta.isNotEmpty == true
-          ? prevAssistant!.swipesMeta
+      regenTargetId: regenTargetId,
+      previousSwipes: prevAssistant.swipes.isNotEmpty
+          ? prevAssistant.swipes
+          : [prevAssistant.content],
+      previousSwipeId: prevAssistant.swipeId,
+      previousReasoning: prevAssistant.reasoning,
+      previousGenTime: prevAssistant.genTime,
+      previousTokens: prevAssistant.tokens,
+      previousSwipesMeta: prevAssistant.swipesMeta.isNotEmpty
+          ? prevAssistant.swipesMeta
           : null,
     );
   }
@@ -446,12 +445,50 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _cancelToken = null;
     _imgGenCancelToken?.cancel();
     _imgGenCancelToken = null;
-    _clearStreaming();;
+    _clearStreaming();
 
     final current = state.value;
     if (current != null && current.isGenerating) {
       final restoration = _restorationMessage;
-      if (restoration != null) {
+      final regenId = current.regenTargetId;
+
+      if (regenId != null && restoration != null) {
+        final idx = current.messages.indexWhere((m) => m.id == regenId);
+        if (idx >= 0) {
+          final restored = current.messages[idx].copyWith(
+            content: restoration.content,
+            swipeId: restoration.swipeId,
+            swipes: restoration.swipes,
+            reasoning: restoration.reasoning,
+            genTime: restoration.genTime,
+            tokens: restoration.tokens,
+            swipesMeta: restoration.swipesMeta,
+            swipeDirection: restoration.swipeDirection,
+          );
+          final restoredMessages = [...current.messages];
+          restoredMessages[idx] = restored;
+          final restoredSession = current.session?.copyWith(
+            messages: restoredMessages,
+            updatedAt: currentTimestampSeconds(),
+          );
+          if (restoredSession != null) {
+            ref.read(chatRepoProvider).put(restoredSession);
+            ChatSessionService.updateCache(restoredSession);
+          }
+          state = AsyncData(ChatState(
+            session: restoredSession ?? current.session,
+            isGenerating: false,
+            isGeneratingImage: false,
+          ));
+        } else {
+          state = AsyncData(ChatState(
+            session: current.session,
+            isGenerating: false,
+            isGeneratingImage: false,
+            regenTargetId: null,
+          ));
+        }
+      } else if (restoration != null) {
         final restoredMessages = <ChatMessage>[...(current.session?.messages ?? const <ChatMessage>[]), restoration];
         final restoredSession = current.session?.copyWith(
           messages: restoredMessages,
@@ -503,6 +540,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     String? previousGenTime,
     int? previousTokens,
     List<Map<String, dynamic>>? previousSwipesMeta,
+    String? regenTargetId,
   }) async {
     final genId = ++_activeGenId;
     final completer = Completer<void>();
@@ -529,6 +567,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       previousTokens: previousTokens,
       previousSwipesMeta: previousSwipesMeta,
       guidanceText: guidanceText,
+      regenTargetId: regenTargetId,
     );
 
     // A newer generation started while we were awaiting — discard this result.
@@ -537,7 +576,42 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       return;
     }
 
-    if (result.session?.messages.length == session.messages.length) {
+    if (regenTargetId != null) {
+      if (result.regenTargetId == regenTargetId) {
+        final finalState = result.copyWith(isGenerating: false, regenTargetId: null);
+        state = AsyncData(finalState);
+      } else {
+        final idx = session.messages.indexWhere((m) => m.id == regenTargetId);
+        if (idx >= 0 && _restorationMessage != null) {
+          final restored = session.messages[idx].copyWith(
+            content: _restorationMessage!.content,
+            swipeId: _restorationMessage!.swipeId,
+            swipes: _restorationMessage!.swipes,
+            reasoning: _restorationMessage!.reasoning,
+            genTime: _restorationMessage!.genTime,
+            tokens: _restorationMessage!.tokens,
+            swipesMeta: _restorationMessage!.swipesMeta,
+            swipeDirection: _restorationMessage!.swipeDirection,
+          );
+          final restoredMessages = [...session.messages];
+          restoredMessages[idx] = restored;
+          final restoredSession = session.copyWith(
+            messages: restoredMessages,
+            updatedAt: currentTimestampSeconds(),
+          );
+          await ref.read(chatRepoProvider).put(restoredSession);
+          ChatSessionService.updateCache(restoredSession);
+          _invalidateHistory();
+          state = AsyncData(ChatState(
+            session: restoredSession,
+            isGenerating: false,
+            error: result.error,
+          ));
+        } else {
+          state = AsyncData(result.copyWith(isGenerating: false, regenTargetId: null));
+        }
+      }
+    } else if (result.session?.messages.length == session.messages.length) {
       // No new message was saved (cancelled or failed)
       if (_restorationMessage != null) {
         final restoredMessages = [...session.messages, _restorationMessage!];

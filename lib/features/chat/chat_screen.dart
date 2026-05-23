@@ -657,6 +657,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           messages: widget.state.visibleMessages,
                           charId: widget.charId,
                           isGenerating: widget.state.isGenerating,
+                          regenTargetId: widget.state.regenTargetId,
                           bottomInset: messageListBottom,
                           charName: character?.name,
                           charColor: character?.color,

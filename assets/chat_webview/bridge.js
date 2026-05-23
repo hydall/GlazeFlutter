@@ -369,6 +369,42 @@ class Bridge {
         eye.remove();
       }
     }
+
+    if (msg.swipeTotal !== undefined && msg.swipeTotal > 1) {
+      const swipeNav = msgEl.querySelector('.swipe-nav');
+      const swipeLabel = swipeNav ? swipeNav.querySelector('.swipe-label') : null;
+      if (swipeLabel) {
+        swipeLabel.textContent = `${(msg.swipeIndex || 0) + 1}/${msg.swipeTotal}`;
+      } else if (!swipeNav) {
+        const right = msgEl.querySelector('.message-meta-right');
+        if (right) {
+          const nav = document.createElement('div');
+          nav.className = 'swipe-nav';
+          const prevBtn = document.createElement('button');
+          prevBtn.className = 'swipe-btn';
+          prevBtn.textContent = '‹';
+          prevBtn.dataset.action = 'swipe-left';
+          prevBtn.dataset.messageId = msg.id;
+          nav.appendChild(prevBtn);
+          const label = document.createElement('span');
+          label.className = 'swipe-label';
+          label.textContent = `${(msg.swipeIndex || 0) + 1}/${msg.swipeTotal}`;
+          nav.appendChild(label);
+          const nextBtn = document.createElement('button');
+          nextBtn.className = 'swipe-btn';
+          nextBtn.textContent = '›';
+          nextBtn.dataset.action = 'swipe-right';
+          nextBtn.dataset.messageId = msg.id;
+          nav.appendChild(nextBtn);
+          const menuBtn = right.querySelector('.meta-menu-btn');
+          if (menuBtn) {
+            right.insertBefore(nav, menuBtn);
+          } else {
+            right.appendChild(nav);
+          }
+        }
+      }
+    }
   }
 
   setLastMessage(newLastId) {

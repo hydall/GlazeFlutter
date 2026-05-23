@@ -38,6 +38,7 @@ class ChatGenerationService {
     int? previousTokens,
     List<Map<String, dynamic>>? previousSwipesMeta,
     String? guidanceText,
+    String? regenTargetId,
   }) async {
     try {
       final builder = _ref.read(promptPayloadBuilderProvider);
@@ -160,6 +161,7 @@ class ChatGenerationService {
             isAllReasoning: isAllReasoning,
             triggeredLorebooks: triggeredLorebooks,
             triggeredMemories: triggeredMemories,
+            regenTargetId: regenTargetId,
           );
         },
         onError: (error) {
@@ -320,6 +322,7 @@ class ChatGenerationService {
     bool isAllReasoning = false,
     List<TriggeredEntry> triggeredLorebooks = const [],
     List<TriggeredEntry> triggeredMemories = const [],
+    String? regenTargetId,
   }) {
     List<String> swipes;
     int swipeId;
@@ -346,8 +349,6 @@ class ChatGenerationService {
     if (previousSwipesMeta != null && previousSwipesMeta.isNotEmpty) {
       swipesMeta = [...previousSwipesMeta, currentSwipeMeta];
     } else if (previousSwipes != null && previousSwipes.isNotEmpty) {
-      // If we have previous swipes but no meta, we need to fill the meta list
-      // to maintain 1:1 alignment.
       final prevMeta = <String, dynamic>{
         'genTime': previousGenTime,
         'reasoning': previousReasoning,
@@ -360,6 +361,35 @@ class ChatGenerationService {
       swipesMeta.add(currentSwipeMeta);
     } else {
       swipesMeta = [currentSwipeMeta];
+    }
+
+    if (regenTargetId != null) {
+      final idx = currentSession.messages.indexWhere((m) => m.id == regenTargetId);
+      if (idx >= 0) {
+        final updated = currentSession.messages[idx].copyWith(
+          content: text,
+          reasoning: reasoning,
+          isAllReasoning: isAllReasoning,
+          genTime: genTime,
+          tokens: tokens,
+          swipes: swipes,
+          swipeId: swipeId,
+          swipesMeta: swipesMeta,
+          swipeDirection: 'right',
+          memoryCoverage: memoryCoverage,
+          triggeredLorebooks: triggeredLorebooks,
+          triggeredMemories: triggeredMemories,
+        );
+        final updatedMessages = [...currentSession.messages];
+        updatedMessages[idx] = updated;
+        final finalSession = currentSession.copyWith(
+          messages: updatedMessages,
+          updatedAt: currentTimestampSeconds(),
+          sessionVars: pendingSessionVars ?? currentSession.sessionVars,
+        );
+        _ref.read(chatRepoProvider).put(finalSession);
+        return ChatState(session: finalSession, lastRawResponse: rawResponse, regenTargetId: regenTargetId);
+      }
     }
 
     final assistantMsg = ChatMessage(

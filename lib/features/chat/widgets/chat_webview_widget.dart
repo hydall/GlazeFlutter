@@ -49,6 +49,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final List<dynamic> memoryDrafts;
   final String? sessionId;
   final int visibleStartIndex;
+  final String? regenTargetId;
 
   const ChatWebViewWidget({
     super.key,
@@ -87,6 +88,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.memoryDrafts = const [],
     this.sessionId,
     this.visibleStartIndex = 0,
+    this.regenTargetId,
   });
 
   @override
@@ -98,6 +100,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
   ChatBridgeController? _bridge;
   bool _ready = false;
   bool _streamingSent = false;
+  bool _regenStreamingSent = false;
   bool _wasGenerating = false;
   bool _sessionSwitching = false;
 
@@ -257,8 +260,11 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     }
 
     if (_wasGenerating && !widget.isGenerating) {
-      _bridge?.removeMessage(_kStreamingId);
+      if (!_regenStreamingSent) {
+        _bridge?.removeMessage(_kStreamingId);
+      }
       _streamingSent = false;
+      _regenStreamingSent = false;
     }
     _wasGenerating = widget.isGenerating;
 
@@ -379,6 +385,22 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       (prev, next) {
         if (!_ready || _bridge == null) return;
         if (next.text.isEmpty && next.reasoning == null) return;
+
+        final regenId = widget.regenTargetId;
+        if (regenId != null) {
+          final idx = widget.messages.indexWhere((m) => m.id == regenId);
+          if (idx >= 0) {
+            final original = widget.messages[idx];
+            final updated = original.copyWith(
+              content: next.text,
+              reasoning: next.reasoning ?? original.reasoning,
+              isTyping: true,
+            );
+            _bridge?.updateMessage(updated);
+            _regenStreamingSent = true;
+          }
+          return;
+        }
 
         final msg = ChatMessage(
           id: _kStreamingId,
