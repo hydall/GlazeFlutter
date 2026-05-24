@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
@@ -33,6 +34,12 @@ final streamingStateProvider =
 
 class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   bool _buildComplete = false;
+
+  void _persistSession(ChatSession session) {
+    ref.read(chatRepoProvider).put(session).catchError((Object e) {
+      debugPrint('[ChatNotifier] failed to persist session: $e');
+    });
+  }
 
   @override
   Future<ChatState> build(String arg) async {
@@ -640,7 +647,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
             updatedAt: currentTimestampSeconds(),
           );
           if (updatedSession != null) {
-            ref.read(chatRepoProvider).put(updatedSession);
+            _persistSession(updatedSession);
             ChatSessionService.updateCache(updatedSession);
           }
           state = AsyncData(ChatState(
@@ -664,7 +671,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
           updatedAt: currentTimestampSeconds(),
         );
         if (restoredSession != null) {
-          ref.read(chatRepoProvider).put(restoredSession);
+          _persistSession(restoredSession);
           ChatSessionService.updateCache(restoredSession);
         }
         state = AsyncData(current.copyWith(
@@ -710,7 +717,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
             updatedAt: currentTimestampSeconds(),
           );
           if (updatedSession != null) {
-            ref.read(chatRepoProvider).put(updatedSession);
+            _persistSession(updatedSession);
             ChatSessionService.updateCache(updatedSession);
           }
           state = AsyncData(current.copyWith(
@@ -726,7 +733,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
             updatedAt: currentTimestampSeconds(),
           );
           if (trimmedSession != null) {
-            ref.read(chatRepoProvider).put(trimmedSession);
+            _persistSession(trimmedSession);
             ChatSessionService.updateCache(trimmedSession);
           }
           state = AsyncData(current.copyWith(
@@ -904,7 +911,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
             final msgs = <ChatMessage>[...(current.session?.messages ?? []), restoration];
             final restored = current.session?.copyWith(messages: msgs, updatedAt: currentTimestampSeconds());
             if (restored != null) {
-              ref.read(chatRepoProvider).put(restored);
+              _persistSession(restored);
               ChatSessionService.updateCache(restored);
             }
             state = AsyncData(current.copyWith(session: restored ?? current.session, isGenerating: false, error: e.toString()));

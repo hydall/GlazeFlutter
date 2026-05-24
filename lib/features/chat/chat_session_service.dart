@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/chat_message.dart';
@@ -12,19 +13,36 @@ import 'initial_message_builder.dart';
 class ChatSessionService {
   final Ref _ref;
 
+  static final int _maxCacheSize = 20;
   static final Map<String, ChatSession> _cache = {};
+  static final List<String> _cacheAccessOrder = [];
 
   ChatSessionService(this._ref);
 
+  static void _touchCacheKey(String key) {
+    _cacheAccessOrder.remove(key);
+    _cacheAccessOrder.add(key);
+    while (_cache.length > _maxCacheSize && _cacheAccessOrder.isNotEmpty) {
+      final evict = _cacheAccessOrder.removeAt(0);
+      _cache.remove(evict);
+    }
+  }
+
   static void updateCache(ChatSession session) {
     _cache[session.id] = session;
+    _touchCacheKey(session.id);
   }
 
   static void clearCache({String? charId}) {
     if (charId == null) {
       _cache.clear();
+      _cacheAccessOrder.clear();
     } else {
-      _cache.removeWhere((k, _) => k.startsWith('${charId}_'));
+      final keysToRemove = _cache.keys.where((k) => k.startsWith('${charId}_')).toList();
+      for (final k in keysToRemove) {
+        _cache.remove(k);
+        _cacheAccessOrder.remove(k);
+      }
     }
   }
 
@@ -71,6 +89,7 @@ class ChatSessionService {
     
     final cached = _cache[cacheKey];
     if (cached != null) {
+      _touchCacheKey(cacheKey);
       saveCurrentSessionIndex(charId, sessionIndex);
       _prefetchAdjacent(charId, sessionIndex);
       return cached;
@@ -85,12 +104,14 @@ class ChatSessionService {
         throw StateError('Session $charId#$sessionIndex not found');
       }
       _cache[target.id] = target;
+      _touchCacheKey(target.id);
       saveCurrentSessionIndex(charId, sessionIndex);
       _prefetchAdjacent(charId, target.sessionIndex);
       return target;
     }
     
     _cache[cacheKey] = session;
+    _touchCacheKey(cacheKey);
     saveCurrentSessionIndex(charId, sessionIndex);
     _prefetchAdjacent(charId, sessionIndex);
     return session;
@@ -106,7 +127,10 @@ class ChatSessionService {
           final prevKey = '${charId}_${currentIdx - 1}';
           if (!_cache.containsKey(prevKey)) {
             futures.add(repo.getById(prevKey).then((s) {
-              if (s != null) _cache[prevKey] = s;
+              if (s != null) {
+                _cache[prevKey] = s;
+                _touchCacheKey(prevKey);
+              }
             }));
           }
         }
@@ -114,12 +138,17 @@ class ChatSessionService {
         final nextKey = '${charId}_${currentIdx + 1}';
         if (!_cache.containsKey(nextKey)) {
           futures.add(repo.getById(nextKey).then((s) {
-            if (s != null) _cache[nextKey] = s;
+            if (s != null) {
+              _cache[nextKey] = s;
+              _touchCacheKey(nextKey);
+            }
           }));
         }
         
         if (futures.isNotEmpty) await Future.wait(futures);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[ChatSessionService] _prefetchAdjacent error: $e');
+      }
     }();
   }
 
@@ -197,7 +226,9 @@ class ChatSessionService {
         if (character != null) {
           await charRepo.put(character.copyWith(currentSessionIndex: index));
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[ChatSessionService] saveCurrentSessionIndex error: $e');
+      }
     }();
   }
 

@@ -183,8 +183,10 @@ class SseClient {
       onDone: () {
         if (!completer.isCompleted) completer.complete();
       },
-      onError: (e) {
-        if (!completer.isCompleted) completer.complete();
+      onError: (Object e) {
+        if (!completer.isCompleted) {
+          completer.completeError(e);
+        }
       },
       cancelOnError: true,
     );

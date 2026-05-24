@@ -27,6 +27,12 @@ class ChatGenerationService {
 
   ChatGenerationService(this._ref);
 
+  void _persist(ChatSession session) {
+    _ref.read(chatRepoProvider).put(session).catchError((Object e) {
+      debugPrint('[ChatGenerationService] failed to persist session: $e');
+    });
+  }
+
   Future<ChatState> generate({
     required ChatSession session,
     ChatSession? saveSession,
@@ -438,7 +444,7 @@ class ChatGenerationService {
           updatedAt: currentTimestampSeconds(),
           sessionVars: pendingSessionVars ?? currentSession.sessionVars,
         );
-        _ref.read(chatRepoProvider).put(finalSession);
+        _persist(finalSession);
         return ChatState(session: finalSession, lastRawResponse: rawResponse, regenTargetId: regenTargetId, visibleStartIndex: visibleStartIndex);
       }
     }
@@ -471,7 +477,7 @@ class ChatGenerationService {
       updatedAt: now,
       sessionVars: sessionVars,
     );
-    _ref.read(chatRepoProvider).put(finalSession);
+    _persist(finalSession);
     return ChatState(session: finalSession, lastRawResponse: rawResponse, visibleStartIndex: visibleStartIndex);
   }
 
@@ -499,7 +505,7 @@ class ChatGenerationService {
       updatedAt: now,
       sessionVars: sessionVars,
     );
-    _ref.read(chatRepoProvider).put(finalSession);
+    _persist(finalSession);
     return ChatState(session: finalSession, visibleStartIndex: visibleStartIndex);
   }
 
@@ -544,7 +550,7 @@ class ChatGenerationService {
       updatedAt: now,
       sessionVars: sessionVars,
     );
-    _ref.read(chatRepoProvider).put(finalSession);
+    _persist(finalSession);
     return ChatState(session: finalSession, regenTargetId: regenTargetId, visibleStartIndex: visibleStartIndex);
   }
 }
