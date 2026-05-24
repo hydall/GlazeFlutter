@@ -19,7 +19,6 @@ sealed class ChatMessageMapperContext with _$ChatMessageMapperContext {
 }
 
 class ChatMessageMapper {
-  static const _imgResultRegex = r'\[IMG:RESULT:(.*?)\]';
 
   static Map<String, dynamic> toMap(
     ChatMessage m,
