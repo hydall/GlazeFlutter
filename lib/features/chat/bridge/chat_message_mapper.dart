@@ -83,7 +83,7 @@ class ChatMessageMapper {
       if (m.swipes.isNotEmpty) 'swipeTotal': m.swipes.length,
       if (m.genTime != null) 'genTime': m.genTime,
       if (m.tokens != null) 'tokens': m.tokens,
-      if (m.isError) 'isError': true,
+      'isError': m.isError,
       if (m.isTyping) 'isTyping': true,
       if (m.reasoning != null && m.reasoning!.isNotEmpty) 'reasoning': m.reasoning,
       if (m.isHidden) 'isHidden': true,

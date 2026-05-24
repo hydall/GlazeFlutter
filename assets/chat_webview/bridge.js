@@ -515,6 +515,8 @@ class Bridge {
 
     if (msg.text != null) section.dataset.rawText = msg.text;
 
+    if (msg.isError !== undefined) section.classList.toggle('error', !!msg.isError);
+
     const isUser = section.classList.contains('user');
     this.renderer.updateMessageContent(
       section,

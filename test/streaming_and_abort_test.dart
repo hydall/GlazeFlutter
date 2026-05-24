@@ -305,7 +305,7 @@ void main() {
 
       final map = ChatMessageMapper.toMap(message, context);
 
-      expect(map['isError'], isNull);
+      expect(map['isError'], isFalse);
     });
   });
 

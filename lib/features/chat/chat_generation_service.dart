@@ -173,6 +173,8 @@ class ChatGenerationService {
           final isCancelled = error is DioException && error.type == DioExceptionType.cancel;
           if (isCancelled) {
             finalState = ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
+          } else if (regenTargetId != null && saveSession != null) {
+            finalState = _saveRegenError(error.toString(), saveSession, regenTargetId, pendingSessionVars: pendingSessionVars, visibleStartIndex: vsi);
           } else {
             finalState = _saveErrorMessage(error.toString(), session, pendingSessionVars: pendingSessionVars, visibleStartIndex: vsi);
           }
@@ -182,6 +184,9 @@ class ChatGenerationService {
       return finalState ?? ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
     } catch (e) {
       if (isAborted()) return ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
+      if (regenTargetId != null && saveSession != null) {
+        return _saveRegenError(e.toString(), saveSession, regenTargetId, visibleStartIndex: vsi);
+      }
       return _saveErrorMessage(e.toString(), session, visibleStartIndex: vsi);
     }
   }
@@ -478,5 +483,50 @@ class ChatGenerationService {
     );
     _ref.read(chatRepoProvider).put(finalSession);
     return ChatState(session: finalSession, visibleStartIndex: visibleStartIndex);
+  }
+
+  ChatState _saveRegenError(
+    String errorText,
+    ChatSession saveSession,
+    String regenTargetId, {
+    Map<String, String>? pendingSessionVars,
+    int visibleStartIndex = 0,
+  }) {
+    final idx = saveSession.messages.indexWhere((m) => m.id == regenTargetId);
+    if (idx < 0) {
+      return _saveErrorMessage(errorText, saveSession, pendingSessionVars: pendingSessionVars, visibleStartIndex: visibleStartIndex);
+    }
+    final original = saveSession.messages[idx];
+    final errorSwipes = original.swipes.isNotEmpty ? [...original.swipes] : [original.content];
+    if (errorSwipes.isNotEmpty) {
+      errorSwipes[errorSwipes.length - 1] = errorText;
+    } else {
+      errorSwipes.add(errorText);
+    }
+    final errorSwipesMeta = original.swipesMeta.isNotEmpty ? [...original.swipesMeta] : [<String, dynamic>{'genTime': original.genTime, 'reasoning': original.reasoning, 'tokens': original.tokens}];
+    if (errorSwipesMeta.isNotEmpty) {
+      errorSwipesMeta[errorSwipesMeta.length - 1] = {};
+    }
+    final updated = original.copyWith(
+      content: errorText,
+      isError: true,
+      isTyping: false,
+      swipes: errorSwipes,
+      swipesMeta: errorSwipesMeta,
+      reasoning: null,
+      genTime: null,
+      tokens: null,
+    );
+    final finalMessages = [...saveSession.messages];
+    finalMessages[idx] = updated;
+    final now = currentTimestampSeconds();
+    final sessionVars = pendingSessionVars ?? saveSession.sessionVars;
+    final finalSession = saveSession.copyWith(
+      messages: finalMessages,
+      updatedAt: now,
+      sessionVars: sessionVars,
+    );
+    _ref.read(chatRepoProvider).put(finalSession);
+    return ChatState(session: finalSession, regenTargetId: regenTargetId, visibleStartIndex: visibleStartIndex);
   }
 }
