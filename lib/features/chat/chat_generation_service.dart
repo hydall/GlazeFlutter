@@ -7,6 +7,7 @@ import '../../core/llm/prompt_isolate.dart';
 import '../../core/llm/prompt_payload_builder.dart';
 import '../../core/llm/sse_client.dart';
 import '../../core/llm/stream_accumulator.dart';
+import '../../core/llm/tokenizer.dart';
 import '../../core/models/api_config.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/active_selection_provider.dart';
@@ -160,7 +161,7 @@ class ChatGenerationService {
           final isAllReasoning = finalText.isEmpty && finalReasoning != null && finalReasoning.isNotEmpty;
           final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;
           final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
-          final tokenCount = (finalText.length / 4).round();
+          final tokenCount = estimateTokens(finalText);
           finalState = _saveAssistantMessage(
             finalText, finalReasoning, saveSession ?? session,
             isAborted: isAborted,

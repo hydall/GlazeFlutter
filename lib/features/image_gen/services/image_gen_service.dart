@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../core/constants/image_gen_patterns.dart';
 import '../../../core/services/image_storage_service.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/persona.dart';
@@ -19,22 +20,16 @@ class ImageGenService {
 
   ImageGenService(this._imageStorage);
 
-  static final _imgGenRegex = RegExp(r'\[IMG:GEN(?::(.*?))?\]');
-  static final _imgResultRegex = RegExp(r'\[IMG:RESULT:(.*?)\]');
-  static final _imgErrorRegex = RegExp(r'\[IMG:ERROR:(.*?)\]');
-  static final _htmlIigTagRegex = RegExp(r"<img\s[^>]*?data-iig-instruction\s*=\s*'([^']*)'[^>]*>", caseSensitive: false, dotAll: true);
-  static final _htmlIigTagDoubleRegex = RegExp(r'''<img\s[^>]*?data-iig-instruction\s*=\s*"([^"]*)"[^>]*>''', caseSensitive: false, dotAll: true);
-
   bool hasImageGenTags(String text) {
-    if (_htmlIigTagRegex.hasMatch(text) || _htmlIigTagDoubleRegex.hasMatch(text)) return true;
-    final stripped = _stripHtmlImgTags(text);
-    return _imgGenRegex.hasMatch(stripped);
+    if (ImgGenPatterns.htmlIigTagRegex.hasMatch(text) || ImgGenPatterns.htmlIigTagDoubleRegex.hasMatch(text)) return true;
+    final stripped = ImgGenPatterns.stripHtmlImgTags(text);
+    return ImgGenPatterns.imgGenRegex.hasMatch(stripped);
   }
 
   List<Map<String, dynamic>> extractImageGenInstructions(String text) {
     final results = <Map<String, dynamic>>[];
 
-    for (final m in _htmlIigTagRegex.allMatches(text)) {
+    for (final m in ImgGenPatterns.htmlIigTagRegex.allMatches(text)) {
       final payload = m.group(1);
       if (payload == null || payload.isEmpty) continue;
       try {
@@ -44,7 +39,7 @@ class ImageGenService {
       }
     }
 
-    for (final m in _htmlIigTagDoubleRegex.allMatches(text)) {
+    for (final m in ImgGenPatterns.htmlIigTagDoubleRegex.allMatches(text)) {
       final payload = m.group(1);
       if (payload == null || payload.isEmpty) continue;
       try {
@@ -54,8 +49,8 @@ class ImageGenService {
       }
     }
 
-    final stripped = _stripHtmlImgTags(text);
-    for (final m in _imgGenRegex.allMatches(stripped)) {
+    final stripped = ImgGenPatterns.stripHtmlImgTags(text);
+    for (final m in ImgGenPatterns.imgGenRegex.allMatches(stripped)) {
       final payload = m.group(1);
       if (payload == null || payload.isEmpty) {
         results.add(<String, dynamic>{'prompt': ''});
@@ -77,22 +72,22 @@ class ImageGenService {
     final instrJson = instruction != null && instruction.isNotEmpty ? jsonEncode(instruction) : '';
     final payload = instrJson.isNotEmpty ? '$imagePath|$instrJson' : imagePath;
     int count = 0;
-    var result = text.replaceAllMapped(_htmlIigTagRegex, (m) {
+    var result = text.replaceAllMapped(ImgGenPatterns.htmlIigTagRegex, (m) {
       if (count++ == index) return '[IMG:RESULT:$payload]';
       return m.group(0)!;
     });
-    result = result.replaceAllMapped(_htmlIigTagDoubleRegex, (m) {
+    result = result.replaceAllMapped(ImgGenPatterns.htmlIigTagDoubleRegex, (m) {
       if (count++ == index) return '[IMG:RESULT:$payload]';
       return m.group(0)!;
     });
-    final stripped = _stripHtmlImgTags(result);
+    final stripped = ImgGenPatterns.stripHtmlImgTags(result);
     final needStrip = stripped != result;
-    result = result.replaceAllMapped(_imgGenRegex, (m) {
+    result = result.replaceAllMapped(ImgGenPatterns.imgGenRegex, (m) {
       if (count++ == index) return '[IMG:RESULT:$payload]';
       return m.group(0)!;
     });
     if (count <= index) return text;
-    return needStrip ? _stripRemainingHtmlImgTags(result) : result;
+    return needStrip ? ImgGenPatterns.stripHtmlImgTags(result) : result;
   }
 
   String replaceTagWithError(String text, int index, String error) {
@@ -100,44 +95,26 @@ class ImageGenService {
     final instructionJson = index < instructions.length ? jsonEncode(instructions[index]) : '';
     final encoded = jsonEncode({'error': error, if (instructionJson.isNotEmpty) 'instruction': instructionJson});
     int count = 0;
-    var result = text.replaceAllMapped(_htmlIigTagRegex, (m) {
+    var result = text.replaceAllMapped(ImgGenPatterns.htmlIigTagRegex, (m) {
       if (count++ == index) return '[IMG:ERROR:$encoded]';
       return m.group(0)!;
     });
-    result = result.replaceAllMapped(_htmlIigTagDoubleRegex, (m) {
+    result = result.replaceAllMapped(ImgGenPatterns.htmlIigTagDoubleRegex, (m) {
       if (count++ == index) return '[IMG:ERROR:$encoded]';
       return m.group(0)!;
     });
-    final stripped = _stripHtmlImgTags(result);
+    final stripped = ImgGenPatterns.stripHtmlImgTags(result);
     final needStrip = stripped != result;
-    result = result.replaceAllMapped(_imgGenRegex, (m) {
+    result = result.replaceAllMapped(ImgGenPatterns.imgGenRegex, (m) {
       if (count++ == index) return '[IMG:ERROR:$encoded]';
       return m.group(0)!;
     });
     if (count <= index) return text;
-    return needStrip ? _stripRemainingHtmlImgTags(result) : result;
-  }
-
-  static String _stripHtmlImgTags(String text) {
-    return text.replaceAllMapped(
-      RegExp(r'<img\s[^>]*?data-iig-instruction\s*=[^>]*>', caseSensitive: false, dotAll: true),
-      (m) => '',
-    );
-  }
-
-  static String _stripRemainingHtmlImgTags(String text) {
-    return text.replaceAllMapped(
-      RegExp(r'<img\s[^>]*?data-iig-instruction\s*=[^>]*>', caseSensitive: false, dotAll: true),
-      (m) => '',
-    );
-  }
-
-  String resetLoadingTags(String text) {
-    return text;
+    return needStrip ? ImgGenPatterns.stripHtmlImgTags(result) : result;
   }
 
   String resetErrorTags(String text) {
-    var result = text.replaceAllMapped(_imgErrorRegex, (m) {
+    var result = text.replaceAllMapped(ImgGenPatterns.imgErrorRegex, (m) {
       try {
         final json = jsonDecode(m.group(1)!) as Map<String, dynamic>;
         final instruction = json['instruction'] as String?;
@@ -147,7 +124,7 @@ class ImageGenService {
       } catch (_) {}
       return '[IMG:GEN]';
     });
-    result = result.replaceAllMapped(_imgResultRegex, (m) {
+    result = result.replaceAllMapped(ImgGenPatterns.imgResultRegex, (m) {
       final raw = m.group(1) ?? '';
       final pipeIdx = raw.indexOf('|');
       final instr = pipeIdx != -1 ? raw.substring(pipeIdx + 1) : null;
@@ -442,7 +419,7 @@ class ImageGenService {
   }
 
   static List<String> extractImageResultPaths(String text) {
-    return _imgResultRegex
+    return ImgGenPatterns.imgResultRegex
         .allMatches(text)
         .map((m) => m.group(1) ?? '')
         .where((p) => p.isNotEmpty)

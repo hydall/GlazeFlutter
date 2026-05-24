@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
+import '../../../core/constants/image_gen_patterns.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/colored_markdown.dart';
 
@@ -13,15 +14,9 @@ class ImageContentRenderer extends StatelessWidget {
   final VoidCallback? onRegenerate;
   final VoidCallback? onAbort;
 
-  static final _imgGenRegex = RegExp(r'\[IMG:GEN(?::(.*?))?\]');
-  static final _imgResultRegex = RegExp(r'\[IMG:RESULT:(.*?)\]');
-  static final _imgErrorRegex = RegExp(r'\[IMG:ERROR:(.*?)\]');
-
   static bool hasImageMarkers(String? text) {
     if (text == null) return false;
-    return _imgGenRegex.hasMatch(text) ||
-      _imgResultRegex.hasMatch(text) ||
-      _imgErrorRegex.hasMatch(text);
+    return ImgGenPatterns.hasAnyImageTag(text);
   }
 
   const ImageContentRenderer({
@@ -39,16 +34,16 @@ class ImageContentRenderer extends StatelessWidget {
 
     final allMarkers = <({int start, int end, _ContentSpan span})>[];
 
-    for (final m in _imgGenRegex.allMatches(content)) {
+    for (final m in ImgGenPatterns.imgGenRegex.allMatches(content)) {
       allMarkers.add((start: m.start, end: m.end, span: _ImgGenSpan(m.group(1) ?? '')));
     }
-    for (final m in _imgResultRegex.allMatches(content)) {
+    for (final m in ImgGenPatterns.imgResultRegex.allMatches(content)) {
       final raw = m.group(1) ?? '';
       final pipeIdx = raw.indexOf('|');
       final path = pipeIdx != -1 ? raw.substring(0, pipeIdx) : raw;
       allMarkers.add((start: m.start, end: m.end, span: _ImgResultSpan(path)));
     }
-    for (final m in _imgErrorRegex.allMatches(content)) {
+    for (final m in ImgGenPatterns.imgErrorRegex.allMatches(content)) {
       allMarkers.add((start: m.start, end: m.end, span: _ImgErrorSpan(m.group(1) ?? '')));
     }
 

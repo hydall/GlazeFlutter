@@ -6,6 +6,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/constants/image_gen_patterns.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/services/generation_notification_service.dart';
 import '../../core/utils/id_generator.dart';
@@ -90,12 +91,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
   bool get isGeneratingImage => _imgGenCancelToken != null && !(_imgGenCancelToken!.isCancelled);
 
-  static final _imgGenRegex = RegExp(r'\[IMG:GEN(?::(.*?))?\]');
-  static final _imgHtmlRegex = RegExp(r"<img\s[^>]*?data-iig-instruction\s*=\s*'([^']*)'[^>]*>", caseSensitive: false, dotAll: true);
-  static final _imgHtmlDoubleRegex = RegExp(r'''<img\s[^>]*?data-iig-instruction\s*=\s*"([^"]*)"[^>]*>''', caseSensitive: false, dotAll: true);
-  // Matches <img ... src="[IMG:GEN...]" ...> (any variant, with or without instruction)
-  static final _imgSrcGenRegex = RegExp(r'''<img\b[^>]*?\bsrc\s*=\s*["']\[IMG:GEN[^\]]*\]["'][^>]*>''', caseSensitive: false, dotAll: true);
-
   ChatSession _fixupSwipesWithImageResults(ChatSession session) {
     bool changed = false;
     final messages = List<ChatMessage>.from(session.messages);
@@ -142,21 +137,20 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   String _cleanStuckImgGenTags(String text) {
-    if (!_imgGenRegex.hasMatch(text) && !_imgHtmlRegex.hasMatch(text) && !_imgHtmlDoubleRegex.hasMatch(text) && !_imgSrcGenRegex.hasMatch(text)) return text;
+    if (!ImgGenPatterns.imgGenRegex.hasMatch(text) && !ImgGenPatterns.htmlIigTagRegex.hasMatch(text) && !ImgGenPatterns.htmlIigTagDoubleRegex.hasMatch(text) && !ImgGenPatterns.imgSrcGenRegex.hasMatch(text)) return text;
     var result = text;
-    // Remove <img src="[IMG:GEN...]" ...> entirely — these have no instruction to recover
-    result = result.replaceAll(_imgSrcGenRegex, '[IMG:ERROR:${jsonEncode({'error': 'Generation interrupted'})}]');
-    result = result.replaceAllMapped(_imgHtmlRegex, (m) {
+    result = result.replaceAll(ImgGenPatterns.imgSrcGenRegex, '[IMG:ERROR:${jsonEncode({'error': 'Generation interrupted'})}]');
+    result = result.replaceAllMapped(ImgGenPatterns.htmlIigTagRegex, (m) {
       final instruction = m.group(1) ?? '';
       final errorJson = jsonEncode({'error': 'Generation interrupted', 'instruction': instruction});
       return '[IMG:ERROR:$errorJson]';
     });
-    result = result.replaceAllMapped(_imgHtmlDoubleRegex, (m) {
+    result = result.replaceAllMapped(ImgGenPatterns.htmlIigTagDoubleRegex, (m) {
       final instruction = m.group(1) ?? '';
       final errorJson = jsonEncode({'error': 'Generation interrupted', 'instruction': instruction});
       return '[IMG:ERROR:$errorJson]';
     });
-    result = result.replaceAllMapped(_imgGenRegex, (m) {
+    result = result.replaceAllMapped(ImgGenPatterns.imgGenRegex, (m) {
       final instruction = m.group(1) ?? '';
       final errorJson = instruction.isNotEmpty
           ? jsonEncode({'error': 'Generation interrupted', 'instruction': instruction})
@@ -924,11 +918,11 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     }
   }
 
-  String? _messagePreview(List messages) {
+  String? _messagePreview(List<ChatMessage> messages) {
     try {
       for (final m in messages.reversed) {
-        final content = (m as dynamic).content as String?;
-        if (content != null && content.isNotEmpty) {
+        final content = m.content;
+        if (content.isNotEmpty) {
           final text = content
               .replaceAll(RegExp(r'\*\*[^*]+\*\*'), '')
               .replaceAll(RegExp(r'\*[^*]+\*'), '')
@@ -944,10 +938,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     } catch (_) {}
     return null;
   }
-
-  static final _imgErrorRegex = RegExp(r'\[IMG:ERROR:(.*?)\]');
-  static final _imgResultPathRegex = RegExp(r'\[IMG:RESULT:(.*?)\]');
-  static final _imgGenHtmlRegex = RegExp(r"""<img\s[^>]*?data-iig-instruction\s*=\s*'([^']*)'[^>]*?src="\[IMG:GEN\]"[^>]*>""", caseSensitive: false, dotAll: true);
 
   Future<void> findImageOnDisk(String messageId, String instruction) async {
     final current = state.value;
@@ -970,11 +960,11 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final msg = current.messages[msgIdx];
     final Set<String> claimedPaths = {};
     for (final m in current.messages) {
-      for (final match in _imgResultPathRegex.allMatches(m.content)) {
+      for (final match in ImgGenPatterns.imgResultRegex.allMatches(m.content)) {
         claimedPaths.add(match.group(1) ?? '');
       }
       for (final s in m.swipes) {
-        for (final match in _imgResultPathRegex.allMatches(s)) {
+        for (final match in ImgGenPatterns.imgResultRegex.allMatches(s)) {
           claimedPaths.add(match.group(1) ?? '');
         }
       }
@@ -1026,18 +1016,17 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   String _replaceFirstImgErrorOrGen(String text, String resultPath) {
-    if (_imgErrorRegex.hasMatch(text)) {
-      return text.replaceFirst(_imgErrorRegex, '[IMG:RESULT:$resultPath]');
+    if (ImgGenPatterns.imgErrorRegex.hasMatch(text)) {
+      return text.replaceFirst(ImgGenPatterns.imgErrorRegex, '[IMG:RESULT:$resultPath]');
     }
-    if (_imgGenHtmlRegex.hasMatch(text)) {
-      return text.replaceFirst(_imgGenHtmlRegex, '[IMG:RESULT:$resultPath]');
+    if (ImgGenPatterns.imgGenHtmlRegex.hasMatch(text)) {
+      return text.replaceFirst(ImgGenPatterns.imgGenHtmlRegex, '[IMG:RESULT:$resultPath]');
     }
     if (text.contains('[IMG:GEN]')) {
       return text.replaceFirst('[IMG:GEN]', '[IMG:RESULT:$resultPath]');
     }
-    final genJsonRegex = RegExp(r'\[IMG:GEN:(.*?)\]');
-    if (genJsonRegex.hasMatch(text)) {
-      return text.replaceFirst(genJsonRegex, '[IMG:RESULT:$resultPath]');
+    if (ImgGenPatterns.imgGenRegex.hasMatch(text)) {
+      return text.replaceFirst(ImgGenPatterns.imgGenRegex, '[IMG:RESULT:$resultPath]');
     }
     return text;
   }
@@ -1101,7 +1090,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
 
   String _resetImgTagsToGen(String text) {
     var result = text;
-    result = result.replaceAllMapped(_imgErrorRegex, (m) {
+    result = result.replaceAllMapped(ImgGenPatterns.imgErrorRegex, (m) {
       final data = m.group(1) ?? '';
       String instruction = '';
       try {
@@ -1113,7 +1102,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       }
       return '[IMG:GEN]';
     });
-    result = result.replaceAllMapped(_imgResultPathRegex, (m) {
+    result = result.replaceAllMapped(ImgGenPatterns.imgResultRegex, (m) {
       final raw = m.group(1) ?? '';
       final pipeIdx = raw.indexOf('|');
       final instr = pipeIdx != -1 ? raw.substring(pipeIdx + 1) : '';

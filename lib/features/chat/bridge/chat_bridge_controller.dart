@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import '../../../core/constants/image_gen_patterns.dart';
 import '../../../core/models/chat_message.dart';
 
 class ChatBridgeController {
@@ -24,7 +25,6 @@ class ChatBridgeController {
   final Set<String> _draftMemoryIds = {};
   final Map<String, String> _imgBase64Cache = {};
   final Map<String, String> _stripThinkCache = {};
-  static final _imgResultRegex = RegExp(r'\[IMG:RESULT:(.*?)\]');
 
   ChatBridgeController(this._controller) {
     _setupHandlers();
@@ -105,7 +105,7 @@ class ChatBridgeController {
   }
 
   Future<String> _resolveImgResults(String text) async {
-    final matches = _imgResultRegex.allMatches(text).toList();
+    final matches = ImgGenPatterns.imgResultRegex.allMatches(text).toList();
     if (matches.isEmpty) return text;
     final uncached = <int, String>{};
     for (int i = 0; i < matches.length; i++) {
@@ -135,7 +135,7 @@ class ChatBridgeController {
         } catch (_) {}
       }));
     }
-    final result = text.replaceAllMapped(_imgResultRegex, (m) {
+    final result = text.replaceAllMapped(ImgGenPatterns.imgResultRegex, (m) {
       final payload = m.group(1) ?? '';
       final pipeIdx = payload.indexOf('|');
       final path = pipeIdx != -1 ? payload.substring(0, pipeIdx) : payload;

@@ -1,5 +1,7 @@
 import 'dart:convert' as convert;
 
+import 'package:glaze_flutter/core/constants/image_gen_patterns.dart';
+
 String htmlToMarkdown(String html) {
   var result = html;
 
@@ -481,8 +483,8 @@ final _htmlTagRegex = RegExp(
 );
 
 String _extractStyledImageFrames(String html) {
-  final imgRegex = RegExp(r"<img\s[^>]*?data-iig-instruction\s*=\s*'([^']*)'[^>]*>", caseSensitive: false, dotAll: true);
-  final imgRegexDouble = RegExp(r'<img\s[^>]*?data-iig-instruction\s*=\s*"([^"]*)"[^>]*>', caseSensitive: false, dotAll: true);
+  final imgRegex = ImgGenPatterns.htmlIigTagRegex;
+  final imgRegexDouble = ImgGenPatterns.htmlIigTagDoubleRegex;
 
   final matches = <RegExpMatch>[];
   matches.addAll(imgRegex.allMatches(html));

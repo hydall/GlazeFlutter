@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:glaze_flutter/core/constants/image_gen_patterns.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../cloud_adapter.dart';
@@ -670,11 +671,11 @@ class SyncEngine {
   }
 }
 
-final _imgResultRegex = RegExp(r'\[IMG:RESULT:[^\]]*\]');
-final _imgErrorRegex = RegExp(r'\[IMG:ERROR:[^\]]*\]');
-final _imgGenRegex = RegExp(r'\[IMG:GEN[^\]]*\]');
-final _base64DataUrlRegex = RegExp(r'data:image/[^;]+;base64,[A-Za-z0-9+/=]{256,}');
-final _imgTagRegex = RegExp(r'<img\s[^>]*?src="data:image/[^"]{256,}?"[^>]*\/?>');
+final _imgResultRegex = ImgGenPatterns.imgResultStripRegex;
+final _imgErrorRegex = ImgGenPatterns.imgErrorStripRegex;
+final _imgGenRegex = ImgGenPatterns.imgGenStripRegex;
+final _base64DataUrlRegex = ImgGenPatterns.base64DataUrlRegex;
+final _imgTagRegex = ImgGenPatterns.imgTagDataSrcRegex;
 
 Map<String, dynamic> _stripImagesFromSession(Map<String, dynamic> json) {
   final messages = json['messages'];
