@@ -78,7 +78,16 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   int _activeGenId = 0;
   Completer<void>? _activeGenCompleter;
 
-  void setCancelToken(CancelToken token) => _cancelToken = token;
+  /// Called by [ChatGenerationService] to register the active SSE cancel token.
+  /// Guarded by [genId]: if the calling generation is no longer current, the
+  /// token is immediately cancelled so its SSE stream never fires onComplete.
+  void setCancelToken(CancelToken token, {required int genId}) {
+    if (_activeGenId != genId) {
+      token.cancel();
+      return;
+    }
+    _cancelToken = token;
+  }
 
   bool get isGeneratingImage => _imgGenCancelToken != null && !(_imgGenCancelToken!.isCancelled);
 
@@ -361,6 +370,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final result = await service.generate(
       session: current.session!,
       charId: arg,
+      genId: genId,
       currentState: current,
       onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
       isAborted: () => _activeGenId != genId,
@@ -756,6 +766,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       session: session,
       saveSession: saveSession,
       charId: arg,
+      genId: genId,
       currentState: current,
       onStateUpdate: (s) { if (_activeGenId == genId) state = AsyncData(s); },
       isAborted: () => _activeGenId != genId,

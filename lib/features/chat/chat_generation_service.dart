@@ -30,6 +30,7 @@ class ChatGenerationService {
     required ChatSession session,
     ChatSession? saveSession,
     required String charId,
+    required int genId,
     required ChatState currentState,
     required void Function(ChatState) onStateUpdate,
     required bool Function() isAborted,
@@ -66,8 +67,9 @@ class ChatGenerationService {
         }
       }
 
+      if (isAborted()) return ChatState(session: saveSession ?? session, isGenerating: false, visibleStartIndex: vsi);
       final cancelToken = CancelToken();
-      _ref.read(chatProvider(charId).notifier).setCancelToken(cancelToken);
+      _ref.read(chatProvider(charId).notifier).setCancelToken(cancelToken, genId: genId);
       final preset = payload.preset;
       const defaultTagStart = '<think' + '>' ;
       const defaultTagEnd = '</think' + '>' ;
