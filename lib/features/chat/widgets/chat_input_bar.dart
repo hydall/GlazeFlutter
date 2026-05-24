@@ -12,7 +12,8 @@ class ChatInputBar extends StatefulWidget {
   final bool isGeneratingImage;
   final VoidCallback? onStop;
   final VoidCallback? onMagicDrawer;
-  final VoidCallback? onImageGen;
+  final VoidCallback? onAttach;
+  final VoidCallback? onFullScreen;
   final VoidCallback? onContinue;
   final VoidCallback? onImpersonate;
   final bool virtualKeyboardSend;
@@ -45,7 +46,8 @@ class ChatInputBar extends StatefulWidget {
     this.isGeneratingImage = false,
     this.onStop,
     this.onMagicDrawer,
-    this.onImageGen,
+    this.onAttach,
+    this.onFullScreen,
     this.onContinue,
     this.onImpersonate,
     this.virtualKeyboardSend = false,
@@ -307,20 +309,24 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   ),
                   const SizedBox(width: 8),
                   _CircleBtn(
-                    icon: _guidanceMode
-                        ? Icons.tips_and_updates
-                        : Icons.tips_and_updates_outlined,
+                    icon: Icons.attach_file,
+                    onTap: widget.onAttach,
+                    batterySaver: widget.batterySaver,
+                  ),
+                  const SizedBox(width: 8),
+                  _CircleBtn(
+                    icon: Icons.fullscreen,
+                    onTap: widget.onFullScreen,
+                    batterySaver: widget.batterySaver,
+                  ),
+                  const SizedBox(width: 8),
+                  _CircleBtn(
+                    icon: Icons.north_east,
                     onTap: () => setState(() {
                       _guidanceMode = !_guidanceMode;
                       if (!_guidanceMode) _guidanceController.clear();
                     }),
                     color: _guidanceMode ? Colors.orange : null,
-                    batterySaver: widget.batterySaver,
-                  ),
-                  const SizedBox(width: 8),
-                  _CircleBtn(
-                    icon: Icons.image_outlined,
-                    onTap: widget.onImageGen,
                     batterySaver: widget.batterySaver,
                   ),
                   const SizedBox(width: 8),

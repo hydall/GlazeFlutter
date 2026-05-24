@@ -14,9 +14,188 @@ class Bridge {
     this.isGeneratingImage = false;
     this._genTimerInterval = null;
     this._genTimerStart = null;
+    this._charName = null;
+    this._personaName = null;
+    this._charAvatarUrl = null;
+    this._personaAvatarUrl = null;
     this._setupScrollListener();
     this._setupInteractionListener();
     this._setupImageClickForward();
+    this._setupSwipeGestures();
+  }
+
+  /* ---------- Touch swipe gestures (char message body) ---------- */
+  /* Ported from Glaze/src/composables/chat/useMessageSwipe.js */
+  _setupSwipeGestures() {
+    const THRESHOLD = 100;
+    let startX = 0;
+    let startY = 0;
+    let activeBody = null;
+    let activeSection = null;
+    let scrollingVertical = false;
+
+    const reset = (body) => {
+      body.style.transition = 'transform 0.3s ease';
+      body.style.transform = '';
+      setTimeout(() => { body.style.transition = ''; }, 300);
+    };
+
+    const animateOut = (body, after) => {
+      body.style.opacity = '0';
+      requestAnimationFrame(() => {
+        body.style.transform = '';
+        setTimeout(() => {
+          body.style.transition = 'opacity 0.2s ease';
+          body.style.opacity = '1';
+          setTimeout(() => { body.style.transition = ''; }, 200);
+          after();
+        }, 50);
+      });
+    };
+
+    const onStart = (e) => {
+      if (this.isGenerating) return;
+      const section = e.target.closest?.('.message-section.char');
+      if (!section) return;
+      if (section.classList.contains('editing') || section.classList.contains('selection-mode')) return;
+      const body = section.querySelector('.msg-body');
+      if (!body) return;
+      const t = e.touches ? e.touches[0] : e;
+      startX = t.clientX;
+      startY = t.clientY;
+      scrollingVertical = false;
+      activeSection = section;
+      activeBody = body;
+      body.style.transition = 'none';
+    };
+
+    const onMove = (e) => {
+      if (!activeBody || !activeSection) return;
+      const t = e.touches ? e.touches[0] : e;
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      if (scrollingVertical) return;
+      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) {
+        scrollingVertical = true;
+        activeBody.style.transform = '';
+        return;
+      }
+
+      const swipeId = parseInt(activeSection.dataset.swipeId || '0', 10);
+      const swipeTotal = parseInt(activeSection.dataset.swipeTotal || '1', 10);
+      const isLast = activeSection.dataset.isLast === 'true';
+      const greetingTotal = parseInt(activeSection.dataset.greetingTotal || '0', 10);
+      const isFirstMsg = activeSection.dataset.messageIndex === '0';
+      const canSwitchGreeting = isFirstMsg && greetingTotal > 1;
+
+      // Block translation when there's nowhere to go on that side.
+      if (dx < 0 && !canSwitchGreeting && !isLast && swipeId >= swipeTotal - 1) return;
+      if (dx > 0 && !canSwitchGreeting && swipeId <= 0) return;
+
+      if (e.cancelable) e.preventDefault();
+      activeBody.style.transform = `translateX(${dx}px)`;
+    };
+
+    const onEnd = (e) => {
+      if (!activeBody || !activeSection) return;
+      const body = activeBody;
+      const section = activeSection;
+      activeBody = null;
+      activeSection = null;
+      if (scrollingVertical) { body.style.transform = ''; body.style.transition = ''; return; }
+
+      const t = e.changedTouches ? e.changedTouches[0] : e;
+      const dx = t.clientX - startX;
+
+      const swipeId = parseInt(section.dataset.swipeId || '0', 10);
+      const swipeTotal = parseInt(section.dataset.swipeTotal || '1', 10);
+      const isLast = section.dataset.isLast === 'true';
+      const greetingTotal = parseInt(section.dataset.greetingTotal || '0', 10);
+      const isFirstMsg = section.dataset.messageIndex === '0';
+      const canSwitchGreeting = isFirstMsg && greetingTotal > 1;
+      const msgId = section.dataset.messageId;
+
+      if (canSwitchGreeting) {
+        if (dx < -THRESHOLD) animateOut(body, () => this._sendToFlutter('onChangeGreeting', [msgId, 1]));
+        else if (dx > THRESHOLD) animateOut(body, () => this._sendToFlutter('onChangeGreeting', [msgId, -1]));
+        else reset(body);
+        return;
+      }
+
+      if (dx < -THRESHOLD) {
+        if (swipeId < swipeTotal - 1) {
+          animateOut(body, () => this._sendToFlutter('onSwipe', [JSON.stringify({ id: msgId, direction: 'right' })]));
+        } else if (isLast) {
+          body.style.transition = 'transform 0.1s';
+          body.style.transform = 'translateX(-20px)';
+          setTimeout(() => {
+            body.style.transform = '';
+            body.style.transition = '';
+            this._sendToFlutter('onRegenerate', [msgId, 'new_variant']);
+          }, 100);
+        } else {
+          reset(body);
+        }
+      } else if (dx > THRESHOLD) {
+        if (swipeId > 0) {
+          animateOut(body, () => this._sendToFlutter('onSwipe', [JSON.stringify({ id: msgId, direction: 'left' })]));
+        } else {
+          reset(body);
+        }
+      } else {
+        reset(body);
+      }
+    };
+
+    const container = this.virtualList.container;
+    container.addEventListener('touchstart', onStart, { passive: true });
+    container.addEventListener('touchmove', onMove, { passive: false });
+    container.addEventListener('touchend', onEnd);
+    container.addEventListener('touchcancel', onEnd);
+  }
+
+  /* ---------- Identity (active char / persona) ---------- */
+  setIdentity(opts) {
+    opts = opts || {};
+    if ('charName' in opts) this._charName = opts.charName || null;
+    if ('personaName' in opts) this._personaName = opts.personaName || null;
+    if ('charAvatarUrl' in opts) this._charAvatarUrl = opts.charAvatarUrl || null;
+    if ('personaAvatarUrl' in opts) this._personaAvatarUrl = opts.personaAvatarUrl || null;
+    this._refreshIdentityDom();
+  }
+
+  _refreshIdentityDom() {
+    const sections = document.querySelectorAll('.message-section.user, .message-section.char');
+    sections.forEach(section => {
+      const isUser = section.classList.contains('user');
+      const stored = section.dataset.personaName || '';
+      // Per-message stored persona wins; otherwise use the active identity.
+      const newName = isUser
+        ? (stored || this._personaName || 'You')
+        : (this._charName || stored || 'Character');
+      const newAvatarUrl = isUser ? this._personaAvatarUrl : this._charAvatarUrl;
+
+      const label = section.querySelector('.msg-name-label');
+      if (label) label.textContent = newName;
+
+      const avatar = section.querySelector('.msg-avatar');
+      if (!avatar) return;
+      const existingImg = avatar.querySelector('img');
+      if (newAvatarUrl) {
+        if (existingImg) {
+          if (existingImg.src !== newAvatarUrl) existingImg.src = newAvatarUrl;
+          existingImg.alt = newName;
+        } else {
+          avatar.textContent = '';
+          const img = document.createElement('img');
+          img.src = newAvatarUrl;
+          img.alt = newName;
+          avatar.appendChild(img);
+        }
+      } else if (!existingImg) {
+        avatar.textContent = (newName.charAt(0) || '?').toUpperCase();
+      }
+    });
   }
 
   /* ---------- Generation timer ---------- */
@@ -104,19 +283,57 @@ class Bridge {
   /* ---------- Scroll / load-more ---------- */
   _setupScrollListener() {
     let loadMoreCooldown = false;
-    let lastScrollTop = 0;
-    this.virtualList.container.addEventListener('scroll', () => {
-      if (loadMoreCooldown || this._suppressLoadMore) return;
-      const st = this.virtualList.container.scrollTop;
-      const scrollingUp = st < lastScrollTop;
-      lastScrollTop = st;
-      if (!scrollingUp) return;
-      if (this.virtualList.isNearTop(500)) {
-        loadMoreCooldown = true;
-        this._sendToFlutter('onLoadMore', []);
-        setTimeout(() => { loadMoreCooldown = false; }, 500);
+    let lastLoadTop = 0;
+    // Header hide-on-scroll (ported from Glaze/src/core/services/ui.js initHeaderScroll)
+    let headerLastTop = 0;
+    let headerHidden = false;
+    let ticking = false;
+    const container = this.virtualList.container;
+
+    const updateHeader = () => {
+      ticking = false;
+      const st = container.scrollTop;
+      // Skip when generating or at top/bottom bounds.
+      if (this.isGenerating) {
+        headerLastTop = st <= 0 ? 0 : st;
+        return;
       }
-    });
+      if (st < 0 || st + container.clientHeight > container.scrollHeight) {
+        headerLastTop = st <= 0 ? 0 : st;
+        return;
+      }
+      if (st > headerLastTop + 3 && st > 50) {
+        if (!headerHidden) {
+          headerHidden = true;
+          this._sendToFlutter('onHeaderScroll', [true]);
+        }
+      } else if (st < headerLastTop - 3) {
+        if (headerHidden) {
+          headerHidden = false;
+          this._sendToFlutter('onHeaderScroll', [false]);
+        }
+      }
+      headerLastTop = st <= 0 ? 0 : st;
+    };
+
+    container.addEventListener('scroll', () => {
+      // Load-more on upward scroll near top.
+      if (!loadMoreCooldown && !this._suppressLoadMore) {
+        const st = container.scrollTop;
+        const scrollingUp = st < lastLoadTop;
+        lastLoadTop = st;
+        if (scrollingUp && this.virtualList.isNearTop(500)) {
+          loadMoreCooldown = true;
+          this._sendToFlutter('onLoadMore', []);
+          setTimeout(() => { loadMoreCooldown = false; }, 500);
+        }
+      }
+      // Header hide via rAF throttling.
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(updateHeader);
+      }
+    }, { passive: true });
   }
 
   /* ---------- Interaction dispatch ---------- */
@@ -530,6 +747,10 @@ class Bridge {
     if (msg.isHidden !== undefined) {
       section.classList.toggle('msg-hidden', !!msg.isHidden);
     }
+
+    if (msg.swipeIndex !== undefined) section.dataset.swipeId = String(msg.swipeIndex);
+    if (msg.swipeTotal !== undefined) section.dataset.swipeTotal = String(msg.swipeTotal);
+    if (msg.greetingTotal !== undefined) section.dataset.greetingTotal = String(msg.greetingTotal);
 
     if (msg.swipeTotal !== undefined && msg.swipeTotal > 1) {
       const switcher = section.querySelector('.msg-switcher .msg-switcher-count');

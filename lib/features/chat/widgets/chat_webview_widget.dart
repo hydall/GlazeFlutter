@@ -35,7 +35,10 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final String? chatLayout;
   final void Function(int index, String messageId, bool isUser, bool isSystem, String content)? onMessageContext;
   final void Function(String id, String direction)? onSwipe;
+  final void Function(String id, int direction)? onChangeGreeting;
   final void Function(String id)? onRegenerate;
+  final void Function(bool hidden)? onHeaderScroll;
+  final int greetingTotal;
   final void Function()? onStop;
   final void Function(String action, String text)? onSelectionAction;
   final void Function(String id, String text)? onEditSave;
@@ -81,7 +84,10 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.chatLayout,
     this.onMessageContext,
     this.onSwipe,
+    this.onChangeGreeting,
     this.onRegenerate,
+    this.onHeaderScroll,
+    this.greetingTotal = 0,
     this.onStop,
     this.onSelectionAction,
     this.onEditSave,
@@ -133,6 +139,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       layout: widget.chatLayout,
       charAvatarPath: widget.charAvatarPath,
       personaAvatarPath: widget.personaAvatarPath,
+      greetingTotal: widget.greetingTotal,
     );
 
     final glaze = context.colors;
@@ -208,6 +215,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           layout: widget.chatLayout,
           charAvatarPath: widget.charAvatarPath,
           personaAvatarPath: widget.personaAvatarPath,
+          greetingTotal: widget.greetingTotal,
         );
         _bridge!.applyTheme({'chat-layout': widget.chatLayout ?? 'default'});
         _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
@@ -232,7 +240,8 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
     if (widget.charName != old.charName ||
         widget.charColor != old.charColor ||
         widget.personaName != old.personaName ||
-        widget.chatLayout != old.chatLayout) {
+        widget.chatLayout != old.chatLayout ||
+        widget.greetingTotal != old.greetingTotal) {
       _bridge!.setIdentity(
         charName: widget.charName,
         charColor: widget.charColor,
@@ -240,6 +249,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
         layout: widget.chatLayout,
         charAvatarPath: widget.charAvatarPath,
         personaAvatarPath: widget.personaAvatarPath,
+        greetingTotal: widget.greetingTotal,
       );
       _bridge!.applyTheme({'chat-layout': widget.chatLayout ?? 'default'});
     }
@@ -277,26 +287,13 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       _bridge!.isGeneratingImage = widget.isGeneratingImage;
       _bridge!.evalJs('if (window.bridge) { window.bridge.setGenerating(${widget.isGenerating}); window.bridge.isGeneratingImage = ${widget.isGeneratingImage}; }');
       if (!anyGenerating && widget.messages.isNotEmpty) {
-        // Generation finished → show regen button on last user message
-        final lastUser = widget.messages.lastWhereOrNull((m) => m.role == 'user');
-        _bridge?.setLastMessage(lastUser?.id);
+        // Generation finished → mark the actual last message; bridge injects
+        // the regen button only when that last message is from the user.
+        _bridge?.setLastMessage(widget.messages.last.id);
       } else if (widget.isGenerating) {
         // Generation started → remove regen button
         _bridge?.setLastMessage(null);
       }
-    }
-
-    // Fresh generation started (no regenTargetId) → inject typing placeholder immediately
-    if (!_wasGenerating && widget.isGenerating && widget.regenTargetId == null && !_streamingSent) {
-      final typingMsg = ChatMessage(
-        id: _kStreamingId,
-        role: 'assistant',
-        content: '',
-        timestamp: DateTime.now().millisecondsSinceEpoch,
-        isTyping: true,
-      );
-      _bridge?.appendMessage(typingMsg);
-      _streamingSent = true;
     }
 
     if (_wasGenerating && !widget.isGenerating) {
@@ -306,11 +303,30 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
       _streamingSent = false;
       _regenStreamingSent = false;
     }
-    _wasGenerating = widget.isGenerating;
 
+    // Sync messages BEFORE injecting the typing placeholder, so the new user
+    // message lands at its correct position (placeholder is appended after).
     if (!identical(old.messages, widget.messages) &&
         !_listsEqual(old.messages, widget.messages)) {
       _syncMessages(old.messages);
+    }
+
+    // Fresh generation started (no regenTargetId) → inject typing placeholder immediately
+    final shouldInjectPlaceholder = !_wasGenerating &&
+        widget.isGenerating &&
+        widget.regenTargetId == null &&
+        !_streamingSent;
+    _wasGenerating = widget.isGenerating;
+    if (shouldInjectPlaceholder) {
+      final typingMsg = ChatMessage(
+        id: _kStreamingId,
+        role: 'assistant',
+        content: '',
+        timestamp: DateTime.now().millisecondsSinceEpoch,
+        isTyping: true,
+      );
+      _bridge?.appendMessage(typingMsg);
+      _streamingSent = true;
     }
   }
 
@@ -359,9 +375,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           startIndex: widget.visibleStartIndex + oldIds.length,
         );
         if (appends.isNotEmpty && !widget.isGenerating) {
-          final lastUser = appends.lastWhereOrNull((m) => m.role == 'user')
-              ?? widget.messages.lastWhereOrNull((m) => m.role == 'user');
-          _bridge?.setLastMessage(lastUser?.id);
+          _bridge?.setLastMessage(widget.messages.lastOrNull?.id);
         }
         return;
       }
@@ -383,8 +397,7 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
           _bridge?.removeMessage(oldIds[i]);
         }
         if (!widget.isGenerating) {
-          final lastUser = widget.messages.lastWhereOrNull((m) => m.role == 'user');
-          _bridge?.setLastMessage(lastUser?.id);
+          _bridge?.setLastMessage(widget.messages.lastOrNull?.id);
         }
         return;
       }
@@ -511,6 +524,12 @@ class _ChatWebViewState extends ConsumerState<ChatWebViewWidget>
             };
             _bridge!.onSwipe = (id, direction) {
               widget.onSwipe?.call(id, direction);
+            };
+            _bridge!.onChangeGreeting = (id, dir) {
+              widget.onChangeGreeting?.call(id, dir);
+            };
+            _bridge!.onHeaderScroll = (hidden) {
+              widget.onHeaderScroll?.call(hidden);
             };
             _bridge!.onRegenerate = (id) {
               widget.onRegenerate?.call(id);

@@ -26,7 +26,10 @@ class ThemeChatPreview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDark = preset.themeMode != 'light';
-    final previewTheme = isDark ? AppTheme.dark(preset) : AppTheme.light(preset);
+    final previewFont = preset.uiFontMode == 'glaze' ? kInterFontFamily : null;
+    final previewTheme = isDark
+        ? AppTheme.dark(preset, fontFamily: previewFont)
+        : AppTheme.light(preset, fontFamily: previewFont);
     final previewCharacter = Character(
       id: 'preview_character',
       name: 'Rei',

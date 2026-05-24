@@ -1,10 +1,11 @@
 import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/material.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 import 'theme_preset.dart';
+
+const String kInterFontFamily = 'Inter';
 
 TextTheme _applySafe(TextTheme theme, {
   required Color bodyColor,
@@ -159,7 +160,7 @@ Color _borderFor(Color bg, bool isDark) {
 class AppTheme {
   static ThemeData dark(ThemePreset preset, {String? fontFamily}) {
     final colorScheme = _buildColorScheme(preset, isDark: true);
-    final effectiveFont = fontFamily ?? GoogleFonts.inter().fontFamily;
+    final effectiveFont = fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 15.0 : 1.0;
@@ -254,7 +255,7 @@ class AppTheme {
       ),
       iconTheme: IconThemeData(color: colorScheme.onSurface),
       textTheme: _applySafe(
-        GoogleFonts.interTextTheme(base.textTheme),
+        base.textTheme.apply(fontFamily: effectiveFont),
         bodyColor: colorScheme.onSurface,
         displayColor: colorScheme.onSurface,
         fontSizeFactor: scaleFactor,
@@ -281,7 +282,7 @@ class AppTheme {
 
   static ThemeData light(ThemePreset preset, {String? fontFamily}) {
     final colorScheme = _buildColorScheme(preset, isDark: false);
-    final effectiveFont = fontFamily ?? GoogleFonts.inter().fontFamily;
+    final effectiveFont = fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 15.0 : 1.0;
@@ -376,7 +377,7 @@ class AppTheme {
       ),
       iconTheme: IconThemeData(color: colorScheme.onSurface),
       textTheme: _applySafe(
-        GoogleFonts.interTextTheme(base.textTheme),
+        base.textTheme.apply(fontFamily: effectiveFont),
         bodyColor: colorScheme.onSurface,
         displayColor: colorScheme.onSurface,
         fontSizeFactor: scaleFactor,

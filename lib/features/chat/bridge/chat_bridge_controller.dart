@@ -16,6 +16,7 @@ class ChatBridgeController {
   String? currentChatLayout;
   String? _charAvatarDataUrl;
   String? _personaAvatarDataUrl;
+  int currentGreetingTotal = 0;
   bool isGenerating = false;
   bool isGeneratingImage = false;
   final Set<String> _coveredMemoryIds = {};
@@ -57,13 +58,24 @@ class ChatBridgeController {
     String? layout,
     String? charAvatarPath,
     String? personaAvatarPath,
+    int? greetingTotal,
   }) async {
     currentCharName = charName;
     currentCharColor = charColor;
     currentPersonaName = personaName;
     currentChatLayout = layout;
+    if (greetingTotal != null) currentGreetingTotal = greetingTotal;
     await _loadAvatarDataUrl(charAvatarPath, isChar: true);
     await _loadAvatarDataUrl(personaAvatarPath, isChar: false);
+    // Push identity to the WebView so already-rendered messages refresh their
+    // user name / persona avatar when the active persona resolves late.
+    final payload = jsonEncode({
+      'charName': currentCharName,
+      'personaName': currentPersonaName,
+      'charAvatarUrl': _charAvatarDataUrl,
+      'personaAvatarUrl': _personaAvatarDataUrl,
+    });
+    await _eval('window.bridge?.setIdentity($payload)');
   }
 
   Future<void> _loadAvatarDataUrl(String? path, {required bool isChar}) async {
@@ -144,10 +156,12 @@ class ChatBridgeController {
 
   void Function()? onReady;
   void Function()? onLoadMore;
+  void Function(bool hidden)? onHeaderScroll;
   void Function(String url)? onLinkClick;
   void Function(String url)? onImageClick;
   void Function(String id, bool isUser, bool isSystem, String content)? onMessageContext;
   void Function(String id, String direction)? onSwipe;
+  void Function(String id, int direction)? onChangeGreeting;
   void Function(String id)? onRegenerate;
   void Function(String action, String text)? onSelectionAction;
   void Function(String id, String text)? onEditSave;
@@ -172,6 +186,14 @@ class ChatBridgeController {
     _controller.addJavaScriptHandler(
       handlerName: 'onLoadMore',
       callback: (args) => onLoadMore?.call(),
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onHeaderScroll',
+      callback: (args) {
+        if (args.isEmpty) return;
+        onHeaderScroll?.call(args[0] == true);
+      },
     );
 
     _controller.addJavaScriptHandler(
@@ -222,6 +244,19 @@ class ChatBridgeController {
       handlerName: 'onRegenerate',
       callback: (args) {
         if (args.isNotEmpty) onRegenerate?.call(args[0] as String);
+      },
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onChangeGreeting',
+      callback: (args) {
+        if (args.length < 2) return;
+        final id = args[0] as String? ?? '';
+        final dir = args[1] is int
+            ? args[1] as int
+            : int.tryParse('${args[1]}') ?? 0;
+        if (id.isEmpty || dir == 0) return;
+        onChangeGreeting?.call(id, dir);
       },
     );
 
@@ -568,7 +603,7 @@ class ChatBridgeController {
       if (m.swipes.isNotEmpty) 'swipeTotal': m.swipes.length,
       if (m.genTime != null) 'genTime': m.genTime,
       if (m.tokens != null) 'tokens': m.tokens,
-      if (m.isError) 'isError': true,
+      'isError': m.isError,
       if (m.isTyping) 'isTyping': true,
       if (m.reasoning != null && m.reasoning!.isNotEmpty) 'reasoning': m.reasoning,
       if (m.isHidden) 'isHidden': true,
@@ -577,6 +612,8 @@ class ChatBridgeController {
       if (m.guidanceText != null && m.guidanceText!.isNotEmpty) 'guidanceText': m.guidanceText,
       if (m.guidanceType != 'GENERATION') 'guidanceType': m.guidanceType,
       if (m.greetingIndex != null) 'greetingIndex': m.greetingIndex,
+      if (m.greetingIndex != null && currentGreetingTotal > 1)
+        'greetingTotal': currentGreetingTotal,
       if (memoryStatus != null) 'memoryStatus': memoryStatus,
       if (m.triggeredLorebooks.isNotEmpty) 'triggeredLorebooks': m.triggeredLorebooks.map((e) => {'name': e.name, 'lorebookName': e.lorebookName}).toList(),
       if (m.triggeredMemories.isNotEmpty) 'triggeredMemories': m.triggeredMemories.map((e) => {'name': e.name, 'lorebookName': e.lorebookName}).toList(),

@@ -484,6 +484,35 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     state = AsyncData(current.copyWith(session: updated));
   }
 
+  /// Ported from useSwipeNavigation.js `changeSwipe`:
+  /// - blocks while generating
+  /// - removes the current swipe if it's an error (with siblings) and slides to a neighbor
+  /// - triggers `regenerateLastAssistant` when stepping past the right edge on the last message
+  /// - clears `isError` on switch
+  Future<void> changeSwipe(int messageIndex, int dir, {bool fromSwipe = false}) async {
+    final current = state.value;
+    if (current == null || current.session == null || current.isGenerating) return;
+    if (messageIndex < 0 || messageIndex >= current.messages.length) return;
+
+    final isLast = messageIndex == current.messages.length - 1;
+    final result = _messageSvc.changeSwipe(
+      current.session!,
+      messageIndex,
+      dir,
+      fromSwipe: fromSwipe,
+      isLastMessage: isLast,
+    );
+
+    if (result.needsRegen) {
+      await regenerateLastAssistant();
+      return;
+    }
+    if (result.isUpdated) {
+      _invalidateHistory();
+      state = AsyncData(current.copyWith(session: result.session));
+    }
+  }
+
   Future<void> setGreeting(int messageIndex, int direction) async {
     final current = state.value;
     if (current == null || current.session == null || current.isGenerating) return;

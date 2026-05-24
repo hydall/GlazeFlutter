@@ -141,6 +141,12 @@ class ChatGenerationService {
         },
         onComplete: (text, reasoning) {
           if (isAborted()) return;
+          if (!apiConfig.stream &&
+              accumulator.text.isEmpty &&
+              accumulator.reasoning.isEmpty &&
+              (text.isNotEmpty || (reasoning != null && reasoning.isNotEmpty))) {
+            accumulator.consumeDelta(text, reasoningDelta: reasoning);
+          }
           accumulator.flush();
           var finalText = accumulator.text.trimLeft();
           // If the model emitted <think>...</think> via reasoning_content but leaked
@@ -410,6 +416,8 @@ class ChatGenerationService {
           content: text,
           reasoning: reasoning,
           isAllReasoning: isAllReasoning,
+          isError: false,
+          isTyping: false,
           genTime: genTime,
           tokens: tokens,
           swipes: swipes,

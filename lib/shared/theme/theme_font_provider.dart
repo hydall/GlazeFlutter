@@ -1,13 +1,42 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../theme/theme_provider.dart';
 import '../theme/theme_preset.dart';
+
+const String _kInterFontFamily = 'Inter';
+const String _kInterAssetPath = 'assets/fonts/InterVariable.ttf';
+
+String? _cachedInterDataUrl;
+Future<String?>? _interLoadFuture;
+
+Future<String?> _loadInterDataUrl() async {
+  if (_cachedInterDataUrl != null) return _cachedInterDataUrl;
+  _interLoadFuture ??= () async {
+    try {
+      final data = await rootBundle.load(_kInterAssetPath);
+      final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      _cachedInterDataUrl = 'data:font/ttf;base64,${base64Encode(bytes)}';
+      return _cachedInterDataUrl;
+    } catch (_) {
+      return null;
+    }
+  }();
+  return _interLoadFuture;
+}
+
+/// Resolves the effective chat font mode, following the 'ui' delegation.
+String _effectiveChatFontMode(ThemePreset preset) {
+  if (preset.chatFontMode == 'ui') return preset.uiFontMode;
+  return preset.chatFontMode;
+}
 
 final chatFontSizeProvider = Provider<double>((ref) {
   final preset = ref.watch(themeProvider).activePreset;
@@ -102,27 +131,43 @@ final chatFontFamilyProvider = FutureProvider<String?>((ref) async {
   final settings = ref.watch(themeProvider);
   if (settings.ignoreCustomFont) return null;
   final preset = settings.activePreset;
-  if (preset.chatFontMode != 'custom') return null;
-  if (!preset.hasChatFont || preset.chatFontName == null) return null;
-  return _loadFontFromBase64(preset.chatFont!, preset.chatFontName!);
+  final mode = _effectiveChatFontMode(preset);
+  if (mode == 'glaze') return _kInterFontFamily;
+  if (mode == 'custom') {
+    if (!preset.hasChatFont || preset.chatFontName == null) return null;
+    return _loadFontFromBase64(preset.chatFont!, preset.chatFontName!);
+  }
+  return null;
 });
 
-final chatFontDataProvider = Provider<String?>((ref) {
+final chatFontDataProvider = FutureProvider<String?>((ref) async {
   final settings = ref.watch(themeProvider);
   if (settings.ignoreCustomFont) return null;
   final preset = settings.activePreset;
-  if (preset.chatFontMode != 'custom') return null;
-  if (!preset.hasChatFont) return null;
-  return preset.chatFont;
+  final mode = _effectiveChatFontMode(preset);
+  if (mode == 'glaze') return _loadInterDataUrl();
+  if (mode == 'custom') {
+    if (!preset.hasChatFont) return null;
+    return preset.chatFont;
+  }
+  return null;
 });
 
 final uiFontFamilyProvider = FutureProvider<String?>((ref) async {
   final settings = ref.watch(themeProvider);
   if (settings.ignoreCustomFont) return null;
   final preset = settings.activePreset;
-  if (preset.uiFontMode != 'custom') return null;
-  if (!preset.hasCustomFont || preset.customFontName == null) return null;
-  return _loadFontFromBase64(preset.customFont!, preset.customFontName!);
+  final mode = preset.uiFontMode;
+  if (mode == 'glaze') {
+    // Trigger asset preload so the font is ready for both Flutter and WebView.
+    unawaited(_loadInterDataUrl());
+    return _kInterFontFamily;
+  }
+  if (mode == 'custom') {
+    if (!preset.hasCustomFont || preset.customFontName == null) return null;
+    return _loadFontFromBase64(preset.customFont!, preset.customFontName!);
+  }
+  return null;
 });
 
 final bgImageProvider = FutureProvider<String?>((ref) async {

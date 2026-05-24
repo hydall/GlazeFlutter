@@ -57,6 +57,10 @@ flutter:
     - assets/hydall.jpg
     - assets/chat_webview/
     - .env
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/InterVariable.ttf
 
 dependency_overrides:
   path_provider: 2.1.5

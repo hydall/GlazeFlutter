@@ -128,6 +128,7 @@ class SseClient {
     var buffer = '';
     var fullText = '';
     var fullReasoning = '';
+    var doneReceived = false;
 
     subscription = (responseStream as Stream<List<int>>).listen(
       (chunk) {
@@ -150,8 +151,7 @@ class SseClient {
               debugPrint('[SSE] cancel detected at [DONE], suppressing onComplete');
             } else {
               onComplete?.call(fullText, fullReasoning.isNotEmpty ? fullReasoning : null);
-              fullText = '';
-              fullReasoning = '';
+              doneReceived = true;
             }
             subscription?.cancel();
             if (!completer.isCompleted) completer.complete();
@@ -202,6 +202,8 @@ class SseClient {
       return;
     }
 
+    if (doneReceived) return;
+
     // Server dropped connection without [DONE] — treat as normal completion
     // if any text was accumulated (provider returned 200 but omitted [DONE]).
     if (fullText.isNotEmpty || fullReasoning.isNotEmpty) {
@@ -228,20 +230,81 @@ class SseClient {
         headers: {
           'Authorization': 'Bearer $apiKey',
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
       ),
       data: body,
       cancelToken: cancelToken,
     );
 
-    final data = response.data as Map<String, dynamic>;
-    final choice = data['choices']?[0];
-    final message = choice?['message'];
-    final content = message?['content'] as String? ?? '';
-    final reasoning = message?['reasoning_content'] as String? ??
-        message?['reasoning'] as String?;
+    final raw = response.data;
+    Map<String, dynamic>? data;
+
+    if (raw is Map<String, dynamic>) {
+      data = raw;
+    } else if (raw is String && raw.trim().isNotEmpty) {
+      final trimmed = raw.trim();
+      // Try plain JSON first.
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is Map<String, dynamic>) data = decoded;
+      } catch (_) {}
+      // Fallback: provider ignored stream:false and sent SSE chunks.
+      if (data == null && trimmed.contains('data:')) {
+        final agg = _aggregateSseString(trimmed);
+        onComplete?.call(agg.$1, agg.$2.isEmpty ? null : agg.$2);
+        return;
+      }
+    }
+
+    if (data == null) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        type: DioExceptionType.badResponse,
+        message: 'Unexpected response body (${raw.runtimeType})',
+      );
+    }
+
+    final choice = (data['choices'] is List && (data['choices'] as List).isNotEmpty)
+        ? (data['choices'] as List).first
+        : null;
+    final message = choice is Map<String, dynamic> ? choice['message'] : null;
+    final content = (message is Map<String, dynamic> ? message['content'] : null) as String? ?? '';
+    final reasoningRaw = message is Map<String, dynamic>
+        ? (message['reasoning_content'] ?? message['reasoning'])
+        : null;
+    final reasoning = reasoningRaw is String ? reasoningRaw : null;
 
     onComplete?.call(content, reasoning);
+  }
+
+  /// Aggregate a fully-buffered SSE response (provider returned text/event-stream
+  /// body despite stream:false). Returns (content, reasoning).
+  (String, String) _aggregateSseString(String body) {
+    var fullText = '';
+    var fullReasoning = '';
+    for (final line in body.split('\n')) {
+      final trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) continue;
+      final payload = trimmed.substring(6).trim();
+      if (payload == '[DONE]') break;
+      try {
+        final json = jsonDecode(payload) as Map<String, dynamic>;
+        final choice = (json['choices'] is List && (json['choices'] as List).isNotEmpty)
+            ? (json['choices'] as List).first
+            : null;
+        final delta = choice is Map<String, dynamic> ? choice['delta'] : null;
+        final msg = choice is Map<String, dynamic> ? choice['message'] : null;
+        final src = delta is Map<String, dynamic> ? delta : (msg is Map<String, dynamic> ? msg : null);
+        if (src == null) continue;
+        final c = src['content'];
+        if (c is String) fullText += c;
+        final r = src['reasoning_content'] ?? src['reasoning'];
+        if (r is String) fullReasoning += r;
+      } catch (_) {}
+    }
+    return (fullText, fullReasoning);
   }
 
   Future<List<Map<String, dynamic>>> fetchModels({
@@ -252,13 +315,13 @@ class SseClient {
     final url = '$base/models';
 
     try {
-      final response = await _dio.get(
+      final response = await _dio.get<Map<String, dynamic>>(
         url,
         options: Options(headers: {
           'Authorization': 'Bearer $apiKey',
         }),
       );
-      final data = response.data['data'] as List?;
+      final data = response.data?['data'] as List?;
       return data?.cast<Map<String, dynamic>>() ?? [];
     } catch (_) {
       return [];

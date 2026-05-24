@@ -639,7 +639,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
             final bgOpacity = preset.bgOpacity.clamp(0.0, 1.0);
             final bgPath = ref.watch(bgImageProvider).valueOrNull;
             final fontStyle = ref.watch(chatFontStyleProvider);
-            final fontDataUrl = ref.watch(chatFontDataProvider);
+            final fontDataUrl = ref.watch(chatFontDataProvider).valueOrNull;
 
             return Stack(
               children: [
@@ -656,6 +656,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                         final character = ref.watch(characterByIdProvider(widget.charId));
                         final effectivePersona = ref.watch(effectivePersonaForChatProvider(widget.charId));
                         final memBook = ref.watch(memoryBookProvider(widget.state.session?.id ?? ''));
+                        final greetingTotal = character == null
+                            ? 0
+                            : ((character.firstMes?.isNotEmpty == true ? 1 : 0) +
+                                character.alternateGreetings.where((g) => g.isNotEmpty).length);
                         return ChatWebViewWidget(
                           messages: widget.state.visibleMessages,
                           charId: widget.charId,
@@ -667,6 +671,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           charName: character?.name,
                           charColor: character?.color,
                           personaName: effectivePersona?.name,
+                          greetingTotal: greetingTotal,
                           chatLayout: appSettings?.chatLayout ?? 'default',
                           charAvatarPath: character?.avatarPath,
                           personaAvatarPath: effectivePersona?.avatarPath,
@@ -700,14 +705,23 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           onSwipe: (id, direction) {
                             final idx = widget.state.messages.indexWhere((m) => m.id == id);
                             if (idx < 0) return;
-                            final msg = widget.state.messages[idx];
-                            final currentSwipe = msg.swipeId;
-                            final newSwipe = direction == 'right'
-                                ? (currentSwipe + 1).clamp(0, msg.swipes.length - 1)
-                                : (currentSwipe - 1).clamp(0, msg.swipes.length - 1);
-                            if (newSwipe != currentSwipe) {
-                              ref.read(chatProvider(widget.charId).notifier).setSwipe(idx, newSwipe);
-                            }
+                            final dir = direction == 'right' ? 1 : -1;
+                            ref.read(chatProvider(widget.charId).notifier)
+                                .changeSwipe(idx, dir, fromSwipe: true);
+                          },
+                          onHeaderScroll: (hidden) {
+                            if (widget.onScrollDirection == null) return;
+                            // Reuse the existing scroll-direction wiring on the parent
+                            // (reverse = down/hide, forward = up/show).
+                            widget.onScrollDirection!(
+                              hidden ? ScrollDirection.reverse : ScrollDirection.forward,
+                            );
+                          },
+                          onChangeGreeting: (id, dir) {
+                            final idx = widget.state.messages.indexWhere((m) => m.id == id);
+                            if (idx < 0) return;
+                            ref.read(chatProvider(widget.charId).notifier)
+                                .setGreeting(idx, dir);
                           },
                           onRegenerate: (id) {
                             ref.read(chatProvider(widget.charId).notifier).regenerateLastAssistant();
@@ -934,10 +948,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                     }
                                   : null,
                               onMagicDrawer: widget.onToggleDrawer,
-                              onImageGen: () => GlazeBottomSheet.show(
+                              onAttach: () => GlazeBottomSheet.show(
                                 context,
                                 child: const ImageGenSheet(),
                               ),
+                              onFullScreen: () {}, // Add your full screen logic here
                               onContinue: () => ref
                                   .read(chatProvider(widget.charId).notifier)
                                   .continueMessage(),

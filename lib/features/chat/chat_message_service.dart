@@ -123,6 +123,78 @@ class ChatMessageService {
     return _persist(session, newMessages);
   }
 
+  /// Mirrors Glaze/src/composables/chat/useSwipeNavigation.js → `changeSwipe`.
+  /// `dir`: +1 forward, -1 back. `fromSwipe`: animation hint (slide vs fade).
+  /// Returns a [ChangeSwipeResult] describing whether the session was updated,
+  /// whether the caller should regenerate a new variant, and whether nothing
+  /// happened (out of bounds / single swipe / generating).
+  ChangeSwipeResult changeSwipe(
+    ChatSession session,
+    int messageIndex,
+    int dir, {
+    bool fromSwipe = false,
+    bool isLastMessage = false,
+  }) {
+    if (messageIndex < 0 || messageIndex >= session.messages.length) {
+      return const ChangeSwipeResult.noop();
+    }
+    final msg = session.messages[messageIndex];
+    final animDir = fromSwipe ? (dir > 0 ? 'slide-next' : 'slide-prev') : 'fade';
+
+    // Error-swipe path: drop the error variant and slide to the neighbor.
+    if (msg.isError && msg.swipes.length > 1) {
+      final errorSwipeId = msg.swipeId;
+      final remainingSwipes = List<String>.from(msg.swipes)..removeAt(errorSwipeId);
+      final remainingMeta = msg.swipesMeta.length > errorSwipeId
+          ? (List<Map<String, dynamic>>.from(msg.swipesMeta)..removeAt(errorSwipeId))
+          : List<Map<String, dynamic>>.from(msg.swipesMeta);
+
+      var newIndex = dir < 0 ? errorSwipeId - 1 : errorSwipeId;
+      if (newIndex >= remainingSwipes.length) newIndex = remainingSwipes.length - 1;
+      if (newIndex < 0) newIndex = 0;
+
+      final meta = newIndex < remainingMeta.length ? remainingMeta[newIndex] : null;
+      final updated = msg.copyWith(
+        swipes: remainingSwipes,
+        swipesMeta: remainingMeta,
+        swipeId: newIndex,
+        content: remainingSwipes[newIndex],
+        isError: false,
+        swipeDirection: animDir,
+        reasoning: meta?['reasoning'] as String?,
+        genTime: meta?['genTime'] as String?,
+        tokens: meta?['tokens'] as int?,
+      );
+      final newMessages = List<ChatMessage>.from(session.messages)..[messageIndex] = updated;
+      return ChangeSwipeResult.updated(_persist(session, newMessages));
+    }
+
+    if (msg.swipes.length <= 1) return const ChangeSwipeResult.noop();
+
+    final newIndex = msg.swipeId + dir;
+
+    // Right-edge on the last message → caller should kick off a new variant.
+    if (dir > 0 && newIndex >= msg.swipes.length && isLastMessage) {
+      return const ChangeSwipeResult.needsRegen();
+    }
+    if (newIndex < 0 || newIndex >= msg.swipes.length) {
+      return const ChangeSwipeResult.noop();
+    }
+
+    final meta = newIndex < msg.swipesMeta.length ? msg.swipesMeta[newIndex] : null;
+    final updated = msg.copyWith(
+      swipeId: newIndex,
+      content: msg.swipes[newIndex],
+      isError: false,
+      swipeDirection: animDir,
+      reasoning: meta?['reasoning'] as String?,
+      genTime: meta?['genTime'] as String?,
+      tokens: meta?['tokens'] as int?,
+    );
+    final newMessages = List<ChatMessage>.from(session.messages)..[messageIndex] = updated;
+    return ChangeSwipeResult.updated(_persist(session, newMessages));
+  }
+
   ChatSession setGreeting(
     ChatSession session,
     int messageIndex,
@@ -161,4 +233,21 @@ class ChatMessageService {
     _ref.read(chatRepoProvider).put(updated);
     return updated;
   }
+}
+
+/// Result of [ChatMessageService.changeSwipe].
+/// - `updated`: session was modified, use [session].
+/// - `needsRegen`: caller should kick off a new variant via regenerate.
+/// - `noop`: nothing happened (out of bounds / single swipe / etc).
+class ChangeSwipeResult {
+  final ChatSession? session;
+  final bool needsRegen;
+
+  const ChangeSwipeResult._(this.session, this.needsRegen);
+  const ChangeSwipeResult.updated(ChatSession s) : this._(s, false);
+  const ChangeSwipeResult.needsRegen() : this._(null, true);
+  const ChangeSwipeResult.noop() : this._(null, false);
+
+  bool get isUpdated => session != null;
+  bool get isNoop => session == null && !needsRegen;
 }

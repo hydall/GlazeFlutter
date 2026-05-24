@@ -669,7 +669,22 @@
   color: var(--text-gray);
   font-style: italic;
 }
-.typing-icon { width: 14px; height: 14px; fill: currentColor; opacity: 0.7; }
+.typing-icon {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  opacity: 0.7;
+  animation: pencil-write 1.5s infinite ease-in-out;
+}
+@keyframes pencil-write {
+  0%   { transform: translateX(0); }
+  15%  { transform: translateX(1px); }
+  30%  { transform: translateX(2px); }
+  45%  { transform: translateX(3px); }
+  60%  { transform: translateX(4px); }
+  75%  { transform: translateX(5px); }
+  100% { transform: translateX(0); }
+}
 .typing-text { font-size: 0.9em; }
 
 .typing-dots-bounce {
