@@ -638,7 +638,70 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
           isGeneratingImage: false,
         ));
       } else {
-        state = AsyncData(current.copyWith(isGenerating: false, isGeneratingImage: false));
+        // Fresh generation (sendMessage). Never remove user messages.
+        // If partial streaming content arrived, save it as an assistant message.
+        // If the last message in state is an assistant that is absolutely empty
+        // (no content and no reasoning), remove it. Otherwise keep everything.
+        final partialText = partialStreaming.text;
+        final partialReasoning = partialStreaming.reasoning;
+        final hasPartial = partialText.isNotEmpty || (partialReasoning != null && partialReasoning.isNotEmpty);
+
+        final currentMessages = current.session?.messages ?? const <ChatMessage>[];
+        final lastMsg = currentMessages.isNotEmpty ? currentMessages.last : null;
+        final lastIsEmptyAssistant = lastMsg != null &&
+            lastMsg.role == 'assistant' &&
+            lastMsg.content.isEmpty &&
+            (lastMsg.reasoning == null || lastMsg.reasoning!.isEmpty);
+
+        if (hasPartial) {
+          // Save partial content as a new assistant message
+          final partialMsg = ChatMessage(
+            id: generateId(),
+            role: 'assistant',
+            content: partialText,
+            reasoning: partialReasoning,
+            isTyping: false,
+            timestamp: DateTime.now().millisecondsSinceEpoch,
+            swipes: [partialText],
+            swipeId: 0,
+            swipesMeta: [<String, dynamic>{}],
+          );
+          final baseMessages = lastIsEmptyAssistant
+              ? currentMessages.sublist(0, currentMessages.length - 1)
+              : currentMessages;
+          final updatedMessages = [...baseMessages, partialMsg];
+          final updatedSession = current.session?.copyWith(
+            messages: updatedMessages,
+            updatedAt: currentTimestampSeconds(),
+          );
+          if (updatedSession != null) {
+            ref.read(chatRepoProvider).put(updatedSession);
+            ChatSessionService.updateCache(updatedSession);
+          }
+          state = AsyncData(current.copyWith(
+            session: updatedSession ?? current.session,
+            isGenerating: false,
+            isGeneratingImage: false,
+          ));
+        } else if (lastIsEmptyAssistant) {
+          // Drop the empty assistant placeholder, keep everything else (incl. user msg)
+          final trimmedMessages = currentMessages.sublist(0, currentMessages.length - 1);
+          final trimmedSession = current.session?.copyWith(
+            messages: trimmedMessages,
+            updatedAt: currentTimestampSeconds(),
+          );
+          if (trimmedSession != null) {
+            ref.read(chatRepoProvider).put(trimmedSession);
+            ChatSessionService.updateCache(trimmedSession);
+          }
+          state = AsyncData(current.copyWith(
+            session: trimmedSession ?? current.session,
+            isGenerating: false,
+            isGeneratingImage: false,
+          ));
+        } else {
+          state = AsyncData(current.copyWith(isGenerating: false, isGeneratingImage: false));
+        }
       }
     } else if (current != null && current.isGeneratingImage) {
       state = AsyncData(current.copyWith(isGeneratingImage: false));
