@@ -569,6 +569,9 @@ class Bridge {
 
     /* Selection bar */
     document.addEventListener('selectionchange', () => {
+      const editing = document.querySelector('.message-section.editing');
+      if (editing) { this._hideSelectionBar(); return; }
+
       let selText = '';
       const sel = window.getSelection();
       if (sel && sel.toString().trim().length > 0) {
@@ -594,11 +597,13 @@ class Bridge {
     document.addEventListener('contextmenu', (e) => {
       const section = e.target.closest('.message-section');
       if (!section) return;
+
+      if (!this.renderer._selectionMode && e.target.closest('.msg-body')) return;
+
       e.preventDefault();
       const id = section.dataset.messageId;
 
       if (this.renderer._selectionMode) {
-        // Already in selection mode — toggle this message
         this.renderer.toggleMessageSelection(id);
         const ids = this.renderer.getSelectedIds();
         this._sendToFlutter('onSelectionChange', [JSON.stringify(ids)]);
@@ -606,7 +611,6 @@ class Bridge {
           this.renderer.setSelectionMode(false);
         }
       } else {
-        // Enter selection mode and select this message
         this.renderer.setSelectionMode(true);
         this.renderer.toggleMessageSelection(id);
         this._sendToFlutter('onSelectionChange', [JSON.stringify(this.renderer.getSelectedIds())]);
@@ -915,7 +919,7 @@ class Bridge {
     const scrollPos = this.virtualList.container.scrollTop;
     section.classList.add('editing');
 
-    const rawText = section.dataset.rawText || '';
+    const rawText = (section.dataset.rawText || '').replace(/^<think\b[^>]*>[\s\S]*?<\/think>\s*/, '');
     const reasoning = section.dataset.reasoning || '';
     let editText = rawText;
     if (reasoning) editText = '<' + 'think>\n' + reasoning + '\n</' + 'think>\n' + rawText;
@@ -946,6 +950,9 @@ class Bridge {
         textarea.scrollTop += e.deltaY * 100;
       }
     }, { passive: false });
+    textarea.addEventListener('touchmove', (e) => {
+      e.stopPropagation();
+    }, { passive: true });
     textarea.style.height = Math.max(80, textarea.scrollHeight + 20) + 'px';
     textarea.focus();
 

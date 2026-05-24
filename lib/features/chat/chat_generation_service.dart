@@ -149,9 +149,11 @@ class ChatGenerationService {
           }
           accumulator.flush();
           var finalText = accumulator.text.trimLeft();
-          // If the model emitted <think>...</think> via reasoning_content but leaked
-          // the closing tag into content, strip it from the start of finalText.
-          if (finalText.startsWith(reasoningTagEnd)) {
+          if (accumulator.hasExternalReasoning) {
+            finalText = finalText.replaceAll(reasoningTagEnd, '');
+            finalText = finalText.replaceAll(reasoningTagStart, '');
+            finalText = finalText.trimLeft();
+          } else if (finalText.startsWith(reasoningTagEnd)) {
             finalText = finalText.substring(reasoningTagEnd.length).trimLeft();
           }
           var finalReasoning = accumulator.reasoning.isNotEmpty ? accumulator.reasoning : reasoning;
