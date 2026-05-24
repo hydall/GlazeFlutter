@@ -744,7 +744,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }) async {
     final genId = ++_activeGenId;
     final completer = Completer<void>();
-    _activeGenCompleter = completer;
     _clearStreaming();
 
     final notifService = GenerationNotificationService.instance;
