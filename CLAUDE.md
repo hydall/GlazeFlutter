@@ -3,7 +3,7 @@
 Native LLM frontend for AI roleplay. Flutter rewrite of [Glaze](https://github.com/hydall/Glaze).
 **Stack:** Flutter 3.41 + Riverpod 2 + Drift (SQLite) + GoRouter. **Language:** Dart only. **License:** AGPL-3.0.
 
-Architecture: `docs/ARCHITECTURE.md`. Migration plan: `docs/FLUTTER_MIGRATION_MVP.md`.
+Architecture: `docs/ARCHITECTURE.md`. Workflow (git, PRs, Trello): `docs/WORKFLOW.md`.
 
 ## Commands
 
@@ -12,7 +12,7 @@ flutter run -d windows          # Dev run (Windows)
 flutter run -d chrome           # Dev run (Web)
 flutter build windows           # Production build
 flutter analyze                 # Lint + typecheck
-dart run build_runner build     # Generate freezed/drift code
+dart run build_runner build     # Regenerate after editing freezed/drift models
 flutter test                    # Run tests
 ```
 
@@ -34,6 +34,7 @@ flutter test                    # Run tests
 ### Navigation
 - **GoRouter** for route definitions
 - Named routes: `/`, `/chat/:charId`, `/settings/api`
+- **Sub-screens need an explicit back button** — `leading: BackButton(onPressed: () => context.go('/parent'))` — GoRouter `go()` replaces the stack and won't add one automatically
 
 ### File Naming
 | Type | Convention | Example |
@@ -84,6 +85,14 @@ When editing files matching a pattern below, READ the corresponding rule file FI
 | Drift reads/writes, repositories | `docs/rules/database.md` |
 | Architecture details, full flow | `docs/ARCHITECTURE.md` |
 | Formal invariants with code references | `docs/INVARIANTS.md` |
+| Custom `==...==` markdown markers, message rendering | `docs/markdown-markers.md` |
+| Windows/build failures, dependency overrides | `docs/BUILD_NOTES.md` |
+
+## Workflow
+
+- Branch (`feat/xxx`) off `master`, push to `origin`, open a PR — see `docs/WORKFLOW.md` for branching, Trello, and cleanup checklists.
+- Run `dart run build_runner build` after changing any freezed/drift model.
+- Single responsibility: split a class before it grows past ~150 lines (thin orchestrators, fat specialists, constructor injection). Details: `docs/ARCHITECTURE.md`.
 
 ## Do NOT
 
@@ -93,3 +102,5 @@ When editing files matching a pattern below, READ the corresponding rule file FI
 - Store API keys in plain text in Drift
 - Mutate state directly — use immutable patterns with freezed
 - Forget `ref.watch` select for streaming UI (causes full rebuild per chunk)
+- Commit directly to `master` — always use a feature branch
+- Use the `gh` CLI — GitHub operations go through GitHub MCP tools
