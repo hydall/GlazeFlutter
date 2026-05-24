@@ -264,8 +264,11 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
-    if (_activeGenCompleter != null && !_activeGenCompleter!.isCompleted) {
-      await _abortAndWait();
+    // Abort any in-flight generation immediately (does not await) — correctness
+    // is guaranteed by the isAborted() closure and setCancelToken genId guard,
+    // so we don't need to wait for the old stream to fully close before starting.
+    if (state.value?.isGenerating == true) {
+      abortGeneration();
     }
     final current = state.value;
     if (current == null || current.session == null || current.isGenerating) return;
@@ -719,16 +722,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _restorationMessage = null;
 
     GenerationNotificationService.instance.onGenerationAborted();
-  }
-
-  /// Aborts any active generation and waits for the SSE stream to fully close
-  /// before returning. This prevents the race condition where a new generation
-  /// starts before the old stream's onError/onComplete callbacks have fired.
-  Future<void> _abortAndWait() async {
-    final completer = _activeGenCompleter;
-    if (completer == null || completer.isCompleted) return;
-    abortGeneration();
-    await completer.future;
   }
 
   void _invalidateHistory() => ref.invalidate(chatHistoryProvider);
