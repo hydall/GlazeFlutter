@@ -132,7 +132,7 @@ final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) {
 
 ## Phase 6: ImgGen Utility Consolidation
 
-- [ ] 6.1 Extract `_replaceFirstImgErrorOrGen` + `_resetImgTagsToGen` → `ImgTagRecoveryService`
+- [x] 6.1 Extract `_replaceFirstImgErrorOrGen` + `_resetImgTagsToGen` → `ImgTagRecoveryService`
 - [x] 6.2 Move `_stripThinkTags` from `ChatBridgeController` → shared utility (`lib/core/utils/think_tags.dart`)
 - [x] 6.3 Unify ChatMessage ↔ JS map conversion in `ChatMessageMapper`
 
