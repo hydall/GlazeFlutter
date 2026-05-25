@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/services/onboarding_service.dart';
 import '../../shared/shell/nav_height_provider.dart';
-import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart' show GlazeAppBar;
 import '../../shared/widgets/menu_group.dart';
 import '../backup/backup_screen.dart';
@@ -18,7 +17,7 @@ class MenuScreen extends ConsumerWidget {
     final navHeight = ref.watch(navHeightProvider);
     final topPad = MediaQuery.of(context).padding.top + 66.0;
     return Scaffold(
-      backgroundColor: context.cs.surface,
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           ListView(

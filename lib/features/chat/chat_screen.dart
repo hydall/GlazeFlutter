@@ -519,6 +519,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   final GlobalKey _inputBarKey = GlobalKey();
 
   bool _isSelectionMode = false;
+  bool _showScrollToBottom = false;
   Set<String> _selectedMessageIds = {};
   final GlobalKey<ChatWebViewWidgetState> _webViewStateKey = GlobalKey();
 
@@ -539,6 +540,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         });
       }
     }
+  }
+
+  Future<void> _scrollToBottom() async {
+    final webViewState = _webViewStateKey.currentState;
+    if (webViewState != null) {
+      await webViewState.scrollToBottom();
+    }
+    if (!mounted) return;
+    setState(() => _showScrollToBottom = false);
   }
 
   void _showImageViewer(BuildContext context, String imageUrl) {
@@ -723,7 +733,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
     final bgBlur = preset.bgBlur > 0 ? preset.bgBlur : 0.0;
     final bgOpacity = preset.bgOpacity.clamp(0.0, 1.0);
-    final bgPath = ref.watch(bgImageProvider).valueOrNull;
+    final bgPath = preset.bgImage;
     final fontStyle = ref.watch(chatFontStyleProvider);
     final fontDataUrl = ref.watch(chatFontDataProvider).valueOrNull;
 
@@ -774,6 +784,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     bgImagePath: bgPath,
                     bgBlur: bgBlur,
                     bgOpacity: bgOpacity,
+                    bgNoiseOpacity: preset.bgNoiseOpacity,
+                    bgNoiseIntensity: preset.bgNoiseIntensity,
                     chatFontName: fontStyle.fontFamily,
                     chatFontDataUrl: fontDataUrl,
                     chatFontSize: fontStyle.fontSize,
@@ -829,6 +841,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                             ? ScrollDirection.reverse
                             : ScrollDirection.forward,
                       );
+                    },
+                    onScrollToBottomVisibility: (visible) {
+                      if (!mounted || _showScrollToBottom == visible) return;
+                      setState(() => _showScrollToBottom = visible);
                     },
                     onChangeGreeting: (id, dir) {
                       final idx = widget.state.messages.indexWhere(
@@ -1018,6 +1034,55 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                   end: Alignment.topCenter,
                   colors: [Colors.black54, Colors.transparent],
                   stops: [0.0, 1.0],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          right: 16,
+          bottom: messageListBottom + 16,
+          child: IgnorePointer(
+            ignoring: !_showScrollToBottom,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              opacity: _showScrollToBottom ? 1 : 0,
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                offset: _showScrollToBottom
+                    ? Offset.zero
+                    : const Offset(0, 0.2),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _scrollToBottom,
+                    borderRadius: BorderRadius.circular(24),
+                    child: Ink(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: context.cs.surface.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.22),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: context.cs.primary,
+                        size: 26,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

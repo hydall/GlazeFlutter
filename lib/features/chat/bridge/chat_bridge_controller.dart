@@ -157,6 +157,7 @@ class ChatBridgeController {
   void Function()? onReady;
   void Function()? onLoadMore;
   void Function(bool hidden)? onHeaderScroll;
+  void Function(bool visible)? onScrollToBottomVisibility;
   void Function(String url)? onLinkClick;
   void Function(String url)? onImageClick;
   void Function(String id, bool isUser, bool isSystem, String content)? onMessageContext;
@@ -193,6 +194,14 @@ class ChatBridgeController {
       callback: (args) {
         if (args.isEmpty) return;
         onHeaderScroll?.call(args[0] == true);
+      },
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onScrollToBottomVisibility',
+      callback: (args) {
+        if (args.isEmpty) return;
+        onScrollToBottomVisibility?.call(args[0] == true);
       },
     );
 
@@ -491,15 +500,29 @@ class ChatBridgeController {
     return _eval('window.bridge?.stopEdit("${_escape(messageId)}")');
   }
 
-  Future<void> setBackgroundImage(String? filePath, int blur, double opacity) {
-    if (filePath == null || filePath.isEmpty) {
+  Future<void> setBackgroundNoise(double opacity, double intensity) {
+    return _eval(
+      'window.bridge?.setBackgroundNoise(${opacity.toStringAsFixed(3)}, ${intensity.toStringAsFixed(3)})',
+    );
+  }
+
+  Future<void> setBackgroundImage(String? src, int blur, double opacity) {
+    if (src == null || src.isEmpty) {
       return _eval('window.bridge?.setBackgroundImage(null, 0, 1)');
     }
-    var url = filePath.replaceAll('\\', '/');
-    if (!url.startsWith('file://')) {
-      url = 'file:///$url';
+    String url;
+    if (src.startsWith('data:') ||
+        src.startsWith('http://') ||
+        src.startsWith('https://') ||
+        src.startsWith('file://')) {
+      url = src;
+    } else {
+      url = 'file:///${src.replaceAll('\\', '/')}';
     }
-    return _eval('window.bridge?.setBackgroundImage("${_escape(url)}", $blur, $opacity)');
+    // Pass through JSON encoder — data URIs can be megabytes long and may
+    // contain characters that the lightweight _escape helper doesn't handle.
+    final encoded = jsonEncode(url);
+    return _eval('window.bridge?.setBackgroundImage($encoded, $blur, $opacity)');
   }
 
   Future<void> setChatFont({String? fontName, String? fontDataUrl, required double fontSize, required double letterSpacing}) {

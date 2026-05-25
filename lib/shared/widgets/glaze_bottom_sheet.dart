@@ -1,10 +1,10 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soft_edge_blur/soft_edge_blur.dart';
 
 import '../theme/app_colors.dart';
 import '../../features/settings/app_settings_provider.dart';
+import 'glass_surface.dart';
 
 // ── Data models ───────────────────────────────────────────────────────────────
 
@@ -243,12 +243,9 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
       constraints: BoxConstraints(
         maxHeight: MediaQuery.of(context).size.height * 0.95,
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.cs.surfaceContainerHighest.withValues(alpha: batterySaver ? 1.0 : 0.8),
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-          border: Border(top: BorderSide(color: context.cs.outlineVariant)),
-        ),
+      child: GlassSurface(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(top: BorderSide(color: context.cs.outlineVariant)),
         child: Stack(
           children: [
             (!batterySaver)
@@ -381,15 +378,7 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
       ),
     );
 
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: batterySaver
-          ? sheetBody
-          : BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: sheetBody,
-            ),
-    );
+    return sheetBody;
   }
 }
 

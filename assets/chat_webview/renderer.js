@@ -175,6 +175,7 @@ const SHADOW_STYLE = `
     line-height: 1.6;
   }
   .edit-textarea:focus { border-color: var(--primary-color, #7996CE); }
+  .message-section.editing .msg-reasoning { display: none; }
 `;
 
 class Renderer {
@@ -251,6 +252,7 @@ class Renderer {
     const classes = ['message-section', this._roleKey(role), `layout-${layout}`];
     if (isError) classes.push('error');
     if (isHidden) classes.push('msg-hidden');
+    if (messageData.isEditing) classes.push('editing');
     if (this._selectionMode) classes.push('selection-mode');
     if (this._selectedIds.has(id)) classes.push('selected');
     section.className = classes.join(' ');

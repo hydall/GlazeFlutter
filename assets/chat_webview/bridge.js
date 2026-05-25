@@ -297,11 +297,21 @@ class Bridge {
   _setupScrollListener() {
     let loadMoreCooldown = false;
     let lastLoadTop = 0;
+    let lastShowScrollToBottom = null;
     // Header hide-on-scroll (ported from Glaze/src/core/services/ui.js initHeaderScroll)
     let headerLastTop = 0;
     let headerHidden = false;
     let ticking = false;
     const container = this.virtualList.container;
+
+    const emitScrollToBottomVisibility = () => {
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      const show = distanceFromBottom > 240;
+      if (lastShowScrollToBottom === show) return;
+      lastShowScrollToBottom = show;
+      this._sendToFlutter('onScrollToBottomVisibility', [show]);
+    };
 
     const updateHeader = () => {
       ticking = false;
@@ -346,7 +356,10 @@ class Bridge {
         ticking = true;
         requestAnimationFrame(updateHeader);
       }
+      emitScrollToBottomVisibility();
     }, { passive: true });
+
+    requestAnimationFrame(emitScrollToBottomVisibility);
   }
 
   /* ---------- Interaction dispatch ---------- */
@@ -593,17 +606,30 @@ class Bridge {
       else this._hideSelectionBar();
     });
 
-    /* Long-press → enter selection mode (or toggle if already in it) */
+    /* Long-press:
+     *   1st press on a message → enter selection mode + select that message
+     *   2nd press on the SAME (already-selected) message body → let native
+     *     text selection take over (don't preventDefault, don't toggle).
+     *   Press on header / footer / a non-selected message → toggle that
+     *     message's selection. Exits selection mode when nothing remains. */
     document.addEventListener('contextmenu', (e) => {
       const section = e.target.closest('.message-section');
       if (!section) return;
 
-      if (!this.renderer._selectionMode && e.target.closest('.msg-body')) return;
+      const id = section.dataset.messageId;
+      const inSelectionMode = this.renderer._selectionMode;
+      const isSelected = this.renderer._selectedIds.has(id);
+      const onBody = !!e.target.closest('.msg-body');
+
+      if (inSelectionMode && isSelected && onBody) {
+        // Second long-press on the same selected message body — hand off to
+        // native text selection (CSS `user-select: text` is active here).
+        return;
+      }
 
       e.preventDefault();
-      const id = section.dataset.messageId;
 
-      if (this.renderer._selectionMode) {
+      if (inSelectionMode) {
         this.renderer.toggleMessageSelection(id);
         const ids = this.renderer.getSelectedIds();
         this._sendToFlutter('onSelectionChange', [JSON.stringify(ids)]);
@@ -792,12 +818,72 @@ class Bridge {
     if (msg.swipeTotal !== undefined) section.dataset.swipeTotal = String(msg.swipeTotal);
     if (msg.greetingTotal !== undefined) section.dataset.greetingTotal = String(msg.greetingTotal);
 
-    if (msg.swipeTotal !== undefined && msg.swipeTotal > 1) {
-      const switcher = section.querySelector('.msg-switcher .msg-switcher-count');
-      if (switcher) switcher.textContent = `${(msg.swipeIndex || 0) + 1}/${msg.swipeTotal}`;
-    }
+    this._syncMessageControls(section, msg);
 
     this.renderer.updateMessageMeta(section, msg);
+  }
+
+  _syncMessageControls(section, msg) {
+    const center = section.querySelector('.msg-center-controls');
+    if (!center) return;
+
+    const isChar = section.classList.contains('char');
+    const isEditing = section.classList.contains('editing');
+    const isLast = section.dataset.isLast === 'true';
+    const isError = msg.isError !== undefined ? !!msg.isError : section.classList.contains('error');
+    const isGenerating = msg.isGenerating !== undefined ? !!msg.isGenerating : !!this.isGenerating;
+    const swipeIndex = msg.swipeIndex !== undefined ? msg.swipeIndex : parseInt(section.dataset.swipeId || '0', 10);
+    const swipeTotal = msg.swipeTotal !== undefined ? msg.swipeTotal : parseInt(section.dataset.swipeTotal || '0', 10);
+    const greetingIndex = msg.greetingIndex !== undefined ? msg.greetingIndex : 0;
+    const greetingTotal = msg.greetingTotal !== undefined ? msg.greetingTotal : parseInt(section.dataset.greetingTotal || '0', 10);
+    const messageIndex = parseInt(section.dataset.messageIndex || '-1', 10);
+    const hasSwipes = isChar && swipeTotal > 1;
+    const hasGreetings = isChar && messageIndex === 0 && greetingTotal > 1;
+    const showRegen = ((!isChar && isLast) || isError) && !isGenerating && !isEditing;
+
+    center.innerHTML = '';
+
+    if (hasSwipes) {
+      center.appendChild(this.renderer._createSwitcher(section.dataset.messageId, swipeIndex || 0, swipeTotal, 'swipe'));
+    } else if (hasGreetings) {
+      center.appendChild(this.renderer._createSwitcher(section.dataset.messageId, greetingIndex || 0, greetingTotal, 'greeting'));
+    }
+
+    if (isChar && isLast && !isGenerating && !isEditing) {
+      const guided = document.createElement('div');
+      guided.className = 'msg-guided-swipe-btn';
+      guided.dataset.action = 'toggle-guided';
+      guided.dataset.messageId = section.dataset.messageId;
+      guided.title = 'Guided swipe';
+      guided.innerHTML = ICON.guided;
+      center.appendChild(guided);
+    }
+
+    if (isChar && isLast && isGenerating) {
+      const stop = document.createElement('button');
+      stop.className = 'stop-btn';
+      stop.dataset.action = 'stop';
+      stop.dataset.messageId = section.dataset.messageId;
+      stop.title = 'Stop';
+      stop.innerHTML = ICON.stop;
+      center.appendChild(stop);
+    }
+
+    if (showRegen) {
+      const regen = document.createElement('div');
+      regen.className = 'msg-regenerate';
+      if (hasSwipes || hasGreetings) regen.classList.add('icon-only');
+      regen.dataset.action = 'regenerate';
+      regen.dataset.messageId = section.dataset.messageId;
+      regen.dataset.mode = 'magic';
+      regen.innerHTML = ICON.regen;
+      if (!hasSwipes && !hasGreetings) {
+        const span = document.createElement('span');
+        span.textContent = 'Regenerate';
+        regen.appendChild(span);
+      }
+      center.appendChild(regen);
+    }
   }
 
   setLastMessage(newLastId) {
@@ -849,7 +935,12 @@ class Bridge {
     this.virtualList.clear();
   }
 
-  scrollToBottom() { this.virtualList.scrollToBottom(); }
+  scrollToBottom() {
+    this.virtualList.scrollToBottom();
+    requestAnimationFrame(() => {
+      this._sendToFlutter('onScrollToBottomVisibility', [false]);
+    });
+  }
   scrollToMessage(messageId) { this.virtualList.scrollToMessage(messageId); }
 
   setSearch(query, activeIndex) { this.renderer.setSearch(query, activeIndex); }
@@ -898,6 +989,11 @@ class Bridge {
   setBottomPadding(px) {
     const container = document.getElementById('chat-container') || document.body;
     container.style.paddingBottom = px + 'px';
+    requestAnimationFrame(() => {
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      this._sendToFlutter('onScrollToBottomVisibility', [distanceFromBottom > 240]);
+    });
   }
 
   setTopPadding(px) {
@@ -1011,7 +1107,7 @@ class Bridge {
       document.body.insertBefore(bg, document.body.firstChild);
     }
     if (url) {
-      bg.style.backgroundImage = `url('${url}')`;
+      bg.style.backgroundImage = `url("${url.replace(/"/g, '\\"')}")`;
       bg.style.display = 'block';
     } else {
       bg.style.backgroundImage = '';
@@ -1019,6 +1115,58 @@ class Bridge {
     }
     bg.style.filter = `blur(${blur || 0}px)`;
     bg.style.opacity = opacity != null ? opacity : 1;
+  }
+
+  setBackgroundNoise(opacity, intensity) {
+    let noise = document.getElementById('bg-noise-layer');
+    if (!noise) {
+      noise = document.createElement('div');
+      noise.id = 'bg-noise-layer';
+      const bg = document.getElementById('bg-layer');
+      if (bg && bg.nextSibling) {
+        document.body.insertBefore(noise, bg.nextSibling);
+      } else {
+        document.body.insertBefore(noise, document.body.firstChild);
+      }
+    }
+    const op = Math.max(0, Math.min(1, opacity || 0));
+    if (op <= 0) {
+      noise.style.display = 'none';
+      noise.style.backgroundImage = '';
+      return;
+    }
+    const i = Math.max(0, Math.min(2, intensity == null ? 1 : intensity));
+    noise.style.display = 'block';
+    noise.style.opacity = op;
+    noise.style.backgroundImage = `url("${this._noiseTile(i)}")`;
+    noise.style.backgroundSize = '128px 128px';
+  }
+
+  _noiseTile(intensity) {
+    if (!this._noiseCache) this._noiseCache = new Map();
+    const key = intensity.toFixed(2);
+    const hit = this._noiseCache.get(key);
+    if (hit) return hit;
+    const size = 128;
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(size, size);
+    const data = img.data;
+    // White pixels with random alpha — per-pixel grain (no SVG tile/grid).
+    // `intensity` linearly scales the alpha distribution: 0.1 → very sparse,
+    // 1.0 → balanced grain, 2.0 → dense (clamped at full opaque).
+    for (let p = 0; p < data.length; p += 4) {
+      const a = Math.min(1, Math.random() * intensity);
+      data[p] = 255;
+      data[p + 1] = 255;
+      data[p + 2] = 255;
+      data[p + 3] = Math.round(a * 255);
+    }
+    ctx.putImageData(img, 0, 0);
+    const url = canvas.toDataURL('image/png');
+    this._noiseCache.set(key, url);
+    return url;
   }
 
   /* ---------- Guided swipe inline ---------- */

@@ -169,6 +169,10 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   void abortImageGeneration() {
     _imgGenCancelToken?.cancel();
     _imgGenCancelToken = null;
+    final current = state.value;
+    if (current != null && current.isGeneratingImage) {
+      state = AsyncData(current.copyWith(isGeneratingImage: false));
+    }
   }
 
   Future<void> retryImageGeneration() async {
@@ -292,21 +296,10 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final regenTargetId = prevAssistant.id;
     _restorationMessage = prevAssistant;
 
-    final swipes = prevAssistant.swipes.isNotEmpty
-        ? [...prevAssistant.swipes, '']
-        : [prevAssistant.content, ''];
-    final newSwipeId = swipes.length - 1;
-    final swipesMeta = prevAssistant.swipesMeta.isNotEmpty
-        ? [...prevAssistant.swipesMeta, <String, dynamic>{}]
-        : [<String, dynamic>{'genTime': prevAssistant.genTime, 'reasoning': prevAssistant.reasoning, 'tokens': prevAssistant.tokens}, <String, dynamic>{}];
-
     final clearedMsg = prevAssistant.copyWith(
       content: '',
       reasoning: null,
       isTyping: true,
-      swipes: swipes,
-      swipeId: newSwipeId,
-      swipesMeta: swipesMeta,
       genTime: null,
       tokens: null,
       isError: false,
@@ -804,6 +797,12 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     if (_activeGenId != genId) {
       if (!completer.isCompleted) completer.complete();
       return;
+    }
+
+    if (result.session != null) {
+      await ref.read(chatRepoProvider).put(result.session!);
+      ChatSessionService.updateCache(result.session!);
+      _invalidateHistory();
     }
 
     if (regenTargetId != null) {

@@ -1,6 +1,3 @@
-import 'dart:math';
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -8,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../features/settings/app_settings_provider.dart';
 import '../shell/nav_height_provider.dart';
 import '../theme/app_colors.dart';
+import 'glass_surface.dart';
 import 'glow_ripple.dart';
 
 String _iconSvg(String path) =>
@@ -68,87 +66,34 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
-    final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
+    final batterySaver =
+        ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
 
-    final navContent = Container(
-      decoration: BoxDecoration(
-        color: context.cs.surfaceContainerHighest.withValues(alpha: batterySaver ? 1.0 : 0.8),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: context.cs.outlineVariant),
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: List.generate(
+          _items.length,
+          (i) => _NavButton(
+            item: _items[i],
+            isActive: i == widget.currentIndex,
+            onTap: () => widget.onTap(i),
+          ),
+        ),
       ),
-      child: batterySaver
-          ? Padding(
-              padding: const EdgeInsets.symmetric(vertical: 7),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: List.generate(
-                  _items.length,
-                  (i) => _NavButton(
-                    item: _items[i],
-                    isActive: i == widget.currentIndex,
-                    onTap: () => widget.onTap(i),
-                  ),
-                ),
-              ),
-            )
-          : GlowRippleOverlay(
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Opacity(
-                      opacity: 0.03,
-                      child: CustomPaint(painter: _NoisePainter()),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 7),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: List.generate(
-                        _items.length,
-                        (i) => _NavButton(
-                          item: _items[i],
-                          isActive: i == widget.currentIndex,
-                          onTap: () => widget.onTap(i),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
     );
 
     return Padding(
       key: _key,
       padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottomPad),
-      child: ClipRRect(
+      child: GlassSurface(
         borderRadius: BorderRadius.circular(20),
-        child: batterySaver
-            ? navContent
-            : BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                child: navContent,
-              ),
+        border: Border.all(color: context.cs.outlineVariant),
+        child: batterySaver ? row : GlowRippleOverlay(child: row),
       ),
     );
   }
-}
-
-class _NoisePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final random = Random(42);
-    final paint = Paint()..color = Colors.white;
-    for (int i = 0; i < 800; i++) {
-      final x = random.nextDouble() * size.width;
-      final y = random.nextDouble() * size.height;
-      canvas.drawRect(Rect.fromLTWH(x, y, 1, 1), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class _NavItem {

@@ -515,21 +515,17 @@ class ChatGenerationService {
     }
     final original = saveSession.messages[idx];
     final errorSwipes = original.swipes.isNotEmpty ? [...original.swipes] : [original.content];
-    if (errorSwipes.isNotEmpty) {
-      errorSwipes[errorSwipes.length - 1] = errorText;
-    } else {
-      errorSwipes.add(errorText);
-    }
-    final errorSwipesMeta = original.swipesMeta.isNotEmpty ? [...original.swipesMeta] : [<String, dynamic>{'genTime': original.genTime, 'reasoning': original.reasoning, 'tokens': original.tokens}];
-    if (errorSwipesMeta.isNotEmpty) {
-      errorSwipesMeta[errorSwipesMeta.length - 1] = {};
-    }
+    errorSwipes.add(errorText);
+    final errorSwipesMeta = original.swipesMeta.isNotEmpty
+        ? [...original.swipesMeta, <String, dynamic>{}]
+        : [<String, dynamic>{'genTime': original.genTime, 'reasoning': original.reasoning, 'tokens': original.tokens}, <String, dynamic>{}];
     final updated = original.copyWith(
       content: errorText,
       isError: true,
       isTyping: false,
       swipes: errorSwipes,
       swipesMeta: errorSwipesMeta,
+      swipeId: errorSwipes.length - 1,
       reasoning: null,
       genTime: null,
       tokens: null,
