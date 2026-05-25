@@ -1046,8 +1046,8 @@
 }
 .sel-btn:hover { background: rgba(255, 255, 255, 0.12); }
 
-.message-section .msg-body,
-.message-section .glaze-message {
+.message-section.selected .msg-body,
+.message-section.selected .glaze-message {
   user-select: text;
   -webkit-user-select: text;
 }
@@ -1098,9 +1098,20 @@
   inset: 0;
   background-size: cover;
   background-position: center;
-  z-index: -1;
+  z-index: -2;
   pointer-events: none;
   transition: opacity 0.3s, filter 0.3s;
+}
+
+#bg-noise-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-repeat: repeat;
+  image-rendering: pixelated;
+  image-rendering: -webkit-optimize-contrast;
+  transition: opacity 0.3s;
 }
 
 /* ============================================================

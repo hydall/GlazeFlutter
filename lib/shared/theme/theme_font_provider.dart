@@ -1,12 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../theme/theme_provider.dart';
 import '../theme/theme_preset.dart';
@@ -170,25 +168,17 @@ final uiFontFamilyProvider = FutureProvider<String?>((ref) async {
   return null;
 });
 
-final bgImageProvider = FutureProvider<String?>((ref) async {
+/// Decoded background image bytes for native Flutter rendering. Returns null
+/// when the active preset has no image. Recomputed only when the data URI
+/// itself changes; `MemoryImage` caches the decoded pixels keyed by identity.
+final bgImageBytesProvider = Provider<Uint8List?>((ref) {
   final preset = ref.watch(themeProvider).activePreset;
   if (!preset.hasBgImage) return null;
-
   try {
     final data = preset.bgImage!;
     final commaIdx = data.indexOf(',');
     if (commaIdx == -1) return null;
-    final base64Str = data.substring(commaIdx + 1);
-    final bytes = base64Decode(base64Str);
-
-    final dir = await getApplicationSupportDirectory();
-    final hash = base64Str.length.hashCode.toRadixString(36);
-    final file = File('${dir.path}/bg/$hash.jpg');
-    if (!file.existsSync()) {
-      file.parent.createSync(recursive: true);
-    }
-    await file.writeAsBytes(bytes);
-    return file.path;
+    return base64Decode(data.substring(commaIdx + 1));
   } catch (_) {
     return null;
   }

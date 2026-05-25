@@ -38,7 +38,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
         (_searchQuery.isNotEmpty ? 32.0 : 0.0);
 
     return Scaffold(
-      backgroundColor: context.cs.surface,
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           Positioned.fill(

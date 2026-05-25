@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glass_surface.dart';
 
 class ChatInputBar extends StatefulWidget {
   final ValueChanged<String> onSend;
@@ -154,16 +155,13 @@ class _ChatInputBarState extends State<ChatInputBar> {
   @override
   Widget build(BuildContext context) {
     if (widget.showSearchControls) {
-      final searchContent = Container(
-        constraints: const BoxConstraints(minHeight: 56),
-        decoration: BoxDecoration(
-          color: context.cs.surface.withValues(alpha: widget.batterySaver ? 1.0 : 0.8),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.05),
-          ),
-          borderRadius: BorderRadius.circular(28),
-        ),
-        child: Row(
+      final searchContent = GlassSurface(
+        borderRadius: BorderRadius.circular(28),
+        tint: context.cs.surface,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Row(
           children: [
             const SizedBox(width: 18),
             Icon(Icons.search, size: 20, color: context.cs.primary),
@@ -200,6 +198,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
             const SizedBox(width: 8),
           ],
         ),
+        ),
       );
       return SafeArea(
         top: false,
@@ -216,16 +215,13 @@ class _ChatInputBarState extends State<ChatInputBar> {
     }
 
     if (widget.isSelectionMode) {
-      final selectionContent = Container(
-        constraints: const BoxConstraints(minHeight: 56),
-        decoration: BoxDecoration(
-          color: context.cs.surface.withValues(alpha: widget.batterySaver ? 1.0 : 0.8),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.05),
-          ),
-          borderRadius: BorderRadius.circular(28),
-        ),
-        child: Row(
+      final selectionContent = GlassSurface(
+        borderRadius: BorderRadius.circular(28),
+        tint: context.cs.surface,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Row(
           children: [
             const SizedBox(width: 8),
             _CircleBtn(
@@ -261,6 +257,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
             ),
             const SizedBox(width: 8),
           ],
+        ),
         ),
       );
       return SafeArea(
@@ -329,17 +326,16 @@ class _ChatInputBarState extends State<ChatInputBar> {
             color: Colors.transparent,
             elevation: 0,
             borderRadius: BorderRadius.circular(28),
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 56),
-              decoration: BoxDecoration(
-                color: context.cs.surface.withValues(alpha: 1.0),
-                border: Border.all(
-                  color: _guidanceMode
-                      ? Colors.orange.withValues(alpha: 0.3)
-                      : Colors.white.withValues(alpha: 0.05),
-                ),
-                borderRadius: BorderRadius.circular(28),
+            child: GlassSurface(
+              borderRadius: BorderRadius.circular(28),
+              tint: context.cs.surface,
+              border: Border.all(
+                color: _guidanceMode
+                    ? Colors.orange.withValues(alpha: 0.3)
+                    : Colors.white.withValues(alpha: 0.05),
               ),
+              child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 56),
               child: TextField(
                 controller: _controller,
                 focusNode: _effectiveFocusNode,
@@ -366,6 +362,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   ),
                   filled: false,
                 ),
+              ),
               ),
             ),
           ),
@@ -491,22 +488,20 @@ class _CircleBtn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final container = Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: context.cs.surface.withValues(alpha: batterySaver ? 1.0 : 0.8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: Icon(icon, color: color ?? context.cs.primary, size: 20),
-      ),
-    );
-
     return GestureDetector(
       onTap: onTap,
-      child: container,
+      child: SizedBox(
+        width: 40,
+        height: 40,
+        child: GlassSurface(
+          borderRadius: BorderRadius.circular(20),
+          tint: context.cs.surface,
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          child: Center(
+            child: Icon(icon, color: color ?? context.cs.primary, size: 20),
+          ),
+        ),
+      ),
     );
   }
 }

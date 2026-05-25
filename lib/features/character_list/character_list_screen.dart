@@ -51,7 +51,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     final topPad = MediaQuery.of(context).padding.top + 74.0;
 
     return Scaffold(
-      backgroundColor: context.cs.surface,
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           Positioned.fill(

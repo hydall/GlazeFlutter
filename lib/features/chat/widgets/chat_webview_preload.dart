@@ -37,6 +37,8 @@ class _ChatWebViewPreloaderState extends State<ChatWebViewPreloader> {
                     transparentBackground: true,
                     useHybridComposition: true,
                     cacheEnabled: true,
+                    allowFileAccess: true,
+                    allowContentAccess: true,
                     allowFileAccessFromFileURLs: true,
                     allowUniversalAccessFromFileURLs: true,
                     mixedContentMode:

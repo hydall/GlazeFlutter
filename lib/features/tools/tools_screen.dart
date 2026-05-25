@@ -62,7 +62,7 @@ class ToolsScreen extends ConsumerWidget {
     final presetName = ref.watch(_activePresetNameProvider).value ?? 'Default';
     final topPad = MediaQuery.of(context).padding.top + 66.0;
     return Scaffold(
-      backgroundColor: context.cs.surface,
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           ListView(

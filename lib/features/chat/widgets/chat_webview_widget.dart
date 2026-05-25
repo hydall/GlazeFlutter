@@ -25,6 +25,8 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final String? bgImagePath;
   final double bgBlur;
   final double bgOpacity;
+  final double bgNoiseOpacity;
+  final double bgNoiseIntensity;
   final List<ChatMessage> messages;
   final bool isGenerating;
   final bool isGeneratingImage;
@@ -38,6 +40,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final void Function(String id, int direction)? onChangeGreeting;
   final void Function(String id)? onRegenerate;
   final void Function(bool hidden)? onHeaderScroll;
+  final void Function(bool visible)? onScrollToBottomVisibility;
   final int greetingTotal;
   final void Function()? onStop;
   final void Function(String action, String text)? onSelectionAction;
@@ -76,6 +79,8 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.bgImagePath,
     this.bgBlur = 0.0,
     this.bgOpacity = 1.0,
+    this.bgNoiseOpacity = 0.0,
+    this.bgNoiseIntensity = 1.0,
     required this.messages,
     required this.isGenerating,
     this.isGeneratingImage = false,
@@ -89,6 +94,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.onChangeGreeting,
     this.onRegenerate,
     this.onHeaderScroll,
+    this.onScrollToBottomVisibility,
     this.greetingTotal = 0,
     this.onStop,
     this.onSelectionAction,
@@ -168,7 +174,8 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     });
 
     await _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
-    
+    await _bridge!.setBackgroundNoise(widget.bgNoiseOpacity, widget.bgNoiseIntensity);
+
     await _bridge!.setChatFont(
       fontName: widget.chatFontName,
       fontDataUrl: widget.chatFontDataUrl,
@@ -224,6 +231,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         );
         _bridge!.applyTheme({'chat-layout': widget.chatLayout ?? 'default'});
         _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
+        _bridge!.setBackgroundNoise(widget.bgNoiseOpacity, widget.bgNoiseIntensity);
         _bridge!.setChatFont(
           fontName: widget.chatFontName,
           fontDataUrl: widget.chatFontDataUrl,
@@ -263,6 +271,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         widget.bgBlur != old.bgBlur ||
         widget.bgOpacity != old.bgOpacity) {
       _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
+    }
+
+    if (widget.bgNoiseOpacity != old.bgNoiseOpacity ||
+        widget.bgNoiseIntensity != old.bgNoiseIntensity) {
+      _bridge!.setBackgroundNoise(widget.bgNoiseOpacity, widget.bgNoiseIntensity);
     }
 
     if (widget.chatFontName != old.chatFontName ||
@@ -314,6 +327,13 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     }
 
     if (_wasGenerating && !widget.isGenerating) {
+      final finishedRegenId = old.regenTargetId;
+      if (finishedRegenId != null) {
+        final finalMsg = widget.messages.where((m) => m.id == finishedRegenId).firstOrNull;
+        if (finalMsg != null) {
+          _bridge?.updateMessage(finalMsg);
+        }
+      }
       if (!_regenStreamingSent) {
         _bridge?.removeMessage(_kStreamingId);
       }
@@ -437,6 +457,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       
       final contentChanged = o.content != n.content;
       final swipeChanged = o.swipeId != n.swipeId;
+      final swipeTotalChanged = o.swipes.length != n.swipes.length;
       final hiddenChanged = o.isHidden != n.isHidden;
       final typingChanged = o.isTyping != n.isTyping;
       final errorChanged = o.isError != n.isError;
@@ -444,7 +465,8 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       final greetingChanged = o.greetingIndex != n.greetingIndex;
       
       final needsUpdate = contentChanged || swipeChanged || hiddenChanged || 
-                         typingChanged || errorChanged || guidanceChanged || greetingChanged;
+                         swipeTotalChanged || typingChanged || errorChanged ||
+                         guidanceChanged || greetingChanged;
       
       if (needsUpdate) {
         _bridge?.updateMessage(n);
@@ -526,6 +548,8 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
             cacheEnabled: true,
             useWideViewPort: true,
             loadWithOverviewMode: true,
+            allowFileAccess: true,
+            allowContentAccess: true,
             allowFileAccessFromFileURLs: true,
             allowUniversalAccessFromFileURLs: true,
             mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
@@ -547,6 +571,9 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
             };
             _bridge!.onHeaderScroll = (hidden) {
               widget.onHeaderScroll?.call(hidden);
+            };
+            _bridge!.onScrollToBottomVisibility = (visible) {
+              widget.onScrollToBottomVisibility?.call(visible);
             };
             _bridge!.onRegenerate = (id) {
               widget.onRegenerate?.call(id);

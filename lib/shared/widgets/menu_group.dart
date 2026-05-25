@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../shared/theme/app_colors.dart';
+import 'glass_surface.dart';
 
 class MenuGroup extends StatelessWidget {
   final String? header;
@@ -11,12 +12,9 @@ class MenuGroup extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: context.cs.outlineVariant),
-        ),
+      child: GlassSurface(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: context.cs.outlineVariant),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

@@ -1,11 +1,10 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../../features/settings/app_settings_provider.dart';
 import '../theme/app_colors.dart';
+import 'glass_surface.dart';
+import 'glaze_background.dart';
 
 /// Scaffold with a floating glassmorphic header — use for screens OUTSIDE
 /// the shell (character editor, chat screen, etc.) that need a back button.
@@ -66,34 +65,36 @@ class GlazeScaffold extends StatelessWidget {
       ),
     );
 
-    return PopScope(
-      canPop: !showBack,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        backHandler();
-      },
-      child: Scaffold(
-        backgroundColor: context.cs.surface,
-        resizeToAvoidBottomInset: resizeToAvoidBottomInset,
-        body: extendBodyBehindHeader
-            ? Stack(
-                children: [
-                  Positioned.fill(child: body),
-                  Positioned(top: 0, left: 0, right: 0, child: animatedHeader),
-                ],
-              )
-            : Column(
-                children: [
-                  animatedHeader,
-                  Expanded(
-                    child: MediaQuery.removePadding(
-                      context: context,
-                      removeTop: true,
-                      child: body,
+    return GlazeBackground(
+      child: PopScope(
+        canPop: !showBack,
+        onPopInvokedWithResult: (didPop, _) {
+          if (didPop) return;
+          backHandler();
+        },
+        child: Scaffold(
+          backgroundColor: Colors.transparent,
+          resizeToAvoidBottomInset: resizeToAvoidBottomInset,
+          body: extendBodyBehindHeader
+              ? Stack(
+                  children: [
+                    Positioned.fill(child: body),
+                    Positioned(top: 0, left: 0, right: 0, child: animatedHeader),
+                  ],
+                )
+              : Column(
+                  children: [
+                    animatedHeader,
+                    Expanded(
+                      child: MediaQuery.removePadding(
+                        context: context,
+                        removeTop: true,
+                        child: body,
+                      ),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+        ),
       ),
     );
   }
@@ -121,78 +122,65 @@ class GlazeAppBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
-
-    final barContent = Container(
-      height: 56,
-      decoration: BoxDecoration(
-        color: context.cs.surfaceContainerHighest.withValues(alpha: batterySaver ? 1.0 : 0.8),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: context.cs.outlineVariant),
-      ),
-          child: Row(
-            children: [
-              // Left: back button OR logo
-              SizedBox(
-                width: 52,
-                child: showBack
-                    ? IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back_ios_new_rounded,
-                          size: 20,
-                        ),
-                        color: context.cs.primary,
-                        onPressed:
-                            onBack ?? () => Navigator.of(context).maybePop(),
-                      )
-                    : leading ??
-                          Padding(
-                            padding: const EdgeInsets.only(left: 12),
-                            child: _GlazeLogo(),
-                          ),
-              ),
-              // Title
-              Expanded(
-                child:
-                    titleWidget ??
-                    (title != null
-                        ? Text(
-                            title!,
-                            style: TextStyle(
-                              color: context.cs.onSurface,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w500,
-                              fontVariations: const [
-                                FontVariation('wght', 500),
-                              ],
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          )
-                        : const SizedBox.shrink()),
-              ),
-              // Right actions
-              if (actions != null)
-                Padding(
-                  padding: const EdgeInsets.only(right: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: actions!,
-                  ),
-                )
-              else
-                const SizedBox(width: 12),
-],
-          ),
-    );
-
-    return ClipRRect(
+    return GlassSurface(
       borderRadius: BorderRadius.circular(20),
-      child: batterySaver
-          ? barContent
-          : BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-              child: barContent,
+      border: Border.all(color: context.cs.outlineVariant),
+      child: SizedBox(
+        height: 56,
+        child: Row(
+          children: [
+            // Left: back button OR logo
+            SizedBox(
+              width: 52,
+              child: showBack
+                  ? IconButton(
+                      icon: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 20,
+                      ),
+                      color: context.cs.primary,
+                      onPressed:
+                          onBack ?? () => Navigator.of(context).maybePop(),
+                    )
+                  : leading ??
+                        Padding(
+                          padding: const EdgeInsets.only(left: 12),
+                          child: _GlazeLogo(),
+                        ),
             ),
+            // Title
+            Expanded(
+              child:
+                  titleWidget ??
+                  (title != null
+                      ? Text(
+                          title!,
+                          style: TextStyle(
+                            color: context.cs.onSurface,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w500,
+                            fontVariations: const [
+                              FontVariation('wght', 500),
+                            ],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        )
+                      : const SizedBox.shrink()),
+            ),
+            // Right actions
+            if (actions != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: actions!,
+                ),
+              )
+            else
+              const SizedBox(width: 12),
+          ],
+        ),
+      ),
     );
   }
 }
