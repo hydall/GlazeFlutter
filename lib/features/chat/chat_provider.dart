@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/llm/tokenizer.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/services/generation_notification_service.dart';
 import '../../core/utils/id_generator.dart';
@@ -121,6 +122,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       role: 'user',
       content: text,
       timestamp: DateTime.now().millisecondsSinceEpoch,
+      tokens: estimateTokens(text),
     );
 
     final updatedMessages = [...current.messages, userMsg];

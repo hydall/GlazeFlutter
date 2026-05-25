@@ -634,7 +634,7 @@ if (messageData.isEditing) classes.push('editing');
     /* --- Right: actions / edit buttons --- */
     if (m.isEditing) {
       footer.appendChild(this._createEditButtons(m.id));
-    } else if (this.selectionManager && this.selectionManager.shouldHideActions()) {
+    } else if (!this.selectionManager || !this.selectionManager.shouldHideActions()) {
       const actions = document.createElement('div');
       actions.className = 'msg-actions-btn';
       actions.dataset.action = 'open-actions';
