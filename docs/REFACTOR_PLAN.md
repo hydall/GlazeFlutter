@@ -118,13 +118,13 @@ final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) {
 ## Phase 4: WebView Streaming Optimization (high risk)
 
 - [x] 4.1 `updateMessageContent` patch instead of rebuild — patch `shadowRoot.querySelector('.glaze-message').innerHTML` for text-only chunks
-- [ ] 4.2 Batch Flutter→WebView messages — collect chunks in `requestAnimationFrame`
+- [x] 4.2 Batch Flutter→WebView messages — collect chunks in `requestAnimationFrame`
 - [x] 4.3 `_createGenStat` — single function, remove 4× DOM construction duplication
-- [ ] 4.4 Reduce `ChatWebViewWidget` callback props (22→~10) — group into typed callback objects
+- [x] 4.4 Reduce `ChatWebViewWidget` callback props (22→5) — group into typed callback objects (`MessageActionsCallbacks`, `EditActionsCallbacks`, `ImageGenCallbacks`, `ScrollCallbacks`, `MiscCallbacks` in `webview_callbacks.dart`)
 
 ## Phase 5: God Object Decomposition (high risk)
 
-- [ ] 5.1 `ChatNotifier` (1127 lines) → extract `AbortHandler` + `ImageRecoveryService`
+- [x] 5.1 `ChatNotifier` (1127 lines) → extract `AbortHandler` + `ImageRecoveryService`
 - [ ] 5.2 `ChatScreen` (1289 lines) → `ChatDrawerController` + `ChatSearchDelegate` + `ChatBody`
 - [ ] 5.3 `ChatActionsService`: `WidgetRef` → `Ref` + context param
 - [ ] 5.4 `ChatGenerationService` → Riverpod provider instead of inline creation
@@ -178,3 +178,6 @@ final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) {
 | 2026-05-25 | merge | Upstream/master 8c38b6e merged — reasoning block hiding fix, editing guard in SelectionManager | Done |
 | 2026-05-25 | 4.2 | MessageUpdateBatcher — coalesce updateMessage calls via requestAnimationFrame, flush before structural ops (15 characterization tests) | Done |
 | 2026-05-25 | 2.5 | UI→DB violations fixed — migrated 17 widget files from direct repo calls to high-level providers (chatSessionOpsProvider, memoryBookOpsProvider, lorebooksProvider, charactersProvider, presetListProvider, personaListProvider), updated characterization tests to verify fix | Done |
+| 2026-05-25 | 4.4 | ChatWebViewWidget callback grouping — 22 props → 5 typed objects (MessageActionsCallbacks, EditActionsCallbacks, ImageGenCallbacks, ScrollCallbacks, MiscCallbacks) in webview_callbacks.dart, updated chat_webview_widget.dart + chat_screen.dart | Done |
+| 2026-05-25 | 5.1a | ImageRecoveryService extracted from ChatNotifier — 4 static pure functions (cleanStuckImgGenTags, replaceFirstImgErrorOrGen, resetImgTagsToGen, fixupSwipesWithImageResults) + 3 instance methods (retryImageGeneration, retryImageGenerationForMessage, findImageOnDisk) via constructor injection. ChatNotifier: 1122→854 lines | Done |
+| 2026-05-25 | 5.1b | AbortHandler extracted from ChatNotifier — encapsulates _cancelToken, _imgGenCancelToken, _restorationMessage, _activeGenId, abortGeneration(), abortImageGeneration(), cancelImageGeneration(), clearStreaming(), setCancelToken(), nextGenId(), isCurrentGen(). ChatNotifier: 854→636 lines | Done |

@@ -11,6 +11,7 @@ import '../chat_state.dart';
 import '../editing_message_provider.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../../shared/theme/app_colors.dart';
+import 'webview_callbacks.dart';
 
 const String _kStreamingId = '__streaming__';
 
@@ -35,27 +36,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final String? searchQuery;
   final int searchCurrentIndex;
   final String? chatLayout;
-  final void Function(int index, String messageId, bool isUser, bool isSystem, String content)? onMessageContext;
-  final void Function(String id, String direction)? onSwipe;
-  final void Function(String id, int direction)? onChangeGreeting;
-  final void Function(String id)? onRegenerate;
-  final void Function(bool hidden)? onHeaderScroll;
-  final void Function(bool visible)? onScrollToBottomVisibility;
   final int greetingTotal;
-  final void Function()? onStop;
-  final void Function(String action, String text)? onSelectionAction;
-  final void Function(String id, String text)? onEditSave;
-  final void Function(String id)? onEditCancel;
-  final void Function(String id, bool focused)? onEditFocusChange;
-  final void Function(String imageUrl)? onImageClick;
-  final void Function(String id, String guidanceText)? onGuidedSwipe;
-  final void Function(String id)? onMemoryClick;
-  final void Function(String id)? onToggleHidden;
-  final void Function(String id)? onInjectClick;
-  final void Function(String instruction, String messageId)? onImgRetry;
-  final void Function(String instruction, String messageId)? onImgFind;
-  final void Function(String instruction, String messageId)? onImgRegen;
-  final void Function()? onImgCancel;
   final String? chatFontName;
   final String? chatFontDataUrl;
   final double chatFontSize;
@@ -66,7 +47,13 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final int visibleStartIndex;
   final String? regenTargetId;
   final bool isSelectionMode;
-  final void Function(List<String> ids)? onSelectionChange;
+  
+  // Callback objects
+  final MessageActionsCallbacks messageActions;
+  final EditActionsCallbacks editActions;
+  final ImageGenCallbacks imageGenActions;
+  final ScrollCallbacks scrollActions;
+  final MiscCallbacks miscActions;
 
   const ChatWebViewWidget({
     super.key,
@@ -90,27 +77,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.searchQuery,
     this.searchCurrentIndex = 0,
     this.chatLayout,
-    this.onMessageContext,
-    this.onSwipe,
-    this.onChangeGreeting,
-    this.onRegenerate,
-    this.onHeaderScroll,
-    this.onScrollToBottomVisibility,
     this.greetingTotal = 0,
-    this.onStop,
-    this.onSelectionAction,
-    this.onEditSave,
-    this.onEditCancel,
-    this.onEditFocusChange,
-    this.onImageClick,
-    this.onGuidedSwipe,
-    this.onMemoryClick,
-    this.onToggleHidden,
-    this.onInjectClick,
-    this.onImgRetry,
-    this.onImgFind,
-    this.onImgRegen,
-    this.onImgCancel,
     this.chatFontName,
     this.chatFontDataUrl,
     this.chatFontSize = 15.0,
@@ -121,7 +88,11 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.visibleStartIndex = 0,
     this.regenTargetId,
     this.isSelectionMode = false,
-    this.onSelectionChange,
+    this.messageActions = const MessageActionsCallbacks(),
+    this.editActions = const EditActionsCallbacks(),
+    this.imageGenActions = const ImageGenCallbacks(),
+    this.scrollActions = const ScrollCallbacks(),
+    this.miscActions = const MiscCallbacks(),
   });
 
   @override
@@ -563,67 +534,67 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
               final allMsgs = ref.read(chatProvider(widget.charId)).value?.messages ?? [];
               final idx = allMsgs.indexWhere((m) => m.id == id);
               if (idx < 0) return;
-              widget.onMessageContext?.call(idx, id, isUser, isSystem, content);
+              widget.messageActions.onMessageContext?.call(idx, id, isUser, isSystem, content);
             };
             _bridge!.onSwipe = (id, direction) {
-              widget.onSwipe?.call(id, direction);
+              widget.messageActions.onSwipe?.call(id, direction);
             };
             _bridge!.onChangeGreeting = (id, dir) {
-              widget.onChangeGreeting?.call(id, dir);
+              widget.messageActions.onChangeGreeting?.call(id, dir);
             };
             _bridge!.onHeaderScroll = (hidden) {
-              widget.onHeaderScroll?.call(hidden);
+              widget.scrollActions.onHeaderScroll?.call(hidden);
             };
             _bridge!.onScrollToBottomVisibility = (visible) {
-              widget.onScrollToBottomVisibility?.call(visible);
+              widget.scrollActions.onScrollToBottomVisibility?.call(visible);
             };
             _bridge!.onRegenerate = (id) {
-              widget.onRegenerate?.call(id);
+              widget.messageActions.onRegenerate?.call(id);
             };
             _bridge!.onSelectionAction = (action, text) {
-              widget.onSelectionAction?.call(action, text);
+              widget.miscActions.onSelectionAction?.call(action, text);
             };
             _bridge!.onSelectionChange = (ids) {
-              widget.onSelectionChange?.call(ids);
+              widget.miscActions.onSelectionChange?.call(ids);
             };
             _bridge!.onEditSave = (id, text) {
-              widget.onEditSave?.call(id, text);
+              widget.editActions.onEditSave?.call(id, text);
             };
             _bridge!.onEditCancel = (id) {
-              widget.onEditCancel?.call(id);
+              widget.editActions.onEditCancel?.call(id);
             };
             _bridge!.onEditFocusChange = (id, focused) {
-              widget.onEditFocusChange?.call(id, focused);
+              widget.editActions.onEditFocusChange?.call(id, focused);
             };
             _bridge!.onImageClick = (imageUrl) {
-              widget.onImageClick?.call(imageUrl);
+              widget.miscActions.onImageClick?.call(imageUrl);
             };
             _bridge!.onGuidedSwipe = (id, guidanceText) {
-              widget.onGuidedSwipe?.call(id, guidanceText);
+              widget.messageActions.onGuidedSwipe?.call(id, guidanceText);
             };
             _bridge!.onMemoryClick = (id) {
-              widget.onMemoryClick?.call(id);
+              widget.messageActions.onMemoryClick?.call(id);
             };
             _bridge!.onToggleHidden = (id) {
-              widget.onToggleHidden?.call(id);
+              widget.messageActions.onToggleHidden?.call(id);
             };
             _bridge!.onInjectClick = (id) {
-              widget.onInjectClick?.call(id);
+              widget.messageActions.onInjectClick?.call(id);
             };
             _bridge!.onImgRetry = (instruction, messageId) {
-              widget.onImgRetry?.call(instruction, messageId);
+              widget.imageGenActions.onImgRetry?.call(instruction, messageId);
             };
             _bridge!.onImgFind = (instruction, messageId) {
-              widget.onImgFind?.call(instruction, messageId);
+              widget.imageGenActions.onImgFind?.call(instruction, messageId);
             };
             _bridge!.onImgRegen = (instruction, messageId) {
-              widget.onImgRegen?.call(instruction, messageId);
+              widget.imageGenActions.onImgRegen?.call(instruction, messageId);
             };
             _bridge!.onImgCancel = () {
-              widget.onImgCancel?.call();
+              widget.imageGenActions.onImgCancel?.call();
             };
             _bridge!.onStop = () {
-              widget.onStop?.call();
+              widget.miscActions.onStop?.call();
             };
             _bridge!.onLinkClick = (url) {
               launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);

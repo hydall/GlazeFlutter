@@ -27,6 +27,7 @@ import 'widgets/chat_input_bar.dart';
 import '../image_gen/widgets/image_gen_sheet.dart';
 import 'widgets/magic_drawer.dart';
 import 'widgets/chat_webview_widget.dart';
+import 'widgets/webview_callbacks.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/db_provider.dart';
 import 'widgets/session_lifecycle_tracker.dart';
@@ -811,217 +812,222 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     memoryDrafts: memBook.valueOrNull?.pendingDrafts ?? [],
                     sessionId: widget.state.session?.id,
                     visibleStartIndex: widget.state.visibleStartIndex,
-                    onMessageContext:
-                        (index, messageId, isUser, isSystem, content) {
-                          showMessageContextMenu(
-                            context: context,
-                            ref: ref,
-                            charId: widget.charId,
-                            content: content,
-                            messageIndex: index,
-                            messageId: messageId,
-                            isUser: isUser,
-                            isTyping:
-                                widget.state.isGenerating &&
-                                index == widget.state.messages.length - 1,
-                            isError: false,
-                            isLast: index == widget.state.messages.length - 1,
-                            isGenerating: widget.state.isGenerating,
-                            isHidden: widget.state.messages[index].isHidden,
-                          );
-                        },
-                    onSelectionChange: (ids) {
-                      if (mounted) {
-                        setState(() {
-                          _selectedMessageIds = ids.toSet();
-                          _isSelectionMode = _selectedMessageIds.isNotEmpty;
-                        });
-                      }
-                    },
-                    isSelectionMode: _isSelectionMode,
-                    onSwipe: (id, direction) {
-                      final idx = widget.state.messages.indexWhere(
-                        (m) => m.id == id,
-                      );
-                      if (idx < 0) return;
-                      final dir = direction == 'right' ? 1 : -1;
-                      ref
-                          .read(chatProvider(widget.charId).notifier)
-                          .changeSwipe(idx, dir, fromSwipe: true);
-                    },
-                    onHeaderScroll: (hidden) {
-                      if (widget.onScrollDirection == null) return;
-                      // Reuse the existing scroll-direction wiring on the parent
-                      // (reverse = down/hide, forward = up/show).
-                      widget.onScrollDirection!(
-                        hidden
-                            ? ScrollDirection.reverse
-                            : ScrollDirection.forward,
-                      );
-                    },
-                    onScrollToBottomVisibility: (visible) {
-                      if (!mounted || _showScrollToBottom == visible) return;
-                      setState(() => _showScrollToBottom = visible);
-                    },
-                    onChangeGreeting: (id, dir) {
-                      final idx = widget.state.messages.indexWhere(
-                        (m) => m.id == id,
-                      );
-                      if (idx < 0) return;
-                      ref
-                          .read(chatProvider(widget.charId).notifier)
-                          .setGreeting(idx, dir);
-                    },
-                    onRegenerate: (id) {
-                      ref
-                          .read(chatProvider(widget.charId).notifier)
-                          .regenerateLastAssistant();
-                    },
-                    onStop: () {
-                      final notifier = ref.read(
-                        chatProvider(widget.charId).notifier,
-                      );
-                      if (widget.state.isGeneratingImage &&
-                          !widget.state.isGenerating) {
-                        notifier.abortImageGeneration();
-                      } else {
-                        notifier.abortGeneration();
-                      }
-                    },
-                    onImgRetry: (instruction, messageId) {
-                      final allMsgs = widget.state.messages;
-                      final idx = allMsgs.indexWhere((m) => m.id == messageId);
-                      if (idx >= 0) {
-                        ref
-                            .read(chatProvider(widget.charId).notifier)
-                            .retryImageGenerationForMessage(idx);
-                      }
-                    },
-                    onImgFind: (instruction, messageId) {
-                      ref
-                          .read(chatProvider(widget.charId).notifier)
-                          .findImageOnDisk(messageId, instruction);
-                    },
-                    onImgRegen: (instruction, messageId) {
-                      final allMsgs = widget.state.messages;
-                      final idx = allMsgs.indexWhere((m) => m.id == messageId);
-                      if (idx >= 0) {
-                        ref
-                            .read(chatProvider(widget.charId).notifier)
-                            .retryImageGenerationForMessage(idx);
-                      }
-                    },
-                    onImgCancel: () {
-                      ref
-                          .read(chatProvider(widget.charId).notifier)
-                          .cancelImageGeneration();
-                    },
-                    onSelectionAction: (action, text) {
-                      if (action == 'copy') {
-                        Clipboard.setData(ClipboardData(text: text));
-                      }
-                    },
-                    onEditSave: (id, text) {
-                      final idx = widget.state.messages.indexWhere(
-                        (m) => m.id == id,
-                      );
-                      if (idx >= 0 && text.isNotEmpty) {
-                        ref
-                            .read(chatProvider(widget.charId).notifier)
-                            .editMessage(idx, text, tagStart: '<think>', tagEnd: '</think>');
-                      }
-                      ref
-                              .read(
-                                editingMessageIdProvider(
-                                  widget.charId,
-                                ).notifier,
-                              )
-                              .state =
-                          null;
-                    },
-                    onEditCancel: (id) {
-                      ref
-                              .read(
-                                editingMessageIdProvider(
-                                  widget.charId,
-                                ).notifier,
-                              )
-                              .state =
-                          null;
-                    },
-                    onEditFocusChange: (id, focused) {
-                      if (!focused) return;
-                      final activeEditingId = ref.read(
-                        editingMessageIdProvider(widget.charId),
-                      );
-                      if (activeEditingId == id && widget.inputFocus.hasFocus) {
-                        widget.inputFocus.unfocus();
-                      }
-                    },
-                    onImageClick: (imageUrl) {
-                      _showImageViewer(context, imageUrl);
-                    },
-                    onGuidedSwipe: (id, guidanceText) {
-                      final idx = widget.state.messages.indexWhere(
-                        (m) => m.id == id,
-                      );
-                      if (idx < 0) return;
-                      final msg = widget.state.messages[idx];
-                      final isLastAssistant =
-                          msg.role == 'assistant' &&
-                          idx == widget.state.messages.length - 1;
-                      if (isLastAssistant) {
-                        ref
-                            .read(chatProvider(widget.charId).notifier)
-                            .regenerateLastAssistant(
-                              guidanceText: guidanceText,
-                            );
-                      }
-                    },
-                    onToggleHidden: (id) {
-                      final idx = widget.state.messages.indexWhere(
-                        (m) => m.id == id,
-                      );
-                      if (idx >= 0) {
-                        ref
-                            .read(chatProvider(widget.charId).notifier)
-                            .toggleMessageHidden(idx);
-                      }
-                    },
-                    onMemoryClick: (id) {
-                      final idx = widget.state.messages.indexWhere(
-                        (m) => m.id == id,
-                      );
-                      if (idx < 0) return;
-                      final msg = widget.state.messages[idx];
-                      if (msg.triggeredMemories.isNotEmpty) {
-                        _showTriggeredItemsSheet(
-                          context,
-                          msg.triggeredMemories,
-                          'Memories',
+                    messageActions: MessageActionsCallbacks(
+                      onMessageContext: (index, messageId, isUser, isSystem, content) {
+                        showMessageContextMenu(
+                          context: context,
+                          ref: ref,
+                          charId: widget.charId,
+                          content: content,
+                          messageIndex: index,
+                          messageId: messageId,
+                          isUser: isUser,
+                          isTyping: widget.state.isGenerating && index == widget.state.messages.length - 1,
+                          isError: false,
+                          isLast: index == widget.state.messages.length - 1,
+                          isGenerating: widget.state.isGenerating,
+                          isHidden: widget.state.messages[index].isHidden,
                         );
-                      }
-                    },
+                      },
+                      onSwipe: (id, direction) {
+                        final idx = widget.state.messages.indexWhere(
+                          (m) => m.id == id,
+                        );
+                        if (idx < 0) return;
+                        final dir = direction == 'right' ? 1 : -1;
+                        ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .changeSwipe(idx, dir, fromSwipe: true);
+                      },
+                      onChangeGreeting: (id, dir) {
+                        final idx = widget.state.messages.indexWhere(
+                          (m) => m.id == id,
+                        );
+                        if (idx < 0) return;
+                        ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .setGreeting(idx, dir);
+                      },
+                      onRegenerate: (id) {
+                        ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .regenerateLastAssistant();
+                      },
+                      onToggleHidden: (id) {
+                        final idx = widget.state.messages.indexWhere(
+                          (m) => m.id == id,
+                        );
+                        if (idx >= 0) {
+                          ref
+                              .read(chatProvider(widget.charId).notifier)
+                              .toggleMessageHidden(idx);
+                        }
+                      },
+                      onMemoryClick: (id) {
+                        final idx = widget.state.messages.indexWhere(
+                          (m) => m.id == id,
+                        );
+                        if (idx < 0) return;
+                        final msg = widget.state.messages[idx];
+                        if (msg.triggeredMemories.isNotEmpty) {
+                          _showTriggeredItemsSheet(
+                            context,
+                            msg.triggeredMemories,
+                            'Memories',
+                          );
+                        }
+                      },
+                      onGuidedSwipe: (id, guidanceText) {
+                        final idx = widget.state.messages.indexWhere(
+                          (m) => m.id == id,
+                        );
+                        if (idx < 0) return;
+                        final msg = widget.state.messages[idx];
+                        final isLastAssistant =
+                            msg.role == 'assistant' &&
+                            idx == widget.state.messages.length - 1;
+                        if (isLastAssistant) {
+                          ref
+                              .read(chatProvider(widget.charId).notifier)
+                              .regenerateLastAssistant(
+                                guidanceText: guidanceText,
+                              );
+                        }
+                      },
+                      onInjectClick: (id) {
+                        final idx = widget.state.messages.indexWhere(
+                          (m) => m.id == id,
+                        );
+                        if (idx < 0) return;
+                        final msg = widget.state.messages[idx];
+                        final all = [
+                          ...msg.triggeredLorebooks,
+                          ...msg.triggeredMemories,
+                        ];
+                        if (all.isNotEmpty) {
+                          _showTriggeredItemsSheet(
+                            context,
+                            all,
+                            'Triggered Entries',
+                          );
+                        }
+                      },
+                    ),
+                    editActions: EditActionsCallbacks(
+                      onEditSave: (id, text) {
+                        final idx = widget.state.messages.indexWhere(
+                          (m) => m.id == id,
+                        );
+                        if (idx >= 0 && text.isNotEmpty) {
+                          ref
+                              .read(chatProvider(widget.charId).notifier)
+                              .editMessage(idx, text, tagStart: '<think>', tagEnd: '</think>');
+                        }
+                        ref
+                                .read(
+                                  editingMessageIdProvider(
+                                    widget.charId,
+                                  ).notifier,
+                                )
+                                .state =
+                            null;
+                      },
+                      onEditCancel: (id) {
+                        ref
+                                .read(
+                                  editingMessageIdProvider(
+                                    widget.charId,
+                                  ).notifier,
+                                )
+                                .state =
+                            null;
+                      },
+                      onEditFocusChange: (id, focused) {
+                        if (!focused) return;
+                        final activeEditingId = ref.read(
+                          editingMessageIdProvider(widget.charId),
+                        );
+                        if (activeEditingId == id && widget.inputFocus.hasFocus) {
+                          widget.inputFocus.unfocus();
+                        }
+                      },
+                    ),
+                    imageGenActions: ImageGenCallbacks(
+                      onImgRetry: (instruction, messageId) {
+                        final allMsgs = widget.state.messages;
+                        final idx = allMsgs.indexWhere((m) => m.id == messageId);
+                        if (idx >= 0) {
+                          ref
+                              .read(chatProvider(widget.charId).notifier)
+                              .retryImageGenerationForMessage(idx);
+                        }
+                      },
+                      onImgFind: (instruction, messageId) {
+                        ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .findImageOnDisk(messageId, instruction);
+                      },
+                      onImgRegen: (instruction, messageId) {
+                        final allMsgs = widget.state.messages;
+                        final idx = allMsgs.indexWhere((m) => m.id == messageId);
+                        if (idx >= 0) {
+                          ref
+                              .read(chatProvider(widget.charId).notifier)
+                              .retryImageGenerationForMessage(idx);
+                        }
+                      },
+                      onImgCancel: () {
+                        ref
+                            .read(chatProvider(widget.charId).notifier)
+                            .cancelImageGeneration();
+                      },
+                    ),
+                    scrollActions: ScrollCallbacks(
+                      onHeaderScroll: (hidden) {
+                        if (widget.onScrollDirection == null) return;
+                        widget.onScrollDirection!(
+                          hidden
+                              ? ScrollDirection.reverse
+                              : ScrollDirection.forward,
+                        );
+                      },
+                      onScrollToBottomVisibility: (visible) {
+                        if (!mounted || _showScrollToBottom == visible) return;
+                        setState(() => _showScrollToBottom = visible);
+                      },
+                    ),
+                    miscActions: MiscCallbacks(
+                      onStop: () {
+                        final notifier = ref.read(
+                          chatProvider(widget.charId).notifier,
+                        );
+                        if (widget.state.isGeneratingImage &&
+                            !widget.state.isGenerating) {
+                          notifier.abortImageGeneration();
+                        } else {
+                          notifier.abortGeneration();
+                        }
+                      },
+                      onSelectionAction: (action, text) {
+                        if (action == 'copy') {
+                          Clipboard.setData(ClipboardData(text: text));
+                        }
+                      },
+                      onSelectionChange: (ids) {
+                        if (mounted) {
+                          setState(() {
+                            _selectedMessageIds = ids.toSet();
+                            _isSelectionMode = _selectedMessageIds.isNotEmpty;
+                          });
+                        }
+                      },
+                      onImageClick: (imageUrl) {
+                        _showImageViewer(context, imageUrl);
+                      },
+                    ),
+                    isSelectionMode: _isSelectionMode,
                     searchQuery: widget.searchQuery,
                     searchCurrentIndex: widget.searchCurrentIndex,
-                    onInjectClick: (id) {
-                      final idx = widget.state.messages.indexWhere(
-                        (m) => m.id == id,
-                      );
-                      if (idx < 0) return;
-                      final msg = widget.state.messages[idx];
-                      final all = [
-                        ...msg.triggeredLorebooks,
-                        ...msg.triggeredMemories,
-                      ];
-                      if (all.isNotEmpty) {
-                        _showTriggeredItemsSheet(
-                          context,
-                          all,
-                          'Triggered Entries',
-                        );
-                      }
-                    },
                   );
                 },
               ),

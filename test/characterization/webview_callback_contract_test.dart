@@ -15,13 +15,27 @@ void main() {
       ).readAsStringSync();
     });
 
-    test('widget has at least 19 callback parameters', () {
-      final callbackPattern = RegExp(r'void Function\(');
-      final allCallbacks = callbackPattern.allMatches(webviewWidgetSource);
-      expect(allCallbacks.length, greaterThanOrEqualTo(19));
+    test('widget has 5 callback group parameters', () {
+      final callbackGroups = [
+        'MessageActionsCallbacks',
+        'EditActionsCallbacks',
+        'ImageGenCallbacks',
+        'ScrollCallbacks',
+        'MiscCallbacks',
+      ];
+      for (final name in callbackGroups) {
+        expect(
+          webviewWidgetSource,
+          contains(name),
+          reason: 'Widget must accept callback group "$name"',
+        );
+      }
     });
 
-    test('all expected onXxx callbacks exist in widget constructor', () {
+    test('all expected onXxx callbacks exist in callback classes', () {
+      final callbacksSource = File(
+        'lib/features/chat/widgets/webview_callbacks.dart',
+      ).readAsStringSync();
       final expectedCallbacks = [
         'onMessageContext',
         'onSwipe',
@@ -45,9 +59,9 @@ void main() {
       ];
       for (final name in expectedCallbacks) {
         expect(
-          webviewWidgetSource,
+          callbacksSource,
           contains(name),
-          reason: 'Widget must declare callback "$name"',
+          reason: 'Callback classes must declare callback "$name"',
         );
       }
     });
