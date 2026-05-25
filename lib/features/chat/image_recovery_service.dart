@@ -177,7 +177,7 @@ class ImageRecoveryService {
     final imgCancelToken = CancelToken();
     _setImgGenCancelToken(imgCancelToken);
 
-    final genService = ChatGenerationService(_ref);
+    final genService = _ref.read(chatGenerationServiceProvider);
     await genService.processImageTags(
       currentState: _getState().value!,
       charId: _charId,
@@ -219,7 +219,7 @@ class ImageRecoveryService {
     final imgCancelToken = CancelToken();
     _setImgGenCancelToken(imgCancelToken);
 
-    final genService = ChatGenerationService(_ref);
+    final genService = _ref.read(chatGenerationServiceProvider);
     await genService.processImageTags(
       currentState: _getState().value!,
       charId: _charId,

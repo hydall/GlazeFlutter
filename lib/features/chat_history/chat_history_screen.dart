@@ -662,7 +662,7 @@ class _SessionTile extends ConsumerWidget {
       if (!context.mounted) return;
       switch (result) {
         case 'export':
-          ChatActionsService(ref).exportSessionUI(
+          ref.read(chatActionsServiceProvider).exportSessionUI(
             context,
             charId: info.characterId,
             sessionId: info.sessionId,

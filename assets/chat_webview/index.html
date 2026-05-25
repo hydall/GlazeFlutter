@@ -7,7 +7,7 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
-      background: transparent;
+      background: var(--bg-color, #1a1a2e);
       color: var(--text-color, #e0e0e0);
       font-family: var(--font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif);
       font-size: var(--font-size, 15px);
@@ -20,7 +20,7 @@
       overflow-y: auto; overflow-x: hidden;
       -webkit-overflow-scrolling: touch;
       padding: 0;
-      background: transparent;
+      background: var(--bg-color, #1a1a2e);
     }
     #chat-container::-webkit-scrollbar {
       display: none;
@@ -36,7 +36,7 @@
     #loading-screen {
       position: fixed; inset: 0;
       display: flex; align-items: center; justify-content: center;
-      background: transparent; z-index: 9999;
+      background: var(--bg-color, #1a1a2e); z-index: 9999;
       transition: opacity 0.2s;
       pointer-events: none;
     }

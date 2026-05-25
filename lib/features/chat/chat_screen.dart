@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -20,7 +19,9 @@ import '../../shared/theme/theme_provider.dart';
 
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../settings/app_settings_provider.dart';
+import 'chat_drawer_controller.dart';
 import 'chat_provider.dart';
+import 'chat_search_delegate.dart';
 import 'chat_state.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
@@ -31,15 +32,6 @@ import 'widgets/webview_callbacks.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/db_provider.dart';
 import 'widgets/session_lifecycle_tracker.dart';
-
-class SearchMatch {
-  final int messageIndex;
-  final int matchIndexInMessage;
-  const SearchMatch(this.messageIndex, this.matchIndexInMessage);
-}
-
-const String _kKeyboardHeightPref = 'chat_last_keyboard_height';
-const double _kDefaultKeyboardHeight = 320;
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String charId;
@@ -59,42 +51,25 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen>
     with SingleTickerProviderStateMixin {
   bool _sessionApplied = false;
-  bool _showSearch = false;
   bool _isHeaderHidden = false;
-  String _searchQuery = '';
-  int _searchCurrentIndex = 0;
-  List<SearchMatch> _searchMatches = [];
-  final TextEditingController _searchController = TextEditingController();
-
-  // Telegram-style input panel state. The input area swaps between three
-  // exclusive bottom-anchored modes: idle, keyboard, drawer.
-  final FocusNode _inputFocus = FocusNode();
-  bool _drawerOpen = false;
-  double _lastKeyboardHeight = _kDefaultKeyboardHeight;
-
-  /// Height frozen at the moment the drawer opens. Passed to _ChatBody so
-  /// the Positioned bottom doesn't jitter while the keyboard animates.
-  double _activeDrawerHeight = _kDefaultKeyboardHeight;
-  late final AnimationController _drawerAnimController;
-  late final Animation<double> _drawerAnim;
-
-  /// True while switching from keyboard to drawer. Keeps the input bar up.
-  bool _switchingToDrawer = false;
+  late final ChatDrawerController _drawerCtrl;
+  late final ChatSearchDelegate _search;
 
   @override
   void initState() {
     super.initState();
-    _drawerAnimController = AnimationController(
+    _drawerCtrl = ChatDrawerController(
       vsync: this,
-      duration: const Duration(milliseconds: 260),
+      readKeyboardHeight: () async {
+        final prefs = await ref.read(sharedPreferencesProvider.future);
+        return prefs.getDouble(kKeyboardHeightPref) ?? 0;
+      },
+      persistKeyboardHeight: (h) async {
+        final prefs = await ref.read(sharedPreferencesProvider.future);
+        await prefs.setDouble(kKeyboardHeightPref, h);
+      },
     );
-    _drawerAnim = CurvedAnimation(
-      parent: _drawerAnimController,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
-    );
-    _inputFocus.addListener(_onFocusChanged);
-    _restoreKeyboardHeight();
+    _search = ChatSearchDelegate();
     if (widget.forceNewSession || widget.initialSessionIndex != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _applySessionPreference();
@@ -104,73 +79,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   @override
   void dispose() {
-    _searchController.dispose();
-    _inputFocus.removeListener(_onFocusChanged);
-    _inputFocus.dispose();
-    _drawerAnimController.dispose();
+    _drawerCtrl.dispose();
+    _search.dispose();
     super.dispose();
   }
 
-  double _tempMaxHeight = 0;
-  Timer? _heightTimer;
-
-  Future<void> _restoreKeyboardHeight() async {
-    try {
-      final prefs = await ref.read(sharedPreferencesProvider.future);
-      final saved = prefs.getDouble(_kKeyboardHeightPref);
-      if (saved != null && saved > 200 && mounted) {
-        setState(() => _lastKeyboardHeight = saved);
-      }
-    } catch (_) {}
-  }
-
-  Future<void> _persistKeyboardHeight(double height) async {
-    try {
-      final prefs = await ref.read(sharedPreferencesProvider.future);
-      await prefs.setDouble(_kKeyboardHeightPref, height);
-    } catch (_) {}
-  }
-
-  void _onFocusChanged() {
-    if (_inputFocus.hasFocus && _drawerOpen) {
-      setState(() {
-        _drawerOpen = false;
-        _activeDrawerHeight = _lastKeyboardHeight;
-      });
-      _drawerAnimController.reverse();
-    }
-  }
-
-  void _toggleDrawer() {
-    if (_drawerOpen) {
-      setState(() => _drawerOpen = false);
-      _drawerAnimController.reverse();
-    } else {
-      HapticFeedback.selectionClick();
-      _activeDrawerHeight = _lastKeyboardHeight;
-
-      final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
-      if (keyboardHeight > 0 || _inputFocus.hasFocus) {
-        setState(() => _switchingToDrawer = true);
-        _inputFocus.unfocus();
-      } else {
-        setState(() => _drawerOpen = true);
-        _drawerAnimController.forward();
-      }
-    }
-  }
-
-  void _closeDrawer() {
-    if (!_drawerOpen) return;
-    setState(() => _drawerOpen = false);
-    _drawerAnimController.reverse();
-  }
-
-  void _onScrollDirection(ScrollDirection direction) {
-    if (direction == ScrollDirection.reverse && !_isHeaderHidden) {
-      setState(() => _isHeaderHidden = true);
-    } else if (direction == ScrollDirection.forward && _isHeaderHidden) {
-      setState(() => _isHeaderHidden = false);
+  Future<void> _applySessionPreference() async {
+    if (_sessionApplied) return;
+    _sessionApplied = true;
+    final notifier = ref.read(chatProvider(widget.charId).notifier);
+    if (widget.forceNewSession) {
+      unawaited(notifier.createNewSession());
+    } else if (widget.initialSessionIndex != null) {
+      unawaited(notifier.switchSession(widget.initialSessionIndex!));
     }
   }
 
@@ -187,14 +108,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     }
   }
 
-  Future<void> _applySessionPreference() async {
-    if (_sessionApplied) return;
-    _sessionApplied = true;
-    final notifier = ref.read(chatProvider(widget.charId).notifier);
-    if (widget.forceNewSession) {
-      unawaited(notifier.createNewSession());
-    } else if (widget.initialSessionIndex != null) {
-      unawaited(notifier.switchSession(widget.initialSessionIndex!));
+  void _onScrollDirection(ScrollDirection direction) {
+    if (direction == ScrollDirection.reverse && !_isHeaderHidden) {
+      setState(() => _isHeaderHidden = true);
+    } else if (direction == ScrollDirection.forward && _isHeaderHidden) {
+      setState(() => _isHeaderHidden = false);
     }
   }
 
@@ -215,88 +133,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final virtualKeyboardSend = appSettings?.virtualKeyboardSend ?? false;
     final enterToSend = appSettings?.enterToSend ?? true;
 
-    // Track the OS keyboard height — record peaks only when stable.
     final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
-    if (keyboardHeight > 200 && _inputFocus.hasFocus) {
-      if (keyboardHeight > _tempMaxHeight) {
-        _tempMaxHeight = keyboardHeight;
-        _heightTimer?.cancel();
-        _heightTimer = Timer(const Duration(milliseconds: 300), () {
-          if (mounted &&
-              _tempMaxHeight > 200 &&
-              _tempMaxHeight != _lastKeyboardHeight) {
-            setState(() {
-              _lastKeyboardHeight = _tempMaxHeight;
-              _persistKeyboardHeight(_lastKeyboardHeight);
-            });
-          }
-        });
-      }
-    }
+    _drawerCtrl.handleKeyboardFrame(keyboardHeight);
 
-    if (!_inputFocus.hasFocus && _tempMaxHeight != 0) {
-      _tempMaxHeight = 0;
-    }
-
-    if (_switchingToDrawer && keyboardHeight == 0) {
+    if (_drawerCtrl.switchingToDrawer && keyboardHeight == 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _switchingToDrawer) {
-          setState(() {
-            _switchingToDrawer = false;
-            _drawerOpen = true;
-          });
-          _drawerAnimController.forward();
-        }
+        if (mounted) _drawerCtrl.checkSwitchingTransition(keyboardHeight);
       });
     }
 
-    if (keyboardHeight > 0 && _drawerOpen && !_switchingToDrawer) {
+    if (keyboardHeight > 0 && _drawerCtrl.drawerOpen && !_drawerCtrl.switchingToDrawer) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _drawerOpen && !_switchingToDrawer) _closeDrawer();
+        if (mounted) _drawerCtrl.checkDrawerCollision(keyboardHeight);
       });
     }
 
-    // Safe area bottom padding is only needed when no panel (keyboard/drawer)
-    // is active. When active, they sit at the very bottom above the system nav bar.
     final safeBottom = MediaQuery.paddingOf(context).bottom;
-    final isIdle =
-        keyboardHeight == 0 &&
-        !_drawerOpen &&
-        !_switchingToDrawer &&
-        _drawerAnimController.value == 0;
-    final bottomPadding = isIdle ? safeBottom : 0.0;
-
-    // Final (post-animation) inset for layout-only consumers.
-    // Animated visual positioning of the input + drawer is driven by
-    // _drawerAnim inside _ChatBody so list paddings don't churn each frame.
-    final targetDrawerInset = (_drawerOpen || _switchingToDrawer)
-        ? _activeDrawerHeight
-        : 0.0;
     final targetBottomPanelInset =
-        math.max(targetDrawerInset, keyboardHeight) + bottomPadding;
+        _drawerCtrl.computeTargetBottomPanelInset(keyboardHeight, safeBottom);
 
     return SessionLifecycleTracker(
       charId: charId,
-      child: PopScope(
-        canPop: !_drawerOpen && !_showSearch && !_inputFocus.hasFocus,
+child: PopScope(
+        canPop: _drawerCtrl.canPop() && !_search.showSearch,
         onPopInvokedWithResult: (didPop, result) {
           if (didPop) return;
-          if (_inputFocus.hasFocus) {
-            _inputFocus.unfocus();
+          if (_drawerCtrl.inputFocus.hasFocus) {
+            _drawerCtrl.inputFocus.unfocus();
             return;
           }
-          if (_drawerOpen) {
-            _closeDrawer();
+          if (_drawerCtrl.drawerOpen) {
+            _drawerCtrl.closeDrawer();
             return;
           }
-          if (_showSearch) {
-            _searchController.clear();
-            setState(() {
-              _showSearch = false;
-              _searchQuery = '';
-              _searchMatches = [];
-              _searchCurrentIndex = 0;
-            });
+          if (_search.showSearch) {
+            _search.closeSearch();
             return;
           }
         },
@@ -305,9 +176,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
           resizeToAvoidBottomInset: false,
           hideHeader: _isHeaderHidden,
           title: title,
-          titleWidget: _showSearch
+          titleWidget: _search.showSearch
               ? TextField(
-                  controller: _searchController,
+                  controller: _search.searchController,
                   autofocus: true,
                   style: TextStyle(color: context.cs.onSurface, fontSize: 16),
                   decoration: InputDecoration(
@@ -317,7 +188,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     ),
                     border: InputBorder.none,
                     isDense: true,
-                    suffixIcon: _searchQuery.isNotEmpty
+                    suffixIcon: _search.searchQuery.isNotEmpty
                         ? IconButton(
                             icon: Icon(
                               Icons.close,
@@ -325,64 +196,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                               size: 20,
                             ),
                             onPressed: () {
-                              _searchController.clear();
-                              setState(() {
-                                _searchQuery = '';
-                                _searchMatches = [];
-                                _searchCurrentIndex = 0;
-                              });
+                              _search.closeSearch();
                             },
                           )
                         : null,
                   ),
                   onChanged: (q) {
-                    final matches = <SearchMatch>[];
-                    if (q.isNotEmpty && chatState != null) {
-                      final lower = q.toLowerCase();
-                      for (int i = 0; i < chatState.messages.length; i++) {
-                        var raw = chatState.messages[i].content;
-                        if (raw.contains('<think')) {
-                          raw = raw.replaceAll(RegExp(r'<think\b[^>]*>[\s\S]*?<\/think\b[^>]*>', caseSensitive: false), '');
-                          raw = raw.replaceAll(RegExp(r'<think\b([^>]*?)(?:>|\n)([\s\S]*?)<\/think\b', caseSensitive: false), '');
-                        }
-                        if (raw.contains('<thinking')) {
-                          raw = raw.replaceAll(RegExp(r'<thinking\b[^>]*>[\s\S]*?<\/thinking\b[^>]*>', caseSensitive: false), '');
-                          raw = raw.replaceAll(RegExp(r'<thinking\b([^>]*?)(?:>|\n)([\s\S]*?)<\/thinking\b', caseSensitive: false), '');
-                        }
-                        raw = raw.trim();
-                        final content = raw.toLowerCase();
-                        
-                        final reasoning = chatState.messages[i].reasoning?.toLowerCase() ?? '';
-                        
-                        int matchIndex = 0;
-                        
-                        if (reasoning.isNotEmpty) {
-                          int startIndex = 0;
-                          while (true) {
-                            final idx = reasoning.indexOf(lower, startIndex);
-                            if (idx == -1) break;
-                            matches.add(SearchMatch(i, matchIndex));
-                            matchIndex++;
-                            startIndex = idx + lower.length;
-                          }
-                        }
-                        
-                        int startIndex = 0;
-                        while (true) {
-                          final idx = content.indexOf(lower, startIndex);
-                          if (idx == -1) break;
-                          matches.add(SearchMatch(i, matchIndex));
-                          matchIndex++;
-                          startIndex = idx + lower.length;
-                        }
-                      }
-                    }
-
-                    setState(() {
-                      _searchQuery = q;
-                      _searchMatches = matches;
-                      _searchCurrentIndex = 0;
-                    });
+                    _search.search(q, chatState?.messages ?? []);
                   },
                 )
               : (character != null
@@ -393,32 +213,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       )
                     : null),
           onBack: () {
-            if (_showSearch) {
-              _searchController.clear();
-              setState(() {
-                _showSearch = false;
-                _searchQuery = '';
-                _searchMatches = [];
-                _searchCurrentIndex = 0;
-              });
+            if (_search.showSearch) {
+              _search.closeSearch();
             } else {
               context.go('/');
             }
           },
-          actions: _showSearch
+          actions: _search.showSearch
               ? const []
               : [
                   IconButton(
                     icon: const Icon(Icons.search),
                     color: context.cs.primary,
                     onPressed: () {
-                      setState(() {
-                        _showSearch = true;
-                        _searchQuery = '';
-                        _searchMatches = [];
-                        _searchCurrentIndex = 0;
-                        _searchController.clear();
-                      });
+                      _search.openSearch();
                     },
                   ),
                 ],
@@ -428,25 +236,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             data: (state) => _ChatBody(
               charId: charId,
               state: state,
-              inputFocus: _inputFocus,
-              drawerOpen: _drawerOpen,
-              isSwitchingToDrawer: _switchingToDrawer,
-              drawerHeight: _activeDrawerHeight,
+              drawerCtrl: _drawerCtrl,
+              search: _search,
               keyboardHeight: keyboardHeight,
               targetBottomPanelInset: targetBottomPanelInset,
-              drawerAnim: _drawerAnim,
-              showSearchControls: _showSearch,
-              searchQuery: _searchQuery,
-              searchMatches: _searchMatches,
-              searchCurrentIndex: _searchCurrentIndex,
-              onSearchPrev: _searchCurrentIndex > 0
-                  ? () => setState(() => _searchCurrentIndex--)
-                  : null,
-              onSearchNext: _searchCurrentIndex < _searchMatches.length - 1
-                  ? () => setState(() => _searchCurrentIndex++)
-                  : null,
-              onCloseDrawer: _closeDrawer,
-              onToggleDrawer: _toggleDrawer,
               onScrollDirection: _onScrollDirection,
               virtualKeyboardSend: virtualKeyboardSend,
               enterToSend: enterToSend,
@@ -461,28 +254,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 class _ChatBody extends ConsumerStatefulWidget {
   final String charId;
   final ChatState state;
-  final FocusNode inputFocus;
-  final bool drawerOpen;
-  final bool isSwitchingToDrawer;
-  final double drawerHeight;
+  final ChatDrawerController drawerCtrl;
+  final ChatSearchDelegate search;
   final double keyboardHeight;
-
-  /// Final (post-animation) inset for layout-only consumers.
-  /// Doesn't churn per frame.
   final double targetBottomPanelInset;
-
-  /// 0..1 progress of the drawer reveal — drives the visual slide and the
-  /// input-bar lift each frame.
-  final Animation<double> drawerAnim;
-
-  final bool showSearchControls;
-  final String searchQuery;
-  final List<SearchMatch> searchMatches;
-  final int searchCurrentIndex;
-  final VoidCallback? onSearchPrev;
-  final VoidCallback? onSearchNext;
-  final VoidCallback onCloseDrawer;
-  final VoidCallback onToggleDrawer;
   final ValueChanged<ScrollDirection>? onScrollDirection;
   final bool virtualKeyboardSend;
   final bool enterToSend;
@@ -490,21 +265,10 @@ class _ChatBody extends ConsumerStatefulWidget {
   const _ChatBody({
     required this.charId,
     required this.state,
-    required this.inputFocus,
-    required this.drawerOpen,
-    required this.isSwitchingToDrawer,
-    required this.drawerHeight,
+    required this.drawerCtrl,
+    required this.search,
     required this.keyboardHeight,
     required this.targetBottomPanelInset,
-    required this.drawerAnim,
-    required this.showSearchControls,
-    required this.searchQuery,
-    required this.searchMatches,
-    required this.searchCurrentIndex,
-    this.onSearchPrev,
-    this.onSearchNext,
-    required this.onCloseDrawer,
-    required this.onToggleDrawer,
     this.onScrollDirection,
     this.virtualKeyboardSend = false,
     this.enterToSend = true,
@@ -721,8 +485,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       editingMessageIdProvider(widget.charId),
       (prev, next) {
         if (next != null) {
-          if (widget.inputFocus.hasFocus) {
-            widget.inputFocus.unfocus();
+          if (widget.drawerCtrl.inputFocus.hasFocus) {
+            widget.drawerCtrl.inputFocus.unfocus();
           }
           if (_isSelectionMode || _selectedMessageIds.isNotEmpty) {
             setState(() {
@@ -743,7 +507,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     // + GlazeAppBar height (56). Matches the floating header above the webview.
     final messageListTop = MediaQuery.paddingOf(context).top + 10 + 56;
     // ...
-    final targetDrawerInset = widget.drawerOpen ? widget.drawerHeight : 0.0;
+    final targetDrawerInset = widget.drawerCtrl.drawerOpen ? widget.drawerCtrl.activeDrawerHeight : 0.0;
     final panelHeight = math.max(targetDrawerInset, widget.keyboardHeight);
     final factor = math.min(1.0, panelHeight / math.max(1.0, safeBottom));
     final effectiveBottomInset = panelHeight + (safeBottom * (1 - factor));
@@ -947,8 +711,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                         final activeEditingId = ref.read(
                           editingMessageIdProvider(widget.charId),
                         );
-                        if (activeEditingId == id && widget.inputFocus.hasFocus) {
-                          widget.inputFocus.unfocus();
+                        if (activeEditingId == id && widget.drawerCtrl.inputFocus.hasFocus) {
+                          widget.drawerCtrl.inputFocus.unfocus();
                         }
                       },
                     ),
@@ -1026,8 +790,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       },
                     ),
                     isSelectionMode: _isSelectionMode,
-                    searchQuery: widget.searchQuery,
-                    searchCurrentIndex: widget.searchCurrentIndex,
+                    searchQuery: widget.search.searchQuery,
+                    searchCurrentIndex: widget.search.searchCurrentIndex,
                   );
                 },
               ),
@@ -1124,15 +888,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         // bar tracks the same reveal so they move as one piece.
         Positioned.fill(
           child: AnimatedBuilder(
-            animation: widget.drawerAnim,
+            animation: widget.drawerCtrl.drawerAnim,
             builder: (context, _) {
-              final progress = widget.drawerAnim.value;
+              final progress = widget.drawerCtrl.drawerAnim.value;
               final bool drawerActive =
-                  widget.drawerOpen || widget.isSwitchingToDrawer;
+                  widget.drawerCtrl.drawerOpen || widget.drawerCtrl.switchingToDrawer;
               final double targetPanelInset = drawerActive
-                  ? widget.drawerHeight
+                  ? widget.drawerCtrl.activeDrawerHeight
                   : 0.0;
-              final int durationMs = widget.isSwitchingToDrawer ? 0 : 260;
+              final int durationMs = widget.drawerCtrl.switchingToDrawer ? 0 : 260;
 
               return TweenAnimationBuilder<double>(
                 tween: Tween<double>(
@@ -1158,7 +922,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       panelHeight + (safeBottom * (1 - factor));
 
                   // Keep the panel mounted while the close animation runs out.
-                  final renderDrawer = widget.drawerOpen || progress > 0.001;
+                  final renderDrawer = widget.drawerCtrl.drawerOpen || progress > 0.001;
 
                   return Stack(
                     children: [
@@ -1166,11 +930,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                         Positioned(
                           left: 0,
                           right: 0,
-                          bottom: -widget.drawerHeight * (1 - progress),
-                          height: widget.drawerHeight,
+                          bottom: -widget.drawerCtrl.activeDrawerHeight * (1 - progress),
+                          height: widget.drawerCtrl.activeDrawerHeight,
                           child: MagicDrawerPanel(
                             charId: widget.charId,
-                            onClose: widget.onCloseDrawer,
+                            onClose: () => widget.drawerCtrl.closeDrawer(),
                           ),
                         ),
                       Positioned(
@@ -1204,7 +968,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                                     .isHidden;
                                           });
                                       return ChatInputBar(
-                                        focusNode: widget.inputFocus,
+                                        focusNode: widget.drawerCtrl.inputFocus,
                                         initialDraft:
                                             widget.state.session?.draft ?? '',
                                         batterySaver:
@@ -1219,14 +983,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                               .saveDraft(text);
                                         },
                                         showSearchControls:
-                                            widget.showSearchControls,
-                                        searchQuery: widget.searchQuery,
+                                            widget.search.showSearch,
+                                        searchQuery: widget.search.searchQuery,
                                         searchMatchCount:
-                                            widget.searchMatches.length,
+                                            widget.search.matchCount,
                                         searchCurrentIndex:
-                                            widget.searchCurrentIndex,
-                                        onSearchNext: widget.onSearchNext,
-                                        onSearchPrev: widget.onSearchPrev,
+                                            widget.search.searchCurrentIndex,
+                                        onSearchNext: widget.search.onSearchNext,
+                                        onSearchPrev: widget.search.onSearchPrev,
                                         isEditingMessage: isEditingMessage,
                                         isSelectionMode: _isSelectionMode,
                                         selectedCount:
@@ -1288,8 +1052,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                           });
                                         },
                                         isDrawerOpen:
-                                            widget.drawerOpen ||
-                                            widget.isSwitchingToDrawer,
+                                            widget.drawerCtrl.drawerOpen ||
+                                            widget.drawerCtrl.switchingToDrawer,
                                         virtualKeyboardSend:
                                             widget.virtualKeyboardSend,
                                         enterToSend: widget.enterToSend,
@@ -1341,7 +1105,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                                 }
                                               }
                                             : null,
-                                        onMagicDrawer: widget.onToggleDrawer,
+                                        onMagicDrawer: () => widget.drawerCtrl.toggleDrawer(context),
                                         onAttach: () => showModalBottomSheet(
                                           context: context,
                                           useRootNavigator: true,

@@ -11,8 +11,9 @@ import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../sync_provider.dart';
 import '../sync_models.dart';
 import '../services/sync_conflict.dart';
-import '../services/sync_engine.dart';
 import '../services/sync_service.dart';
+import 'sync_icons.dart';
+import 'sync_sheet_widgets.dart';
 
 class SyncSheet extends ConsumerStatefulWidget {
   const SyncSheet({super.key});
@@ -114,16 +115,16 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (!connected) ...[
-                _buildSectionHeader('Connect a Cloud Provider'),
+                buildSyncSectionHeader(context, 'Connect a Cloud Provider'),
                 const SizedBox(height: 4),
-                _buildProviderSelectorButton(
+                buildSyncProviderButton(
                   icon: const DropboxIcon(size: 22, color: Colors.white),
                   label: _isConnecting ? 'Connecting...' : 'Dropbox',
                   color: context.colors.accent,
                   onPressed: _isConnecting || _isConnectingGdrive ? null : _connectDropbox,
                 ),
                 const SizedBox(height: 8),
-                _buildProviderSelectorButton(
+                buildSyncProviderButton(
                   icon: const GDriveIcon(size: 22, color: Colors.white),
                   label: _isConnectingGdrive ? 'Connecting...' : 'Google Drive',
                   color: const Color(0xFF4285F4),
@@ -131,228 +132,30 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 ),
                 if (lastError != null) ...[
                   const SizedBox(height: 12),
-                  _buildErrorCard(lastError),
+                  buildSyncErrorCard(lastError),
                 ],
               ] else ...[
-                // Connected status card
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: context.colors.accent.withValues(alpha: 0.05),
-                    border: Border.all(color: context.colors.accent.withValues(alpha: 0.15)),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        children: [
-                          if (provider == SyncProvider.dropbox)
-                            DropboxIcon(size: 24, color: context.colors.accent)
-                          else
-                            const GDriveIcon(size: 24, color: Color(0xFF4285F4)),
-                          const SizedBox(width: 8),
-                          Text(
-                            provider == SyncProvider.dropbox ? 'Dropbox' : 'Google Drive',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: context.cs.onSurface,
-                            ),
-                          ),
-                          const Spacer(),
-                          if (status == SyncStatus.syncing)
-                            const _PulsingDot(color: Color(0xFFFF9800))
-                          else if (status == SyncStatus.error)
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFFFF3B30),
-                                shape: BoxShape.circle,
-                              ),
-                            )
-                          else
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: const BoxDecoration(
-                                color: Color(0xFF4CAF50),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                        ],
-                      ),
-                      if (service?.accountInfo != null && service!.accountInfo!['email'] != null) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          service.accountInfo!['email'] as String,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: context.cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 4),
-                      Text(
-                        _getStatusLabel(status, service),
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: context.cs.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Folder ID row if GDrive
+                _buildConnectedCard(context, status, provider, service),
                 if (provider == SyncProvider.gdrive && _gdriveFolderId != null)
-                  Container(
-                    margin: const EdgeInsets.only(top: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.04),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Folder ID',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: context.cs.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _gdriveFolderId!,
-                            style: const TextStyle(
-                              fontFamily: 'monospace',
-                              fontSize: 11,
-                              color: Colors.white70,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        IconButton(
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          icon: const Icon(Icons.copy, size: 16, color: Colors.white54),
-                          onPressed: () {
-                            Clipboard.setData(ClipboardData(text: _gdriveFolderId!));
-                            GlazeToast.show(context, 'Folder ID copied');
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-
-                // Conflict Banner / Resolve section
+                  _buildFolderIdRow(context),
                 if (conflicts.isNotEmpty)
-                  Container(
-                    margin: const EdgeInsets.only(top: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.05),
-                      border: Border.all(color: Colors.orange.withValues(alpha: 0.15)),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Sync Conflicts (${conflicts.length})',
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.orangeAccent,
-                              ),
-                            ),
-                          ],
-                        ),
-                         const SizedBox(height: 10),
-                         Row(
-                           children: [
-                             Expanded(
-                               child: TextButton(
-                                 onPressed: () => _resolveAllConflicts('local'),
-                                 style: TextButton.styleFrom(
-                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                   backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
-                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                 ),
-                                 child: const Text('Keep All Local', style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
-                               ),
-                             ),
-                             const SizedBox(width: 8),
-                             Expanded(
-                               child: TextButton(
-                                 onPressed: () => _resolveAllConflicts('cloud'),
-                                 style: TextButton.styleFrom(
-                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                                   backgroundColor: Colors.greenAccent.withValues(alpha: 0.15),
-                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                 ),
-                                 child: const Text('Use All Cloud', style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
-                               ),
-                             ),
-                           ],
-                         ),
-                         const SizedBox(height: 10),
-                         ...conflicts.map((c) => Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      c.name,
-                                      style: const TextStyle(fontSize: 13, color: Colors.white70),
-                                    ),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => _resolveConflict(c, 'local'),
-                                    child: const Text('Keep Local', style: TextStyle(color: Colors.blueAccent)),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => _resolveConflict(c, 'cloud'),
-                                    child: const Text('Use Cloud', style: TextStyle(color: Colors.greenAccent)),
-                                  ),
-                                ],
-                              ),
-                            )),
-                      ],
-                    ),
-                  ),
-
-                // Sync result card
-                if (_syncResult != null) ...[
-                  _buildSyncResultCard(_syncResult!),
-                ],
-
-                // Linear Progress bar during Sync
-                if ((status == SyncStatus.syncing || _isWiping) && progress != null) ...[
-                  _buildProgressBar(progress),
-                ],
-
-                // Error Card if any
+                  _buildConflictBanner(context, conflicts),
+                if (_syncResult != null)
+                  buildSyncResultCard(context, _syncResult!),
+                if ((status == SyncStatus.syncing || _isWiping) && progress != null)
+                  buildSyncProgressBar(context, progress),
                 if (lastError != null) ...[
                   const SizedBox(height: 12),
-                  _buildErrorCard(lastError),
+                  buildSyncErrorCard(lastError),
                 ],
-
-                // Manual Sync section
                 const SizedBox(height: 16),
-                _buildSectionHeader('Manual Sync'),
+                buildSyncSectionHeader(context, 'Manual Sync'),
                 const SizedBox(height: 4),
                 Row(
                   children: [
                     Expanded(
-                      child: _buildManualButton(
+                      child: buildSyncManualButton(
+                        context: context,
                         onPressed: isSyncing ? null : () => _doSync('push'),
                         icon: Icons.cloud_upload_outlined,
                         label: 'Push',
@@ -361,7 +164,8 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: _buildManualButton(
+                      child: buildSyncManualButton(
+                        context: context,
                         onPressed: isSyncing ? null : () => _doSync('pull'),
                         icon: Icons.cloud_download_outlined,
                         label: 'Pull',
@@ -370,157 +174,23 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                     ),
                   ],
                 ),
-
-                // Sync settings section
                 const SizedBox(height: 16),
-                _buildSectionHeader('Sync Settings'),
+                buildSyncSectionHeader(context, 'Sync Settings'),
                 const SizedBox(height: 4),
-                // Auto Sync Toggle
-                GestureDetector(
-                  onTap: () {
-                    _setAutoSync(!autoEnabled);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    color: Colors.transparent,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Enable Auto-Sync',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  color: context.cs.onSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Automatically sync after every N messages',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: context.cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Switch(
-                          value: autoEnabled,
-                          onChanged: _setAutoSync,
-                          activeThumbColor: context.colors.accent,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Auto sync threshold count picker
-                if (autoEnabled && service != null) ...[
-                  Container(
-                    margin: const EdgeInsets.only(top: 4, bottom: 8),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Every ',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: context.cs.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildCountButton(
-                          icon: Icons.remove,
-                          onPressed: service.autoSyncMessageCount > 1
-                              ? () => _updateAutoSyncThreshold(service.autoSyncMessageCount - 1)
-                              : null,
-                        ),
-                        Container(
-                          width: 50,
-                          alignment: Alignment.center,
-                          child: Text(
-                            '${service.autoSyncMessageCount}',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: context.cs.onSurface,
-                            ),
-                          ),
-                        ),
-                        _buildCountButton(
-                          icon: Icons.add,
-                          onPressed: service.autoSyncMessageCount < 50
-                              ? () => _updateAutoSyncThreshold(service.autoSyncMessageCount + 1)
-                              : null,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          ' messages',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: context.cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                // Include API keys in sync
-                GestureDetector(
-                  onTap: () {
-                    _setIncludeApiKeys(!_syncIncludeApiKeys);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    color: Colors.transparent,
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Include API Keys in Sync',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  color: context.cs.onSurface,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Send provider API keys to cloud backup',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: context.cs.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Switch(
-                          value: _syncIncludeApiKeys,
-                          onChanged: _setIncludeApiKeys,
-                          activeThumbColor: context.colors.accent,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Danger zone section
+                _buildAutoSyncToggle(context, autoEnabled, service),
+                if (autoEnabled && service != null)
+                  _buildAutoSyncThresholdRow(context, service),
+                _buildIncludeApiKeysToggle(context),
                 const SizedBox(height: 16),
                 Divider(color: Colors.white.withValues(alpha: 0.1), height: 1),
                 const SizedBox(height: 16),
-                _buildDangerButton(
+                buildSyncDangerButton(
                   icon: Icons.logout_rounded,
                   label: 'Disconnect',
                   onPressed: _isDisconnecting ? null : _disconnect,
                 ),
                 const SizedBox(height: 8),
-                _buildDangerButton(
+                buildSyncDangerButton(
                   icon: Icons.delete_outline_rounded,
                   label: _isWiping ? 'Wiping...' : 'Wipe Cloud Data',
                   onPressed: _isWiping ? null : _wipeCloudData,
@@ -536,297 +206,346 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     );
   }
 
+  Widget _buildConnectedCard(BuildContext context, SyncStatus status, SyncProvider provider, SyncService? service) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: context.colors.accent.withValues(alpha: 0.05),
+        border: Border.all(color: context.colors.accent.withValues(alpha: 0.15)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              if (provider == SyncProvider.dropbox)
+                DropboxIcon(size: 24, color: context.colors.accent)
+              else
+                const GDriveIcon(size: 24, color: Color(0xFF4285F4)),
+              const SizedBox(width: 8),
+              Text(
+                provider == SyncProvider.dropbox ? 'Dropbox' : 'Google Drive',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: context.cs.onSurface,
+                ),
+              ),
+              const Spacer(),
+              if (status == SyncStatus.syncing)
+                const PulsingDot(color: Color(0xFFFF9800))
+              else if (status == SyncStatus.error)
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFFF3B30),
+                    shape: BoxShape.circle,
+                  ),
+                )
+              else
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF4CAF50),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+            ],
+          ),
+          if (service?.accountInfo != null && service!.accountInfo!['email'] != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              service.accountInfo!['email'] as String,
+              style: TextStyle(
+                fontSize: 13,
+                color: context.cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+          const SizedBox(height: 4),
+          Text(
+            _getStatusLabel(status, service),
+            style: TextStyle(
+              fontSize: 13,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFolderIdRow(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Text(
+            'Folder ID',
+            style: TextStyle(
+              fontSize: 12,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              _gdriveFolderId!,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 11,
+                color: Colors.white70,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: const Icon(Icons.copy, size: 16, color: Colors.white54),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: _gdriveFolderId!));
+              GlazeToast.show(context, 'Folder ID copied');
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConflictBanner(BuildContext context, List<SyncConflict> conflicts) {
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.05),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.15)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 20),
+              const SizedBox(width: 8),
+              Text(
+                'Sync Conflicts (${conflicts.length})',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orangeAccent,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => _resolveAllConflicts('local'),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Keep All Local', style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextButton(
+                  onPressed: () => _resolveAllConflicts('cloud'),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    backgroundColor: Colors.greenAccent.withValues(alpha: 0.15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: const Text('Use All Cloud', style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ...conflicts.map((c) => Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      c.name,
+                      style: const TextStyle(fontSize: 13, color: Colors.white70),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => _resolveConflict(c, 'local'),
+                    child: const Text('Keep Local', style: TextStyle(color: Colors.blueAccent)),
+                  ),
+                  TextButton(
+                    onPressed: () => _resolveConflict(c, 'cloud'),
+                    child: const Text('Use Cloud', style: TextStyle(color: Colors.greenAccent)),
+                  ),
+                ],
+              ),
+            )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAutoSyncToggle(BuildContext context, bool autoEnabled, SyncService? service) {
+    return GestureDetector(
+      onTap: () {
+        _setAutoSync(!autoEnabled);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        color: Colors.transparent,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Enable Auto-Sync',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: context.cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Automatically sync after every N messages',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: autoEnabled,
+              onChanged: _setAutoSync,
+              activeThumbColor: context.colors.accent,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAutoSyncThresholdRow(BuildContext context, SyncService service) {
+    return Container(
+      margin: const EdgeInsets.only(top: 4, bottom: 8),
+      child: Row(
+        children: [
+          Text(
+            'Every ',
+            style: TextStyle(
+              fontSize: 14,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(width: 8),
+          buildSyncCountButton(
+            icon: Icons.remove,
+            onPressed: service.autoSyncMessageCount > 1
+                ? () => _updateAutoSyncThreshold(service.autoSyncMessageCount - 1)
+                : null,
+          ),
+          Container(
+            width: 50,
+            alignment: Alignment.center,
+            child: Text(
+              '${service.autoSyncMessageCount}',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: context.cs.onSurface,
+              ),
+            ),
+          ),
+          buildSyncCountButton(
+            icon: Icons.add,
+            onPressed: service.autoSyncMessageCount < 50
+                ? () => _updateAutoSyncThreshold(service.autoSyncMessageCount + 1)
+                : null,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            ' messages',
+            style: TextStyle(
+              fontSize: 14,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildIncludeApiKeysToggle(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        _setIncludeApiKeys(!_syncIncludeApiKeys);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        color: Colors.transparent,
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Include API Keys in Sync',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w500,
+                      color: context.cs.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Send provider API keys to cloud backup',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.cs.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch(
+              value: _syncIncludeApiKeys,
+              onChanged: _setIncludeApiKeys,
+              activeThumbColor: context.colors.accent,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _goBack() {
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     } else {
       context.go('/menu');
     }
-  }
-
-  Widget _buildSectionHeader(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, bottom: 8, top: 12),
-      child: Text(
-        title.toUpperCase(),
-        style: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
-          color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
-          letterSpacing: 0.5,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProviderSelectorButton({
-    required Widget icon,
-    required String label,
-    required Color color,
-    required VoidCallback? onPressed,
-  }) {
-    final disabled = onPressed == null;
-    return Material(
-      color: color,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onPressed,
-        child: Opacity(
-          opacity: disabled ? 0.7 : 1.0,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                icon,
-                const SizedBox(width: 10),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildManualButton({
-    required VoidCallback? onPressed,
-    required IconData icon,
-    required String label,
-    required bool primary,
-  }) {
-    final accent = context.colors.accent;
-    final bg = primary ? accent : accent.withValues(alpha: 0.1);
-    final fg = primary ? Colors.white : accent;
-    final disabled = onPressed == null;
-
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onPressed,
-        child: Opacity(
-          opacity: disabled ? 0.7 : 1.0,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 22, color: fg),
-                const SizedBox(width: 8),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: fg,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDangerButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback? onPressed,
-    bool light = false,
-  }) {
-    final disabled = onPressed == null;
-    final bg = light ? const Color(0xFFFF3B30).withValues(alpha: 0.05) : const Color(0xFFFF3B30).withValues(alpha: 0.1);
-    return Material(
-      color: bg,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onPressed,
-        child: Opacity(
-          opacity: disabled ? 0.7 : 1.0,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 22, color: const Color(0xFFFF3B30)),
-                const SizedBox(width: 10),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFFF3B30),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCountButton({required IconData icon, VoidCallback? onPressed}) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.05),
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: onPressed,
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, size: 16, color: onPressed == null ? Colors.white24 : Colors.white70),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildErrorCard(String error) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFF3B30).withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.error_outline, color: Color(0xFFFF3B30), size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              error,
-              style: const TextStyle(color: Color(0xFFFF3B30), fontSize: 13, height: 1.4),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSyncResultCard(Map<String, dynamic> result) {
-    final type = result['type'] as String;
-    final pushed = result['pushed'] as int? ?? 0;
-    final pulled = result['pulled'] as int? ?? 0;
-    final deleted = result['deleted'] as int? ?? 0;
-    final total = result['total'] as String?;
-    final conflictsCount = result['conflictsCount'] as int? ?? 0;
-
-    String message = '';
-    Color cardColor = const Color(0xFF4CAF50).withValues(alpha: 0.1);
-    Color textColor = const Color(0xFF4CAF50);
-
-    if (type == 'push') {
-      message = 'Pushed: $pushed items';
-    } else if (type == 'pull') {
-      message = 'Pulled: $pulled items';
-      if (conflictsCount > 0) {
-        message += ', $conflictsCount conflicts';
-      }
-      cardColor = context.colors.accent.withValues(alpha: 0.1);
-      textColor = context.colors.accent;
-    } else if (type == 'wipe') {
-      message = (total == 'all') ? 'Cloud data wiped' : 'Deleted: $deleted/${total ?? "?"} items';
-    } else {
-      message = 'Full sync complete';
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              message,
-              style: TextStyle(
-                fontSize: 13,
-                color: textColor,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          if (type == 'pull' && conflictsCount > 0)
-            TextButton(
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                minimumSize: Size.zero,
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                backgroundColor: Colors.orange.withValues(alpha: 0.15),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-              ),
-              onPressed: () {
-                // Focus / view conflicts
-              },
-              child: const Text(
-                'Resolve',
-                style: TextStyle(fontSize: 12, color: Colors.orangeAccent, fontWeight: FontWeight.bold),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProgressBar(SyncProgress p) {
-    final indeterminate = p.total <= 0;
-    final pct = indeterminate ? null : (p.current / p.total).clamp(0.0, 1.0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 12),
-        if (p.message != null)
-          Text(
-            p.message!,
-            style: TextStyle(
-              fontSize: 12,
-              color: context.cs.onSurfaceVariant,
-            ),
-          ),
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: LinearProgressIndicator(
-            value: pct,
-            backgroundColor: Colors.white.withValues(alpha: 0.1),
-            valueColor: AlwaysStoppedAnimation<Color>(context.colors.accent),
-            minHeight: 4,
-          ),
-        ),
-        if (!indeterminate) ...[
-          const SizedBox(height: 4),
-          Text(
-            '${p.current}/${p.total}',
-            style: TextStyle(
-              fontSize: 11,
-              color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
-            ),
-          ),
-        ],
-      ],
-    );
   }
 
   String _getStatusLabel(SyncStatus status, SyncService? service) {
@@ -945,7 +664,6 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
 
     final providerLabel = service.provider == SyncProvider.dropbox ? 'Dropbox' : 'Google Drive';
 
-    // Step 1: Warning dialog
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
       title: 'Wipe Cloud Data',
@@ -970,7 +688,6 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
 
     if (confirmed != true) return;
 
-    // Step 2: Confirmation input dialog
     if (!mounted) return;
     await GlazeBottomSheet.show<void>(
       context,
@@ -990,7 +707,6 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             return;
           }
 
-          // Execute wipe!
           setState(() {
             _isWiping = true;
             _syncResult = null;
@@ -1140,6 +856,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       GlazeToast.show(context, choice == 'cloud' ? 'All conflicts resolved: cloud versions applied' : 'All conflicts resolved: local versions kept');
     }
   }
+
   void _setAutoSync(bool val) async {
     final service = ref.read(syncServiceProvider).value;
     if (service != null) {
@@ -1156,141 +873,3 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     }
   }
 }
-
-class DropboxIcon extends StatelessWidget {
-  final double size;
-  final Color? color;
-  const DropboxIcon({super.key, this.size = 22, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size(size, size),
-      painter: _DropboxIconPainter(color ?? Colors.white),
-    );
-  }
-}
-
-class _DropboxIconPainter extends CustomPainter {
-  final Color color;
-  _DropboxIconPainter(this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    final scaleX = size.width / 24.0;
-    final scaleY = size.height / 24.0;
-
-    void drawPath(List<Offset> points) {
-      final path = Path();
-      path.moveTo(points[0].dx * scaleX, points[0].dy * scaleY);
-      for (var i = 1; i < points.length; i++) {
-        path.lineTo(points[i].dx * scaleX, points[i].dy * scaleY);
-      }
-      path.close();
-      canvas.drawPath(path, paint);
-    }
-
-    drawPath([const Offset(6.5, 2), const Offset(2, 5), const Offset(6.5, 8), const Offset(11, 5)]);
-    drawPath([const Offset(17.5, 2), const Offset(13, 5), const Offset(17.5, 8), const Offset(22, 5)]);
-    drawPath([const Offset(6.5, 8), const Offset(2, 11), const Offset(6.5, 14), const Offset(11, 11)]);
-    drawPath([const Offset(17.5, 8), const Offset(13, 11), const Offset(17.5, 14), const Offset(22, 11)]);
-    drawPath([const Offset(12, 14), const Offset(7.5, 17), const Offset(12, 20), const Offset(16.5, 17)]);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class GDriveIcon extends StatelessWidget {
-  final double size;
-  final Color? color;
-  const GDriveIcon({super.key, this.size = 22, this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size(size, size),
-      painter: _GDriveIconPainter(color ?? Colors.white),
-    );
-  }
-}
-
-class _GDriveIconPainter extends CustomPainter {
-  final Color color;
-  _GDriveIconPainter(this.color);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.fill;
-    final scaleX = size.width / 24.0;
-    final scaleY = size.height / 24.0;
-
-    final path = Path()
-      ..moveTo(7.71 * scaleX, 3.5 * scaleY)
-      ..lineTo(16.29 * scaleX, 3.5 * scaleY)
-      ..lineTo(22.85 * scaleX, 15.0 * scaleY)
-      ..lineTo(18.27 * scaleX, 22.5 * scaleY)
-      ..lineTo(5.73 * scaleX, 22.5 * scaleY)
-      ..lineTo(1.15 * scaleX, 15.0 * scaleY)
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _PulsingDot extends StatefulWidget {
-  final Color color;
-  const _PulsingDot({required this.color});
-
-  @override
-  State<_PulsingDot> createState() => _PulsingDotState();
-}
-
-class _PulsingDotState extends State<_PulsingDot> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 1),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: Tween<double>(begin: 0.3, end: 1.0).animate(_controller),
-      child: Container(
-        width: 10,
-        height: 10,
-        decoration: BoxDecoration(
-          color: widget.color,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: widget.color.withValues(alpha: 0.4),
-              blurRadius: 4,
-              spreadRadius: 1,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-

@@ -3,15 +3,11 @@ class StreamAccumulator {
   final String? tagEnd;
   final bool hasInlineTags;
 
+  String _raw = '';
   String _text = '';
   String _reasoning = '';
-  bool _inReasoningBlock = false;
-  String _pending = '';
-  // True once we've received at least one non-empty reasoningDelta via the
-  // dedicated API field.  When this is set we know the model is delivering
-  // reasoning out-of-band, so any tagEnd that leaks into the content stream
-  // should be stripped rather than parsed as inline.
   bool _hasExternalReasoning = false;
+  bool _splitDone = false;
 
   StreamAccumulator({
     this.tagStart,
@@ -26,108 +22,58 @@ class StreamAccumulator {
     }
 
     if (hasInlineTags && tagStart != null && tagEnd != null) {
-      if (delta.isNotEmpty) {
-        _pending += delta;
-        _processPending();
-      }
+      _raw += delta;
+      _resplit();
     } else {
       _text += delta;
     }
   }
 
-  void _processPending() {
-    var input = _pending;
-    var textPart = '';
-
-    while (input.isNotEmpty) {
-      if (_inReasoningBlock) {
-        final tag = tagEnd!;
-        final endIdx = input.indexOf(tag);
-        if (endIdx == -1) {
-          // Check if input ends with a partial tagEnd prefix
-          final partial = _partialSuffixLength(input, tag);
-          if (partial > 0) {
-            _reasoning += input.substring(0, input.length - partial);
-            _pending = input.substring(input.length - partial);
-          } else {
-            _reasoning += input;
-            _pending = '';
-          }
-          _text += textPart;
-          return;
-        }
-        _reasoning += input.substring(0, endIdx);
-        input = input.substring(endIdx + tag.length);
-        _inReasoningBlock = false;
-      } else {
-        if (_hasExternalReasoning && tagEnd != null) {
-          final endIdx = input.indexOf(tagEnd!);
-          if (endIdx != -1) {
-            textPart += input.substring(0, endIdx);
-            input = input.substring(endIdx + tagEnd!.length);
-            continue;
-          }
-          final partial = _partialSuffixLength(input, tagEnd!);
-          if (partial > 0) {
-            textPart += input.substring(0, input.length - partial);
-            _pending = input.substring(input.length - partial);
-          } else {
-            textPart += input;
-            _pending = '';
-          }
-          break;
-        }
-        final tag = tagStart!;
-        final startIdx = input.indexOf(tag);
-        if (startIdx == -1) {
-          final partial = _partialSuffixLength(input, tag);
-          if (partial > 0) {
-            textPart += input.substring(0, input.length - partial);
-            _pending = input.substring(input.length - partial);
-          } else {
-            textPart += input;
-            _pending = '';
-          }
-          break;
-        }
-        textPart += input.substring(0, startIdx);
-        input = input.substring(startIdx + tag.length);
-        _inReasoningBlock = true;
-      }
+  void _resplit() {
+    if (_hasExternalReasoning) {
+      var content = _raw;
+      if (tagStart != null) content = content.replaceAll(tagStart!, '');
+      if (tagEnd != null) content = content.replaceAll(tagEnd!, '');
+      _text = content.trimLeft();
+      _splitDone = true;
+      return;
     }
 
-    _text += textPart;
+    final startIdx = _raw.indexOf(tagStart!);
+    if (startIdx == -1) {
+      _text = _raw;
+      _reasoning = '';
+      _splitDone = false;
+      return;
+    }
+
+    final endIdx = _raw.indexOf(tagEnd!, startIdx + tagStart!.length);
+    if (endIdx == -1) {
+      _text = _raw.substring(0, startIdx).trimLeft();
+      _reasoning = _raw.substring(startIdx + tagStart!.length);
+      _splitDone = false;
+      return;
+    }
+
+    _text = (_raw.substring(0, startIdx) + _raw.substring(endIdx + tagEnd!.length)).trimLeft();
+    _reasoning = _raw.substring(startIdx + tagStart!.length, endIdx);
+    _splitDone = true;
   }
 
-  /// Returns the length of the longest suffix of [input] that is a prefix of [tag].
-  int _partialSuffixLength(String input, String tag) {
-    for (var len = tag.length - 1; len > 0; len--) {
-      if (input.endsWith(tag.substring(0, len))) return len;
-    }
-    return 0;
-  }
+  void flush() {}
 
   String get text => _text;
   String get reasoning => _reasoning;
-  bool get isInReasoningBlock => _inReasoningBlock;
-
   bool get hasExternalReasoning => _hasExternalReasoning;
+  bool get splitDone => _splitDone;
+
+  String get raw => _raw;
 
   void reset() {
+    _raw = '';
     _text = '';
     _reasoning = '';
-    _inReasoningBlock = false;
-    _pending = '';
     _hasExternalReasoning = false;
-  }
-
-  void flush() {
-    if (_pending.isEmpty) return;
-    if (_inReasoningBlock) {
-      _reasoning += _pending;
-    } else {
-      _text += _pending;
-    }
-    _pending = '';
+    _splitDone = false;
   }
 }

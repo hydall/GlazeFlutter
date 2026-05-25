@@ -14,8 +14,12 @@ import '../../shared/widgets/glaze_toast.dart';
 import '../chat_history/chat_history_provider.dart';
 import 'chat_provider.dart';
 
+final chatActionsServiceProvider = Provider<ChatActionsService>((ref) {
+  return ChatActionsService(ref);
+});
+
 class ChatActionsService {
-  final WidgetRef _ref;
+  final Ref _ref;
 
   ChatActionsService(this._ref);
 

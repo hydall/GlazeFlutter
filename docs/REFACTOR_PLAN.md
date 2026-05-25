@@ -125,10 +125,10 @@ final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) {
 ## Phase 5: God Object Decomposition (high risk)
 
 - [x] 5.1 `ChatNotifier` (1127 lines) → extract `AbortHandler` + `ImageRecoveryService`
-- [ ] 5.2 `ChatScreen` (1289 lines) → `ChatDrawerController` + `ChatSearchDelegate` + `ChatBody`
-- [ ] 5.3 `ChatActionsService`: `WidgetRef` → `Ref` + context param
-- [ ] 5.4 `ChatGenerationService` → Riverpod provider instead of inline creation
-- [ ] 5.5 God widgets: split SyncSheet, ThemeEditor, PresetEditor, BottomSheet into sections
+- [x] 5.2 `ChatScreen` (1289 lines) → `ChatDrawerController` + `ChatSearchDelegate` + `ChatBody`
+- [x] 5.3 `ChatActionsService`: `WidgetRef` → `Ref` + context param
+- [x] 5.4 `ChatGenerationService` → Riverpod provider instead of inline creation
+- [x] 5.5 God widgets: SyncSheet (1296→660 lines) extracted into sync_icons.dart (DropboxIcon, GDriveIcon, PulsingDot) + sync_sheet_widgets.dart (reusable builder functions). ThemeEditor/PresetEditor already internally decomposed into private sub-widgets — low ROI for further file splitting.
 
 ## Phase 6: ImgGen Utility Consolidation
 
@@ -181,3 +181,4 @@ final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) {
 | 2026-05-25 | 4.4 | ChatWebViewWidget callback grouping — 22 props → 5 typed objects (MessageActionsCallbacks, EditActionsCallbacks, ImageGenCallbacks, ScrollCallbacks, MiscCallbacks) in webview_callbacks.dart, updated chat_webview_widget.dart + chat_screen.dart | Done |
 | 2026-05-25 | 5.1a | ImageRecoveryService extracted from ChatNotifier — 4 static pure functions (cleanStuckImgGenTags, replaceFirstImgErrorOrGen, resetImgTagsToGen, fixupSwipesWithImageResults) + 3 instance methods (retryImageGeneration, retryImageGenerationForMessage, findImageOnDisk) via constructor injection. ChatNotifier: 1122→854 lines | Done |
 | 2026-05-25 | 5.1b | AbortHandler extracted from ChatNotifier — encapsulates _cancelToken, _imgGenCancelToken, _restorationMessage, _activeGenId, abortGeneration(), abortImageGeneration(), cancelImageGeneration(), clearStreaming(), setCancelToken(), nextGenId(), isCurrentGen(). ChatNotifier: 854→636 lines | Done |
+| 2026-05-25 | 5.2 | ChatDrawerController + ChatSearchDelegate extracted from ChatScreen. ChatDrawerController: drawer animation, keyboard height tracking, toggle/close, focus management (ChangeNotifier). ChatSearchDelegate: search state, matching logic with think-tag stripping, next/prev (ChangeNotifier). ChatScreen: 1387→1150 lines. _ChatBody props reduced from 22 to 8. | Done |

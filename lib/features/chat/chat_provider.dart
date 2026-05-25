@@ -247,7 +247,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     final character = await charRepo.getById(arg);
     await notifService.onGenerationStarted(character?.name ?? 'Unknown');
 
-    final service = ChatGenerationService(ref);
+    final service = ref.read(chatGenerationServiceProvider);
     final result = await service.generate(
       session: current.session!,
       charId: arg,
@@ -506,7 +506,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     await notifService.onGenerationStarted(character?.name ?? 'Unknown');
 
     try {
-    final service = ChatGenerationService(ref);
+    final service = ref.read(chatGenerationServiceProvider);
     final result = await service.generate(
       session: session,
       saveSession: saveSession,

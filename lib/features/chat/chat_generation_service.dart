@@ -22,6 +22,10 @@ import 'chat_provider.dart';
 import 'chat_state.dart';
 import 'widgets/cached_token_breakdown.dart';
 
+final chatGenerationServiceProvider = Provider<ChatGenerationService>((ref) {
+  return ChatGenerationService(ref);
+});
+
 class ChatGenerationService {
   final Ref _ref;
 
@@ -154,15 +158,7 @@ class ChatGenerationService {
               (text.isNotEmpty || (reasoning != null && reasoning.isNotEmpty))) {
             accumulator.consumeDelta(text, reasoningDelta: reasoning);
           }
-          accumulator.flush();
           var finalText = accumulator.text.trimLeft();
-          if (accumulator.hasExternalReasoning) {
-            finalText = finalText.replaceAll(reasoningTagEnd, '');
-            finalText = finalText.replaceAll(reasoningTagStart, '');
-            finalText = finalText.trimLeft();
-          } else if (finalText.startsWith(reasoningTagEnd)) {
-            finalText = finalText.substring(reasoningTagEnd.length).trimLeft();
-          }
           var finalReasoning = accumulator.reasoning.isNotEmpty ? accumulator.reasoning : reasoning;
           final isAllReasoning = finalText.isEmpty && finalReasoning != null && finalReasoning.isNotEmpty;
           final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;

@@ -537,7 +537,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       if (!mounted) return;
       switch (result) {
         case 'export':
-          await ChatActionsService(ref).exportSessionUI(
+          await ref.read(chatActionsServiceProvider).exportSessionUI(
             context,
             charId: widget.charId,
             sessionId: sessionId,
@@ -593,13 +593,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         final importResult = importChatFromJsonlString(
           utf8.decode(file.bytes!),
         );
-        count = await ChatActionsService(
-          ref,
-        ).importChatFromResult(widget.charId, importResult);
+        count = await ref.read(chatActionsServiceProvider)
+            .importChatFromResult(widget.charId, importResult);
       } else if (filePath != null) {
-        count = await ChatActionsService(
-          ref,
-        ).importChat(widget.charId, filePath);
+        count = await ref.read(chatActionsServiceProvider)
+            .importChat(widget.charId, filePath);
       } else {
         return;
       }
