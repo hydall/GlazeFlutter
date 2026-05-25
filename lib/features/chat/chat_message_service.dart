@@ -25,13 +25,20 @@ class ChatMessageService {
     String? newReasoning = msg.reasoning;
     bool isAllReasoning = msg.isAllReasoning;
 
-    if (tagStart != null && tagEnd != null && text.contains(tagStart)) {
-      final startIdx = text.indexOf(tagStart);
-      final endIdx = text.indexOf(tagEnd, startIdx + tagStart.length);
-      if (endIdx != -1) {
-        newReasoning = text.substring(startIdx + tagStart.length, endIdx).trim();
-        text = (text.substring(0, startIdx) + text.substring(endIdx + tagEnd.length)).trim();
-        isAllReasoning = text.isEmpty && newReasoning.isNotEmpty;
+    if (tagStart != null && tagEnd != null) {
+      if (text.contains(tagStart)) {
+        final startIdx = text.indexOf(tagStart);
+        final endIdx = text.indexOf(tagEnd, startIdx + tagStart.length);
+        if (endIdx != -1) {
+          newReasoning = text.substring(startIdx + tagStart.length, endIdx).trim();
+          text = (text.substring(0, startIdx) + text.substring(endIdx + tagEnd.length)).trim();
+          isAllReasoning = text.isEmpty && newReasoning.isNotEmpty;
+          if (newReasoning.isEmpty) newReasoning = null;
+        }
+      } else {
+        // User removed the think block entirely — clear reasoning
+        newReasoning = null;
+        isAllReasoning = false;
       }
     }
 

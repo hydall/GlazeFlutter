@@ -60,6 +60,7 @@ class SelectionManager {
   getSelectedIds() { return [...this._selectedIds]; }
 
   setSelectionMode(enabled) {
+    if (enabled && document.querySelector('.message-section.editing')) return;
     this._selectionMode = !!enabled;
     if (!enabled) this._selectedIds.clear();
     document.querySelectorAll('.message-section').forEach(msgEl => {

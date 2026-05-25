@@ -714,6 +714,24 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   @override
   Widget build(BuildContext context) {
+    final isEditingMessage =
+        ref.watch(editingMessageIdProvider(widget.charId)) != null;
+    ref.listen<String?>(
+      editingMessageIdProvider(widget.charId),
+      (prev, next) {
+        if (next != null) {
+          if (widget.inputFocus.hasFocus) {
+            widget.inputFocus.unfocus();
+          }
+          if (_isSelectionMode || _selectedMessageIds.isNotEmpty) {
+            setState(() {
+              _isSelectionMode = false;
+              _selectedMessageIds.clear();
+            });
+          }
+        }
+      },
+    );
     final preset = ref.watch(themeProvider).activePreset;
     final appSettings = ref.watch(appSettingsProvider).valueOrNull;
     // Reserve space below the message list for: input bar + (keyboard or
@@ -910,7 +928,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       if (idx >= 0 && text.isNotEmpty) {
                         ref
                             .read(chatProvider(widget.charId).notifier)
-                            .editMessage(idx, text);
+                            .editMessage(idx, text, tagStart: '<think>', tagEnd: '</think>');
                       }
                       ref
                               .read(
@@ -930,6 +948,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                               )
                               .state =
                           null;
+                    },
+                    onEditFocusChange: (id, focused) {
+                      if (!focused) return;
+                      final activeEditingId = ref.read(
+                        editingMessageIdProvider(widget.charId),
+                      );
+                      if (activeEditingId == id && widget.inputFocus.hasFocus) {
+                        widget.inputFocus.unfocus();
+                      }
                     },
                     onImageClick: (imageUrl) {
                       _showImageViewer(context, imageUrl);
@@ -1194,6 +1221,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                             widget.searchCurrentIndex,
                                         onSearchNext: widget.onSearchNext,
                                         onSearchPrev: widget.onSearchPrev,
+                                        isEditingMessage: isEditingMessage,
                                         isSelectionMode: _isSelectionMode,
                                         selectedCount:
                                             _selectedMessageIds.length,
