@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/features/chat/widgets/chat_input_bar.dart';
 import 'package:glaze_flutter/features/chat/widgets/input_bar.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   group('ChatInputBar', () {
     late List<String> sentMessages;
 
@@ -13,14 +19,16 @@ void main() {
       bool enterToSend = true,
     }) {
       sentMessages = [];
-      return MaterialApp(
-        home: Scaffold(
-          body: ChatInputBar(
-            onSend: (text) => sentMessages.add(text),
-            isGenerating: false,
-            focusNode: focusNode,
-            virtualKeyboardSend: virtualKeyboardSend,
-            enterToSend: enterToSend,
+      return ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: ChatInputBar(
+              onSend: (text) => sentMessages.add(text),
+              isGenerating: false,
+              focusNode: focusNode,
+              virtualKeyboardSend: virtualKeyboardSend,
+              enterToSend: enterToSend,
+            ),
           ),
         ),
       );
