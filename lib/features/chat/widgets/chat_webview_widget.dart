@@ -46,6 +46,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final void Function(String action, String text)? onSelectionAction;
   final void Function(String id, String text)? onEditSave;
   final void Function(String id)? onEditCancel;
+  final void Function(String id, bool focused)? onEditFocusChange;
   final void Function(String imageUrl)? onImageClick;
   final void Function(String id, String guidanceText)? onGuidedSwipe;
   final void Function(String id)? onMemoryClick;
@@ -100,6 +101,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.onSelectionAction,
     this.onEditSave,
     this.onEditCancel,
+    this.onEditFocusChange,
     this.onImageClick,
     this.onGuidedSwipe,
     this.onMemoryClick,
@@ -486,7 +488,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           _bridge!.stopEdit(prev);
           final oldMsg = widget.messages.where((m) => m.id == prev).firstOrNull;
           if (oldMsg != null) {
-            _bridge!.updateMessageContent(oldMsg.id, oldMsg.content, oldMsg.role == 'user');
+            _bridge!.updateMessage(oldMsg);
           }
         }
         if (next != null) {
@@ -589,6 +591,9 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
             };
             _bridge!.onEditCancel = (id) {
               widget.onEditCancel?.call(id);
+            };
+            _bridge!.onEditFocusChange = (id, focused) {
+              widget.onEditFocusChange?.call(id, focused);
             };
             _bridge!.onImageClick = (imageUrl) {
               widget.onImageClick?.call(imageUrl);

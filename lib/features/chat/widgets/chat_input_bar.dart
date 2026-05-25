@@ -45,6 +45,7 @@ class ChatInputBar extends StatefulWidget {
   final VoidCallback? onHideSelected;
   final VoidCallback? onDeleteSelected;
   final bool allSelectedHidden;
+  final bool isEditingMessage;
 
   const ChatInputBar({
     super.key,
@@ -77,6 +78,7 @@ class ChatInputBar extends StatefulWidget {
     this.onHideSelected,
     this.onDeleteSelected,
     this.allSelectedHidden = false,
+    this.isEditingMessage = false,
   });
 
   @override
@@ -110,15 +112,25 @@ class _ChatInputBarState extends State<ChatInputBar> {
   @override
   void didUpdateWidget(ChatInputBar old) {
     super.didUpdateWidget(old);
-    if (old.enterToSend != widget.enterToSend) {
+    if (old.enterToSend != widget.enterToSend ||
+        old.isEditingMessage != widget.isEditingMessage ||
+        old.focusNode != widget.focusNode) {
       _updateFocusNodeHandler();
     }
   }
 
   void _updateFocusNodeHandler() {
     final fn = widget.focusNode;
+    final effective = _effectiveFocusNode;
+    effective.canRequestFocus = !widget.isEditingMessage;
+    if (widget.isEditingMessage && effective.hasFocus) {
+      effective.unfocus();
+    }
     if (fn == null || !widget.enterToSend) return;
     fn.onKeyEvent = (node, event) {
+      if (widget.isEditingMessage) {
+        return KeyEventResult.ignored;
+      }
       if (event is KeyDownEvent &&
           event.logicalKey == LogicalKeyboardKey.enter &&
           !HardwareKeyboard.instance.isShiftPressed) {
@@ -292,6 +304,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
               ),
               child: TextField(
                 controller: _guidanceController,
+                readOnly: widget.isEditingMessage,
+                canRequestFocus: !widget.isEditingMessage,
+                enableInteractiveSelection: !widget.isEditingMessage,
+                showCursor: !widget.isEditingMessage,
                 maxLines: 3,
                 minLines: 1,
                 textCapitalization: TextCapitalization.sentences,
@@ -339,6 +355,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
               child: TextField(
                 controller: _controller,
                 focusNode: _effectiveFocusNode,
+                readOnly: widget.isEditingMessage,
+                canRequestFocus: !widget.isEditingMessage,
+                enableInteractiveSelection: !widget.isEditingMessage,
+                showCursor: !widget.isEditingMessage,
                 maxLines: 5,
                 minLines: 1,
                 textCapitalization: TextCapitalization.sentences,

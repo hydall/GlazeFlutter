@@ -365,8 +365,15 @@ class Bridge {
   /* ---------- Interaction dispatch ---------- */
   _setupInteractionListener() {
     document.addEventListener('click', (e) => {
+      const editingSection = document.querySelector('.message-section.editing');
+
       /* Selection mode: tap on message toggles selection */
       if (this.renderer._selectionMode) {
+        if (editingSection) {
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         const section = e.target.closest('.message-section');
         if (section) {
           e.preventDefault();
@@ -613,6 +620,9 @@ class Bridge {
      *   Press on header / footer / a non-selected message → toggle that
      *     message's selection. Exits selection mode when nothing remains. */
     document.addEventListener('contextmenu', (e) => {
+      if (document.querySelector('.message-section.editing')) {
+        return;
+      }
       const section = e.target.closest('.message-section');
       if (!section) return;
 
@@ -1013,6 +1023,11 @@ class Bridge {
     if (!section) return;
 
     const scrollPos = this.virtualList.container.scrollTop;
+    this.renderer.setSelectionMode(false);
+    this._sendToFlutter('onSelectionChange', [JSON.stringify([])]);
+    this._hideSelectionBar();
+    const existingSelection = window.getSelection?.();
+    if (existingSelection) existingSelection.removeAllRanges();
     section.classList.add('editing');
 
     const rawText = (section.dataset.rawText || '').replace(/^<think\b[^>]*>[\s\S]*?<\/think>\s*/, '');
@@ -1030,6 +1045,12 @@ class Bridge {
     textarea.value = editText;
     textarea.dataset.originalText = editText;
     body.appendChild(textarea);
+    textarea.addEventListener('focus', () => {
+      this._sendToFlutter('onEditFocusChange', [messageId, true]);
+    });
+    textarea.addEventListener('blur', () => {
+      this._sendToFlutter('onEditFocusChange', [messageId, false]);
+    });
 
     textarea.addEventListener('input', () => {
       textarea.style.height = 'auto';
@@ -1051,6 +1072,7 @@ class Bridge {
     }, { passive: true });
     textarea.style.height = Math.max(80, textarea.scrollHeight + 20) + 'px';
     textarea.focus();
+    this._sendToFlutter('onEditFocusChange', [messageId, true]);
 
     /* Replace center controls with edit buttons */
     const footer = section.querySelector('.msg-footer');
@@ -1086,6 +1108,7 @@ class Bridge {
     const section = document.querySelector(`[data-message-id="${messageId}"]`);
     if (!section) return;
     section.classList.remove('editing');
+    this._sendToFlutter('onEditFocusChange', [messageId, false]);
 
     const body = section.querySelector('.msg-body');
     if (body && body.dataset.originalHtml !== undefined) {
@@ -1265,7 +1288,10 @@ class Bridge {
     requestAnimationFrame(tick);
   }
 
-  setSelectionMode(enabled) { this.renderer.setSelectionMode(enabled); }
+  setSelectionMode(enabled) {
+    if (enabled && document.querySelector('.message-section.editing')) return;
+    this.renderer.setSelectionMode(enabled);
+  }
 
   _setupImageClickForward() {
     this.virtualList.container.addEventListener('image-click', (e) => {

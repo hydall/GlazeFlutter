@@ -167,6 +167,7 @@ class ChatBridgeController {
   void Function(String action, String text)? onSelectionAction;
   void Function(String id, String text)? onEditSave;
   void Function(String id)? onEditCancel;
+  void Function(String id, bool focused)? onEditFocusChange;
   void Function(String id, String guidanceText)? onGuidedSwipe;
   void Function(String id)? onMemoryClick;
   void Function(String id)? onToggleHidden;
@@ -296,6 +297,14 @@ class ChatBridgeController {
       callback: (args) {
         if (args.isEmpty) return;
         onEditCancel?.call(args[0] as String);
+      },
+    );
+
+    _controller.addJavaScriptHandler(
+      handlerName: 'onEditFocusChange',
+      callback: (args) {
+        if (args.length < 2) return;
+        onEditFocusChange?.call(args[0] as String, args[1] == true);
       },
     );
 
