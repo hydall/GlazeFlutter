@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/llm/embedding_service.dart';
 import '../../core/llm/sse_client.dart';
 import '../../core/models/api_config.dart';
+import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
@@ -119,14 +119,14 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     _saveTimer = Timer(const Duration(milliseconds: 800), _save);
   }
 
-  void _persistActiveId(String? id) {
-    SharedPreferences.getInstance().then((prefs) {
-      if (id != null) {
-        prefs.setString('activeApiConfigId', id);
-      } else {
-        prefs.remove('activeApiConfigId');
-      }
-    });
+  void _persistActiveId(String? id) async {
+    final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+    if (prefs == null) return;
+    if (id != null) {
+      await prefs.setString('activeApiConfigId', id);
+    } else {
+      await prefs.remove('activeApiConfigId');
+    }
   }
 
   void _loadActivePreset() {

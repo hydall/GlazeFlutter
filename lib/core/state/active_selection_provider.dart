@@ -1,13 +1,12 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-
 
 import '../models/persona.dart';
 import '../models/preset.dart';
 import 'db_provider.dart';
 import 'memory_settings_provider.dart';
+import 'shared_prefs_provider.dart';
 
 import 'global_regex_provider.dart';
 import '../../features/personas/persona_list_provider.dart';
@@ -34,7 +33,7 @@ final activeRegexesProvider = FutureProvider<List<PresetRegex>>((ref) async {
 });
 
 Future<void> loadActiveSelections(WidgetRef ref) async {
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = await ref.read(sharedPreferencesProvider.future);
   ref.read(activePresetIdProvider.notifier).state =
       prefs.getString('activePresetId');
   ref.read(activePersonaIdProvider.notifier).state =
@@ -59,7 +58,7 @@ Future<void> loadActiveSelections(WidgetRef ref) async {
 
 Future<void> setActivePreset(WidgetRef ref, String? id) async {
   ref.read(activePresetIdProvider.notifier).state = id;
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = await ref.read(sharedPreferencesProvider.future);
   if (id != null) {
     await prefs.setString('activePresetId', id);
   } else {
@@ -69,7 +68,7 @@ Future<void> setActivePreset(WidgetRef ref, String? id) async {
 
 Future<void> setActivePersona(WidgetRef ref, String? id) async {
   ref.read(activePersonaIdProvider.notifier).state = id;
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = await ref.read(sharedPreferencesProvider.future);
   if (id != null) {
     await prefs.setString('activePersonaId', id);
   } else {
@@ -111,7 +110,8 @@ Future<void> setPersonaConnection(
   final current = ref.read(personaConnectionsProvider);
   final updated = _buildUpdatedConnections(current, type, targetId, personaId);
   ref.read(personaConnectionsProvider.notifier).state = updated;
-  await _persistPersonaConnections(updated);
+  final prefs = await ref.read(sharedPreferencesProvider.future);
+  await prefs.setString('personaConnections', jsonEncode(updated.toJson()));
 }
 
 void setPersonaConnectionRef(
@@ -123,12 +123,10 @@ void setPersonaConnectionRef(
   final current = ref.read(personaConnectionsProvider);
   final updated = _buildUpdatedConnections(current, type, targetId, personaId);
   ref.read(personaConnectionsProvider.notifier).state = updated;
-  _persistPersonaConnections(updated);
-}
-
-Future<void> _persistPersonaConnections(PersonaConnections conns) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('personaConnections', jsonEncode(conns.toJson()));
+  final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+  if (prefs != null) {
+    prefs.setString('personaConnections', jsonEncode(updated.toJson()));
+  }
 }
 
 Persona? getEffectivePersona(
@@ -166,12 +164,10 @@ final effectivePersonaForChatProvider = Provider.family<Persona?, String>((ref, 
   return getEffectivePersona(personas, charId, null, activePersonaId, personaConnections);
 });
 
-Future<void> _persistGlobalVars(Map<String, String> vars) async {
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.setString('globalVars', jsonEncode(vars));
-}
-
 void updateGlobalVarsRef(Ref ref, Map<String, String> vars) {
   ref.read(globalVarsProvider.notifier).state = vars;
-  _persistGlobalVars(vars);
+  final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+  if (prefs != null) {
+    prefs.setString('globalVars', jsonEncode(vars));
+  }
 }

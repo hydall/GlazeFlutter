@@ -9,16 +9,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'editing_message_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/state/character_provider.dart';
 import '../../core/state/active_selection_provider.dart';
+import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import 'widgets/message_actions.dart';
 import '../../shared/theme/theme_font_provider.dart';
 import '../../shared/theme/theme_provider.dart';
 
-import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../settings/app_settings_provider.dart';
 import 'chat_provider.dart';
@@ -116,7 +115,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   Future<void> _restoreKeyboardHeight() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ref.read(sharedPreferencesProvider.future);
       final saved = prefs.getDouble(_kKeyboardHeightPref);
       if (saved != null && saved > 200 && mounted) {
         setState(() => _lastKeyboardHeight = saved);
@@ -126,7 +125,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
   Future<void> _persistKeyboardHeight(double height) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ref.read(sharedPreferencesProvider.future);
       await prefs.setDouble(_kKeyboardHeightPref, height);
     } catch (_) {}
   }

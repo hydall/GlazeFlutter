@@ -285,12 +285,12 @@ void main() {
   });
 
   // ─── selectionMode public getter (Phase 3.7) ──────────────────────────────
-  group('selectionMode encapsulation (renderer.js)', () {
-    test('renderer has public selectionMode getter', () {
+  group('selectionMode encapsulation (SelectionManager)', () {
+    test('SelectionManager has public selectionMode getter', () {
       expect(
-        rendererJs,
+        bridgeJs,
         contains('get selectionMode()'),
-        reason: 'Renderer must expose selectionMode as public getter',
+        reason: 'SelectionManager must expose selectionMode as public getter',
       );
     });
 
@@ -298,7 +298,7 @@ void main() {
       expect(
         bridgeJs,
         isNot(contains('renderer._selectionMode')),
-        reason: 'Bridge must use renderer.selectionMode, not the private _selectionMode field',
+        reason: 'Bridge must use SelectionManager.selectionMode, not the private _selectionMode field',
       );
     });
   });

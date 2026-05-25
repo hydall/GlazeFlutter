@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/shared_prefs_provider.dart';
 import 'catalog_models.dart';
 import 'services/datacat_provider.dart';
 import 'services/janitor_provider.dart';
@@ -80,7 +81,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   }
 
   Future<void> _loadSavedState() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _ref.read(sharedPreferencesProvider.future);
     final savedProvider = prefs.getString(_providerKey) ?? 'janitor';
     final provider = CatalogProvider.values.firstWhere(
       (p) => p.name == savedProvider,
@@ -115,7 +116,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   }
 
   Future<void> _saveState() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _ref.read(sharedPreferencesProvider.future);
     await prefs.setString(_providerKey, state.activeProvider.name);
     await prefs.setString('${_sortKey}_${state.activeProvider.name}', state.filters.sort);
     await prefs.setString(_filtersKey, jsonEncode({

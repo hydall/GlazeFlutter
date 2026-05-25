@@ -18,7 +18,17 @@ class ThemePresetScreen extends ConsumerStatefulWidget {
 }
 
 class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
-  final _storage = ThemePresetStorage();
+  ThemePresetStorage? _storage;
+
+  @override
+  void initState() {
+    super.initState();
+    _initStorage();
+  }
+
+  Future<void> _initStorage() async {
+    _storage = await ThemePresetStorage.create();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -246,7 +256,8 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       final file = result.files.first;
       if (file.path == null) return;
 
-      final preset = await _storage.importFromFile(file.path!);
+      final preset = await _storage?.importFromFile(file.path!);
+      if (preset == null) return;
       await ref.read(themeProvider.notifier).importPreset(preset);
       _applyPreset(preset);
 

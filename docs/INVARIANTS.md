@@ -3,15 +3,13 @@
 Formal runtime behavior that must not change during any refactor.
 Every structural PR must preserve these invariants or explicitly document a deviation.
 
-PR checklist: bottom of this file.
-
 ---
 
 ## 1. Chat Generation Invariants
 
 ### INV-C1: At most one active chat generation per `charId`
 
-`ChatNotifier.sendMessage()` / `generate()` checks `state.isGenerating` before starting.
+`ChatNotifier.sendMessage()` checks `state.isGenerating` before starting.
 If a generation is already active for this character, the call is rejected.
 
 ### INV-C2: Generation state is always eventually cleaned up
@@ -19,25 +17,27 @@ If a generation is already active for this character, the call is rejected.
 For every generation start, there must be a matching cleanup on every exit:
 - Completion
 - Error
-- Abort (`stopGeneration()`)
-- Screen dispose / notifier disposal
+- Abort (`abortGeneration()`)
+- App restart (fresh `ChatState` with `isGenerating = false`)
+
+Note: `ChatNotifier` uses `ref.keepAlive()`, so provider disposal is not a cleanup path. State resets on app restart when `build()` runs fresh.
 
 ### INV-C3: Partial text is preserved on abort
 
 When the user aborts mid-stream and partial text exists, the partial response is saved
-as a completed message — not discarded. `ChatGenerationService` must persist partial text
-before clearing state.
+as a completed message — not discarded. `ChatNotifier.abortGeneration()` reads
+`streamingStateProvider` and persists partial text before clearing state.
 
 ### INV-C4: `isGenerating` is consistent with actual generation activity
 
 `ChatState.isGenerating == true` iff an SSE stream is currently active for this `charId`.
-On hot restart / provider rebuild, `isGenerating` must be reset to `false`.
+On app restart, `build()` creates a fresh `ChatState` where `isGenerating` defaults to `false`.
 
-### INV-C5: Session variables are restored on abort/error
+### INV-C5: Session variables are restored on abort/error ⚠️ NOT IMPLEMENTED
 
-If macro expansion mutates `sessionVars` during prompt build, those mutations must be
-rolled back on every non-happy exit path. `ChatGenerationService` must restore the
-pre-generation snapshot on abort or error.
+If macro expansion mutates `sessionVars` during prompt build, those mutations should be
+rolled back on every non-happy exit path. **Currently not implemented** — aborted generations
+may leave behind mutated `sessionVars`.
 
 ### INV-C6: Background generation continues independently
 
@@ -48,21 +48,41 @@ has its own independent state. Switching screens does not abort other characters
 ### INV-C7: Stale completions are discarded
 
 If an SSE stream completes after a new generation has started (e.g. very fast regen),
-the stale `onComplete` callback must detect the mismatch and discard the result.
-Guard: compare `genId` / `CancelToken` before writing to state.
+the stale callback must detect the mismatch and discard the result.
+Guard: compare `_activeGenId` before writing to state. `ChatGenerationService`
+receives `isAborted: () => _activeGenId != genId`.
 
 ---
 
-## 2. Summary Generation Invariants
+## 2. Image Generation Invariants
+
+### INV-IG1: Image generation runs after text generation completes
+
+`ChatGenerationService.processImageTags()` is called only after the SSE stream completes
+and the assistant message is saved. It never runs concurrently with text generation.
+
+### INV-IG2: Image generation has independent abort infrastructure
+
+Uses `_imgGenCancelToken` (separate from the text `_cancelToken`) and `isGeneratingImage`
+state (separate from `isGenerating`).
+
+### INV-IG3: Image generation abort clears `isGeneratingImage`
+
+Both `abortGeneration()` and `cancelImageGeneration()` clear the flag.
+Cancelled image tags are replaced with `[IMG:ERROR:...]`.
+
+---
+
+## 3. Summary Generation Invariants
 
 ### INV-S1: Summary is always non-streaming
 
-`SummaryService` always calls the API with `stream: false`. No SSE.
+`SummaryService.generateSummary()` uses `_dio.post()` (plain HTTP POST). No SSE.
 
 ### INV-S2: Summary does not create generation registry entries
 
 Summary generation does not touch `ChatState.isGenerating` or any `charId`-keyed
-generation guard. It has its own abort controller owned by the caller.
+generation guard. It has no `CancelToken` — once started, it cannot be aborted.
 
 ### INV-S3: Summary does not mutate chat messages
 
@@ -71,30 +91,30 @@ It must not modify `ChatSession.messages`.
 
 ---
 
-## 3. Memory Draft Generation Invariants
+## 4. Memory Draft Generation Invariants
 
 ### INV-M1: Memory draft does not use chat generation state
 
-`MemoryDraftGenerator` owns its own abort infrastructure (per-draft `CancelToken`).
+`MemoryDraftGenerator` owns its own `SseClient` and receives an external `CancelToken`.
 It never reads or writes `ChatState.isGenerating`.
 
 ### INV-M2: Memory draft is always non-streaming
 
-`MemoryDraftGenerator` calls the API with `stream: false` unconditionally.
+`MemoryDraftGenerator.generate()` calls the API with `stream: false` unconditionally.
 
-### INV-M3: Memory draft cannot start while chat generation is active
+### INV-M3: Memory draft cannot start while chat generation is active ⚠️ NOT ENFORCED
 
-`MemoryDraftGenerator.generate()` must check `ChatState.isGenerating` for the same
-`charId` and reject if active.
+`memory_books_sheet.dart._generateDraft()` does not check `ChatState.isGenerating`.
+A memory draft can start while chat generation is running. **Mutual exclusion is not implemented.**
 
-### INV-M4: Chat generation cannot start while memory draft is active
+### INV-M4: Chat generation cannot start while memory draft is active ⚠️ NOT ENFORCED
 
-`ChatNotifier.sendMessage()` must check whether a memory draft generation is currently
-running for the same `charId` and reject if so.
+`ChatNotifier.sendMessage()` does not check for active memory drafts.
+No shared state exists to track whether a memory draft is in progress.
 
 ---
 
-## 4. Prompt Semantics Invariants
+## 5. Prompt Semantics Invariants
 
 ### INV-PS1: Prompt block order is determined by the preset's `blocks` array
 
@@ -102,22 +122,24 @@ The preset's `blocks` list fully controls what appears in the prompt and in what
 Character fields appear only when a matching preset block ID resolves them.
 If a block is disabled, that field is omitted. `PromptBuilder` is the sole enforcer.
 
-### INV-PS2: Keyword scan always precedes vector scan
+### INV-PS2: Vector scan runs before keyword scan; keyword deduplicates vector
 
-Keyword lorebook scan runs synchronously in `PromptBuilder` (inside the Dart isolate).
-Vector scan runs async after the isolate completes, in `PromptPayloadBuilder`.
-Vector results are deduplicated against keyword results.
+1. Vector lorebook scan runs async in `PromptPayloadBuilder.buildFromSession()` — results packed into `PromptPayload.vectorEntries`.
+2. Keyword lorebook scan runs synchronously in `PromptBuilder` (inside the Dart isolate).
+3. `mergeKeywordVector()` deduplicates: vector entries whose IDs appear in keyword results are dropped. Keyword results always win.
 
 ### INV-PS3: History cutoff is oldest-first
 
 When context overflows, history is trimmed from the **oldest** end.
-Newer messages are always retained preferentially.
-`ContextCalculator` enforces this: it walks from index 0 forward, dropping old messages.
+`ContextCalculator._trimHistory()` walks backwards from the newest end, accumulating
+messages until the budget is full. The oldest messages are dropped because they are never accumulated.
 
-### INV-PS4: Memory injection is guarded by a token budget
+### INV-PS4: Memory injection is guarded by a token budget ⚠️ NOT IMPLEMENTED
 
-If memory tokens ≥ 35% of `safeContext` OR memory tokens ≤ 0 → injection skipped.
-`MemoryInjectionService` enforces this before any injection attempt.
+`MemoryInjectionService.buildInjection()` has no 35% token budget threshold check.
+Memory injection proceeds unconditionally as long as there are active entries with content.
+`ContextCalculator.calculate()` subtracts memory tokens from the history budget, but there
+is no guard that skips injection when it would consume too much budget.
 
 ### INV-PS5: Memory injection position is deterministic
 
@@ -127,47 +149,45 @@ Given the same inputs, the injection point is always the same:
 
 ### INV-PS6: Regex application order is deterministic
 
-Preset regex scripts run first, then global regex scripts.
-Within each group, scripts are applied in array order.
-`RegexService` enforces this.
+The caller in `prompt_builder.dart` assembles the list: preset regex scripts first,
+then global regex scripts. `RegexService.applyRegexes()` applies scripts in list order.
 
 ### INV-PS7: Macro resolution order is fixed
 
-Within a single `MacroEngine.apply()` call, macros resolve in this order:
+Within a single `MacroEngine.replaceMacros()` call, macros resolve in this order:
 1. Comment stripping
 2. Static character macros
-3. Trim
-4. Session variable macros (`setvar`/`getvar`)
-5. Global variable macros
-6. Custom named macros
-7. `{{random::}}` / `{{pick::}}`
-8. Dice `{{roll::}}`
-9. Date/Time
-10. Reasoning tags
-11. Escape handling
+3. `{{reasoningPrefix}}` / `{{reasoningSuffix}}`
+4. `{{summary}}` / `{{lorebooks}}` / `{{guidance}}`
+5. Trim
+6. Session variable macros (`setvar`/`getvar`)
+7. Global variable macros (`setglobalvar`/`getglobalvar`)
+8. Custom named macros
+9. `{{random::}}` / `{{pick::}}`
+10. Dice `{{roll::}}`
+11. Date/Time
+12. Escape handling
 
 ### INV-PS8: Recursive lorebook scan is bounded
 
-`LorebookScanner` limits recursion to `maxIterations = 5`.
-This prevents infinite loops from circular entry references.
+`LorebookScanner` limits recursion to `maxIterations = 5` when `recursiveScan` is enabled,
+or `1` when disabled. This prevents infinite loops from circular entry references.
 
 ---
 
-## 5. Stream vs Non-Stream Parity
+## 6. Stream vs Non-Stream Parity
 
 ### INV-P1: Final output is identical regardless of transport mode
 
-Both streaming (SSE) and non-streaming paths must produce the same final
+Both streaming (SSE) and non-streaming paths produce the same final
 `(text, reasoning)` pair for the same API response content.
+Both paths use `StreamAccumulator` for reasoning extraction.
 
 ### INV-P2: Reasoning extraction is equivalent
 
-- Streaming: `StreamAccumulator` splits `<think>…</think>` tags incrementally with
-  partial-suffix lookahead to handle tag boundaries across chunk splits.
-- Non-streaming: `ResponseNormalizer.normalizeReasoningOutput()` strips tags from
-  the final string; `reasoning_content` field merged separately.
-
-Both must produce the same `reasoning` output for the same raw content.
+Both streaming and non-streaming paths use `StreamAccumulator` to split
+`<think…>` tags. The non-streaming path feeds the entire response as one
+delta through the same accumulator, producing identical output.
 
 ### INV-P3: Abort behavior differs by design
 
@@ -178,24 +198,41 @@ This asymmetry is intentional and correct.
 
 ---
 
-## 6. Abort Invariants
+## 7. Abort Invariants
 
 ### INV-A1: Abort propagates to the HTTP layer
 
-When `ChatNotifier.stopGeneration()` is called, the `CancelToken` passed to
-`SseClient` must be cancelled. This closes the underlying Dio request and stops
-the SSE stream. Cancelling only UI state while leaving the TCP connection open is a bug.
+When `ChatNotifier.abortGeneration()` is called:
+1. `_activeGenId++` — invalidates stale callbacks
+2. `_cancelToken?.cancel()` — propagates to Dio, closes the SSE stream
+3. `_imgGenCancelToken?.cancel()` — cancels any in-flight image generation
+4. Manual state restoration + partial text persist in `abortGeneration()` itself
+
+Cancelling only UI state while leaving the TCP connection open is a bug.
 
 ### INV-A2: Abort restores pre-generation state
 
-On abort, `ChatGenerationService` must restore:
-- The placeholder message (remove or convert to partial)
+On abort, `ChatNotifier.abortGeneration()` restores:
+- The placeholder message (converted to partial or removed)
 - `ChatState.isGenerating → false`
-- Any session variables mutated during prompt build
+- `ChatState.isGeneratingImage → false`
+- Session variables mutated during prompt build — ⚠️ NOT IMPLEMENTED (see INV-C5)
 
-### INV-A3: Regen during active generation is rejected
+### INV-A3: Regen during active generation aborts first
 
-`ChatNotifier.regenerate()` must check `isGenerating` and reject if active.
+`ChatNotifier.regenerateLastAssistant()` does not simply reject when generation is active.
+It calls `abortGeneration()` first, then proceeds with the new generation.
+If abort fails to clear `isGenerating`, the subsequent check rejects.
+
+---
+
+## 8. Continue Message Invariant
+
+### INV-CM1: Continue message appends to the last assistant message
+
+`ChatNotifier.continueMessage()` reuses `ChatGenerationService.generate()` but
+post-processes the result by concatenating `lastMsg.content + generatedMsg.content`.
+It does not create a new message or swipe.
 
 ---
 
@@ -204,15 +241,17 @@ On abort, `ChatGenerationService` must restore:
 Before merging any structural PR:
 
 - [ ] Chat generation produces correct responses end-to-end
-- [ ] Stop generation preserves partial text when available
-- [ ] Regenerate while generating is safely rejected
+- [ ] Stop generation (abort) preserves partial text when available
+- [ ] Regenerate while generating aborts the current generation first
 - [ ] Switching characters during generation continues background generation
 - [ ] Prompt block order matches preset definition
-- [ ] Keyword scan runs before vector scan; results deduplicated
-- [ ] Memory injection respects the 35% token budget guard
+- [ ] Vector scan runs before keyword scan; results deduplicated
+- [ ] Memory injection does not exceed context budget (⚠️ no guard yet)
 - [ ] History cutoff trims oldest messages first
 - [ ] Summary returns a string without affecting chat state
-- [ ] Memory draft does not interact with chat generation state
+- [ ] Memory draft does not interact with chat generation state (⚠️ not enforced)
+- [ ] Image generation completes after text generation, has separate abort
 - [ ] Context limit exceeded shows an error to the user
 - [ ] API not configured shows an error to the user
 - [ ] Abort closes the TCP connection (not just UI state)
+- [ ] Session variables are restored on abort/error (⚠️ not implemented)

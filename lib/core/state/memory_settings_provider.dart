@@ -1,7 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'shared_prefs_provider.dart';
 
 class MemoryGlobalSettings {
   final bool enabled;
@@ -170,14 +171,15 @@ class MemoryGlobalSettings {
 
 final memoryGlobalSettingsProvider =
     StateNotifierProvider<MemoryGlobalSettingsNotifier, MemoryGlobalSettings>(
-  (ref) => MemoryGlobalSettingsNotifier(),
+  (ref) => MemoryGlobalSettingsNotifier(ref),
 );
 
 class MemoryGlobalSettingsNotifier extends StateNotifier<MemoryGlobalSettings> {
-  MemoryGlobalSettingsNotifier() : super(const MemoryGlobalSettings());
+  final Ref _ref;
+  MemoryGlobalSettingsNotifier(this._ref) : super(const MemoryGlobalSettings());
 
   Future<void> load() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _ref.read(sharedPreferencesProvider.future);
     final raw = prefs.getString('memorySettings');
     if (raw != null) {
       try {
@@ -189,7 +191,7 @@ class MemoryGlobalSettingsNotifier extends StateNotifier<MemoryGlobalSettings> {
 
   Future<void> save(MemoryGlobalSettings settings) async {
     state = settings;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await _ref.read(sharedPreferencesProvider.future);
     await prefs.setString('memorySettings', jsonEncode(settings.toJson()));
   }
 }

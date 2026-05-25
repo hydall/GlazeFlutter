@@ -28,8 +28,10 @@ silently corrupt state.
 
 ## Rule 2: No state mutation without ownership
 
-- SSE callbacks (`onDelta`, `onComplete`, `onError`) **must** check `genId` before
+- SSE callbacks (`onDelta`, `onComplete`, `onError`) **must** check `_activeGenId` before
   mutating `ChatState` or persisting to DB.
+- Image generation callbacks (`retryImageGeneration`, `retryImageGenerationForMessage`)
+  currently do NOT have a `genId` guard — potential stale state write.
 - New services that receive async results and write to state must include a
   staleness/ownership check. Without it, late completions **will** corrupt state.
 
@@ -61,19 +63,26 @@ Rule of thumb: if there's an `await` before the mutation, there's a potential ra
 
 ---
 
-## Rule 5: Mutual exclusion for concurrent operations
+## Rule 5: Mutual exclusion for concurrent operations ⚠️ PARTIALLY UNENFORCED
 
-- Chat generation and memory draft generation are mutually exclusive (checked in both directions).
-- If adding a new request type alongside chat generation, add mutual exclusion guards
-  in **both** directions.
+- Chat generation and memory draft generation **should** be mutually exclusive, but
+  neither direction is implemented:
+  - `ChatNotifier.sendMessage()` does NOT check for active memory drafts.
+  - `memory_books_sheet.dart._generateDraft()` does NOT check `ChatState.isGenerating`.
+  - No shared state bridges the two systems.
+- Image generation runs only after text generation completes (enforced by call order).
 - Background operations (auto-sync, embedding indexing) should check `isGenerating`
   for the relevant `charId` before starting.
+
+If adding a new request type alongside chat generation, add mutual exclusion guards
+in **both** directions.
 
 ---
 
 ## Rule 6: CancelToken must reach the HTTP layer
 
-When the user taps Stop, `CancelToken.cancel()` must propagate all the way to `Dio`.
+When the user taps Stop, `abortGeneration()` calls `_cancelToken?.cancel()` and
+`_imgGenCancelToken?.cancel()`, both of which must propagate to Dio.
 Cancelling only UI state (`isGenerating = false`) while the TCP connection stays open
 is a bug — the stream continues running in the background and may write stale results.
 
@@ -83,10 +92,13 @@ Verify: after pressing Stop, the network tab shows the request was actually term
 
 ## Known race classes
 
-| Race | Cause | Fix |
+| Race | Cause | Fix / Status |
 |------|-------|-----|
-| Stale completion writes to new generation's state | Callback didn't check `genId` | Add `genId` check before any mutation |
+| Stale completion writes to new generation's state | Callback didn't check `_activeGenId` | Guard exists in `ChatGenerationService` callbacks via `isAborted()` |
 | Stop button doesn't close TCP connection | `CancelToken` not passed to `Dio` | Ensure `CancelToken` reaches `SseClient` |
 | Read-mutate-write in DB | `getById` + `put` without transaction | Wrap in `db.transaction()` |
-| Two memory drafts start for same draft ID | No in-flight ID tracking | Track in-flight IDs in `MemoryDraftGenerator` |
-| `apiListProvider` null on cold start | Sync provider read before async load | `await ref.read(apiListProvider.future)` first |
+| Two memory drafts start for same draft ID | No in-flight ID tracking in generator | Tracked in widget: `memory_books_sheet.dart._generatingDrafts` map |
+| `apiListProvider` null on cold start | Sync provider read before async load | `await ref.read(apiListProvider.future)` first; also used by `MemoryDraftGenerator` |
+| Image retry state corruption | `retryImageGeneration` callbacks have no `genId` guard | ⚠️ Unfixed — potential stale write to `ChatState` |
+| Chat ↔ memory draft mutual exclusion | Neither side checks the other | ⚠️ Not implemented |
+| Character deletion orphan rows | `CharactersNotifier.remove()` pre-deletes `ChatSessions`, causing `CharacterRepo.delete()` to skip `MemoryBookRows`/`ChatSummaries` cleanup | ⚠️ Bug — see `docs/rules/database.md` |

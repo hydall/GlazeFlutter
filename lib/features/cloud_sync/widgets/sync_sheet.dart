@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/state/shared_prefs_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../../shared/widgets/sheet_view.dart';
@@ -47,7 +47,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   }
 
   void _loadIncludeApiKeys() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
     final raw = prefs.get('gz_sync_include_api_keys');
     final val = raw is bool ? raw : false;
     if (!mounted) return;
@@ -57,7 +57,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   }
 
   void _setIncludeApiKeys(bool val) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
     if (prefs.get('gz_sync_include_api_keys') is! bool) {
       await prefs.remove('gz_sync_include_api_keys');
     }

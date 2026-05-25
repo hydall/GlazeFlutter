@@ -36,15 +36,21 @@ class ThemeSettings {
 }
 
 class ThemeNotifier extends StateNotifier<ThemeSettings> {
-  final ThemePresetStorage _storage = ThemePresetStorage();
+  ThemePresetStorage? _storage;
 
   ThemeNotifier() : super(const ThemeSettings()) {
-    _load();
+    _init();
+  }
+
+  Future<void> _init() async {
+    _storage = await ThemePresetStorage.create();
+    await _load();
   }
 
   Future<void> _load() async {
-    final presets = await _storage.loadAll();
-    final activeId = await _storage.loadActiveId();
+    if (_storage == null) return;
+    final presets = await _storage!.loadAll();
+    final activeId = await _storage!.loadActiveId();
     final active = presets.firstWhere(
       (p) => p.id == activeId,
       orElse: () => presets.first,
@@ -70,18 +76,18 @@ class ThemeNotifier extends StateNotifier<ThemeSettings> {
       accentColor: preset.accent,
       activePreset: preset,
     );
-    await _storage.setActive(preset.id);
+    await _storage?.setActive(preset.id);
   }
 
   Future<void> importPreset(ThemePreset preset) async {
-    await _storage.addPreset(preset);
-    final presets = await _storage.loadAll();
+    await _storage?.addPreset(preset);
+    final presets = await _storage?.loadAll() ?? state.presets;
     state = state.copyWith(presets: presets);
   }
 
   Future<void> deletePreset(String id) async {
-    await _storage.removePreset(id);
-    final presets = await _storage.loadAll();
+    await _storage?.removePreset(id);
+    final presets = await _storage?.loadAll() ?? state.presets;
     var active = state.activePreset;
     if (active.id == id) {
       active = presets.first;
@@ -101,7 +107,7 @@ class ThemeNotifier extends StateNotifier<ThemeSettings> {
       accentColor: preset.accent,
       presets: updated,
     );
-    await _storage.saveAll(updated);
+    await _storage?.saveAll(updated);
   }
 
   Future<void> reload() async {

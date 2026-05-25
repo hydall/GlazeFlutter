@@ -141,7 +141,7 @@ class JsPresetImporter extends BackupHelpers {
     if (presetsList == null || presetsList.isEmpty) return;
 
     final activeId = (ls['gz_theme_active_preset'] ?? kv['gz_theme_active_preset'] ?? 'default').toString();
-    final storage = ThemePresetStorage();
+    final storage = await ThemePresetStorage.create();
     final imported = <ThemePreset>[];
 
     for (final p in presetsList) {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/shared_prefs_provider.dart';
 import 'image_gen_models.dart';
 import 'services/image_gen_service.dart';
 
@@ -17,7 +18,7 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
 
   @override
   Future<ImageGenSettings> build() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
     final raw = prefs.getString(_key);
     if (raw != null) {
       try {
@@ -79,7 +80,7 @@ class ImageGenSettingsNotifier extends AsyncNotifier<ImageGenSettings> {
   }
 
   Future<void> save(ImageGenSettings settings) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
     await prefs.setString(_key, jsonEncode(_toJson(settings)));
     state = AsyncData(settings);
   }

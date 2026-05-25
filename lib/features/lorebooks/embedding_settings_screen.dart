@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/llm/embedding_service.dart';
 import '../../../core/llm/lorebook_providers.dart';
 import '../../../core/state/lorebook_provider.dart';
+import '../../../core/state/shared_prefs_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/glaze_toast.dart';
@@ -76,7 +76,7 @@ class _EmbeddingSettingsScreenState
 
   void _save() async {
     final maxChunkTokens = int.tryParse(_maxChunkTokensCtrl.text) ?? 8192;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
     await prefs.setInt('gz_embedding_max_chunk_tokens', maxChunkTokens);
 
     final current = ref.read(lorebookSettingsProvider);

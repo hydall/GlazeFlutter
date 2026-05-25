@@ -6,18 +6,18 @@ import '../../features/onboarding/onboarding_screen.dart';
 
 const _onboardingCompleteKey = 'onboarding_complete';
 
-Future<bool> isOnboardingComplete() async {
-  final prefs = await SharedPreferences.getInstance();
+Future<bool> isOnboardingComplete([SharedPreferences? prefs]) async {
+  prefs ??= await SharedPreferences.getInstance();
   return prefs.getBool(_onboardingCompleteKey) ?? false;
 }
 
-Future<void> markOnboardingComplete() async {
-  final prefs = await SharedPreferences.getInstance();
+Future<void> markOnboardingComplete([SharedPreferences? prefs]) async {
+  prefs ??= await SharedPreferences.getInstance();
   await prefs.setBool(_onboardingCompleteKey, true);
 }
 
-Future<void> resetOnboarding() async {
-  final prefs = await SharedPreferences.getInstance();
+Future<void> resetOnboarding([SharedPreferences? prefs]) async {
+  prefs ??= await SharedPreferences.getInstance();
   await prefs.setBool(_onboardingCompleteKey, false);
 }
 

@@ -16,10 +16,59 @@ Each phase = separate PR. Each task = separate commit.
 ## Phase 1: Extract Constants & Utilities (low risk, high ROI)
 
 - [x] 1.1 IMG-tag regex → `lib/core/constants/image_gen_patterns.dart` (6 files affected)
-- [ ] 1.2 `SharedPrefsProvider` — single Riverpod provider (20+ files)
+- [x] 1.2 `SharedPrefsProvider` — single Riverpod provider (see detail below)
 - [x] 1.3 Token estimation: `length/4` → `estimateTokens()` in `chat_generation_service.dart`
 - [x] 1.4 Remove dead code `resetLoadingTags` in `image_gen_service.dart`
 - [x] 1.5 `_messagePreview`: `List` → `List<ChatMessage>`, remove `as dynamic` in `chat_provider.dart`
+
+### 1.2 Detail — SharedPrefsProvider Migration
+
+**New file:** `lib/core/state/shared_prefs_provider.dart`
+```dart
+final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) {
+  return SharedPreferences.getInstance();
+});
+```
+
+**Pattern — Riverpod classes (have `ref`):** replace `await SharedPreferences.getInstance()` → `await ref.read(sharedPreferencesProvider.future)`
+
+| File | Type |
+|------|------|
+| `app_settings_provider.dart` | AsyncNotifier |
+| `active_selection_provider.dart` | standalone functions (WidgetRef/Ref) |
+| `global_regex_provider.dart` | AsyncNotifier |
+| `memory_settings_provider.dart` | StateNotifier (added `Ref _ref`) |
+| `lorebook_provider.dart` | AsyncNotifier + standalone functions |
+| `api_list_provider.dart` | AsyncNotifier |
+| `preset_list_provider.dart` | AsyncNotifier |
+| `image_gen_provider.dart` | AsyncNotifier |
+| `catalog_provider.dart` | StateNotifier (has `Ref _ref`) |
+| `preset_seeder.dart` | WidgetRef function |
+
+**Pattern — ConsumerWidgets:** replace `await SharedPreferences.getInstance()` → `await ref.read(sharedPreferencesProvider.future)`
+
+| File |
+|------|
+| `chat_screen.dart` |
+| `magic_drawer.dart` |
+| `chat_stats_sheet.dart` |
+| `session_lifecycle_tracker.dart` |
+| `api_settings_screen.dart` |
+| `embedding_settings_screen.dart` |
+| `sync_sheet.dart` |
+
+**Pattern — Plain Dart services (no `ref`):** optional `SharedPreferences?` param with fallback to `getInstance()`
+
+| File | Approach |
+|------|----------|
+| `onboarding_service.dart` | Optional `prefs` param |
+| `sync_deletion_tracker.dart` | Optional `prefs` param |
+| `image_storage_service.dart` | Optional `prefsArg` param |
+| `lorebook_provider.dart` (save functions) | Optional `prefs` param |
+| `ThemePresetStorage` | Constructor injection + `create()` factory |
+
+**Not migrated** (backup/migration/sync services — no `ref`, low testability priority):
+`sync_service.dart`, `sync_manifest.dart`, `sync_engine.dart`, `migration_service.dart`, `backup_service.dart`, `backup_exporter.dart`, `js_backup_importer.dart`, `js_preset_importer.dart`, `js_lorebook_importer.dart`, `js_api_config_importer.dart`, `service_prefs_writer.dart`, `gdrive_auth.dart`, `dropbox_auth.dart`, `janny_provider.dart`, `datacat_provider.dart`
 
 ## Phase 2: Data Safety Fixes (medium risk, critical)
 
@@ -59,9 +108,9 @@ Each phase = separate PR. Each task = separate commit.
 ## Phase 3: WebView Bridge Decomposition (high risk, high ROI)
 
 - [x] 3.1 Extract `InteractionDispatch` — 270-line click handler → action map with `data-action`
-- [ ] 3.2 Extract `SelectionManager` — selection bar + selection mode state
-- [ ] 3.3 Extract `EditController` — startEdit/stopEdit + textarea events
-- [ ] 3.4 Extract `SwipeGestureHandler` — swipe gestures, swipe context helper
+- [x] 3.2 Extract `SelectionManager` — selection bar + selection mode state
+- [x] 3.3 Extract `EditController` — startEdit/stopEdit + textarea events
+- [x] 3.4 Extract `SwipeGestureHandler` — swipe gestures, swipe context helper
 - [x] 3.5 Extract `GenTimer` — start/stop gen timer
 - [x] 3.6 Normalize `renderMessage` — always return array, remove 4× duplication
 - [x] 3.7 `renderer._selectionMode` → public API getter (encapsulation)
@@ -89,6 +138,17 @@ Each phase = separate PR. Each task = separate commit.
 
 ---
 
+## Phase 7: Tokenizer Accuracy (medium risk)
+
+- [ ] 7.1 Add `o200k_base` encoding support via custom `Tiktoken` constructor — download vocab from `https://openaipublic.blob.core.windows.net/encodings/o200k_base.tiktoken` (~2MB), cache locally, load into existing `tiktoken` Dart package using `Tiktoken(name, patStr, mergeableRanks, specialTokens)`
+- [ ] 7.2 Model-aware encoding selector — map model name → encoding (`cl100k_base` for GPT-4/3.5, `o200k_base` for GPT-4o/4.1/5.x, heuristic multiplier for Claude/other providers)
+- [ ] 7.3 Heuristic multiplier fallback for non-OpenAI models — Claude: `×0.69`, Gemini/Mistral: `×0.7` (approximate, no local tokenizer available)
+- [ ] 7.4 Replace `estimateTokens()` global with `estimateTokens(text, {modelEncoding})` — encoding selection based on current `ApiConfig.model`
+
+**Context:** `cl100k_base` overestimates by ~45% for both Claude (113k vs 78k actual) and GPT-5.4 (~113k vs 71k). The Dart `tiktoken` 1.0.3 package does not support `o200k_base` natively, but allows extending via constructor. JS Glaze uses `gpt-tokenizer` (cl100k_base only) — same problem exists there too.
+
+---
+
 ## Progress Log
 
 | Date | Phase | Task | Status |
@@ -109,3 +169,8 @@ Each phase = separate PR. Each task = separate commit.
 | 2026-05-25 | 4.1 | Streaming fast path patch | Done |
 | 2026-05-25 | 4.3 | _createGenStat dedup | Done |
 | 2026-05-25 | 0.1–0.5 | Characterization tests (125 tests, 4 files) | Done |
+| 2026-05-25 | 1.2 | SharedPrefsProvider — 30 files migrated | Done |
+| 2026-05-25 | docs | Rewrote ARCHITECTURE.md, INVARIANTS.md, rules/generation.md, rules/database.md, markdown-markers.md, rules/race-conditions.md | Done |
+| 2026-05-25 | 3.2 | SelectionManager extraction from bridge.js + renderer.js | Done |
+| 2026-05-25 | 3.3 | EditController extraction from bridge.js | Done |
+| 2026-05-25 | 3.4 | SwipeGestureHandler extraction from bridge.js | Done |

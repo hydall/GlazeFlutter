@@ -24,7 +24,7 @@ void main() {
 
   setUpAll(() {
     bridgeJs = _asset('bridge.js');
-    rendererJs = _asset('renderer.js');
+    rendererJs = _asset('renderer.js'); // kept for future renderer-specific tests
   });
 
   // ─── Phase 3.2: SelectionManager ────────────────────────────────────────
@@ -33,39 +33,42 @@ void main() {
       expect(bridgeJs, contains('setSelectionMode(enabled)'));
     });
 
-    test('setSelectionMode delegates to renderer', () {
-      expect(bridgeJs, contains('renderer.setSelectionMode(enabled)'));
+    test('setSelectionMode delegates to SelectionManager', () {
+      expect(bridgeJs, contains('_selectionManager.setSelectionMode(enabled)'));
     });
 
-    test('Renderer has setSelectionMode method', () {
-      expect(rendererJs, contains('setSelectionMode(enabled)'));
+    test('SelectionManager class exists in bridge.js', () {
+      expect(bridgeJs, contains('class SelectionManager'));
     });
 
-    test('Renderer has toggleMessageSelection method', () {
-      expect(rendererJs, contains('toggleMessageSelection(messageId)'));
+    test('SelectionManager has setSelectionMode method', () {
+      expect(bridgeJs, contains('setSelectionMode(enabled)'));
     });
 
-    test('Renderer has getSelectedIds method', () {
-      expect(rendererJs, contains('getSelectedIds()'));
+    test('SelectionManager has toggleMessageSelection method', () {
+      expect(bridgeJs, contains('toggleMessageSelection(messageId)'));
     });
 
-    test('Renderer tracks _selectedIds as Set', () {
-      expect(rendererJs, contains('_selectedIds'));
+    test('SelectionManager has getSelectedIds method', () {
+      expect(bridgeJs, contains('getSelectedIds()'));
     });
 
-    test('contextmenu listener enters selection mode on long press', () {
+    test('SelectionManager tracks _selectedIds as Set', () {
+      expect(bridgeJs, contains('_selectedIds'));
+    });
+
+    test('contextmenu listener delegates to SelectionManager', () {
       final marker = "addEventListener('contextmenu'";
       expect(bridgeJs, contains(marker));
       final idx = bridgeJs.indexOf(marker);
       expect(idx, isNot(-1));
       final context = bridgeJs.substring(idx, idx + 2000);
-      expect(context, contains('setSelectionMode(true)'));
+      expect(context, contains('_selectionManager.handleContextMenu'));
     });
 
-    test('selectionchange listener shows selection bar', () {
+    test('selectionchange listener delegates to SelectionManager', () {
       expect(bridgeJs, contains('selectionchange'));
-      expect(bridgeJs, contains('_showSelectionBar'));
-      expect(bridgeJs, contains('_hideSelectionBar'));
+      expect(bridgeJs, contains('_selectionManager.handleSelectionChange'));
     });
 
     test('_showSelectionBar creates Copy and Quote buttons', () {
@@ -83,197 +86,239 @@ void main() {
       expect(bridgeJs, contains('onSelectionAction'));
     });
 
-    test('click in selection mode toggles message selection', () {
+    test('click in selection mode delegated to SelectionManager.handleClick', () {
       final idx = bridgeJs.indexOf('class InteractionDispatch');
       final classBody = _extractBlockBody(bridgeJs, idx);
-      expect(classBody, contains('toggleMessageSelection'));
-      expect(classBody, contains('selectionMode'));
+      expect(classBody, contains('_selectionManager.handleClick'));
     });
 
-    test('exits selection mode when no messages remain selected', () {
-      final idx = bridgeJs.indexOf('class InteractionDispatch');
+    test('SelectionManager exits selection mode when no messages remain selected', () {
+      expect(bridgeJs, contains('exitIfEmpty'));
+    });
+
+    test('selection-mode CSS class is toggled by SelectionManager', () {
+      final idx = bridgeJs.indexOf('class SelectionManager');
       final classBody = _extractBlockBody(bridgeJs, idx);
-      expect(classBody, contains('setSelectionMode(false)'));
-    });
-
-    test('selection-mode CSS class is toggled on message sections', () {
-      final idx = rendererJs.indexOf('setSelectionMode(enabled)');
-      final body = _extractBlockBody(rendererJs, idx);
-      expect(body, contains("'selection-mode'"));
+      expect(classBody, contains("'selection-mode'"));
     });
   });
 
   // ─── Phase 3.3: EditController ──────────────────────────────────────────
   group('Edit behavior (Phase 3.3 characterization)', () {
-    test('Bridge has startEdit method', () {
+    test('Bridge has startEdit method that delegates to EditController', () {
       expect(bridgeJs, contains('startEdit(messageId)'));
+      expect(bridgeJs, contains('_editController.startEdit'));
     });
 
-    test('Bridge has stopEdit method', () {
+    test('Bridge has stopEdit method that delegates to EditController', () {
       expect(bridgeJs, contains('stopEdit(messageId)'));
+      expect(bridgeJs, contains('_editController.stopEdit'));
     });
 
-    test('startEdit creates edit-textarea', () {
-      final idx = bridgeJs.indexOf('startEdit(messageId)');
-      final body = _extractBlockBody(bridgeJs, idx);
+    test('EditController class exists in bridge.js', () {
+      expect(bridgeJs, contains('class EditController'));
+    });
+
+    test('EditController startEdit creates edit-textarea', () {
+      final idx = bridgeJs.indexOf('class EditController');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      final startIdx = classBody.indexOf('startEdit(messageId');
+      expect(startIdx, isNot(-1));
+      final body = _extractBlockBody(classBody, startIdx);
       expect(body, contains('edit-textarea'));
     });
 
-    test('startEdit saves originalHtml in dataset', () {
-      final idx = bridgeJs.indexOf('startEdit(messageId)');
-      final body = _extractBlockBody(bridgeJs, idx);
+    test('EditController startEdit saves originalHtml in dataset', () {
+      final idx = bridgeJs.indexOf('class EditController');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      final startIdx = classBody.indexOf('startEdit(messageId');
+      final body = _extractBlockBody(classBody, startIdx);
       expect(body, contains('dataset.originalHtml'));
     });
 
-    test('startEdit adds editing class to section', () {
-      final idx = bridgeJs.indexOf('startEdit(messageId)');
-      final body = _extractBlockBody(bridgeJs, idx);
+    test('EditController startEdit adds editing class to section', () {
+      final idx = bridgeJs.indexOf('class EditController');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      final startIdx = classBody.indexOf('startEdit(messageId');
+      final body = _extractBlockBody(classBody, startIdx);
       expect(body, contains("'editing'"));
     });
 
-    test('startEdit creates Cancel and Save buttons in footer', () {
-      final idx = bridgeJs.indexOf('startEdit(messageId)');
-      final body = _extractBlockBody(bridgeJs, idx);
+    test('EditController startEdit creates Cancel and Save buttons in footer', () {
+      final idx = bridgeJs.indexOf('class EditController');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      final startIdx = classBody.indexOf('startEdit(messageId');
+      final body = _extractBlockBody(classBody, startIdx);
       expect(body, contains('edit-cancel'));
       expect(body, contains('edit-save'));
     });
 
-    test('stopEdit restores originalHtml from dataset', () {
-      final idx = bridgeJs.indexOf('stopEdit(messageId)');
-      final body = _extractBlockBody(bridgeJs, idx);
+    test('EditController stopEdit restores originalHtml from dataset', () {
+      final idx = bridgeJs.indexOf('class EditController');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      final stopIdx = classBody.indexOf('stopEdit(messageId');
+      final body = _extractBlockBody(classBody, stopIdx);
       expect(body, contains('dataset.originalHtml'));
     });
 
-    test('stopEdit removes editing class', () {
-      final idx = bridgeJs.indexOf('stopEdit(messageId)');
-      final body = _extractBlockBody(bridgeJs, idx);
+    test('EditController stopEdit removes editing class', () {
+      final idx = bridgeJs.indexOf('class EditController');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      final stopIdx = classBody.indexOf('stopEdit(messageId');
+      final body = _extractBlockBody(classBody, stopIdx);
       expect(body, contains("'editing'"));
     });
 
-    test('edit-save action sends onEditSave with message ID and textarea value', () {
+    test('edit-save action delegates to EditController.handleSave', () {
       final idx = bridgeJs.indexOf("'edit-save':");
       expect(idx, isNot(-1));
       final block = bridgeJs.substring(idx, idx + 300);
-      expect(block, contains('onEditSave'));
-      expect(block, contains('edit-textarea'));
+      expect(block, contains('_editController.handleSave'));
     });
 
-    test('edit-cancel action sends onEditCancel', () {
+    test('EditController handleSave sends onEditSave with textarea value', () {
+      expect(bridgeJs, contains('handleSave(el)'));
+      final idx = bridgeJs.indexOf('handleSave(el)');
+      final body = _extractBlockBody(bridgeJs, idx);
+      expect(body, contains('onEditSave'));
+      expect(body, contains('edit-textarea'));
+    });
+
+    test('edit-cancel action delegates to EditController.handleCancel', () {
       final idx = bridgeJs.indexOf("'edit-cancel':");
       expect(idx, isNot(-1));
       final block = bridgeJs.substring(idx, idx + 200);
-      expect(block, contains('onEditCancel'));
+      expect(block, contains('_editController.handleCancel'));
+    });
+
+    test('EditController handleCancel sends onEditCancel', () {
+      expect(bridgeJs, contains('handleCancel(el)'));
+      final idx = bridgeJs.indexOf('handleCancel(el)');
+      final body = _extractBlockBody(bridgeJs, idx);
+      expect(body, contains('onEditCancel'));
     });
 
     test('textarea has auto-resize input listener', () {
-      final idx = bridgeJs.indexOf('startEdit(messageId)');
-      final body = _extractBlockBody(bridgeJs, idx);
-      expect(body, contains("addEventListener('input'"));
+      final idx = bridgeJs.indexOf('class EditController');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      expect(classBody, contains("addEventListener('input'"));
     });
 
     test('textarea has wheel listener with scroll speed multiplier', () {
-      final idx = bridgeJs.indexOf('startEdit(messageId)');
-      final body = _extractBlockBody(bridgeJs, idx);
-      expect(body, contains("addEventListener('wheel'"));
-      expect(body, contains('0.3'));
+      final idx = bridgeJs.indexOf('class EditController');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      expect(classBody, contains("addEventListener('wheel'"));
+      expect(classBody, contains('0.3'));
     });
 
     test('startEdit handles think blocks — separates reasoning from content', () {
-      final idx = bridgeJs.indexOf('startEdit(messageId)');
-      final body = _extractBlockBody(bridgeJs, idx);
-      final hasThink = body.contains('</think') || body.contains('<think');
+      final idx = bridgeJs.indexOf('class EditController');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      final hasThink = classBody.contains('</think') || classBody.contains('<think');
       expect(hasThink, isTrue);
     });
   });
 
   // ─── Phase 3.4: SwipeGestureHandler ─────────────────────────────────────
   group('Swipe gesture behavior (Phase 3.4 characterization)', () {
-    test('Bridge has _setupSwipeGestures method', () {
-      expect(bridgeJs, contains('_setupSwipeGestures()'));
+    test('SwipeGestureHandler class exists in bridge.js', () {
+      expect(bridgeJs, contains('class SwipeGestureHandler'));
+    });
+
+    test('Bridge creates SwipeGestureHandler and calls setup', () {
+      expect(bridgeJs, contains('_swipeHandler = new SwipeGestureHandler'));
+      expect(bridgeJs, contains('_swipeHandler.setup()'));
     });
 
     test('swipe setup registers touchstart, touchmove, touchend, touchcancel', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      expect(body, contains('touchstart'));
-      expect(body, contains('touchmove'));
-      expect(body, contains('touchend'));
-      expect(body, contains('touchcancel'));
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      expect(classBody, contains('touchstart'));
+      expect(classBody, contains('touchmove'));
+      expect(classBody, contains('touchend'));
+      expect(classBody, contains('touchcancel'));
     });
 
     test('swipe uses a horizontal threshold', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      expect(body, contains('THRESHOLD'));
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      expect(classBody, contains('THRESHOLD'));
     });
 
     test('swipe cancels when vertical scroll is detected', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      expect(body, contains('scrollingVertical'));
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      expect(classBody, contains('scrollingVertical'));
     });
 
     test('swipe applies translateX transform during drag', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      expect(body, contains('translateX'));
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      expect(classBody, contains('translateX'));
     });
 
     test('left swipe on last message triggers regeneration', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      expect(body, contains('onRegenerate'));
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      expect(classBody, contains('onRegenerate'));
     });
 
     test('swipe past threshold triggers onSwipe', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      expect(body, contains('onSwipe'));
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      expect(classBody, contains('onSwipe'));
     });
 
     test('greeting swipe triggers onChangeGreeting', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      expect(body, contains('onChangeGreeting'));
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      expect(classBody, contains('onChangeGreeting'));
     });
 
     test('swipe reads swipe context', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      final hasSwipeContext = body.contains('swipeId') || body.contains('data-swipe-id');
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      final hasSwipeContext = classBody.contains('swipeId') || classBody.contains('data-swipe-id');
       expect(hasSwipeContext, isTrue);
     });
 
     test('swipe is disabled while generating', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      final hasGenerating = body.contains('isGenerating') || body.contains('generating');
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      final hasGenerating = classBody.contains('isGenerating') || classBody.contains('generating');
       expect(hasGenerating, isTrue);
     });
 
     test('swipe is disabled during editing', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      expect(body, contains('editing'));
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      expect(classBody, contains('editing'));
     });
 
     test('swipe blocks horizontal translation at boundaries', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      final hasDx = body.contains('dx') || body.contains('translateX');
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      final hasDx = classBody.contains('dx') || classBody.contains('translateX');
       expect(hasDx, isTrue);
     });
 
     test('reset animation uses CSS transition', () {
-      final idx = bridgeJs.indexOf('_setupSwipeGestures()');
-      final body = _extractBlockBody(bridgeJs, idx);
-      expect(body, contains('transition'));
+      final idx = bridgeJs.indexOf('class SwipeGestureHandler');
+      final classBody = _extractBlockBody(bridgeJs, idx);
+      expect(classBody, contains('transition'));
     });
 
     test('guided swipe toggles inline panel with textarea and sends onGuidedSwipe', () {
-      expect(bridgeJs, contains('_toggleGuidedSwipe'));
+      expect(bridgeJs, contains('toggleGuidedSwipe'));
       expect(bridgeJs, contains('guided-swipe-textarea'));
       expect(bridgeJs, contains("'onGuidedSwipe'"));
+    });
+
+    test('toggle-guided action delegates to SwipeGestureHandler', () {
+      final idx = bridgeJs.indexOf("'toggle-guided':");
+      expect(idx, isNot(-1));
+      final block = bridgeJs.substring(idx, idx + 200);
+      expect(block, contains('_swipeHandler.toggleGuidedSwipe'));
     });
   });
 
@@ -372,16 +417,19 @@ void main() {
       }
     });
 
-    test('edit callbacks send messageId and text', () {
+    test('edit callbacks delegate to EditController', () {
       final saveIdx = bridgeJs.indexOf("'edit-save':");
       expect(saveIdx, isNot(-1));
       final saveBlock = bridgeJs.substring(saveIdx, saveIdx + 300);
-      expect(saveBlock, contains('onEditSave'));
+      expect(saveBlock, contains('_editController.handleSave'));
 
       final cancelIdx = bridgeJs.indexOf("'edit-cancel':");
       expect(cancelIdx, isNot(-1));
       final cancelBlock = bridgeJs.substring(cancelIdx, cancelIdx + 200);
-      expect(cancelBlock, contains('onEditCancel'));
+      expect(cancelBlock, contains('_editController.handleCancel'));
+
+      expect(bridgeJs, contains('onEditSave'));
+      expect(bridgeJs, contains('onEditCancel'));
     });
   });
 }

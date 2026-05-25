@@ -9,9 +9,16 @@ class ThemePresetStorage {
   static const _presetsKey = 'theme_presets';
   static const _activeKey = 'theme_active_preset';
 
-  Future<List<ThemePreset>> loadAll() async {
+  final SharedPreferences _prefs;
+  ThemePresetStorage(this._prefs);
+
+  static Future<ThemePresetStorage> create() async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_presetsKey);
+    return ThemePresetStorage(prefs);
+  }
+
+  Future<List<ThemePreset>> loadAll() async {
+    final raw = _prefs.getString(_presetsKey);
     if (raw == null) return [_defaultPreset];
     try {
       final list = jsonDecode(raw) as List;
@@ -24,18 +31,15 @@ class ThemePresetStorage {
   }
 
   Future<String> loadActiveId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_activeKey) ?? 'default';
+    return _prefs.getString(_activeKey) ?? 'default';
   }
 
   Future<void> saveAll(List<ThemePreset> presets) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_presetsKey, jsonEncode(presets.map((e) => e.toJson()).toList()));
+    await _prefs.setString(_presetsKey, jsonEncode(presets.map((e) => e.toJson()).toList()));
   }
 
   Future<void> saveActiveId(String id) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_activeKey, id);
+    await _prefs.setString(_activeKey, id);
   }
 
   Future<ThemePreset> importFromFile(String path) async {

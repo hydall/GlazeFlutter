@@ -3,9 +3,9 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/state/db_provider.dart';
+import '../../../core/state/shared_prefs_provider.dart';
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/rolling_number.dart';
@@ -102,7 +102,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
 
   Future<void> _updateTimeStats() async {
     if (!mounted) return;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
 
     int chatTime = 0;
     int charTime = 0;

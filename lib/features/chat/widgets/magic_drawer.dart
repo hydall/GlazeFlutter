@@ -9,10 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:soft_edge_blur/soft_edge_blur.dart';
 
 import 'package:go_router/go_router.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/chat_import_export.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../core/state/shared_prefs_provider.dart';
 import '../../../features/settings/app_settings_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -141,7 +141,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _loadLayout() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
     final savedOrder = prefs.getStringList(_itemsKey);
     final savedDeleted = prefs.getStringList(_deletedItemsKey) ?? const [];
     _deletedIds
@@ -168,7 +168,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _saveLayout() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
     await prefs.setStringList(_itemsKey, List<String>.from(_itemIds));
     await prefs.setStringList(_deletedItemsKey, _deletedIds.toList());
   }

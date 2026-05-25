@@ -22,8 +22,8 @@ class ImageStorageService implements SyncImageStore {
     return service;
   }
 
-  Future<void> _migrateOldThumbnails() async {
-    final prefs = await SharedPreferences.getInstance();
+  Future<void> _migrateOldThumbnails([SharedPreferences? prefsArg]) async {
+    final prefs = prefsArg ?? await SharedPreferences.getInstance();
     if (prefs.getBool('gz_thumb_v2_migrated') == true) return;
 
     final thumbDir = Directory(p.join(baseDir, 'thumbnails'));

@@ -46,6 +46,459 @@ class GenTimer {
   }
 }
 
+class SelectionManager {
+  constructor(sendToFlutter) {
+    this._sendToFlutter = sendToFlutter;
+    this._selectionMode = false;
+    this._selectedIds = new Set();
+    this._selectedText = '';
+    this._barCreated = false;
+  }
+
+  get selectionMode() { return this._selectionMode; }
+
+  getSelectedIds() { return [...this._selectedIds]; }
+
+  setSelectionMode(enabled) {
+    this._selectionMode = !!enabled;
+    if (!enabled) this._selectedIds.clear();
+    document.querySelectorAll('.message-section').forEach(msgEl => {
+      msgEl.classList.toggle('selection-mode', this._selectionMode);
+      msgEl.classList.toggle('selected', this._selectedIds.has(msgEl.dataset.messageId));
+    });
+  }
+
+  toggleMessageSelection(messageId) {
+    if (this._selectedIds.has(messageId)) this._selectedIds.delete(messageId);
+    else this._selectedIds.add(messageId);
+    const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (msgEl) {
+      msgEl.classList.toggle('selected', this._selectedIds.has(messageId));
+    }
+  }
+
+  exitIfEmpty() {
+    if (this._selectedIds.size === 0) this.setSelectionMode(false);
+  }
+
+  handleClick(e) {
+    if (!this._selectionMode) return false;
+    const section = e.target.closest('.message-section');
+    if (!section) return false;
+    e.preventDefault();
+    e.stopPropagation();
+    const id = section.dataset.messageId;
+    this.toggleMessageSelection(id);
+    this._sendToFlutter('onSelectionChange', [JSON.stringify(this.getSelectedIds())]);
+    this.exitIfEmpty();
+    return true;
+  }
+
+  handleContextMenu(e) {
+    const section = e.target.closest('.message-section');
+    if (!section) return false;
+
+    if (!this._selectionMode && !e.target.closest('.msg-body')) return false;
+
+    e.preventDefault();
+    const id = section.dataset.messageId;
+
+    if (this._selectionMode) {
+      this.toggleMessageSelection(id);
+      this._sendToFlutter('onSelectionChange', [JSON.stringify(this.getSelectedIds())]);
+      this.exitIfEmpty();
+    } else {
+      this.setSelectionMode(true);
+      this.toggleMessageSelection(id);
+      this._sendToFlutter('onSelectionChange', [JSON.stringify(this.getSelectedIds())]);
+    }
+    return true;
+  }
+
+  handleSelectionChange() {
+    const editing = document.querySelector('.message-section.editing');
+    if (editing) { this._hideSelectionBar(); return; }
+
+    let selText = '';
+    const sel = window.getSelection();
+    if (sel && sel.toString().trim().length > 0) {
+      selText = sel.toString().trim();
+    }
+    if (!selText) {
+      const hosts = document.querySelectorAll('.message-content');
+      for (const el of hosts) {
+        if (el.shadowRoot) {
+          const shadowSel = el.shadowRoot.getSelection ? el.shadowRoot.getSelection() : null;
+          if (shadowSel && shadowSel.toString().trim().length > 0) {
+            selText = shadowSel.toString().trim();
+            break;
+          }
+        }
+      }
+    }
+    if (selText) this._showSelectionBar(selText);
+    else this._hideSelectionBar();
+  }
+
+  _showSelectionBar(text) {
+    let bar = document.getElementById('selection-bar');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'selection-bar';
+      bar.className = 'selection-bar';
+      bar.innerHTML = '<button class="sel-btn" data-action="copy">Copy</button><button class="sel-btn" data-action="quote">Quote</button>';
+      bar.addEventListener('click', (e) => {
+        const btn = e.target.closest('.sel-btn');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        this._sendToFlutter('onSelectionAction', [JSON.stringify({ action, text: this._selectedText })]);
+        this._hideSelectionBar();
+        window.getSelection().removeAllRanges();
+      });
+      document.body.appendChild(bar);
+      this._barCreated = true;
+    }
+    this._selectedText = text;
+    bar.style.display = 'flex';
+  }
+
+  _hideSelectionBar() {
+    const bar = document.getElementById('selection-bar');
+    if (bar) bar.style.display = 'none';
+  }
+
+  applyClassesToSection(section, classes) {
+    if (this._selectionMode) classes.push('selection-mode');
+    if (this._selectedIds.has(section.dataset.messageId || '')) classes.push('selected');
+    return classes;
+  }
+
+  shouldHideActions() { return this._selectionMode; }
+
+  hideSelectionBar() { this._hideSelectionBar(); }
+}
+
+class EditController {
+  constructor(sendToFlutter) {
+    this._sendToFlutter = sendToFlutter;
+  }
+
+  startEdit(messageId, scrollTopFn) {
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!section) return;
+
+    const scrollPos = scrollTopFn();
+    section.classList.add('editing');
+
+    const rawText = (section.dataset.rawText || '').replace(/^<think\b[^>]*>[\s\S]*?<\/think>\s*/, '');
+    const reasoning = section.dataset.reasoning || '';
+    let editText = rawText;
+    if (reasoning) editText = '<' + 'think>\n' + reasoning + '\n</' + 'think>\n' + rawText;
+
+    const body = section.querySelector('.msg-body');
+    if (!body) return;
+
+    body.dataset.originalHtml = body.innerHTML;
+    body.innerHTML = '';
+    const textarea = document.createElement('textarea');
+    textarea.className = 'edit-textarea';
+    textarea.value = editText;
+    textarea.dataset.originalText = editText;
+    body.appendChild(textarea);
+
+    textarea.addEventListener('input', () => {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.max(80, textarea.scrollHeight) + 'px';
+    });
+    textarea.addEventListener('wheel', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      if (e.deltaMode === 0) {
+        textarea.scrollTop += e.deltaY * 0.3;
+      } else if (e.deltaMode === 1) {
+        textarea.scrollTop += e.deltaY * 16;
+      } else {
+        textarea.scrollTop += e.deltaY * 100;
+      }
+    }, { passive: false });
+    textarea.addEventListener('touchmove', (e) => {
+      e.stopPropagation();
+    }, { passive: true });
+    textarea.style.height = Math.max(80, textarea.scrollHeight + 20) + 'px';
+    textarea.focus();
+
+    const footer = section.querySelector('.msg-footer');
+    if (footer) {
+      footer.dataset.originalHtml = footer.innerHTML;
+      footer.innerHTML = '';
+
+      const metaCol = document.createElement('div');
+      metaCol.className = 'msg-meta';
+      footer.appendChild(metaCol);
+
+      const center = document.createElement('div');
+      center.className = 'msg-center-controls';
+      footer.appendChild(center);
+
+      const editBox = document.createElement('div');
+      editBox.className = 'edit-buttons';
+      editBox.innerHTML = `
+        <div class="edit-btn cancel" data-action="edit-cancel" data-message-id="${messageId}" title="Cancel">
+          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </div>
+        <div class="edit-btn save" data-action="edit-save" data-message-id="${messageId}" title="Save">
+          <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+        </div>
+      `;
+      footer.appendChild(editBox);
+    }
+
+    scrollTopFn(scrollPos);
+  }
+
+  stopEdit(messageId) {
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!section) return;
+    section.classList.remove('editing');
+
+    const body = section.querySelector('.msg-body');
+    if (body && body.dataset.originalHtml !== undefined) {
+      body.innerHTML = body.dataset.originalHtml;
+      delete body.dataset.originalHtml;
+    }
+    const footer = section.querySelector('.msg-footer');
+    if (footer && footer.dataset.originalHtml !== undefined) {
+      footer.innerHTML = footer.dataset.originalHtml;
+      delete footer.dataset.originalHtml;
+    }
+  }
+
+  handleSave(el) {
+    const section = el.closest('.message-section');
+    const ta = section ? section.querySelector('.edit-textarea') : null;
+    this._sendToFlutter('onEditSave', [el.dataset.messageId, ta ? ta.value : '']);
+  }
+
+  handleCancel(el) {
+    this._sendToFlutter('onEditCancel', [el.dataset.messageId]);
+  }
+
+  isEditing(section) {
+    return section && section.classList.contains('editing');
+  }
+}
+
+class SwipeGestureHandler {
+  constructor(sendToFlutter, getContainer, isGeneratingFn) {
+    this._sendToFlutter = sendToFlutter;
+    this._getContainer = getContainer;
+    this._isGenerating = isGeneratingFn;
+  }
+
+  setup() {
+    const THRESHOLD = 100;
+    let startX = 0;
+    let startY = 0;
+    let activeBody = null;
+    let activeSection = null;
+    let scrollingVertical = false;
+    const self = this;
+
+    const reset = (body) => {
+      body.style.transition = 'transform 0.3s ease';
+      body.style.transform = '';
+      setTimeout(() => { body.style.transition = ''; }, 300);
+    };
+
+    const animateOut = (body, after) => {
+      body.style.opacity = '0';
+      requestAnimationFrame(() => {
+        body.style.transform = '';
+        setTimeout(() => {
+          body.style.transition = 'opacity 0.2s ease';
+          body.style.opacity = '1';
+          setTimeout(() => { body.style.transition = ''; }, 200);
+          after();
+        }, 50);
+      });
+    };
+
+    const onStart = (e) => {
+      if (self._isGenerating()) return;
+
+      const path = e.composedPath ? e.composedPath() : (e.path || []);
+      const isScrollableX = path.some(el => {
+        if (el.nodeType === Node.ELEMENT_NODE) {
+          const style = window.getComputedStyle(el);
+          if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
+            if (el.scrollWidth > el.clientWidth) return true;
+          }
+        }
+        return false;
+      });
+      if (isScrollableX) return;
+
+      const section = e.target.closest?.('.message-section.char');
+      if (!section) return;
+      if (section.classList.contains('editing') || section.classList.contains('selection-mode')) return;
+      const body = section.querySelector('.msg-body');
+      if (!body) return;
+      const t = e.touches ? e.touches[0] : e;
+      startX = t.clientX;
+      startY = t.clientY;
+      scrollingVertical = false;
+      activeSection = section;
+      activeBody = body;
+      body.style.transition = 'none';
+    };
+
+    const onMove = (e) => {
+      if (!activeBody || !activeSection) return;
+      const t = e.touches ? e.touches[0] : e;
+      const dx = t.clientX - startX;
+      const dy = t.clientY - startY;
+      if (scrollingVertical) return;
+      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) {
+        scrollingVertical = true;
+        activeBody.style.transform = '';
+        return;
+      }
+
+      const swipeId = parseInt(activeSection.dataset.swipeId || '0', 10);
+      const swipeTotal = parseInt(activeSection.dataset.swipeTotal || '1', 10);
+      const isLast = activeSection.dataset.isLast === 'true';
+      const greetingTotal = parseInt(activeSection.dataset.greetingTotal || '0', 10);
+      const isFirstMsg = activeSection.dataset.messageIndex === '0';
+      const canSwitchGreeting = isFirstMsg && greetingTotal > 1;
+
+      if (dx < 0 && !canSwitchGreeting && !isLast && swipeId >= swipeTotal - 1) return;
+      if (dx > 0 && !canSwitchGreeting && swipeId <= 0) return;
+
+      if (e.cancelable) e.preventDefault();
+      activeBody.style.transform = `translateX(${dx}px)`;
+    };
+
+    const onEnd = (e) => {
+      if (!activeBody || !activeSection) return;
+      const body = activeBody;
+      const section = activeSection;
+      activeBody = null;
+      activeSection = null;
+      if (scrollingVertical) { body.style.transform = ''; body.style.transition = ''; return; }
+
+      const t = e.changedTouches ? e.changedTouches[0] : e;
+      const dx = t.clientX - startX;
+
+      const swipeId = parseInt(section.dataset.swipeId || '0', 10);
+      const swipeTotal = parseInt(section.dataset.swipeTotal || '1', 10);
+      const isLast = section.dataset.isLast === 'true';
+      const greetingTotal = parseInt(section.dataset.greetingTotal || '0', 10);
+      const isFirstMsg = section.dataset.messageIndex === '0';
+      const canSwitchGreeting = isFirstMsg && greetingTotal > 1;
+      const msgId = section.dataset.messageId;
+
+      if (canSwitchGreeting) {
+        if (dx < -THRESHOLD) animateOut(body, () => self._sendToFlutter('onChangeGreeting', [msgId, 1]));
+        else if (dx > THRESHOLD) animateOut(body, () => self._sendToFlutter('onChangeGreeting', [msgId, -1]));
+        else reset(body);
+        return;
+      }
+
+      if (dx < -THRESHOLD) {
+        if (swipeId < swipeTotal - 1) {
+          animateOut(body, () => self._sendToFlutter('onSwipe', [JSON.stringify({ id: msgId, direction: 'right' })]));
+        } else if (isLast) {
+          body.style.transition = 'transform 0.1s';
+          body.style.transform = 'translateX(-20px)';
+          setTimeout(() => {
+            body.style.transform = '';
+            body.style.transition = '';
+            self._sendToFlutter('onRegenerate', [msgId, 'new_variant']);
+          }, 100);
+        } else {
+          reset(body);
+        }
+      } else if (dx > THRESHOLD) {
+        if (swipeId > 0) {
+          animateOut(body, () => self._sendToFlutter('onSwipe', [JSON.stringify({ id: msgId, direction: 'left' })]));
+        } else {
+          reset(body);
+        }
+      } else {
+        reset(body);
+      }
+    };
+
+    const container = this._getContainer();
+    container.addEventListener('touchstart', onStart, { passive: true });
+    container.addEventListener('touchmove', onMove, { passive: false });
+    container.addEventListener('touchend', onEnd);
+    container.addEventListener('touchcancel', onEnd);
+  }
+
+  toggleGuidedSwipe(messageId) {
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!section) return;
+
+    const btn = section.querySelector('.msg-guided-swipe-btn');
+    const existing = section.querySelector('.guided-swipe-container');
+    if (existing) {
+      existing.remove();
+      btn?.classList.remove('active');
+      return;
+    }
+
+    const container = document.createElement('div');
+    container.className = 'guided-swipe-container';
+
+    const main = document.createElement('div');
+    main.className = 'guidance-main';
+    main.innerHTML = `<div class="guidance-header">GUIDED SWIPE</div>`;
+    const textarea = document.createElement('textarea');
+    textarea.className = 'guided-swipe-textarea';
+    textarea.placeholder = 'Enter OOC instruction for swipe...';
+    textarea.rows = 1;
+    main.appendChild(textarea);
+    container.appendChild(main);
+
+    const self = this;
+    const actions = document.createElement('div');
+    actions.className = 'guided-swipe-actions';
+
+    const cancel = document.createElement('div');
+    cancel.className = 'guided-btn cancel';
+    cancel.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
+    cancel.addEventListener('click', () => {
+      container.remove();
+      btn?.classList.remove('active');
+    });
+    actions.appendChild(cancel);
+
+    const confirm = document.createElement('div');
+    confirm.className = 'guided-btn confirm';
+    confirm.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+    confirm.addEventListener('click', () => {
+      const guidance = textarea.value.trim();
+      if (guidance) self._sendToFlutter('onGuidedSwipe', [messageId, guidance]);
+      container.remove();
+      btn?.classList.remove('active');
+    });
+    actions.appendChild(confirm);
+
+    container.appendChild(actions);
+
+    const stack = section.querySelector('.msg-content-stack');
+    if (stack && stack.parentNode === section) {
+      section.insertBefore(container, stack.nextSibling);
+    } else {
+      section.appendChild(container);
+    }
+
+    btn?.classList.add('active');
+    textarea.focus();
+  }
+}
+
 class InteractionDispatch {
   constructor(bridge) {
     this.bridge = bridge;
@@ -53,21 +506,8 @@ class InteractionDispatch {
 
   handleClick(e) {
     const bridge = this.bridge;
-    const renderer = bridge.renderer;
 
-    if (renderer.selectionMode) {
-      const section = e.target.closest('.message-section');
-      if (section) {
-        e.preventDefault();
-        e.stopPropagation();
-        const id = section.dataset.messageId;
-        renderer.toggleMessageSelection(id);
-        const ids = renderer.getSelectedIds();
-        bridge._sendToFlutter('onSelectionChange', [JSON.stringify(ids)]);
-        if (ids.length === 0) renderer.setSelectionMode(false);
-        return;
-      }
-    }
+    if (bridge._selectionManager.handleClick(e)) return;
 
     const reasoningHdr = e.target.closest('[data-action="toggle-reasoning"]');
     if (reasoningHdr) {
@@ -109,15 +549,7 @@ class InteractionDispatch {
 
     const guidedBtn = e.target.closest('.msg-guided-swipe-btn');
     if (guidedBtn) {
-      bridge._toggleGuidedSwipe(guidedBtn.dataset.messageId);
-      return;
-    }
-
-    const editSave = e.target.closest('[data-action="edit-save"]');
-    if (editSave) {
-      const section = editSave.closest('.message-section');
-      const ta = section ? section.querySelector('.edit-textarea') : null;
-      bridge._sendToFlutter('onEditSave', [editSave.dataset.messageId, ta ? ta.value : '']);
+      bridge._swipeHandler.toggleGuidedSwipe(guidedBtn.dataset.messageId);
       return;
     }
 
@@ -168,7 +600,7 @@ class InteractionDispatch {
       return;
     }
 
-    bridge._hideSelectionBar();
+    bridge._selectionManager.hideSelectionBar();
   }
 
   _extractImgInstruction(el, path) {
@@ -196,13 +628,9 @@ class InteractionDispatch {
       'greeting-next': (e, el) => bridge._sendToFlutter('onChangeGreeting', [el.dataset.messageId, 1]),
       'stop': (e, el) => bridge._sendToFlutter('onStop', []),
       'regenerate': (e, el) => bridge._sendToFlutter('onRegenerate', [el.dataset.messageId, el.dataset.mode || 'magic']),
-      'toggle-guided': (e, el) => bridge._toggleGuidedSwipe(el.dataset.messageId),
-      'edit-save': (e, el) => {
-        const section = el.closest('.message-section');
-        const ta = section ? section.querySelector('.edit-textarea') : null;
-        bridge._sendToFlutter('onEditSave', [el.dataset.messageId, ta ? ta.value : '']);
-      },
-      'edit-cancel': (e, el) => bridge._sendToFlutter('onEditCancel', [el.dataset.messageId]),
+      'toggle-guided': (e, el) => bridge._swipeHandler.toggleGuidedSwipe(el.dataset.messageId),
+      'edit-save': (e, el) => bridge._editController.handleSave(el),
+      'edit-cancel': (e, el) => bridge._editController.handleCancel(el),
       'open-actions': (e, el) => {
         const id = el.dataset.messageId;
         const section = document.querySelector(`[data-message-id="${id}"]`);
@@ -239,158 +667,23 @@ class Bridge {
     this.isGenerating = false;
     this.isGeneratingImage = false;
     this._genTimer = new GenTimer();
+    this._selectionManager = new SelectionManager((name, args) => this._sendToFlutter(name, args));
+    this._editController = new EditController((name, args) => this._sendToFlutter(name, args));
     this._interaction = new InteractionDispatch(this);
     this._charName = null;
     this._personaName = null;
     this._charAvatarUrl = null;
     this._personaAvatarUrl = null;
+    renderer.selectionManager = this._selectionManager;
+    this._swipeHandler = new SwipeGestureHandler(
+      (name, args) => this._sendToFlutter(name, args),
+      () => this.virtualList.container,
+      () => this.isGenerating,
+    );
     this._setupScrollListener();
     this._setupInteractionListener();
     this._setupImageClickForward();
-    this._setupSwipeGestures();
-  }
-
-  /* ---------- Touch swipe gestures (char message body) ---------- */
-  /* Ported from Glaze/src/composables/chat/useMessageSwipe.js */
-  _setupSwipeGestures() {
-    const THRESHOLD = 100;
-    let startX = 0;
-    let startY = 0;
-    let activeBody = null;
-    let activeSection = null;
-    let scrollingVertical = false;
-
-    const reset = (body) => {
-      body.style.transition = 'transform 0.3s ease';
-      body.style.transform = '';
-      setTimeout(() => { body.style.transition = ''; }, 300);
-    };
-
-    const animateOut = (body, after) => {
-      body.style.opacity = '0';
-      requestAnimationFrame(() => {
-        body.style.transform = '';
-        setTimeout(() => {
-          body.style.transition = 'opacity 0.2s ease';
-          body.style.opacity = '1';
-          setTimeout(() => { body.style.transition = ''; }, 200);
-          after();
-        }, 50);
-      });
-    };
-
-    const onStart = (e) => {
-      if (this.isGenerating) return;
-
-      const path = e.composedPath ? e.composedPath() : (e.path || []);
-      const isScrollableX = path.some(el => {
-        if (el.nodeType === Node.ELEMENT_NODE) {
-          const style = window.getComputedStyle(el);
-          if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
-            if (el.scrollWidth > el.clientWidth) return true;
-          }
-        }
-        return false;
-      });
-      if (isScrollableX) return;
-
-      const section = e.target.closest?.('.message-section.char');
-      if (!section) return;
-      if (section.classList.contains('editing') || section.classList.contains('selection-mode')) return;
-      const body = section.querySelector('.msg-body');
-      if (!body) return;
-      const t = e.touches ? e.touches[0] : e;
-      startX = t.clientX;
-      startY = t.clientY;
-      scrollingVertical = false;
-      activeSection = section;
-      activeBody = body;
-      body.style.transition = 'none';
-    };
-
-    const onMove = (e) => {
-      if (!activeBody || !activeSection) return;
-      const t = e.touches ? e.touches[0] : e;
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
-      if (scrollingVertical) return;
-      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) {
-        scrollingVertical = true;
-        activeBody.style.transform = '';
-        return;
-      }
-
-      const swipeId = parseInt(activeSection.dataset.swipeId || '0', 10);
-      const swipeTotal = parseInt(activeSection.dataset.swipeTotal || '1', 10);
-      const isLast = activeSection.dataset.isLast === 'true';
-      const greetingTotal = parseInt(activeSection.dataset.greetingTotal || '0', 10);
-      const isFirstMsg = activeSection.dataset.messageIndex === '0';
-      const canSwitchGreeting = isFirstMsg && greetingTotal > 1;
-
-      // Block translation when there's nowhere to go on that side.
-      if (dx < 0 && !canSwitchGreeting && !isLast && swipeId >= swipeTotal - 1) return;
-      if (dx > 0 && !canSwitchGreeting && swipeId <= 0) return;
-
-      if (e.cancelable) e.preventDefault();
-      activeBody.style.transform = `translateX(${dx}px)`;
-    };
-
-    const onEnd = (e) => {
-      if (!activeBody || !activeSection) return;
-      const body = activeBody;
-      const section = activeSection;
-      activeBody = null;
-      activeSection = null;
-      if (scrollingVertical) { body.style.transform = ''; body.style.transition = ''; return; }
-
-      const t = e.changedTouches ? e.changedTouches[0] : e;
-      const dx = t.clientX - startX;
-
-      const swipeId = parseInt(section.dataset.swipeId || '0', 10);
-      const swipeTotal = parseInt(section.dataset.swipeTotal || '1', 10);
-      const isLast = section.dataset.isLast === 'true';
-      const greetingTotal = parseInt(section.dataset.greetingTotal || '0', 10);
-      const isFirstMsg = section.dataset.messageIndex === '0';
-      const canSwitchGreeting = isFirstMsg && greetingTotal > 1;
-      const msgId = section.dataset.messageId;
-
-      if (canSwitchGreeting) {
-        if (dx < -THRESHOLD) animateOut(body, () => this._sendToFlutter('onChangeGreeting', [msgId, 1]));
-        else if (dx > THRESHOLD) animateOut(body, () => this._sendToFlutter('onChangeGreeting', [msgId, -1]));
-        else reset(body);
-        return;
-      }
-
-      if (dx < -THRESHOLD) {
-        if (swipeId < swipeTotal - 1) {
-          animateOut(body, () => this._sendToFlutter('onSwipe', [JSON.stringify({ id: msgId, direction: 'right' })]));
-        } else if (isLast) {
-          body.style.transition = 'transform 0.1s';
-          body.style.transform = 'translateX(-20px)';
-          setTimeout(() => {
-            body.style.transform = '';
-            body.style.transition = '';
-            this._sendToFlutter('onRegenerate', [msgId, 'new_variant']);
-          }, 100);
-        } else {
-          reset(body);
-        }
-      } else if (dx > THRESHOLD) {
-        if (swipeId > 0) {
-          animateOut(body, () => this._sendToFlutter('onSwipe', [JSON.stringify({ id: msgId, direction: 'left' })]));
-        } else {
-          reset(body);
-        }
-      } else {
-        reset(body);
-      }
-    };
-
-    const container = this.virtualList.container;
-    container.addEventListener('touchstart', onStart, { passive: true });
-    container.addEventListener('touchmove', onMove, { passive: false });
-    container.addEventListener('touchend', onEnd);
-    container.addEventListener('touchcancel', onEnd);
+    this._swipeHandler.setup();
   }
 
   /* ---------- Identity (active char / persona) ---------- */
@@ -541,55 +834,9 @@ class Bridge {
   _setupInteractionListener() {
     document.addEventListener('click', (e) => this._interaction.handleClick(e));
 
-    /* Selection bar */
-    document.addEventListener('selectionchange', () => {
-      const editing = document.querySelector('.message-section.editing');
-      if (editing) { this._hideSelectionBar(); return; }
+    document.addEventListener('selectionchange', () => this._selectionManager.handleSelectionChange());
 
-      let selText = '';
-      const sel = window.getSelection();
-      if (sel && sel.toString().trim().length > 0) {
-        selText = sel.toString().trim();
-      }
-      if (!selText) {
-        const hosts = document.querySelectorAll('.message-content');
-        for (const el of hosts) {
-          if (el.shadowRoot) {
-            const shadowSel = el.shadowRoot.getSelection ? el.shadowRoot.getSelection() : null;
-            if (shadowSel && shadowSel.toString().trim().length > 0) {
-              selText = shadowSel.toString().trim();
-              break;
-            }
-          }
-        }
-      }
-      if (selText) this._showSelectionBar(selText);
-      else this._hideSelectionBar();
-    });
-
-    /* Long-press → enter selection mode (or toggle if already in it) */
-    document.addEventListener('contextmenu', (e) => {
-      const section = e.target.closest('.message-section');
-      if (!section) return;
-
-      if (!this.renderer.selectionMode && e.target.closest('.msg-body')) return;
-
-      e.preventDefault();
-      const id = section.dataset.messageId;
-
-      if (this.renderer.selectionMode) {
-        this.renderer.toggleMessageSelection(id);
-        const ids = this.renderer.getSelectedIds();
-        this._sendToFlutter('onSelectionChange', [JSON.stringify(ids)]);
-        if (ids.length === 0) {
-          this.renderer.setSelectionMode(false);
-        }
-      } else {
-        this.renderer.setSelectionMode(true);
-        this.renderer.toggleMessageSelection(id);
-        this._sendToFlutter('onSelectionChange', [JSON.stringify(this.renderer.getSelectedIds())]);
-      }
-    });
+    document.addEventListener('contextmenu', (e) => this._selectionManager.handleContextMenu(e));
   }
 
   _extractText(section) {
@@ -599,33 +846,6 @@ class Bridge {
       if (root) return root.textContent || '';
     }
     return section.dataset.rawText || '';
-  }
-
-  /* ---------- Selection bar ---------- */
-  _showSelectionBar(text) {
-    let bar = document.getElementById('selection-bar');
-    if (!bar) {
-      bar = document.createElement('div');
-      bar.id = 'selection-bar';
-      bar.className = 'selection-bar';
-      bar.innerHTML = '<button class="sel-btn" data-action="copy">Copy</button><button class="sel-btn" data-action="quote">Quote</button>';
-      bar.addEventListener('click', (e) => {
-        const btn = e.target.closest('.sel-btn');
-        if (!btn) return;
-        const action = btn.dataset.action;
-        this._sendToFlutter('onSelectionAction', [JSON.stringify({ action, text: this._selectedText })]);
-        this._hideSelectionBar();
-        window.getSelection().removeAllRanges();
-      });
-      document.body.appendChild(bar);
-    }
-    this._selectedText = text;
-    bar.style.display = 'flex';
-  }
-
-  _hideSelectionBar() {
-    const bar = document.getElementById('selection-bar');
-    if (bar) bar.style.display = 'none';
   }
 
   /* ---------- Loading screen ---------- */
@@ -870,94 +1090,14 @@ class Bridge {
 
   /* ---------- Inline edit (toggle into .msg-body) ---------- */
   startEdit(messageId) {
-    const section = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!section) return;
-
-    const scrollPos = this.virtualList.container.scrollTop;
-    section.classList.add('editing');
-
-    const rawText = (section.dataset.rawText || '').replace(/^<think\b[^>]*>[\s\S]*?<\/think>\s*/, '');
-    const reasoning = section.dataset.reasoning || '';
-    let editText = rawText;
-    if (reasoning) editText = '<' + 'think>\n' + reasoning + '\n</' + 'think>\n' + rawText;
-
-    const body = section.querySelector('.msg-body');
-    if (!body) return;
-
-    body.dataset.originalHtml = body.innerHTML;
-    body.innerHTML = '';
-    const textarea = document.createElement('textarea');
-    textarea.className = 'edit-textarea';
-    textarea.value = editText;
-    textarea.dataset.originalText = editText;
-    body.appendChild(textarea);
-
-    textarea.addEventListener('input', () => {
-      textarea.style.height = 'auto';
-      textarea.style.height = Math.max(80, textarea.scrollHeight) + 'px';
+    this._editController.startEdit(messageId, (pos) => {
+      if (pos !== undefined) this.virtualList.container.scrollTop = pos;
+      return this.virtualList.container.scrollTop;
     });
-    textarea.addEventListener('wheel', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      if (e.deltaMode === 0) {
-        textarea.scrollTop += e.deltaY * 0.3;
-      } else if (e.deltaMode === 1) {
-        textarea.scrollTop += e.deltaY * 16;
-      } else {
-        textarea.scrollTop += e.deltaY * 100;
-      }
-    }, { passive: false });
-    textarea.addEventListener('touchmove', (e) => {
-      e.stopPropagation();
-    }, { passive: true });
-    textarea.style.height = Math.max(80, textarea.scrollHeight + 20) + 'px';
-    textarea.focus();
-
-    /* Replace center controls with edit buttons */
-    const footer = section.querySelector('.msg-footer');
-    if (footer) {
-      footer.dataset.originalHtml = footer.innerHTML;
-      footer.innerHTML = '';
-
-      const metaCol = document.createElement('div');
-      metaCol.className = 'msg-meta';
-      footer.appendChild(metaCol);
-
-      const center = document.createElement('div');
-      center.className = 'msg-center-controls';
-      footer.appendChild(center);
-
-      const editBox = document.createElement('div');
-      editBox.className = 'edit-buttons';
-      editBox.innerHTML = `
-        <div class="edit-btn cancel" data-action="edit-cancel" data-message-id="${messageId}" title="Cancel">
-          <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-        </div>
-        <div class="edit-btn save" data-action="edit-save" data-message-id="${messageId}" title="Save">
-          <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-        </div>
-      `;
-      footer.appendChild(editBox);
-    }
-
-    this.virtualList.container.scrollTop = scrollPos;
   }
 
   stopEdit(messageId) {
-    const section = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!section) return;
-    section.classList.remove('editing');
-
-    const body = section.querySelector('.msg-body');
-    if (body && body.dataset.originalHtml !== undefined) {
-      body.innerHTML = body.dataset.originalHtml;
-      delete body.dataset.originalHtml;
-    }
-    const footer = section.querySelector('.msg-footer');
-    if (footer && footer.dataset.originalHtml !== undefined) {
-      footer.innerHTML = footer.dataset.originalHtml;
-      delete footer.dataset.originalHtml;
-    }
+    this._editController.stopEdit(messageId);
   }
 
   setBackgroundImage(url, blur, opacity) {
@@ -976,69 +1116,6 @@ class Bridge {
     }
     bg.style.filter = `blur(${blur || 0}px)`;
     bg.style.opacity = opacity != null ? opacity : 1;
-  }
-
-  /* ---------- Guided swipe inline ---------- */
-  _toggleGuidedSwipe(messageId) {
-    const section = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (!section) return;
-
-    const btn = section.querySelector('.msg-guided-swipe-btn');
-    const existing = section.querySelector('.guided-swipe-container');
-    if (existing) {
-      existing.remove();
-      btn?.classList.remove('active');
-      return;
-    }
-
-    const container = document.createElement('div');
-    container.className = 'guided-swipe-container';
-
-    const main = document.createElement('div');
-    main.className = 'guidance-main';
-    main.innerHTML = `<div class="guidance-header">GUIDED SWIPE</div>`;
-    const textarea = document.createElement('textarea');
-    textarea.className = 'guided-swipe-textarea';
-    textarea.placeholder = 'Enter OOC instruction for swipe...';
-    textarea.rows = 1;
-    main.appendChild(textarea);
-    container.appendChild(main);
-
-    const actions = document.createElement('div');
-    actions.className = 'guided-swipe-actions';
-
-    const cancel = document.createElement('div');
-    cancel.className = 'guided-btn cancel';
-    cancel.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
-    cancel.addEventListener('click', () => {
-      container.remove();
-      btn?.classList.remove('active');
-    });
-    actions.appendChild(cancel);
-
-    const confirm = document.createElement('div');
-    confirm.className = 'guided-btn confirm';
-    confirm.innerHTML = '<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
-    confirm.addEventListener('click', () => {
-      const guidance = textarea.value.trim();
-      if (guidance) this._sendToFlutter('onGuidedSwipe', [messageId, guidance]);
-      container.remove();
-      btn?.classList.remove('active');
-    });
-    actions.appendChild(confirm);
-
-    container.appendChild(actions);
-
-    /* Insert after .msg-content-stack inside section (matches Vue layout) */
-    const stack = section.querySelector('.msg-content-stack');
-    if (stack && stack.parentNode === section) {
-      section.insertBefore(container, stack.nextSibling);
-    } else {
-      section.appendChild(container);
-    }
-
-    btn?.classList.add('active');
-    textarea.focus();
   }
 
   setPerformanceMode(enabled) {
@@ -1074,7 +1151,7 @@ class Bridge {
     requestAnimationFrame(tick);
   }
 
-  setSelectionMode(enabled) { this.renderer.setSelectionMode(enabled); }
+  setSelectionMode(enabled) { this._selectionManager.setSelectionMode(enabled); }
 
   _setupImageClickForward() {
     this.virtualList.container.addEventListener('image-click', (e) => {

@@ -1,16 +1,16 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/preset.dart';
+import 'shared_prefs_provider.dart';
 
 const _globalRegexKey = 'gz_global_regex_scripts';
 
 class GlobalRegexNotifier extends AsyncNotifier<List<PresetRegex>> {
   @override
   Future<List<PresetRegex>> build() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
     final raw = prefs.getString(_globalRegexKey);
     if (raw == null || raw.isEmpty) return [];
     try {
@@ -24,7 +24,7 @@ class GlobalRegexNotifier extends AsyncNotifier<List<PresetRegex>> {
   }
 
   Future<void> _persist(List<PresetRegex> scripts) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
     final json = scripts.map((e) => e.toJson()).toList();
     await prefs.setString(_globalRegexKey, jsonEncode(json));
   }

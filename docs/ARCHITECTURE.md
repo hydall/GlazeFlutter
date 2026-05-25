@@ -38,10 +38,12 @@ UI → Providers → Services → Repos/Models. No circular imports.
 ```
 lib/
 ├── core/
+│   ├── constants/
+│   │   └── image_gen_patterns.dart     # IMG-tag regex constants
 │   ├── db/
-│   │   ├── app_db.dart               # AppDatabase singleton (9 tables, migrations v1–17)
-│   │   ├── tables.dart               # Drift table class definitions
-│   │   └── repositories/            # One repo per table (CRUD only)
+│   │   ├── app_db.dart                 # AppDatabase singleton (9 tables, migrations v1–19)
+│   │   ├── tables.dart                 # Drift table class definitions
+│   │   └── repositories/              # One repo per table (CRUD only)
 │   │       ├── api_config_repo.dart
 │   │       ├── character_repo.dart
 │   │       ├── chat_repo.dart
@@ -61,25 +63,29 @@ lib/
 │   │   ├── persona.dart
 │   │   └── preset.dart
 │   ├── llm/                          # LLM pipeline specialists
-│   │   ├── prompt_builder.dart       # Orchestrator: block ordering, lorebook merge, trimming
-│   │   ├── prompt_block_resolver.dart# Maps preset block ID → resolved text
+│   │   ├── prompt_builder.dart        # Orchestrator: block ordering, lorebook merge, trimming
+│   │   ├── prompt_block_resolver.dart # Maps preset block ID → resolved text
 │   │   ├── prompt_payload_builder.dart # Riverpod-aware: assembles PromptPayload from state
-│   │   ├── prompt_isolate.dart       # Runs buildPrompt() in a Dart isolate
-│   │   ├── history_assembler.dart    # ChatMessage[] → PromptMessage[], macro application
-│   │   ├── context_calculator.dart   # Token budget: trims history from oldest end
+│   │   ├── prompt_isolate.dart        # Runs buildPrompt() in a Dart isolate
+│   │   ├── history_assembler.dart     # ChatMessage[] → PromptMessage[], macro application
+│   │   ├── context_calculator.dart    # Token budget: trims history from oldest end
 │   │   ├── fallback_prompt_builder.dart # Minimal prompt when no preset configured
-│   │   ├── lorebook_scanner.dart     # Keyword scan: sticky/cooldown/probability/recursion
-│   │   ├── lorebook_merger.dart      # Merges keyword + vector results, deduplicates
-│   │   ├── lorebook_coverage.dart    # Diagnostic: full coverage report per entry/key
-│   │   ├── lorebook_vector_search.dart # Cosine search + hybrid boost, Riverpod providers
+│   │   ├── lorebook_scanner.dart      # Keyword scan: sticky/cooldown/probability/recursion
+│   │   ├── lorebook_merger.dart       # Merges keyword + vector results, deduplicates
+│   │   ├── lorebook_providers.dart    # Riverpod providers for vector search/embedding
+│   │   ├── lorebook_coverage.dart     # Diagnostic: full coverage report per entry/key
+│   │   ├── lorebook_vector_search.dart # Cosine search + hybrid boost
 │   │   ├── lorebook_embedding_service.dart # Indexes lorebook entries into embedding store
+│   │   ├── retrieval_hints.dart       # Retrieval hint extraction from lorebook entries
+│   │   ├── embedding_service.dart     # Calls embedding API, handles chunking + rate limits
+│   │   ├── embedding_types.dart       # Shared embedding type definitions
+│   │   ├── embedding_error_labels.dart # Error classification for embedding status
 │   │   ├── memory_embedding_service.dart   # Indexes memory entries into embedding store
 │   │   ├── memory_injection_service.dart   # Scores + selects memory entries for injection
-│   │   ├── embedding_service.dart    # Calls embedding API, handles chunking + rate limits
-│   │   ├── glaze_matcher.dart        # Pure regex keyword matching (3 whole-word modes)
-│   │   ├── regex_service.dart        # Applies PresetRegex scripts to a string
+│   │   ├── glaze_matcher.dart         # Pure regex keyword matching (3 whole-word modes)
+│   │   ├── regex_service.dart         # Applies PresetRegex scripts to a string
 │   │   ├── sse_client.dart           # SSE + non-streaming completions via Dio
-│   │   ├── stream_accumulator.dart   # Parses inline <think>…</think> tags from stream
+│   │   ├── stream_accumulator.dart   # Parses inline <think…> tags from stream
 │   │   ├── response_normalizer.dart  # Extracts content from non-streaming response body
 │   │   ├── summary_service.dart      # Reads/writes summaries, triggers LLM regeneration
 │   │   ├── tokenizer.dart            # estimateTokens() with LRU cache, base64 stripping
@@ -94,14 +100,23 @@ lib/
 │   │   ├── backup_service.dart           # Top-level backup orchestrator (thin)
 │   │   ├── backup/
 │   │   │   ├── backup_exporter.dart      # Serializes to Glaze-native ZIP
-│   │   │   ├── backup_helpers.dart       # ZIP read/write, JSON helpers, V1→V2 upgrade
+│   │   │   ├── backup_helpers.dart       # ZIP read/write, JSON helpers
 │   │   │   ├── flutter_backup_importer.dart  # Imports Glaze-native backup
 │   │   │   ├── js_backup_importer.dart       # Imports SillyTavern ZIP (orchestrator)
 │   │   │   ├── js_character_importer.dart    # Imports ST character PNG/JSON files
 │   │   │   ├── js_chat_importer.dart         # Imports ST JSONL chat files
 │   │   │   ├── js_api_config_importer.dart   # Parses ST settings → ApiConfig
 │   │   │   ├── js_preset_importer.dart       # Imports ST preset JSON files
-│   │   │   └── js_lorebook_importer.dart     # Imports ST lorebook JSON files
+│   │   │   ├── js_preset_mapper.dart         # Maps ST preset fields → Glaze Preset
+│   │   │   ├── js_lorebook_importer.dart     # Imports ST lorebook JSON files
+│   │   │   ├── js_lorebook_mapper.dart       # Maps ST lorebook fields → Glaze Lorebook
+│   │   │   ├── js_memory_importer.dart       # Imports ST memory book data
+│   │   │   ├── js_message_normalizer.dart    # Normalizes ST message format
+│   │   │   ├── profile_resolver.dart         # Resolves ST service profiles → API configs
+│   │   │   ├── authors_note_helper.dart      # Authors note extraction from ST data
+│   │   │   ├── data_url_helpers.dart         # Data URL parsing/encoding
+│   │   │   ├── type_converters.dart          # ST→Glaze type conversions
+│   │   │   └── service_prefs_writer.dart     # Writes imported prefs to SharedPreferences
 │   │   ├── migration_service.dart    # Migrates legacy Glaze-JS data to Drift DB
 │   │   ├── preset_defaults.dart      # Ensures mandatory blocks exist in imported presets
 │   │   ├── preset_seeder.dart        # Seeds built-in "Glaze Default" preset on first launch
@@ -111,7 +126,7 @@ lib/
 │   │   ├── deep_link_service.dart    # Listens for OAuth deep-link URIs
 │   │   ├── generation_notification_service.dart # Android foreground/background notifications
 │   │   ├── memory_prompt_presets.dart           # Built-in memory prompt templates
-│   │   └── onboarding_service.dart   # !! MIXED: onboarding UI + completion logic — refactor candidate
+│   │   └── onboarding_service.dart   # Completion check logic only (UI in features/onboarding/)
 │   ├── import/
 │   │   ├── silly_tavern_preset_parser.dart  # ST preset JSON → Glaze Preset (pure)
 │   │   └── st_lorebook_importer.dart        # ST lorebook JSON → Glaze Lorebook (pure)
@@ -126,6 +141,7 @@ lib/
 │   │   └── event_hub.dart            # Lightweight pub/sub bus (broadcast StreamControllers)
 │   └── state/                        # Global Riverpod providers
 │       ├── db_provider.dart          # AppDatabase + all repo providers
+│       ├── shared_prefs_provider.dart # SharedPreferences FutureProvider
 │       ├── active_selection_provider.dart # Active preset/persona/globalVars/regexes
 │       ├── character_provider.dart   # CharactersNotifier (watchAll reactive stream)
 │       ├── lorebook_provider.dart    # LorebooksNotifier + settings/activations
@@ -135,14 +151,19 @@ lib/
 │   ├── chat/
 │   │   ├── chat_provider.dart        # ChatNotifier: full ChatState lifecycle per charId
 │   │   ├── chat_state.dart           # ChatState + StreamingState value objects
-│   │   ├── chat_screen.dart          # UI: MessageList + ChatInputBar + header
+│   │   ├── editing_message_provider.dart # Tracks which message is being edited
+│   │   ├── chat_screen.dart          # UI: WebView + ChatInputBar + header
 │   │   ├── chat_generation_service.dart  # Orchestrates one generation cycle (SSE stream)
 │   │   ├── chat_session_service.dart     # Creates/finds sessions, alternate greetings
 │   │   ├── chat_message_service.dart     # Message-level mutations (edit/delete/hide/reorder)
 │   │   ├── chat_actions_service.dart     # Branch/clear/rename/delete session
 │   │   ├── initial_message_builder.dart  # Selects greeting, runs macros, returns first msg
 │   │   ├── memory_draft_generator.dart   # LLM-based memory auto-generation
-│   │   └── widgets/                      # Chat UI widgets (pure UI, large files OK)
+│   │   ├── bridge/                       # WebView ↔ Flutter bridge
+│   │   │   ├── chat_bridge_controller.dart  # Dart-side bridge methods
+│   │   │   ├── chat_message_mapper.dart     # ChatMessage → JS map conversion
+│   │   │   └── chat_webview_keep_alive.dart # Keep-alive key provider
+│   │   └── widgets/                      # Chat UI widgets
 │   ├── chat_history/
 │   │   ├── chat_history_provider.dart    # All sessions across all characters
 │   │   └── chat_history_screen.dart      # Root/home screen
@@ -154,6 +175,7 @@ lib/
 │   │   ├── app_settings_screen.dart
 │   │   ├── theme_editor_screen.dart
 │   │   ├── theme_preset_screen.dart
+│   │   ├── theme_preview.dart
 │   │   └── widgets/
 │   ├── lorebooks/                    # Lorebook UI screens + widgets
 │   ├── presets/                      # Preset UI screens + widgets
@@ -165,6 +187,8 @@ lib/
 │   ├── regex/                        # Global regex list screen
 │   ├── cloud_sync/                   # Cloud sync UI, provider, services (Dropbox/GDrive)
 │   ├── image_gen/                    # Image generation UI, provider, services
+│   ├── onboarding/                   # First-run onboarding screen
+│   ├── picks/                        # Featured picks grid + detail launcher
 │   ├── tools/                        # Developer tools screen (tokenizer, coverage, etc.)
 │   └── menu/                         # Sidebar menu + About overlay
 ├── shared/
@@ -173,12 +197,15 @@ lib/
 │   │   └── nav_height_provider.dart  # navHeightProvider: nav bar height for layout
 │   ├── theme/
 │   │   ├── theme_preset.dart         # Freezed ThemePreset model
+│   │   ├── theme_preset_storage.dart # ThemePresetStorage: load/save/import presets
 │   │   ├── theme_provider.dart       # ThemeNotifier: loads + applies ThemeData
 │   │   ├── theme_font_provider.dart  # ThemeFontNotifier: loads Google Fonts dynamically
-│   │   └── app_colors.dart           # Color palette + fromPreset() factory
+│   │   ├── app_colors.dart           # Color palette + fromPreset() factory
+│   │   └── app_theme.dart            # AppTheme builder: ColorScheme from preset
 │   └── widgets/                      # Reusable UI primitives
 │       ├── glaze_bottom_sheet.dart   # Primary bottom sheet (snap points, glassmorphic)
 │       ├── sheet_view.dart           # SheetView: sheet-aware scaffold with header
+│       ├── colored_markdown.dart     # Custom InlineMd/BlockMd classes for markers
 │       └── ...
 ├── app.dart                          # GlazeApp: GoRouter config + boot-time init
 └── main.dart                         # Entry point: orientation lock, services init
@@ -198,7 +225,7 @@ lib/
 | 4 | `prompt_builder.dart` | Builds ordered prompt blocks from payload |
 | 5 | `prompt_block_resolver.dart` | Resolves each block ID → text via character fields |
 | 6 | `lorebook_scanner.dart` | Keyword scan of lorebook entries against chat history |
-| 7 | `lorebook_vector_search.dart` | Vector semantic search (runs after keyword scan) |
+| 7 | `lorebook_vector_search.dart` | Vector semantic search (runs in PromptPayloadBuilder before isolate) |
 | 8 | `lorebook_merger.dart` | Merges keyword + vector results, deduplicates |
 | 9 | `memory_injection_service.dart` | Scores memory entries, injects top-N |
 | 10 | `history_assembler.dart` | Assembles chat history blocks with depth inserts |
@@ -207,23 +234,25 @@ lib/
 | 13 | `macro_engine.dart` | Expands all `{{macro}}` tokens |
 | 14 | `prompt_isolate.dart` | Runs prompt build off the UI thread |
 | 15 | `sse_client.dart` | Sends request, streams SSE deltas back |
-| 16 | `stream_accumulator.dart` | Splits text from inline `<think>` reasoning |
+| 16 | `stream_accumulator.dart` | Splits text from inline `<think…>` reasoning |
 | 17 | `response_normalizer.dart` | Extracts final content (non-streaming path) |
 
 ### Request Types
 
-| Type | Streaming | Registry | Abort |
-|------|-----------|----------|-------|
-| Chat | Yes (SSE) | `ChatState.isGenerating` per `charId` | `CancelToken` in `ChatNotifier` |
-| Summary | No | None | Caller-owned |
-| Memory draft | No | Own abort per draft ID | Per-draft controller in `MemoryDraftGenerator` |
+| Type | State owner | Streaming | Abort |
+|------|-------------|-----------|-------|
+| Chat | `ChatState.isGenerating` per `charId` | Yes (SSE) | `CancelToken` + `_activeGenId` in `ChatNotifier` |
+| Image gen | `ChatState.isGeneratingImage` + `_imgGenCancelToken` | No (one-shot LLM) | `_imgGenCancelToken` in `ChatNotifier` |
+| Summary | Widget-local `_isGenerating` in `summary_sheet.dart` | No | Widget-scoped `CancelToken` |
+| Memory draft | Widget-local `_generatingDrafts` in `memory_books_sheet.dart` | No | Per-draft `CancelToken` in `_cancelTokens` map |
 
 ### Prompt Ordering (invariant — do not reorder)
 
-1. Keyword lorebook scan (synchronous in `PromptBuilder`)
-2. Vector lorebook scan (async, after keyword scan, deduplicated against it)
-3. Memory injection (guarded by 35% token budget)
-4. Context cutoff — trims oldest messages first
+1. Vector lorebook scan (async, in `PromptPayloadBuilder`, before isolate)
+2. Keyword lorebook scan (synchronous in `PromptBuilder`, inside isolate)
+3. Merge: keyword + vector, deduplicate vector against keyword
+4. Memory injection
+5. Context cutoff — trims oldest messages first
 
 ---
 
@@ -255,24 +284,31 @@ lib/
 **Reasoning:**
 - `{{reasoningPrefix}}`, `{{reasoningSuffix}}` — inline reasoning tag config
 
+**Dynamic content:**
+- `{{summary}}` — current chat summary
+- `{{lorebooks}}` — triggered lorebook content
+- `{{guidance}}` — guided swipe instruction
+
 **Comments:**
 - `{{// comment}}` — single-line comment (removed)
 - `{{ // }}...{{ /// }}` — multi-line scoped comment (removed)
 
 **Escaping:** `\{\{` → `{{`, `\}\}` → `}}`
 
-### Resolution Order (fixed)
+### Resolution Order (fixed, matches code)
+
 1. Comment stripping
 2. Static character macros
-3. Trim
-4. Session variable macros (`setvar`/`getvar`)
-5. Global variable macros
-6. Custom named macros
-7. `{{random::}}` / `{{pick::}}`
-8. Dice `{{roll::}}`
-9. Date/Time
-10. Reasoning tags
-11. Escape handling
+3. `{{reasoningPrefix}}` / `{{reasoningSuffix}}`
+4. `{{summary}}` / `{{lorebooks}}` / `{{guidance}}`
+5. Trim
+6. Session variable macros (`setvar`/`getvar`)
+7. Global variable macros (`setglobalvar`/`getglobalvar`)
+8. Custom named macros
+9. `{{random::}}` / `{{pick::}}`
+10. Dice `{{roll::}}`
+11. Date/Time
+12. Escape handling
 
 ---
 
@@ -281,10 +317,14 @@ lib/
 ### Files
 - `lorebook_scanner.dart` — keyword scan: sticky/cooldown/probability/character-filter/recursion
 - `lorebook_merger.dart` — merges keyword + vector results, deduplicates by entry ID
+- `lorebook_providers.dart` — Riverpod providers for vector search and embedding
 - `lorebook_coverage.dart` — diagnostic full coverage report
 - `lorebook_vector_search.dart` — cosine similarity, hybrid boost (name/key/hint overlap)
 - `lorebook_embedding_service.dart` — indexes lorebook entries (hash-based dirty check)
+- `retrieval_hints.dart` — extracts retrieval hints from lorebook entries
 - `embedding_service.dart` — calls embedding API, auto-chunking, rate-limit handling
+- `embedding_types.dart` — shared embedding type definitions
+- `embedding_error_labels.dart` — error classification for embedding status UI
 - `vector_math.dart` — `cosineSimilarity`, `findTopK`, `findTopKMulti` (MaxSim)
 - `lorebook_provider.dart` — CRUD + activations + settings (SharedPreferences)
 
@@ -295,7 +335,7 @@ lib/
 - `'both'` — combined (keyword results deduplicated from vector budget)
 
 ### Recursive Scan Bounds
-- Max iterations: 5 (or 1 if `recursiveScan == false`)
+- Max iterations: 5 when `recursiveScan == true`, else 1
 - Prevents infinite loops from circular lorebook references
 
 ---
@@ -335,25 +375,22 @@ MemoryDraft {
 ### Injection Rule
 Memory entries are injected only when all linked `messageIds` are already **outside** the active context window. This prevents double-coverage.
 
-### Token Budget Guard
-If memory tokens ≥ 35% of `safeContext` OR memory tokens ≤ 0 → injection aborted.
-
 ---
 
 ## 5. Database Layer
 
 **File:** `lib/core/db/app_db.dart` + `lib/core/db/repositories/`
 
-### Tables (9 total, schema v17)
+### Tables (9 total, schema v19)
 | Table | Repo | Notes |
 |-------|------|-------|
-| `Characters` | `character_repo.dart` | watchAll() reactive stream |
-| `ChatSessions` | `chat_repo.dart` | 254 lines — largest repo |
+| `Characters` | `character_repo.dart` | watchAll() reactive stream; v18: `picksHash`, v19: `createdAt` |
+| `ChatSessions` | `chat_repo.dart` | Largest repo (~210 lines) |
 | `Presets` | `preset_repo.dart` | JSON blob per preset |
 | `ApiConfigs` | `api_config_repo.dart` | |
 | `Personas` | `persona_repo.dart` | |
 | `Lorebooks` | `lorebook_repo.dart` | entries + settings as JSON |
-| `Embeddings` | `embedding_repo.dart` | vectors as binary BLOB |
+| `Embeddings` | `embedding_repo.dart` | `entryId`, `vectorsBlob`, `retrievalHintsJson`, `errorJson` |
 | `ChatSummaries` | `summary_repo.dart` | one per session |
 | `MemoryBookRows` | `memory_book_repo.dart` | DriftAccessor |
 
@@ -372,10 +409,16 @@ See `docs/rules/database.md`.
 - `sync_serialization.dart` — entity → JSON envelope
 - `sync_conflict.dart` — winner = newer `updatedAt`
 - `sync_queue.dart` — serial queue preventing duplicate uploads
+- `sync_config.dart` — sync configuration model
+- `sync_models.dart` — sync data models
+- `sync_provider.dart` — Riverpod provider for sync state
+- `sync_repo_interfaces.dart` — Abstract repo interfaces for sync
+- `cloud_adapter.dart` — Abstract adapter interface for cloud providers
 - `dropbox/dropbox_adapter.dart` + `dropbox_auth.dart` — OAuth2 PKCE + API v2
 - `gdrive/gdrive_adapter.dart` + `gdrive_auth.dart` + `gdrive_files.dart` + `gdrive_folders.dart`
 - `oauth_local_server.dart` — desktop OAuth loopback (local HTTP server)
 - `deep_link_service.dart` — mobile OAuth deep-link receiver
+- `widgets/sync_sheet.dart` — Sync UI sheet
 
 ### What Is Synced
 Characters, sessions, presets, API configs, personas, lorebooks, theme presets, active preset, selected app settings. **Not synced:** generation state, UI state, embedding vectors, debug traces.
@@ -386,9 +429,11 @@ Characters, sessions, presets, API configs, personas, lorebooks, theme presets, 
 
 ### Files
 - `shared/theme/theme_preset.dart` — Freezed `ThemePreset` model
+- `shared/theme/theme_preset_storage.dart` — `ThemePresetStorage`: load/save/import presets (SharedPreferences)
 - `shared/theme/theme_provider.dart` — `ThemeNotifier`: loads active preset, generates `ThemeData`
 - `shared/theme/theme_font_provider.dart` — `ThemeFontNotifier`: loads Google Fonts async at startup
 - `shared/theme/app_colors.dart` — `AppColors.fromPreset()`: all palette slots with defaults
+- `shared/theme/app_theme.dart` — `AppTheme` builder: generates `ThemeData` + `ColorScheme` from preset
 
 ### `updatePreset(ThemePreset preset)` flow
 1. `ThemeNotifier.updatePreset()` → saves to `ThemePresetStorage`
@@ -402,20 +447,29 @@ Characters, sessions, presets, API configs, personas, lorebooks, theme presets, 
 ### Files
 - `image_gen_service.dart` — orchestrates: dispatches to provider adapters, saves images
 - `image_gen_provider.dart` — manages settings + generation state
+- `image_gen_models.dart` — Freezed data models for image generation
+- `image_gen_http.dart` — HTTP client for image generation APIs
 - Provider adapters: `routmy_image_provider.dart`, `openai_image_provider.dart`, `gemini_image_provider.dart`, `naistera_image_provider.dart`
+- UI: `widgets/image_gen_sheet.dart`, `widgets/image_content_renderer.dart`
 
 ---
 
 ## 9. Known Design Issues
 
-See `docs/rules/` for enforcement rules. Issues tracked for refactor:
+Issues tracked for refactor:
 
-1. **`onboarding_service.dart`** (687 lines) — contains Flutter widget tree inside `services/`. Violates layer rule: services must not import `flutter/material.dart`. Refactor: extract UI to `features/onboarding/onboarding_screen.dart`, leave only completion-check logic in service.
+1. **`onboarding_service.dart`** — partially fixed: UI extracted to `features/onboarding/onboarding_screen.dart`. Remaining issue: service still imports `package:flutter/material.dart` for `BuildContext` and calls `rootNavigatorKey.currentState.push()`.
 
-2. **`magic_drawer_stats_service.dart`** (194 lines) — named "service" but lives in `features/chat/widgets/`. Move to `features/chat/` (provider or service level).
+2. **`magic_drawer_stats_service.dart`** (~236 lines) — named "service" but lives in `features/chat/widgets/`. Move to `features/chat/` (provider or service level).
 
-3. **`prompt_payload_builder.dart`** (224 lines) — reads 7+ Riverpod providers directly. Becoming a God object. Split: pure `PromptInputsCollector` (reads providers) + pure `PromptPayloadAssembler` (builds payload from collected inputs, no Riverpod dep).
+3. **`prompt_payload_builder.dart`** (~240 lines) — reads 7+ Riverpod providers directly. Becoming a God object. Split: pure `PromptInputsCollector` (reads providers) + pure `PromptPayloadAssembler` (builds payload from collected inputs, no Riverpod dep).
 
-4. **`chat_provider.dart`** (369 lines) — `ChatNotifier` does generate + swipe + edit + delete + branch + clear. Split responsibilities across dedicated notifiers or move action logic to services, leaving notifier as thin state owner.
+4. **`chat_provider.dart`** (~1000 lines) — `ChatNotifier` does generate + swipe + edit + delete + branch + clear + image gen + continue. Split responsibilities across dedicated notifiers or move action logic to services, leaving notifier as thin state owner.
 
-5. **`lorebook_vector_search.dart`** — contains Riverpod provider declarations mixed with service logic. Riverpod providers should live in a `lorebook_vector_search_provider.dart`.
+5. ~~**`lorebook_vector_search.dart`** — contained Riverpod provider declarations mixed with service logic.~~ **Fixed** — providers extracted to `lorebook_providers.dart`.
+
+6. **Mutual exclusion between chat generation and memory draft is not enforced.** Neither `ChatNotifier.sendMessage()` nor `memory_books_sheet.dart._generateDraft()` checks for the other's active state. See `docs/INVARIANTS.md` INV-M3/INV-M4.
+
+7. **Session variable rollback on abort is not implemented.** `ChatNotifier.abortGeneration()` does not restore pre-generation `sessionVars`. See `docs/INVARIANTS.md` INV-C5.
+
+8. **35% memory token budget guard is not implemented.** `MemoryInjectionService.buildInjection()` has no threshold check. Memory injection proceeds unconditionally. See `docs/INVARIANTS.md` INV-PS4.

@@ -185,32 +185,8 @@ class Renderer {
     this.activeSearchIndex = -1;
     this.searchMatches = [];
     this._lastTimestamps = { date: null, idx: -1 };
-    this._selectionMode = false;
-    this._selectedIds = new Set();
+    this.selectionManager = null;
   }
-
-  /* ----- Selection mode ----- */
-  setSelectionMode(enabled) {
-    this._selectionMode = !!enabled;
-    if (!enabled) this._selectedIds.clear();
-    document.querySelectorAll('.message-section').forEach(msgEl => {
-      msgEl.classList.toggle('selection-mode', this._selectionMode);
-      msgEl.classList.toggle('selected', this._selectedIds.has(msgEl.dataset.messageId));
-    });
-  }
-
-  toggleMessageSelection(messageId) {
-    if (this._selectedIds.has(messageId)) this._selectedIds.delete(messageId);
-    else this._selectedIds.add(messageId);
-    const msgEl = document.querySelector(`[data-message-id="${messageId}"]`);
-    if (msgEl) {
-      msgEl.classList.toggle('selected', this._selectedIds.has(messageId));
-    }
-  }
-
-  getSelectedIds() { return [...this._selectedIds]; }
-
-  get selectionMode() { return this._selectionMode; }
 
   /* ----- Public: render a message ----- */
   renderMessage(messageData) {
@@ -253,8 +229,7 @@ class Renderer {
     const classes = ['message-section', this._roleKey(role), `layout-${layout}`];
     if (isError) classes.push('error');
     if (isHidden) classes.push('msg-hidden');
-    if (this._selectionMode) classes.push('selection-mode');
-    if (this._selectedIds.has(id)) classes.push('selected');
+    if (this.selectionManager) this.selectionManager.applyClassesToSection(section, classes);
     section.className = classes.join(' ');
 
     /* --- Header --- */
@@ -657,7 +632,7 @@ class Renderer {
     /* --- Right: actions / edit buttons --- */
     if (m.isEditing) {
       footer.appendChild(this._createEditButtons(m.id));
-    } else if (!this._selectionMode) {
+    } else if (this.selectionManager && this.selectionManager.shouldHideActions()) {
       const actions = document.createElement('div');
       actions.className = 'msg-actions-btn';
       actions.dataset.action = 'open-actions';

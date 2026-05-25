@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../core/state/shared_prefs_provider.dart';
 
 final appSettingsProvider = AsyncNotifierProvider<AppSettingsNotifier, AppSettings>(
     AppSettingsNotifier.new);
@@ -76,7 +77,7 @@ class AppSettings {
 class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
   @override
   Future<AppSettings> build() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
     return AppSettings(
       enterToSend: prefs.getBool('enterToSend') ?? true,
       hideMessageId: prefs.getBool('hideMessageId') ?? false,
@@ -97,7 +98,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
   }
 
   Future<void> save(AppSettings settings) async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
     await prefs.setBool('enterToSend', settings.enterToSend);
     await prefs.setBool('hideMessageId', settings.hideMessageId);
     await prefs.setBool('hideGenerationTime', settings.hideGenerationTime);

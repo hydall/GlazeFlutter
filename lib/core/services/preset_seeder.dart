@@ -1,15 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/preset.dart';
 import '../state/db_provider.dart';
+import '../state/shared_prefs_provider.dart';
 import '../utils/time_helpers.dart';
 import 'preset_defaults.dart';
 
 const _seededKey = 'defaultPresetsSeeded';
 
 Future<void> seedDefaultPresets(WidgetRef ref) async {
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = await ref.read(sharedPreferencesProvider.future);
   if (prefs.getBool(_seededKey) == true) return;
 
   final repo = ref.read(presetRepoProvider);

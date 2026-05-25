@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../core/state/shared_prefs_provider.dart';
 
 class SessionLifecycleTracker extends ConsumerStatefulWidget {
   final String charId;
@@ -43,7 +44,7 @@ class _SessionLifecycleTrackerState extends ConsumerState<SessionLifecycleTracke
     _enteredAt = null;
     if (elapsed <= 0) return;
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs = await ref.read(sharedPreferencesProvider.future);
       final key = 'chat_time_${widget.charId}';
       final prev = prefs.getInt(key) ?? 0;
       await prefs.setInt(key, prev + elapsed);
