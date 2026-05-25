@@ -432,4 +432,90 @@ void main() {
       expect(bridgeJs, contains('onEditCancel'));
     });
   });
+
+  // ─── Phase 4.2: MessageUpdateBatcher ──────────────────────────────────────
+  group('MessageUpdateBatcher (Phase 4.2 characterization)', () {
+    test('MessageUpdateBatcher class exists', () {
+      expect(bridgeJs, contains('class MessageUpdateBatcher'));
+    });
+
+    test('has enqueue method', () {
+      expect(bridgeJs, contains('enqueue(id, updateFn)'));
+    });
+
+    test('has flush method', () {
+      final idx = bridgeJs.indexOf('class MessageUpdateBatcher');
+      final classBody = bridgeJs.substring(idx, idx + 500);
+      expect(classBody, contains('flush()'));
+    });
+
+    test('has hasPending method', () {
+      final idx = bridgeJs.indexOf('class MessageUpdateBatcher');
+      final classBody = bridgeJs.substring(idx, idx + 700);
+      expect(classBody, contains('hasPending()'));
+    });
+
+    test('uses requestAnimationFrame for batching', () {
+      final idx = bridgeJs.indexOf('class MessageUpdateBatcher');
+      final classBody = bridgeJs.substring(idx, idx + 500);
+      expect(classBody, contains('requestAnimationFrame'));
+    });
+
+    test('Bridge creates _updateBatcher', () {
+      expect(bridgeJs, contains('new MessageUpdateBatcher()'));
+    });
+
+    test('updateMessage delegates to _updateBatcher.enqueue', () {
+      final idx = bridgeJs.indexOf('updateMessage(messageJson)');
+      final methodBody = bridgeJs.substring(idx, idx + 200);
+      expect(methodBody, contains('_updateBatcher.enqueue'));
+    });
+
+    test('_executeUpdateMessage contains update logic', () {
+      expect(bridgeJs, contains('_executeUpdateMessage(msg)'));
+      final idx = bridgeJs.indexOf('_executeUpdateMessage(msg) {');
+      final methodBody = bridgeJs.substring(idx, idx + 800);
+      expect(methodBody, contains('updateMessageContent'));
+    });
+
+    test('flush() called before setMessages', () {
+      final idx = bridgeJs.indexOf('setMessages(messagesJson)');
+      final methodBody = bridgeJs.substring(idx, idx + 100);
+      expect(methodBody, contains('this.flush()'));
+    });
+
+    test('flush() called before appendMessage', () {
+      final idx = bridgeJs.indexOf('appendMessage(messageJson)');
+      final methodBody = bridgeJs.substring(idx, idx + 100);
+      expect(methodBody, contains('this.flush()'));
+    });
+
+    test('flush() called before appendMessages', () {
+      final idx = bridgeJs.indexOf('appendMessages(messagesJson)');
+      final methodBody = bridgeJs.substring(idx, idx + 100);
+      expect(methodBody, contains('this.flush()'));
+    });
+
+    test('flush() called before prependMessages', () {
+      final idx = bridgeJs.indexOf('prependMessages(messagesJson)');
+      final methodBody = bridgeJs.substring(idx, idx + 100);
+      expect(methodBody, contains('this.flush()'));
+    });
+
+    test('flush() called before removeMessage', () {
+      final idx = bridgeJs.indexOf('removeMessage(messageId)');
+      final methodBody = bridgeJs.substring(idx, idx + 100);
+      expect(methodBody, contains('this.flush()'));
+    });
+
+    test('flush() called before clearAll', () {
+      final idx = bridgeJs.indexOf('clearAll()');
+      final methodBody = bridgeJs.substring(idx, idx + 100);
+      expect(methodBody, contains('this.flush()'));
+    });
+
+    test('bridge has public flush method', () {
+      expect(bridgeJs, contains('flush() { this._updateBatcher.flush(); }'));
+    });
+  });
 }

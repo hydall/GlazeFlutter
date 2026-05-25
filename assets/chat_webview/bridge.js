@@ -46,6 +46,34 @@ class GenTimer {
   }
 }
 
+class MessageUpdateBatcher {
+  constructor() {
+    this._pending = new Map();
+    this._rafScheduled = false;
+  }
+
+  enqueue(id, updateFn) {
+    this._pending.set(id, updateFn);
+    if (!this._rafScheduled) {
+      this._rafScheduled = true;
+      requestAnimationFrame(() => this.flush());
+    }
+  }
+
+  flush() {
+    const batch = new Map(this._pending);
+    this._pending.clear();
+    this._rafScheduled = false;
+    for (const [id, fn] of batch) {
+      fn(id);
+    }
+  }
+
+  hasPending() {
+    return this._pending.size > 0;
+  }
+}
+
 class SelectionManager {
   constructor(sendToFlutter) {
     this._sendToFlutter = sendToFlutter;
@@ -673,6 +701,7 @@ class Bridge {
     this.isGenerating = false;
     this.isGeneratingImage = false;
     this._genTimer = new GenTimer();
+    this._updateBatcher = new MessageUpdateBatcher();
     this._selectionManager = new SelectionManager((name, args) => this._sendToFlutter(name, args));
     this._editController = new EditController((name, args) => this._sendToFlutter(name, args));
     this._interaction = new InteractionDispatch(this);
@@ -890,6 +919,7 @@ class Bridge {
 
   /* ---------- Message list API ---------- */
   setMessages(messagesJson) {
+    this.flush();
     this._suppressLoadMore = true;
     const container = document.getElementById('chat-container') || document.body;
     if (![...container.classList].some(c => c.startsWith('layout-'))) {
@@ -916,6 +946,7 @@ class Bridge {
   }
 
   appendMessage(messageJson) {
+    this.flush();
     const msg = JSON.parse(messageJson);
     const rendered = this.renderer.renderMessage(msg);
     for (const el of rendered) {
@@ -926,6 +957,7 @@ class Bridge {
   }
 
   appendMessages(messagesJson) {
+    this.flush();
     const messages = JSON.parse(messagesJson);
     messages.forEach(msg => {
       const rendered = this.renderer.renderMessage(msg);
@@ -937,6 +969,7 @@ class Bridge {
   }
 
   prependMessages(messagesJson) {
+    this.flush();
     this._suppressLoadMore = true;
     const messages = JSON.parse(messagesJson);
     const scrollBefore = this.virtualList.container.scrollHeight;
@@ -957,6 +990,10 @@ class Bridge {
 
   updateMessage(messageJson) {
     const msg = JSON.parse(messageJson);
+    this._updateBatcher.enqueue(msg.id, () => this._executeUpdateMessage(msg));
+  }
+
+  _executeUpdateMessage(msg) {
     const section = document.querySelector(`[data-message-id="${msg.id}"]`);
     if (!section) return;
 
@@ -992,6 +1029,8 @@ class Bridge {
 
     this.renderer.updateMessageMeta(section, msg);
   }
+
+  flush() { this._updateBatcher.flush(); }
 
   _syncMessageControls(section, msg) {
     const center = section.querySelector('.msg-center-controls');
@@ -1098,9 +1137,13 @@ class Bridge {
     // For char messages: renderer rebuilds controls on next render; flag is enough.
   }
 
-  removeMessage(messageId) { this.virtualList.remove(messageId); }
+  removeMessage(messageId) {
+    this.flush();
+    this.virtualList.remove(messageId);
+  }
 
   clearAll() {
+    this.flush();
     this._showLoadingScreen();
     this.virtualList.clear();
   }

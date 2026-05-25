@@ -176,3 +176,4 @@ final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) {
 | 2026-05-25 | 3.4 | SwipeGestureHandler extraction from bridge.js | Done |
 | 2026-05-25 | merge | Upstream/master 3ab55fc merged — noise overlay, contextmenu handoff, isEditing class | Done |
 | 2026-05-25 | merge | Upstream/master 8c38b6e merged — reasoning block hiding fix, editing guard in SelectionManager | Done |
+| 2026-05-25 | 4.2 | MessageUpdateBatcher — coalesce updateMessage calls via requestAnimationFrame, flush before structural ops (15 characterization tests) | Done |
