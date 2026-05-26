@@ -348,7 +348,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
       if (!mounted) return;
       if (models.isEmpty) {
         String? responseText;
-        await client.streamChatCompletion(endpoint: endpoint, apiKey: apiKey, model: model, messages: [{'role': 'user', 'content': 'Hi'}], maxTokens: 8, temperature: 0.0, topP: 1.0, stream: false, onComplete: (text, _) => responseText = text, onError: (e) => throw e);
+        await client.streamChatCompletion(endpoint: endpoint, apiKey: apiKey, model: model, messages: [{'role': 'user', 'content': 'Hi'}], maxTokens: 8, temperature: 0.0, topP: 1.0, stream: false, onComplete: (text, _, {rawResponseJson}) => responseText = text, onError: (e) => throw e);
         if (!mounted) return;
         if (responseText != null) GlazeToast.show(context, 'Connection successful!');
       } else {

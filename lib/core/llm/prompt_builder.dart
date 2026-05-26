@@ -143,6 +143,9 @@ PromptResult buildPrompt(PromptPayload payload) {
     summaryContent: payload.summaryContent,
     guidanceText: payload.guidanceText,
     macroName: char.macroName,
+    summaryMemoryContent: payload.memoryInjectionTarget == 'summary_macro'
+        ? payload.memoryMacroContent
+        : null,
   );
 
   var currentSessionVars = Map<String, String>.from(payload.sessionVars);
@@ -449,25 +452,10 @@ PromptResult _assembleMessages({
     if (payload.memoryInjectionTarget == 'summary_macro' && macroText.isNotEmpty) {
       final msgSummaryIdx = messages.indexWhere((m) => m.isSummary);
       if (msgSummaryIdx >= 0) {
-        final existing = messages[msgSummaryIdx];
-        messages[msgSummaryIdx] = PromptMessage(
-          role: existing.role,
-          content: '${existing.content}\n\n$macroText',
-          blockId: existing.blockId,
-          blockName: existing.blockName,
-          isHistory: existing.isHistory,
-          isDepth: existing.isDepth,
-          depth: existing.depth,
-          isLorebook: existing.isLorebook,
-          isSummary: true,
-        );
-        final attrSummaryIdx = attributionBlocks.indexWhere((b) => b.id == (existing.blockId ?? 'summary'));
-        if (attrSummaryIdx >= 0) {
-          attributionBlocks[attrSummaryIdx] = StaticBlock(id: attributionBlocks[attrSummaryIdx].id, content: '${attributionBlocks[attrSummaryIdx].content}\n\n$macroText');
-        } else {
-          attributionBlocks.add(StaticBlock(id: 'memory', content: macroText));
-        }
-        macroTokens['memory'] = estimateTokens(macroText);
+        // Memory injection for summary_macro is now performed at macro-expansion time
+        // inside replaceMacros() (see macro_engine.dart). This preserves the user's
+        // custom wrapper tags around {{summary}}, e.g. <summary>{{summary}}</summary>.
+        // We intentionally do NOT append here anymore.
       } else {
         _injectMemoryBlock(messages, attributionBlocks, payload.memoryContent!);
       }

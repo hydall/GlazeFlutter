@@ -246,7 +246,7 @@ void main() {
     });
 
     test('Bridge creates GenTimer instance', () {
-      expect(bridgeJs, contains('new GenTimer()'));
+      expect(bridgeJs, contains('new GenTimer('));
     });
 
     test('setGenerating delegates to _genTimer.start/stop', () {

@@ -7,14 +7,35 @@ Architecture: `docs/ARCHITECTURE.md`. Workflow (git, PRs, Trello): `docs/WORKFLO
 
 ## Commands
 
-```bash
-flutter run -d windows          # Dev run (Windows)
-flutter run -d chrome           # Dev run (Web)
-flutter build windows           # Production build
-flutter analyze                 # Lint + typecheck
-dart run build_runner build     # Regenerate after editing freezed/drift models
-flutter test                    # Run tests
+Flutter SDK is at `Z:\Glaze project\flutter`. The agent's shell may not have `flutter` on PATH. Try `flutter` first; if it fails with "not recognized", fall back to the full path.
+
+```powershell
+# Preferred — try PATH first:
+flutter analyze
+
+# Fallback if flutter is not on PATH:
+& "Z:\Glaze project\flutter\bin\flutter.bat" <subcommand>
 ```
+
+Full examples:
+
+```powershell
+flutter analyze                          # Lint + typecheck
+flutter analyze lib/foo.dart             # Analyze single file
+flutter test                             # Run all tests
+flutter test test/bar_test.dart          # Run single test file
+flutter build windows                    # Production build
+dart run build_runner build              # Regenerate after editing freezed/drift models
+
+# Same commands via full path (fallback if flutter not on PATH):
+& "Z:\Glaze project\flutter\bin\flutter.bat" analyze
+& "Z:\Glaze project\flutter\bin\flutter.bat" test
+& "Z:\Glaze project\flutter\bin\flutter.bat" test test/bar_test.dart
+& "Z:\Glaze project\flutter\bin\flutter.bat" build windows
+& "Z:\Glaze project\flutter\bin\dart.bat" run build_runner build
+```
+
+For `flutter run` (dev server), see below — the agent cannot run it.
 
 **`flutter run` and `flutter test --watch` are permanently unavailable to the agent.**
 
@@ -25,10 +46,48 @@ Only run one-shot, non-interactive commands:
 - `flutter test` (non-watch, one-shot)
 - `dart run build_runner build` when required
 
+(Fall back to the full `& "Z:\Glaze project\flutter\bin\flutter.bat"` path if `flutter` is not on PATH.)
+
 If you need to verify runtime behavior or hot-reload changes, ask the user to run `flutter run -d <platform>` (or `flutter run -d chrome`) in a separate terminal and report back. The agent cannot drive or observe a live Flutter session.
 
 **Hot restart after JS asset changes:**
 When files in `assets/chat_webview/` are modified, the user must **hot restart** (press `R`). Hot reload (`r`) doesn't rebuild the asset bundle.
+
+## Diagnostic error capture commands (PowerShell — user terminal)
+
+Run these from the project root in **your PowerShell terminal**. These are for the user's convenience; the agent runs `flutter analyze`/`flutter test` directly via the bat file.
+
+These commands:
+- Run `flutter analyze` / `flutter test`
+- Keep **only build-crashing errors** (or test failures) — warnings/hints are filtered out
+- Overwrite `analyze_errors.txt` / `test_failures.txt` on every run (the files are gitignored, see `.gitignore`)
+- Print the result in the terminal so you can easily select & copy
+
+**Analyze — only errors that would crash a build + final count:**
+
+```powershell
+flutter analyze 2>&1 | Select-String -Pattern '^(error|• error|\d+ errors)' | Set-Content -Path analyze_errors.txt -Encoding UTF8; Get-Content analyze_errors.txt
+```
+
+**Tests — failures + summary:**
+
+```powershell
+flutter test 2>&1 | Select-String -Pattern '(FAIL|error|failed|^\d+ tests? failed|^\d+ passing)' | Set-Content -Path test_failures.txt -Encoding UTF8; Get-Content test_failures.txt
+```
+
+After running the command, just tell the agent:
+- "Прочитай analyze_errors.txt"
+- "Прочитай test_failures.txt"
+
+The agent will read the file from the workspace root using its tools and can then analyze/fix the issues.
+
+If you ever want the **full** raw output (including warnings), use:
+
+```powershell
+flutter analyze 2>&1 | Tee-Object -FilePath analyze_full.txt -Encoding UTF8; Get-Content analyze_full.txt
+```
+
+(And the same pattern for `flutter test` → `test_full.txt`.)
 
 ## Code Conventions
 

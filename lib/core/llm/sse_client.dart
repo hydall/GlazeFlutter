@@ -5,7 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 typedef SseOnUpdate = void Function(String delta, String? reasoningDelta);
-typedef SseOnComplete = void Function(String text, String? reasoning);
+typedef SseOnComplete = void Function(String text, String? reasoning, {String? rawResponseJson});
 typedef SseOnError = void Function(Object error);
 
 class SseClient {
@@ -129,6 +129,7 @@ class SseClient {
     var fullText = '';
     var fullReasoning = '';
     var doneReceived = false;
+    String? lastRawJsonPayload; // the last complete SSE data JSON string before [DONE]
 
     subscription = (responseStream as Stream<List<int>>).listen(
       (chunk) {
@@ -150,13 +151,16 @@ class SseClient {
             if (cancelToken != null && cancelToken.isCancelled) {
               debugPrint('[SSE] cancel detected at [DONE], suppressing onComplete');
             } else {
-              onComplete?.call(fullText, fullReasoning.isNotEmpty ? fullReasoning : null);
+              onComplete?.call(fullText, fullReasoning.isNotEmpty ? fullReasoning : null, rawResponseJson: lastRawJsonPayload);
               doneReceived = true;
             }
             subscription?.cancel();
             if (!completer.isCompleted) completer.complete();
             return;
           }
+
+          // Keep the last successfully parsed JSON payload (this is the "final response" chunk)
+          lastRawJsonPayload = data;
 
           try {
             final json = jsonDecode(data) as Map<String, dynamic>;
@@ -209,7 +213,7 @@ class SseClient {
     // Server dropped connection without [DONE] — treat as normal completion
     // if any text was accumulated (provider returned 200 but omitted [DONE]).
     if (fullText.isNotEmpty || fullReasoning.isNotEmpty) {
-      onComplete?.call(fullText, fullReasoning.isNotEmpty ? fullReasoning : null);
+      onComplete?.call(fullText, fullReasoning.isNotEmpty ? fullReasoning : null, rawResponseJson: lastRawJsonPayload);
       return;
     }
     throw DioException(
@@ -242,10 +246,15 @@ class SseClient {
     final raw = response.data;
     Map<String, dynamic>? data;
 
+    String? rawResponseJson;
     if (raw is Map<String, dynamic>) {
       data = raw;
+      try {
+        rawResponseJson = jsonEncode(raw);
+      } catch (_) {}
     } else if (raw is String && raw.trim().isNotEmpty) {
       final trimmed = raw.trim();
+      rawResponseJson = trimmed; // keep original body for raw view
       // Try plain JSON first.
       try {
         final decoded = jsonDecode(trimmed);
@@ -254,7 +263,7 @@ class SseClient {
       // Fallback: provider ignored stream:false and sent SSE chunks.
       if (data == null && trimmed.contains('data:')) {
         final agg = _aggregateSseString(trimmed);
-        onComplete?.call(agg.$1, agg.$2.isEmpty ? null : agg.$2);
+        onComplete?.call(agg.$1, agg.$2.isEmpty ? null : agg.$2, rawResponseJson: rawResponseJson);
         return;
       }
     }
@@ -278,7 +287,7 @@ class SseClient {
         : null;
     final reasoning = reasoningRaw is String ? reasoningRaw : null;
 
-    onComplete?.call(content, reasoning);
+    onComplete?.call(content, reasoning, rawResponseJson: rawResponseJson ?? jsonEncode(data));
   }
 
   /// Aggregate a fully-buffered SSE response (provider returned text/event-stream

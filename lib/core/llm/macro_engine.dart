@@ -18,6 +18,9 @@ class MacroContext {
   final String? lorebooksContent;
   final String? guidanceText;
   final String? macroName;
+  /// Memory content to be appended when expanding {{summary}} in summary_macro mode.
+  /// This allows <wrapper>{{summary}}</wrapper> to enclose both the summary and the injected memories.
+  final String? summaryMemoryContent;
 
   const MacroContext({
     required this.charName,
@@ -37,6 +40,7 @@ class MacroContext {
     this.lorebooksContent,
     this.guidanceText,
     this.macroName,
+    this.summaryMemoryContent,
   });
 
   MacroContext copyWith({
@@ -45,6 +49,7 @@ class MacroContext {
     String? summaryContent,
     String? lorebooksContent,
     String? guidanceText,
+    String? summaryMemoryContent,
   }) {
     return MacroContext(
       charName: charName,
@@ -64,6 +69,7 @@ class MacroContext {
       lorebooksContent: lorebooksContent ?? this.lorebooksContent,
       guidanceText: guidanceText ?? this.guidanceText,
       macroName: macroName,
+      summaryMemoryContent: summaryMemoryContent ?? this.summaryMemoryContent,
     );
   }
 }
@@ -192,7 +198,14 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
 
   result = result.replaceAllMapped(
     RegExp(r'\{\{summary\}\}', caseSensitive: false),
-    (_) => ctx.summaryContent ?? '',
+    (_) {
+      final base = ctx.summaryContent ?? '';
+      if (ctx.summaryMemoryContent != null && ctx.summaryMemoryContent!.isNotEmpty) {
+        if (base.isEmpty) return ctx.summaryMemoryContent!;
+        return '$base\n\n${ctx.summaryMemoryContent!}';
+      }
+      return base;
+    },
   );
 
   result = result.replaceAllMapped(

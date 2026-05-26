@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -150,7 +150,7 @@ class ChatGenerationService {
             });
           }
         },
-        onComplete: (text, reasoning) {
+        onComplete: (text, reasoning, {rawResponseJson}) {
           if (isAborted()) return;
           if (!apiConfig.stream &&
               accumulator.text.isEmpty &&
@@ -160,6 +160,17 @@ class ChatGenerationService {
           }
           var finalText = accumulator.text.trimLeft();
           var finalReasoning = accumulator.reasoning.isNotEmpty ? accumulator.reasoning : reasoning;
+
+          // Belt-and-suspenders sanitization: remove any leaked reasoning tag markers
+          // from the final visible text and reasoning. This catches cases where the model
+          // (especially on non-streaming path) emits an unbalanced stray </think> or the
+          // configured closing tag "from thin air". The markers are control tokens and
+          // must never appear in the persisted assistant message content or reasoning field.
+          finalText = _sanitizeReasoningMarkers(finalText, reasoningTagStart, reasoningTagEnd);
+          if (finalReasoning != null && finalReasoning.isNotEmpty) {
+            finalReasoning = _sanitizeReasoningMarkers(finalReasoning, reasoningTagStart, reasoningTagEnd);
+          }
+
           final isAllReasoning = finalText.isEmpty && finalReasoning != null && finalReasoning.isNotEmpty;
           final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;
           final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
@@ -169,7 +180,7 @@ class ChatGenerationService {
             isAborted: isAborted,
             pendingSessionVars: pendingSessionVars,
             genTime: timeStr, tokens: tokenCount,
-            rawResponse: text,
+            rawResponse: rawResponseJson ?? text,
             previousSwipes: previousSwipes,
             previousSwipeId: previousSwipeId,
             previousReasoning: previousReasoning,
@@ -475,6 +486,34 @@ class ChatGenerationService {
     );
     _persist(finalSession);
     return ChatState(session: finalSession, lastRawResponse: rawResponse, visibleStartIndex: visibleStartIndex);
+  }
+
+  /// Removes stray reasoning tag markers (both the configured ones and the
+  /// canonical <think>/</think> defaults) from the final text or reasoning.
+  /// This is a last-line defense against unbalanced or leaked tags that the model
+  /// (especially on the non-streaming path) may emit "from thin air".
+  String _sanitizeReasoningMarkers(String input, String tagStart, String tagEnd) {
+    var s = input;
+    // Configured tags first (user may have chosen custom markers)
+    if (tagStart.isNotEmpty) {
+      s = s.replaceAll(tagStart, '');
+    }
+    if (tagEnd.isNotEmpty) {
+      s = s.replaceAll(tagEnd, '');
+    }
+    // Canonical defaults (in case of leakage even when custom tags are configured)
+    s = s.replaceAll('<think>', '');
+    s = s.replaceAll('</think>', '');
+    s = s.replaceAll('<think>\n', '');
+    s = s.replaceAll('\n</think>', '');
+    s = s.replaceAll('<think> ', '');
+    s = s.replaceAll(' </think>', '');
+    // Also catch partially malformed variants that sometimes leak
+    s = s.replaceAll('<think', '');
+    s = s.replaceAll('</think', '');
+    s = s.replaceAll('think>', '');
+    s = s.replaceAll('think\n', '');
+    return s;
   }
 
   ChatState _saveErrorMessage(

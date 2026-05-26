@@ -848,7 +848,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           temperature: 0.0,
           topP: 1.0,
           stream: false,
-          onComplete: (text, _) => responseText = text,
+          onComplete: (text, _, {rawResponseJson}) => responseText = text,
           onError: (e) => throw e,
         );
         if (mounted && responseText != null) {

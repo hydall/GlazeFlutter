@@ -75,7 +75,7 @@ class MemoryDraftGenerator {
       topP: 1.0,
       stream: false,
       cancelToken: cancelToken,
-      onComplete: (text, _) {
+      onComplete: (text, _, {rawResponseJson}) {
         if (!completer.isCompleted) completer.complete(text);
       },
       onError: (error) {

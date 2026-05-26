@@ -24,7 +24,8 @@ Open the PR with the **GitHub MCP tools** (`mcp__plugin_github_github__create_pu
 1. `git branch --show-current` — confirm the branch.
 2. `git checkout master && git pull` — sync.
 3. `git checkout -b feat/xxx` — create the feature branch.
-4. `flutter analyze` — verify before committing.
+4. `flutter analyze` — lint + typecheck.
+5. `flutter test` — run the test suite (one-shot, non-watch mode).
 
 ## Cleanup after merge
 
