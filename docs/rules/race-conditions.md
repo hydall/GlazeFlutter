@@ -101,4 +101,4 @@ Verify: after pressing Stop, the network tab shows the request was actually term
 | `apiListProvider` null on cold start | Sync provider read before async load | `await ref.read(apiListProvider.future)` first; also used by `MemoryDraftGenerator` |
 | Image retry state corruption | `retryImageGeneration` callbacks have no `genId` guard | ⚠️ Unfixed — potential stale write to `ChatState` |
 | Chat ↔ memory draft mutual exclusion | Neither side checks the other | ⚠️ Not implemented |
-| Character deletion orphan rows | `CharactersNotifier.remove()` pre-deletes `ChatSessions`, causing `CharacterRepo.delete()` to skip `MemoryBookRows`/`ChatSummaries` cleanup | ⚠️ Bug — see `docs/rules/database.md` |
+| Character deletion orphan rows | `CharactersNotifier.remove()` previously called `chatRepo.deleteByCharacterId` (only deleted `ChatSessions`) before `CharacterRepo.delete`, missing per-session tables | **Fixed** — `deleteByCharacterId` now deletes `MemoryBookRows` + `ChatSummaries` + `ChatSessions` in correct order. See `docs/rules/database.md`. |

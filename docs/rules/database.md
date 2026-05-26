@@ -88,7 +88,7 @@ Schema: `{ entryId, sourceType, sourceId, vectorsBlob (BLOB), textHash, retrieva
 
 ## Deletion cascades
 
-### `CharacterRepo.delete(charId)` (inside DB transaction)
+### `CharacterRepo.delete(charId)` (inside DB transaction, defensive)
 
 1. Gets session IDs for the character
 2. Deletes `MemoryBookRows` by session IDs
@@ -96,21 +96,32 @@ Schema: `{ entryId, sourceType, sourceId, vectorsBlob (BLOB), textHash, retrieva
 4. Deletes `ChatSessions` by character ID
 5. Deletes `Characters` by charId
 
+This path is used by direct repo callers (e.g. sync engine). It is idempotent.
+
 **Does NOT delete:**
 - `Embeddings` — done separately in `CharactersNotifier.remove()`
 - `Lorebooks` — character-scoped lorebooks deleted separately in `CharactersNotifier.remove()`
+
+### `chatRepo.deleteByCharacterId(characterId)` (preferred path for bulk character-scoped cleanup)
+
+Deletes in order:
+1. `MemoryBookRows` for all sessions of the character
+2. `ChatSummaries` for all sessions of the character
+3. `ChatSessions` for the character
+
+Returns the list of deleted session IDs (for sync-deletion tracking).
 
 ### `CharactersNotifier.remove(id)` (provider-level, wraps repo + extra cleanup)
 
 1. Deletes character-scoped lorebooks (`lorebookRepo.getByScopeAndTarget('character', id)`)
 2. Deletes embeddings for those lorebooks (`embeddingRepo.deleteBySourceId(lorebookId)`)
 3. Cleans stale IDs from `lorebookActivations` SharedPreferences map
-4. Calls `chatRepo.deleteByCharacterId(id)` — deletes all `ChatSessions` for the character
-5. Calls `repo.delete(id)` — **BUG**: queries for session IDs by character ID, but sessions
-   were already deleted in step 4, so `MemoryBookRows` and `ChatSummaries` are never cleaned up.
-   This causes orphan rows after character deletion.
+4. Calls `chatRepo.deleteByCharacterId(id)` — fully cleans `MemoryBookRows`, `ChatSummaries`, and `ChatSessions` for the character (see above)
+5. Calls `repo.delete(id)` — deletes the `Characters` row (its internal defensive cleanup of per-session rows is a no-op after step 4, since sessions are already gone)
 
-When adding a new table with per-character data, add its deletion to the appropriate cascade path.
+This order guarantees no orphan `MemoryBookRows` or `ChatSummaries` rows after character deletion.
+
+When adding a new table with per-character or per-session data, add its deletion to the appropriate cascade path (`deleteByCharacterId` for session-scoped data, or `CharactersNotifier.remove` for character-scoped auxiliary data).
 
 ---
 

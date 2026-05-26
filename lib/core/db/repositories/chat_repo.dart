@@ -77,14 +77,22 @@ class ChatRepo implements SyncChatStore {
     )..where((t) => t.sessionId.equals(sessionId))).go();
   }
 
-  /// Deletes all sessions belonging to [characterId].
-  /// Returns the deleted session IDs for sync-deletion tracking.
+  /// Deletes all sessions belonging to [characterId], along with all per-session
+  /// dependent data (memory books, summaries). Returns the deleted session IDs
+  /// for sync-deletion tracking.
   Future<List<String>> deleteByCharacterId(String characterId) async {
     final rows = await (_db.select(_db.chatSessions)
           ..where((t) => t.characterId.equals(characterId)))
         .get();
     final ids = rows.map((r) => r.sessionId).toList();
+
     if (ids.isNotEmpty) {
+      await (_db.delete(_db.memoryBookRows)
+            ..where((t) => t.sessionId.isIn(ids)))
+          .go();
+      await (_db.delete(_db.chatSummaries)
+            ..where((t) => t.sessionId.isIn(ids)))
+          .go();
       await (_db.delete(_db.chatSessions)
             ..where((t) => t.characterId.equals(characterId)))
           .go();
