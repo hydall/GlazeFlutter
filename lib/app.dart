@@ -186,7 +186,7 @@ class GlazeApp extends ConsumerStatefulWidget {
 }
 
 class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver {
-  StreamSubscription<String>? _navSub;
+  StreamSubscription<NotificationNavigationData>? _navSub;
 
   @override
   void initState() {
@@ -223,8 +223,8 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
 
   void _listenNotificationNavigation() {
     _navSub = GenerationNotificationService.instance.navigationStream.listen(
-      (charId) {
-        if (mounted) context.push('/chat/$charId');
+      (data) {
+        if (mounted) context.push('/chat/${data.charId}');
       },
     );
   }

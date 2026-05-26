@@ -568,6 +568,23 @@ class ChatBridgeController {
     return _eval('window.bridge?.setPerformanceMode(${enabled})');
   }
 
+  Future<void> setMessageSettings({
+    required bool batterySaver,
+    required bool hideMessageId,
+    required bool hideGenerationTime,
+    required bool hideTokenCount,
+    required bool disableSwipeRegeneration,
+  }) {
+    final json = jsonEncode({
+      'batterySaver': batterySaver,
+      'hideMessageId': hideMessageId,
+      'hideGenerationTime': hideGenerationTime,
+      'hideTokenCount': hideTokenCount,
+      'disableSwipeRegeneration': disableSwipeRegeneration,
+    });
+    return _callJs('setMessageSettings', json);
+  }
+
   Future<void> setSelectionMode(bool enabled) {
     return _eval('window.bridge?.setSelectionMode(${enabled})');
   }

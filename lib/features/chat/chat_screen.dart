@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -18,6 +19,7 @@ import '../../shared/theme/theme_font_provider.dart';
 import '../../shared/theme/theme_provider.dart';
 
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/image_viewer.dart';
 import '../settings/app_settings_provider.dart';
 import 'chat_drawer_controller.dart';
 import 'chat_provider.dart';
@@ -316,50 +318,20 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   }
 
   void _showImageViewer(BuildContext context, String imageUrl) {
-    showDialog(
-      context: context,
-      barrierColor: Colors.black87,
-      builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: EdgeInsets.zero,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 4.0,
-              child: Center(
-                child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => Image.file(
-                    File(
-                      imageUrl
-                          .replaceFirst('file:///', '')
-                          .replaceFirst('file://', ''),
-                    ),
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const Icon(
-                      Icons.broken_image,
-                      size: 64,
-                      color: Colors.white54,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              top: MediaQuery.paddingOf(context).top + 8,
-              right: 8,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    final ImageProvider provider;
+    if (imageUrl.startsWith('data:')) {
+      final commaIdx = imageUrl.indexOf(',');
+      if (commaIdx == -1) return;
+      provider = MemoryImage(base64Decode(imageUrl.substring(commaIdx + 1)));
+    } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+      provider = NetworkImage(imageUrl);
+    } else {
+      final path = imageUrl
+          .replaceFirst('file:///', '')
+          .replaceFirst('file://', '');
+      provider = FileImage(File(path));
+    }
+    ImageViewer.show(context, imageProvider: provider);
   }
 
   void _showTriggeredItemsSheet(
@@ -576,6 +548,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     memoryDrafts: memBook.valueOrNull?.pendingDrafts ?? [],
                     sessionId: widget.state.session?.id,
                     visibleStartIndex: widget.state.visibleStartIndex,
+                    batterySaver: appSettings?.batterySaver ?? false,
+                    hideMessageId: appSettings?.hideMessageId ?? false,
+                    hideGenerationTime: appSettings?.hideGenerationTime ?? false,
+                    hideTokenCount: appSettings?.hideTokenCount ?? false,
+                    disableSwipeRegeneration:
+                        appSettings?.disableSwipeRegeneration ?? false,
                     messageActions: MessageActionsCallbacks(
                       onMessageContext: (index, messageId, isUser, isSystem, content) {
                         showMessageContextMenu(

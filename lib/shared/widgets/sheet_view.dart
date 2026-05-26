@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../shell/nav_height_provider.dart';
 import '../../features/settings/app_settings_provider.dart';
 import 'package:soft_edge_blur/soft_edge_blur.dart';
+import 'glaze_background.dart';
 import 'glaze_scaffold.dart';
 
 class SheetViewAction {
@@ -308,112 +309,114 @@ class _SheetViewState extends ConsumerState<SheetView>
           if (didPop) return;
           backHandler();
         },
-        child: Scaffold(
-        backgroundColor: context.cs.surface,
-        resizeToAvoidBottomInset: false,
-        body: Stack(
-          children: [
-            Positioned.fill(
-              child: Builder(
-                builder: (context) {
-                  final mediaQuery = MediaQuery.of(context);
-                  final extraTop = _hasHeader ? (mediaQuery.padding.top + 10 + _headerH) : mediaQuery.padding.top;
-                  final newPadding = mediaQuery.padding.copyWith(
-                    top: extraTop,
-                    bottom: navHeight > mediaQuery.padding.bottom
-                        ? navHeight
-                        : mediaQuery.padding.bottom,
-                  );
+        child: GlazeBackground(
+          child: Scaffold(
+            backgroundColor: Colors.transparent,
+            resizeToAvoidBottomInset: false,
+            body: Stack(
+              children: [
+                Positioned.fill(
+                  child: Builder(
+                    builder: (context) {
+                      final mediaQuery = MediaQuery.of(context);
+                      final extraTop = _hasHeader ? (mediaQuery.padding.top + 10 + _headerH) : mediaQuery.padding.top;
+                      final newPadding = mediaQuery.padding.copyWith(
+                        top: extraTop,
+                        bottom: navHeight > mediaQuery.padding.bottom
+                            ? navHeight
+                            : mediaQuery.padding.bottom,
+                      );
 
-                  final innerChild = Padding(
-                    padding: widget.bodyPadding ?? EdgeInsets.zero,
-                    child: Padding(
-                      padding: EdgeInsets.only(bottom: isKeyboardOpen ? bottomInset + 10 : 0),
-                      child: widget.body,
-                    ),
-                  );
+                      final innerChild = Padding(
+                        padding: widget.bodyPadding ?? EdgeInsets.zero,
+                        child: Padding(
+                          padding: EdgeInsets.only(bottom: isKeyboardOpen ? bottomInset + 10 : 0),
+                          child: widget.body,
+                        ),
+                      );
 
-                  return MediaQuery(
-                    data: mediaQuery.copyWith(padding: newPadding),
-                    child: widget.scrollController != null
-                        ? RawScrollbar(
-                            controller: widget.scrollController,
-                            thumbColor: Colors.white.withValues(alpha: 0.15),
-                            radius: const Radius.circular(3),
-                            thickness: 4,
-                            padding: EdgeInsets.only(top: extraTop, right: 3),
-                            child: innerChild,
-                          )
-                        : innerChild,
-                  );
-                },
-              ),
-            ),
-            if (_hasHeader)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                    child: KeyedSubtree(
-                      key: _headerKey,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          GlazeAppBar(
-                            title: widget.title,
-                            titleWidget: widget.titleWidget,
-                            showBack: widget.showBack,
-                            onBack: widget.onBack,
-                            actions: widget.actions.map((action) {
-                              return _HeaderIconButton(
-                                onPressed: action.onPressed,
-                                tooltip: action.tooltip,
-                                 foregroundColor: action.color ?? context.cs.primary,
-                                child: action.icon,
-                              );
-                            }).toList(),
-                          ),
-                          if (widget.tabs.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: Row(
-                                children: widget.tabs.map((tab) => Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    child: _SheetTabButton(
-                                      tab: tab,
-                                      active: widget.activeTabId == tab.id,
-                                      onTap: widget.onTabSelected == null ? null : () => widget.onTabSelected!(tab.id),
-                                    ),
-                                  ),
-                                )).toList(),
+                      return MediaQuery(
+                        data: mediaQuery.copyWith(padding: newPadding),
+                        child: widget.scrollController != null
+                            ? RawScrollbar(
+                                controller: widget.scrollController,
+                                thumbColor: Colors.white.withValues(alpha: 0.15),
+                                radius: const Radius.circular(3),
+                                thickness: 4,
+                                padding: EdgeInsets.only(top: extraTop, right: 3),
+                                child: innerChild,
+                              )
+                            : innerChild,
+                      );
+                    },
+                  ),
+                ),
+                if (_hasHeader)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: SafeArea(
+                      bottom: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                        child: KeyedSubtree(
+                          key: _headerKey,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              GlazeAppBar(
+                                title: widget.title,
+                                titleWidget: widget.titleWidget,
+                                showBack: widget.showBack,
+                                onBack: widget.onBack,
+                                actions: widget.actions.map((action) {
+                                  return _HeaderIconButton(
+                                    onPressed: action.onPressed,
+                                    tooltip: action.tooltip,
+                                    foregroundColor: action.color ?? context.cs.primary,
+                                    child: action.icon,
+                                  );
+                                }).toList(),
                               ),
-                            ),
-                          if (widget.headerBottom != null)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 12),
-                              child: widget.headerBottom!,
-                            ),
-                        ],
+                              if (widget.tabs.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: Row(
+                                    children: widget.tabs.map((tab) => Expanded(
+                                      child: Padding(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                                        child: _SheetTabButton(
+                                          tab: tab,
+                                          active: widget.activeTabId == tab.id,
+                                          onTap: widget.onTabSelected == null ? null : () => widget.onTabSelected!(tab.id),
+                                        ),
+                                      ),
+                                    )).toList(),
+                                  ),
+                                ),
+                              if (widget.headerBottom != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 12),
+                                  child: widget.headerBottom!,
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-            if (widget.floating != null)
-              Positioned.fill(child: widget.floating!),
-            if (widget.floatingActionButton != null)
-              Positioned(
-                right: 16,
-                bottom: 16 + MediaQuery.of(context).padding.bottom + bottomInset,
-                child: widget.floatingActionButton!,
-              ),
-          ],
-        ),
+                if (widget.floating != null)
+                  Positioned.fill(child: widget.floating!),
+                if (widget.floatingActionButton != null)
+                  Positioned(
+                    right: 16,
+                    bottom: 16 + MediaQuery.of(context).padding.bottom + bottomInset,
+                    child: widget.floatingActionButton!,
+                  ),
+              ],
+            ),
+          ),
         ),
       );
     }

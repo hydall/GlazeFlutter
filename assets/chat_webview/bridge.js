@@ -5,36 +5,49 @@
  * ============================================================ */
 
 class GenTimer {
-  constructor() {
+  constructor(renderer) {
+    this.renderer = renderer;
     this._interval = null;
     this._start = null;
+  }
+
+  _format(startTime) {
+    const elapsedSeconds = (Date.now() - startTime) / 1000;
+    const battery = !!(window.bridge && window.bridge.batterySaver);
+    return (battery ? elapsedSeconds.toFixed(0) : elapsedSeconds.toFixed(1)) + 's';
   }
 
   start() {
     this.stop();
     this._start = Date.now();
+    const battery = !!(window.bridge && window.bridge.batterySaver);
+    const intervalMs = battery ? 1000 : 100;
     this._interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - this._start) / 1000);
-      const timeStr = elapsed + 's';
+      const timeStr = this._format(this._start);
       const streamingEl = document.querySelector('[data-message-id="__streaming__"]')
         || document.querySelector('.message-section.char .msg-body .typing-container')?.closest('.message-section');
       if (streamingEl) {
-        let badge = streamingEl.querySelector('.gen-time-badge');
-        if (!badge) {
+        let wrapper = streamingEl.querySelector('.gen-time-wrapper');
+
+        if (!wrapper) {
           const layout = streamingEl.classList.contains('layout-bubble') ? 'bubble' : 'default';
           const statContainer = streamingEl.querySelector(layout === 'bubble' ? '.bubble-meta' : '.msg-meta');
           if (statContainer) {
-            const gw = document.createElement('div');
-            gw.className = 'gen-stat-wrap';
-            badge = document.createElement('span');
-            badge.className = 'gen-time gen-time-badge';
-            gw.appendChild(badge);
-            statContainer.appendChild(gw);
+            const stat = this.renderer._createGenStat(timeStr, 0, layout === 'bubble' ? '2px' : '4px');
+            if (layout === 'bubble') stat.style.marginRight = 'auto';
+            statContainer.appendChild(stat);
+            wrapper = stat.querySelector('.gen-time-wrapper');
           }
         }
-        if (badge) badge.textContent = timeStr;
+
+        if (wrapper && wrapper.rollingNumber) {
+          wrapper.rollingNumber.setValue(timeStr);
+        } else {
+          const badge = streamingEl.querySelector('.gen-time-badge');
+          if (badge) badge.textContent = timeStr;
+        }
       }
-    }, 1000);
+    }, intervalMs);
   }
 
   stop() {
@@ -124,6 +137,7 @@ class SelectionManager {
   }
 
   handleContextMenu(e) {
+    if (e.target.closest('.message-section.editing')) return false;
     const section = e.target.closest('.message-section');
     if (!section) return false;
 
@@ -142,6 +156,7 @@ class SelectionManager {
       this._sendToFlutter('onSelectionChange', [JSON.stringify(this.getSelectedIds())]);
       this.exitIfEmpty();
     } else {
+      if (document.querySelector('.message-section.editing')) return false;
       this.setSelectionMode(true);
       this.toggleMessageSelection(id);
       this._sendToFlutter('onSelectionChange', [JSON.stringify(this.getSelectedIds())]);
@@ -323,10 +338,11 @@ class EditController {
 }
 
 class SwipeGestureHandler {
-  constructor(sendToFlutter, getContainer, isGeneratingFn) {
+  constructor(sendToFlutter, getContainer, isGeneratingFn, disableRegenFn) {
     this._sendToFlutter = sendToFlutter;
     this._getContainer = getContainer;
     this._isGenerating = isGeneratingFn;
+    this._disableRegen = disableRegenFn || (() => false);
   }
 
   setup() {
@@ -405,7 +421,8 @@ class SwipeGestureHandler {
       const isFirstMsg = activeSection.dataset.messageIndex === '0';
       const canSwitchGreeting = isFirstMsg && greetingTotal > 1;
 
-      if (dx < 0 && !canSwitchGreeting && !isLast && swipeId >= swipeTotal - 1) return;
+      const blockLastRegen = isLast && self._disableRegen();
+      if (dx < 0 && !canSwitchGreeting && (blockLastRegen || !isLast) && swipeId >= swipeTotal - 1) return;
       if (dx > 0 && !canSwitchGreeting && swipeId <= 0) return;
 
       if (e.cancelable) e.preventDefault();
@@ -441,7 +458,7 @@ class SwipeGestureHandler {
       if (dx < -THRESHOLD) {
         if (swipeId < swipeTotal - 1) {
           animateOut(body, () => self._sendToFlutter('onSwipe', [JSON.stringify({ id: msgId, direction: 'right' })]));
-        } else if (isLast) {
+        } else if (isLast && !self._disableRegen()) {
           body.style.transition = 'transform 0.1s';
           body.style.transform = 'translateX(-20px)';
           setTimeout(() => {
@@ -623,8 +640,8 @@ class InteractionDispatch {
 
     const avatar = e.target.closest('.msg-avatar');
     if (avatar) {
-      const section = avatar.closest('.message-section');
-      if (section) bridge._sendToFlutter('onAvatarClick', [section.dataset.messageId]);
+      const img = avatar.querySelector('img');
+      if (img && img.src) bridge._sendToFlutter('onImageClick', [img.src]);
       return;
     }
 
@@ -700,7 +717,7 @@ class Bridge {
     this._requestCounter = 0;
     this.isGenerating = false;
     this.isGeneratingImage = false;
-    this._genTimer = new GenTimer();
+    this._genTimer = new GenTimer(renderer);
     this._updateBatcher = new MessageUpdateBatcher();
     this._selectionManager = new SelectionManager((name, args) => this._sendToFlutter(name, args));
     this._editController = new EditController((name, args) => this._sendToFlutter(name, args));
@@ -709,11 +726,14 @@ class Bridge {
     this._personaName = null;
     this._charAvatarUrl = null;
     this._personaAvatarUrl = null;
+    this.batterySaver = false;
+    this.disableSwipeRegeneration = false;
     renderer.selectionManager = this._selectionManager;
     this._swipeHandler = new SwipeGestureHandler(
       (name, args) => this._sendToFlutter(name, args),
       () => this.virtualList.container,
       () => this.isGenerating,
+      () => this.disableSwipeRegeneration,
     );
     this._setupScrollListener();
     this._setupInteractionListener();
@@ -1139,7 +1159,12 @@ class Bridge {
 
   removeMessage(messageId) {
     this.flush();
-    this.virtualList.remove(messageId);
+    const el = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (el && this.renderer) {
+      this.renderer.animateRemoveSection(el, () => this.virtualList.remove(messageId));
+    } else {
+      this.virtualList.remove(messageId);
+    }
   }
 
   clearAll() {
@@ -1218,6 +1243,19 @@ class Bridge {
     const container = document.getElementById('chat-container') || document.body;
     container.classList.remove('layout-bubble', 'layout-default');
     container.classList.add(`layout-${layout || 'default'}`);
+  }
+
+  setMessageSettings(json) {
+    let s;
+    try { s = typeof json === 'string' ? JSON.parse(json) : (json || {}); }
+    catch (_) { s = {}; }
+    this.batterySaver = !!s.batterySaver;
+    this.disableSwipeRegeneration = !!s.disableSwipeRegeneration;
+    const container = document.getElementById('chat-container') || document.body;
+    container.classList.toggle('battery-saver', this.batterySaver);
+    container.classList.toggle('hide-message-id', !!s.hideMessageId);
+    container.classList.toggle('hide-gen-time', !!s.hideGenerationTime);
+    container.classList.toggle('hide-token-count', !!s.hideTokenCount);
   }
 
   /* ---------- Inline edit (toggle into .msg-body) ---------- */

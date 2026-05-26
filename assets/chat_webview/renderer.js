@@ -178,6 +178,7 @@ const SHADOW_STYLE = `
   .message-section.editing .msg-reasoning { display: none; }
 `;
 
+
 class Renderer {
   constructor(formatter, virtualList) {
     this.formatter = formatter;
@@ -191,6 +192,17 @@ class Renderer {
 
   /* ----- Public: render a message ----- */
   renderMessage(messageData) {
+    if (messageData.messageIndex == null && this.virtualList) {
+      const items = this.virtualList.items;
+      for (let i = items.length - 1; i >= 0; i--) {
+        const el = items[i].el;
+        if (el && el.dataset && el.dataset.messageIndex != null) {
+          messageData.messageIndex = parseInt(el.dataset.messageIndex, 10) + 1;
+          break;
+        }
+      }
+    }
+
     const elements = [];
 
     if (messageData.timestamp) {
@@ -233,6 +245,8 @@ class Renderer {
 if (messageData.isEditing) classes.push('editing');
     if (this.selectionManager) this.selectionManager.applyClassesToSection(section, classes);
     section.className = classes.join(' ');
+    section.classList.add('msg-appear');
+    section.addEventListener('animationend', () => section.classList.remove('msg-appear'), { once: true });
 
     /* --- Header --- */
     section.appendChild(this._createHeader(messageData));
@@ -501,10 +515,11 @@ if (messageData.isEditing) classes.push('editing');
       stat.appendChild(clock.firstChild);
       const gw = document.createElement('span');
       gw.className = 'gen-time-wrapper';
-      const gt = document.createElement('span');
-      gt.className = 'gen-time gen-time-badge';
-      gt.textContent = genTime;
-      gw.appendChild(gt);
+      const rn = new RollingNumber(genTime);
+      rn.el.classList.add('gen-time');
+      rn.el.classList.add('gen-time-badge');
+      gw.rollingNumber = rn;
+      gw.appendChild(rn.el);
       stat.appendChild(gw);
     }
     if (hasTokens) {
@@ -854,7 +869,37 @@ if (messageData.isEditing) classes.push('editing');
   }
 
   updateMessageMeta(sectionEl, msg) {
-    if (!sectionEl) return;
+    if (msg.messageIndex !== undefined && msg.messageIndex !== null) {
+      sectionEl.dataset.messageIndex = String(msg.messageIndex);
+      const idxStr = `#${msg.messageIndex + 1}`;
+      
+      const headerName = sectionEl.querySelector('.msg-header .msg-name');
+      if (headerName) {
+        let idx = headerName.querySelector('.msg-index');
+        if (!idx) {
+          idx = document.createElement('span');
+          idx.className = 'msg-index gen-stat header-idx';
+          const label = headerName.querySelector('.msg-name-label');
+          if (label && label.nextSibling) {
+            headerName.insertBefore(idx, label.nextSibling);
+          } else {
+            headerName.appendChild(idx);
+          }
+        }
+        idx.textContent = idxStr;
+      }
+      
+      const bubbleMeta = sectionEl.querySelector('.bubble-meta');
+      if (bubbleMeta) {
+        let idx = bubbleMeta.querySelector('.msg-index');
+        if (!idx) {
+          idx = document.createElement('span');
+          idx.className = 'msg-index gen-stat';
+          bubbleMeta.insertBefore(idx, bubbleMeta.firstChild);
+        }
+        idx.textContent = idxStr;
+      }
+    }
 
     const hasGen = msg.genTime && msg.genTime !== '0s';
     const hasTokens = msg.tokens && msg.tokens > 0 && !msg.isTyping;
@@ -872,12 +917,22 @@ if (messageData.isEditing) classes.push('editing');
       if (hasGen) {
         const timeStr = msg.genTime;
         if (genStatBubble) {
-          const badge = genStatBubble.querySelector('.gen-time-badge');
-          if (badge) badge.textContent = timeStr;
+          const wrapper = genStatBubble.querySelector('.gen-time-wrapper');
+          if (wrapper && wrapper.rollingNumber) {
+            wrapper.rollingNumber.setValue(timeStr);
+          } else {
+            const badge = genStatBubble.querySelector('.gen-time-badge');
+            if (badge) badge.textContent = timeStr;
+          }
         }
         if (genStatFooter) {
-          const badge = genStatFooter.querySelector('.gen-time-badge');
-          if (badge) badge.textContent = timeStr;
+          const wrapper = genStatFooter.querySelector('.gen-time-wrapper');
+          if (wrapper && wrapper.rollingNumber) {
+            wrapper.rollingNumber.setValue(timeStr);
+          } else {
+            const badge = genStatFooter.querySelector('.gen-time-badge');
+            if (badge) badge.textContent = timeStr;
+          }
         }
       }
 
@@ -1100,4 +1155,27 @@ if (messageData.isEditing) classes.push('editing');
   }
 
   scrollToSearchMatch(index) { this.setSearch(this.searchQuery, index); }
+
+  animateRemoveSection(el, onDone) {
+    if (!el) { onDone?.(); return; }
+    if (el.classList.contains('native-lite')) { onDone?.(); return; }
+    const h = el.offsetHeight;
+    el.style.overflow = 'hidden';
+    el.style.pointerEvents = 'none';
+    el.style.transition = 'opacity 0.18s ease, transform 0.18s ease';
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(-8px)';
+    setTimeout(() => {
+      el.style.transition = 'max-height 0.14s ease, padding-top 0.14s ease, padding-bottom 0.14s ease, margin-top 0.14s ease, margin-bottom 0.14s ease';
+      el.style.maxHeight = h + 'px';
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        el.style.maxHeight = '0';
+        el.style.paddingTop = '0';
+        el.style.paddingBottom = '0';
+        el.style.marginTop = '0';
+        el.style.marginBottom = '0';
+      }));
+      setTimeout(() => onDone?.(), 150);
+    }, 190);
+  }
 }

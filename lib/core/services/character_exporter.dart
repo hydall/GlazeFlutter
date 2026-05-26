@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../models/character.dart';
@@ -45,11 +46,12 @@ Future<PngExportResult> exportCharacterAsPng({
   chunkFull.setUint8List(8, chunkData);
   chunkFull.setUint32(8 + chunkData.length, crcValue, Endian.big);
 
-  final insertPos = _findIhdrEnd(avatarBytes);
-  final resultPng = Uint8List(avatarBytes.length + chunkFull.lengthInBytes);
-  resultPng.setRange(0, insertPos, avatarBytes);
+  final pngAvatar = _ensurePng(avatarBytes);
+  final insertPos = _findIhdrEnd(pngAvatar);
+  final resultPng = Uint8List(pngAvatar.length + chunkFull.lengthInBytes);
+  resultPng.setRange(0, insertPos, pngAvatar);
   resultPng.setRange(insertPos, insertPos + chunkFull.lengthInBytes, chunkFull.buffer.asUint8List());
-  resultPng.setRange(insertPos + chunkFull.lengthInBytes, resultPng.length, avatarBytes.sublist(insertPos));
+  resultPng.setRange(insertPos + chunkFull.lengthInBytes, resultPng.length, pngAvatar.sublist(insertPos));
 
   final safeName = (character.name.isEmpty ? 'character' : character.name)
       .replaceAll(RegExp(r'[/\\?%*:|"<>\.]'), '-')
@@ -215,11 +217,26 @@ Map<String, dynamic> _buildV2Data(Character character, {Map<String, dynamic>? ch
   };
 }
 
+// IHDR data length is always 13 in valid PNG; guard against non-PNG bytes
+// (e.g. JPEG from iOS photo library) which would produce a garbage insertPos.
 int _findIhdrEnd(Uint8List pngBytes) {
   if (pngBytes.length < 33) return 8;
   final data = ByteData.sublistView(pngBytes);
   final ihdrLen = data.getUint32(8, Endian.big);
+  if (ihdrLen != 13) return 33;
   return 8 + 4 + 4 + ihdrLen + 4;
+}
+
+bool _isPng(Uint8List bytes) =>
+    bytes.length >= 8 &&
+    bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 &&
+    bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A;
+
+Uint8List _ensurePng(Uint8List bytes) {
+  if (_isPng(bytes)) return bytes;
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) throw Exception('Could not decode avatar image for PNG export');
+  return Uint8List.fromList(img.encodePng(decoded));
 }
 
 int _crc32(Uint8List data) {

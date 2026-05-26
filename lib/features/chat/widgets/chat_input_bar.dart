@@ -434,7 +434,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 builder: (context, value, child) {
                   final hasText = value.text.trim().isNotEmpty || (_guidanceMode && _guidanceController.text.trim().isNotEmpty);
                   final isGenerating = widget.isGenerating || widget.isGeneratingImage;
-                  
+
                   IconData icon;
                   if (isGenerating) {
                     icon = Icons.stop_rounded;
@@ -444,7 +444,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     icon = Icons.account_circle_rounded;
                   }
 
-                  return GestureDetector(
+                  return _SendBtn(
+                    icon: icon,
+                    batterySaver: widget.batterySaver,
                     onTap: () {
                       if (isGenerating) {
                         widget.onStop?.call();
@@ -454,39 +456,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         widget.onImpersonate?.call();
                       }
                     },
-                    child: Container(
-                      height: 40,
-                      width: 40,
-                      decoration: BoxDecoration(
-                        color: context.cs.primary,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          transitionBuilder: (child, animation) {
-                            return FadeTransition(
-                              opacity: animation,
-                              child: ScaleTransition(
-                                scale: Tween<double>(begin: 0.8, end: 1.0).animate(
-                                  CurvedAnimation(
-                                    parent: animation,
-                                    curve: Curves.easeOut,
-                                  ),
-                                ),
-                                child: child,
-                              ),
-                            );
-                          },
-                          child: Icon(
-                            icon,
-                            key: ValueKey(icon),
-                            color: Colors.black,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ),
                   );
                 },
               ),
@@ -498,7 +467,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
   }
 }
 
-class _CircleBtn extends StatelessWidget {
+class _CircleBtn extends StatefulWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final Color? color;
@@ -507,18 +476,127 @@ class _CircleBtn extends StatelessWidget {
   const _CircleBtn({required this.icon, this.onTap, this.color, this.batterySaver = false});
 
   @override
+  State<_CircleBtn> createState() => _CircleBtnState();
+}
+
+class _CircleBtnState extends State<_CircleBtn> with SingleTickerProviderStateMixin {
+  late final AnimationController _press;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _press = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 80),
+      reverseDuration: const Duration(milliseconds: 150),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.82).animate(
+      CurvedAnimation(parent: _press, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: 40,
-        height: 40,
-        child: GlassSurface(
-          borderRadius: BorderRadius.circular(20),
-          tint: context.cs.surface,
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+      onTap: widget.onTap,
+      onTapDown: (widget.onTap != null && !widget.batterySaver) ? (_) => _press.forward() : null,
+      onTapUp: (widget.onTap != null && !widget.batterySaver) ? (_) => _press.reverse() : null,
+      onTapCancel: (widget.onTap != null && !widget.batterySaver) ? () => _press.reverse() : null,
+      child: ScaleTransition(
+        scale: _scale,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: GlassSurface(
+            borderRadius: BorderRadius.circular(20),
+            tint: context.cs.surface,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            child: Center(
+              child: Icon(widget.icon, color: widget.color ?? context.cs.primary, size: 20),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SendBtn extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final bool batterySaver;
+
+  const _SendBtn({required this.icon, this.onTap, this.batterySaver = false});
+
+  @override
+  State<_SendBtn> createState() => _SendBtnState();
+}
+
+class _SendBtnState extends State<_SendBtn> with SingleTickerProviderStateMixin {
+  late final AnimationController _press;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _press = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 80),
+      reverseDuration: const Duration(milliseconds: 150),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.82).animate(
+      CurvedAnimation(parent: _press, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: widget.batterySaver ? null : (_) => _press.forward(),
+      onTapUp: widget.batterySaver ? null : (_) => _press.reverse(),
+      onTapCancel: widget.batterySaver ? null : () => _press.reverse(),
+      child: ScaleTransition(
+        scale: _scale,
+        child: Container(
+          height: 40,
+          width: 40,
+          decoration: BoxDecoration(
+            color: context.cs.primary,
+            shape: BoxShape.circle,
+          ),
           child: Center(
-            child: Icon(icon, color: color ?? context.cs.primary, size: 20),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: ScaleTransition(
+                  scale: Tween<double>(begin: 0.8, end: 1.0).animate(
+                    CurvedAnimation(parent: animation, curve: Curves.easeOut),
+                  ),
+                  child: child,
+                ),
+              ),
+              child: Icon(
+                widget.icon,
+                key: ValueKey(widget.icon),
+                color: Colors.black,
+                size: 20,
+              ),
+            ),
           ),
         ),
       ),

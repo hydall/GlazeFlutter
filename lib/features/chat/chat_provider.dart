@@ -282,6 +282,9 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     await notifService.onGenerationCompleted(
       character?.name ?? 'Unknown', arg,
       messagePreview: preview,
+      sessionId: result.session?.id,
+      msgId: result.messages.isNotEmpty ? result.messages.last.id : null,
+      avatarPath: character?.avatarPath,
     );
   }
 
@@ -630,6 +633,11 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     await notifService.onGenerationCompleted(
       character?.name ?? 'Unknown', arg,
       messagePreview: preview,
+      sessionId: result.session?.id,
+      msgId: result.session?.messages.isNotEmpty == true
+          ? result.session!.messages.last.id
+          : null,
+      avatarPath: character?.avatarPath,
     );
 
     if (!completer.isCompleted) completer.complete();

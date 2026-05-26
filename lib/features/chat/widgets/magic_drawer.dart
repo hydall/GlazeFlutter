@@ -14,6 +14,8 @@ import '../../../core/services/chat_import_export.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import '../../../features/settings/app_settings_provider.dart';
+import '../../../core/state/lorebook_provider.dart';
+import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/chat_session_ops_provider.dart';
 import '../../../features/chat_history/chat_history_provider.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -201,6 +203,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     }
     if (mounted) setState(() {});
     _loadTokenStats();
+  }
+
+  void _scheduleRefresh() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), _refreshStats);
   }
 
   bool _isKnownItem(String id) => _allItems.any((item) => item.id == id);
@@ -621,13 +628,20 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       final prevSession = prev?.value?.session;
       final nextSession = next.value?.session;
       if (prevSession?.id != nextSession?.id ||
-          prevSession?.messages.length != nextSession?.messages.length) {
-        _debounceTimer?.cancel();
-        _debounceTimer = Timer(
-          const Duration(milliseconds: 500),
-          _refreshStats,
-        );
+          prevSession?.messages.length != nextSession?.messages.length ||
+          prevSession?.messages.lastOrNull?.content !=
+              nextSession?.messages.lastOrNull?.content) {
+        _scheduleRefresh();
       }
+    });
+    ref.listen(activePresetIdProvider, (prev, next) {
+      if (prev != next) _scheduleRefresh();
+    });
+    ref.listen(activePersonaIdProvider, (prev, next) {
+      if (prev != next) _scheduleRefresh();
+    });
+    ref.listen(lorebookActivationsProvider, (prev, next) {
+      if (prev != next) _scheduleRefresh();
     });
 
     final items = _displayItems;

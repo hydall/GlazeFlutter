@@ -399,6 +399,14 @@
 .gen-time { transition: opacity 0.15s; }
 .token-count-inline { display: inline-flex; align-items: center; }
 
+/* Message visibility settings (toggled via Bridge.setMessageSettings) */
+.hide-message-id .msg-index { display: none !important; }
+.hide-gen-time .gen-stat > svg:first-child,
+.hide-gen-time .gen-stat .gen-time-wrapper { display: none !important; }
+.hide-token-count .gen-stat .token-count-inline { display: none !important; }
+/* Hide the entire gen-stat container when both gen-time AND token-count are hidden */
+.hide-gen-time.hide-token-count .gen-stat { display: none !important; }
+
 /* ============================================================
  * Center controls
  * ============================================================ */
@@ -659,6 +667,20 @@
  * Swipe / fade transitions (applied via classes by renderer)
  * ============================================================ */
 .swipe-animating { overflow: hidden; }
+
+/* ============================================================
+ * Message enter / exit animations
+ * Ported from ChatMessage.vue: slide-next + fade transitions
+ * ============================================================ */
+@keyframes msgSlideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.message-section.msg-appear {
+  animation: msgSlideIn 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.message-section.native-lite.msg-appear { animation: none; }
 
 /* ============================================================
  * Typing indicator
@@ -1250,3 +1272,43 @@
   z-index: 2;
   pointer-events: none;
 }
+
+/* ============================================================
+ * Rolling Number Animation
+ * ============================================================ */
+.rolling-number {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  height: 1.2em;
+  font-variant-numeric: tabular-nums;
+}
+.rolling-number-inner {
+  display: inline-flex;
+  align-items: center;
+}
+.rolling-column {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+}
+.column-enter-active, .column-leave-active { transition: all 0.2s ease; }
+.column-enter-from, .column-leave-to { opacity: 0; width: 0 !important; transform: scaleX(0); }
+.digit-container { display: inline-block; position: relative; height: 1.2em; overflow: hidden; vertical-align: top; }
+.digit-measure { visibility: hidden; display: inline-block; line-height: 1.2em; }
+.digit { position: absolute; top: 0; left: 0; right: 0; text-align: center; line-height: 1.2em; }
+.symbol { line-height: 1.2em; }
+.is-symbol { width: auto; }
+
+.slide-digit-enter-active,
+.slide-digit-leave-active { transition: transform 0.2s cubic-bezier(0.4, 0.0, 0.2, 1), opacity 0.2s cubic-bezier(0.4, 0.0, 0.2, 1); }
+.slide-digit-fast-enter-active,
+.slide-digit-fast-leave-active { transition: transform 0.05s linear, opacity 0.05s linear; }
+.slide-digit-enter-from,
+.slide-digit-fast-enter-from { transform: translateY(100%); opacity: 0; }
+.slide-digit-leave-to,
+.slide-digit-fast-leave-to { transform: translateY(-100%); opacity: 0; }
+.slide-digit-enter-to,
+.slide-digit-leave-from,
+.slide-digit-fast-enter-to,
+.slide-digit-fast-leave-from { transform: translateY(0); opacity: 1; }

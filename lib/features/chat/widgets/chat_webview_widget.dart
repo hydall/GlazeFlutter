@@ -47,7 +47,12 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final int visibleStartIndex;
   final String? regenTargetId;
   final bool isSelectionMode;
-  
+  final bool batterySaver;
+  final bool hideMessageId;
+  final bool hideGenerationTime;
+  final bool hideTokenCount;
+  final bool disableSwipeRegeneration;
+
   // Callback objects
   final MessageActionsCallbacks messageActions;
   final EditActionsCallbacks editActions;
@@ -88,6 +93,11 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.visibleStartIndex = 0,
     this.regenTargetId,
     this.isSelectionMode = false,
+    this.batterySaver = false,
+    this.hideMessageId = false,
+    this.hideGenerationTime = false,
+    this.hideTokenCount = false,
+    this.disableSwipeRegeneration = false,
     this.messageActions = const MessageActionsCallbacks(),
     this.editActions = const EditActionsCallbacks(),
     this.imageGenActions = const ImageGenCallbacks(),
@@ -154,6 +164,14 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       fontDataUrl: widget.chatFontDataUrl,
       fontSize: widget.chatFontSize,
       letterSpacing: widget.chatLetterSpacing,
+    );
+
+    await _bridge!.setMessageSettings(
+      batterySaver: widget.batterySaver,
+      hideMessageId: widget.hideMessageId,
+      hideGenerationTime: widget.hideGenerationTime,
+      hideTokenCount: widget.hideTokenCount,
+      disableSwipeRegeneration: widget.disableSwipeRegeneration,
     );
 
     await _bridge!.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
@@ -265,6 +283,20 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
 
     if (widget.isSelectionMode != old.isSelectionMode) {
       _bridge!.setSelectionMode(widget.isSelectionMode);
+    }
+
+    if (widget.batterySaver != old.batterySaver ||
+        widget.hideMessageId != old.hideMessageId ||
+        widget.hideGenerationTime != old.hideGenerationTime ||
+        widget.hideTokenCount != old.hideTokenCount ||
+        widget.disableSwipeRegeneration != old.disableSwipeRegeneration) {
+      _bridge!.setMessageSettings(
+        batterySaver: widget.batterySaver,
+        hideMessageId: widget.hideMessageId,
+        hideGenerationTime: widget.hideGenerationTime,
+        hideTokenCount: widget.hideTokenCount,
+        disableSwipeRegeneration: widget.disableSwipeRegeneration,
+      );
     }
 
     if (widget.searchQuery != old.searchQuery || widget.searchCurrentIndex != old.searchCurrentIndex) {

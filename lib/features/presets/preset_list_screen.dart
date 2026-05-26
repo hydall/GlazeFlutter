@@ -188,7 +188,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
           icon: Icons.add_circle_outline,
           label: 'Create New Preset',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             _openEditor(null);
           },
         ),
@@ -196,7 +196,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
           icon: Icons.file_upload_outlined,
           label: 'Import from File',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             _importPreset();
           },
         ),
@@ -383,7 +383,7 @@ class _PsCard extends StatelessWidget {
           icon: Icons.edit_outlined,
           label: 'Edit',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             onEdit();
           },
         ),
@@ -391,7 +391,7 @@ class _PsCard extends StatelessWidget {
           icon: Icons.copy_outlined,
           label: 'Duplicate',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             onDuplicate();
           },
         ),
@@ -401,7 +401,7 @@ class _PsCard extends StatelessWidget {
           label: 'Delete',
           isDestructive: true,
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             onDelete();
           },
         ),

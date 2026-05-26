@@ -3,8 +3,21 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+class NotificationNavigationData {
+  final String charId;
+  final String? sessionId;
+  final String? msgId;
+
+  const NotificationNavigationData({
+    required this.charId,
+    this.sessionId,
+    this.msgId,
+  });
+}
 
 class GenerationNotificationService {
   GenerationNotificationService._();
@@ -15,23 +28,39 @@ class GenerationNotificationService {
   static const _generationChannelName = 'Generation';
   static const _messageChannelId = 'glaze_message';
   static const _messageChannelName = 'New Messages';
-  static const _messageNotificationId = 2001;
+  static const _iosAudioChannel =
+      MethodChannel('com.hydall.glaze/background_audio');
 
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
-  final StreamController<String> _navigationController =
-      StreamController<String>.broadcast();
+  final StreamController<NotificationNavigationData> _navigationController =
+      StreamController<NotificationNavigationData>.broadcast();
 
   bool _isGenerating = false;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
+  NotificationNavigationData? _pendingNotificationData;
+  String? _activeCharId;
+  String? _activeSessionId;
 
-  Stream<String> get navigationStream => _navigationController.stream;
+  Stream<NotificationNavigationData> get navigationStream =>
+      _navigationController.stream;
 
-  bool get _isMobile => Platform.isAndroid || Platform.isIOS;
+  bool get _isMobile =>
+      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+
+  /// Stable notification ID in range 1..2147483646, mirrors Vue stableIdFromString.
+  int _stableId(String str) {
+    int hash = 0;
+    for (int i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.codeUnitAt(i);
+      hash = hash.toSigned(32);
+    }
+    return (hash.abs() % 2147483646) + 1;
+  }
 
   Future<void> init() async {
     const androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@drawable/ic_stat_icon_config_sample');
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -51,9 +80,10 @@ class GenerationNotificationService {
       return;
     }
 
-    if (Platform.isAndroid) {
-      final androidPlugin = _notifications.resolvePlatformSpecificImplementation<
-          AndroidFlutterLocalNotificationsPlugin>();
+    if (!kIsWeb && Platform.isAndroid) {
+      final androidPlugin =
+          _notifications.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
       if (androidPlugin != null) {
         await androidPlugin.createNotificationChannel(
           const AndroidNotificationChannel(
@@ -65,7 +95,7 @@ class GenerationNotificationService {
         );
         await androidPlugin.requestNotificationsPermission();
       }
-    } else if (Platform.isIOS) {
+    } else if (!kIsWeb && Platform.isIOS) {
       final iosPlugin = _notifications.resolvePlatformSpecificImplementation<
           IOSFlutterLocalNotificationsPlugin>();
       await iosPlugin?.requestPermissions(
@@ -94,10 +124,27 @@ class GenerationNotificationService {
         ),
       );
     }
+
+    // Restore pending data when app is cold-launched from a notification tap.
+    try {
+      final launchDetails =
+          await _notifications.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp == true) {
+        final payload = launchDetails!.notificationResponse?.payload;
+        if (payload != null) _pendingNotificationData = _parsePayload(payload);
+      }
+    } catch (_) {}
   }
 
   void updateLifecycleState(AppLifecycleState state) {
     _lifecycleState = state;
+  }
+
+  /// Call when the user opens / focuses a chat screen to suppress redundant
+  /// notifications for that character+session. Pass nulls when leaving.
+  void setActiveContext(String? charId, String? sessionId) {
+    _activeCharId = charId;
+    _activeSessionId = sessionId;
   }
 
   Future<void> onGenerationStarted(String charName) async {
@@ -108,12 +155,16 @@ class GenerationNotificationService {
           await FlutterForegroundTask.startService(
             notificationTitle: charName,
             notificationText: 'Generating response...',
+            notificationIcon: const NotificationIcon(
+              metaDataName: 'com.hydall.glaze.ic_generation',
+            ),
             callback: _foregroundTaskCallback,
           );
         }
       } catch (e) {
         debugPrint('NOTIF: foreground task start failed: $e');
       }
+      await _startSilentAudio();
     }
   }
 
@@ -121,13 +172,22 @@ class GenerationNotificationService {
     String charName,
     String charId, {
     String? messagePreview,
+    String? sessionId,
+    String? msgId,
+    String? avatarPath,
   }) async {
     _isGenerating = false;
     await _stopForegroundTask();
 
     if (_isMobile && _lifecycleState != AppLifecycleState.resumed) {
-      await _showMessageNotification(charName, charId,
-          messagePreview: messagePreview);
+      await sendMessageNotification(
+        charName,
+        messagePreview ?? 'New message received',
+        avatarPath,
+        charId,
+        sessionId: sessionId,
+        msgId: msgId,
+      );
     }
   }
 
@@ -138,6 +198,99 @@ class GenerationNotificationService {
 
   bool get isGenerating => _isGenerating;
 
+  /// Shows a message notification. Suppressed while the app is foregrounded
+  /// and the user is viewing the same charId+sessionId (mirrors Vue.js
+  /// visibility + activeContext check).
+  Future<void> sendMessageNotification(
+    String title,
+    String body,
+    String? avatarPath,
+    String charId, {
+    String? sessionId,
+    String? msgId,
+  }) async {
+    if (_lifecycleState == AppLifecycleState.resumed) {
+      if (_activeCharId == charId &&
+          (sessionId == null || _activeSessionId == sessionId)) {
+        return;
+      }
+    }
+
+    if (!_isMobile) return;
+
+    try {
+      final notifId = _stableId(charId);
+      final payload = _buildPayload(charId, sessionId, msgId);
+
+      final NotificationDetails details;
+      if (Platform.isAndroid) {
+        final personIcon = avatarPath != null && File(avatarPath).existsSync()
+            ? BitmapFilePathAndroidIcon(avatarPath)
+            : null;
+        final person = Person(name: title, icon: personIcon);
+        final messagingStyle = MessagingStyleInformation(
+          person,
+          messages: [Message(body, DateTime.now(), person)],
+          conversationTitle: title,
+        );
+        details = NotificationDetails(
+          android: AndroidNotificationDetails(
+            _messageChannelId,
+            _messageChannelName,
+            channelDescription: 'Notifications for new chat messages',
+            importance: Importance.high,
+            priority: Priority.high,
+            styleInformation: messagingStyle,
+            icon: 'new_message',
+            autoCancel: true,
+            groupKey: charId,
+          ),
+          iOS: const DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        );
+      } else {
+        final attachments = avatarPath != null && File(avatarPath).existsSync()
+            ? [DarwinNotificationAttachment(avatarPath)]
+            : <DarwinNotificationAttachment>[];
+        details = NotificationDetails(
+          iOS: DarwinNotificationDetails(
+            attachments: attachments,
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        );
+      }
+
+      await _notifications.show(notifId, title, body, details,
+          payload: payload);
+    } catch (e) {
+      debugPrint('NOTIF: sendMessageNotification failed: $e');
+    }
+  }
+
+  /// Cancels delivered notifications for a character (e.g. when the user
+  /// opens that chat). Mirrors Vue.js clearMessageNotifications.
+  Future<void> clearMessageNotifications(String charId) async {
+    if (!_isMobile) return;
+    try {
+      await _notifications.cancel(_stableId(charId));
+    } catch (e) {
+      debugPrint('NOTIF: clearMessageNotifications failed: $e');
+    }
+  }
+
+  /// Returns and clears the notification data from the last tap — used to
+  /// navigate on app launch from a background/terminated notification.
+  NotificationNavigationData? consumePendingNotificationData() {
+    final data = _pendingNotificationData;
+    _pendingNotificationData = null;
+    return data;
+  }
+
   Future<void> _stopForegroundTask() async {
     if (_isMobile) {
       try {
@@ -147,51 +300,51 @@ class GenerationNotificationService {
       } catch (e) {
         debugPrint('NOTIF: foreground task stop failed: $e');
       }
+      await _stopSilentAudio();
     }
   }
 
-  Future<void> _showMessageNotification(
-    String charName,
-    String charId, {
-    String? messagePreview,
-  }) async {
-    const androidDetails = AndroidNotificationDetails(
-      _messageChannelId,
-      _messageChannelName,
-      channelDescription: 'Notifications for new chat messages',
-      importance: Importance.high,
-      priority: Priority.high,
-      autoCancel: true,
-      icon: '@drawable/new_message',
-    );
-    const iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-    );
-    const details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
+  Future<void> _startSilentAudio() async {
+    if (kIsWeb || !Platform.isIOS) return;
+    try {
+      await _iosAudioChannel.invokeMethod<void>('start');
+    } catch (e) {
+      debugPrint('NOTIF: silent audio start failed: $e');
+    }
+  }
 
-    final body = messagePreview ?? 'New message received';
-
-    await _notifications.show(
-      _messageNotificationId,
-      charName,
-      body,
-      details,
-      payload: 'chat:$charId',
-    );
+  Future<void> _stopSilentAudio() async {
+    if (kIsWeb || !Platform.isIOS) return;
+    try {
+      await _iosAudioChannel.invokeMethod<void>('stop');
+    } catch (e) {
+      debugPrint('NOTIF: silent audio stop failed: $e');
+    }
   }
 
   void _onNotificationTapped(NotificationResponse response) {
     final payload = response.payload;
-    if (payload != null && payload.startsWith('chat:')) {
-      final charId = payload.substring(5);
-      _navigationController.add(charId);
+    if (payload == null) return;
+    final data = _parsePayload(payload);
+    if (data != null) {
+      _pendingNotificationData = data;
+      _navigationController.add(data);
     }
   }
+
+  NotificationNavigationData? _parsePayload(String payload) {
+    if (!payload.startsWith('chat:')) return null;
+    final parts = payload.substring(5).split(':');
+    if (parts.isEmpty || parts[0].isEmpty) return null;
+    return NotificationNavigationData(
+      charId: parts[0],
+      sessionId: parts.length > 1 && parts[1].isNotEmpty ? parts[1] : null,
+      msgId: parts.length > 2 && parts[2].isNotEmpty ? parts[2] : null,
+    );
+  }
+
+  String _buildPayload(String charId, String? sessionId, String? msgId) =>
+      'chat:$charId:${sessionId ?? ''}:${msgId ?? ''}';
 
   void dispose() {
     _navigationController.close();
