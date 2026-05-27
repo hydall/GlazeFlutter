@@ -159,6 +159,12 @@ class MagicDrawerStatsService {
 
     final cached = _ref.read(cachedTokenBreakdownProvider(charId));
 
+    final approxHistoryTokens = session != null
+        ? session.messages
+            .where((m) => !m.isHidden && !m.isTyping)
+            .fold<int>(0, (sum, m) => sum + (m.content.length / 4).round())
+        : 0;
+
     return MagicDrawerStats(
       character: character,
       activePreset: activePreset,
@@ -172,6 +178,7 @@ class MagicDrawerStatsService {
       regexCount: regexes.length,
       summaryChars: summaryChars,
       promptTokens: cached?.totalTokens ?? 0,
+      approximateHistoryTokens: approxHistoryTokens,
       contextSize: chatApi?.contextSize ?? 0,
       characterTokens: (cached?.sourceTokens['description'] ?? 0) > 0 ? cached!.sourceTokens['description']! : (cached?.macroTokens['description'] ?? 0),
       presetTokens: cached?.presetNetTokens ?? 0,

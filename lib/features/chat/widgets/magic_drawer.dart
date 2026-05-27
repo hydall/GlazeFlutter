@@ -236,6 +236,8 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       'context' =>
         _stats.promptTokens > 0 && _stats.contextSize > 0
             ? '${_stats.promptTokens}/${_stats.contextSize} tokens'
+            : _loadingTokens && _stats.approximateHistoryTokens > 0
+            ? '~${_stats.approximateHistoryTokens}/${_stats.contextSize} tokens'
             : _loadingTokens
             ? 'Calculating...'
             : null,
@@ -265,6 +267,8 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       'preview' =>
         _stats.promptTokens > 0
             ? '${_stats.promptTokens} tokens'
+            : _loadingTokens && _stats.approximateHistoryTokens > 0
+            ? '~${_stats.approximateHistoryTokens} tokens'
             : _loadingTokens
             ? 'Calculating...'
             : null,

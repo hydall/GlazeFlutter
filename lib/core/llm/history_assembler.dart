@@ -80,6 +80,30 @@ class PromptMessage {
   });
 
   Map<String, String> toApiMap() => {'role': role, 'content': content};
+
+  Map<String, dynamic> toJson() => {
+    'role': role,
+    'content': content,
+    'blockId': blockId,
+    'depth': depth,
+    'isHistory': isHistory,
+    'isDepth': isDepth,
+    'isLorebook': isLorebook,
+    'isSummary': isSummary,
+    'blockName': blockName,
+  };
+
+  factory PromptMessage.fromJson(Map<String, dynamic> json) => PromptMessage(
+    role: json['role'] as String,
+    content: json['content'] as String,
+    blockId: json['blockId'] as String?,
+    depth: json['depth'] as int?,
+    isHistory: json['isHistory'] as bool? ?? false,
+    isDepth: json['isDepth'] as bool? ?? false,
+    isLorebook: json['isLorebook'] as bool? ?? false,
+    isSummary: json['isSummary'] as bool? ?? false,
+    blockName: json['blockName'] as String?,
+  );
 }
 
 String _normalizeUnderscoreEmphasis(String text) {

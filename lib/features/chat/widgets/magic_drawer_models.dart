@@ -44,6 +44,7 @@ class MagicDrawerStats {
   final int regexCount;
   final int summaryChars;
   final int promptTokens;
+  final int approximateHistoryTokens;
   final int contextSize;
   final int characterTokens;
   final int presetTokens;
@@ -71,6 +72,7 @@ class MagicDrawerStats {
     this.regexCount = 0,
     this.summaryChars = 0,
     this.promptTokens = 0,
+    this.approximateHistoryTokens = 0,
     this.contextSize = 0,
     this.characterTokens = 0,
     this.presetTokens = 0,
@@ -88,6 +90,7 @@ class MagicDrawerStats {
 
   MagicDrawerStats copyWith({
     int? promptTokens,
+    int? approximateHistoryTokens,
     int? contextSize,
     int? characterTokens,
     int? presetTokens,
@@ -107,6 +110,7 @@ class MagicDrawerStats {
       regexCount: regexCount,
       summaryChars: summaryChars,
       promptTokens: promptTokens ?? this.promptTokens,
+      approximateHistoryTokens: approximateHistoryTokens ?? this.approximateHistoryTokens,
       contextSize: contextSize ?? this.contextSize,
       characterTokens: characterTokens ?? this.characterTokens,
       presetTokens: presetTokens ?? this.presetTokens,

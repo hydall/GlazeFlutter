@@ -27,6 +27,28 @@ class ScannedEntry {
     required this.lorebookId,
     required this.constant,
   });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'comment': comment,
+    'content': content,
+    'position': position,
+    'order': order,
+    'lorebookName': lorebookName,
+    'lorebookId': lorebookId,
+    'constant': constant,
+  };
+
+  factory ScannedEntry.fromJson(Map<String, dynamic> json) => ScannedEntry(
+    id: json['id'] as String,
+    comment: json['comment'] as String,
+    content: json['content'] as String,
+    position: json['position'] as String,
+    order: json['order'] as int,
+    lorebookName: json['lorebookName'] as String,
+    lorebookId: json['lorebookId'] as String,
+    constant: json['constant'] as bool,
+  );
 }
 
 List<ScannedEntry> scanLorebooks({

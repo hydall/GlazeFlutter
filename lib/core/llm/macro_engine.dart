@@ -72,6 +72,48 @@ class MacroContext {
       summaryMemoryContent: summaryMemoryContent ?? this.summaryMemoryContent,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'charName': charName,
+    'charDescription': charDescription,
+    'charScenario': charScenario,
+    'charPersonality': charPersonality,
+    'charMesExample': charMesExample,
+    'userName': userName,
+    'personaPrompt': personaPrompt,
+    'reasoningStart': reasoningStart,
+    'reasoningEnd': reasoningEnd,
+    'sessionVars': sessionVars,
+    'globalVars': globalVars,
+    'charId': charId,
+    'sessionId': sessionId,
+    'summaryContent': summaryContent,
+    'lorebooksContent': lorebooksContent,
+    'guidanceText': guidanceText,
+    'macroName': macroName,
+    'summaryMemoryContent': summaryMemoryContent,
+  };
+
+  factory MacroContext.fromJson(Map<String, dynamic> json) => MacroContext(
+    charName: json['charName'] as String,
+    charDescription: json['charDescription'] as String?,
+    charScenario: json['charScenario'] as String?,
+    charPersonality: json['charPersonality'] as String?,
+    charMesExample: json['charMesExample'] as String?,
+    userName: json['userName'] as String? ?? 'User',
+    personaPrompt: json['personaPrompt'] as String?,
+    reasoningStart: json['reasoningStart'] as String?,
+    reasoningEnd: json['reasoningEnd'] as String?,
+    sessionVars: Map<String, String>.from(json['sessionVars'] as Map? ?? {}),
+    globalVars: Map<String, String>.from(json['globalVars'] as Map? ?? {}),
+    charId: json['charId'] as String,
+    sessionId: json['sessionId'] as String,
+    summaryContent: json['summaryContent'] as String?,
+    lorebooksContent: json['lorebooksContent'] as String?,
+    guidanceText: json['guidanceText'] as String?,
+    macroName: json['macroName'] as String?,
+    summaryMemoryContent: json['summaryMemoryContent'] as String?,
+  );
 }
 
 class MacroResult {

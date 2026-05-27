@@ -5,6 +5,13 @@ class StaticBlock {
   final String id;
   final String content;
   const StaticBlock({required this.id, required this.content});
+
+  Map<String, dynamic> toJson() => {'id': id, 'content': content};
+
+  factory StaticBlock.fromJson(Map<String, dynamic> json) => StaticBlock(
+    id: json['id'] as String,
+    content: json['content'] as String,
+  );
 }
 
 class ContextCalculator {
@@ -146,6 +153,38 @@ class TokenBreakdown {
     this.fixedTotal = 0,
     this.remaining = 0,
   });
+
+  Map<String, dynamic> toJson() => {
+    'sourceTokens': sourceTokens,
+    'macroTokens': macroTokens,
+    'staticTotal': staticTotal,
+    'historyBudget': historyBudget,
+    'historyTokens': historyTokens,
+    'totalTokens': totalTokens,
+    'cutoffIndex': cutoffIndex,
+    'trimmedHistory': trimmedHistory.map((m) => m.toJson()).toList(),
+    'lorebookReserveTokens': lorebookReserveTokens,
+    'memoryTokens': memoryTokens,
+    'vectorLoreTokens': vectorLoreTokens,
+    'fixedTotal': fixedTotal,
+    'remaining': remaining,
+  };
+
+  factory TokenBreakdown.fromJson(Map<String, dynamic> json) => TokenBreakdown(
+    sourceTokens: Map<String, int>.from(json['sourceTokens'] as Map),
+    macroTokens: Map<String, int>.from(json['macroTokens'] as Map? ?? {}),
+    staticTotal: json['staticTotal'] as int,
+    historyBudget: json['historyBudget'] as int,
+    historyTokens: json['historyTokens'] as int,
+    totalTokens: json['totalTokens'] as int,
+    cutoffIndex: json['cutoffIndex'] as int,
+    trimmedHistory: (json['trimmedHistory'] as List).map((m) => PromptMessage.fromJson(m as Map<String, dynamic>)).toList(),
+    lorebookReserveTokens: json['lorebookReserveTokens'] as int? ?? 0,
+    memoryTokens: json['memoryTokens'] as int? ?? 0,
+    vectorLoreTokens: json['vectorLoreTokens'] as int? ?? 0,
+    fixedTotal: json['fixedTotal'] as int? ?? 0,
+    remaining: json['remaining'] as int? ?? 0,
+  );
 
   int get lorebookTotal => (sourceTokens['lorebook'] ?? 0) + (macroTokens['lorebooks'] ?? 0) + vectorLoreTokens;
 

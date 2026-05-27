@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/context_calculator.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
+import '../../../features/settings/api_list_provider.dart';
 import '../../../features/settings/app_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../chat_provider.dart';
+import 'cached_token_breakdown.dart';
 import 'tokenizer_widgets.dart';
 
 class TokenizerSheet extends ConsumerStatefulWidget {
@@ -29,14 +31,40 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   @override
   void initState() {
     super.initState();
-    final settings = ref.read(appSettingsProvider).valueOrNull ?? const AppSettings();
+    final settings =
+        ref.read(appSettingsProvider).valueOrNull ?? const AppSettings();
     _hidePercent = settings.tokenizerHidePercent;
     _historyFillThreshold = settings.tokenizerHistoryFillThreshold;
-    _calculate();
+    _loadOrCalculate();
   }
 
   double _hidePercent = 30;
   double _historyFillThreshold = 85;
+
+  void _loadOrCalculate() {
+    final cached = ref.read(cachedTokenBreakdownProvider(widget.charId));
+    if (cached != null) {
+      final chatState = ref.read(chatProvider(widget.charId)).value;
+      final session = chatState?.session;
+      _contextSize = chatState?.session != null
+          ? _resolveContextSize()
+          : null;
+      _visibleCount =
+          session?.messages.where((m) => !m.isHidden).length ?? 0;
+      _breakdown = cached;
+      return;
+    }
+    _calculate();
+  }
+
+  int? _resolveContextSize() {
+    try {
+      final chatApi = ref.read(activeApiConfigProvider);
+      return chatApi?.contextSize;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> _calculate() async {
     setState(() => _loading = true);
@@ -55,10 +83,15 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       final payload = await builder.buildFromSession(
         charId: widget.charId,
         session: session,
+        skipVectorSearch: true,
       );
       _contextSize = payload.apiConfig.contextSize;
 
       final result = await buildPromptInIsolate(payload);
+      ref
+          .read(cachedTokenBreakdownProvider(widget.charId).notifier)
+          .state = result.breakdown;
+
       if (mounted) setState(() => _breakdown = result.breakdown);
     } catch (e) {
       debugPrint('Tokenizer error: $e');
@@ -95,23 +128,24 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : bd == null
-          ? Center(
-              child: Text(
-                'No data',
-                style: TextStyle(color: context.cs.onSurfaceVariant),
-              ),
-            )
-          : _showSettings
-          ? _buildSettings()
-          : _buildMainView(
-              bd,
-              contextSize,
-              used,
-              remaining,
-              usedPercent,
-              historyFill,
-              nearLimit,
-            ),
+              ? Center(
+                  child: Text(
+                    'No data',
+                    style:
+                        TextStyle(color: context.cs.onSurfaceVariant),
+                  ),
+                )
+              : _showSettings
+                  ? _buildSettings()
+                  : _buildMainView(
+                      bd,
+                      contextSize,
+                      used,
+                      remaining,
+                      usedPercent,
+                      historyFill,
+                      nearLimit,
+                    ),
     );
   }
 
@@ -124,16 +158,19 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     double historyFill,
     bool nearLimit,
   ) {
-    final hideCount = (_visibleCount * _hidePercent / 100).ceil().clamp(1, _visibleCount > 1 ? _visibleCount - 1 : 0);
+    final hideCount = (_visibleCount * _hidePercent / 100)
+        .ceil()
+        .clamp(1, _visibleCount > 1 ? _visibleCount - 1 : 0);
     final historyTokens = bd.sourceTokens['history'] ?? 0;
-    final hideTokens = _visibleCount > 0 ? ((historyTokens / _visibleCount) * hideCount).toInt() : 0;
+    final hideTokens = _visibleCount > 0
+        ? ((historyTokens / _visibleCount) * hideCount).toInt()
+        : 0;
 
     return Builder(
       builder: (context) => ListView(
         shrinkWrap: true,
-        padding: const EdgeInsets.all(
-          16,
-        ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+        padding: const EdgeInsets.all(16)
+            .add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
         children: [
           HeroCard(
             used: used,
@@ -149,20 +186,31 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
           ],
           if (nearLimit) ...[
             const SizedBox(height: 24),
-            NearLimitWarning(hideCount: hideCount, hideTokens: hideTokens),
+            NearLimitWarning(
+                hideCount: hideCount, hideTokens: hideTokens),
           ],
           const SizedBox(height: 24),
           Row(
             children: [
               Expanded(
                 child: FilledButton(
-                  onPressed: hideCount > 0 ? () => _confirmHide(context, hideCount) : null,
+                  onPressed: hideCount > 0
+                      ? () => _confirmHide(context, hideCount)
+                      : null,
                   style: FilledButton.styleFrom(
                     backgroundColor: context.cs.primary,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text(hideCount > 0 ? 'Hide top $hideCount' : 'Hide top messages', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+                  child: Text(
+                      hideCount > 0
+                          ? 'Hide top $hideCount'
+                          : 'Hide top messages',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white)),
                 ),
               ),
               const SizedBox(width: 12),
@@ -171,12 +219,18 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
                   onPressed: () => setState(() => _showSettings = true),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: context.cs.onSurface,
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                    side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-                    backgroundColor: context.cs.surfaceContainerHighest.withValues(alpha: 0.5),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                    side: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.1)),
+                    backgroundColor: context.cs.surfaceContainerHighest
+                        .withValues(alpha: 0.5),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text('Settings', style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: const Text('Settings',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600)),
                 ),
               ),
             ],
@@ -187,11 +241,12 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   }
 
   void _saveSettings() {
-    final settings = ref.read(appSettingsProvider).valueOrNull ?? const AppSettings();
+    final settings =
+        ref.read(appSettingsProvider).valueOrNull ?? const AppSettings();
     ref.read(appSettingsProvider.notifier).save(settings.copyWith(
-      tokenizerHidePercent: _hidePercent,
-      tokenizerHistoryFillThreshold: _historyFillThreshold,
-    ));
+          tokenizerHidePercent: _hidePercent,
+          tokenizerHistoryFillThreshold: _historyFillThreshold,
+        ));
   }
 
   void _confirmHide(BuildContext context, int count) async {
@@ -200,24 +255,29 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       title: 'Hide Messages',
       bigInfo: BottomSheetBigInfo(
         icon: Icons.visibility_off_outlined,
-        description: 'Hide the top $count visible message${count > 1 ? 's' : ''} from prompt? They will still be visible in chat (dimmed) but excluded from generation.',
+        description:
+            'Hide the top $count visible message${count > 1 ? 's' : ''} from prompt? They will still be visible in chat (dimmed) but excluded from generation.',
       ),
       items: [
         BottomSheetItem(
           label: 'Hide $count',
           centered: true,
-          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
+          onTap: () =>
+              Navigator.of(context, rootNavigator: true).pop(true),
         ),
         BottomSheetItem(
           label: 'Cancel',
           centered: true,
-          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+          onTap: () =>
+              Navigator.of(context, rootNavigator: true).pop(false),
         ),
       ],
     );
     if (confirmed == true) {
-      await ref.read(chatProvider(widget.charId).notifier).hideTopMessages(count);
-      _calculate();
+      await ref
+          .read(chatProvider(widget.charId).notifier)
+          .hideTopMessages(count);
+      await _calculate();
     }
   }
 
@@ -225,9 +285,8 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     return Builder(
       builder: (context) => ListView(
         shrinkWrap: true,
-        padding: const EdgeInsets.all(
-          16,
-        ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+        padding: const EdgeInsets.all(16)
+            .add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
         children: [
           SettingsSlider(
             label: 'History fill threshold',
@@ -248,7 +307,8 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
             min: 1,
             max: 95,
             unit: '%',
-            description: 'What % of visible messages the Hide button will hide',
+            description:
+                'What % of visible messages the Hide button will hide',
             onChanged: (v) {
               setState(() => _hidePercent = v);
               _saveSettings();

@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app.dart';
 import 'package:glaze_flutter/core/llm/tokenizer.dart';
+import 'package:glaze_flutter/core/llm/prompt_worker.dart';
 import 'core/services/generation_notification_service.dart';
 import 'core/services/deep_link_service.dart';
 
@@ -18,6 +19,7 @@ Future<void> main() async {
   ]);
   await dotenv.load(fileName: '.env');
   await preloadO200kBase();
+  await PromptWorker.ensureInitialized();
   await GenerationNotificationService.instance.init();
   await DeepLinkService.instance.init();
   runApp(const _RestartableApp());
