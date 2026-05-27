@@ -157,22 +157,11 @@ Persona? getEffectivePersona(
   return personas.isNotEmpty ? personas.first : null;
 }
 
-typedef EffectivePersonaChatKey = ({String charId, String? sessionId});
-
-final effectivePersonaForChatProvider =
-    Provider.family<Persona?, EffectivePersonaChatKey>((ref, key) {
-  final personasAsync = ref.watch(personaListProvider);
-  if (!personasAsync.hasValue) return null;
-
+final effectivePersonaForChatProvider = Provider.family<Persona?, String>((ref, charId) {
+  final personas = ref.watch(personaListProvider).value ?? [];
   final activePersonaId = ref.watch(activePersonaIdProvider);
   final personaConnections = ref.watch(personaConnectionsProvider);
-  return getEffectivePersona(
-    personasAsync.requireValue,
-    key.charId,
-    key.sessionId,
-    activePersonaId,
-    personaConnections,
-  );
+  return getEffectivePersona(personas, charId, null, activePersonaId, personaConnections);
 });
 
 void updateGlobalVarsRef(Ref ref, Map<String, String> vars) {

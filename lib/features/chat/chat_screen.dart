@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -19,8 +20,7 @@ import '../../shared/theme/theme_provider.dart';
 
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/image_viewer.dart';
-import '../settings/app_settings_provider.dart' show AppSettings, appSettingsProvider;
-import 'chat_bottom_inset_controller.dart';
+import '../settings/app_settings_provider.dart';
 import 'chat_drawer_controller.dart';
 import 'chat_provider.dart';
 import 'chat_search_delegate.dart';
@@ -137,6 +137,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final batterySaver = appSettings?.batterySaver ?? false;
     _drawerCtrl.setBatterySaverMode(batterySaver);
 
+    final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
+    _drawerCtrl.handleKeyboardFrame(keyboardHeight);
+
+    if (_drawerCtrl.switchingToDrawer && keyboardHeight == 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _drawerCtrl.checkSwitchingTransition(keyboardHeight);
+      });
+    }
+
+    if (keyboardHeight > 0 && _drawerCtrl.drawerOpen && !_drawerCtrl.switchingToDrawer) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _drawerCtrl.checkDrawerCollision(keyboardHeight);
+      });
+    }
+
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    final targetBottomPanelInset =
+        _drawerCtrl.computeTargetBottomPanelInset(keyboardHeight, safeBottom);
+
     return SessionLifecycleTracker(
       charId: charId,
 child: PopScope(
@@ -223,7 +242,8 @@ child: PopScope(
               state: state,
               drawerCtrl: _drawerCtrl,
               search: _search,
-              headerHidden: _isHeaderHidden,
+              keyboardHeight: keyboardHeight,
+              targetBottomPanelInset: targetBottomPanelInset,
               onScrollDirection: _onScrollDirection,
               virtualKeyboardSend: virtualKeyboardSend,
               enterToSend: enterToSend,
@@ -240,7 +260,8 @@ class _ChatBody extends ConsumerStatefulWidget {
   final ChatState state;
   final ChatDrawerController drawerCtrl;
   final ChatSearchDelegate search;
-  final bool headerHidden;
+  final double keyboardHeight;
+  final double targetBottomPanelInset;
   final ValueChanged<ScrollDirection>? onScrollDirection;
   final bool virtualKeyboardSend;
   final bool enterToSend;
@@ -250,7 +271,8 @@ class _ChatBody extends ConsumerStatefulWidget {
     required this.state,
     required this.drawerCtrl,
     required this.search,
-    this.headerHidden = false,
+    required this.keyboardHeight,
+    required this.targetBottomPanelInset,
     this.onScrollDirection,
     this.virtualKeyboardSend = false,
     this.enterToSend = true,
@@ -261,62 +283,31 @@ class _ChatBody extends ConsumerStatefulWidget {
 }
 
 class _ChatBodyState extends ConsumerState<_ChatBody> {
+  double _inputBarHeight = 130.0;
   final GlobalKey _inputBarKey = GlobalKey();
-  late final ChatBottomInsetController _insetController;
-  late final VoidCallback _drawerInsetListener;
+  late final VoidCallback _drawerAnimListener;
 
   bool _isSelectionMode = false;
-  final ValueNotifier<bool> _showScrollToBottom = ValueNotifier(false);
+  bool _showScrollToBottom = false;
   Set<String> _selectedMessageIds = {};
   final GlobalKey<ChatWebViewWidgetState> _webViewStateKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _insetController = ChatBottomInsetController(widget.drawerCtrl);
-    _drawerInsetListener = _syncBottomInsets;
-    widget.drawerCtrl.drawerAnim.addListener(_drawerInsetListener);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkHeight();
-      _syncBottomInsets();
-    });
+    _drawerAnimListener = () {
+      if (mounted) setState(() {});
+    };
+    widget.drawerCtrl.drawerAnim.addListener(_drawerAnimListener);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkHeight());
   }
 
   @override
   void didUpdateWidget(covariant _ChatBody oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (!identical(oldWidget.drawerCtrl.drawerAnim, widget.drawerCtrl.drawerAnim)) {
-      oldWidget.drawerCtrl.drawerAnim.removeListener(_drawerInsetListener);
-      widget.drawerCtrl.drawerAnim.addListener(_drawerInsetListener);
-    }
-    if (oldWidget.headerHidden != widget.headerHidden) {
-      _syncWebViewLayout(immediate: true);
-    }
-  }
-
-  static const double _webViewBottomScrollPadding = 12;
-
-  void _syncWebViewLayout({bool immediate = false}) {
-    if (!mounted) return;
-    _webViewStateKey.currentState?.updateLayoutInsets(
-      top: _messageListTop(context),
-      bottom: _webViewBottomScrollPadding,
-      immediate: immediate,
-    );
-  }
-
-  double _messageListTop(BuildContext context) {
-    const headerHeight = 56.0;
-    const wrapPadding = 10.0;
-    return MediaQuery.paddingOf(context).top +
-        wrapPadding +
-        (widget.headerHidden ? 0 : headerHeight);
-  }
-
-  void _syncBottomInsets() {
-    if (!mounted) return;
-    if (_insetController.syncFromContext(context)) {
-      _syncWebViewLayout(immediate: true);
+      oldWidget.drawerCtrl.drawerAnim.removeListener(_drawerAnimListener);
+      widget.drawerCtrl.drawerAnim.addListener(_drawerAnimListener);
     }
   }
 
@@ -325,9 +316,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final ctx = _inputBarKey.currentContext;
     if (ctx != null) {
       final size = ctx.size;
-      if (size != null && size.height > 0) {
-        _insetController.setInputBarHeight(size.height);
-        _syncBottomInsets();
+      if (size != null && size.height != _inputBarHeight && size.height > 0) {
+        setState(() {
+          _inputBarHeight = size.height;
+        });
       }
     }
   }
@@ -338,7 +330,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       await webViewState.scrollToBottom();
     }
     if (!mounted) return;
-    _showScrollToBottom.value = false;
+    setState(() => _showScrollToBottom = false);
   }
 
   void _showImageViewer(BuildContext context, String imageUrl) {
@@ -475,9 +467,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   @override
   void dispose() {
-    widget.drawerCtrl.drawerAnim.removeListener(_drawerInsetListener);
-    _showScrollToBottom.dispose();
-    _insetController.dispose();
+    widget.drawerCtrl.drawerAnim.removeListener(_drawerAnimListener);
     super.dispose();
   }
 
@@ -507,6 +497,23 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         ? ref.read(themeProvider).activePreset
         : ref.watch(themeProvider).activePreset;
     final batterySaver = appSettings?.batterySaver ?? false;
+    // Reserve space below the message list for: input bar + (keyboard or
+    // drawer) + the bottom safe area. We pass the FINAL inset so the list's
+    // padding doesn't churn per animation frame.
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    // Top inset for the chat list: safe area + GlazeScaffold wrap padding (10)
+    // + GlazeAppBar height (56). Matches the floating header above the webview.
+    final messageListTop = MediaQuery.paddingOf(context).top + 10 + 56;
+    // ...
+    final drawerProgress = widget.drawerCtrl.drawerAnim.value;
+    final targetDrawerInset =
+        (widget.drawerCtrl.drawerOpen || widget.drawerCtrl.switchingToDrawer)
+            ? widget.drawerCtrl.activeDrawerHeight * drawerProgress
+            : 0.0;
+    final panelHeight = math.max(targetDrawerInset, widget.keyboardHeight);
+    final factor = math.min(1.0, panelHeight / math.max(1.0, safeBottom));
+    final effectiveBottomInset = panelHeight + (safeBottom * (1 - factor));
+    final messageListBottom = _inputBarHeight + effectiveBottomInset;
 
     final bgBlur = preset.bgBlur > 0 ? preset.bgBlur : 0.0;
     final bgOpacity = preset.bgOpacity.clamp(0.0, 1.0);
@@ -520,33 +527,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final character = batterySaverMode
         ? ref.read(characterByIdProvider(widget.charId))
         : ref.watch(characterByIdProvider(widget.charId));
-    final personaKey = (
-      charId: widget.charId,
-      sessionId: widget.state.session?.id,
-    );
     final effectivePersona = batterySaverMode
-        ? ref.read(effectivePersonaForChatProvider(personaKey))
-        : ref.watch(effectivePersonaForChatProvider(personaKey));
-    ref.listen(effectivePersonaForChatProvider(personaKey), (prev, next) {
-      if (prev?.id == next?.id &&
-          prev?.name == next?.name &&
-          prev?.avatarPath == next?.avatarPath) {
-        return;
-      }
-      _webViewStateKey.currentState?.applyIdentity(
-        charName: character?.name,
-        charColor: character?.color,
-        personaName: next?.name,
-        charAvatarPath: character?.avatarPath,
-        personaAvatarPath: next?.avatarPath,
-        greetingTotal: character == null
-            ? 0
-            : ((character.firstMes?.isNotEmpty == true ? 1 : 0) +
-                character.alternateGreetings
-                    .where((g) => g.isNotEmpty)
-                    .length),
-      );
-    });
+        ? ref.read(effectivePersonaForChatProvider(widget.charId))
+        : ref.watch(effectivePersonaForChatProvider(widget.charId));
     final memBook = batterySaverMode
         ? ref.read(memoryBookProvider(widget.state.session?.id ?? ''))
         : ref.watch(memoryBookProvider(widget.state.session?.id ?? ''));
@@ -555,48 +538,53 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         : ((character.firstMes?.isNotEmpty == true ? 1 : 0) +
             character.alternateGreetings.where((g) => g.isNotEmpty).length);
 
-    final webViewLayer = NotificationListener<UserScrollNotification>(
-      onNotification: (notification) {
-        if (widget.onScrollDirection != null) {
-          widget.onScrollDirection!(notification.direction);
-        }
-        return false;
-      },
-      child: ChatWebViewWidget(
-          key: _webViewStateKey,
-          messages: widget.state.visibleMessages,
-          charId: widget.charId,
-          isGenerating: widget.state.isGenerating,
-          isGeneratingImage: widget.state.isGeneratingImage,
-          regenTargetId: widget.state.regenTargetId,
-          bottomInset: 0,
-          topInset: 0,
-          charName: character?.name,
-          charColor: character?.color,
-          personaName: effectivePersona?.name,
-          greetingTotal: greetingTotal,
-          chatLayout: appSettings?.chatLayout ?? 'default',
-          charAvatarPath: character?.avatarPath,
-          personaAvatarPath: effectivePersona?.avatarPath,
-          bgImagePath: bgPath,
-          bgBlur: bgBlur,
-          bgOpacity: bgOpacity,
-          bgNoiseOpacity: preset.bgNoiseOpacity,
-          bgNoiseIntensity: preset.bgNoiseIntensity,
-          chatFontName: fontStyle.fontFamily,
-          chatFontDataUrl: fontDataUrl,
-          chatFontSize: fontStyle.fontSize,
-          chatLetterSpacing: fontStyle.letterSpacing,
-          memoryEntries: memBook.valueOrNull?.entries ?? [],
-          memoryDrafts: memBook.valueOrNull?.pendingDrafts ?? [],
-          sessionId: widget.state.session?.id,
-          visibleStartIndex: widget.state.visibleStartIndex,
-          batterySaver: batterySaver,
-          hideMessageId: appSettings?.hideMessageId ?? false,
-          hideGenerationTime: appSettings?.hideGenerationTime ?? false,
-          hideTokenCount: appSettings?.hideTokenCount ?? false,
-          disableSwipeRegeneration: appSettings?.disableSwipeRegeneration ?? false,
-          messageActions: MessageActionsCallbacks(
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: NotificationListener<UserScrollNotification>(
+            onNotification: (notification) {
+              if (widget.onScrollDirection != null) {
+                widget.onScrollDirection!(notification.direction);
+              }
+              return false;
+            },
+            child: RepaintBoundary(
+              child: ChatWebViewWidget(
+                    key: _webViewStateKey,
+                    messages: widget.state.visibleMessages,
+                    charId: widget.charId,
+                    isGenerating: widget.state.isGenerating,
+                    isGeneratingImage: widget.state.isGeneratingImage,
+                    regenTargetId: widget.state.regenTargetId,
+                    bottomInset: messageListBottom,
+                    topInset: messageListTop,
+                    charName: character?.name,
+                    charColor: character?.color,
+                    personaName: effectivePersona?.name,
+                    greetingTotal: greetingTotal,
+                    chatLayout: appSettings?.chatLayout ?? 'default',
+                    charAvatarPath: character?.avatarPath,
+                    personaAvatarPath: effectivePersona?.avatarPath,
+                    bgImagePath: bgPath,
+                    bgBlur: bgBlur,
+                    bgOpacity: bgOpacity,
+                    bgNoiseOpacity: preset.bgNoiseOpacity,
+                    bgNoiseIntensity: preset.bgNoiseIntensity,
+                    chatFontName: fontStyle.fontFamily,
+                    chatFontDataUrl: fontDataUrl,
+                    chatFontSize: fontStyle.fontSize,
+                    chatLetterSpacing: fontStyle.letterSpacing,
+                    memoryEntries: memBook.valueOrNull?.entries ?? [],
+                    memoryDrafts: memBook.valueOrNull?.pendingDrafts ?? [],
+                    sessionId: widget.state.session?.id,
+                    visibleStartIndex: widget.state.visibleStartIndex,
+                    batterySaver: appSettings?.batterySaver ?? false,
+                    hideMessageId: appSettings?.hideMessageId ?? false,
+                    hideGenerationTime: appSettings?.hideGenerationTime ?? false,
+                    hideTokenCount: appSettings?.hideTokenCount ?? false,
+                    disableSwipeRegeneration:
+                        appSettings?.disableSwipeRegeneration ?? false,
+                    messageActions: MessageActionsCallbacks(
                       onMessageContext: (index, messageId, isUser, isSystem, content) {
                         showMessageContextMenu(
                           context: context,
@@ -768,7 +756,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     ),
                     scrollActions: ScrollCallbacks(
                       onHeaderScroll: (hidden) {
-                        if (_insetController.isKeyboardVisible) return;
                         if (widget.onScrollDirection == null) return;
                         widget.onScrollDirection!(
                           hidden
@@ -777,11 +764,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                         );
                       },
                       onScrollToBottomVisibility: (visible) {
-                        if (_insetController.isKeyboardVisible) return;
-                        if (!mounted || _showScrollToBottom.value == visible) {
-                          return;
-                        }
-                        _showScrollToBottom.value = visible;
+                        if (!mounted || _showScrollToBottom == visible) return;
+                        setState(() => _showScrollToBottom = visible);
                       },
                     ),
                     miscActions: MiscCallbacks(
@@ -817,294 +801,347 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     searchQuery: widget.search.searchQuery,
                     searchCurrentIndex: widget.search.searchCurrentIndex,
                   ),
-    );
-
-    return Stack(
-      children: [
-        ChatBottomInsetSync(
-          controller: _insetController,
-          drawerCtrl: widget.drawerCtrl,
-          onInsetsSettled: () => _syncWebViewLayout(immediate: true),
+            ),
+          ),
         ),
-        ListenableBuilder(
-          listenable: _insetController,
-          builder: (context, _) {
-            final bottomPanelInset = _insetController.bottomPanelInset;
-            final keyboardVisible = _insetController.isKeyboardVisible;
-            final inputBarBottom = _insetController.inputBarHeight + 16;
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                Padding(
-                  padding: EdgeInsets.only(bottom: bottomPanelInset),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Column(
-                        children: [
-                          Expanded(
-                            child: RepaintBoundary(child: webViewLayer),
-                          ),
-                          RepaintBoundary(
-                            child: _buildInputBarColumn(
-                              context: context,
-                              isEditingMessage: isEditingMessage,
-                              appSettings: appSettings,
-                              batterySaver: batterySaver,
-                              keyboardVisible: keyboardVisible,
-                            ),
+        // Top gradient for fade effect under the header
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: MediaQuery.paddingOf(context).top + 20,
+          child: IgnorePointer(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.black54, Colors.transparent],
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Bottom gradient for fade effect under the input area
+        Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: messageListBottom + 40,
+          child: IgnorePointer(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black54, Colors.transparent],
+                  stops: [0.0, 1.0],
+                ),
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          right: 16,
+          bottom: messageListBottom + 16,
+          child: IgnorePointer(
+            ignoring: !_showScrollToBottom,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOutCubic,
+              opacity: _showScrollToBottom ? 1 : 0,
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutCubic,
+                offset: _showScrollToBottom
+                    ? Offset.zero
+                    : const Offset(0, 0.2),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _scrollToBottom,
+                    borderRadius: BorderRadius.circular(24),
+                    child: Ink(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: context.cs.surface.withValues(alpha: 0.9),
+                        borderRadius: BorderRadius.circular(22),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.08),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.22),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
                           ),
                         ],
                       ),
-                      if (!keyboardVisible)
-                        Positioned(
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                          height: MediaQuery.paddingOf(context).top + 20,
-                          child: IgnorePointer(
-                            child: Container(
-                              decoration: const BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [Colors.black54, Colors.transparent],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (!keyboardVisible)
-                        Positioned(
-                          right: 16,
-                          bottom: inputBarBottom,
-                          child: ValueListenableBuilder<bool>(
-                            valueListenable: _showScrollToBottom,
-                            builder: (context, showScrollToBottom, _) {
-                              return IgnorePointer(
-                                ignoring: !showScrollToBottom,
-                                child: AnimatedOpacity(
-                                  duration: const Duration(milliseconds: 180),
-                                  curve: Curves.easeOutCubic,
-                                  opacity: showScrollToBottom ? 1 : 0,
-                                  child: AnimatedSlide(
-                                    duration: const Duration(milliseconds: 180),
-                                    curve: Curves.easeOutCubic,
-                                    offset: showScrollToBottom
-                                        ? Offset.zero
-                                        : const Offset(0, 0.2),
-                                    child: Material(
-                                      color: Colors.transparent,
-                                      child: InkWell(
-                                        onTap: _scrollToBottom,
-                                        borderRadius: BorderRadius.circular(24),
-                                        child: Ink(
-                                          width: 44,
-                                          height: 44,
-                                          decoration: BoxDecoration(
-                                            color: context.cs.surface
-                                                .withValues(alpha: 0.9),
-                                            borderRadius: BorderRadius.circular(22),
-                                            border: Border.all(
-                                              color: Colors.white.withValues(alpha: 0.08),
-                                            ),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black.withValues(alpha: 0.22),
-                                                blurRadius: 18,
-                                                offset: const Offset(0, 8),
-                                              ),
-                                            ],
-                                          ),
-                                          child: Icon(
-                                            Icons.keyboard_arrow_down_rounded,
-                                            color: context.cs.primary,
-                                            size: 26,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                Positioned.fill(
-                  child: RepaintBoundary(
-                    child: AnimatedBuilder(
-                      animation: widget.drawerCtrl.drawerAnim,
-                      builder: (context, _) {
-                        final progress = widget.drawerCtrl.drawerAnim.value;
-                        final renderDrawer =
-                            widget.drawerCtrl.drawerOpen || progress > 0.001;
-                        if (!renderDrawer) {
-                          return const SizedBox.shrink();
-                        }
-                        return Align(
-                          alignment: Alignment.bottomCenter,
-                          child: Transform.translate(
-                            offset: Offset(
-                              0,
-                              widget.drawerCtrl.activeDrawerHeight * (1 - progress),
-                            ),
-                            child: SizedBox(
-                              height: widget.drawerCtrl.activeDrawerHeight,
-                              width: double.infinity,
-                              child: MagicDrawerPanel(
-                                charId: widget.charId,
-                                onClose: () => widget.drawerCtrl.closeDrawer(),
-                                disableEffects:
-                                    batterySaver && widget.drawerCtrl.isDrawerAnimating,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: context.cs.primary,
+                        size: 26,
+                      ),
                     ),
                   ),
                 ),
-              ],
-            );
-          },
+              ),
+            ),
+          ),
         ),
-      ],
-    );
-  }
+        // Animated bottom region: drawer slides up from below, the input
+        // bar tracks the same reveal so they move as one piece.
+        Positioned.fill(
+          child: AnimatedBuilder(
+            animation: widget.drawerCtrl.drawerAnim,
+            builder: (context, _) {
+              final progress = widget.drawerCtrl.drawerAnim.value;
+              final bool drawerActive =
+                  widget.drawerCtrl.drawerOpen || widget.drawerCtrl.switchingToDrawer;
+              final double targetPanelInset = drawerActive
+                  ? widget.drawerCtrl.activeDrawerHeight
+                  : 0.0;
+              final panelHeight = math.max(
+                targetPanelInset,
+                widget.keyboardHeight,
+              );
 
-  Widget _buildInputBarColumn({
-    required BuildContext context,
-    required bool isEditingMessage,
-    required AppSettings? appSettings,
-    required bool batterySaver,
-    required bool keyboardVisible,
-  }) {
-    return NotificationListener<SizeChangedLayoutNotification>(
-      onNotification: (n) {
-        WidgetsBinding.instance.addPostFrameCallback((_) => _checkHeight());
-        return true;
-      },
-      child: SizeChangedLayoutNotifier(
-        child: Container(
-          key: _inputBarKey,
-          child: Builder(
-            builder: (context) {
-              final allSelectedHidden = _selectedMessageIds.isNotEmpty &&
-                  _selectedMessageIds.every((id) {
-                    final idx =
-                        widget.state.messages.indexWhere((m) => m.id == id);
-                    return idx >= 0 && widget.state.messages[idx].isHidden;
-                  });
-              return ChatInputBar(
-                focusNode: widget.drawerCtrl.inputFocus,
-                initialDraft: widget.state.session?.draft ?? '',
-                batterySaver:
-                    (appSettings?.batterySaver ?? false) || keyboardVisible,
-                onDraftChanged: (text) {
-                  ref.read(chatProvider(widget.charId).notifier).saveDraft(text);
-                },
-                showSearchControls: widget.search.showSearch,
-                searchQuery: widget.search.searchQuery,
-                searchMatchCount: widget.search.matchCount,
-                searchCurrentIndex: widget.search.searchCurrentIndex,
-                onSearchNext: widget.search.onSearchNext,
-                onSearchPrev: widget.search.onSearchPrev,
-                isEditingMessage: isEditingMessage,
-                isSelectionMode: _isSelectionMode,
-                selectedCount: _selectedMessageIds.length,
-                allSelectedHidden: allSelectedHidden,
-                onCancelSelection: () {
-                  setState(() {
-                    _isSelectionMode = false;
-                    _selectedMessageIds.clear();
-                  });
-                },
-                onHideSelected: () {
-                  final notifier =
-                      ref.read(chatProvider(widget.charId).notifier);
-                  for (final id in _selectedMessageIds) {
-                    final idx =
-                        widget.state.messages.indexWhere((m) => m.id == id);
-                    if (idx >= 0) {
-                      notifier.toggleMessageHidden(idx);
-                    }
-                  }
-                  setState(() {
-                    _isSelectionMode = false;
-                    _selectedMessageIds.clear();
-                  });
-                },
-                onDeleteSelected: () {
-                  final notifier =
-                      ref.read(chatProvider(widget.charId).notifier);
-                  final indices = _selectedMessageIds
-                      .map(
-                        (id) => widget.state.messages
-                            .indexWhere((m) => m.id == id),
-                      )
-                      .where((idx) => idx >= 0)
-                      .toList()
-                    ..sort((a, b) => b.compareTo(a));
-                  for (final idx in indices) {
-                    notifier.deleteMessage(idx);
-                  }
-                  setState(() {
-                    _isSelectionMode = false;
-                    _selectedMessageIds.clear();
-                  });
-                },
-                isDrawerOpen: widget.drawerCtrl.drawerOpen ||
-                    widget.drawerCtrl.switchingToDrawer,
-                virtualKeyboardSend: widget.virtualKeyboardSend,
-                enterToSend: widget.enterToSend,
-                onSend: (text) {
-                  if (text.trim().isEmpty) return;
-                  ref.read(chatProvider(widget.charId).notifier).sendMessage(text);
-                },
-                onSendWithGuidance: (text, guidance) {
-                  if (text.trim().isEmpty) return;
-                  ref
-                      .read(chatProvider(widget.charId).notifier)
-                      .sendMessage(text, guidanceText: guidance);
-                },
-                isGenerating: widget.state.isGenerating,
-                isGeneratingImage: widget.state.isGeneratingImage,
-                onStop: (widget.state.isGenerating ||
-                        widget.state.isGeneratingImage)
-                    ? () {
-                        final notifier =
-                            ref.read(chatProvider(widget.charId).notifier);
-                        if (widget.state.isGeneratingImage &&
-                            !widget.state.isGenerating) {
-                          notifier.abortImageGeneration();
-                        } else {
-                          notifier.abortGeneration();
-                        }
-                      }
-                    : null,
-                onMagicDrawer: () => widget.drawerCtrl.toggleDrawer(context),
-                onAttach: () => showModalBottomSheet<void>(
-                  context: context,
-                  useRootNavigator: true,
-                  isScrollControlled: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => const ImageGenSheet(),
-                ),
-                onFullScreen: () {},
-                onContinue: () => ref
-                    .read(chatProvider(widget.charId).notifier)
-                    .continueMessage(),
-                onImpersonate: () => ref
-                    .read(chatProvider(widget.charId).notifier)
-                    .regenerateLastAssistant(),
+              // Smoothly transition from safe area to panel height.
+              // This prevents a 24px jump when the animation starts.
+              final safeBottom = MediaQuery.paddingOf(context).bottom;
+              final factor = math.min(
+                1.0,
+                panelHeight / math.max(1.0, safeBottom),
+              );
+              final animatedBottomPanelInset =
+                  panelHeight + (safeBottom * (1 - factor));
+
+              // Keep the panel mounted while the close animation runs out.
+              final renderDrawer = widget.drawerCtrl.drawerOpen || progress > 0.001;
+
+              return Stack(
+                children: [
+                  if (renderDrawer)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: -widget.drawerCtrl.activeDrawerHeight * (1 - progress),
+                      height: widget.drawerCtrl.activeDrawerHeight,
+                      child: MagicDrawerPanel(
+                        charId: widget.charId,
+                        onClose: () => widget.drawerCtrl.closeDrawer(),
+                        disableEffects:
+                            batterySaver && widget.drawerCtrl.isDrawerAnimating,
+                      ),
+                    ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: animatedBottomPanelInset,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        NotificationListener<SizeChangedLayoutNotification>(
+                              onNotification: (n) {
+                                WidgetsBinding.instance.addPostFrameCallback(
+                                  (_) => _checkHeight(),
+                                );
+                                return true;
+                              },
+                              child: SizeChangedLayoutNotifier(
+                                child: Container(
+                                  key: _inputBarKey,
+                                  child: Builder(
+                                    builder: (context) {
+                                      final allSelectedHidden =
+                                          _selectedMessageIds.isNotEmpty &&
+                                          _selectedMessageIds.every((id) {
+                                            final idx = widget.state.messages
+                                                .indexWhere((m) => m.id == id);
+                                            return idx >= 0 &&
+                                                widget
+                                                    .state
+                                                    .messages[idx]
+                                                    .isHidden;
+                                          });
+                                      return ChatInputBar(
+                                        focusNode: widget.drawerCtrl.inputFocus,
+                                        initialDraft:
+                                            widget.state.session?.draft ?? '',
+                                        batterySaver:
+                                            appSettings?.batterySaver ?? false,
+                                        onDraftChanged: (text) {
+                                          ref
+                                              .read(
+                                                chatProvider(
+                                                  widget.charId,
+                                                ).notifier,
+                                              )
+                                              .saveDraft(text);
+                                        },
+                                        showSearchControls:
+                                            widget.search.showSearch,
+                                        searchQuery: widget.search.searchQuery,
+                                        searchMatchCount:
+                                            widget.search.matchCount,
+                                        searchCurrentIndex:
+                                            widget.search.searchCurrentIndex,
+                                        onSearchNext: widget.search.onSearchNext,
+                                        onSearchPrev: widget.search.onSearchPrev,
+                                        isEditingMessage: isEditingMessage,
+                                        isSelectionMode: _isSelectionMode,
+                                        selectedCount:
+                                            _selectedMessageIds.length,
+                                        allSelectedHidden: allSelectedHidden,
+                                        onCancelSelection: () {
+                                          setState(() {
+                                            _isSelectionMode = false;
+                                            _selectedMessageIds.clear();
+                                          });
+                                        },
+                                        onHideSelected: () {
+                                          final notifier = ref.read(
+                                            chatProvider(
+                                              widget.charId,
+                                            ).notifier,
+                                          );
+                                          for (final id
+                                              in _selectedMessageIds) {
+                                            final idx = widget.state.messages
+                                                .indexWhere((m) => m.id == id);
+                                            if (idx >= 0) {
+                                              notifier.toggleMessageHidden(idx);
+                                            }
+                                          }
+                                          setState(() {
+                                            _isSelectionMode = false;
+                                            _selectedMessageIds.clear();
+                                          });
+                                        },
+                                        onDeleteSelected: () {
+                                          final notifier = ref.read(
+                                            chatProvider(
+                                              widget.charId,
+                                            ).notifier,
+                                          );
+                                          // Sort indices in descending order so deleting doesn't shift remaining indices
+                                          final indices =
+                                              _selectedMessageIds
+                                                  .map(
+                                                    (id) => widget
+                                                        .state
+                                                        .messages
+                                                        .indexWhere(
+                                                          (m) => m.id == id,
+                                                        ),
+                                                  )
+                                                  .where((idx) => idx >= 0)
+                                                  .toList()
+                                                ..sort(
+                                                  (a, b) => b.compareTo(a),
+                                                );
+                                          for (final idx in indices) {
+                                            notifier.deleteMessage(idx);
+                                          }
+                                          setState(() {
+                                            _isSelectionMode = false;
+                                            _selectedMessageIds.clear();
+                                          });
+                                        },
+                                        isDrawerOpen:
+                                            widget.drawerCtrl.drawerOpen ||
+                                            widget.drawerCtrl.switchingToDrawer,
+                                        virtualKeyboardSend:
+                                            widget.virtualKeyboardSend,
+                                        enterToSend: widget.enterToSend,
+                                        onSend: (text) {
+                                          if (text.trim().isEmpty) return;
+                                          ref
+                                              .read(
+                                                chatProvider(
+                                                  widget.charId,
+                                                ).notifier,
+                                              )
+                                              .sendMessage(text);
+                                        },
+                                        onSendWithGuidance: (text, guidance) {
+                                          if (text.trim().isEmpty) return;
+                                          ref
+                                              .read(
+                                                chatProvider(
+                                                  widget.charId,
+                                                ).notifier,
+                                              )
+                                              .sendMessage(
+                                                text,
+                                                guidanceText: guidance,
+                                              );
+                                        },
+                                        isGenerating: widget.state.isGenerating,
+                                        isGeneratingImage:
+                                            widget.state.isGeneratingImage,
+                                        onStop:
+                                            (widget.state.isGenerating ||
+                                                widget.state.isGeneratingImage)
+                                            ? () {
+                                                final notifier = ref.read(
+                                                  chatProvider(
+                                                    widget.charId,
+                                                  ).notifier,
+                                                );
+                                                if (widget
+                                                        .state
+                                                        .isGeneratingImage &&
+                                                    !widget
+                                                        .state
+                                                        .isGenerating) {
+                                                  notifier
+                                                      .abortImageGeneration();
+                                                } else {
+                                                  notifier.abortGeneration();
+                                                }
+                                              }
+                                            : null,
+                                        onMagicDrawer: () => widget.drawerCtrl.toggleDrawer(context),
+                                        onAttach: () => showModalBottomSheet(
+                                          context: context,
+                                          useRootNavigator: true,
+                                          isScrollControlled: true,
+                                          backgroundColor: Colors.transparent,
+                                          builder: (_) => const ImageGenSheet(),
+                                        ),
+                                        onFullScreen:
+                                            () {}, // Add your full screen logic here
+                                        onContinue: () => ref
+                                            .read(
+                                              chatProvider(
+                                                widget.charId,
+                                              ).notifier,
+                                            )
+                                            .continueMessage(),
+                                        onImpersonate: () => ref
+                                            .read(
+                                              chatProvider(
+                                                widget.charId,
+                                              ).notifier,
+                                            )
+                                            .regenerateLastAssistant(),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ),
+                      ],
+                    ),
+                  ),
+                ],
               );
             },
           ),
         ),
-      ),
+      ],
     );
   }
 }
