@@ -527,9 +527,33 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final character = batterySaverMode
         ? ref.read(characterByIdProvider(widget.charId))
         : ref.watch(characterByIdProvider(widget.charId));
+    final personaKey = (
+      charId: widget.charId,
+      sessionId: widget.state.session?.id,
+    );
     final effectivePersona = batterySaverMode
-        ? ref.read(effectivePersonaForChatProvider(widget.charId))
-        : ref.watch(effectivePersonaForChatProvider(widget.charId));
+        ? ref.read(effectivePersonaForChatProvider(personaKey))
+        : ref.watch(effectivePersonaForChatProvider(personaKey));
+    ref.listen(effectivePersonaForChatProvider(personaKey), (prev, next) {
+      if (prev?.id == next?.id &&
+          prev?.name == next?.name &&
+          prev?.avatarPath == next?.avatarPath) {
+        return;
+      }
+      _webViewStateKey.currentState?.applyIdentity(
+        charName: character?.name,
+        charColor: character?.color,
+        personaName: next?.name,
+        charAvatarPath: character?.avatarPath,
+        personaAvatarPath: next?.avatarPath,
+        greetingTotal: character == null
+            ? 0
+            : ((character.firstMes?.isNotEmpty == true ? 1 : 0) +
+                character.alternateGreetings
+                    .where((g) => g.isNotEmpty)
+                    .length),
+      );
+    });
     final memBook = batterySaverMode
         ? ref.read(memoryBookProvider(widget.state.session?.id ?? ''))
         : ref.watch(memoryBookProvider(widget.state.session?.id ?? ''));
