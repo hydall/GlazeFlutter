@@ -23,12 +23,12 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
 
-    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "GlazeBackgroundAudio")
+    guard let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "GlazeBackgroundAudio") else { return }
     let channel = FlutterMethodChannel(
       name: "com.hydall.glaze/background_audio",
       binaryMessenger: registrar.messenger()
     )
-    channel.setMethodCallHandler { [weak self] call, result in
+    channel.setMethodCallHandler { [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) in
       switch call.method {
       case "start":
         self?.backgroundAudio.start()

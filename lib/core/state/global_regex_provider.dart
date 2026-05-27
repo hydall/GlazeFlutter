@@ -7,6 +7,62 @@ import 'shared_prefs_provider.dart';
 
 const _globalRegexKey = 'gz_global_regex_scripts';
 
+/// Normalizes a raw ST-style or Glaze-style global regex script into our canonical PresetRegex JSON shape.
+/// Handles field name mappings (scriptName→name, findRegex→regex, etc.) and all ST compatibility flags.
+Map<String, dynamic> normalizeJsGlobalRegex(Map<String, dynamic> raw) {
+  final map = Map<String, dynamic>.from(raw);
+  if (!map.containsKey('id')) map['id'] = '${DateTime.now().millisecondsSinceEpoch}';
+  if (!map.containsKey('name')) map['name'] = map['scriptName'] ?? 'Imported';
+  if (!map.containsKey('regex')) map['regex'] = map['findRegex'] ?? '';
+  if (!map.containsKey('replacement')) map['replacement'] = map['replaceString'] ?? '';
+  if (!map.containsKey('trimOut')) map['trimOut'] = _joinTrimStrings(raw['trimStrings']);
+  if (!map.containsKey('placement')) {
+    final p = raw['placement'];
+    if (p is List) {
+      map['placement'] = p.map((e) => e is int ? e : int.tryParse(e.toString()) ?? 1).toList();
+    } else {
+      map['placement'] = [1, 2];
+    }
+  }
+  if (!map.containsKey('ephemerality')) {
+    final e = raw['runOnEdit'];
+    map['ephemerality'] = e == true ? [1, 2] : [2];
+  }
+  // Preserve runOnEdit as a direct bool for ST compatibility
+  if (raw.containsKey('runOnEdit')) {
+    map['runOnEdit'] = _coerceToBool(raw['runOnEdit']);
+  }
+  // Map ST flags to our new fields (accept both camelCase and any ST variants)
+  map['markdownOnly'] = _coerceToBool(raw['markdownOnly'] ?? raw['markdown_only']);
+  map['promptOnly'] = _coerceToBool(raw['promptOnly'] ?? raw['prompt_only']);
+  map['substituteRegex'] = _coerceToInt(raw['substituteRegex'] ?? raw['substitute_regex']) ?? 0;
+  map['minDepth'] = _coerceToInt(map['minDepth']);
+  map['maxDepth'] = _coerceToInt(map['maxDepth']);
+  map['disabled'] = _coerceToBool(map['disabled']);
+  return map;
+}
+
+String _joinTrimStrings(dynamic trim) {
+  if (trim is List) {
+    return trim.whereType<String>().join('\n');
+  }
+  if (trim is String) return trim;
+  return '';
+}
+
+int? _coerceToInt(dynamic v) {
+  if (v is int) return v;
+  if (v is num) return v.toInt();
+  if (v is String) return int.tryParse(v);
+  return null;
+}
+
+bool _coerceToBool(dynamic v) {
+  if (v is bool) return v;
+  if (v is num) return v != 0;
+  return false;
+}
+
 class GlobalRegexNotifier extends AsyncNotifier<List<PresetRegex>> {
   @override
   Future<List<PresetRegex>> build() async {
@@ -15,7 +71,7 @@ class GlobalRegexNotifier extends AsyncNotifier<List<PresetRegex>> {
     if (raw == null || raw.isEmpty) return [];
     try {
       final list = jsonDecode(raw) as List;
-      final result = list.map((e) => PresetRegex.fromJson(_normalizeJsRegex(e as Map<String, dynamic>))).toList();
+      final result = list.map((e) => PresetRegex.fromJson(normalizeJsGlobalRegex(e as Map<String, dynamic>))).toList();
       _persist(result);
       return result;
     } catch (_) {
@@ -57,7 +113,7 @@ class GlobalRegexNotifier extends AsyncNotifier<List<PresetRegex>> {
     for (final raw in rawList) {
       if (raw is! Map<String, dynamic>) continue;
       try {
-        final regex = PresetRegex.fromJson(_normalizeJsRegex(raw));
+        final regex = PresetRegex.fromJson(normalizeJsGlobalRegex(raw));
         if (!existingIds.contains(regex.id)) {
           imported.add(regex);
           existingIds.add(regex.id);
@@ -69,43 +125,6 @@ class GlobalRegexNotifier extends AsyncNotifier<List<PresetRegex>> {
       state = AsyncData(updated);
       await _persist(updated);
     }
-  }
-
-  Map<String, dynamic> _normalizeJsRegex(Map<String, dynamic> raw) {
-    final map = Map<String, dynamic>.from(raw);
-    if (!map.containsKey('id')) map['id'] = '${DateTime.now().millisecondsSinceEpoch}';
-    if (!map.containsKey('name')) map['name'] = map['scriptName'] ?? 'Imported';
-    if (!map.containsKey('regex')) map['regex'] = map['findRegex'] ?? '';
-    if (!map.containsKey('replacement')) map['replacement'] = map['replaceString'] ?? '';
-    if (!map.containsKey('placement')) {
-      final p = raw['placement'];
-      if (p is List) {
-        map['placement'] = p.map((e) => e is int ? e : int.tryParse(e.toString()) ?? 1).toList();
-      } else {
-        map['placement'] = [1, 2];
-      }
-    }
-    if (!map.containsKey('ephemerality')) {
-      final e = raw['runOnEdit'];
-      map['ephemerality'] = e == true ? [1, 2] : [2];
-    }
-    map['minDepth'] = _coerceToInt(map['minDepth']);
-    map['maxDepth'] = _coerceToInt(map['maxDepth']);
-    map['disabled'] = _coerceToBool(map['disabled']);
-    return map;
-  }
-
-  static int? _coerceToInt(dynamic v) {
-    if (v is int) return v;
-    if (v is num) return v.toInt();
-    if (v is String) return int.tryParse(v);
-    return null;
-  }
-
-  static bool _coerceToBool(dynamic v) {
-    if (v is bool) return v;
-    if (v is num) return v != 0;
-    return false;
   }
 }
 

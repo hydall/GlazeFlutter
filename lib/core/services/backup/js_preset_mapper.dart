@@ -58,6 +58,25 @@ mixin JsPresetMapper on TypeConverters {
         if (r['isEnabled'] is bool) {
           normalized['disabled'] = !(r['isEnabled'] as bool);
         }
+        // ST compatibility flags (accept both camelCase and snake_case variants)
+        if (!normalized.containsKey('markdownOnly')) {
+          normalized['markdownOnly'] = r['markdownOnly'] ?? r['markdown_only'] ?? false;
+        }
+        if (!normalized.containsKey('promptOnly')) {
+          normalized['promptOnly'] = r['promptOnly'] ?? r['prompt_only'] ?? false;
+        }
+        if (!normalized.containsKey('runOnEdit')) {
+          normalized['runOnEdit'] = r['runOnEdit'] ?? false;
+        }
+        if (!normalized.containsKey('substituteRegex')) {
+          normalized['substituteRegex'] = r['substituteRegex'] ?? r['substitute_regex'] ?? 0;
+        }
+        if (!normalized.containsKey('minDepth') && r.containsKey('minDepth')) {
+          normalized['minDepth'] = r['minDepth'];
+        }
+        if (!normalized.containsKey('maxDepth') && r.containsKey('maxDepth')) {
+          normalized['maxDepth'] = r['maxDepth'];
+        }
         regexes.add(PresetRegex.fromJson(normalized));
       }
     }

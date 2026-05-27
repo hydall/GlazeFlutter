@@ -36,6 +36,10 @@ class PresetRegex with _$PresetRegex {
     @Default('0') String macroRules,
     int? minDepth,
     int? maxDepth,
+    @Default(false) bool markdownOnly,
+    @Default(false) bool promptOnly,
+    @Default(false) bool runOnEdit,
+    @Default(0) int substituteRegex,
   }) = _PresetRegex;
 
   factory PresetRegex.fromJson(Map<String, dynamic> json) =>
@@ -76,11 +80,41 @@ Map<String, dynamic> _normalizeBlock(Map<String, dynamic> json) {
 
 Map<String, dynamic> _normalizeRegex(Map<String, dynamic> json) {
   final n = Map<String, dynamic>.from(json);
+
+  // ST key mappings → canonical Glaze keys (defensive for direct fromJson calls)
+  if (!n.containsKey('name') || (n['name'] is String && (n['name'] as String).isEmpty)) {
+    final stName = n['scriptName'];
+    if (stName is String && stName.isNotEmpty) n['name'] = stName;
+  }
+  if (!n.containsKey('regex') || (n['regex'] is String && (n['regex'] as String).isEmpty)) {
+    final stRegex = n['findRegex'];
+    if (stRegex is String && stRegex.isNotEmpty) n['regex'] = stRegex;
+  }
+  if (!n.containsKey('replacement') || (n['replacement'] is String && (n['replacement'] as String).isEmpty)) {
+    final stRepl = n['replaceString'];
+    if (stRepl is String) n['replacement'] = stRepl;
+  }
+  if (!n.containsKey('trimOut') || (n['trimOut'] is String && (n['trimOut'] as String).isEmpty)) {
+    n['trimOut'] = _joinTrimForNormalize(n['trimStrings']);
+  }
+
   n['disabled'] = _coerceBool(n['disabled'], false);
   n['minDepth'] = _coerceInt(n['minDepth']);
   n['maxDepth'] = _coerceInt(n['maxDepth']);
   n['macroRules'] = _coerceString(n['macroRules'], '0');
+  n['markdownOnly'] = _coerceBool(n['markdownOnly'], false);
+  n['promptOnly'] = _coerceBool(n['promptOnly'], false);
+  n['runOnEdit'] = _coerceBool(n['runOnEdit'], false);
+  n['substituteRegex'] = _coerceInt(n['substituteRegex']) ?? 0;
   return n;
+}
+
+String _joinTrimForNormalize(dynamic trim) {
+  if (trim is List) {
+    return trim.whereType<String>().join('\n');
+  }
+  if (trim is String) return trim;
+  return '';
 }
 
 Map<String, dynamic> _normalizePreset(Map<String, dynamic> json) {

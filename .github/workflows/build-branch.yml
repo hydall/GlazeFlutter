@@ -162,11 +162,41 @@ jobs:
       - name: Install CocoaPods
         run: cd ios && pod install && cd ..
 
-      - name: Build IPA (release, no signing)
-        run: flutter build ipa --release --no-codesign --no-pub
+      # === Reverted iOS IPA creation (the version that produced working sideload builds before PR 96) ===
+      # We are reverting the "flutter build ipa" change introduced in 195b260 because it regressed the build
+      # between good build ~43 and the failing 46/47. Adding heavy diagnostics to find the real cause.
+      - name: Build iOS (release, no signing) — DIAGNOSTIC
+        run: |
+          set -x
+          flutter build ios --release --no-codesign --no-pub
+          echo "=== AFTER flutter build ios ==="
+          find build/ios -type f -name "*.app" -o -name "*.ipa" 2>/dev/null | head -20 || true
+          ls -laR build/ios/iphoneos 2>/dev/null | tail -30 || true
+          echo "=== END DIAGNOSTIC ==="
+
+      - name: Create IPA (manual Payload method — last known good for sideloading)
+        run: |
+          set -x
+          mkdir -p Payload
+          # Try the common location first
+          if [ -d "build/ios/iphoneos" ]; then
+            cp -r build/ios/iphoneos/*.app Payload/ 2>/dev/null || true
+          fi
+          # Fallbacks in case structure changed
+          find build -type d -name "*.app" 2>/dev/null | head -5 | while read app; do
+            echo "Found app at: $app"
+            cp -r "$app" Payload/ 2>/dev/null || true
+          done
+          echo "=== Payload contents before zip ==="
+          find Payload -type f | head -30
+          ls -la Payload
+          zip -r Glaze-release.ipa Payload || (echo "zip failed, contents:"; find . -name "*.app" 2>/dev/null | head -10)
+          echo "=== Final artifact check ==="
+          ls -la *.ipa 2>/dev/null || true
+          find . -name "*.ipa" 2>/dev/null | head -5
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: Glaze-release-iOS
-          path: build/ios/ipa/*.ipa
+          path: Glaze-release.ipa

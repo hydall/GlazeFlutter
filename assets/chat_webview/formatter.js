@@ -149,13 +149,34 @@ class Formatter {
     });
 
     // 6. Extract HTML Tags — distinguish block vs inline
+    //    Skip orphan tags (no matching pair) so they render as visible text
+    //    instead of being interpreted as real HTML elements.
     const tagBlocks = [];
     const blockTags = new Set(['div','p','style','pre','table','ul','ol','li','h1','h2','h3','h4','h5','h6','blockquote','section','article','header','footer','hr','details','summary','figure','figcaption','svg','path','math','canvas','video','audio','form','fieldset','nav','aside','main','img','br','loomledger']);
     const TAG_REGEX = /<(?:[^"'>]|"[^"]*"|'[^']*')*>/g;
 
+    const allTagMatches = [...html.matchAll(TAG_REGEX)];
+    const tagCounts = new Map();
+    for (const m of allTagMatches) {
+      const nameMatch = m[0].match(/^<\/?(\w+)/);
+      if (nameMatch) {
+        const name = nameMatch[1].toLowerCase();
+        tagCounts.set(name, (tagCounts.get(name) || 0) + 1);
+      }
+    }
+
     html = html.replace(TAG_REGEX, (match) => {
       const tagMatch = match.match(/^<\/?(\w+)/);
-      const isBlock = tagMatch ? blockTags.has(tagMatch[1].toLowerCase()) : false;
+      if (!tagMatch) return match;
+      const name = tagMatch[1].toLowerCase();
+      const count = tagCounts.get(name) || 0;
+      // Self-closing tags (br, hr, img) and paired tags are fine;
+      // single occurrence of a non-self-closing tag is orphan — escape it.
+      const selfClosing = new Set(['br', 'hr', 'img', 'input', 'meta', 'link']);
+      if (count === 1 && !selfClosing.has(name)) {
+        return match.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+      const isBlock = blockTags.has(name);
       const id = this._ph('T_', tagBlocks.length, isBlock);
       tagBlocks.push(match);
       return id;
@@ -360,26 +381,43 @@ class Formatter {
   }
 
   _renderStyledSegment(seg) {
-    let m = seg.match(/^==hc:(#[0-9a-fA-F]{3,8})==(.+?)==$/s);
-    if (m) return `<span class="glaze-hc" style="color:${m[1]}">${m[2]}</span>`;
-
-    m = seg.match(/^==glow:(#[0-9a-fA-F]{3,8}),(\d+)==(.+?)==$/s);
-    if (m) return `<span class="glaze-glow" style="text-shadow:${m[1]} 0 0 ${m[2]}px, ${m[1]} 0 0 ${parseInt(m[2])/2}px">${m[3]}</span>`;
-
-    m = seg.match(/^==cg:(#[0-9a-fA-F]{3,8}),([0-9a-fA-F]{3,8}),(\d+)==(.+?)==$/s);
+    // Variant C support: the captured inner content (group 2) may contain raw HTML/Markdown
+    // (e.g. <summary>, <details>, nested tags, etc.) because html_to_markdown now emits
+    // rich content inside ==hc:...== etc. markers. We run it through the normal rich-text
+    // pipeline so structure + color are both preserved.
+    let m = seg.match(/^==hc:(#[0-9a-fA-F]{3,8})==([\s\S]+?)==$/);
     if (m) {
-      return `<span class="glaze-cg" style="color:${m[1]};text-shadow:${m[2]} 0 0 ${m[3]}px, ${m[2]} 0 0 ${parseInt(m[3])/2}px">${m[4]}</span>`;
+      const color = m[1];
+      const innerRaw = m[2];
+      const rich = this._processText ? this._processText(innerRaw, /*isUser*/ false, true) : innerRaw;
+      return `<span class="glaze-hc" style="color:${color}">${rich}</span>`;
     }
 
-    m = seg.match(/^==grad:(#[0-9a-fA-F]{3,8}(?:,#[0-9a-fA-F]{3,8})+)==(.+?)==$/s);
+    m = seg.match(/^==glow:(#[0-9a-fA-F]{3,8}),(\d+)==([\s\S]+?)==$/);
+    if (m) {
+      const rich = this._processText ? this._processText(m[3], false, true) : m[3];
+      return `<span class="glaze-glow" style="text-shadow:${m[1]} 0 0 ${m[2]}px, ${m[1]} 0 0 ${parseInt(m[2])/2}px">${rich}</span>`;
+    }
+
+    m = seg.match(/^==cg:(#[0-9a-fA-F]{3,8}),([0-9a-fA-F]{3,8}),(\d+)==([\s\S]+?)==$/);
+    if (m) {
+      const rich = this._processText ? this._processText(m[4], false, true) : m[4];
+      return `<span class="glaze-cg" style="color:${m[1]};text-shadow:${m[2]} 0 0 ${m[3]}px, ${m[2]} 0 0 ${parseInt(m[3])/2}px">${rich}</span>`;
+    }
+
+    m = seg.match(/^==grad:(#[0-9a-fA-F]{3,8}(?:,#[0-9a-fA-F]{3,8})+)==([\s\S]+?)==$/);
     if (m) {
       const colors = m[1].match(/#[0-9a-fA-F]{3,8}/g);
       const gradient = colors.join(',');
-      return `<span class="glaze-grad" style="background:linear-gradient(90deg,${gradient});-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">${m[2]}</span>`;
+      const rich = this._processText ? this._processText(m[2], false, true) : m[2];
+      return `<span class="glaze-grad" style="background:linear-gradient(90deg,${gradient});-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent">${rich}</span>`;
     }
 
-    m = seg.match(/^==bg:(#[0-9a-fA-F]{3,8})==(.+?)==$/s);
-    if (m) return `<span class="glaze-bg" style="background:${m[1]};padding:1px 4px;border-radius:3px">${m[2]}</span>`;
+    m = seg.match(/^==bg:(#[0-9a-fA-F]{3,8})==([\s\S]+?)==$/);
+    if (m) {
+      const rich = this._processText ? this._processText(m[2], false, true) : m[2];
+      return `<span class="glaze-bg" style="background:${m[1]};padding:1px 4px;border-radius:3px">${rich}</span>`;
+    }
 
     m = seg.match(/^==mark==(.+?)==$/s);
     if (m) return `<span class="glaze-mark">${m[1]}</span>`;

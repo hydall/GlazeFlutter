@@ -280,12 +280,11 @@ String _convertInlineTags(String html) {
 
 String _wrapColored(String color, String content) {
   if (!color.startsWith('#')) return _inline(content);
-  final text = _convertInlineTags(content).replaceAll(RegExp(r'<[^>]+>'), '').trim();
-  return text.split('\n').map((line) {
-    final trimmed = line.trim();
-    if (trimmed.isEmpty) return '';
-    return '==hc:$color==$trimmed==';
-  }).join('\n');
+  // Variant C: carry rich inner HTML (including <summary>, nested tags, etc.)
+  // so the webview renderer can render color + structure.
+  final inner = content.trim();
+  if (inner.isEmpty) return '';
+  return '==hc:$color==$inner==';
 }
 
 String _convertColoredSpan(String html) {
@@ -306,17 +305,18 @@ String _convertColoredSpan(String html) {
         return text.split('\n').map((line) {
           final trimmed = line.trim();
           if (trimmed.isEmpty) return '';
-          return '==bg:$bgColor==$trimmed==';
+          // Variant C: preserve rich inner HTML for background blocks too
+          return '==bg:$bgColor==${content.trim()}==';
         }).join('\n');
       }
 
       if (cssColor.isNotEmpty && shadows.isNotEmpty) {
         final shadow = shadows.first;
-        return '==cg:$cssColor,${shadow.color},${shadow.blur.round()}==$text==';
+        return '==cg:$cssColor,${shadow.color},${shadow.blur.round()}==${content.trim()}==';
       }
       if (shadows.isNotEmpty) {
         final shadow = shadows.first;
-        return '==glow:${shadow.color},${shadow.blur.round()}==$text==';
+        return '==glow:${shadow.color},${shadow.blur.round()}==${content.trim()}==';
       }
       if (cssColor.isNotEmpty) return _wrapColored(cssColor, content);
 
@@ -349,12 +349,14 @@ String _convertColoredFont(String html) {
 
       final gradColors = _extractGradientColors(styleAttr);
       if (gradColors.length >= 2) {
-        return '==grad:${gradColors.join(",")}==$text==';
+        // Variant C: pass original rich inner content (may contain <summary> etc.)
+        return '==grad:${gradColors.join(",")}==${content.trim()}==';
       }
       if (gradColors.length == 1) return _wrapColored(gradColors.first, content);
 
       final color = _extractColor(styleAttr);
       if (color.isNotEmpty) return _wrapColored(color, content);
+      // No recognized color/gradient — fall back to stripped text for plain style-only font
       return text;
     },
   );

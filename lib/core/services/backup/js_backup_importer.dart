@@ -4,6 +4,7 @@ import 'package:drift/drift.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../db/app_db.dart';
+import '../../state/global_regex_provider.dart';
 import '../image_storage_service.dart';
 import 'backup_helpers.dart';
 import 'js_api_config_importer.dart';
@@ -151,7 +152,9 @@ class JsBackupImporter extends BackupHelpers {
           final existingIds = merged.map((e) => (e as Map<String, dynamic>)['id']?.toString()).toSet();
           for (final item in decoded) {
             if (item is Map<String, dynamic> && !existingIds.contains(item['id']?.toString())) {
-              merged.add(item);
+              final normalized = normalizeJsGlobalRegex(item);
+              merged.add(normalized);
+              existingIds.add(normalized['id']?.toString());
             }
           }
           await prefs.setString('gz_global_regex_scripts', jsonEncode(merged));
@@ -163,7 +166,9 @@ class JsBackupImporter extends BackupHelpers {
       final existingIds = merged.map((e) => (e as Map<String, dynamic>)['id']?.toString()).toSet();
       for (final item in regexScriptsRaw) {
         if (item is Map<String, dynamic> && !existingIds.contains(item['id']?.toString())) {
-          merged.add(item);
+          final normalized = normalizeJsGlobalRegex(item);
+          merged.add(normalized);
+          existingIds.add(normalized['id']?.toString());
         }
       }
       await prefs.setString('gz_global_regex_scripts', jsonEncode(merged));

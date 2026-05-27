@@ -39,6 +39,13 @@ String applyRegexes(
     final sEphemerality = script.ephemerality;
     if (sEphemerality.isNotEmpty && !sEphemerality.contains(ephemeralityFilter)) continue;
 
+    // ST-style context flags: markdownOnly vs promptOnly
+    // Heuristic used in Glaze: placement 1/2 = history (often rendered as markdown),
+    // placement 4 = system/prompt blocks. If a script declares one of the flags,
+    // restrict application accordingly. Both false = apply to all contexts (current default).
+    if (script.markdownOnly && ![1, 2].contains(placementFilter)) continue;
+    if (script.promptOnly && placementFilter != 4) continue;
+
     if (ctx.depth != null) {
       final minD = script.minDepth;
       final maxD = script.maxDepth;
@@ -91,10 +98,38 @@ String _applySingleScript(String text, PresetRegex script, RegexApplyContext ctx
   final parsed = _parseRegexPattern(pattern);
   try {
     final regex = RegExp(parsed.pattern, multiLine: parsed.multiLine, dotAll: parsed.dotAll, caseSensitive: parsed.caseSensitive);
-    processed = processed.replaceAll(regex, replacement);
+
+    // Determine if we need custom replacement logic (backrefs or substituteRegex mode)
+    final hasBackrefs = RegExp(r'(\\\d|\$\d)').hasMatch(replacement);
+    final useSubst = script.substituteRegex != 0;
+
+    if (hasBackrefs || useSubst) {
+      processed = processed.replaceAllMapped(regex, (match) => _resolveReplacement(replacement, match));
+    } else {
+      processed = processed.replaceAll(regex, replacement);
+    }
   } catch (_) {}
 
   return processed;
+}
+
+/// Resolves a replacement string that may contain backreferences ($1, \1, $2, \2, etc.)
+/// against a Match (RegExpMatch in practice). Supports both $n (Dart/ST common) and \n (ST raw) forms.
+String _resolveReplacement(String template, Match match) {
+  // Replace $n and \n style backrefs. We scan from longest possible group index down
+  // to avoid partial overlaps (e.g., $10 before $1).
+  final groupCount = match.groupCount;
+  var result = template;
+
+  for (int i = groupCount; i >= 0; i--) {
+    final captured = match.group(i) ?? '';
+    // $n form
+    result = result.replaceAll('\$${i}', captured);
+    // \n form (raw backslash in the stored replacement string)
+    result = result.replaceAll('\\$i', captured);
+  }
+
+  return result;
 }
 
 ({String pattern, bool multiLine, bool dotAll, bool caseSensitive}) _parseRegexPattern(String raw) {
