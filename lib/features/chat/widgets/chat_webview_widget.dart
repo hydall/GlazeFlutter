@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -119,9 +119,79 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   bool _regenStreamingSent = false;
   bool _wasGenerating = false;
   bool _sessionSwitching = false;
+  double _appliedBottomInset = -1;
+  double _appliedTopInset = -1;
+  double _pendingTopInset = 0;
+  double _pendingBottomInset = 0;
+  bool _perfModeEnabled = false;
+  Timer? _layoutInsetDebounce;
+
+  static const _layoutInsetSettleDelay = Duration(milliseconds: 220);
 
   @override
   bool get wantKeepAlive => true;
+
+  @override
+  void dispose() {
+    _layoutInsetDebounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> updateLayoutInsets({
+    required double top,
+    required double bottom,
+    bool immediate = false,
+  }) {
+    _pendingTopInset = top;
+    _pendingBottomInset = bottom;
+
+    final bridge = _bridge;
+    if (bridge == null || !_ready) return Future.value();
+
+    if (immediate) {
+      return _applyLayoutInsets(refresh: true);
+    }
+
+    // During keyboard motion we can get many inset updates.
+    // Apply without forcing virtualList.refresh() (refresh triggers DOM churn).
+    _layoutInsetDebounce?.cancel();
+    _layoutInsetDebounce = Timer(_layoutInsetSettleDelay, () {
+      _layoutInsetDebounce = null;
+      if (!mounted) return;
+      unawaited(_applyLayoutInsets(refresh: false));
+    });
+    return Future.value();
+  }
+
+  Future<void> _applyLayoutInsets({required bool refresh}) {
+    final bridge = _bridge;
+    if (bridge == null || !_ready) return Future.value();
+
+    final topDelta = (_pendingTopInset - _appliedTopInset).abs();
+    final bottomDelta = (_pendingBottomInset - _appliedBottomInset).abs();
+    if (topDelta < 0.5 && bottomDelta < 0.5) {
+      return Future.value();
+    }
+
+    _appliedTopInset = _pendingTopInset;
+    _appliedBottomInset = _pendingBottomInset;
+    final shouldEnablePerfMode = widget.batterySaver;
+    if (shouldEnablePerfMode != _perfModeEnabled) {
+      _perfModeEnabled = shouldEnablePerfMode;
+      unawaited(bridge.setPerformanceMode(_perfModeEnabled));
+    }
+
+    return bridge.setLayoutInsets(
+      top: _appliedTopInset,
+      bottom: _appliedBottomInset,
+      refresh: refresh,
+    );
+  }
+
+  @Deprecated('Use updateLayoutInsets')
+  Future<void> updateBottomInset(double inset) {
+    return updateLayoutInsets(top: _appliedTopInset, bottom: inset);
+  }
 
   Future<void> _syncIdentityFromWidget() async {
     final bridge = _bridge;
@@ -183,19 +253,23 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       disableSwipeRegeneration: widget.disableSwipeRegeneration,
     );
 
-    // Persona/char identity can resolve while theme and assets load above.
     await _syncIdentityFromWidget();
+    _appliedTopInset = widget.topInset;
+    _appliedBottomInset = widget.bottomInset;
+    if (widget.topInset > 0 || widget.bottomInset > 0) {
+      await _bridge!.setLayoutInsets(
+        top: widget.topInset,
+        bottom: widget.bottomInset,
+        refresh: widget.bottomInset <= 0.5,
+      );
+    }
+    _perfModeEnabled = widget.batterySaver;
+    await _bridge!.setPerformanceMode(_perfModeEnabled);
     await _bridge!.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
     _bridge!.updateMemoryBookData(
       entries: widget.memoryEntries.map((e) => {'status': e.status, 'messageIds': e.messageIds}).toList(),
       pendingDrafts: widget.memoryDrafts.map((e) => {'messageIds': e.messageIds}).toList(),
     );
-    if (widget.bottomInset > 0) {
-      await _bridge!.setBottomPadding(widget.bottomInset);
-    }
-    if (widget.topInset > 0) {
-      await _bridge!.setTopPadding(widget.topInset);
-    }
     if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
       await _bridge!.setSearch(query: widget.searchQuery!, activeIndex: widget.searchCurrentIndex);
     }
@@ -205,6 +279,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     _bridge!.isGenerating = initialAnyGen;
     _bridge!.evalJs('if (window.bridge) window.bridge.isGenerating = ${initialAnyGen};');
     _ready = true;
+    unawaited(updateLayoutInsets(
+      top: _pendingTopInset,
+      bottom: _pendingBottomInset,
+      immediate: true,
+    ));
   }
 
   Future<void> applyIdentity({
@@ -363,6 +442,10 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         hideTokenCount: widget.hideTokenCount,
         disableSwipeRegeneration: widget.disableSwipeRegeneration,
       );
+      if (widget.batterySaver != old.batterySaver) {
+        _perfModeEnabled = widget.batterySaver;
+        _bridge!.setPerformanceMode(_perfModeEnabled);
+      }
     }
 
     if (widget.searchQuery != old.searchQuery || widget.searchCurrentIndex != old.searchCurrentIndex) {
@@ -373,12 +456,12 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       }
     }
 
-    if (widget.bottomInset != old.bottomInset) {
-      _bridge!.setBottomPadding(widget.bottomInset);
-    }
-
-    if (widget.topInset != old.topInset) {
-      _bridge!.setTopPadding(widget.topInset);
+    if (widget.topInset != old.topInset || widget.bottomInset != old.bottomInset) {
+      unawaited(updateLayoutInsets(
+        top: widget.topInset,
+        bottom: widget.bottomInset,
+        immediate: true,
+      ));
     }
 
     final anyGenerating = widget.isGenerating || widget.isGeneratingImage;
@@ -614,8 +697,10 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             domStorageEnabled: true,
-            transparentBackground: true,
-            useHybridComposition: true,
+            transparentBackground: false,
+            // Virtual display on Android: hybrid composition re-rasterizes the
+            // full WebView when Flutter overlays move (keyboard animation).
+            useHybridComposition: Platform.isIOS,
             cacheEnabled: true,
             useWideViewPort: true,
             loadWithOverviewMode: true,
@@ -714,23 +799,6 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
             debugPrint('[JS] ${consoleMessage.message}');
           },
         ),
-        if (widget.bottomInset > 0)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.02),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }

@@ -1029,6 +1029,68 @@
   -webkit-backdrop-filter: none !important;
 }
 
+/* Hard keyboard perf mode: intentionally aggressive.
+   Goal is to cap raster cost while IME is visible. */
+#chat-container.perf-mode,
+#chat-container.perf-mode *,
+#chat-container.perf-mode *::before,
+#chat-container.perf-mode *::after {
+  animation: none !important;
+  transition: none !important;
+}
+#chat-container.perf-mode .message-section,
+#chat-container.perf-mode .msg-body,
+#chat-container.perf-mode .msg-reasoning,
+#chat-container.perf-mode .msg-switcher,
+#chat-container.perf-mode .msg-regenerate,
+#chat-container.perf-mode .msg-guided-swipe-btn,
+#chat-container.perf-mode .msg-actions-btn,
+#chat-container.perf-mode .edit-btn,
+#chat-container.perf-mode .guided-swipe-container,
+#chat-container.perf-mode .selection-bar,
+#chat-container.perf-mode .error-window,
+#chat-container.perf-mode .img-result-frame,
+#chat-container.perf-mode .img-gen-frame,
+#chat-container.perf-mode .img-error-frame {
+  box-shadow: none !important;
+  filter: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+#chat-container.perf-mode .msg-guided-swipe-btn,
+#chat-container.perf-mode .msg-actions-btn,
+#chat-container.perf-mode .selection-bar {
+  display: none !important;
+}
+#chat-container.perf-mode .msg-header,
+#chat-container.perf-mode .msg-footer,
+#chat-container.perf-mode .msg-reasoning,
+#chat-container.perf-mode .msg-guidance-block,
+#chat-container.perf-mode .guided-swipe-container,
+#chat-container.perf-mode .typing-icon,
+#chat-container.perf-mode .typing-dots-bounce {
+  display: none !important;
+}
+#chat-container.perf-mode .message-section {
+  padding: 8px 12px !important;
+}
+#chat-container.perf-mode .message-section.layout-bubble .msg-content-stack {
+  max-width: 100% !important;
+}
+#chat-container.perf-mode .message-section.layout-bubble .msg-body {
+  border: none !important;
+  border-radius: 10px !important;
+  padding: 8px 10px !important;
+}
+#chat-container.perf-mode .typing-dots-static {
+  margin-left: 0 !important;
+  letter-spacing: 0 !important;
+}
+#chat-container.perf-mode #bg-layer,
+#chat-container.perf-mode #bg-noise-layer {
+  display: none !important;
+}
+
 /* ============================================================
  * Shadow DOM content (.glaze-message)
  * NOTE: most of these are also injected inside the shadow root

@@ -19,6 +19,7 @@ class ChatDrawerController extends ChangeNotifier {
 
   double _tempMaxHeight = 0;
   Timer? _heightTimer;
+  Timer? _switchingFallbackTimer;
   bool _batterySaverMode = false;
 
   final Future<double> Function() _readKeyboardHeight;
@@ -40,6 +41,7 @@ class ChatDrawerController extends ChangeNotifier {
       reverseCurve: Curves.easeInCubic,
     );
     _inputFocus.addListener(_onFocusChanged);
+    _drawerAnimController.addStatusListener(_onAnimStatus);
   }
 
   FocusNode get inputFocus => _inputFocus;
@@ -66,6 +68,8 @@ class ChatDrawerController extends ChangeNotifier {
   void toggleDrawer(BuildContext context) {
     if (_drawerOpen) {
       _drawerOpen = false;
+      _switchingToDrawer = false;
+      _switchingFallbackTimer?.cancel();
       _drawerAnimController.reverse();
       notifyListeners();
     } else {
@@ -75,11 +79,18 @@ class ChatDrawerController extends ChangeNotifier {
       final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
       if (keyboardHeight > 0 || _inputFocus.hasFocus) {
         _switchingToDrawer = true;
-        if (_batterySaverMode) {
-          _drawerOpen = true;
-          _drawerAnimController.forward();
-        }
+        _drawerOpen = true;
+        _drawerAnimController.forward();
+        // Force-close IME even if focus listeners lag.
+        SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
         _inputFocus.unfocus();
+        _switchingFallbackTimer?.cancel();
+        _switchingFallbackTimer = Timer(const Duration(milliseconds: 450), () {
+          if (_switchingToDrawer) {
+            _switchingToDrawer = false;
+            notifyListeners();
+          }
+        });
         notifyListeners();
       } else {
         _drawerOpen = true;
@@ -90,15 +101,29 @@ class ChatDrawerController extends ChangeNotifier {
   }
 
   void closeDrawer() {
-    if (!_drawerOpen) return;
+    if (!_drawerOpen && !_switchingToDrawer) return;
     _drawerOpen = false;
+    _switchingToDrawer = false;
+    _switchingFallbackTimer?.cancel();
     _drawerAnimController.reverse();
     notifyListeners();
+  }
+
+  void _onAnimStatus(AnimationStatus status) {
+    if (status == AnimationStatus.dismissed) {
+      if (_switchingToDrawer) {
+        _switchingToDrawer = false;
+        notifyListeners();
+      }
+      _switchingFallbackTimer?.cancel();
+    }
   }
 
   void _onFocusChanged() {
     if (_inputFocus.hasFocus && _drawerOpen) {
       _drawerOpen = false;
+      _switchingToDrawer = false;
+      _switchingFallbackTimer?.cancel();
       _activeDrawerHeight = _lastKeyboardHeight;
       _drawerAnimController.reverse();
       notifyListeners();
@@ -122,6 +147,13 @@ class ChatDrawerController extends ChangeNotifier {
 
     if (!_inputFocus.hasFocus && _tempMaxHeight != 0) {
       _tempMaxHeight = 0;
+    }
+
+    final threshold = _batterySaverMode ? 20.0 : 0.0;
+    if (_switchingToDrawer && keyboardHeight <= threshold) {
+      _switchingToDrawer = false;
+      _switchingFallbackTimer?.cancel();
+      notifyListeners();
     }
   }
 
@@ -166,6 +198,7 @@ class ChatDrawerController extends ChangeNotifier {
   @override
   void dispose() {
     _heightTimer?.cancel();
+    _switchingFallbackTimer?.cancel();
     _inputFocus.removeListener(_onFocusChanged);
     _inputFocus.dispose();
     _drawerAnimController.dispose();
