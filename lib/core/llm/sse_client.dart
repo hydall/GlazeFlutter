@@ -11,7 +11,11 @@ typedef SseOnError = void Function(Object error);
 class SseClient {
   final Dio _dio;
 
-  SseClient() : _dio = Dio();
+  SseClient()
+      : _dio = Dio(BaseOptions(
+          connectTimeout: const Duration(seconds: 30),
+          receiveTimeout: const Duration(seconds: 120),
+        ));
 
   static String normalizeEndpoint(String endpoint) {
     var normalized = endpoint.trim();

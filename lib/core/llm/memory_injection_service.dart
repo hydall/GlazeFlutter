@@ -175,7 +175,8 @@ class MemoryInjectionService {
       final queryText = buffer.toString().trim();
       if (queryText.isEmpty) return {};
 
-      final queryChunks = await _embeddingService.getEmbeddingsWithChunks([queryText], config);
+      final queryChunks = await _embeddingService.getEmbeddingsWithChunks([queryText], config)
+          .timeout(const Duration(seconds: 15), onTimeout: () => []);
       if (queryChunks.isEmpty) return {};
 
       final queryVecChunks = queryChunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
