@@ -1,4 +1,6 @@
-import 'package:collection/collection.dart';
+import 'dart:async';
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -117,11 +119,81 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   bool _regenStreamingSent = false;
   bool _wasGenerating = false;
   bool _sessionSwitching = false;
+  double _appliedBottomInset = -1;
+  double _appliedTopInset = -1;
+  double _pendingTopInset = 0;
+  double _pendingBottomInset = 0;
+  bool _perfModeEnabled = false;
+  Timer? _layoutInsetDebounce;
+
+  static const _layoutInsetSettleDelay = Duration(milliseconds: 220);
 
   @override
   bool get wantKeepAlive => true;
 
-  Future<void> _initWebView() async {
+  @override
+  void dispose() {
+    _layoutInsetDebounce?.cancel();
+    super.dispose();
+  }
+
+  Future<void> updateLayoutInsets({
+    required double top,
+    required double bottom,
+    bool immediate = false,
+  }) {
+    _pendingTopInset = top;
+    _pendingBottomInset = bottom;
+
+    final bridge = _bridge;
+    if (bridge == null || !_ready) return Future.value();
+
+    if (immediate) {
+      return _applyLayoutInsets(refresh: true);
+    }
+
+    // During keyboard motion we can get many inset updates.
+    // Apply without forcing virtualList.refresh() (refresh triggers DOM churn).
+    _layoutInsetDebounce?.cancel();
+    _layoutInsetDebounce = Timer(_layoutInsetSettleDelay, () {
+      _layoutInsetDebounce = null;
+      if (!mounted) return;
+      unawaited(_applyLayoutInsets(refresh: false));
+    });
+    return Future.value();
+  }
+
+  Future<void> _applyLayoutInsets({required bool refresh}) {
+    final bridge = _bridge;
+    if (bridge == null || !_ready) return Future.value();
+
+    final topDelta = (_pendingTopInset - _appliedTopInset).abs();
+    final bottomDelta = (_pendingBottomInset - _appliedBottomInset).abs();
+    if (topDelta < 0.5 && bottomDelta < 0.5) {
+      return Future.value();
+    }
+
+    _appliedTopInset = _pendingTopInset;
+    _appliedBottomInset = _pendingBottomInset;
+    final shouldEnablePerfMode = widget.batterySaver;
+    if (shouldEnablePerfMode != _perfModeEnabled) {
+      _perfModeEnabled = shouldEnablePerfMode;
+      unawaited(bridge.setPerformanceMode(_perfModeEnabled));
+    }
+
+    return bridge.setLayoutInsets(
+      top: _appliedTopInset,
+      bottom: _appliedBottomInset,
+      refresh: refresh,
+    );
+  }
+
+  @Deprecated('Use updateLayoutInsets')
+  Future<void> updateBottomInset(double inset) {
+    return updateLayoutInsets(top: _appliedTopInset, bottom: inset);
+  }
+
+  Future<void> _syncIdentityFromWidget() async {
     final bridge = _bridge;
     if (bridge == null) return;
 
@@ -134,6 +206,13 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       personaAvatarPath: widget.personaAvatarPath,
       greetingTotal: widget.greetingTotal,
     );
+  }
+
+  Future<void> _initWebView() async {
+    final bridge = _bridge;
+    if (bridge == null) return;
+
+    await _syncIdentityFromWidget();
 
     final glaze = context.colors;
     final cs = context.cs;
@@ -174,17 +253,23 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       disableSwipeRegeneration: widget.disableSwipeRegeneration,
     );
 
+    await _syncIdentityFromWidget();
+    _appliedTopInset = widget.topInset;
+    _appliedBottomInset = widget.bottomInset;
+    if (widget.topInset > 0 || widget.bottomInset > 0) {
+      await _bridge!.setLayoutInsets(
+        top: widget.topInset,
+        bottom: widget.bottomInset,
+        refresh: widget.bottomInset <= 0.5,
+      );
+    }
+    _perfModeEnabled = widget.batterySaver;
+    await _bridge!.setPerformanceMode(_perfModeEnabled);
     await _bridge!.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
     _bridge!.updateMemoryBookData(
       entries: widget.memoryEntries.map((e) => {'status': e.status, 'messageIds': e.messageIds}).toList(),
       pendingDrafts: widget.memoryDrafts.map((e) => {'messageIds': e.messageIds}).toList(),
     );
-    if (widget.bottomInset > 0) {
-      await _bridge!.setBottomPadding(widget.bottomInset);
-    }
-    if (widget.topInset > 0) {
-      await _bridge!.setTopPadding(widget.topInset);
-    }
     if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
       await _bridge!.setSearch(query: widget.searchQuery!, activeIndex: widget.searchCurrentIndex);
     }
@@ -194,6 +279,98 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     _bridge!.isGenerating = initialAnyGen;
     _bridge!.evalJs('if (window.bridge) window.bridge.isGenerating = ${initialAnyGen};');
     _ready = true;
+    unawaited(updateLayoutInsets(
+      top: _pendingTopInset,
+      bottom: _pendingBottomInset,
+      immediate: true,
+    ));
+  }
+
+  Future<void> applyIdentity({
+    String? charName,
+    String? charColor,
+    String? personaName,
+    String? charAvatarPath,
+    String? personaAvatarPath,
+    int? greetingTotal,
+  }) {
+    final bridge = _bridge;
+    if (bridge == null || !_ready) return Future.value();
+    return bridge.setIdentity(
+      charName: charName ?? widget.charName,
+      charColor: charColor ?? widget.charColor,
+      personaName: personaName ?? widget.personaName,
+      layout: widget.chatLayout,
+      charAvatarPath: charAvatarPath ?? widget.charAvatarPath,
+      personaAvatarPath: personaAvatarPath ?? widget.personaAvatarPath,
+      greetingTotal: greetingTotal ?? widget.greetingTotal,
+    );
+  }
+
+  bool _identityChanged(ChatWebViewWidget old) {
+    return widget.charName != old.charName ||
+        widget.charColor != old.charColor ||
+        widget.personaName != old.personaName ||
+        widget.charAvatarPath != old.charAvatarPath ||
+        widget.personaAvatarPath != old.personaAvatarPath ||
+        widget.chatLayout != old.chatLayout ||
+        widget.greetingTotal != old.greetingTotal;
+  }
+
+  Future<void> _applySessionSwitch(ChatWebViewWidget old) async {
+    final bridge = _bridge;
+    if (bridge == null) return;
+
+    _sessionSwitching = true;
+    if (widget.charId != old.charId) {
+      await bridge.setIdentity(
+        charName: widget.charName,
+        charColor: widget.charColor,
+        personaName: widget.personaName,
+        layout: widget.chatLayout,
+        charAvatarPath: widget.charAvatarPath,
+        personaAvatarPath: widget.personaAvatarPath,
+        greetingTotal: widget.greetingTotal,
+      );
+      await bridge.applyTheme({'chat-layout': widget.chatLayout ?? 'default'});
+      await bridge.setBackgroundImage(
+        widget.bgImagePath,
+        widget.bgBlur.toInt(),
+        widget.bgOpacity,
+      );
+      await bridge.setBackgroundNoise(
+        widget.bgNoiseOpacity,
+        widget.bgNoiseIntensity,
+      );
+      await bridge.setChatFont(
+        fontName: widget.chatFontName,
+        fontDataUrl: widget.chatFontDataUrl,
+        fontSize: widget.chatFontSize,
+        letterSpacing: widget.chatLetterSpacing,
+      );
+    } else {
+      await bridge.setIdentity(
+        charName: widget.charName,
+        charColor: widget.charColor,
+        personaName: widget.personaName,
+        layout: widget.chatLayout,
+        charAvatarPath: widget.charAvatarPath,
+        personaAvatarPath: widget.personaAvatarPath,
+        greetingTotal: widget.greetingTotal,
+      );
+    }
+
+    await bridge.clearAll();
+    await bridge.setMessages(
+      widget.messages,
+      visibleStartIndex: widget.visibleStartIndex,
+    );
+    Future.delayed(const Duration(milliseconds: 150), () {
+      bridge.scrollToBottom();
+      _sessionSwitching = false;
+    });
+    _wasGenerating = widget.isGenerating;
+    _streamingSent = false;
   }
 
   @override
@@ -209,43 +386,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     }
 
     if (widget.charId != old.charId || widget.sessionId != old.sessionId) {
-      _sessionSwitching = true;
-      if (widget.charId != old.charId) {
-        _bridge!.setIdentity(
-          charName: widget.charName,
-          charColor: widget.charColor,
-          personaName: widget.personaName,
-          layout: widget.chatLayout,
-          charAvatarPath: widget.charAvatarPath,
-          personaAvatarPath: widget.personaAvatarPath,
-          greetingTotal: widget.greetingTotal,
-        );
-        _bridge!.applyTheme({'chat-layout': widget.chatLayout ?? 'default'});
-        _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
-        _bridge!.setBackgroundNoise(widget.bgNoiseOpacity, widget.bgNoiseIntensity);
-        _bridge!.setChatFont(
-          fontName: widget.chatFontName,
-          fontDataUrl: widget.chatFontDataUrl,
-          fontSize: widget.chatFontSize,
-          letterSpacing: widget.chatLetterSpacing,
-        );
-      }
-      _bridge!.clearAll();
-      _bridge!.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
-      Future.delayed(const Duration(milliseconds: 150), () {
-        _bridge?.scrollToBottom();
-        _sessionSwitching = false;
-      });
-      _wasGenerating = widget.isGenerating;
-      _streamingSent = false;
+      unawaited(_applySessionSwitch(old));
       return;
     }
 
-    if (widget.charName != old.charName ||
-        widget.charColor != old.charColor ||
-        widget.personaName != old.personaName ||
-        widget.chatLayout != old.chatLayout ||
-        widget.greetingTotal != old.greetingTotal) {
+    if (_identityChanged(old)) {
       _bridge!.setIdentity(
         charName: widget.charName,
         charColor: widget.charColor,
@@ -297,6 +442,10 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         hideTokenCount: widget.hideTokenCount,
         disableSwipeRegeneration: widget.disableSwipeRegeneration,
       );
+      if (widget.batterySaver != old.batterySaver) {
+        _perfModeEnabled = widget.batterySaver;
+        _bridge!.setPerformanceMode(_perfModeEnabled);
+      }
     }
 
     if (widget.searchQuery != old.searchQuery || widget.searchCurrentIndex != old.searchCurrentIndex) {
@@ -307,12 +456,12 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       }
     }
 
-    if (widget.bottomInset != old.bottomInset) {
-      _bridge!.setBottomPadding(widget.bottomInset);
-    }
-
-    if (widget.topInset != old.topInset) {
-      _bridge!.setTopPadding(widget.topInset);
+    if (widget.topInset != old.topInset || widget.bottomInset != old.bottomInset) {
+      unawaited(updateLayoutInsets(
+        top: widget.topInset,
+        bottom: widget.bottomInset,
+        immediate: true,
+      ));
     }
 
     final anyGenerating = widget.isGenerating || widget.isGeneratingImage;
@@ -548,8 +697,10 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             domStorageEnabled: true,
-            transparentBackground: true,
-            useHybridComposition: true,
+            transparentBackground: false,
+            // Virtual display on Android: hybrid composition re-rasterizes the
+            // full WebView when Flutter overlays move (keyboard animation).
+            useHybridComposition: Platform.isIOS,
             cacheEnabled: true,
             useWideViewPort: true,
             loadWithOverviewMode: true,
@@ -648,23 +799,6 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
             debugPrint('[JS] ${consoleMessage.message}');
           },
         ),
-        if (widget.bottomInset > 0)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.02),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
       ],
     );
   }

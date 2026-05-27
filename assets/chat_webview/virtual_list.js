@@ -10,7 +10,10 @@ class VirtualList {
 
     this._renderStart = 0;
     this._renderEnd = 0;
-    this._bufferSize = Infinity;
+    // Keep a finite virtualization window. Infinity effectively disables
+    // virtualization and explodes raster cost on long chats.
+    this._bufferSize = 40;
+    this._perfMode = false;
 
     this._topSpacer = document.createElement('div');
     this._topSpacer.className = 'vl-spacer vl-spacer-top';
@@ -169,6 +172,10 @@ class VirtualList {
     this.container.scrollTop = this.container.scrollHeight;
     requestAnimationFrame(() => {
       this.container.scrollTop = this.container.scrollHeight;
+      // When scrolling programmatically we still need to rebuild the visible
+      // window. Otherwise (e.g. initial clientHeight=0) the list can look
+      // empty until the next real user scroll.
+      this._applyWindow();
       requestAnimationFrame(() => {
         this.container.scrollTop = this.container.scrollHeight;
         this._isUserScroll = true;
@@ -274,9 +281,12 @@ class VirtualList {
 
     const startIdx = this._findIndexAtOffset(scrollTop);
     const endIdx = this._findIndexAtOffset(scrollTop + viewHeight);
+    const dynamicBuffer = this._perfMode
+      ? Math.max(6, this._bufferSize)
+      : Math.max(this._bufferSize, Math.ceil((viewHeight || 800) / 140) + 10);
 
-    this._renderStart = Math.max(0, startIdx - this._bufferSize);
-    this._renderEnd = Math.min(n, endIdx + this._bufferSize + 1);
+    this._renderStart = Math.max(0, startIdx - dynamicBuffer);
+    this._renderEnd = Math.min(n, endIdx + dynamicBuffer + 1);
   }
 
   _isInWindow(idx) {
@@ -340,8 +350,12 @@ class VirtualList {
 
   _ensureRendered(targetIdx) {
     const n = this.messageOrder.length;
-    this._renderStart = Math.max(0, targetIdx - this._bufferSize);
-    this._renderEnd = Math.min(n, targetIdx + this._bufferSize + 1);
+    const viewHeight = this.container.clientHeight || 800;
+    const dynamicBuffer = this._perfMode
+      ? Math.max(8, this._bufferSize)
+      : Math.max(this._bufferSize, Math.ceil(viewHeight / 140) + 10);
+    this._renderStart = Math.max(0, targetIdx - dynamicBuffer);
+    this._renderEnd = Math.min(n, targetIdx + dynamicBuffer + 1);
 
     for (let i = this._renderStart; i < this._renderEnd; i++) {
       const id = this.messageOrder[i];
@@ -412,6 +426,19 @@ class VirtualList {
     }
 
     this._updateSpacers();
+
+    // One-shot settle: during layout transitions (keyboard open) the
+    // container can temporarily report clientHeight=0. In that case the
+    // initial _computeWindow() renders nothing until the next user scroll.
+    // Recompute after the next frame once height becomes available.
+    if (this.container.clientHeight <= 1) {
+      setTimeout(() => {
+        if (!this.container || !this.container.isConnected) return;
+        if (this.container.clientHeight > 1) {
+          this.refresh({ startAtBottom: true });
+        }
+      }, 60);
+    }
   }
 
   pendingScrollToBottom() {
@@ -420,5 +447,33 @@ class VirtualList {
 
   pendingScrollToMessage(messageId) {
     this._pendingScrollToId = messageId;
+  }
+
+  setPerfMode(enabled) {
+    this._perfMode = !!enabled;
+    this._applyWindow();
+  }
+
+  refresh(opts) {
+    const startAtBottom = opts && opts.startAtBottom;
+    this._dirty = true;
+    if (this.container.clientHeight <= 1) {
+      setTimeout(() => {
+        if (!this.container || !this.container.isConnected) return;
+        if (this.container.clientHeight > 1) {
+          this.refresh(opts);
+        }
+      }, 60);
+      return;
+    }
+    if (startAtBottom) {
+      this.container.scrollTop = this.container.scrollHeight;
+    }
+    this._applyWindow();
+    if (startAtBottom) {
+      requestAnimationFrame(() => {
+        this.container.scrollTop = this.container.scrollHeight;
+      });
+    }
   }
 }
