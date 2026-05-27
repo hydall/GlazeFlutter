@@ -13,9 +13,11 @@ import '../models/chat_message.dart';
 import '../models/api_config.dart';
 import '../models/lorebook.dart';
 import 'context_calculator.dart';
+import 'glaze_matcher.dart';
 import 'history_assembler.dart';
 import 'lorebook_scanner.dart';
 import 'prompt_builder.dart';
+import 'prompt_inputs.dart';
 import 'tokenizer.dart';
 
 /// Long-lived isolate worker that runs buildPrompt off the main thread.
@@ -89,6 +91,14 @@ class PromptWorker {
   Future<PromptResult> buildPrompt(PromptPayload payload) async {
     final json = jsonEncode(_serializePayload(payload));
     final response = await _send('buildPrompt', json) as String;
+    return _deserializeResult(jsonDecode(response) as Map<String, dynamic>);
+  }
+
+  /// Builds a complete prompt from raw inputs. This runs memory injection,
+  /// lorebook scanning, prompt assembly, and tokenization all in the isolate.
+  Future<PromptResult> buildFromInputs(PromptInputs inputs) async {
+    final json = jsonEncode(inputs.toJson());
+    final response = await _send('buildFromInputs', json) as String;
     return _deserializeResult(jsonDecode(response) as Map<String, dynamic>);
   }
 
@@ -212,6 +222,11 @@ void _isolateEntryPoint(List<dynamic> args) {
           final result = buildPrompt(payload);
           responseSendPort.send([id, jsonEncode(_serializeResult(result))]);
 
+        case 'buildFromInputs':
+          final inputs = PromptInputs.fromJson(jsonDecode(data as String) as Map<String, dynamic>);
+          final result2 = _buildFromInputs(inputs);
+          responseSendPort.send([id, jsonEncode(_serializeResult(result2))]);
+
         default:
           responseSendPort.send([id, {'error': 'Unknown command: $command'}]);
       }
@@ -219,4 +234,114 @@ void _isolateEntryPoint(List<dynamic> args) {
       responseSendPort.send([id, {'error': '$e\n$st'}]);
     }
   });
+}
+
+/// Builds a complete prompt from raw inputs in the isolate.
+/// Performs memory keyword injection, lorebook scanning, and prompt assembly.
+PromptResult _buildFromInputs(PromptInputs inputs) {
+  // 1. Memory keyword injection (no vector search in isolate)
+  String? memoryContent;
+  String? memoryMacroContent;
+  String memoryInjectionTarget = inputs.memoryInjectionTarget;
+  List<TriggeredEntry> triggeredMemories = [];
+
+  if (inputs.memoryEnabled && inputs.memoryEntries.isNotEmpty) {
+    final historyText = inputs.history
+        .where((m) => !m.isHidden && !m.isTyping)
+        .map((m) => m.content)
+        .join('\n');
+    final scanText = historyText.toLowerCase();
+    final keywordMatched = <String>{};
+
+    for (final entry in inputs.memoryEntries) {
+      if (entry.status != 'active' || entry.content.trim().isEmpty) continue;
+
+      for (final key in entry.keys) {
+        if (key.isEmpty) continue;
+        if (inputs.memoryKeyMatchMode == 'glaze') {
+          if (_glazeMatch(key, scanText)) keywordMatched.add(entry.id);
+        } else if (inputs.memoryKeyMatchMode == 'both') {
+          if (scanText.contains(key.toLowerCase()) || _glazeMatch(key, scanText)) {
+            keywordMatched.add(entry.id);
+          }
+        } else {
+          if (scanText.contains(key.toLowerCase())) keywordMatched.add(entry.id);
+        }
+      }
+    }
+
+    final scoredEntries = inputs.memoryEntries
+        .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
+        .map((entry) {
+          var score = 0.0;
+          if (keywordMatched.contains(entry.id)) score += 6;
+          if (entry.messageIds.isNotEmpty) score += 2;
+          score += entry.content.length > 20 ? 1 : 0;
+          return (entry: entry, score: score);
+        })
+        .toList()
+      ..sort((a, b) => b.score.compareTo(a.score));
+
+    final topEntries = scoredEntries
+        .where((item) => item.score > 0)
+        .take(inputs.memoryMaxInjected)
+        .map((item) => item.entry)
+        .toList();
+
+    if (topEntries.isNotEmpty) {
+      final macroContent = topEntries.map((e) => e.content.trim()).join('\n\n');
+      final contentParts = <String>[];
+      if (inputs.summaryContent != null && inputs.summaryContent!.isNotEmpty) {
+        contentParts.add('Summary excerpt:\n${inputs.summaryContent}');
+      }
+      contentParts.add('Memory context:');
+      for (final entry in topEntries) {
+        final title = entry.title.isNotEmpty ? entry.title : 'Memory';
+        contentParts.add('- $title: ${entry.content.trim()}');
+      }
+
+      memoryContent = contentParts.join('\n\n');
+      memoryMacroContent = macroContent;
+      triggeredMemories = topEntries
+          .map((e) => TriggeredEntry(
+                id: e.id,
+                name: e.title.isNotEmpty ? e.title : e.id,
+                source: 'memory',
+              ))
+          .toList();
+    }
+  }
+
+  // 2. Build payload
+  final payload = PromptPayload(
+    character: inputs.character,
+    persona: inputs.persona,
+    preset: inputs.preset,
+    history: inputs.history,
+    apiConfig: inputs.apiConfig,
+    sessionVars: inputs.sessionVars,
+    globalVars: inputs.globalVars,
+    summaryContent: inputs.summaryContent,
+    guidanceText: inputs.guidanceText,
+    lorebooks: inputs.lorebooks,
+    lorebookSettings: inputs.lorebookSettings,
+    lorebookActivations: inputs.lorebookActivations,
+    vectorEntries: inputs.vectorEntries,
+    authorsNote: inputs.authorsNote,
+    characterDepthPrompt: inputs.characterDepthPrompt,
+    characterDepthPromptDepth: inputs.characterDepthPromptDepth,
+    characterDepthPromptRole: inputs.characterDepthPromptRole,
+    globalRegexes: inputs.globalRegexes,
+    memoryContent: memoryContent,
+    memoryMacroContent: memoryMacroContent,
+    memoryInjectionTarget: memoryInjectionTarget,
+    triggeredMemories: triggeredMemories,
+  );
+
+  // 3. Build prompt (lorebook scanning happens inside buildPrompt)
+  return buildPrompt(payload);
+}
+
+bool _glazeMatch(String key, String text) {
+  return glazeCheckMatch(key, text, false, WholeWordMode.glaze);
 }

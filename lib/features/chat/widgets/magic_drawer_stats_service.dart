@@ -1,35 +1,29 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/llm/embedding_types.dart';
-import '../../../core/llm/lorebook_providers.dart';
-import '../../../core/llm/lorebook_scanner.dart';
-import '../../../core/llm/memory_injection_service.dart';
-import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/summary_service.dart';
-import '../../../core/models/chat_message.dart';
 import '../../../core/models/preset.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
-import '../../../core/state/lorebook_provider.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../chat_provider.dart';
 import 'cached_token_breakdown.dart';
 import 'magic_drawer_models.dart';
-
-class _StatsContext {
-  final List<ScannedEntry> scannedEntries;
-  const _StatsContext({required this.scannedEntries});
-}
+import 'token_breakdown_cache.dart';
 
 class MagicDrawerStatsService {
   final WidgetRef _ref;
 
   MagicDrawerStatsService(this._ref);
 
-  _StatsContext? _lastStatsContext;
+  bool _isCalculating = false;
+  bool _pendingRecalc = false;
+  String? _pendingCharId;
+  MagicDrawerStats? _pendingBase;
 
   Future<MagicDrawerStats> computeStats(String charId) async {
     final chatState = _ref.read(chatProvider(charId)).value;
@@ -70,11 +64,6 @@ class MagicDrawerStatsService {
     var sessionCount = 0;
     var messageCount = 0;
     String? summaryContent;
-    String? memoryContent;
-    String? memoryMacroContent;
-    String memoryInjectionTarget = 'summary_block';
-    Map<String, dynamic> memoryCoverage = {};
-    List<TriggeredEntry> triggeredMemories = [];
 
     if (session != null) {
       try {
@@ -88,42 +77,6 @@ class MagicDrawerStatsService {
       }
 
       try {
-        final memoryService = _ref.read(memoryInjectionServiceProvider);
-        final embeddingConfig = _ref.read(embeddingConfigProvider);
-        final memoryHistory = session.messages
-            .where((m) => !m.isHidden && !m.isTyping)
-            .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
-            .toList();
-        final memoryResult = await memoryService.buildInjection(
-          sessionId: session.id,
-          historyText: session.historyText,
-          messageCount: session.messages.length,
-          summaryExcerpt: summaryContent,
-          history: memoryHistory,
-          currentText: session.messages.lastOrNull?.content ?? '',
-          embeddingConfig: embeddingConfig,
-        );
-        memoryContent = memoryResult.content.isNotEmpty ? memoryResult.content : null;
-        memoryMacroContent = memoryResult.macroContent.isNotEmpty ? memoryResult.macroContent : null;
-        memoryInjectionTarget = memoryResult.injectionTarget;
-        if (memoryResult.entries.isNotEmpty) {
-          memoryCoverage = {
-            'entryIds': memoryResult.entries.map((e) => e.id).toList(),
-            'needsRebuild': false,
-            'stale': false,
-            'injected': memoryContent != null,
-          };
-          triggeredMemories = memoryResult.entries.map((e) => TriggeredEntry(
-            id: e.id,
-            name: e.title.isNotEmpty ? e.title : e.id,
-            source: 'memory',
-          )).toList();
-        }
-      } catch (e) {
-        debugPrint('[MagicDrawer] memory injection error: $e');
-      }
-
-      try {
         final memoryBook = await memoryRepo.getBySessionId(session.id);
         memoryEntries = memoryBook?.entries.length ?? 0;
         sessionCount =
@@ -133,24 +86,6 @@ class MagicDrawerStatsService {
         debugPrint('[MagicDrawer] session stats error: $e');
       }
     }
-
-    final lorebookActivations = _ref.read(lorebookActivationsProvider);
-    final lorebookSettings = _ref.read(lorebookSettingsProvider);
-    final triggeredEntries = session != null
-        ? scanLorebooks(
-            history: session.messages,
-            char: character,
-            textToScan: session.messages.isNotEmpty
-                ? session.messages.last.content
-                : '',
-            chatId: session.id,
-            lorebooks: lorebooks,
-            globalSettings: lorebookSettings,
-            activations: lorebookActivations,
-          )
-        : <ScannedEntry>[];
-
-    _lastStatsContext = _StatsContext(scannedEntries: triggeredEntries);
 
     bool imageGenEnabled = false;
     try {
@@ -173,7 +108,7 @@ class MagicDrawerStatsService {
       session: session,
       sessionCount: sessionCount,
       messageCount: messageCount,
-      lorebookEntryCount: triggeredEntries.length,
+      lorebookEntryCount: 0,
       memoryEntryCount: memoryEntries,
       regexCount: regexes.length,
       summaryChars: summaryChars,
@@ -187,11 +122,6 @@ class MagicDrawerStatsService {
       imageGenEnabled: imageGenEnabled,
       lorebooks: lorebooks,
       summaryContent: summaryContent,
-      memoryContent: memoryContent,
-      memoryMacroContent: memoryMacroContent,
-      memoryInjectionTarget: memoryInjectionTarget,
-      memoryCoverage: memoryCoverage,
-      triggeredMemories: triggeredMemories,
     );
   }
 
@@ -202,63 +132,84 @@ class MagicDrawerStatsService {
 
     if (session == null || character == null || chatApi == null) return base;
 
+    if (_isCalculating) {
+      _pendingRecalc = true;
+      _pendingCharId = charId;
+      _pendingBase = base;
+      return base;
+    }
+
+    _isCalculating = true;
     try {
+      final visibleCount = session.messages.where((m) => !m.isHidden).length;
+      final hash = TokenBreakdownCache.computeHash(
+        charId: charId,
+        sessionId: session.id,
+        messageCount: visibleCount,
+        contextSize: chatApi.contextSize,
+        maxTokens: chatApi.maxTokens,
+        authorsNote: session.authorsNote?.content ?? '',
+        summary: base.summaryContent ?? '',
+      );
+
+      final cached = TokenBreakdownCache.get(hash);
+      if (cached != null) {
+        _ref.read(cachedTokenBreakdownProvider(charId).notifier).state = cached;
+        return base.copyWith(
+          promptTokens: cached.totalTokens,
+          characterTokens: (cached.sourceTokens['description'] ?? 0) > 0
+              ? cached.sourceTokens['description']!
+              : (cached.macroTokens['description'] ?? 0),
+          presetTokens: cached.presetNetTokens,
+          personaTokens: (cached.sourceTokens['persona'] ?? 0) > 0
+              ? cached.sourceTokens['persona']!
+              : (cached.macroTokens['persona'] ?? 0),
+          summaryTokens: (cached.sourceTokens['summary'] ?? 0) > 0
+              ? cached.sourceTokens['summary']!
+              : (cached.macroTokens['summary'] ?? 0),
+        );
+      }
+
       final builder = _ref.read(promptPayloadBuilderProvider);
-      final payload = await builder.buildFromPreFetched(
+      final inputs = await builder.collectInputs(
         charId: charId,
         session: session,
-        character: character,
-        chatApi: chatApi,
-        preset: base.activePreset,
-        persona: base.activePersona,
-        lorebooks: base.lorebooks,
-        summaryContent: base.summaryContent,
-        memoryContent: base.memoryContent,
-        memoryMacroContent: base.memoryMacroContent,
-        memoryInjectionTarget: base.memoryInjectionTarget,
-        memoryCoverage: base.memoryCoverage,
-        triggeredMemories: base.triggeredMemories.cast(),
-        skipVectorSearch: true,
       );
-      final payloadWithScan = PromptPayload(
-        character: payload.character,
-        persona: payload.persona,
-        preset: payload.preset,
-        history: payload.history,
-        apiConfig: payload.apiConfig,
-        sessionVars: payload.sessionVars,
-        globalVars: payload.globalVars,
-        lorebooks: payload.lorebooks,
-        lorebookSettings: payload.lorebookSettings,
-        lorebookActivations: payload.lorebookActivations,
-        vectorEntries: payload.vectorEntries,
-        summaryContent: payload.summaryContent,
-        memoryContent: payload.memoryContent,
-        memoryInjectionTarget: payload.memoryInjectionTarget,
-        memoryCoverage: payload.memoryCoverage,
-        guidanceText: payload.guidanceText,
-        authorsNote: payload.authorsNote,
-        characterDepthPrompt: payload.characterDepthPrompt,
-        characterDepthPromptDepth: payload.characterDepthPromptDepth,
-        characterDepthPromptRole: payload.characterDepthPromptRole,
-        globalRegexes: payload.globalRegexes,
-        preScannedEntries: _lastStatsContext?.scannedEntries,
-      );
-      final promptResult = await buildPromptInIsolate(payloadWithScan);
-      final sourceTokens = promptResult.breakdown.sourceTokens;
+      final result = await buildFromInputsInIsolate(inputs);
+      final breakdown = result.breakdown;
+      final sourceTokens = breakdown.sourceTokens;
 
-      _ref.read(cachedTokenBreakdownProvider(charId).notifier).state =
-          promptResult.breakdown;
+      TokenBreakdownCache.set(hash, breakdown);
+      _ref.read(cachedTokenBreakdownProvider(charId).notifier).state = breakdown;
 
       return base.copyWith(
-        promptTokens: promptResult.breakdown.totalTokens,
-        characterTokens: (sourceTokens['description'] ?? 0) > 0 ? sourceTokens['description']! : (promptResult.breakdown.macroTokens['description'] ?? 0),
-        presetTokens: promptResult.breakdown.presetNetTokens,
-        personaTokens: (sourceTokens['persona'] ?? 0) > 0 ? sourceTokens['persona']! : (promptResult.breakdown.macroTokens['persona'] ?? 0),
-        summaryTokens: (sourceTokens['summary'] ?? 0) > 0 ? sourceTokens['summary']! : (promptResult.breakdown.macroTokens['summary'] ?? 0),
+        promptTokens: breakdown.totalTokens,
+        characterTokens: (sourceTokens['description'] ?? 0) > 0
+            ? sourceTokens['description']!
+            : (breakdown.macroTokens['description'] ?? 0),
+        presetTokens: breakdown.presetNetTokens,
+        personaTokens: (sourceTokens['persona'] ?? 0) > 0
+            ? sourceTokens['persona']!
+            : (breakdown.macroTokens['persona'] ?? 0),
+        summaryTokens: (sourceTokens['summary'] ?? 0) > 0
+            ? sourceTokens['summary']!
+            : (breakdown.macroTokens['summary'] ?? 0),
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[MagicDrawer] computeTokenStats error: $e');
       return base;
+    } finally {
+      _isCalculating = false;
+      if (_pendingRecalc) {
+        _pendingRecalc = false;
+        final cId = _pendingCharId;
+        final b = _pendingBase;
+        _pendingCharId = null;
+        _pendingBase = null;
+        if (cId != null && b != null) {
+          unawaited(computeTokenStats(cId, b));
+        }
+      }
     }
   }
 }

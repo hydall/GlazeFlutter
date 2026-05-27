@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/llm/context_calculator.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
+import '../../../core/models/api_config.dart';
 import '../../../features/settings/api_list_provider.dart';
 import '../../../features/settings/app_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -11,6 +12,7 @@ import '../../../shared/widgets/sheet_view.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../chat_provider.dart';
 import 'cached_token_breakdown.dart';
+import 'token_breakdown_cache.dart';
 import 'tokenizer_widgets.dart';
 
 class TokenizerSheet extends ConsumerStatefulWidget {
@@ -42,25 +44,53 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   double _historyFillThreshold = 85;
 
   void _loadOrCalculate() {
-    final cached = ref.read(cachedTokenBreakdownProvider(widget.charId));
+    final chatState = ref.read(chatProvider(widget.charId)).value;
+    final session = chatState?.session;
+    if (session == null) {
+      _calculate();
+      return;
+    }
+
+    final chatApi = _resolveApiConfig();
+    if (chatApi == null) {
+      _calculate();
+      return;
+    }
+
+    final visibleCount = session.messages.where((m) => !m.isHidden).length;
+    final summaryContent = ref.read(cachedTokenBreakdownProvider(widget.charId));
+    final hash = TokenBreakdownCache.computeHash(
+      charId: widget.charId,
+      sessionId: session.id,
+      messageCount: visibleCount,
+      contextSize: chatApi.contextSize,
+      maxTokens: chatApi.maxTokens,
+      authorsNote: session.authorsNote?.content ?? '',
+      summary: '',
+    );
+
+    final cached = TokenBreakdownCache.get(hash);
     if (cached != null) {
-      final chatState = ref.read(chatProvider(widget.charId)).value;
-      final session = chatState?.session;
-      _contextSize = chatState?.session != null
-          ? _resolveContextSize()
-          : null;
-      _visibleCount =
-          session?.messages.where((m) => !m.isHidden).length ?? 0;
+      _contextSize = chatApi.contextSize;
+      _visibleCount = visibleCount;
       _breakdown = cached;
       return;
     }
+
+    final riverpodCached = summaryContent;
+    if (riverpodCached != null) {
+      _contextSize = chatApi.contextSize;
+      _visibleCount = visibleCount;
+      _breakdown = riverpodCached;
+      return;
+    }
+
     _calculate();
   }
 
-  int? _resolveContextSize() {
+  ApiConfig? _resolveApiConfig() {
     try {
-      final chatApi = ref.read(activeApiConfigProvider);
-      return chatApi?.contextSize;
+      return ref.read(activeApiConfigProvider);
     } catch (_) {
       return null;
     }
@@ -80,19 +110,31 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       _visibleCount = session.messages.where((m) => !m.isHidden).length;
 
       final builder = ref.read(promptPayloadBuilderProvider);
-      final payload = await builder.buildFromSession(
+      final inputs = await builder.collectInputs(
         charId: widget.charId,
         session: session,
-        skipVectorSearch: true,
       );
-      _contextSize = payload.apiConfig.contextSize;
+      _contextSize = inputs.apiConfig.contextSize;
 
-      final result = await buildPromptInIsolate(payload);
+      final result = await buildFromInputsInIsolate(inputs);
+      final breakdown = result.breakdown;
+
+      final hash = TokenBreakdownCache.computeHash(
+        charId: widget.charId,
+        sessionId: session.id,
+        messageCount: _visibleCount,
+        contextSize: inputs.apiConfig.contextSize,
+        maxTokens: inputs.apiConfig.maxTokens,
+        authorsNote: session.authorsNote?.content ?? '',
+        summary: inputs.summaryContent ?? '',
+      );
+      TokenBreakdownCache.set(hash, breakdown);
+
       ref
           .read(cachedTokenBreakdownProvider(widget.charId).notifier)
-          .state = result.breakdown;
+          .state = breakdown;
 
-      if (mounted) setState(() => _breakdown = result.breakdown);
+      if (mounted) setState(() => _breakdown = breakdown);
     } catch (e) {
       debugPrint('Tokenizer error: $e');
     } finally {

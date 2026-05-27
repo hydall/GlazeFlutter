@@ -40,6 +40,7 @@ import 'magic_drawer_widgets.dart';
 import 'memory_books_sheet.dart';
 import 'prompt_preview_screen.dart';
 import 'summary_sheet.dart';
+import 'token_breakdown_cache.dart';
 import 'tokenizer_sheet.dart';
 
 class MagicDrawerPanel extends ConsumerStatefulWidget {
@@ -140,7 +141,10 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     if (mounted) {
       setState(() => _loading = false);
     }
-    _loadTokenStats();
+    // Defer token stats calculation until after UI render completes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scheduleTokenStats();
+    });
   }
 
   Future<void> _loadLayout() async {
@@ -180,6 +184,14 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     _stats = await MagicDrawerStatsService(ref).computeStats(widget.charId);
   }
 
+  void _scheduleTokenStats() {
+    _debounceTimer?.cancel();
+    final delay = ref.read(appSettingsProvider).valueOrNull?.batterySaver == true
+        ? const Duration(milliseconds: 700)
+        : const Duration(milliseconds: 300);
+    _debounceTimer = Timer(delay, _loadTokenStats);
+  }
+
   Future<void> _loadTokenStats() async {
     if (!mounted) return;
     setState(() => _loadingTokens = true);
@@ -196,13 +208,14 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   /// Lightweight refresh: only stats, no layout re-read from disk.
   /// Called by the debounce timer when messages change.
   Future<void> _refreshStats() async {
+    TokenBreakdownCache.invalidate();
     try {
       await _loadStats();
     } catch (e) {
       debugPrint('[MagicDrawer] _refreshStats error: $e');
     }
     if (mounted) setState(() {});
-    _loadTokenStats();
+    _scheduleTokenStats();
   }
 
   void _scheduleRefresh() {
