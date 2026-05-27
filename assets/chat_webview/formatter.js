@@ -149,13 +149,34 @@ class Formatter {
     });
 
     // 6. Extract HTML Tags — distinguish block vs inline
+    //    Skip orphan tags (no matching pair) so they render as visible text
+    //    instead of being interpreted as real HTML elements.
     const tagBlocks = [];
     const blockTags = new Set(['div','p','style','pre','table','ul','ol','li','h1','h2','h3','h4','h5','h6','blockquote','section','article','header','footer','hr','details','summary','figure','figcaption','svg','path','math','canvas','video','audio','form','fieldset','nav','aside','main','img','br','loomledger']);
     const TAG_REGEX = /<(?:[^"'>]|"[^"]*"|'[^']*')*>/g;
 
+    const allTagMatches = [...html.matchAll(TAG_REGEX)];
+    const tagCounts = new Map();
+    for (const m of allTagMatches) {
+      const nameMatch = m[0].match(/^<\/?(\w+)/);
+      if (nameMatch) {
+        const name = nameMatch[1].toLowerCase();
+        tagCounts.set(name, (tagCounts.get(name) || 0) + 1);
+      }
+    }
+
     html = html.replace(TAG_REGEX, (match) => {
       const tagMatch = match.match(/^<\/?(\w+)/);
-      const isBlock = tagMatch ? blockTags.has(tagMatch[1].toLowerCase()) : false;
+      if (!tagMatch) return match;
+      const name = tagMatch[1].toLowerCase();
+      const count = tagCounts.get(name) || 0;
+      // Self-closing tags (br, hr, img) and paired tags are fine;
+      // single occurrence of a non-self-closing tag is orphan — escape it.
+      const selfClosing = new Set(['br', 'hr', 'img', 'input', 'meta', 'link']);
+      if (count === 1 && !selfClosing.has(name)) {
+        return match.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+      const isBlock = blockTags.has(name);
       const id = this._ph('T_', tagBlocks.length, isBlock);
       tagBlocks.push(match);
       return id;
