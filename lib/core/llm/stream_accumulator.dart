@@ -19,6 +19,42 @@ class StreamAccumulator {
     this.hasInlineTags = false,
   });
 
+  String _normalizeThinkTagVariants(String input) {
+    if (!hasInlineTags || tagStart == null || tagEnd == null) return input;
+
+    final startLower = tagStart!.toLowerCase();
+    final endLower = tagEnd!.toLowerCase();
+
+    final configuredIsThinking = startLower.startsWith('<thinking');
+    final configuredIsThink = startLower.startsWith('<think') && !configuredIsThinking;
+
+    final configuredEndIsThinking = endLower.startsWith('</thinking');
+    final configuredEndIsThink = endLower.startsWith('</think') && !configuredEndIsThinking;
+
+    // Support models that output <thinking>...</thinking> but our parser expects <think>...</think>.
+    if (configuredIsThink && configuredEndIsThink) {
+      input = input.replaceAll(
+        RegExp(r'<thinking\b[^>]*>', caseSensitive: false),
+        tagStart!,
+      );
+      input = input.replaceAll(
+        RegExp(r'</thinking\b[^>]*>', caseSensitive: false),
+        tagEnd!,
+      );
+    } else if (configuredIsThinking && configuredEndIsThinking) {
+      input = input.replaceAll(
+        RegExp(r'<think\b[^>]*>', caseSensitive: false),
+        tagStart!,
+      );
+      input = input.replaceAll(
+        RegExp(r'</think\b[^>]*>', caseSensitive: false),
+        tagEnd!,
+      );
+    }
+
+    return input;
+  }
+
   void consumeDelta(String delta, {String? reasoningDelta}) {
     if (reasoningDelta != null && reasoningDelta.isNotEmpty) {
       _reasoning += reasoningDelta;
@@ -37,6 +73,7 @@ class StreamAccumulator {
 
   void _processPending() {
     var input = _pending;
+    input = _normalizeThinkTagVariants(input);
     var textPart = '';
 
     while (input.isNotEmpty) {

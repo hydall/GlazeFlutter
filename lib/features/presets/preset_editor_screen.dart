@@ -393,7 +393,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
                   child: TextField(
                     controller: _reasoningStartCtrl,
                     style: TextStyle(color: context.cs.onSurface),
-                    decoration: _inputDecoration('<textarea>'),
+                    decoration: _inputDecoration('<think>'),
                   ),
                 ),
                 const SizedBox(width: 12),
