@@ -1,0 +1,17 @@
+﻿00:00 +0: loading Z:/Glaze project/glaze_flutter/test/regex_service_test.dart
+00:00 +0: Z:/Glaze project/glaze_flutter/test/regex_service_test.dart: RegexService — ST compatibility (backrefs, flags, substituteRegex) Hide html: paired + self-closing tags removed (backrefs + dotAll)
+00:00 +1: Z:/Glaze project/glaze_flutter/test/regex_service_test.dart: RegexService — ST compatibility (backrefs, flags, substituteRegex) Braille blank jb: space -> U+2800 (braille blank)
+00:00 +2: Z:/Glaze project/glaze_flutter/test/regex_service_test.dart: RegexService — ST compatibility (backrefs, flags, substituteRegex) Reverse braille: U+2800 -> space
+00:00 +3: Z:/Glaze project/glaze_flutter/test/regex_service_test.dart: RegexService — ST compatibility (backrefs, flags, substituteRegex) ReplaceSpace with substituteRegex:1 — U+3164 (hangul filler) -> space
+00:00 +4: Z:/Glaze project/glaze_flutter/test/regex_service_test.dart: RegexService — ST compatibility (backrefs, flags, substituteRegex) markdownOnly flag restricts to placement 1/2 (history)
+00:00 +5: Z:/Glaze project/glaze_flutter/test/regex_service_test.dart: RegexService — ST compatibility (backrefs, flags, substituteRegex) promptOnly flag restricts to placement 4 (prompt)
+00:00 +6: Z:/Glaze project/glaze_flutter/test/preset_import_test.dart: Standard blocks: chat history, world info before/after are imported
+00:00 +7: Z:/Glaze project/glaze_flutter/test/preset_import_test.dart: Macro blocks: {{lorebooks}} and {{summary}} preserved in content
+00:00 +8: Z:/Glaze project/glaze_flutter/test/preset_import_test.dart: Custom block with macros: non-mandatory blocks keep their content
+00:00 +9: Z:/Glaze project/glaze_flutter/test/preset_import_test.dart: Mixed preset: standard blocks + custom macro blocks coexist
+00:00 +10: Z:/Glaze project/glaze_flutter/test/preset_import_test.dart: Empty preset: no prompts — finalizeImportedPreset adds all mandatory blocks
+00:00 +11: Z:/Glaze project/glaze_flutter/test/preset_import_test.dart: Block ordering: summary before chat_history, authors_note after
+00:00 +12: Z:/Glaze project/glaze_flutter/test/preset_import_test.dart: Disabled blocks are preserved as disabled
+00:00 +13: Z:/Glaze project/glaze_flutter/test/preset_import_test.dart: finalizeImportedPreset does not overwrite existing custom blocks
+00:00 +14: Z:/Glaze project/glaze_flutter/test/preset_import_test.dart: SillyTavern identifier mapping: chatHistory -> chat_history, charDescription -> char_card
+00:00 +15: All tests passed!

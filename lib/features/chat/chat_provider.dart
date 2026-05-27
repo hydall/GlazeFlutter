@@ -16,6 +16,8 @@ import 'abort_handler.dart';
 import 'chat_generation_service.dart';
 import 'chat_message_service.dart';
 import 'chat_session_service.dart';
+import 'widgets/cached_token_breakdown.dart';
+import 'widgets/token_breakdown_cache.dart';
 import 'chat_state.dart';
 import 'image_recovery_service.dart';
 import 'initial_message_builder.dart';
@@ -301,6 +303,8 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     if (current == null || current.session == null) return;
     final updated = _messageSvc.editMessage(current.session!, index, newContent, tagStart: tagStart, tagEnd: tagEnd);
     _invalidateHistory();
+    TokenBreakdownCache.invalidate();
+    ref.read(cachedTokenBreakdownProvider(arg).notifier).state = null;
     state = AsyncData(current.copyWith(session: updated));
   }
 

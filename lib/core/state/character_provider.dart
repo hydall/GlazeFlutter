@@ -14,9 +14,16 @@ final charactersProvider = AsyncNotifierProvider<CharactersNotifier, List<Charac
 );
 
 final characterByIdProvider = Provider.family<Character?, String>((ref, id) {
+  ref.watch(avatarVersionProvider);
   final chars = ref.watch(charactersProvider).value ?? [];
   return chars.where((c) => c.id == id).firstOrNull;
 });
+
+final avatarVersionProvider = StateProvider<int>((ref) => 0);
+
+void bumpAvatarVersion(dynamic ref) {
+  ref.read(avatarVersionProvider.notifier).state++;
+}
 
 class CharactersNotifier extends AsyncNotifier<List<Character>> {
   StreamSubscription<List<Character>>? _sub;

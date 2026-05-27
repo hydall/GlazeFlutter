@@ -204,7 +204,11 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   }
 
   void _reloadApp() {
-    GlazeApp.restartApp();
+    final rootNav = Navigator.of(context, rootNavigator: true);
+    rootNav.pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      GlazeApp.restartApp();
+    });
   }
 }
 

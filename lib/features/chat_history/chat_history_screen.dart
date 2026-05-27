@@ -11,6 +11,7 @@ import '../../shared/theme/app_colors.dart';
 
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../core/state/character_provider.dart' show avatarVersionProvider;
 import '../chat/chat_actions_service.dart';
 import '../chat/chat_provider.dart';
 import '../settings/app_settings_provider.dart';
@@ -434,7 +435,7 @@ class _SessionTile extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           children: [
-            _buildAvatar(context),
+            _buildAvatar(context, ref),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -676,7 +677,8 @@ class _SessionTile extends ConsumerWidget {
   }
 
 
-  Widget _buildAvatar(BuildContext context) {
+  Widget _buildAvatar(BuildContext context, WidgetRef ref) {
+    ref.watch(avatarVersionProvider);
     if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
       return CircleAvatar(
         radius: 24,
@@ -729,7 +731,7 @@ class _GroupHeader extends ConsumerWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Row(
           children: [
-            _buildAvatar(context, latest),
+            _buildAvatar(context, ref, latest),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -799,7 +801,8 @@ class _GroupHeader extends ConsumerWidget {
     );
   }
 
-  Widget _buildAvatar(BuildContext context, ChatSessionInfo info) {
+  Widget _buildAvatar(BuildContext context, WidgetRef ref, ChatSessionInfo info) {
+    ref.watch(avatarVersionProvider);
     if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
       return CircleAvatar(
         radius: 24,
