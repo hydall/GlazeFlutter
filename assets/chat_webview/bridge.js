@@ -728,7 +728,6 @@ class Bridge {
     this._personaAvatarUrl = null;
     this.batterySaver = false;
     this.disableSwipeRegeneration = false;
-    this._perfMode = false;
     renderer.selectionManager = this._selectionManager;
     this._swipeHandler = new SwipeGestureHandler(
       (name, args) => this._sendToFlutter(name, args),
@@ -842,7 +841,6 @@ class Bridge {
     const container = this.virtualList.container;
 
     const emitScrollToBottomVisibility = () => {
-      if (this._perfMode) return;
       const distanceFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
       const show = distanceFromBottom > 240;
@@ -853,7 +851,6 @@ class Bridge {
 
     const updateHeader = () => {
       ticking = false;
-      if (this._perfMode) return;
       const st = container.scrollTop;
       // Skip when generating or at top/bottom bounds.
       if (this.isGenerating) {
@@ -891,18 +888,14 @@ class Bridge {
         }
       }
       // Header hide via rAF throttling.
-      if (!this._perfMode && !ticking) {
+      if (!ticking) {
         ticking = true;
         requestAnimationFrame(updateHeader);
       }
-      if (!this._perfMode) {
-        emitScrollToBottomVisibility();
-      }
+      emitScrollToBottomVisibility();
     }, { passive: true });
 
-    if (!this._perfMode) {
-      requestAnimationFrame(emitScrollToBottomVisibility);
-    }
+    requestAnimationFrame(emitScrollToBottomVisibility);
   }
 
   /* ---------- Interaction dispatch ---------- */
@@ -1231,28 +1224,14 @@ class Bridge {
     }
   }
 
-  setLayoutInsets(opts) {
-    opts = opts || {};
-    const top = opts.top ?? 0;
-    const bottom = opts.bottom ?? 0;
-    const refresh = opts.refresh !== false;
-    const container = document.getElementById('chat-container') || document.body;
-    const topPx = top + 'px';
-    const bottomPx = bottom + 'px';
-    const changed =
-      container.style.paddingTop !== topPx ||
-      container.style.paddingBottom !== bottomPx;
-    container.style.paddingTop = topPx;
-    container.style.paddingBottom = bottomPx;
-    if (refresh && changed && this.virtualList) {
-      const nearBottom = this.virtualList.isNearBottom(240);
-      this.virtualList.refresh({ startAtBottom: nearBottom });
-    }
-  }
-
   setBottomPadding(px) {
     const container = document.getElementById('chat-container') || document.body;
     container.style.paddingBottom = px + 'px';
+    requestAnimationFrame(() => {
+      const distanceFromBottom =
+        container.scrollHeight - container.scrollTop - container.clientHeight;
+      this._sendToFlutter('onScrollToBottomVisibility', [distanceFromBottom > 240]);
+    });
   }
 
   setTopPadding(px) {
@@ -1360,27 +1339,11 @@ class Bridge {
 
   setPerformanceMode(enabled) {
     const container = document.getElementById('chat-container') || document.body;
-    this._perfMode = !!enabled;
-    container.classList.toggle('perf-mode', this._perfMode);
+    container.classList.toggle('perf-mode', !!enabled);
     /* Mirror .native-lite onto each message for class-scoped styles */
     document.querySelectorAll('.message-section').forEach(el => {
-      el.classList.toggle('native-lite', this._perfMode);
+      el.classList.toggle('native-lite', !!enabled);
     });
-    // Tighten virtualization window in perf mode to minimize DOM/raster cost.
-    if (this.virtualList && typeof this.virtualList._bufferSize === 'number') {
-      this.virtualList._bufferSize = this._perfMode ? 8 : 40;
-      if (typeof this.virtualList.setPerfMode === 'function') {
-        this.virtualList.setPerfMode(this._perfMode);
-      }
-      if (typeof this.virtualList._applyWindow === 'function') {
-        this.virtualList._applyWindow();
-      }
-    }
-    // While perf mode is active, keep "scroll to bottom" hidden to avoid
-    // extra Flutter<->JS traffic from visibility calculations.
-    if (this._perfMode) {
-      this._sendToFlutter('onScrollToBottomVisibility', [false]);
-    }
   }
 
   animateGenTime(messageId, targetTime) {

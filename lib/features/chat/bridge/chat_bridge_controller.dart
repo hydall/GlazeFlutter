@@ -506,19 +506,6 @@ class ChatBridgeController {
     return _eval('window.bridge?.setSearch("${_escape(query)}", $activeIndex)');
   }
 
-  Future<void> setLayoutInsets({
-    required double top,
-    required double bottom,
-    bool refresh = true,
-  }) {
-    final payload = jsonEncode({
-      'top': top,
-      'bottom': bottom,
-      'refresh': refresh,
-    });
-    return _eval('window.bridge?.setLayoutInsets($payload)');
-  }
-
   Future<void> setBottomPadding(double px) {
     return _eval('window.bridge?.setBottomPadding(${px.toStringAsFixed(1)})');
   }
