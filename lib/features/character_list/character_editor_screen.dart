@@ -132,6 +132,9 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
     final storage = await ref.read(imageStorageProvider.future);
     final savedPath = await storage.saveAvatar(_effectiveId, bytes);
     await FileImage(File(savedPath)).evict();
+    final thumbPath = storage.thumbnailPath(savedPath);
+    if (thumbPath != null) await FileImage(File(thumbPath)).evict();
+    bumpAvatarVersion(ref);
     if (mounted) {
       setState(() {
         _item['avatarPath'] = savedPath;

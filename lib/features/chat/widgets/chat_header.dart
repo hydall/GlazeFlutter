@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/character.dart';
 
+import '../../../core/state/character_provider.dart' show avatarVersionProvider;
 import '../../../shared/theme/app_colors.dart';
 
 class ChatHeader extends ConsumerWidget {
@@ -20,6 +21,7 @@ class ChatHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(avatarVersionProvider);
     Color avatarColor = context.cs.primary;
     if (character.color != null && character.color!.isNotEmpty) {
       try {
