@@ -15,6 +15,7 @@ class MemoryGlobalSettings {
   final int batchSize;
   final int parallelJobs;
   final bool vectorSearchEnabled;
+  final double vectorThreshold;
   final String keyMatchMode;
   final String generationSource;
   final String generationModel;
@@ -37,6 +38,7 @@ class MemoryGlobalSettings {
     this.batchSize = 3,
     this.parallelJobs = 1,
     this.vectorSearchEnabled = false,
+    this.vectorThreshold = 0.6,
     this.keyMatchMode = 'glaze',
     this.generationSource = 'current',
     this.generationModel = '',
@@ -63,6 +65,9 @@ class MemoryGlobalSettings {
       batchSize: _toInt(json['batchSize']) ?? 3,
       parallelJobs: _toInt(json['parallelJobs']) ?? 1,
       vectorSearchEnabled: json['vectorSearchEnabled'] as bool? ?? false,
+      vectorThreshold: json['vectorThreshold'] is num
+          ? (json['vectorThreshold'] as num).toDouble()
+          : 0.6,
       keyMatchMode: ['plain', 'glaze', 'both'].contains(json['keyMatchMode'])
           ? json['keyMatchMode'] as String
           : 'glaze',
@@ -107,6 +112,7 @@ class MemoryGlobalSettings {
         'batchSize': batchSize,
         'parallelJobs': parallelJobs,
         'vectorSearchEnabled': vectorSearchEnabled,
+        'vectorThreshold': vectorThreshold,
         'keyMatchMode': keyMatchMode,
         'generationSource': generationSource,
         'generationModel': generationModel,
@@ -133,6 +139,7 @@ class MemoryGlobalSettings {
     int? batchSize,
     int? parallelJobs,
     bool? vectorSearchEnabled,
+    double? vectorThreshold,
     String? keyMatchMode,
     String? generationSource,
     String? generationModel,
@@ -155,6 +162,7 @@ class MemoryGlobalSettings {
       batchSize: batchSize ?? this.batchSize,
       parallelJobs: parallelJobs ?? this.parallelJobs,
       vectorSearchEnabled: vectorSearchEnabled ?? this.vectorSearchEnabled,
+      vectorThreshold: vectorThreshold ?? this.vectorThreshold,
       keyMatchMode: keyMatchMode ?? this.keyMatchMode,
       generationSource: generationSource ?? this.generationSource,
       generationModel: generationModel ?? this.generationModel,

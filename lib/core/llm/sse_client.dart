@@ -113,7 +113,7 @@ class SseClient {
     SseOnUpdate? onUpdate,
     SseOnComplete? onComplete,
   ) async {
-    final response = await _dio.post(
+    final response = await _dio.post<ResponseBody>(
       url,
       options: Options(
         headers: {
@@ -126,14 +126,23 @@ class SseClient {
       cancelToken: cancelToken,
     );
 
-    final responseStream = response.data.stream;
+    final responseBody = response.data;
+    if (responseBody == null) {
+      throw DioException(
+        requestOptions: response.requestOptions,
+        response: response,
+        type: DioExceptionType.badResponse,
+        message: 'Empty stream response body',
+      );
+    }
+    final responseStream = responseBody.stream;
     final completer = Completer<void>();
-    StreamSubscription? subscription;
+    StreamSubscription<List<int>>? subscription;
     var buffer = '';
     var fullText = '';
     var fullReasoning = '';
     var doneReceived = false;
-    String? lastRawJsonPayload; // the last complete SSE data JSON string before [DONE]
+    String? lastRawJsonPayload; // fallback: last complete SSE JSON payload before [DONE]
 
     subscription = (responseStream as Stream<List<int>>).listen(
       (chunk) {
@@ -148,6 +157,13 @@ class SseClient {
         buffer = lines.removeLast();
 
         for (final line in lines) {
+          if (cancelToken?.isCancelled == true) {
+            debugPrint('[SSE] cancel detected while parsing lines, stopping immediately');
+            buffer = '';
+            subscription?.cancel();
+            if (!completer.isCompleted) completer.complete();
+            return;
+          }
           final trimmed = line.trim();
           if (!trimmed.startsWith('data: ')) continue;
           final data = trimmed.substring(6).trim();
@@ -155,7 +171,15 @@ class SseClient {
             if (cancelToken != null && cancelToken.isCancelled) {
               debugPrint('[SSE] cancel detected at [DONE], suppressing onComplete');
             } else {
-              onComplete?.call(fullText, fullReasoning.isNotEmpty ? fullReasoning : null, rawResponseJson: lastRawJsonPayload);
+              onComplete?.call(
+                fullText,
+                fullReasoning.isNotEmpty ? fullReasoning : null,
+                rawResponseJson: _buildAggregatedRawResponse(
+                  fullText: fullText,
+                  fullReasoning: fullReasoning,
+                  fallbackRawJsonPayload: lastRawJsonPayload,
+                ),
+              );
               doneReceived = true;
             }
             subscription?.cancel();
@@ -199,11 +223,13 @@ class SseClient {
       cancelOnError: true,
     );
 
-    cancelToken?.whenCancel.then((_) {
-      debugPrint('[SSE] CancelToken fired — cancelling stream subscription');
-      subscription?.cancel();
-      if (!completer.isCompleted) completer.complete();
-    });
+    if (cancelToken != null) {
+      unawaited(cancelToken.whenCancel.then((_) {
+        debugPrint('[SSE] CancelToken fired — cancelling stream subscription');
+        subscription?.cancel();
+        if (!completer.isCompleted) completer.complete();
+      }));
+    }
 
     await completer.future;
 
@@ -217,7 +243,15 @@ class SseClient {
     // Server dropped connection without [DONE] — treat as normal completion
     // if any text was accumulated (provider returned 200 but omitted [DONE]).
     if (fullText.isNotEmpty || fullReasoning.isNotEmpty) {
-      onComplete?.call(fullText, fullReasoning.isNotEmpty ? fullReasoning : null, rawResponseJson: lastRawJsonPayload);
+      onComplete?.call(
+        fullText,
+        fullReasoning.isNotEmpty ? fullReasoning : null,
+        rawResponseJson: _buildAggregatedRawResponse(
+          fullText: fullText,
+          fullReasoning: fullReasoning,
+          fallbackRawJsonPayload: lastRawJsonPayload,
+        ),
+      );
       return;
     }
     throw DioException(
@@ -234,7 +268,7 @@ class SseClient {
     CancelToken? cancelToken,
     SseOnComplete? onComplete,
   ) async {
-    final response = await _dio.post(
+    final response = await _dio.post<dynamic>(
       url,
       options: Options(
         headers: {
@@ -320,6 +354,29 @@ class SseClient {
       } catch (_) {}
     }
     return (fullText, fullReasoning);
+  }
+
+  /// Builds a stable JSON payload for "Request Preview -> Response" from the
+  /// streamed deltas, so UI shows the actual assistant text/reasoning instead
+  /// of an arbitrary last SSE chunk.
+  String? _buildAggregatedRawResponse({
+    required String fullText,
+    required String fullReasoning,
+    String? fallbackRawJsonPayload,
+  }) {
+    if (fullText.isEmpty && fullReasoning.isEmpty) {
+      return fallbackRawJsonPayload;
+    }
+    final message = <String, dynamic>{'role': 'assistant', 'content': fullText};
+    if (fullReasoning.isNotEmpty) {
+      message['reasoning'] = fullReasoning;
+    }
+    return jsonEncode({
+      'object': 'chat.completion',
+      'choices': [
+        {'index': 0, 'message': message},
+      ],
+    });
   }
 
   Future<List<Map<String, dynamic>>> fetchModels({

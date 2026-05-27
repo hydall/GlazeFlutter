@@ -56,6 +56,11 @@ class ChatGenerationService {
   }) async {
     debugPrint('[gen] generate() START charId=$charId genId=$genId');
     final vsi = currentState.visibleStartIndex;
+    final cancelToken = CancelToken();
+    _ref.read(chatProvider(charId).notifier).setCancelToken(cancelToken, genId: genId);
+    if (cancelToken.isCancelled) {
+      return ChatState(session: saveSession ?? session, isGenerating: false, visibleStartIndex: vsi);
+    }
     try {
       debugPrint('[gen] building payload...');
       final builder = _ref.read(promptPayloadBuilderProvider);
@@ -63,12 +68,28 @@ class ChatGenerationService {
         charId: charId,
         session: session,
         guidanceText: guidanceText,
+        shouldAbort: isAborted,
+        cancelToken: cancelToken,
       );
+      if (isAborted()) {
+        return ChatState(
+          session: saveSession ?? session,
+          isGenerating: false,
+          visibleStartIndex: vsi,
+        );
+      }
       debugPrint('[gen] payload built, building prompt in isolate...');
 
       final apiConfig = payload.apiConfig;
 
       final promptResult = await buildPromptInIsolate(payload);
+      if (isAborted()) {
+        return ChatState(
+          session: saveSession ?? session,
+          isGenerating: false,
+          visibleStartIndex: vsi,
+        );
+      }
       debugPrint('[gen] prompt built, messages=${promptResult.messages.length}, totalTokens=${promptResult.breakdown.totalTokens}');
 
       _ref.read(cachedTokenBreakdownProvider(charId).notifier).state =
@@ -83,12 +104,9 @@ class ChatGenerationService {
       }
 
       if (isAborted()) return ChatState(session: saveSession ?? session, isGenerating: false, visibleStartIndex: vsi);
-      final cancelToken = CancelToken();
-      _ref.read(chatProvider(charId).notifier).setCancelToken(cancelToken, genId: genId);
-      if (cancelToken.isCancelled) return ChatState(session: saveSession ?? session, isGenerating: false, visibleStartIndex: vsi);
       final preset = payload.preset;
-      const defaultTagStart = '<think' + '>' ;
-      const defaultTagEnd = '</think' + '>' ;
+      const defaultTagStart = '<think>';
+      const defaultTagEnd = '</think>';
       final reasoningTagStart = (preset?.reasoningStart?.isNotEmpty == true)
           ? preset!.reasoningStart!
           : (apiConfig.reasoningTagStart?.isNotEmpty == true)
@@ -100,12 +118,12 @@ class ChatGenerationService {
               ? apiConfig.reasoningTagEnd!
               : defaultTagEnd;
 
-      // Only enable inline tag parsing when the preset explicitly asks for it
-      // (reasoningEnabled == true) AND we actually have non-empty tag pair.
-      // This matches the Vue app behavior exactly (see glaze/src/.../requestOrchestrator.js + chatPreparation.js).
-      final hasInlineTags = (preset?.reasoningEnabled == true) &&
-          reasoningTagStart.isNotEmpty &&
-          reasoningTagEnd.isNotEmpty;
+      // Enable inline tag parsing when tag markers are available. Some providers
+      // still emit <think>...</think> even if preset.reasoningEnabled is false;
+      // in that case we still must route the content into reasoning instead of
+      // leaking it into visible assistant text.
+      final hasInlineTags =
+          reasoningTagStart.isNotEmpty && reasoningTagEnd.isNotEmpty;
 
       final accumulator = StreamAccumulator(
         tagStart: reasoningTagStart,

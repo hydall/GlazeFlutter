@@ -37,6 +37,7 @@ class EmbeddingService {
   Future<List<List<double>>> getEmbeddings(
     List<String> texts,
     EmbeddingConfig config,
+    {CancelToken? cancelToken}
   ) async {
     final allChunks = <List<String>>[];
     final chunkMap = <int, int>{};
@@ -52,7 +53,11 @@ class EmbeddingService {
     }
 
     final flatChunks = allChunks.expand((c) => c).toList();
-    final allVectors = await _batchEmbed(flatChunks, config);
+    final allVectors = await _batchEmbed(
+      flatChunks,
+      config,
+      cancelToken: cancelToken,
+    );
 
     final result = <List<double>>[];
     int offset = 0;
@@ -71,6 +76,7 @@ class EmbeddingService {
   Future<List<EmbeddingChunk>> getEmbeddingsWithChunks(
     List<String> texts,
     EmbeddingConfig config,
+    {CancelToken? cancelToken}
   ) async {
     final allChunks = <String>[];
     final textChunkRanges = <_ChunkRange>[];
@@ -82,7 +88,11 @@ class EmbeddingService {
       textChunkRanges.add(_ChunkRange(start: start, end: allChunks.length));
     }
 
-    final allVectors = await _batchEmbed(allChunks, config);
+    final allVectors = await _batchEmbed(
+      allChunks,
+      config,
+      cancelToken: cancelToken,
+    );
 
     final result = <EmbeddingChunk>[];
     int offset = 0;
@@ -103,17 +113,25 @@ class EmbeddingService {
   Future<List<List<double>>> _batchEmbed(
     List<String> chunks,
     EmbeddingConfig config,
+    {CancelToken? cancelToken}
   ) async {
     const batchSize = 32;
     final allVectors = <List<double>>[];
 
     for (int i = 0; i < chunks.length; i += batchSize) {
       final batch = chunks.sublist(i, (i + batchSize).clamp(0, chunks.length));
-      final vectors = await _callEmbeddingApi(batch, config);
+      final vectors = await _callEmbeddingApi(
+        batch,
+        config,
+        cancelToken: cancelToken,
+      );
       allVectors.addAll(vectors);
 
       if (i + batchSize < chunks.length) {
-        await Future.delayed(const Duration(milliseconds: 200));
+        if (cancelToken?.isCancelled == true) {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 200));
       }
     }
 
@@ -123,6 +141,7 @@ class EmbeddingService {
   Future<List<List<double>>> _callEmbeddingApi(
     List<String> texts,
     EmbeddingConfig config,
+    {CancelToken? cancelToken}
   ) async {
     if (texts.isEmpty) return [];
 
@@ -143,6 +162,7 @@ class EmbeddingService {
           'input': texts,
         },
         options: Options(headers: headers),
+        cancelToken: cancelToken,
       );
 
       final data = response.data;

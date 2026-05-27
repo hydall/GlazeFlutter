@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../db/app_db.dart';
@@ -45,9 +47,13 @@ class MemoryInjectionService {
     List<ChatMessageForSearch>? history,
     String? currentText,
     EmbeddingConfig? embeddingConfig,
+    bool Function()? shouldAbort,
+    CancelToken? cancelToken,
   }) async {
+    if (shouldAbort?.call() == true) return const MemoryInjectionResult();
     debugPrint('[mem] buildInjection: reading memory book...');
     final book = await _repo.getBySessionId(sessionId);
+    if (shouldAbort?.call() == true) return const MemoryInjectionResult();
     if (book == null) { debugPrint('[mem] no memory book found'); return const MemoryInjectionResult(); }
     debugPrint('[mem] memory book loaded, entries=${book.entries.length}');
 
@@ -83,7 +89,15 @@ class MemoryInjectionService {
     final vectorScores = <String, double>{};
     if (gs.vectorSearchEnabled && embeddingConfig != null && embeddingConfig.endpoint.isNotEmpty && history != null) {
       debugPrint('[mem] starting vector search...');
-      vectorScores.addAll(await _vectorSearchMemory(activeEntries, history, currentText ?? '', embeddingConfig, gs));
+      vectorScores.addAll(await _vectorSearchMemory(
+        activeEntries,
+        history,
+        currentText ?? '',
+        embeddingConfig,
+        gs,
+        shouldAbort: shouldAbort,
+        cancelToken: cancelToken,
+      ));
       debugPrint('[mem] vector search done, scores=${vectorScores.length}');
     } else {
       debugPrint('[mem] vector search skipped (enabled=${gs.vectorSearchEnabled}, endpoint=${embeddingConfig?.endpoint.isNotEmpty ?? false}, history=${history != null})');
@@ -138,10 +152,13 @@ class MemoryInjectionService {
     String currentText,
     EmbeddingConfig config,
     MemoryGlobalSettings settings,
+    {bool Function()? shouldAbort, CancelToken? cancelToken}
   ) async {
     try {
+      if (shouldAbort?.call() == true) return {};
       debugPrint('[mem-vec] reading embeddings from DB...');
       final embeddingRows = await _embeddingRepo.getBySourceType('memory_entry');
+      if (shouldAbort?.call() == true) return {};
       final embeddingMap = <String, EmbeddingRow>{};
       for (final row in embeddingRows) {
         embeddingMap[row.entryId] = row;
@@ -149,18 +166,30 @@ class MemoryInjectionService {
       debugPrint('[mem-vec] loaded ${embeddingRows.length} embedding rows');
 
       final candidates = <VectorCandidate>[];
-      for (final entry in entries) {
+      for (int i = 0; i < entries.length; i++) {
+        final entry = entries[i];
+        debugPrint('[mem-vec] processing entry ${i + 1}/${entries.length}: id=${entry.id}');
         final row = embeddingMap[entry.id];
-        if (row == null || row.vectorsBlob == null) continue;
+        if (shouldAbort?.call() == true) return {};
+        if (row == null || !_embeddingRepo.hasUsableVectors(row)) {
+          debugPrint('[mem-vec]   skipped: no row or no vectorsBlob');
+          continue;
+        }
 
         final text = entry.content;
         final hints = MemoryEmbeddingService.extractMemoryRetrievalHints(entry);
         final fingerprint = jsonEncode({'text': text, 'retrievalHints': hints});
         final currentHash = sha256.convert(utf8.encode(fingerprint)).toString();
-        if (row.textHash != currentHash) continue;
+        if (row.textHash != currentHash) {
+          debugPrint('[mem-vec]   skipped: hash mismatch');
+          continue;
+        }
 
         final vectors = _embeddingRepo.decodeVectors(row);
-        if (vectors == null || vectors.isEmpty) continue;
+        if (vectors == null || vectors.isEmpty) {
+          debugPrint('[mem-vec]   skipped: vectors null or empty');
+          continue;
+        }
 
         candidates.add(VectorCandidate(
           id: entry.id,
@@ -169,6 +198,7 @@ class MemoryInjectionService {
             'hints': _embeddingRepo.decodeHints(row) ?? [],
           },
         ));
+        debugPrint('[mem-vec]   added candidate with ${vectors.length} vectors');
       }
       debugPrint('[mem-vec] valid candidates: ${candidates.length}');
 
@@ -185,18 +215,24 @@ class MemoryInjectionService {
       }
       final queryText = buffer.toString().trim();
       if (queryText.isEmpty) return {};
+      if (shouldAbort?.call() == true) return {};
 
       debugPrint('[mem-vec] calling embedding API (endpoint=${config.endpoint})...');
-      final queryChunks = await _embeddingService.getEmbeddingsWithChunks([queryText], config)
+      final queryChunks = await _embeddingService.getEmbeddingsWithChunks(
+        [queryText],
+        config,
+        cancelToken: cancelToken,
+      )
           .timeout(const Duration(seconds: 15), onTimeout: () => []);
+      if (cancelToken?.isCancelled == true) return {};
       debugPrint('[mem-vec] embedding API returned ${queryChunks.length} chunks');
       if (queryChunks.isEmpty) return {};
 
       final queryVecChunks = queryChunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
       final results = findTopKMulti(queryVecChunks, candidates, candidates.length, 0);
 
-      final threshold = 0.6;
-      final topK = 5;
+      final threshold = settings.vectorThreshold;
+      final topK = settings.maxInjectedEntries.clamp(1, 50);
       return Map.fromEntries(
         results
             .where((r) => r.score >= threshold)

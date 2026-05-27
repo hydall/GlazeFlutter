@@ -30,7 +30,10 @@ class MemoryEmbeddingService {
     final textHash = computeHash(fingerprint);
 
     final existing = await _repo.getByEntryId(entry.id);
-    if (existing != null && existing.textHash == textHash && existing.vectorsBlob != null && existing.errorJson == null) {
+    if (existing != null &&
+        existing.textHash == textHash &&
+        _repo.hasUsableVectors(existing) &&
+        existing.errorJson == null) {
       return;
     }
 
@@ -92,7 +95,10 @@ class MemoryEmbeddingService {
         final fingerprint = _buildFingerprint(entries[i], text);
     final textHash = computeHash(fingerprint);
 
-        if (existing != null && existing.textHash == textHash && existing.vectorsBlob != null && existing.errorJson == null) {
+        if (existing != null &&
+            existing.textHash == textHash &&
+            _repo.hasUsableVectors(existing) &&
+            existing.errorJson == null) {
           skipped++;
           continue;
         }

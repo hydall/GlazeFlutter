@@ -94,6 +94,11 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
     return bytesToVectorList(row.vectorsBlob!);
   }
 
+  bool hasUsableVectors(EmbeddingRow row) {
+    final blob = row.vectorsBlob;
+    return blob != null && blob.isNotEmpty;
+  }
+
   List<String>? decodeHints(EmbeddingRow row) {
     if (row.retrievalHintsJson == null) return null;
     try {
