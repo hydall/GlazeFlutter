@@ -95,10 +95,18 @@ class ChatGenerationService {
           : (apiConfig.reasoningTagEnd?.isNotEmpty == true)
               ? apiConfig.reasoningTagEnd!
               : defaultTagEnd;
+
+      // Only enable inline tag parsing when the preset explicitly asks for it
+      // (reasoningEnabled == true) AND we actually have non-empty tag pair.
+      // This matches the Vue app behavior exactly (see glaze/src/.../requestOrchestrator.js + chatPreparation.js).
+      final hasInlineTags = (preset?.reasoningEnabled == true) &&
+          reasoningTagStart.isNotEmpty &&
+          reasoningTagEnd.isNotEmpty;
+
       final accumulator = StreamAccumulator(
         tagStart: reasoningTagStart,
         tagEnd: reasoningTagEnd,
-        hasInlineTags: true,
+        hasInlineTags: hasInlineTags,
       );
 
       final apiMessages = promptResult.messages

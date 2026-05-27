@@ -126,6 +126,21 @@ PromptResult buildPrompt(PromptPayload payload) {
   final preset = payload.preset!;
   final char = payload.character;
   final persona = payload.persona;
+
+  const defaultTagStart = '<think>';
+  const defaultTagEnd = '</think>';
+  // Vue-поведение: если preset пустой (null/""), берём теги из API settings (или дефолт).
+  final effectiveReasoningTagStart = (preset.reasoningStart?.isNotEmpty == true)
+      ? preset.reasoningStart!
+      : (payload.apiConfig.reasoningTagStart?.isNotEmpty == true)
+          ? payload.apiConfig.reasoningTagStart!
+          : defaultTagStart;
+  final effectiveReasoningTagEnd = (preset.reasoningEnd?.isNotEmpty == true)
+      ? preset.reasoningEnd!
+      : (payload.apiConfig.reasoningTagEnd?.isNotEmpty == true)
+          ? payload.apiConfig.reasoningTagEnd!
+          : defaultTagEnd;
+
   final macroCtx = MacroContext(
     charName: char.name,
     charDescription: char.description,
@@ -134,8 +149,8 @@ PromptResult buildPrompt(PromptPayload payload) {
     charMesExample: char.mesExample,
     userName: persona?.name ?? 'User',
     personaPrompt: persona?.prompt,
-    reasoningStart: preset.reasoningStart,
-    reasoningEnd: preset.reasoningEnd,
+    reasoningStart: effectiveReasoningTagStart,
+    reasoningEnd: effectiveReasoningTagEnd,
     sessionVars: payload.sessionVars,
     globalVars: payload.globalVars,
     charId: char.id,

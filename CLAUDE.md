@@ -165,6 +165,7 @@ When editing files matching a pattern below, READ the corresponding rule file FI
 ## Workflow
 
 - Branch (`feat/xxx`) off `master`, push to `origin`, open a PR — see `docs/WORKFLOW.md` for branching, Trello, and cleanup checklists.
+- Open PRs only against upstream repository `hydall/GlazeFlutter` (base: `hydall/GlazeFlutter:master`), not against fork repos.
 - Run `dart run build_runner build` after changing any freezed/drift model.
 - Single responsibility: split a class before it grows past ~150 lines (thin orchestrators, fat specialists, constructor injection). Details: `docs/CODE_STYLE.md`.
 

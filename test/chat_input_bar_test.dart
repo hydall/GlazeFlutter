@@ -93,11 +93,13 @@ void main() {
 
     Widget buildInputBar() {
       sentMessages = [];
-      return MaterialApp(
-        home: Scaffold(
-          body: InputBar(
-            onSend: (text) => sentMessages.add(text),
-            isGenerating: false,
+      return ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: InputBar(
+              onSend: (text) => sentMessages.add(text),
+              isGenerating: false,
+            ),
           ),
         ),
       );
