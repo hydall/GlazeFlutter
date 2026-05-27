@@ -11,8 +11,8 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../chat_provider.dart';
-import 'cached_token_breakdown.dart';
-import 'token_breakdown_cache.dart';
+import '../state/cached_token_breakdown.dart';
+import '../state/token_breakdown_cache.dart';
 import 'tokenizer_widgets.dart';
 
 class TokenizerSheet extends ConsumerStatefulWidget {

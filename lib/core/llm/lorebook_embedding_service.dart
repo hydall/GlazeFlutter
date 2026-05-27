@@ -47,7 +47,10 @@ class LorebookEmbeddingService {
       final existing = forceReindex ? null : await _repo.getByEntryId(namespacedId);
 
       // Skip if already indexed with matching hash (unless forcing reindex)
-      if (existing != null && existing.textHash == textHash && existing.vectorsBlob != null && existing.errorJson == null) {
+      if (existing != null &&
+          existing.textHash == textHash &&
+          _repo.hasUsableVectors(existing) &&
+          existing.errorJson == null) {
         skipped++;
         continue;
       }

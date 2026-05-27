@@ -16,8 +16,8 @@ import 'abort_handler.dart';
 import 'chat_generation_service.dart';
 import 'chat_message_service.dart';
 import 'chat_session_service.dart';
-import 'widgets/cached_token_breakdown.dart';
-import 'widgets/token_breakdown_cache.dart';
+import 'state/cached_token_breakdown.dart';
+import 'state/token_breakdown_cache.dart';
 import 'chat_state.dart';
 import 'image_recovery_service.dart';
 import 'initial_message_builder.dart';
@@ -177,7 +177,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
         messages: current.messages,
         updatedAt: currentTimestampSeconds(),
       );
-      await _runGeneration(promptSession, current, saveSession: current.session!);
+      await _runGeneration(promptSession, current, saveSession: current.session!, guidanceText: guidanceText);
       return;
     }
 

@@ -11,9 +11,9 @@ import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../chat_provider.dart';
-import 'cached_token_breakdown.dart';
+import '../state/cached_token_breakdown.dart';
 import 'magic_drawer_models.dart';
-import 'token_breakdown_cache.dart';
+import '../state/token_breakdown_cache.dart';
 
 class MagicDrawerStatsService {
   final WidgetRef _ref;

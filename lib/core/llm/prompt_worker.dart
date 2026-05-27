@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
 
-import 'package:flutter/foundation.dart';
 // ignore: depend_on_referenced_packages
 import 'package:path_provider/path_provider.dart';
 
@@ -74,7 +73,6 @@ class PromptWorker {
     });
 
     await worker._send('init', null);
-    debugPrint('[PromptWorker] Isolate ready with tokenizer loaded');
 
     return worker;
   }
@@ -85,7 +83,13 @@ class PromptWorker {
     _pending[id] = completer;
 
     _sendPort.send([id, command, data]);
-    return completer.future;
+    return completer.future.timeout(
+      const Duration(seconds: 60),
+      onTimeout: () {
+        _pending.remove(id);
+        throw TimeoutException('PromptWorker request timed out after 60s', const Duration(seconds: 60));
+      },
+    );
   }
 
   Future<PromptResult> buildPrompt(PromptPayload payload) async {

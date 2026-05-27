@@ -19,6 +19,7 @@ class ChatDrawerController extends ChangeNotifier {
 
   double _tempMaxHeight = 0;
   Timer? _heightTimer;
+  bool _batterySaverMode = false;
 
   final Future<double> Function() _readKeyboardHeight;
   final Future<void> Function(double) _persistKeyboardHeight;
@@ -46,7 +47,11 @@ class ChatDrawerController extends ChangeNotifier {
   bool get switchingToDrawer => _switchingToDrawer;
   double get lastKeyboardHeight => _lastKeyboardHeight;
   double get activeDrawerHeight => _activeDrawerHeight;
-  bool get isDrawerAnimating => _drawerAnimController.value > 0.001;
+  bool get isDrawerAnimating => _drawerAnimController.isAnimating;
+
+  void setBatterySaverMode(bool enabled) {
+    _batterySaverMode = enabled;
+  }
 
   Future<void> restoreKeyboardHeight() async {
     try {
@@ -70,6 +75,10 @@ class ChatDrawerController extends ChangeNotifier {
       final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
       if (keyboardHeight > 0 || _inputFocus.hasFocus) {
         _switchingToDrawer = true;
+        if (_batterySaverMode) {
+          _drawerOpen = true;
+          _drawerAnimController.forward();
+        }
         _inputFocus.unfocus();
         notifyListeners();
       } else {
@@ -117,10 +126,15 @@ class ChatDrawerController extends ChangeNotifier {
   }
 
   bool checkSwitchingTransition(double keyboardHeight) {
-    if (_switchingToDrawer && keyboardHeight == 0) {
+    final threshold = _batterySaverMode ? 20.0 : 0.0;
+    if (_switchingToDrawer && keyboardHeight <= threshold) {
       _switchingToDrawer = false;
-      _drawerOpen = true;
-      _drawerAnimController.forward();
+      if (!_drawerOpen) {
+        _drawerOpen = true;
+      }
+      if (_drawerAnimController.value < 1.0) {
+        _drawerAnimController.forward();
+      }
       notifyListeners();
       return true;
     }

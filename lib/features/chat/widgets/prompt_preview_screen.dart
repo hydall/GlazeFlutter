@@ -16,7 +16,7 @@ import '../../../shared/widgets/glaze_tab_bar.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../chat_provider.dart';
-import 'cached_token_breakdown.dart';
+import '../state/cached_token_breakdown.dart';
 
 class PromptPreviewScreen extends ConsumerStatefulWidget {
   final String charId;

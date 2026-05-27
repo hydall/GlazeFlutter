@@ -3,6 +3,7 @@ import '../models/lorebook.dart';
 import '../db/app_db.dart';
 import '../db/repositories/embedding_repo.dart';
 import '../utils/cast_helpers.dart';
+import 'package:dio/dio.dart';
 import 'embedding_service.dart';
 import 'embedding_types.dart';
 import 'lorebook_embedding_service.dart';
@@ -37,6 +38,7 @@ class LorebookVectorSearch {
     LorebookActivations? activations,
     String? chatId,
     int? overrideTopK,
+    CancelToken? cancelToken,
   }) async {
     if (settings.searchType == 'keyword') return [];
 
@@ -123,7 +125,11 @@ class LorebookVectorSearch {
     final allLorebookIds = <String, String>{};
 
     if (focusedQuery.isNotEmpty) {
-      final focusedChunks = await _embeddingService.getEmbeddingsWithChunks([focusedQuery], config);
+      final focusedChunks = await _embeddingService.getEmbeddingsWithChunks(
+        [focusedQuery],
+        config,
+        cancelToken: cancelToken,
+      );
       final focusedVecChunks = focusedChunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
       final focusedResults = findTopKMulti(focusedVecChunks, candidates, candidates.length, 0);
       for (final r in focusedResults) {
@@ -138,7 +144,11 @@ class LorebookVectorSearch {
     }
 
     if (fallbackQuery.isNotEmpty && fallbackQuery != focusedQuery) {
-      final fallbackChunks = await _embeddingService.getEmbeddingsWithChunks([fallbackQuery], config);
+      final fallbackChunks = await _embeddingService.getEmbeddingsWithChunks(
+        [fallbackQuery],
+        config,
+        cancelToken: cancelToken,
+      );
       final fallbackVecChunks = fallbackChunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
       final fallbackResults = findTopKMulti(fallbackVecChunks, candidates, candidates.length, 0);
       for (final r in fallbackResults) {

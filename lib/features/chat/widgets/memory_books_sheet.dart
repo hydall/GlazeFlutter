@@ -88,12 +88,13 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     final autoGen = s.autoGenerateEnabled ? 'Auto-gen' : 'Manual';
     final delayed = s.useDelayedAutomation ? 'Delayed' : 'Immediate';
     final target = s.injectionTarget == 'summary_macro' ? '{{summary}}' : 'Summary Block';
+    final vectorThreshold = s.vectorThreshold.toStringAsFixed(2);
     final maxEntries = s.maxInjectedEntries;
     final batchSize = s.batchSize;
     final outTokens = (s.generationMaxTokens != null && s.generationMaxTokens! > 0)
         ? '${s.generationMaxTokens} out'
         : 'Auto out';
-    return '$interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • $maxEntries in prompt';
+    return '$interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries in prompt';
   }
 
   String get _searchModelLabel {
@@ -342,12 +343,13 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
   void _openSettings() async {
     final currentSettings = _globalSettingsAsBookSettings();
-    final newSettings = await GlazeBottomSheet.show<MemoryBookSettings>(
+    final newResult = await GlazeBottomSheet.show<MemorySettingsSheetResult>(
       context,
       title: 'Memory Settings',
       child: MemoryGenerationSettingsSheet(settings: currentSettings),
     );
-    if (newSettings != null && mounted) {
+    if (newResult != null && mounted) {
+      final newSettings = newResult.settings;
       final newGlobal = MemoryGlobalSettings(
         enabled: newSettings.enabled,
         autoCreateEnabled: newSettings.autoCreateEnabled,
@@ -359,6 +361,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
         batchSize: newSettings.batchSize,
         parallelJobs: _gs.parallelJobs,
         vectorSearchEnabled: newSettings.vectorSearchEnabled,
+        vectorThreshold: newResult.vectorThreshold,
         keyMatchMode: newSettings.keyMatchMode,
         generationSource: newSettings.generationSource,
         generationModel: newSettings.generationModel,
@@ -460,6 +463,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       if (idx >= 0) entries[idx] = result;
       setState(() { _book = _book!.copyWith(entries: entries); });
       await _save();
+      await ref.read(memoryBookOpsProvider).deleteEmbeddingEntry(result.id);
+      await _autoIndexEntry(result);
     }
   }
 

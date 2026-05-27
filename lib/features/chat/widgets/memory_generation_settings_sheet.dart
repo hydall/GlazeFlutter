@@ -34,6 +34,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
   late String _promptPreset;
   late String _keyMatchMode;
   late bool _vectorSearchEnabled;
+  late double _vectorThreshold;
 
   late final TextEditingController _generationModelCtrl;
   late final TextEditingController _generationEndpointCtrl;
@@ -57,6 +58,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
     _promptPreset = s.promptPreset;
     _keyMatchMode = s.keyMatchMode;
     _vectorSearchEnabled = s.vectorSearchEnabled;
+    _vectorThreshold = ref.read(memoryGlobalSettingsProvider).vectorThreshold;
 
     _generationModelCtrl = TextEditingController(text: s.generationModel);
     _generationEndpointCtrl = TextEditingController(text: s.generationEndpoint);
@@ -100,7 +102,13 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
       keyMatchMode: _keyMatchMode,
       vectorSearchEnabled: _vectorSearchEnabled,
     );
-    Navigator.pop(context, settings);
+    Navigator.pop(
+      context,
+      MemorySettingsSheetResult(
+        settings: settings,
+        vectorThreshold: _vectorThreshold,
+      ),
+    );
   }
 
   @override
@@ -158,6 +166,16 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
           _sectionLabel('Search'),
           _switchTile('Vector Search', _vectorSearchEnabled, (v) => setState(() => _vectorSearchEnabled = v)),
           if (_vectorSearchEnabled) ...[
+            const SizedBox(height: 8),
+            _sliderField(
+              label: 'Vector threshold',
+              value: _vectorThreshold,
+              min: 0.0,
+              max: 1.0,
+              divisions: 20,
+              display: _vectorThreshold.toStringAsFixed(2),
+              onChanged: (v) => setState(() => _vectorThreshold = v),
+            ),
             const SizedBox(height: 8),
             SegmentedButton<String>(
               segments: const [
@@ -421,4 +439,51 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
       child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
     );
   }
+
+  Widget _sliderField({
+    required String label,
+    required double value,
+    required double min,
+    required double max,
+    required int divisions,
+    required String display,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(fontSize: 13, color: context.cs.onSurface),
+              ),
+            ),
+            Text(
+              display,
+              style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+            ),
+          ],
+        ),
+        Slider(
+          value: value.clamp(min, max),
+          min: min,
+          max: max,
+          divisions: divisions,
+          onChanged: onChanged,
+        ),
+      ],
+    );
+  }
+}
+
+class MemorySettingsSheetResult {
+  final MemoryBookSettings settings;
+  final double vectorThreshold;
+
+  const MemorySettingsSheetResult({
+    required this.settings,
+    required this.vectorThreshold,
+  });
 }

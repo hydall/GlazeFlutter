@@ -134,6 +134,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final appSettings = ref.watch(appSettingsProvider).valueOrNull;
     final virtualKeyboardSend = appSettings?.virtualKeyboardSend ?? false;
     final enterToSend = appSettings?.enterToSend ?? true;
+    final batterySaver = appSettings?.batterySaver ?? false;
+    _drawerCtrl.setBatterySaverMode(batterySaver);
 
     final keyboardHeight = MediaQuery.viewInsetsOf(context).bottom;
     _drawerCtrl.handleKeyboardFrame(keyboardHeight);
@@ -283,6 +285,7 @@ class _ChatBody extends ConsumerStatefulWidget {
 class _ChatBodyState extends ConsumerState<_ChatBody> {
   double _inputBarHeight = 130.0;
   final GlobalKey _inputBarKey = GlobalKey();
+  late final VoidCallback _drawerAnimListener;
 
   bool _isSelectionMode = false;
   bool _showScrollToBottom = false;
@@ -292,7 +295,20 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   @override
   void initState() {
     super.initState();
+    _drawerAnimListener = () {
+      if (mounted) setState(() {});
+    };
+    widget.drawerCtrl.drawerAnim.addListener(_drawerAnimListener);
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkHeight());
+  }
+
+  @override
+  void didUpdateWidget(covariant _ChatBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.drawerCtrl.drawerAnim, widget.drawerCtrl.drawerAnim)) {
+      oldWidget.drawerCtrl.drawerAnim.removeListener(_drawerAnimListener);
+      widget.drawerCtrl.drawerAnim.addListener(_drawerAnimListener);
+    }
   }
 
   void _checkHeight() {
@@ -450,6 +466,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   }
 
   @override
+  void dispose() {
+    widget.drawerCtrl.drawerAnim.removeListener(_drawerAnimListener);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isEditingMessage =
         ref.watch(editingMessageIdProvider(widget.charId)) != null;
@@ -469,8 +491,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         }
       },
     );
-    final preset = ref.watch(themeProvider).activePreset;
     final appSettings = ref.watch(appSettingsProvider).valueOrNull;
+    final batterySaverMode = appSettings?.batterySaver ?? false;
+    final preset = batterySaverMode
+        ? ref.read(themeProvider).activePreset
+        : ref.watch(themeProvider).activePreset;
+    final batterySaver = appSettings?.batterySaver ?? false;
     // Reserve space below the message list for: input bar + (keyboard or
     // drawer) + the bottom safe area. We pass the FINAL inset so the list's
     // padding doesn't churn per animation frame.
@@ -479,7 +505,11 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     // + GlazeAppBar height (56). Matches the floating header above the webview.
     final messageListTop = MediaQuery.paddingOf(context).top + 10 + 56;
     // ...
-    final targetDrawerInset = widget.drawerCtrl.drawerOpen ? widget.drawerCtrl.activeDrawerHeight : 0.0;
+    final drawerProgress = widget.drawerCtrl.drawerAnim.value;
+    final targetDrawerInset =
+        (widget.drawerCtrl.drawerOpen || widget.drawerCtrl.switchingToDrawer)
+            ? widget.drawerCtrl.activeDrawerHeight * drawerProgress
+            : 0.0;
     final panelHeight = math.max(targetDrawerInset, widget.keyboardHeight);
     final factor = math.min(1.0, panelHeight / math.max(1.0, safeBottom));
     final effectiveBottomInset = panelHeight + (safeBottom * (1 - factor));
@@ -488,8 +518,25 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final bgBlur = preset.bgBlur > 0 ? preset.bgBlur : 0.0;
     final bgOpacity = preset.bgOpacity.clamp(0.0, 1.0);
     final bgPath = preset.bgImage;
-    final fontStyle = ref.watch(chatFontStyleProvider);
-    final fontDataUrl = ref.watch(chatFontDataProvider).valueOrNull;
+    final fontStyle = batterySaverMode
+        ? ref.read(chatFontStyleProvider)
+        : ref.watch(chatFontStyleProvider);
+    final fontDataUrl = batterySaverMode
+        ? ref.read(chatFontDataProvider).valueOrNull
+        : ref.watch(chatFontDataProvider).valueOrNull;
+    final character = batterySaverMode
+        ? ref.read(characterByIdProvider(widget.charId))
+        : ref.watch(characterByIdProvider(widget.charId));
+    final effectivePersona = batterySaverMode
+        ? ref.read(effectivePersonaForChatProvider(widget.charId))
+        : ref.watch(effectivePersonaForChatProvider(widget.charId));
+    final memBook = batterySaverMode
+        ? ref.read(memoryBookProvider(widget.state.session?.id ?? ''))
+        : ref.watch(memoryBookProvider(widget.state.session?.id ?? ''));
+    final greetingTotal = character == null
+        ? 0
+        : ((character.firstMes?.isNotEmpty == true ? 1 : 0) +
+            character.alternateGreetings.where((g) => g.isNotEmpty).length);
 
     return Stack(
       children: [
@@ -502,24 +549,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               return false;
             },
             child: RepaintBoundary(
-              child: Builder(
-                builder: (context) {
-                  final character = ref.watch(
-                    characterByIdProvider(widget.charId),
-                  );
-                  final effectivePersona = ref.watch(
-                    effectivePersonaForChatProvider(widget.charId),
-                  );
-                  final memBook = ref.watch(
-                    memoryBookProvider(widget.state.session?.id ?? ''),
-                  );
-                  final greetingTotal = character == null
-                      ? 0
-                      : ((character.firstMes?.isNotEmpty == true ? 1 : 0) +
-                            character.alternateGreetings
-                                .where((g) => g.isNotEmpty)
-                                .length);
-                  return ChatWebViewWidget(
+              child: ChatWebViewWidget(
                     key: _webViewStateKey,
                     messages: widget.state.visibleMessages,
                     charId: widget.charId,
@@ -770,9 +800,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     isSelectionMode: _isSelectionMode,
                     searchQuery: widget.search.searchQuery,
                     searchCurrentIndex: widget.search.searchCurrentIndex,
-                  );
-                },
-              ),
+                  ),
             ),
           ),
         ),
@@ -874,55 +902,47 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
               final double targetPanelInset = drawerActive
                   ? widget.drawerCtrl.activeDrawerHeight
                   : 0.0;
-              final int durationMs = widget.drawerCtrl.switchingToDrawer ? 0 : 260;
+              final panelHeight = math.max(
+                targetPanelInset,
+                widget.keyboardHeight,
+              );
 
-              return TweenAnimationBuilder<double>(
-                tween: Tween<double>(
-                  begin: targetPanelInset,
-                  end: targetPanelInset,
-                ),
-                duration: Duration(milliseconds: durationMs),
-                curve: Curves.easeOutCubic,
-                builder: (context, animatedInset, _) {
-                  final panelHeight = math.max(
-                    animatedInset,
-                    widget.keyboardHeight,
-                  );
+              // Smoothly transition from safe area to panel height.
+              // This prevents a 24px jump when the animation starts.
+              final safeBottom = MediaQuery.paddingOf(context).bottom;
+              final factor = math.min(
+                1.0,
+                panelHeight / math.max(1.0, safeBottom),
+              );
+              final animatedBottomPanelInset =
+                  panelHeight + (safeBottom * (1 - factor));
 
-                  // Smoothly transition from safe area to panel height.
-                  // This prevents a 24px jump when the animation starts.
-                  final safeBottom = MediaQuery.paddingOf(context).bottom;
-                  final factor = math.min(
-                    1.0,
-                    panelHeight / math.max(1.0, safeBottom),
-                  );
-                  final animatedBottomPanelInset =
-                      panelHeight + (safeBottom * (1 - factor));
+              // Keep the panel mounted while the close animation runs out.
+              final renderDrawer = widget.drawerCtrl.drawerOpen || progress > 0.001;
 
-                  // Keep the panel mounted while the close animation runs out.
-                  final renderDrawer = widget.drawerCtrl.drawerOpen || progress > 0.001;
-
-                  return Stack(
-                    children: [
-                      if (renderDrawer)
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          bottom: -widget.drawerCtrl.activeDrawerHeight * (1 - progress),
-                          height: widget.drawerCtrl.activeDrawerHeight,
-                          child: MagicDrawerPanel(
-                            charId: widget.charId,
-                            onClose: () => widget.drawerCtrl.closeDrawer(),
-                          ),
-                        ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: animatedBottomPanelInset,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            NotificationListener<SizeChangedLayoutNotification>(
+              return Stack(
+                children: [
+                  if (renderDrawer)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: -widget.drawerCtrl.activeDrawerHeight * (1 - progress),
+                      height: widget.drawerCtrl.activeDrawerHeight,
+                      child: MagicDrawerPanel(
+                        charId: widget.charId,
+                        onClose: () => widget.drawerCtrl.closeDrawer(),
+                        disableEffects:
+                            batterySaver && widget.drawerCtrl.isDrawerAnimating,
+                      ),
+                    ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: animatedBottomPanelInset,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        NotificationListener<SizeChangedLayoutNotification>(
                               onNotification: (n) {
                                 WidgetsBinding.instance.addPostFrameCallback(
                                   (_) => _checkHeight(),
@@ -1113,12 +1133,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                 ),
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  );
-                },
+                      ],
+                    ),
+                  ),
+                ],
               );
             },
           ),

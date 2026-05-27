@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 
 import '../../features/settings/api_list_provider.dart';
 import '../../shared/widgets/glaze_toast.dart' show GlazeToast, ToastPosition;
@@ -108,26 +109,43 @@ class PromptPayloadBuilder {
     required ChatSession? session,
     String? guidanceText,
     bool skipVectorSearch = false,
+    bool Function()? shouldAbort,
+    CancelToken? cancelToken,
   }) async {
+    void throwIfAborted() {
+      if (shouldAbort?.call() == true) {
+        throw const _GenerationAbortedException();
+      }
+    }
+
+    throwIfAborted();
+    debugPrint('[payload] reading character...');
     final charRepo = _ref.read(characterRepoProvider);
     final presetRepo = _ref.read(presetRepoProvider);
     final personaRepo = _ref.read(personaRepoProvider);
     final lorebookRepo = _ref.read(lorebookRepoProvider);
 
     final character = await charRepo.getById(charId);
+    throwIfAborted();
     if (character == null) throw StateError('Character not found: $charId');
 
+    debugPrint('[payload] reading API config...');
     await _ref.read(apiListProvider.future);
+    throwIfAborted();
     final chatApi = _ref.read(activeApiConfigProvider);
     if (chatApi == null || chatApi.mode == 'embedding') throw StateError('No chat API config available');
 
+    debugPrint('[payload] reading preset...');
     final activePresetId = _ref.read(activePresetIdProvider);
     final presets = await presetRepo.getAll();
+    throwIfAborted();
     final preset = activePresetId != null
         ? presets.where((p) => p.id == activePresetId).firstOrNull
         : (presets.isNotEmpty ? presets.first : null);
 
+    debugPrint('[payload] reading persona...');
     final personas = await personaRepo.getAll();
+    throwIfAborted();
     final connections = _ref.read(personaConnectionsProvider);
     final activePersonaId = _ref.read(activePersonaIdProvider);
     final sessionId = session?.id;
@@ -136,7 +154,9 @@ class PromptPayloadBuilder {
       personas, charId, sessionId, activePersonaId, connections,
     );
 
+    debugPrint('[payload] reading lorebooks...');
     final lorebooks = await lorebookRepo.getAll();
+    throwIfAborted();
     final lorebookSettings = _ref.read(lorebookSettingsProvider);
     final lorebookActivations = _ref.read(lorebookActivationsProvider);
 
@@ -151,9 +171,12 @@ class PromptPayloadBuilder {
     List<LorebookEntry> vectorEntries = [];
 
     if (session != null) {
+      debugPrint('[payload] getting summary...');
       final summaryService = _ref.read(summaryServiceProvider);
       summaryContent = await summaryService.getSummary(session.id);
+      throwIfAborted();
 
+      debugPrint('[payload] building memory injection...');
       final memoryService = _ref.read(memoryInjectionServiceProvider);
       final historyText = session.historyText;
       final embeddingConfig = _ref.read(embeddingConfigProvider);
@@ -169,7 +192,11 @@ class PromptPayloadBuilder {
         history: memoryHistory,
         currentText: session.messages.lastOrNull?.content ?? '',
         embeddingConfig: embeddingConfig,
+        shouldAbort: shouldAbort,
+        cancelToken: cancelToken,
       );
+      throwIfAborted();
+      debugPrint('[payload] memory injection complete, entries=${memoryResult.entries.length}');
       memoryContent = memoryResult.content.isNotEmpty ? memoryResult.content : null;
       memoryMacroContent = memoryResult.macroContent.isNotEmpty ? memoryResult.macroContent : null;
       memoryInjectionTarget = memoryResult.injectionTarget;
@@ -188,15 +215,26 @@ class PromptPayloadBuilder {
       }
 
       if (!skipVectorSearch) {
+        debugPrint('[payload] running vector search...');
         try {
-          vectorEntries = await _runVectorSearch(session.messages, session.messages.lastOrNull?.content ?? '', character.world, character, chatId: session.id)
+          vectorEntries = await _runVectorSearch(
+            session.messages,
+            session.messages.lastOrNull?.content ?? '',
+            character.world,
+            character,
+            chatId: session.id,
+            cancelToken: cancelToken,
+          )
               .timeout(const Duration(seconds: 15));
+          throwIfAborted();
+          debugPrint('[payload] vector search complete, entries=${vectorEntries.length}');
         } catch (e) {
-          debugPrint('[VEC] vector search timed out or failed: $e');
+          debugPrint('[payload] vector search timed out or failed: $e');
         }
       }
     }
 
+    debugPrint('[payload] building final payload...');
     return PromptPayload(
       character: character,
       persona: persona,
@@ -287,6 +325,7 @@ class PromptPayloadBuilder {
     String? charWorld,
     Character? character, {
     String? chatId,
+    CancelToken? cancelToken,
   }) async {
     final settings = _ref.read(lorebookSettingsProvider);
     if (settings.searchType == 'keyword') return [];
@@ -311,6 +350,7 @@ class PromptPayloadBuilder {
         activations: activations,
         chatId: chatId,
         overrideTopK: overrideTopK,
+        cancelToken: cancelToken,
       );
 
       // Key by "lorebookId_entryId" to avoid collisions between lorebooks
@@ -336,6 +376,10 @@ class PromptPayloadBuilder {
       return [];
     }
   }
+}
+
+class _GenerationAbortedException implements Exception {
+  const _GenerationAbortedException();
 }
 
 final promptPayloadBuilderProvider = Provider<PromptPayloadBuilder>((ref) {

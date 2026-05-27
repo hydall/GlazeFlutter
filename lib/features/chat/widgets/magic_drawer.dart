@@ -40,18 +40,24 @@ import 'magic_drawer_widgets.dart';
 import 'memory_books_sheet.dart';
 import 'prompt_preview_screen.dart';
 import 'summary_sheet.dart';
-import 'token_breakdown_cache.dart';
+import '../state/token_breakdown_cache.dart';
 import 'tokenizer_sheet.dart';
 
 class MagicDrawerPanel extends ConsumerStatefulWidget {
   final String charId;
+  final bool disableEffects;
 
   /// Called when the drawer wants to dismiss itself (e.g. after the user picks
   /// an item that opens another screen). The host owns visibility, so we ask
   /// it to hide us instead of popping a route.
   final VoidCallback? onClose;
 
-  const MagicDrawerPanel({super.key, required this.charId, this.onClose});
+  const MagicDrawerPanel({
+    super.key,
+    required this.charId,
+    this.onClose,
+    this.disableEffects = false,
+  });
 
   @override
   ConsumerState<MagicDrawerPanel> createState() => _MagicDrawerPanelState();
@@ -768,6 +774,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         children: [
           Positioned.fill(
             child: batterySaver
+                || widget.disableEffects
                 ? scrollable
                 : SoftEdgeBlur(
                     edges: [

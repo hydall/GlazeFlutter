@@ -81,7 +81,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         statuses[entry.id] = 'error';
         final error = repo.decodeError(record);
         errorLabels[entry.id] = EmbeddingErrorLabel.classify(error).label;
-      } else if (record.vectorsBlob != null) {
+      } else if (repo.hasUsableVectors(record)) {
         statuses[entry.id] = 'indexed';
       } else {
         statuses[entry.id] = 'none';
