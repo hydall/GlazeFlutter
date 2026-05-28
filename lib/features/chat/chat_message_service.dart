@@ -60,6 +60,7 @@ class ChatMessageService {
       isAllReasoning: isAllReasoning,
       swipes: updatedSwipes,
       swipesMeta: updatedSwipesMeta,
+      tokens: estimateTokens(text),
     );
     return _persist(session, newMessages);
   }

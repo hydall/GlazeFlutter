@@ -34,15 +34,11 @@ class ChatMessageMapper {
 
     String? displayName;
     String? avatarColor;
-    String? avatarUrl;
-
     if (isAssistant) {
       displayName = ctx.currentCharName ?? m.personaName ?? 'Character';
       avatarColor = ctx.currentCharColor;
-      if (!isStreamingUpdate) avatarUrl = ctx.charAvatarDataUrl;
     } else if (isUser) {
       displayName = m.personaName ?? ctx.currentPersonaName ?? 'You';
-      if (!isStreamingUpdate) avatarUrl = ctx.personaAvatarDataUrl;
     } else {
       displayName = m.personaName ?? 'System';
     }
@@ -76,8 +72,7 @@ class ChatMessageMapper {
       'isAssistant': isAssistant,
       'isSystem': m.role == 'system',
       'displayName': displayName,
-      if (avatarColor != null) 'avatarColor': avatarColor,
-      if (avatarUrl != null) 'avatarUrl': avatarUrl,
+      'avatarColor': ?avatarColor,
       if (m.imagePath != null) 'imagePath': m.imagePath,
       if (m.personaName != null) 'personaName': m.personaName,
       if (m.swipes.isNotEmpty) 'swipeIndex': m.swipeId,
@@ -89,13 +84,13 @@ class ChatMessageMapper {
       if (m.reasoning != null && m.reasoning!.isNotEmpty) 'reasoning': m.reasoning,
       'isHidden': m.isHidden,
       if (isLast) 'isLast': true,
-      if (messageIndex != null) 'messageIndex': messageIndex,
+      'messageIndex': ?messageIndex,
       if (m.guidanceText != null && m.guidanceText!.isNotEmpty) 'guidanceText': m.guidanceText,
       if (m.guidanceType != 'GENERATION') 'guidanceType': m.guidanceType,
       if (m.greetingIndex != null) 'greetingIndex': m.greetingIndex,
       if (m.greetingIndex != null && ctx.greetingTotal > 1)
         'greetingTotal': ctx.greetingTotal,
-      if (memoryStatus != null) 'memoryStatus': memoryStatus,
+      'memoryStatus': ?memoryStatus,
       if (m.triggeredLorebooks.isNotEmpty) 'triggeredLorebooks': _triggeredToJson(m.triggeredLorebooks),
       if (m.triggeredMemories.isNotEmpty) 'triggeredMemories': _triggeredToJson(m.triggeredMemories),
       'isGenerating': ctx.isGenerating,

@@ -307,10 +307,17 @@ if (messageData.isEditing) classes.push('editing');
     /* Avatar */
     const avatar = document.createElement('div');
     avatar.className = 'msg-avatar';
+    const roleKey = this._roleKey(m.role);
     const finalName = m.displayName || m.personaName || this._getDefaultName(m.role);
-    if (m.avatarUrl) {
+    const identity = window.bridge || null;
+    const avatarUrl = m.avatarUrl || (roleKey === 'user'
+      ? (identity && identity._personaAvatarUrl)
+      : roleKey === 'char'
+        ? (identity && identity._charAvatarUrl)
+        : null);
+    if (avatarUrl) {
       const img = document.createElement('img');
-      img.src = m.avatarUrl;
+      img.src = avatarUrl;
       img.alt = finalName;
       avatar.appendChild(img);
     } else {

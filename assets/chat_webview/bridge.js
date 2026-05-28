@@ -1210,14 +1210,20 @@ class Bridge {
     }
   }
 
+  _normalizeLayout(layout) {
+    const raw = String(layout || '').trim().toLowerCase();
+    return (raw === 'bubble' || raw === 'bubbles') ? 'bubble' : 'default';
+  }
+
   applyTheme(themeJson) {
     const theme = JSON.parse(themeJson);
     const container = document.getElementById('chat-container') || document.body;
 
     for (const [key, value] of Object.entries(theme)) {
       if (key === 'chat-layout') {
+        const layout = this._normalizeLayout(value);
         container.classList.remove('layout-bubble', 'layout-default');
-        container.classList.add(`layout-${value || 'default'}`);
+        container.classList.add(`layout-${layout}`);
         continue;
       }
       document.documentElement.style.setProperty(`--${key}`, value);
@@ -1240,9 +1246,10 @@ class Bridge {
   }
 
   applyLayout(layout) {
+    const normalized = this._normalizeLayout(layout);
     const container = document.getElementById('chat-container') || document.body;
     container.classList.remove('layout-bubble', 'layout-default');
-    container.classList.add(`layout-${layout || 'default'}`);
+    container.classList.add(`layout-${normalized}`);
   }
 
   setMessageSettings(json) {
