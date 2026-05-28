@@ -113,9 +113,16 @@ class ChatBridgeController {
     return text;
   }
 
+  String _normalizeLayout(String? layout) {
+    final raw = (layout ?? '').trim().toLowerCase();
+    if (raw == 'bubble' || raw == 'bubbles') return 'bubble';
+    return 'default';
+  }
+
   Future<void> applyLayout(String layout) {
-    currentChatLayout = layout;
-    return _eval('window.bridge?.applyLayout?.("${_escape(layout)}")');
+    final normalizedLayout = _normalizeLayout(layout);
+    currentChatLayout = normalizedLayout;
+    return _eval('window.bridge?.applyLayout?.("${_escape(normalizedLayout)}")');
   }
 
   void Function()? onReady;
@@ -511,7 +518,12 @@ class ChatBridgeController {
   }
 
   Future<void> applyTheme(Map<String, String> theme) {
-    final json = jsonEncode(theme);
+    final normalizedTheme = Map<String, String>.from(theme);
+    if (normalizedTheme.containsKey('chat-layout')) {
+      normalizedTheme['chat-layout'] =
+          _normalizeLayout(normalizedTheme['chat-layout']);
+    }
+    final json = jsonEncode(normalizedTheme);
     return _callJs('applyTheme', json);
   }
 
