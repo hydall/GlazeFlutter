@@ -259,7 +259,8 @@ class InMemoryManifestProvider implements SyncManifestProvider {
         );
 
   @override
-  Future<SyncManifest> buildLocalManifest() => _builder.buildLocalManifest();
+  Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest}) =>
+      _builder.buildLocalManifest(cloudManifest: cloudManifest);
 
   @override
   Future<SyncManifest> readLocalManifest() async {
@@ -1329,6 +1330,105 @@ void main() {
         reason: 'Manifest hash must not be session id alone');
     expect(divergentHash, isNot(equals(metadataHash)),
         reason: 'Message changes must change the manifest hash');
+  });
+
+  test('stale local manifest does not false-conflict characters matching cloud', () async {
+    final deviceA = SyncWorld();
+    await deviceA.characters.put(makeChar('c1', name: 'Alice'));
+    await deviceA.characters.put(makeChar('c2', name: 'Bob'));
+    final aManifest = await deviceA.manifestProvider.buildLocalManifest();
+    await deviceA.manifestProvider.writeLocalManifest(
+      aManifest.copyWith(lastSync: 5000),
+    );
+    await deviceA.engine.pushEntities(onProgress: (_) {});
+
+    final deviceB = SyncWorld();
+    deviceB.cloud.files.addAll(deviceA.cloud.files);
+    await deviceB.characters.put(makeChar('c1', name: 'Alice'));
+    await deviceB.characters.put(makeChar('c2', name: 'Bob'));
+
+    // Stale manifest: wrong hashes but same DB content as cloud.
+    final cloudManifest = SyncManifest.fromJson(
+      jsonDecode(deviceB.cloud.files[cloudPath('manifest', 'manifest')]!)
+          as Map<String, dynamic>,
+    );
+    final stale = await deviceB.manifestProvider.buildLocalManifest();
+    final staleEntries = Map<String, SyncManifestEntry>.from(stale.entries);
+    for (final key in ['character:c1', 'character:c2']) {
+      final e = staleEntries[key]!;
+      staleEntries[key] = e.copyWith(
+        hash: 'stale-hash-${e.id}',
+        updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+      );
+    }
+    await deviceB.manifestProvider.writeLocalManifest(
+      stale.copyWith(lastSync: 9000, entries: staleEntries),
+    );
+
+    final conflicts = <SyncConflict>[];
+    await deviceB.engine.pullEntities(
+      onProgress: (_) {},
+      onConflict: (c) => conflicts.add(c),
+    );
+
+    expect(conflicts.where((c) => c.type == 'character'), isEmpty,
+        reason: 'Same character data as cloud must not conflict on stale hash');
+  });
+
+  test('resolve all cloud pulls data and rebuilds manifest', () async {
+    final deviceA = SyncWorld();
+    await deviceA.characters.put(makeChar('c1', name: 'Cloud'));
+    final aManifest = await deviceA.manifestProvider.buildLocalManifest();
+    await deviceA.manifestProvider.writeLocalManifest(
+      aManifest.copyWith(lastSync: 5000),
+    );
+    await deviceA.engine.pushEntities(onProgress: (_) {});
+
+    final deviceB = SyncWorld();
+    deviceB.cloud.files.addAll(deviceA.cloud.files);
+    await deviceB.characters.put(makeChar('c1', name: 'Local'));
+
+    final yManifest = await deviceB.manifestProvider.buildLocalManifest();
+    final patched = Map<String, SyncManifestEntry>.from(yManifest.entries);
+    patched['character:c1'] = patched['character:c1']!.copyWith(
+      updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+    );
+    await deviceB.manifestProvider.writeLocalManifest(
+      yManifest.copyWith(lastSync: 8000, entries: patched),
+    );
+
+    final conflicts = <SyncConflict>[];
+    await deviceB.engine.pullEntities(
+      onProgress: (_) {},
+      onConflict: (c) => conflicts.add(c),
+    );
+    expect(conflicts, isNotEmpty);
+
+    final resolvedKeys = <String>[];
+    for (final conflict in conflicts) {
+      await deviceB.engine.resolveConflict(conflict, 'cloud');
+      resolvedKeys.add(conflict.key);
+    }
+    await deviceB.engine.applyPendingPull(
+      onProgress: (_) {},
+      resolvedAsCloud: resolvedKeys,
+    );
+
+    expect(deviceB.characters.data['c1']?.name, equals('Cloud'));
+    final manifest = await deviceB.manifestProvider.readLocalManifest();
+    expect(manifest.lastSync, greaterThan(0));
+    final cloudManifest = SyncManifest.fromJson(
+      jsonDecode(deviceB.cloud.files[cloudPath('manifest', 'manifest')]!)
+          as Map<String, dynamic>,
+    );
+    final rebuilt = await deviceB.manifestProvider.buildLocalManifest(
+      cloudManifest: cloudManifest,
+    );
+    expect(
+      rebuilt.entries['character:c1']?.hash,
+      manifest.entries['character:c1']?.hash,
+      reason: 'Finalize must persist hashes from local DB, not stale cloud manifest',
+    );
   });
 
   test('chat conflict detection uses metadata hash and updatedAt', () {

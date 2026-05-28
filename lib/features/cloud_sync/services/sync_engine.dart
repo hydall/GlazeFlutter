@@ -27,6 +27,13 @@ class SyncProgress {
 }
 
 class SyncEngine {
+  static bool _isSingletonType(String type) =>
+      type == 'lorebooks' ||
+      type == 'api_presets' ||
+      type == 'theme_presets' ||
+      type == 'theme_state' ||
+      type == 'local_storage';
+
   final CloudAdapter _adapter;
   final SyncManifestProvider _manifestBuilder;
   final SyncCharacterStore _characterRepo;
@@ -157,7 +164,9 @@ class SyncEngine {
     if (cloudManifest == null) return;
     final previousManifest = await _manifestBuilder.readLocalManifest();
     final isFirstSync = previousManifest.lastSync == 0;
-    final localManifest = await _manifestBuilder.buildLocalManifest();
+    final localManifest = await _manifestBuilder.buildLocalManifest(
+      cloudManifest: cloudManifest,
+    );
 
     final entries = cloudManifest.entries.values.toList();
     final conflicts = <SyncConflict>[];
@@ -170,9 +179,11 @@ class SyncEngine {
         continue;
       }
 
-      // Before first successful sync, local manifest timestamps are not reliable
-      // (seeded defaults get updatedAt=now). Prefer cloud without surfacing conflicts.
-      if (isFirstSync && localEntry != null) {
+      // First sync: auto-prefer cloud only for singleton blobs (seeded defaults).
+      // Characters/personas/chats keep normal conflict rules when local rows exist.
+      if (isFirstSync &&
+          localEntry != null &&
+          _isSingletonType(cloudEntry.type)) {
         pullEntries.add(cloudEntry);
         continue;
       }
@@ -216,7 +227,9 @@ class SyncEngine {
     final cloudManifest =
         await _loadCloudManifestForPendingPull() ?? await _downloadCloudManifest();
     if (cloudManifest == null) return;
-    final localManifest = await _manifestBuilder.buildLocalManifest();
+    final localManifest = await _manifestBuilder.buildLocalManifest(
+      cloudManifest: cloudManifest,
+    );
 
     final pullEntries = <SyncManifestEntry>[];
     final cloudKeys = cloudManifest.entries.keys.toSet();
@@ -301,9 +314,17 @@ class SyncEngine {
   }
 
   Future<void> _finalizePull(SyncManifest localManifest, SyncManifest cloudManifest) async {
-    await _manifestBuilder.writeLocalManifest(cloudManifest.copyWith(
-      lastSync: DateTime.now().millisecondsSinceEpoch,
-    ));
+    final rebuilt = await _manifestBuilder.buildLocalManifest(
+      cloudManifest: cloudManifest,
+    );
+    await _manifestBuilder.writeLocalManifest(
+      rebuilt.copyWith(
+        createdAt: cloudManifest.createdAt != 0
+            ? cloudManifest.createdAt
+            : rebuilt.createdAt,
+        lastSync: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
     await _manifestBuilder.clearDeleted();
   }
 

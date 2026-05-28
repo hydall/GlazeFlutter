@@ -43,7 +43,9 @@ class SyncManifestBuilder implements SyncManifestProvider {
     return id;
   }
 
-  Future<SyncManifest> buildLocalManifest() async {
+  /// [cloudManifest] — when pulling, used to avoid bumping updatedAt to now for
+  /// entities that only differ from a stale local manifest but match cloud.
+  Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest}) async {
     final deviceId = await getDeviceId();
     final now = DateTime.now().millisecondsSinceEpoch;
     final entries = <String, SyncManifestEntry>{};
@@ -56,9 +58,14 @@ class SyncManifestBuilder implements SyncManifestProvider {
       final hash = SyncSerialization.computeSyncHash(json);
       final key = entryKey('character', c.id);
       final prevEntry = previous.entries[key];
-      final updatedAt = hash == prevEntry?.hash
-          ? prevEntry!.updatedAt
-          : now;
+      final cloudEntry = cloudManifest?.entries[key];
+      var updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+      if (c.updatedAt > updatedAt) updatedAt = c.updatedAt;
 
       entries[key] = SyncManifestEntry(
         type: 'character',
@@ -75,7 +82,13 @@ class SyncManifestBuilder implements SyncManifestProvider {
       final hash = SyncSerialization.computeSyncHash(json);
       final key = entryKey('persona', p.id);
       final prevEntry = previous.entries[key];
-      final updatedAt = hash == prevEntry?.hash ? prevEntry!.updatedAt : now;
+      final cloudEntry = cloudManifest?.entries[key];
+      final updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
 
       entries[key] = SyncManifestEntry(
         type: 'persona',
@@ -91,9 +104,14 @@ class SyncManifestBuilder implements SyncManifestProvider {
       final hash = SyncSerialization.computeChatMetadataHash(s);
       final key = entryKey('chat', s.sessionId);
       final prevEntry = previous.entries[key];
-      final updatedAt = hash == prevEntry?.hash
-          ? prevEntry!.updatedAt
-          : now;
+      final cloudEntry = cloudManifest?.entries[key];
+      var updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+      if (s.updatedAt > updatedAt) updatedAt = s.updatedAt;
 
       entries[key] = SyncManifestEntry(
         type: 'chat',
@@ -104,7 +122,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
       );
     }
 
-    await _addSingletons(entries, previous, now);
+    await _addSingletons(entries, previous, now, cloudManifest);
     await _addDeletedEntries(entries, now);
 
     return SyncManifest(
@@ -115,10 +133,37 @@ class SyncManifestBuilder implements SyncManifestProvider {
     );
   }
 
+  /// Decides manifest updatedAt without spurious "now" bumps on hash drift.
+  static int _resolveUpdatedAt({
+    required String hash,
+    required SyncManifestEntry? prevEntry,
+    required SyncManifestEntry? cloudEntry,
+    required int now,
+  }) {
+    if (prevEntry != null && hash == prevEntry.hash) {
+      return prevEntry.updatedAt;
+    }
+    if (cloudEntry != null && hash == cloudEntry.hash) {
+      return cloudEntry.updatedAt;
+    }
+    if (prevEntry != null &&
+        cloudEntry != null &&
+        prevEntry.hash == cloudEntry.hash) {
+      // Was aligned with cloud; local DB changed → treat as local edit.
+      return now;
+    }
+    if (prevEntry == null && cloudEntry != null && hash != cloudEntry.hash) {
+      // Local row exists but never synced — diverged from cloud.
+      return now;
+    }
+    return prevEntry?.updatedAt ?? 0;
+  }
+
   Future<void> _addSingletons(
     Map<String, SyncManifestEntry> entries,
     SyncManifest previous,
     int now,
+    SyncManifest? cloudManifest,
   ) async {
     final singletons = <String, dynamic>{};
 
@@ -137,13 +182,15 @@ class SyncManifestBuilder implements SyncManifestProvider {
       final hash = SyncSerialization.computeSyncHash(entry.value);
       final key = entryKey(type, type);
       final prevEntry = previous.entries[key];
-      final updatedAt = hash == prevEntry?.hash
-          ? prevEntry!.updatedAt
-          : prevEntry == null
-              ? 0
-              : items.isEmpty
-                  ? 0
-                  : now;
+      final cloudEntry = cloudManifest?.entries[key];
+      final updatedAt = items.isEmpty
+          ? 0
+          : _resolveUpdatedAt(
+              hash: hash,
+              prevEntry: prevEntry,
+              cloudEntry: cloudEntry,
+              now: now,
+            );
 
       entries[key] = SyncManifestEntry(
         type: type,

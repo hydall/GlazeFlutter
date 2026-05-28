@@ -224,7 +224,9 @@ class SyncService {
   }
 
   Future<void> resolveAllConflicts(String choice) async {
+    if (_conflicts.isEmpty) return;
     final conflicts = List<SyncConflict>.from(_conflicts);
+    final wasConflict = _status == SyncStatus.conflict;
     try {
       for (final conflict in conflicts) {
         await _engine.resolveConflict(conflict, choice);
@@ -232,11 +234,10 @@ class SyncService {
           _resolvedAsCloud.add(conflict.key);
         }
       }
-      _conflicts.clear();
-      if (_status == SyncStatus.conflict) {
+      if (wasConflict) {
         await _engine.applyPendingPull(
           onProgress: (_) {},
-          resolvedAsCloud: choice == 'cloud' ? _resolvedAsCloud : null,
+          resolvedAsCloud: choice == 'cloud' ? List.from(_resolvedAsCloud) : null,
         );
         _resolvedAsCloud.clear();
         _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
@@ -244,6 +245,7 @@ class SyncService {
         await prefs.setInt('gz_sync_last', _lastSyncTime!);
         _status = SyncStatus.idle;
       }
+      _conflicts.clear();
     } catch (e) {
       _lastError = e.toString();
       _status = SyncStatus.error;

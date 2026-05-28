@@ -16,6 +16,7 @@ import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import 'widgets/message_actions.dart';
 import '../../shared/theme/theme_font_provider.dart';
+import '../../shared/theme/theme_preset.dart';
 import '../../shared/theme/theme_provider.dart';
 
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -34,6 +35,25 @@ import 'widgets/webview_callbacks.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/db_provider.dart';
 import 'widgets/session_lifecycle_tracker.dart';
+
+String _chatWebViewThemeSyncKey(ThemePreset preset, String chatLayout) {
+  return [
+    preset.id,
+    preset.accentColor,
+    preset.uiColor,
+    preset.userBubbleColor,
+    preset.charBubbleColor,
+    preset.userTextColor,
+    preset.charTextColor,
+    preset.userQuoteColor,
+    preset.charQuoteColor,
+    preset.userItalicColor,
+    preset.charItalicColor,
+    preset.elementOpacity,
+    preset.elementBlur,
+    chatLayout,
+  ].join('|');
+}
 
 class ChatScreen extends ConsumerStatefulWidget {
   final String charId;
@@ -587,6 +607,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     personaName: effectivePersona?.name,
                     greetingTotal: greetingTotal,
                     chatLayout: appSettings?.chatLayout ?? 'default',
+                    themeSyncKey: _chatWebViewThemeSyncKey(
+                      preset,
+                      appSettings?.chatLayout ?? 'default',
+                    ),
+                    elementOpacity: preset.elementOpacity,
+                    elementBlur: preset.elementBlur,
                     charAvatarPath: character?.avatarPath,
                     personaAvatarPath: effectivePersona?.avatarPath,
                     bgImagePath: bgPath,

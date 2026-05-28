@@ -1113,6 +1113,13 @@
   font-weight: 500;
 }
 
+/* When Flutter sets a bg image, layers above must stay transparent. */
+html.has-bg-image,
+html.has-bg-image body,
+html.has-bg-image #chat-container {
+  background: transparent !important;
+}
+
 /* ============================================================
  * Background layer
  * ============================================================ */

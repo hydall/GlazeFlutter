@@ -61,7 +61,7 @@ abstract class SyncImageStore {
 }
 
 abstract class SyncManifestProvider {
-  Future<SyncManifest> buildLocalManifest();
+  Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest});
   Future<SyncManifest> readLocalManifest();
   Future<void> writeLocalManifest(SyncManifest manifest);
   Future<void> clearDeleted();

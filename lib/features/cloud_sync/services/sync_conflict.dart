@@ -26,6 +26,8 @@ class SyncConflictDetector {
     if (localEntry == null) return false;
     if (localEntry.deleted) return false;
     if (localEntry.hash == cloudEntry.hash) return false;
+    // updatedAt == 0 means never edited on this device — prefer cloud pull.
+    if (localEntry.updatedAt == 0) return false;
     return localEntry.updatedAt > cloudEntry.updatedAt;
   }
 

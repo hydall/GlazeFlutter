@@ -876,11 +876,13 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       }
     } catch (e) {
       ref.read(syncLastErrorProvider.notifier).state = e.toString();
-      ref.read(syncStatusProvider.notifier).state = service.status;
       ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
       if (mounted) {
         GlazeToast.errorWithCopy(context, 'Could not resolve conflicts: ', e);
       }
+    } finally {
+      ref.read(syncStatusProvider.notifier).state = service.status;
+      ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
     }
   }
 

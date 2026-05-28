@@ -1284,8 +1284,10 @@ class Bridge {
       bg.id = 'bg-layer';
       document.body.insertBefore(bg, document.body.firstChild);
     }
-    if (url) {
-      bg.style.backgroundImage = `url("${url.replace(/"/g, '\\"')}")`;
+    const hasUrl = !!(url && String(url).length > 0);
+    document.documentElement.classList.toggle('has-bg-image', hasUrl);
+    if (hasUrl) {
+      bg.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
       bg.style.display = 'block';
     } else {
       bg.style.backgroundImage = '';
