@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/state/db_provider.dart';
 import '../../../core/services/image_storage_service.dart';
+import '../../../shared/theme/theme_preset_storage.dart';
 import 'services/sync_conflict.dart';
 import 'services/sync_engine.dart';
 import 'services/sync_service.dart';
@@ -16,6 +17,7 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
   await SyncConfig.load();
 
   final imageStorage = await ref.watch(imageStorageProvider.future);
+  final themeStorage = await ThemePresetStorage.create();
 
   final service = SyncService(
     characterRepo: ref.watch(characterRepoProvider),
@@ -26,6 +28,7 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
     lorebookRepo: ref.watch(lorebookRepoProvider),
     embeddingRepo: ref.watch(embeddingRepoProvider),
     imageStorage: imageStorage,
+    themePresetRepo: themeStorage,
   );
   await service.init();
 

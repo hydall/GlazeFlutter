@@ -14,6 +14,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
   final SyncPresetStore _presetRepo;
   final SyncApiConfigStore _apiRepo;
   final SyncLorebookStore _lorebookRepo;
+  final SyncThemePresetStore _themePresetRepo;
 
   static const _manifestKey = 'gz_sync_manifest_v2';
   static const _deviceIdKey = 'gz_sync_device_id';
@@ -26,13 +27,16 @@ class SyncManifestBuilder implements SyncManifestProvider {
     required SyncPresetStore presetRepo,
     required SyncApiConfigStore apiRepo,
     required SyncLorebookStore lorebookRepo,
+    required SyncThemePresetStore themePresetRepo,
   })  : _characterRepo = characterRepo,
         _chatRepo = chatRepo,
         _personaRepo = personaRepo,
         _presetRepo = presetRepo,
         _apiRepo = apiRepo,
-        _lorebookRepo = lorebookRepo;
+        _lorebookRepo = lorebookRepo,
+        _themePresetRepo = themePresetRepo;
 
+  @override
   Future<String> getDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     var id = prefs.getString(_deviceIdKey);
@@ -45,6 +49,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
 
   /// [cloudManifest] — when pulling, used to avoid bumping updatedAt to now for
   /// entities that only differ from a stale local manifest but match cloud.
+  @override
   Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest}) async {
     final deviceId = await getDeviceId();
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -164,22 +169,13 @@ class SyncManifestBuilder implements SyncManifestProvider {
 
   /// Remove device-specific fields from entity JSON before hashing so that
   /// the same logical entity produces the same hash on every device.
+  /// Gallery is excluded entirely: image paths are device-local, and gallery
+  /// metadata (ids, labels, order) can drift between devices without
+  /// representing a meaningful content change.
   static Map<String, dynamic> _stripLocalPaths(Map<String, dynamic> json) {
     final out = Map<String, dynamic>.from(json);
     out.remove('avatarPath');
-    if (out.containsKey('gallery')) {
-      final gallery = out['gallery'];
-      if (gallery is List) {
-        out['gallery'] = gallery.map((g) {
-          if (g is Map<String, dynamic>) {
-            final stripped = Map<String, dynamic>.from(g);
-            stripped.remove('imagePath');
-            return stripped;
-          }
-          return g;
-        }).toList();
-      }
-    }
+    out.remove('gallery');
     return out;
   }
 
@@ -201,6 +197,9 @@ class SyncManifestBuilder implements SyncManifestProvider {
 
     final presets = await _presetRepo.getAll();
     singletons['theme_presets'] = presets.map((p) => p.toJson()).toList();
+
+    final uiThemes = await _themePresetRepo.getAll();
+    singletons['ui_themes'] = uiThemes.map((t) => t.toJson()).toList();
 
     for (final entry in singletons.entries) {
       final type = entry.key;
@@ -254,6 +253,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     }
   }
 
+  @override
   Future<SyncManifest> readLocalManifest() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_manifestKey);
@@ -265,6 +265,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     }
   }
 
+  @override
   Future<void> writeLocalManifest(SyncManifest manifest) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_manifestKey, jsonEncode(manifest.toJson()));
@@ -280,6 +281,14 @@ class SyncManifestBuilder implements SyncManifestProvider {
     await prefs.setString(_deletedKey, jsonEncode(deleted));
   }
 
+  @override
+  Future<void> clearLocalManifest() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_manifestKey);
+    await prefs.remove(_deletedKey);
+  }
+
+  @override
   Future<void> clearDeleted() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_deletedKey);

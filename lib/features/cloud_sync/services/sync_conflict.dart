@@ -39,18 +39,23 @@ class SyncConflictDetector {
   ) {
     switch (type) {
       case 'character':
-        return (localEntity?['name'] ?? cloudEntity?['name'] ?? 'Character $id') as String;
+        return (localEntity?['name'] ?? cloudEntity?['name'] ?? id) as String;
       case 'persona':
-        return (localEntity?['name'] ?? cloudEntity?['name'] ?? 'Persona $id') as String;
+        return (localEntity?['name'] ?? cloudEntity?['name'] ?? id) as String;
       case 'chat':
-        final charName = localEntity?['characterName'] ?? cloudEntity?['characterName'];
-        return charName != null ? 'Chat with $charName' : 'Chat $id';
+        final charId = localEntity?['characterId'] ?? cloudEntity?['characterId'];
+        final idx = localEntity?['sessionIndex'] ?? cloudEntity?['sessionIndex'];
+        if (charId != null && idx != null) return 'Chat #$idx ($charId)';
+        if (charId != null) return 'Chat ($charId)';
+        return 'Chat $id';
       case 'lorebooks':
         return 'Lorebooks';
       case 'api_presets':
         return 'API Presets';
       case 'theme_presets':
-        return 'Theme Presets';
+        return 'Prompt Presets';
+      case 'ui_themes':
+        return 'UI Themes';
       case 'theme_state':
         return 'Theme State';
       case 'local_storage':

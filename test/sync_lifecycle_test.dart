@@ -10,6 +10,7 @@ import 'package:glaze_flutter/core/models/chat_message.dart';
 import 'package:glaze_flutter/core/models/lorebook.dart';
 import 'package:glaze_flutter/core/models/persona.dart';
 import 'package:glaze_flutter/core/models/preset.dart';
+import 'package:glaze_flutter/shared/theme/theme_preset.dart';
 import 'package:glaze_flutter/features/cloud_sync/cloud_adapter.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_conflict.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_engine.dart';
@@ -132,6 +133,18 @@ class FakeApiConfigStore implements SyncApiConfigStore {
   }
 }
 
+class FakeThemePresetStore implements SyncThemePresetStore {
+  List<ThemePreset> data = [];
+
+  @override
+  Future<List<ThemePreset>> getAll() async => data;
+
+  @override
+  Future<void> putAll(List<ThemePreset> presets) async {
+    data = List.from(presets);
+  }
+}
+
 class FakeLorebookStore implements SyncLorebookStore {
   final Map<String, Lorebook> data = {};
 
@@ -249,6 +262,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     required SyncPresetStore presetRepo,
     required SyncApiConfigStore apiRepo,
     required SyncLorebookStore lorebookRepo,
+    required SyncThemePresetStore themePresetRepo,
   }) : _builder = SyncManifestBuilder(
           characterRepo: characterRepo,
           chatRepo: chatRepo,
@@ -256,6 +270,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
           presetRepo: presetRepo,
           apiRepo: apiRepo,
           lorebookRepo: lorebookRepo,
+          themePresetRepo: themePresetRepo,
         );
 
   @override
@@ -286,7 +301,16 @@ class InMemoryManifestProvider implements SyncManifestProvider {
   }
 
   @override
+  Future<void> clearLocalManifest() async {
+    _cached = const SyncManifest(deviceId: '', createdAt: 0);
+    _storage.remove('manifest');
+  }
+
+  @override
   Future<void> clearDeleted() async {}
+
+  @override
+  Future<String> getDeviceId() => _builder.getDeviceId();
 }
 
 // ─── Helper: build a complete in-memory environment ─────────────────
@@ -301,6 +325,7 @@ class SyncWorld {
   late final FakeEmbeddingStore embeddings;
   late final FakeImageStore images;
   late final FakeCloudAdapter cloud;
+  late final FakeThemePresetStore uiThemes;
   late final InMemoryManifestProvider manifestProvider;
 
   SyncWorld() {
@@ -313,6 +338,7 @@ class SyncWorld {
     embeddings = FakeEmbeddingStore();
     images = FakeImageStore();
     cloud = FakeCloudAdapter();
+    uiThemes = FakeThemePresetStore();
     manifestProvider = InMemoryManifestProvider(
       characterRepo: characters,
       chatRepo: chats,
@@ -320,6 +346,7 @@ class SyncWorld {
       presetRepo: presets,
       apiRepo: apiConfigs,
       lorebookRepo: lorebooks,
+      themePresetRepo: uiThemes,
     );
   }
 
@@ -334,6 +361,7 @@ class SyncWorld {
         lorebooks,
         embeddings,
         images,
+        uiThemes,
       );
 }
 

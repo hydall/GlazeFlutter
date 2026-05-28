@@ -16,6 +16,7 @@ import '../../../core/models/chat_message.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../core/models/api_config.dart';
 import '../../../core/models/preset.dart';
+import '../../../shared/theme/theme_preset.dart';
 import '../sync_repo_interfaces.dart';
 
 class SyncProgress {
@@ -31,6 +32,7 @@ class SyncEngine {
       type == 'lorebooks' ||
       type == 'api_presets' ||
       type == 'theme_presets' ||
+      type == 'ui_themes' ||
       type == 'theme_state' ||
       type == 'local_storage';
 
@@ -44,6 +46,7 @@ class SyncEngine {
   final SyncLorebookStore _lorebookRepo;
   final SyncEmbeddingStore _embeddingRepo;
   final SyncImageStore _imageStorage;
+  final SyncThemePresetStore _themePresetRepo;
   final SyncQueue _queue = SyncQueue();
   bool _includeApiKeys = false;
 
@@ -58,6 +61,7 @@ class SyncEngine {
     this._lorebookRepo,
     this._embeddingRepo,
     this._imageStorage,
+    this._themePresetRepo,
   );
 
   Future<void> pushEntities({
@@ -188,8 +192,9 @@ class SyncEngine {
       }
 
       if (SyncConflictDetector.needsConflict(localEntry, cloudEntry)) {
+        final localData = await _readLocalEntity(cloudEntry.type, cloudEntry.id);
         final name = SyncConflictDetector.getConflictName(
-          cloudEntry.type, null, null, cloudEntry.id,
+          cloudEntry.type, localData, null, cloudEntry.id,
         );
         conflicts.add(SyncConflict(
           key: cloudEntry.key,
@@ -490,6 +495,9 @@ class SyncEngine {
         case 'theme_presets':
           final all = await _presetRepo.getAll();
           return {'__singleton': true, 'items': all.map((p) => p.toJson()).toList()};
+        case 'ui_themes':
+          final all = await _themePresetRepo.getAll();
+          return {'__singleton': true, 'items': all.map((t) => t.toJson()).toList()};
         default:
           return null;
       }
@@ -533,6 +541,9 @@ class SyncEngine {
             _presetRepo,
             idOf: (p) => p.id,
           );
+          break;
+        case 'ui_themes':
+          await _applyUiThemes(data);
           break;
       }
     } catch (_) {}
@@ -582,6 +593,19 @@ class SyncEngine {
     }
   }
 
+  Future<void> _applyUiThemes(Map<String, dynamic> data) async {
+    final List<Map<String, dynamic>> items;
+    if (data['__singleton'] == true) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else if (data.containsKey('items')) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else {
+      items = [data];
+    }
+    final presets = items.map((j) => ThemePreset.fromJson(j)).toList();
+    await _themePresetRepo.putAll(presets);
+  }
+
   Future<void> _deleteLocalEntity(String type, String id) async {
     try {
       switch (type) {
@@ -612,6 +636,9 @@ class SyncEngine {
           for (final p in presets) {
             await _presetRepo.delete(p.id);
           }
+          break;
+        case 'ui_themes':
+          await _themePresetRepo.putAll([]);
           break;
       }
     } catch (_) {}

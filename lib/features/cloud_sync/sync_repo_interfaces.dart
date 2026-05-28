@@ -6,6 +6,7 @@ import '../../core/models/chat_message.dart';
 import '../../core/models/lorebook.dart';
 import '../../core/models/persona.dart';
 import '../../core/models/preset.dart';
+import '../../shared/theme/theme_preset.dart';
 import 'sync_models.dart';
 
 abstract class SyncCharacterStore {
@@ -50,6 +51,11 @@ abstract class SyncLorebookStore {
   Future<void> delete(String id);
 }
 
+abstract class SyncThemePresetStore {
+  Future<List<ThemePreset>> getAll();
+  Future<void> putAll(List<ThemePreset> presets);
+}
+
 abstract class SyncEmbeddingStore {
   Future<void> deleteBySourceId(String sourceId);
 }
@@ -64,5 +70,7 @@ abstract class SyncManifestProvider {
   Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest});
   Future<SyncManifest> readLocalManifest();
   Future<void> writeLocalManifest(SyncManifest manifest);
+  Future<void> clearLocalManifest();
   Future<void> clearDeleted();
+  Future<String> getDeviceId();
 }

@@ -22,6 +22,7 @@ class SyncService {
   final SyncLorebookStore _lorebookRepo;
   final SyncEmbeddingStore _embeddingRepo;
   final SyncImageStore _imageStorage;
+  final SyncThemePresetStore _themePresetRepo;
 
   SyncProvider _provider = SyncProvider.dropbox;
   SyncStatus _status = SyncStatus.idle;
@@ -75,6 +76,7 @@ class SyncService {
     required SyncLorebookStore lorebookRepo,
     required SyncEmbeddingStore embeddingRepo,
     required SyncImageStore imageStorage,
+    required SyncThemePresetStore themePresetRepo,
   })  : _characterRepo = characterRepo,
         _chatRepo = chatRepo,
         _personaRepo = personaRepo,
@@ -82,7 +84,8 @@ class SyncService {
         _apiRepo = apiRepo,
         _lorebookRepo = lorebookRepo,
         _embeddingRepo = embeddingRepo,
-        _imageStorage = imageStorage;
+        _imageStorage = imageStorage,
+        _themePresetRepo = themePresetRepo;
 
   CloudAdapter get _adapter {
     switch (_provider) {
@@ -100,6 +103,7 @@ class SyncService {
         presetRepo: _presetRepo,
         apiRepo: _apiRepo,
         lorebookRepo: _lorebookRepo,
+        themePresetRepo: _themePresetRepo,
       );
 
   SyncEngine get _engine => SyncEngine(
@@ -113,6 +117,7 @@ class SyncService {
         _lorebookRepo,
         _embeddingRepo,
         _imageStorage,
+        _themePresetRepo,
       );
 
   Future<void> init() async {
@@ -215,6 +220,9 @@ class SyncService {
       await engine.wipeCloudData(
         onProgress: onProgress ?? (_) {},
       );
+      await _manifestBuilder.clearLocalManifest();
+      _conflicts.clear();
+      _resolvedAsCloud.clear();
       _status = SyncStatus.idle;
     } catch (e) {
       _lastError = e.toString();
@@ -300,6 +308,11 @@ class SyncService {
         break;
     }
     _accountInfo = null;
+    _conflicts.clear();
+    _resolvedAsCloud.clear();
+    _lastSyncTime = null;
+    _status = SyncStatus.idle;
+    await _manifestBuilder.clearLocalManifest();
     await _saveTokens();
   }
 

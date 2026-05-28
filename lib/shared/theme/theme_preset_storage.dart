@@ -3,9 +3,10 @@ import 'dart:io';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../features/cloud_sync/sync_repo_interfaces.dart';
 import 'theme_preset.dart';
 
-class ThemePresetStorage {
+class ThemePresetStorage implements SyncThemePresetStore {
   static const _presetsKey = 'theme_presets';
   static const _activeKey = 'theme_active_preset';
 
@@ -95,6 +96,12 @@ class ThemePresetStorage {
   Future<void> setActive(String id) async {
     await saveActiveId(id);
   }
+
+  @override
+  Future<List<ThemePreset>> getAll() => loadAll();
+
+  @override
+  Future<void> putAll(List<ThemePreset> presets) => saveAll(presets);
 }
 
 final _defaultPreset = ThemePreset(
