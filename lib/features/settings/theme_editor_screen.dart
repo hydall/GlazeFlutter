@@ -362,6 +362,16 @@ class _GeneralTab extends StatelessWidget {
                 unit: 'px',
                 onChanged: (v) => onUpdate((p) => p.copyWith(bgBlur: v)),
               ),
+              _SliderRow(
+                label: 'Dark Overlay',
+                value: preset.bgDim,
+                min: 0,
+                max: 1,
+                divisions: 20,
+                unit: '%',
+                displayMultiplier: 100,
+                onChanged: (v) => onUpdate((p) => p.copyWith(bgDim: v)),
+              ),
             ],
             _SliderRow(
               label: 'BG Noise Opacity',

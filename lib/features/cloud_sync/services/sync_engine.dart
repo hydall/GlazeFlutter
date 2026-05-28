@@ -16,6 +16,7 @@ import '../../../core/models/chat_message.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../core/models/api_config.dart';
 import '../../../core/models/preset.dart';
+import '../../../shared/theme/theme_preset.dart';
 import '../sync_repo_interfaces.dart';
 
 class SyncProgress {
@@ -27,6 +28,14 @@ class SyncProgress {
 }
 
 class SyncEngine {
+  static bool _isSingletonType(String type) =>
+      type == 'lorebooks' ||
+      type == 'api_presets' ||
+      type == 'theme_presets' ||
+      type == 'ui_themes' ||
+      type == 'theme_state' ||
+      type == 'local_storage';
+
   final CloudAdapter _adapter;
   final SyncManifestProvider _manifestBuilder;
   final SyncCharacterStore _characterRepo;
@@ -37,6 +46,7 @@ class SyncEngine {
   final SyncLorebookStore _lorebookRepo;
   final SyncEmbeddingStore _embeddingRepo;
   final SyncImageStore _imageStorage;
+  final SyncThemePresetStore _themePresetRepo;
   final SyncQueue _queue = SyncQueue();
   bool _includeApiKeys = false;
 
@@ -51,6 +61,7 @@ class SyncEngine {
     this._lorebookRepo,
     this._embeddingRepo,
     this._imageStorage,
+    this._themePresetRepo,
   );
 
   Future<void> pushEntities({
@@ -155,7 +166,11 @@ class SyncEngine {
   }) async {
     final cloudManifest = await _downloadCloudManifest();
     if (cloudManifest == null) return;
-    final localManifest = await _manifestBuilder.buildLocalManifest();
+    final previousManifest = await _manifestBuilder.readLocalManifest();
+    final isFirstSync = previousManifest.lastSync == 0;
+    final localManifest = await _manifestBuilder.buildLocalManifest(
+      cloudManifest: cloudManifest,
+    );
 
     final entries = cloudManifest.entries.values.toList();
     final conflicts = <SyncConflict>[];
@@ -168,9 +183,18 @@ class SyncEngine {
         continue;
       }
 
+      // Before first successful sync, local manifest timestamps are unreliable
+      // (no previous entries → updatedAt defaults to now or entity timestamp).
+      // Auto-prefer cloud for everything on first sync.
+      if (isFirstSync && localEntry != null) {
+        pullEntries.add(cloudEntry);
+        continue;
+      }
+
       if (SyncConflictDetector.needsConflict(localEntry, cloudEntry)) {
+        final localData = await _readLocalEntity(cloudEntry.type, cloudEntry.id);
         final name = SyncConflictDetector.getConflictName(
-          cloudEntry.type, null, null, cloudEntry.id,
+          cloudEntry.type, localData, null, cloudEntry.id,
         );
         conflicts.add(SyncConflict(
           key: cloudEntry.key,
@@ -204,9 +228,12 @@ class SyncEngine {
     required void Function(SyncProgress) onProgress,
     List<String>? resolvedAsCloud,
   }) async {
-    final cloudManifest = await _loadCloudManifestForPendingPull();
+    final cloudManifest =
+        await _loadCloudManifestForPendingPull() ?? await _downloadCloudManifest();
     if (cloudManifest == null) return;
-    final localManifest = await _manifestBuilder.buildLocalManifest();
+    final localManifest = await _manifestBuilder.buildLocalManifest(
+      cloudManifest: cloudManifest,
+    );
 
     final pullEntries = <SyncManifestEntry>[];
     final cloudKeys = cloudManifest.entries.keys.toSet();
@@ -291,9 +318,17 @@ class SyncEngine {
   }
 
   Future<void> _finalizePull(SyncManifest localManifest, SyncManifest cloudManifest) async {
-    await _manifestBuilder.writeLocalManifest(cloudManifest.copyWith(
-      lastSync: DateTime.now().millisecondsSinceEpoch,
-    ));
+    final rebuilt = await _manifestBuilder.buildLocalManifest(
+      cloudManifest: cloudManifest,
+    );
+    await _manifestBuilder.writeLocalManifest(
+      rebuilt.copyWith(
+        createdAt: cloudManifest.createdAt != 0
+            ? cloudManifest.createdAt
+            : rebuilt.createdAt,
+        lastSync: DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
     await _manifestBuilder.clearDeleted();
   }
 
@@ -338,7 +373,10 @@ class SyncEngine {
     final updatedEntries = Map<String, SyncManifestEntry>.from(rebuiltManifest.entries);
     final rebuiltEntry = updatedEntries[conflict.key];
 
-    if (choice == 'local' && rebuiltEntry != null) {
+    if (choice == 'cloud') {
+      // Align manifest with cloud so the same conflict does not reappear.
+      updatedEntries[conflict.key] = conflict.cloudEntry;
+    } else if (choice == 'local' && rebuiltEntry != null) {
       updatedEntries[conflict.key] = rebuiltEntry.copyWith(
         updatedAt: conflict.localEntry.updatedAt,
       );
@@ -457,6 +495,9 @@ class SyncEngine {
         case 'theme_presets':
           final all = await _presetRepo.getAll();
           return {'__singleton': true, 'items': all.map((p) => p.toJson()).toList()};
+        case 'ui_themes':
+          final all = await _themePresetRepo.getAll();
+          return {'__singleton': true, 'items': all.map((t) => t.toJson()).toList()};
         default:
           return null;
       }
@@ -478,13 +519,31 @@ class SyncEngine {
           await _chatRepo.put(ChatSession.fromJson(data));
           break;
         case 'lorebooks':
-          await _applySingleton<Lorebook>(data, Lorebook.fromJson, _lorebookRepo);
+          await _applySingleton<Lorebook>(
+            data,
+            Lorebook.fromJson,
+            _lorebookRepo,
+            idOf: (lb) => lb.id,
+          );
           break;
         case 'api_presets':
-          await _applySingleton<ApiConfig>(data, ApiConfig.fromJson, _apiRepo);
+          await _applySingleton<ApiConfig>(
+            data,
+            ApiConfig.fromJson,
+            _apiRepo,
+            idOf: (a) => a.id,
+          );
           break;
         case 'theme_presets':
-          await _applySingleton<Preset>(data, Preset.fromJson, _presetRepo);
+          await _applySingleton<Preset>(
+            data,
+            Preset.fromJson,
+            _presetRepo,
+            idOf: (p) => p.id,
+          );
+          break;
+        case 'ui_themes':
+          await _applyUiThemes(data);
           break;
       }
     } catch (_) {}
@@ -493,8 +552,9 @@ class SyncEngine {
   Future<void> _applySingleton<T>(
     Map<String, dynamic> data,
     T Function(Map<String, dynamic>) fromJson,
-    dynamic repo,
-  ) async {
+    dynamic repo, {
+    String Function(T)? idOf,
+  }) async {
     final List<Map<String, dynamic>> items;
     if (data['__singleton'] == true) {
       items = (data['items'] as List).cast<Map<String, dynamic>>();
@@ -504,10 +564,46 @@ class SyncEngine {
       items = [data];
     }
 
+    final getAll = repo.getAll as Future<List<T>> Function();
     final put = repo.put as Future<void> Function(T);
+    final delete = repo.delete as Future<void> Function(String);
+
+    final cloudIds = <String>{};
+    final parsed = <T>[];
     for (final item in items) {
-      await put(fromJson(item));
+      final entity = fromJson(item);
+      parsed.add(entity);
+      if (idOf != null) {
+        cloudIds.add(idOf(entity));
+      }
     }
+
+    if (idOf != null) {
+      final existing = await getAll();
+      for (final entity in existing) {
+        final id = idOf(entity);
+        if (!cloudIds.contains(id)) {
+          await delete(id);
+        }
+      }
+    }
+
+    for (final entity in parsed) {
+      await put(entity);
+    }
+  }
+
+  Future<void> _applyUiThemes(Map<String, dynamic> data) async {
+    final List<Map<String, dynamic>> items;
+    if (data['__singleton'] == true) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else if (data.containsKey('items')) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else {
+      items = [data];
+    }
+    final presets = items.map((j) => ThemePreset.fromJson(j)).toList();
+    await _themePresetRepo.putAll(presets);
   }
 
   Future<void> _deleteLocalEntity(String type, String id) async {
@@ -528,6 +624,21 @@ class SyncEngine {
             await _lorebookRepo.delete(lb.id);
             await _embeddingRepo.deleteBySourceId(lb.id);
           }
+          break;
+        case 'api_presets':
+          final apis = await _apiRepo.getAll();
+          for (final a in apis) {
+            await _apiRepo.delete(a.id);
+          }
+          break;
+        case 'theme_presets':
+          final presets = await _presetRepo.getAll();
+          for (final p in presets) {
+            await _presetRepo.delete(p.id);
+          }
+          break;
+        case 'ui_themes':
+          await _themePresetRepo.putAll([]);
           break;
       }
     } catch (_) {}

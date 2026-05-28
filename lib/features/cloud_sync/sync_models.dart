@@ -162,6 +162,8 @@ String cloudPath(String type, String id) {
       return '$cloudBase/api_presets.json';
     case 'theme_presets':
       return '$cloudBase/theme_presets.json';
+    case 'ui_themes':
+      return '$cloudBase/ui_themes.json';
     case 'theme_state':
       return '$cloudBase/theme_state.json';
     case 'local_storage':

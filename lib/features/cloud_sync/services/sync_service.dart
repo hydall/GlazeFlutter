@@ -22,6 +22,7 @@ class SyncService {
   final SyncLorebookStore _lorebookRepo;
   final SyncEmbeddingStore _embeddingRepo;
   final SyncImageStore _imageStorage;
+  final SyncThemePresetStore _themePresetRepo;
 
   SyncProvider _provider = SyncProvider.dropbox;
   SyncStatus _status = SyncStatus.idle;
@@ -75,6 +76,7 @@ class SyncService {
     required SyncLorebookStore lorebookRepo,
     required SyncEmbeddingStore embeddingRepo,
     required SyncImageStore imageStorage,
+    required SyncThemePresetStore themePresetRepo,
   })  : _characterRepo = characterRepo,
         _chatRepo = chatRepo,
         _personaRepo = personaRepo,
@@ -82,7 +84,8 @@ class SyncService {
         _apiRepo = apiRepo,
         _lorebookRepo = lorebookRepo,
         _embeddingRepo = embeddingRepo,
-        _imageStorage = imageStorage;
+        _imageStorage = imageStorage,
+        _themePresetRepo = themePresetRepo;
 
   CloudAdapter get _adapter {
     switch (_provider) {
@@ -100,6 +103,7 @@ class SyncService {
         presetRepo: _presetRepo,
         apiRepo: _apiRepo,
         lorebookRepo: _lorebookRepo,
+        themePresetRepo: _themePresetRepo,
       );
 
   SyncEngine get _engine => SyncEngine(
@@ -113,6 +117,7 @@ class SyncService {
         _lorebookRepo,
         _embeddingRepo,
         _imageStorage,
+        _themePresetRepo,
       );
 
   Future<void> init() async {
@@ -215,6 +220,9 @@ class SyncService {
       await engine.wipeCloudData(
         onProgress: onProgress ?? (_) {},
       );
+      await _manifestBuilder.clearLocalManifest();
+      _conflicts.clear();
+      _resolvedAsCloud.clear();
       _status = SyncStatus.idle;
     } catch (e) {
       _lastError = e.toString();
@@ -224,66 +232,57 @@ class SyncService {
   }
 
   Future<void> resolveAllConflicts(String choice) async {
-    final engine = SyncEngine(
-      _adapter,
-      _manifestBuilder,
-      _characterRepo,
-      _chatRepo,
-      _personaRepo,
-      _presetRepo,
-      _apiRepo,
-      _lorebookRepo,
-      _embeddingRepo,
-      _imageStorage,
-    );
-    for (final conflict in _conflicts) {
-      await engine.resolveConflict(conflict, choice);
-      if (choice == 'cloud') {
-        _resolvedAsCloud.add(conflict.key);
+    if (_conflicts.isEmpty) return;
+    final conflicts = List<SyncConflict>.from(_conflicts);
+    final wasConflict = _status == SyncStatus.conflict;
+    try {
+      for (final conflict in conflicts) {
+        await _engine.resolveConflict(conflict, choice);
+        if (choice == 'cloud') {
+          _resolvedAsCloud.add(conflict.key);
+        }
       }
-    }
-    _conflicts.clear();
-    if (_status == SyncStatus.conflict) {
-      await engine.applyPendingPull(
-        onProgress: (_) {},
-        resolvedAsCloud: _resolvedAsCloud,
-      );
-      _resolvedAsCloud.clear();
-      _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('gz_sync_last', _lastSyncTime!);
-      _status = SyncStatus.idle;
+      if (wasConflict) {
+        await _engine.applyPendingPull(
+          onProgress: (_) {},
+          resolvedAsCloud: choice == 'cloud' ? List.from(_resolvedAsCloud) : null,
+        );
+        _resolvedAsCloud.clear();
+        _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('gz_sync_last', _lastSyncTime!);
+        _status = SyncStatus.idle;
+      }
+      _conflicts.clear();
+    } catch (e) {
+      _lastError = e.toString();
+      _status = SyncStatus.error;
+      rethrow;
     }
   }
 
   Future<void> resolveConflict(SyncConflict conflict, String choice) async {
-    final engine = SyncEngine(
-      _adapter,
-      _manifestBuilder,
-      _characterRepo,
-      _chatRepo,
-      _personaRepo,
-      _presetRepo,
-      _apiRepo,
-      _lorebookRepo,
-      _embeddingRepo,
-      _imageStorage,
-    );
-    await engine.resolveConflict(conflict, choice);
-    if (choice == 'cloud') {
-      _resolvedAsCloud.add(conflict.key);
-    }
-    _conflicts.removeWhere((c) => c.key == conflict.key);
-    if (_conflicts.isEmpty && _status == SyncStatus.conflict) {
-      await engine.applyPendingPull(
-        onProgress: (_) {},
-        resolvedAsCloud: _resolvedAsCloud,
-      );
-      _resolvedAsCloud.clear();
-      _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('gz_sync_last', _lastSyncTime!);
-      _status = SyncStatus.idle;
+    try {
+      await _engine.resolveConflict(conflict, choice);
+      if (choice == 'cloud') {
+        _resolvedAsCloud.add(conflict.key);
+      }
+      _conflicts.removeWhere((c) => c.key == conflict.key);
+      if (_conflicts.isEmpty && _status == SyncStatus.conflict) {
+        await _engine.applyPendingPull(
+          onProgress: (_) {},
+          resolvedAsCloud: choice == 'cloud' ? _resolvedAsCloud : null,
+        );
+        _resolvedAsCloud.clear();
+        _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('gz_sync_last', _lastSyncTime!);
+        _status = SyncStatus.idle;
+      }
+    } catch (e) {
+      _lastError = e.toString();
+      _status = SyncStatus.error;
+      rethrow;
     }
   }
 
@@ -309,6 +308,11 @@ class SyncService {
         break;
     }
     _accountInfo = null;
+    _conflicts.clear();
+    _resolvedAsCloud.clear();
+    _lastSyncTime = null;
+    _status = SyncStatus.idle;
+    await _manifestBuilder.clearLocalManifest();
     await _saveTokens();
   }
 

@@ -30,6 +30,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final double bgOpacity;
   final double bgNoiseOpacity;
   final double bgNoiseIntensity;
+  final double bgDim;
   final List<ChatMessage> messages;
   final bool isGenerating;
   final bool isGeneratingImage;
@@ -38,6 +39,10 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final String? searchQuery;
   final int searchCurrentIndex;
   final String? chatLayout;
+  /// Changes when preset colors/layout tokens affecting the WebView change.
+  final String? themeSyncKey;
+  final double elementOpacity;
+  final double elementBlur;
   final int greetingTotal;
   final String? chatFontName;
   final String? chatFontDataUrl;
@@ -76,6 +81,7 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.bgOpacity = 1.0,
     this.bgNoiseOpacity = 0.0,
     this.bgNoiseIntensity = 1.0,
+    this.bgDim = 0.0,
     required this.messages,
     required this.isGenerating,
     this.isGeneratingImage = false,
@@ -84,6 +90,9 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.searchQuery,
     this.searchCurrentIndex = 0,
     this.chatLayout,
+    this.themeSyncKey,
+    this.elementOpacity = 0.8,
+    this.elementBlur = 12,
     this.greetingTotal = 0,
     this.chatFontName,
     this.chatFontDataUrl,
@@ -144,26 +153,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
 
     await _syncIdentityFromWidget();
 
-    final glaze = context.colors;
-    final cs = context.cs;
-    await _bridge!.applyTheme({
-      'bg-color': _colorHex(cs.surface),
-      'text-color': _colorHex(cs.onSurface),
-      'user-bg': _colorHex(glaze.userBubble),
-      'assistant-bg': _colorHex(glaze.charBubble),
-      'user-text': _colorHex(glaze.userText ?? cs.onSurface),
-      'assistant-text': _colorHex(glaze.charText ?? cs.onSurface),
-      'system-bg': _colorHex(cs.surfaceContainerHighest),
-      'system-text': _colorHex(cs.onSurfaceVariant),
-      'user-quote-color': _colorHex(glaze.userQuote ?? cs.primary),
-      'char-quote-color': _colorHex(glaze.charQuote ?? cs.primary),
-      'user-italic-color': _colorHex(glaze.userItalic ?? cs.primary),
-      'char-italic-color': _colorHex(glaze.charItalic ?? cs.primary),
-      'primary-color': _colorHex(cs.primary),
-      'error-color': _colorHex(cs.error),
-      'font-size': '${widget.chatFontSize}px',
-      'chat-layout': widget.chatLayout ?? 'default',
-    });
+    await _applyThemeToBridge();
 
     await _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
     await _bridge!.setBackgroundNoise(widget.bgNoiseOpacity, widget.bgNoiseIntensity);
@@ -253,7 +243,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         personaAvatarPath: widget.personaAvatarPath,
         greetingTotal: widget.greetingTotal,
       );
-      await bridge.applyTheme({'chat-layout': widget.chatLayout ?? 'default'});
+      await _applyThemeToBridge();
       await bridge.setBackgroundImage(
         widget.bgImagePath,
         widget.bgBlur.toInt(),
@@ -321,13 +311,22 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         personaAvatarPath: widget.personaAvatarPath,
         greetingTotal: widget.greetingTotal,
       );
-      _bridge!.applyTheme({'chat-layout': widget.chatLayout ?? 'default'});
+    }
+
+    if (widget.themeSyncKey != old.themeSyncKey ||
+        widget.chatLayout != old.chatLayout ||
+        widget.elementOpacity != old.elementOpacity ||
+        widget.elementBlur != old.elementBlur ||
+        widget.chatFontSize != old.chatFontSize) {
+      _bridge!.applyTheme(_buildThemeMap());
     }
 
     if (widget.bgImagePath != old.bgImagePath ||
         widget.bgBlur != old.bgBlur ||
-        widget.bgOpacity != old.bgOpacity) {
+        widget.bgOpacity != old.bgOpacity ||
+        widget.bgDim != old.bgDim) {
       _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
+      _bridge!.applyTheme({'bg-dim': widget.bgDim.toStringAsFixed(2)});
     }
 
     if (widget.bgNoiseOpacity != old.bgNoiseOpacity ||
@@ -733,6 +732,46 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           ),
       ],
     );
+  }
+
+  Map<String, String> _buildThemeMap() {
+    final glaze = context.colors;
+    final cs = context.cs;
+    final primary = cs.primary;
+    return {
+      'bg-color': _colorHex(cs.surface),
+      'text-color': _colorHex(cs.onSurface),
+      'ui-bg-rgb': _colorRgb(cs.surface),
+      'vk-blue-rgb': _colorRgb(primary),
+      'primary-rgb': _colorRgb(primary),
+      'user-bubble-color-rgb': _colorRgb(glaze.userBubble),
+      'char-bubble-color-rgb': _colorRgb(glaze.charBubble),
+      'user-text-color': _colorHex(glaze.userText ?? cs.onSurface),
+      'char-text-color': _colorHex(glaze.charText ?? cs.onSurface),
+      'user-quote-color': _colorHex(glaze.userQuote ?? cs.primary),
+      'char-quote-color': _colorHex(glaze.charQuote ?? cs.primary),
+      'user-italic-color': _colorHex(glaze.userItalic ?? cs.primary),
+      'char-italic-color': _colorHex(glaze.charItalic ?? cs.primary),
+      'primary-color': _colorHex(primary),
+      'error-color': _colorHex(cs.error),
+      'element-opacity': widget.elementOpacity.clamp(0.0, 1.0).toStringAsFixed(2),
+      'element-blur': '${widget.elementBlur.clamp(0.0, 64.0).round()}px',
+      'font-size': '${widget.chatFontSize}px',
+      'chat-font-size': '${widget.chatFontSize}px',
+      'chat-layout': widget.chatLayout ?? 'default',
+      'bg-dim': widget.bgDim.clamp(0.0, 1.0).toStringAsFixed(2),
+    };
+  }
+
+  Future<void> _applyThemeToBridge() async {
+    await _bridge?.applyTheme(_buildThemeMap());
+  }
+
+  String _colorRgb(Color c) {
+    final r = (c.r * 255).round();
+    final g = (c.g * 255).round();
+    final b = (c.b * 255).round();
+    return '$r, $g, $b';
   }
 
   String _colorHex(Color c) {

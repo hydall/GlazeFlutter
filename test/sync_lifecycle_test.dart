@@ -10,6 +10,7 @@ import 'package:glaze_flutter/core/models/chat_message.dart';
 import 'package:glaze_flutter/core/models/lorebook.dart';
 import 'package:glaze_flutter/core/models/persona.dart';
 import 'package:glaze_flutter/core/models/preset.dart';
+import 'package:glaze_flutter/shared/theme/theme_preset.dart';
 import 'package:glaze_flutter/features/cloud_sync/cloud_adapter.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_conflict.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_engine.dart';
@@ -132,6 +133,18 @@ class FakeApiConfigStore implements SyncApiConfigStore {
   }
 }
 
+class FakeThemePresetStore implements SyncThemePresetStore {
+  List<ThemePreset> data = [];
+
+  @override
+  Future<List<ThemePreset>> getAll() async => data;
+
+  @override
+  Future<void> putAll(List<ThemePreset> presets) async {
+    data = List.from(presets);
+  }
+}
+
 class FakeLorebookStore implements SyncLorebookStore {
   final Map<String, Lorebook> data = {};
 
@@ -249,6 +262,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     required SyncPresetStore presetRepo,
     required SyncApiConfigStore apiRepo,
     required SyncLorebookStore lorebookRepo,
+    required SyncThemePresetStore themePresetRepo,
   }) : _builder = SyncManifestBuilder(
           characterRepo: characterRepo,
           chatRepo: chatRepo,
@@ -256,10 +270,22 @@ class InMemoryManifestProvider implements SyncManifestProvider {
           presetRepo: presetRepo,
           apiRepo: apiRepo,
           lorebookRepo: lorebookRepo,
+          themePresetRepo: themePresetRepo,
         );
 
   @override
-  Future<SyncManifest> buildLocalManifest() => _builder.buildLocalManifest();
+  Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest}) async {
+    // Sync in-memory storage → SharedPreferences so the builder's
+    // readLocalManifest() sees the same manifest the tests wrote.
+    final raw = _storage['manifest'];
+    final prefs = await SharedPreferences.getInstance();
+    if (raw != null) {
+      await prefs.setString('gz_sync_manifest_v2', raw);
+    } else {
+      await prefs.remove('gz_sync_manifest_v2');
+    }
+    return _builder.buildLocalManifest(cloudManifest: cloudManifest);
+  }
 
   @override
   Future<SyncManifest> readLocalManifest() async {
@@ -275,7 +301,16 @@ class InMemoryManifestProvider implements SyncManifestProvider {
   }
 
   @override
+  Future<void> clearLocalManifest() async {
+    _cached = const SyncManifest(deviceId: '', createdAt: 0);
+    _storage.remove('manifest');
+  }
+
+  @override
   Future<void> clearDeleted() async {}
+
+  @override
+  Future<String> getDeviceId() => _builder.getDeviceId();
 }
 
 // ─── Helper: build a complete in-memory environment ─────────────────
@@ -290,6 +325,7 @@ class SyncWorld {
   late final FakeEmbeddingStore embeddings;
   late final FakeImageStore images;
   late final FakeCloudAdapter cloud;
+  late final FakeThemePresetStore uiThemes;
   late final InMemoryManifestProvider manifestProvider;
 
   SyncWorld() {
@@ -302,6 +338,7 @@ class SyncWorld {
     embeddings = FakeEmbeddingStore();
     images = FakeImageStore();
     cloud = FakeCloudAdapter();
+    uiThemes = FakeThemePresetStore();
     manifestProvider = InMemoryManifestProvider(
       characterRepo: characters,
       chatRepo: chats,
@@ -309,6 +346,7 @@ class SyncWorld {
       presetRepo: presets,
       apiRepo: apiConfigs,
       lorebookRepo: lorebooks,
+      themePresetRepo: uiThemes,
     );
   }
 
@@ -323,6 +361,7 @@ class SyncWorld {
         lorebooks,
         embeddings,
         images,
+        uiThemes,
       );
 }
 
@@ -425,7 +464,8 @@ void main() {
     final modifiedChar = makeChar('shared1', name: 'Device Y Edit');
     await deviceY.characters.put(modifiedChar);
 
-    // Force local manifest to show updatedAt newer than cloud
+    // Force local manifest to show updatedAt newer than cloud.
+    // Set lastSync > 0 so isFirstSync is false (simulates a second sync).
     final yManifest = await deviceY.manifestProvider.buildLocalManifest();
     final patchedEntries = Map<String, SyncManifestEntry>.from(yManifest.entries);
     final charEntry = patchedEntries['character:shared1'];
@@ -436,7 +476,7 @@ void main() {
       );
     }
     await deviceY.manifestProvider.writeLocalManifest(
-      yManifest.copyWith(entries: patchedEntries),
+      yManifest.copyWith(lastSync: 5000, entries: patchedEntries),
     );
 
     final yConflicts = <SyncConflict>[];
@@ -657,7 +697,7 @@ void main() {
       );
     }
     await world.manifestProvider.writeLocalManifest(
-      localManifest.copyWith(entries: patchedEntries),
+      localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
     );
 
     // First pull — detects conflict
@@ -1136,7 +1176,7 @@ void main() {
       );
     }
     await world.manifestProvider.writeLocalManifest(
-      localManifest.copyWith(entries: patchedEntries),
+      localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
     );
 
     final conflicts = <SyncConflict>[];
@@ -1212,7 +1252,7 @@ void main() {
       );
     }
     await world.manifestProvider.writeLocalManifest(
-      localManifest.copyWith(entries: patchedEntries),
+      localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
     );
 
     final conflicts = <SyncConflict>[];
@@ -1231,5 +1271,247 @@ void main() {
 
     expect(world.characters.data['c2']?.name, equals('Cloud Bob'),
         reason: 'Cloud version should be applied after resolve');
+  });
+
+  test(
+      'chat with same session id but different messages surfaces conflict',
+      () async {
+    final deviceA = SyncWorld();
+    await deviceA.characters.put(makeChar('char1', name: 'Alice'));
+    await deviceA.chats.put(ChatSession(
+      id: 's1',
+      characterId: 'char1',
+      sessionIndex: 0,
+      updatedAt: 1000,
+      messages: [
+        const ChatMessage(
+          id: 'm1',
+          role: 'assistant',
+          content: 'Hello from cloud',
+          timestamp: 1000,
+        ),
+      ],
+    ));
+
+    final aManifest = await deviceA.manifestProvider.buildLocalManifest();
+    await deviceA.manifestProvider.writeLocalManifest(
+      aManifest.copyWith(lastSync: 5000),
+    );
+    await deviceA.engine.pushEntities(onProgress: (_) {});
+
+    final deviceB = SyncWorld();
+    deviceB.cloud.files.addAll(deviceA.cloud.files);
+    await deviceB.characters.put(makeChar('char1', name: 'Alice'));
+    await deviceB.chats.put(ChatSession(
+      id: 's1',
+      characterId: 'char1',
+      sessionIndex: 0,
+      updatedAt: 9000,
+      messages: [
+        const ChatMessage(
+          id: 'm2',
+          role: 'assistant',
+          content: 'Hello from local device',
+          timestamp: 9000,
+        ),
+      ],
+    ));
+
+    final bManifest = await deviceB.manifestProvider.buildLocalManifest();
+    await deviceB.manifestProvider.writeLocalManifest(
+      bManifest.copyWith(lastSync: 8000),
+    );
+
+    final conflicts = <SyncConflict>[];
+    await deviceB.engine.pullEntities(
+      onProgress: (_) {},
+      onConflict: (c) => conflicts.add(c),
+    );
+
+    expect(
+      conflicts.any((c) => c.type == 'chat' && c.id == 's1'),
+      isTrue,
+      reason:
+          'Divergent chat content must not be skipped when session ids match',
+    );
+    expect(
+      deviceB.chats.data['s1']?.messages.first.content,
+      equals('Hello from local device'),
+      reason: 'Unresolved conflict must keep local chat',
+    );
+  });
+
+  test('chat metadata hash reflects message content, not only session id', () {
+    const base = SessionMetadata(
+      sessionId: 's1',
+      characterId: 'char1',
+      sessionIndex: 0,
+      updatedAt: 1000,
+      messageCount: 0,
+      lastMessageContent: '',
+      lastMessageTimestamp: 0,
+    );
+    const withMessages = SessionMetadata(
+      sessionId: 's1',
+      characterId: 'char1',
+      sessionIndex: 0,
+      updatedAt: 1000,
+      messageCount: 3,
+      lastMessageContent: 'Hello',
+      lastMessageTimestamp: 2000,
+    );
+
+    final idOnlyHash = SyncSerialization.computeSyncHash('s1');
+    final metadataHash = SyncSerialization.computeChatMetadataHash(base);
+    final divergentHash = SyncSerialization.computeChatMetadataHash(withMessages);
+
+    expect(metadataHash, isNot(equals(idOnlyHash)),
+        reason: 'Manifest hash must not be session id alone');
+    expect(divergentHash, isNot(equals(metadataHash)),
+        reason: 'Message changes must change the manifest hash');
+  });
+
+  test('stale local manifest does not false-conflict characters matching cloud', () async {
+    final deviceA = SyncWorld();
+    await deviceA.characters.put(makeChar('c1', name: 'Alice'));
+    await deviceA.characters.put(makeChar('c2', name: 'Bob'));
+    final aManifest = await deviceA.manifestProvider.buildLocalManifest();
+    await deviceA.manifestProvider.writeLocalManifest(
+      aManifest.copyWith(lastSync: 5000),
+    );
+    await deviceA.engine.pushEntities(onProgress: (_) {});
+
+    final deviceB = SyncWorld();
+    deviceB.cloud.files.addAll(deviceA.cloud.files);
+    await deviceB.characters.put(makeChar('c1', name: 'Alice'));
+    await deviceB.characters.put(makeChar('c2', name: 'Bob'));
+
+    // Stale manifest: wrong hashes but same DB content as cloud.
+    final cloudManifest = SyncManifest.fromJson(
+      jsonDecode(deviceB.cloud.files[cloudPath('manifest', 'manifest')]!)
+          as Map<String, dynamic>,
+    );
+    final stale = await deviceB.manifestProvider.buildLocalManifest();
+    final staleEntries = Map<String, SyncManifestEntry>.from(stale.entries);
+    for (final key in ['character:c1', 'character:c2']) {
+      final e = staleEntries[key]!;
+      staleEntries[key] = e.copyWith(
+        hash: 'stale-hash-${e.id}',
+        updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+      );
+    }
+    await deviceB.manifestProvider.writeLocalManifest(
+      stale.copyWith(lastSync: 9000, entries: staleEntries),
+    );
+
+    final conflicts = <SyncConflict>[];
+    await deviceB.engine.pullEntities(
+      onProgress: (_) {},
+      onConflict: (c) => conflicts.add(c),
+    );
+
+    expect(conflicts.where((c) => c.type == 'character'), isEmpty,
+        reason: 'Same character data as cloud must not conflict on stale hash');
+  });
+
+  test('resolve all cloud pulls data and rebuilds manifest', () async {
+    final deviceA = SyncWorld();
+    await deviceA.characters.put(makeChar('c1', name: 'Cloud'));
+    final aManifest = await deviceA.manifestProvider.buildLocalManifest();
+    await deviceA.manifestProvider.writeLocalManifest(
+      aManifest.copyWith(lastSync: 5000),
+    );
+    await deviceA.engine.pushEntities(onProgress: (_) {});
+
+    final deviceB = SyncWorld();
+    deviceB.cloud.files.addAll(deviceA.cloud.files);
+    await deviceB.characters.put(makeChar('c1', name: 'Local'));
+
+    final yManifest = await deviceB.manifestProvider.buildLocalManifest();
+    final patched = Map<String, SyncManifestEntry>.from(yManifest.entries);
+    patched['character:c1'] = patched['character:c1']!.copyWith(
+      updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+    );
+    await deviceB.manifestProvider.writeLocalManifest(
+      yManifest.copyWith(lastSync: 8000, entries: patched),
+    );
+
+    final conflicts = <SyncConflict>[];
+    await deviceB.engine.pullEntities(
+      onProgress: (_) {},
+      onConflict: (c) => conflicts.add(c),
+    );
+    expect(conflicts, isNotEmpty);
+
+    final resolvedKeys = <String>[];
+    for (final conflict in conflicts) {
+      await deviceB.engine.resolveConflict(conflict, 'cloud');
+      resolvedKeys.add(conflict.key);
+    }
+    await deviceB.engine.applyPendingPull(
+      onProgress: (_) {},
+      resolvedAsCloud: resolvedKeys,
+    );
+
+    expect(deviceB.characters.data['c1']?.name, equals('Cloud'));
+    final manifest = await deviceB.manifestProvider.readLocalManifest();
+    expect(manifest.lastSync, greaterThan(0));
+    final cloudManifest = SyncManifest.fromJson(
+      jsonDecode(deviceB.cloud.files[cloudPath('manifest', 'manifest')]!)
+          as Map<String, dynamic>,
+    );
+    final rebuilt = await deviceB.manifestProvider.buildLocalManifest(
+      cloudManifest: cloudManifest,
+    );
+    expect(
+      rebuilt.entries['character:c1']?.hash,
+      manifest.entries['character:c1']?.hash,
+      reason: 'Finalize must persist hashes from local DB, not stale cloud manifest',
+    );
+  });
+
+  test('chat conflict detection uses metadata hash and updatedAt', () {
+    final localHash = SyncSerialization.computeChatMetadataHash(const SessionMetadata(
+      sessionId: 's1',
+      characterId: 'char1',
+      sessionIndex: 0,
+      updatedAt: 100,
+      messageCount: 0,
+      lastMessageContent: '',
+      lastMessageTimestamp: 0,
+    ));
+    final cloudHash = SyncSerialization.computeChatMetadataHash(const SessionMetadata(
+      sessionId: 's1',
+      characterId: 'char1',
+      sessionIndex: 0,
+      updatedAt: 5000,
+      messageCount: 2,
+      lastMessageContent: 'Cloud',
+      lastMessageTimestamp: 5000,
+    ));
+
+    final localEntry = SyncManifestEntry(
+      type: 'chat',
+      id: 's1',
+      path: cloudPath('chat', 's1'),
+      updatedAt: 100,
+      hash: localHash,
+    );
+    final cloudEntry = SyncManifestEntry(
+      type: 'chat',
+      id: 's1',
+      path: cloudPath('chat', 's1'),
+      updatedAt: 5000,
+      hash: cloudHash,
+    );
+
+    expect(SyncConflictDetector.needsConflict(localEntry, cloudEntry), isFalse);
+    expect(
+      SyncConflictDetector.needsConflict(
+        localEntry.copyWith(updatedAt: 9000),
+        cloudEntry,
+      ),
+      isTrue,
+    );
   });
 }

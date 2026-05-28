@@ -256,14 +256,14 @@ if (messageData.isEditing) classes.push('editing');
       section.appendChild(this._createGuidanceBlock(guidanceText, guidanceType));
     }
 
-    /* --- Reasoning --- */
-    if (reasoning && reasoning.trim()) {
-      section.appendChild(this._createReasoningBlock(reasoning, this._isUser(role)));
-    }
-
     /* --- Content stack --- */
     const stack = document.createElement('div');
     stack.className = 'msg-content-stack';
+
+    /* --- Reasoning (inside content stack so it flows with the bubble) --- */
+    if (reasoning && reasoning.trim()) {
+      stack.appendChild(this._createReasoningBlock(reasoning, this._isUser(role)));
+    }
 
     const wrapper = document.createElement('div');
     wrapper.className = 'msg-transition-wrapper';
@@ -835,13 +835,13 @@ if (messageData.isEditing) classes.push('editing');
     if (image) body.appendChild(image);
     if (meta) body.appendChild(meta);
 
-    /* Reasoning is rendered outside body — handle separately */
+    /* Reasoning lives inside .msg-content-stack (before .msg-transition-wrapper) */
     let reasoningEl = sectionEl.querySelector('.msg-reasoning');
     if (reasoning && reasoning.trim()) {
       if (!reasoningEl) {
         reasoningEl = this._createReasoningBlock(reasoning, isUser);
-        const guidance = sectionEl.querySelector('.msg-guidance-block');
-        sectionEl.insertBefore(reasoningEl, guidance ? guidance.nextSibling : sectionEl.querySelector('.msg-content-stack'));
+        const contentStack = sectionEl.querySelector('.msg-content-stack');
+        contentStack.insertBefore(reasoningEl, contentStack.firstChild);
       } else {
         const host = reasoningEl.querySelector('.msg-reasoning-inner .message-content');
         if (host) this._writeShadowContent(host, reasoning, isUser, false);

@@ -14,6 +14,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
   final SyncPresetStore _presetRepo;
   final SyncApiConfigStore _apiRepo;
   final SyncLorebookStore _lorebookRepo;
+  final SyncThemePresetStore _themePresetRepo;
 
   static const _manifestKey = 'gz_sync_manifest_v2';
   static const _deviceIdKey = 'gz_sync_device_id';
@@ -26,13 +27,16 @@ class SyncManifestBuilder implements SyncManifestProvider {
     required SyncPresetStore presetRepo,
     required SyncApiConfigStore apiRepo,
     required SyncLorebookStore lorebookRepo,
+    required SyncThemePresetStore themePresetRepo,
   })  : _characterRepo = characterRepo,
         _chatRepo = chatRepo,
         _personaRepo = personaRepo,
         _presetRepo = presetRepo,
         _apiRepo = apiRepo,
-        _lorebookRepo = lorebookRepo;
+        _lorebookRepo = lorebookRepo,
+        _themePresetRepo = themePresetRepo;
 
+  @override
   Future<String> getDeviceId() async {
     final prefs = await SharedPreferences.getInstance();
     var id = prefs.getString(_deviceIdKey);
@@ -43,7 +47,10 @@ class SyncManifestBuilder implements SyncManifestProvider {
     return id;
   }
 
-  Future<SyncManifest> buildLocalManifest() async {
+  /// [cloudManifest] — when pulling, used to avoid bumping updatedAt to now for
+  /// entities that only differ from a stale local manifest but match cloud.
+  @override
+  Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest}) async {
     final deviceId = await getDeviceId();
     final now = DateTime.now().millisecondsSinceEpoch;
     final entries = <String, SyncManifestEntry>{};
@@ -53,12 +60,19 @@ class SyncManifestBuilder implements SyncManifestProvider {
     final characters = await _characterRepo.getAll();
     for (final c in characters) {
       final json = c.toJson();
-      final hash = SyncSerialization.computeSyncHash(json);
+      final hash = SyncSerialization.computeSyncHash(
+        _stripLocalPaths(json),
+      );
       final key = entryKey('character', c.id);
       final prevEntry = previous.entries[key];
-      final updatedAt = hash == prevEntry?.hash
-          ? prevEntry!.updatedAt
-          : now;
+      final cloudEntry = cloudManifest?.entries[key];
+      var updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+      if (c.updatedAt > updatedAt) updatedAt = c.updatedAt;
 
       entries[key] = SyncManifestEntry(
         type: 'character',
@@ -72,10 +86,18 @@ class SyncManifestBuilder implements SyncManifestProvider {
     final personas = await _personaRepo.getAll();
     for (final p in personas) {
       final json = p.toJson();
-      final hash = SyncSerialization.computeSyncHash(json);
+      final hash = SyncSerialization.computeSyncHash(
+        _stripLocalPaths(json),
+      );
       final key = entryKey('persona', p.id);
       final prevEntry = previous.entries[key];
-      final updatedAt = hash == prevEntry?.hash ? prevEntry!.updatedAt : now;
+      final cloudEntry = cloudManifest?.entries[key];
+      final updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
 
       entries[key] = SyncManifestEntry(
         type: 'persona',
@@ -88,10 +110,17 @@ class SyncManifestBuilder implements SyncManifestProvider {
 
     final sessions = await _chatRepo.getAllSessionMetadata();
     for (final s in sessions) {
-      final hash = SyncSerialization.computeSyncHash(s.sessionId);
+      final hash = SyncSerialization.computeChatMetadataHash(s);
       final key = entryKey('chat', s.sessionId);
       final prevEntry = previous.entries[key];
-      final updatedAt = prevEntry?.updatedAt ?? now;
+      final cloudEntry = cloudManifest?.entries[key];
+      var updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+      if (s.updatedAt > updatedAt) updatedAt = s.updatedAt;
 
       entries[key] = SyncManifestEntry(
         type: 'chat',
@@ -102,7 +131,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
       );
     }
 
-    await _addSingletons(entries, previous, now);
+    await _addSingletons(entries, previous, now, cloudManifest);
     await _addDeletedEntries(entries, now);
 
     return SyncManifest(
@@ -113,10 +142,48 @@ class SyncManifestBuilder implements SyncManifestProvider {
     );
   }
 
+  /// Decides manifest updatedAt without spurious "now" bumps on hash drift.
+  static int _resolveUpdatedAt({
+    required String hash,
+    required SyncManifestEntry? prevEntry,
+    required SyncManifestEntry? cloudEntry,
+    required int now,
+  }) {
+    if (prevEntry != null && hash == prevEntry.hash) {
+      return prevEntry.updatedAt;
+    }
+    if (cloudEntry != null && hash == cloudEntry.hash) {
+      return cloudEntry.updatedAt;
+    }
+    if (prevEntry != null &&
+        cloudEntry != null &&
+        prevEntry.hash == cloudEntry.hash) {
+      // Was aligned with cloud; local DB changed → treat as local edit.
+      return now;
+    }
+    // No previous manifest entry — entity was never synced from this device.
+    // Don't claim "now" (would always beat cloud); let entity-level updatedAt
+    // (c.updatedAt, s.updatedAt) override if the entity was genuinely edited.
+    return prevEntry?.updatedAt ?? 0;
+  }
+
+  /// Remove device-specific fields from entity JSON before hashing so that
+  /// the same logical entity produces the same hash on every device.
+  /// Gallery is excluded entirely: image paths are device-local, and gallery
+  /// metadata (ids, labels, order) can drift between devices without
+  /// representing a meaningful content change.
+  static Map<String, dynamic> _stripLocalPaths(Map<String, dynamic> json) {
+    final out = Map<String, dynamic>.from(json);
+    out.remove('avatarPath');
+    out.remove('gallery');
+    return out;
+  }
+
   Future<void> _addSingletons(
     Map<String, SyncManifestEntry> entries,
     SyncManifest previous,
     int now,
+    SyncManifest? cloudManifest,
   ) async {
     final singletons = <String, dynamic>{};
 
@@ -124,10 +191,15 @@ class SyncManifestBuilder implements SyncManifestProvider {
     singletons['lorebooks'] = lorebooks.map((l) => l.toJson()).toList();
 
     final apiConfigs = await _apiRepo.getAll();
-    singletons['api_presets'] = apiConfigs.map((a) => a.toJson()).toList();
+    singletons['api_presets'] = apiConfigs
+        .map((a) => a.copyWith(apiKey: '', embeddingApiKey: '').toJson())
+        .toList();
 
     final presets = await _presetRepo.getAll();
     singletons['theme_presets'] = presets.map((p) => p.toJson()).toList();
+
+    final uiThemes = await _themePresetRepo.getAll();
+    singletons['ui_themes'] = uiThemes.map((t) => t.toJson()).toList();
 
     for (final entry in singletons.entries) {
       final type = entry.key;
@@ -135,11 +207,15 @@ class SyncManifestBuilder implements SyncManifestProvider {
       final hash = SyncSerialization.computeSyncHash(entry.value);
       final key = entryKey(type, type);
       final prevEntry = previous.entries[key];
-      final updatedAt = hash == prevEntry?.hash
-          ? prevEntry!.updatedAt
-          : items.isEmpty
-              ? 0
-              : now;
+      final cloudEntry = cloudManifest?.entries[key];
+      final updatedAt = items.isEmpty
+          ? 0
+          : _resolveUpdatedAt(
+              hash: hash,
+              prevEntry: prevEntry,
+              cloudEntry: cloudEntry,
+              now: now,
+            );
 
       entries[key] = SyncManifestEntry(
         type: type,
@@ -177,6 +253,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     }
   }
 
+  @override
   Future<SyncManifest> readLocalManifest() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_manifestKey);
@@ -188,6 +265,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     }
   }
 
+  @override
   Future<void> writeLocalManifest(SyncManifest manifest) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_manifestKey, jsonEncode(manifest.toJson()));
@@ -203,6 +281,14 @@ class SyncManifestBuilder implements SyncManifestProvider {
     await prefs.setString(_deletedKey, jsonEncode(deleted));
   }
 
+  @override
+  Future<void> clearLocalManifest() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_manifestKey);
+    await prefs.remove(_deletedKey);
+  }
+
+  @override
   Future<void> clearDeleted() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_deletedKey);

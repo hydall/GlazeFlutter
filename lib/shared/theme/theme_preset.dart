@@ -46,6 +46,7 @@ class ThemePreset with _$ThemePreset {
     @Default(0.8) double noiseIntensity,
     @Default(0.03) double bgNoiseOpacity,
     @Default(0.4) double bgNoiseIntensity,
+    @Default(0) double bgDim,
     String? bgImage,
   }) = _ThemePreset;
 

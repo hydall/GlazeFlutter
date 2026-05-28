@@ -2,10 +2,25 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 
+import '../../../core/models/chat_message.dart';
 import '../cloud_adapter.dart';
 import '../sync_models.dart';
 
 class SyncSerialization {
+  /// Content fingerprint for manifest conflict detection (not full session JSON).
+  static String computeChatMetadataHash(SessionMetadata metadata) {
+    return computeSyncHash({
+      'sessionId': metadata.sessionId,
+      'characterId': metadata.characterId,
+      'sessionIndex': metadata.sessionIndex,
+      'updatedAt': metadata.updatedAt,
+      'messageCount': metadata.messageCount,
+      'lastMessageContent': metadata.lastMessageContent,
+      'lastMessageTimestamp': metadata.lastMessageTimestamp,
+      'sessionName': metadata.sessionName,
+    });
+  }
+
   static String computeSyncHash(dynamic data) {
     final json = jsonEncode(data);
     return sha256.convert(utf8.encode(json)).toString();
