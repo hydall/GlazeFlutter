@@ -1,10 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-import '../../../core/constants/image_gen_patterns.dart';
 import '../../../core/models/chat_message.dart';
 import 'chat_message_mapper.dart';
 
@@ -16,15 +14,14 @@ class ChatBridgeController {
   String? currentCharColor;
   String? currentPersonaName;
   String? currentChatLayout;
-  String? _charAvatarDataUrl;
-  String? _personaAvatarDataUrl;
+  String? _charAvatarUrl;
+  String? _personaAvatarUrl;
   int currentGreetingTotal = 0;
   bool isGenerating = false;
   bool isGeneratingImage = false;
   final Set<String> _coveredMemoryIds = {};
   final Set<String> _pendingMemoryIds = {};
   final Set<String> _draftMemoryIds = {};
-  final Map<String, String> _imgBase64Cache = {};
 
   ChatBridgeController(this._controller) {
     _setupHandlers();
@@ -34,8 +31,8 @@ class ChatBridgeController {
     currentCharName: currentCharName,
     currentCharColor: currentCharColor,
     currentPersonaName: currentPersonaName,
-    charAvatarDataUrl: _charAvatarDataUrl,
-    personaAvatarDataUrl: _personaAvatarDataUrl,
+    charAvatarDataUrl: _charAvatarUrl,
+    personaAvatarDataUrl: _personaAvatarUrl,
     isGenerating: isGenerating,
     coveredMemoryIds: _coveredMemoryIds,
     pendingMemoryIds: _pendingMemoryIds,
@@ -78,88 +75,42 @@ class ChatBridgeController {
     currentPersonaName = personaName;
     currentChatLayout = layout;
     if (greetingTotal != null) currentGreetingTotal = greetingTotal;
-    await _loadAvatarDataUrl(charAvatarPath, isChar: true);
-    await _loadAvatarDataUrl(personaAvatarPath, isChar: false);
+    _setAvatarUrl(charAvatarPath, isChar: true);
+    _setAvatarUrl(personaAvatarPath, isChar: false);
     // Push identity to the WebView so already-rendered messages refresh their
     // user name / persona avatar when the active persona resolves late.
     final payload = jsonEncode({
       'charName': currentCharName,
       'personaName': currentPersonaName,
-      'charAvatarUrl': _charAvatarDataUrl,
-      'personaAvatarUrl': _personaAvatarDataUrl,
+      'charAvatarUrl': _charAvatarUrl,
+      'personaAvatarUrl': _personaAvatarUrl,
     });
     await _eval('window.bridge?.setIdentity($payload)');
   }
 
-  Future<void> _loadAvatarDataUrl(String? path, {required bool isChar}) async {
-    if (path == null || path.isEmpty) {
-      if (isChar) _charAvatarDataUrl = null;
-      else _personaAvatarDataUrl = null;
-      return;
-    }
-    try {
-      final file = File(path);
-      if (await file.exists()) {
-        final bytes = await file.readAsBytes();
-        final base64Str = base64Encode(bytes);
-        final ext = path.toLowerCase();
-        final mime = ext.endsWith('.jpg') || ext.endsWith('.jpeg')
-            ? 'image/jpeg'
-            : ext.endsWith('.gif')
-                ? 'image/gif'
-                : ext.endsWith('.webp')
-                    ? 'image/webp'
-                    : 'image/png';
-        final dataUrl = 'data:$mime;base64,$base64Str';
-        if (isChar) _charAvatarDataUrl = dataUrl;
-        else _personaAvatarDataUrl = dataUrl;
+  void _setAvatarUrl(String? path, {required bool isChar}) {
+    String? url;
+    if (path != null && path.isNotEmpty) {
+      if (path.startsWith('data:') ||
+          path.startsWith('http://') ||
+          path.startsWith('https://') ||
+          path.startsWith('file://')) {
+        url = path;
+      } else {
+        url = 'file:///${path.replaceAll('\\', '/')}';
       }
-    } catch (_) {}
+    }
+    if (isChar) {
+      _charAvatarUrl = url;
+    } else {
+      _personaAvatarUrl = url;
+    }
   }
 
   Future<String> _resolveImgResults(String text) async {
-    final matches = ImgGenPatterns.imgResultRegex.allMatches(text).toList();
-    if (matches.isEmpty) return text;
-    final uncached = <int, String>{};
-    for (int i = 0; i < matches.length; i++) {
-      final payload = matches[i].group(1) ?? '';
-      final pipeIdx = payload.indexOf('|');
-      final path = pipeIdx != -1 ? payload.substring(0, pipeIdx) : payload;
-      if (!_imgBase64Cache.containsKey(path)) {
-        uncached[i] = path;
-      }
-    }
-    if (uncached.isNotEmpty) {
-      await Future.wait(uncached.entries.map((e) async {
-        final path = e.value;
-        try {
-          final file = File(path);
-          if (await file.exists()) {
-            final bytes = await file.readAsBytes();
-            final b64 = base64Encode(bytes);
-            final ext = path.toLowerCase();
-            final mime = ext.endsWith('.jpg') || ext.endsWith('.jpeg')
-                ? 'image/jpeg'
-                : ext.endsWith('.gif') ? 'image/gif'
-                : ext.endsWith('.webp') ? 'image/webp'
-                : 'image/png';
-            _imgBase64Cache[path] = 'data:$mime;base64,$b64';
-          }
-        } catch (_) {}
-      }));
-    }
-    final result = text.replaceAllMapped(ImgGenPatterns.imgResultRegex, (m) {
-      final payload = m.group(1) ?? '';
-      final pipeIdx = payload.indexOf('|');
-      final path = pipeIdx != -1 ? payload.substring(0, pipeIdx) : payload;
-      final dataUrl = _imgBase64Cache[path];
-      if (dataUrl != null) {
-        final rest = pipeIdx != -1 ? payload.substring(pipeIdx) : '';
-        return '[IMG:RESULT:$dataUrl$rest]';
-      }
-      return m.group(0)!;
-    });
-    return result;
+    // Keep image paths in the bridge payload. The WebView formatter resolves
+    // local paths to file:// URLs, avoiding huge base64 strings on Android.
+    return text;
   }
 
   Future<void> applyLayout(String layout) {
@@ -565,7 +516,7 @@ class ChatBridgeController {
   }
 
   Future<void> setPerformanceMode(bool enabled) {
-    return _eval('window.bridge?.setPerformanceMode(${enabled})');
+    return _eval('window.bridge?.setPerformanceMode($enabled)');
   }
 
   Future<void> setMessageSettings({
@@ -586,7 +537,7 @@ class ChatBridgeController {
   }
 
   Future<void> setSelectionMode(bool enabled) {
-    return _eval('window.bridge?.setSelectionMode(${enabled})');
+    return _eval('window.bridge?.setSelectionMode($enabled)');
   }
 
   Future<void> toggleMessageSelection(String id) {

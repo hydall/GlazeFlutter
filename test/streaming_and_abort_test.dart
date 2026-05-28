@@ -13,7 +13,7 @@ void main() {
       isGenerating: false,
     );
 
-    test('should include avatarUrl when isStreamingUpdate is false', () {
+    test('should not include avatarUrl in message payload', () {
       final message = ChatMessage(
         id: 'msg1',
         role: 'assistant',
@@ -26,7 +26,7 @@ void main() {
         isStreamingUpdate: false,
       );
 
-      expect(map['avatarUrl'], equals('data:image/png;base64,LARGE_AVATAR_DATA_HERE'));
+      expect(map.containsKey('avatarUrl'), isFalse);
     });
 
     test('should NOT include avatarUrl when isStreamingUpdate is true', () {
@@ -42,10 +42,10 @@ void main() {
         isStreamingUpdate: true,
       );
 
-      expect(map['avatarUrl'], isNull);
+      expect(map.containsKey('avatarUrl'), isFalse);
     });
 
-    test('should include persona avatarUrl for user messages when not streaming', () {
+    test('should not include persona avatarUrl in message payload', () {
       final message = ChatMessage(
         id: 'msg1',
         role: 'user',
@@ -58,7 +58,7 @@ void main() {
         isStreamingUpdate: false,
       );
 
-      expect(map['avatarUrl'], equals('data:image/png;base64,USER_AVATAR_DATA_HERE'));
+      expect(map.containsKey('avatarUrl'), isFalse);
     });
 
     test('should NOT include persona avatarUrl for user messages when streaming', () {
@@ -74,7 +74,7 @@ void main() {
         isStreamingUpdate: true,
       );
 
-      expect(map['avatarUrl'], isNull);
+      expect(map.containsKey('avatarUrl'), isFalse);
     });
   });
 
@@ -93,7 +93,7 @@ void main() {
 
       final map = ChatMessageMapper.toMap(message, contextNoAvatar);
 
-      expect(map['avatarUrl'], isNull);
+      expect(map.containsKey('avatarUrl'), isFalse);
     });
 
     test('avatarColor should be included for assistant when present', () {
