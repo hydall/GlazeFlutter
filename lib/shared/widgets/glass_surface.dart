@@ -53,7 +53,7 @@ class GlassSurface extends ConsumerWidget {
       child: child,
     );
 
-    final withNoise = preset.noiseOpacity > 0
+    final withNoise = !batterySaver && preset.noiseOpacity > 0
         ? Stack(
             fit: StackFit.passthrough,
             children: [

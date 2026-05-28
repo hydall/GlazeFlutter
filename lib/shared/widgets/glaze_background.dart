@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../features/settings/app_settings_provider.dart';
 import '../theme/app_colors.dart';
 import '../theme/theme_font_provider.dart';
 import '../theme/theme_provider.dart';
@@ -22,6 +23,8 @@ class GlazeBackground extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final bytes = ref.watch(bgImageBytesProvider);
     final preset = ref.watch(themeProvider).activePreset;
+    final batterySaver =
+        ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
     final base = backgroundColor ?? context.cs.surface;
 
     return Container(
@@ -33,23 +36,27 @@ class GlazeBackground extends ConsumerWidget {
             Positioned.fill(
               child: Opacity(
                 opacity: preset.bgOpacity.clamp(0.0, 1.0),
-                child: ImageFiltered(
-                  imageFilter: preset.bgBlur > 0
-                      ? ImageFilter.blur(
+                child: !batterySaver && preset.bgBlur > 0
+                    ? ImageFiltered(
+                        imageFilter: ImageFilter.blur(
                           sigmaX: preset.bgBlur,
                           sigmaY: preset.bgBlur,
                           tileMode: TileMode.clamp,
-                        )
-                      : ImageFilter.blur(sigmaX: 0, sigmaY: 0),
-                  child: Image.memory(
-                    bytes,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
-                  ),
-                ),
+                        ),
+                        child: Image.memory(
+                          bytes,
+                          fit: BoxFit.cover,
+                          gaplessPlayback: true,
+                        ),
+                      )
+                    : Image.memory(
+                        bytes,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                      ),
               ),
             ),
-          if (preset.bgNoiseOpacity > 0)
+          if (!batterySaver && preset.bgNoiseOpacity > 0)
             Positioned.fill(
               child: IgnorePointer(
                 child: NoiseOverlay(
