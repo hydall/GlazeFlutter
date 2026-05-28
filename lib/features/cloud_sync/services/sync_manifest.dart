@@ -55,7 +55,9 @@ class SyncManifestBuilder implements SyncManifestProvider {
     final characters = await _characterRepo.getAll();
     for (final c in characters) {
       final json = c.toJson();
-      final hash = SyncSerialization.computeSyncHash(json);
+      final hash = SyncSerialization.computeSyncHash(
+        _stripLocalPaths(json),
+      );
       final key = entryKey('character', c.id);
       final prevEntry = previous.entries[key];
       final cloudEntry = cloudManifest?.entries[key];
@@ -79,7 +81,9 @@ class SyncManifestBuilder implements SyncManifestProvider {
     final personas = await _personaRepo.getAll();
     for (final p in personas) {
       final json = p.toJson();
-      final hash = SyncSerialization.computeSyncHash(json);
+      final hash = SyncSerialization.computeSyncHash(
+        _stripLocalPaths(json),
+      );
       final key = entryKey('persona', p.id);
       final prevEntry = previous.entries[key];
       final cloudEntry = cloudManifest?.entries[key];
@@ -158,6 +162,27 @@ class SyncManifestBuilder implements SyncManifestProvider {
     return prevEntry?.updatedAt ?? 0;
   }
 
+  /// Remove device-specific fields from entity JSON before hashing so that
+  /// the same logical entity produces the same hash on every device.
+  static Map<String, dynamic> _stripLocalPaths(Map<String, dynamic> json) {
+    final out = Map<String, dynamic>.from(json);
+    out.remove('avatarPath');
+    if (out.containsKey('gallery')) {
+      final gallery = out['gallery'];
+      if (gallery is List) {
+        out['gallery'] = gallery.map((g) {
+          if (g is Map<String, dynamic>) {
+            final stripped = Map<String, dynamic>.from(g);
+            stripped.remove('imagePath');
+            return stripped;
+          }
+          return g;
+        }).toList();
+      }
+    }
+    return out;
+  }
+
   Future<void> _addSingletons(
     Map<String, SyncManifestEntry> entries,
     SyncManifest previous,
@@ -170,7 +195,9 @@ class SyncManifestBuilder implements SyncManifestProvider {
     singletons['lorebooks'] = lorebooks.map((l) => l.toJson()).toList();
 
     final apiConfigs = await _apiRepo.getAll();
-    singletons['api_presets'] = apiConfigs.map((a) => a.toJson()).toList();
+    singletons['api_presets'] = apiConfigs
+        .map((a) => a.copyWith(apiKey: '', embeddingApiKey: '').toJson())
+        .toList();
 
     final presets = await _presetRepo.getAll();
     singletons['theme_presets'] = presets.map((p) => p.toJson()).toList();
