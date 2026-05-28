@@ -259,8 +259,18 @@ class InMemoryManifestProvider implements SyncManifestProvider {
         );
 
   @override
-  Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest}) =>
-      _builder.buildLocalManifest(cloudManifest: cloudManifest);
+  Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest}) async {
+    // Sync in-memory storage → SharedPreferences so the builder's
+    // readLocalManifest() sees the same manifest the tests wrote.
+    final raw = _storage['manifest'];
+    final prefs = await SharedPreferences.getInstance();
+    if (raw != null) {
+      await prefs.setString('gz_sync_manifest_v2', raw);
+    } else {
+      await prefs.remove('gz_sync_manifest_v2');
+    }
+    return _builder.buildLocalManifest(cloudManifest: cloudManifest);
+  }
 
   @override
   Future<SyncManifest> readLocalManifest() async {
@@ -426,7 +436,8 @@ void main() {
     final modifiedChar = makeChar('shared1', name: 'Device Y Edit');
     await deviceY.characters.put(modifiedChar);
 
-    // Force local manifest to show updatedAt newer than cloud
+    // Force local manifest to show updatedAt newer than cloud.
+    // Set lastSync > 0 so isFirstSync is false (simulates a second sync).
     final yManifest = await deviceY.manifestProvider.buildLocalManifest();
     final patchedEntries = Map<String, SyncManifestEntry>.from(yManifest.entries);
     final charEntry = patchedEntries['character:shared1'];
@@ -437,7 +448,7 @@ void main() {
       );
     }
     await deviceY.manifestProvider.writeLocalManifest(
-      yManifest.copyWith(entries: patchedEntries),
+      yManifest.copyWith(lastSync: 5000, entries: patchedEntries),
     );
 
     final yConflicts = <SyncConflict>[];
@@ -658,7 +669,7 @@ void main() {
       );
     }
     await world.manifestProvider.writeLocalManifest(
-      localManifest.copyWith(entries: patchedEntries),
+      localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
     );
 
     // First pull — detects conflict
@@ -1137,7 +1148,7 @@ void main() {
       );
     }
     await world.manifestProvider.writeLocalManifest(
-      localManifest.copyWith(entries: patchedEntries),
+      localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
     );
 
     final conflicts = <SyncConflict>[];
@@ -1213,7 +1224,7 @@ void main() {
       );
     }
     await world.manifestProvider.writeLocalManifest(
-      localManifest.copyWith(entries: patchedEntries),
+      localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
     );
 
     final conflicts = <SyncConflict>[];

@@ -152,10 +152,9 @@ class SyncManifestBuilder implements SyncManifestProvider {
       // Was aligned with cloud; local DB changed → treat as local edit.
       return now;
     }
-    if (prevEntry == null && cloudEntry != null && hash != cloudEntry.hash) {
-      // Local row exists but never synced — diverged from cloud.
-      return now;
-    }
+    // No previous manifest entry — entity was never synced from this device.
+    // Don't claim "now" (would always beat cloud); let entity-level updatedAt
+    // (c.updatedAt, s.updatedAt) override if the entity was genuinely edited.
     return prevEntry?.updatedAt ?? 0;
   }
 

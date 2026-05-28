@@ -179,11 +179,10 @@ class SyncEngine {
         continue;
       }
 
-      // First sync: auto-prefer cloud only for singleton blobs (seeded defaults).
-      // Characters/personas/chats keep normal conflict rules when local rows exist.
-      if (isFirstSync &&
-          localEntry != null &&
-          _isSingletonType(cloudEntry.type)) {
+      // Before first successful sync, local manifest timestamps are unreliable
+      // (no previous entries → updatedAt defaults to now or entity timestamp).
+      // Auto-prefer cloud for everything on first sync.
+      if (isFirstSync && localEntry != null) {
         pullEntries.add(cloudEntry);
         continue;
       }
