@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -121,7 +123,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   @override
   bool get wantKeepAlive => true;
 
-  Future<void> _initWebView() async {
+  Future<void> _syncIdentityFromWidget() async {
     final bridge = _bridge;
     if (bridge == null) return;
 
@@ -134,6 +136,13 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       personaAvatarPath: widget.personaAvatarPath,
       greetingTotal: widget.greetingTotal,
     );
+  }
+
+  Future<void> _initWebView() async {
+    final bridge = _bridge;
+    if (bridge == null) return;
+
+    await _syncIdentityFromWidget();
 
     final glaze = context.colors;
     final cs = context.cs;
@@ -174,6 +183,8 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       disableSwipeRegeneration: widget.disableSwipeRegeneration,
     );
 
+    // Persona/char identity can resolve while theme and assets load above.
+    await _syncIdentityFromWidget();
     await _bridge!.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
     _bridge!.updateMemoryBookData(
       entries: widget.memoryEntries.map((e) => {'status': e.status, 'messageIds': e.messageIds}).toList(),
@@ -196,6 +207,93 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     _ready = true;
   }
 
+  Future<void> applyIdentity({
+    String? charName,
+    String? charColor,
+    String? personaName,
+    String? charAvatarPath,
+    String? personaAvatarPath,
+    int? greetingTotal,
+  }) {
+    final bridge = _bridge;
+    if (bridge == null || !_ready) return Future.value();
+    return bridge.setIdentity(
+      charName: charName ?? widget.charName,
+      charColor: charColor ?? widget.charColor,
+      personaName: personaName ?? widget.personaName,
+      layout: widget.chatLayout,
+      charAvatarPath: charAvatarPath ?? widget.charAvatarPath,
+      personaAvatarPath: personaAvatarPath ?? widget.personaAvatarPath,
+      greetingTotal: greetingTotal ?? widget.greetingTotal,
+    );
+  }
+
+  bool _identityChanged(ChatWebViewWidget old) {
+    return widget.charName != old.charName ||
+        widget.charColor != old.charColor ||
+        widget.personaName != old.personaName ||
+        widget.charAvatarPath != old.charAvatarPath ||
+        widget.personaAvatarPath != old.personaAvatarPath ||
+        widget.chatLayout != old.chatLayout ||
+        widget.greetingTotal != old.greetingTotal;
+  }
+
+  Future<void> _applySessionSwitch(ChatWebViewWidget old) async {
+    final bridge = _bridge;
+    if (bridge == null) return;
+
+    _sessionSwitching = true;
+    if (widget.charId != old.charId) {
+      await bridge.setIdentity(
+        charName: widget.charName,
+        charColor: widget.charColor,
+        personaName: widget.personaName,
+        layout: widget.chatLayout,
+        charAvatarPath: widget.charAvatarPath,
+        personaAvatarPath: widget.personaAvatarPath,
+        greetingTotal: widget.greetingTotal,
+      );
+      await bridge.applyTheme({'chat-layout': widget.chatLayout ?? 'default'});
+      await bridge.setBackgroundImage(
+        widget.bgImagePath,
+        widget.bgBlur.toInt(),
+        widget.bgOpacity,
+      );
+      await bridge.setBackgroundNoise(
+        widget.bgNoiseOpacity,
+        widget.bgNoiseIntensity,
+      );
+      await bridge.setChatFont(
+        fontName: widget.chatFontName,
+        fontDataUrl: widget.chatFontDataUrl,
+        fontSize: widget.chatFontSize,
+        letterSpacing: widget.chatLetterSpacing,
+      );
+    } else {
+      await bridge.setIdentity(
+        charName: widget.charName,
+        charColor: widget.charColor,
+        personaName: widget.personaName,
+        layout: widget.chatLayout,
+        charAvatarPath: widget.charAvatarPath,
+        personaAvatarPath: widget.personaAvatarPath,
+        greetingTotal: widget.greetingTotal,
+      );
+    }
+
+    await bridge.clearAll();
+    await bridge.setMessages(
+      widget.messages,
+      visibleStartIndex: widget.visibleStartIndex,
+    );
+    Future.delayed(const Duration(milliseconds: 150), () {
+      bridge.scrollToBottom();
+      _sessionSwitching = false;
+    });
+    _wasGenerating = widget.isGenerating;
+    _streamingSent = false;
+  }
+
   @override
   void didUpdateWidget(ChatWebViewWidget old) {
     super.didUpdateWidget(old);
@@ -209,45 +307,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     }
 
     if (widget.charId != old.charId || widget.sessionId != old.sessionId) {
-      _sessionSwitching = true;
-      if (widget.charId != old.charId) {
-        _bridge!.setIdentity(
-          charName: widget.charName,
-          charColor: widget.charColor,
-          personaName: widget.personaName,
-          layout: widget.chatLayout,
-          charAvatarPath: widget.charAvatarPath,
-          personaAvatarPath: widget.personaAvatarPath,
-          greetingTotal: widget.greetingTotal,
-        );
-        _bridge!.applyTheme({'chat-layout': widget.chatLayout ?? 'default'});
-        _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
-        _bridge!.setBackgroundNoise(widget.bgNoiseOpacity, widget.bgNoiseIntensity);
-        _bridge!.setChatFont(
-          fontName: widget.chatFontName,
-          fontDataUrl: widget.chatFontDataUrl,
-          fontSize: widget.chatFontSize,
-          letterSpacing: widget.chatLetterSpacing,
-        );
-      }
-      _bridge!.clearAll();
-      _bridge!.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
-      Future.delayed(const Duration(milliseconds: 150), () {
-        _bridge?.scrollToBottom();
-        _sessionSwitching = false;
-      });
-      _wasGenerating = widget.isGenerating;
-      _streamingSent = false;
+      unawaited(_applySessionSwitch(old));
       return;
     }
 
-    if (widget.charName != old.charName ||
-        widget.charColor != old.charColor ||
-        widget.personaName != old.personaName ||
-        widget.charAvatarPath != old.charAvatarPath ||
-        widget.personaAvatarPath != old.personaAvatarPath ||
-        widget.chatLayout != old.chatLayout ||
-        widget.greetingTotal != old.greetingTotal) {
+    if (_identityChanged(old)) {
       _bridge!.setIdentity(
         charName: widget.charName,
         charColor: widget.charColor,
