@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../utils/color_utils.dart';
 import 'theme_preset.dart';
 
 class GlazeColors extends ThemeExtension<GlazeColors> {
@@ -112,17 +113,9 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
 
   static Color? _ensureContrast(Color? text, Color bg) {
     if (text == null) return _contrastFor(bg);
-    final ratio = _contrastRatio(text, bg);
+    final ratio = contrastRatio(text, bg);
     if (ratio < 2.5) return _contrastFor(bg);
     return text;
-  }
-
-  static double _contrastRatio(Color a, Color b) {
-    final l1 = a.computeLuminance();
-    final l2 = b.computeLuminance();
-    final lighter = l1 > l2 ? l1 : l2;
-    final darker = l1 > l2 ? l2 : l1;
-    return (lighter + 0.05) / (darker + 0.05);
   }
 
   @override

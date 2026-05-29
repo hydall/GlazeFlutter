@@ -15,6 +15,7 @@ import '../../shared/widgets/glaze_toast.dart';
 import 'lorebook_connections_sheet.dart';
 import 'lorebook_per_book_settings_screen.dart';
 import 'widgets/entry_editor_dialog.dart';
+import 'widgets/lorebook_entry_tile.dart';
 
 class LorebookEditorScreen extends ConsumerStatefulWidget {
   final String lorebookId;
@@ -655,7 +656,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                         if (_settings != null)
                           Padding(
                             padding: const EdgeInsets.only(right: 4),
-                            child: _Badge(
+                            child: LorebookEntryBadge(
                               label: 'custom',
                               color: Colors.purple,
                             ),
@@ -844,7 +845,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                         itemBuilder: (_, i) {
                           final entry = _filteredEntries[i];
                           final realIndex = _entries.indexOf(entry);
-                          return _EntryTile(
+                          return LorebookEntryTile(
                             entry: entry,
                             embeddingStatus: _embeddingStatuses[entry.id],
                             embeddingError: _embeddingErrorLabels[entry.id],
@@ -862,109 +863,6 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (e, _) => Scaffold(body: Center(child: Text('Error: $e'))),
-    );
-  }
-}
-
-class _Badge extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _Badge({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 9,
-          fontWeight: FontWeight.w700,
-          color: color,
-        ),
-      ),
-    );
-  }
-}
-
-class _EntryTile extends StatelessWidget {
-  final LorebookEntry entry;
-  final String? embeddingStatus;
-  final String? embeddingError;
-  final VoidCallback onToggle;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
-
-  const _EntryTile({
-    required this.entry,
-    this.embeddingStatus,
-    this.embeddingError,
-    required this.onToggle,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      color: Colors.white.withValues(alpha: 0.03),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: ListTile(
-        dense: true,
-        leading: Switch(
-          value: entry.enabled,
-          onChanged: (_) => onToggle(),
-          activeThumbColor: context.cs.primary,
-        ),
-        title: Text(
-          entry.comment.isNotEmpty
-              ? entry.comment
-              : (entry.keys.isNotEmpty ? entry.keys.join(', ') : 'Entry'),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: entry.enabled
-                ? context.cs.onSurface
-                : context.cs.onSurfaceVariant,
-          ),
-        ),
-        subtitle: Text(
-          '${entry.keys.length} keys | order ${entry.order}${entry.constant ? ' | constant' : ''}',
-          style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (entry.vectorSearch) ...[
-              _Badge(label: 'vec', color: Colors.cyan),
-              if (embeddingStatus == 'indexed')
-                _Badge(label: 'idx', color: Colors.green),
-              if (embeddingStatus == 'error')
-                Tooltip(
-                  message: embeddingError ?? 'Error',
-                  child: _Badge(label: embeddingError ?? 'err', color: Colors.orange),
-                ),
-            ],
-            IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 18),
-              onPressed: onEdit,
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, size: 18),
-              onPressed: onDelete,
-            ),
-          ],
-        ),
-        onTap: onEdit,
-      ),
     );
   }
 }

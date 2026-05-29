@@ -12,6 +12,7 @@ import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/generic_editor.dart';
 import 'preset_list_provider.dart';
+import 'widgets/preset_block_row.dart';
 import 'widgets/widgets.dart';
 
 /// Standalone screen wrapper around [PresetEditorBody].
@@ -331,7 +332,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
         });
         _scheduleSave();
       },
-      itemBuilder: (_, i) => _BlockRow(
+      itemBuilder: (_, i) => PresetBlockRow(
         key: ValueKey(_blocks[i].id),
         block: _blocks[i],
         index: i,
@@ -576,145 +577,6 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
     );
-  }
-}
-
-// ─── _BlockRow ────────────────────────────────────────────────────────────────
-
-class _BlockRow extends StatelessWidget {
-  final PresetBlock block;
-  final int index;
-  final bool isLast;
-  final VoidCallback onEdit;
-  final ValueChanged<bool> onToggle;
-
-  const _BlockRow({
-    super.key,
-    required this.block,
-    required this.index,
-    required this.isLast,
-    required this.onEdit,
-    required this.onToggle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: const Color(0x33808080),
-            width: isLast ? 0 : 1,
-          ),
-        ),
-      ),
-      child: Opacity(
-        opacity: block.enabled ? 1.0 : 0.5,
-        child: Row(
-          children: [
-            // Drag handle
-            ReorderableDragStartListener(
-              index: index,
-              child: SizedBox(
-                width: 30,
-                height: 44,
-                child: Center(
-                  child: Text(
-                    '≡',
-                    style: TextStyle(
-                      fontSize: 20,
-                      color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // Role icon
-            Icon(
-              _roleIcon(block.role),
-              size: 16,
-              color: context.cs.onSurface.withValues(alpha: 0.6),
-            ),
-            const SizedBox(width: 8),
-            // Name + token estimate
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        block.name,
-                         style: TextStyle(
-                           fontSize: 15,
-                           fontWeight: FontWeight.w500,
-                           color: context.cs.onSurface,
-                         ),
-                      ),
-                    ),
-                    if (block.content.isNotEmpty) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          '~${(block.content.length / 4).round()}',
-                           style: TextStyle(
-                             fontSize: 11,
-                             color: context.cs.onSurfaceVariant,
-                           ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            // Edit button
-            SizedBox(
-              width: 36,
-              height: 44,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: onEdit,
-                   child: Icon(
-                     Icons.edit_outlined,
-                     size: 20,
-                     color: context.cs.onSurfaceVariant,
-                   ),
-                ),
-              ),
-            ),
-            // Enable toggle
-            Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: Transform.scale(
-                scale: 0.8,
-                alignment: Alignment.centerRight,
-                child: Switch(
-                  value: block.enabled,
-                  onChanged: onToggle,
-                  activeThumbColor: context.cs.primary,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  IconData _roleIcon(String role) {
-    return switch (role) {
-      'user' => Icons.person_outline,
-      'assistant' => Icons.smart_toy_outlined,
-      _ => Icons.storage_outlined,
-    };
   }
 }
 

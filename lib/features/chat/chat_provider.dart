@@ -4,7 +4,6 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/llm/regex_service.dart';
 import '../../core/llm/tokenizer.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/active_selection_provider.dart';
@@ -14,16 +13,16 @@ import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../cloud_sync/sync_provider.dart' show notifySyncMessageGenerated;
 import '../chat_history/chat_history_provider.dart';
-import '../personas/persona_list_provider.dart';
 import 'abort_handler.dart';
 import 'chat_generation_service.dart';
 import 'chat_message_service.dart';
 import 'chat_session_service.dart';
-import 'state/cached_token_breakdown.dart';
-import 'state/token_breakdown_cache.dart';
 import 'chat_state.dart';
 import 'image_recovery_service.dart';
-import 'initial_message_builder.dart';
+import 'controllers/chat_message_ops_controller.dart';
+import 'controllers/chat_swipe_controller.dart';
+import 'controllers/chat_session_controller.dart';
+import 'controllers/chat_draft_controller.dart';
 
 final chatProvider =
     AsyncNotifierProvider.family<ChatNotifier, ChatState, String>(
@@ -55,7 +54,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     if (existing != null) {
       final fixed = _fixupSwipesWithImageResults(existing);
       if (!identical(fixed, existing)) {
-        // Persist the cleanup so stuck [IMG:GEN] tags don't reappear after restart
         await ref.read(chatRepoProvider).put(fixed);
       }
       final start = fixed.messages.length > ChatState.initialPageSize
@@ -100,13 +98,14 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       ImageRecoveryService.fixupSwipesWithImageResults(session);
 
   void abortImageGeneration() => _abortHandler.abortImageGeneration();
-
   void abortGeneration() => _abortHandler.abortGeneration();
-
   void cancelImageGeneration() => _abortHandler.cancelImageGeneration();
-
   Future<void> retryImageGeneration() async =>
       _imageRecoverySvc.retryImageGeneration();
+  Future<void> findImageOnDisk(String messageId, String instruction) async =>
+      _imageRecoverySvc.findImageOnDisk(messageId, instruction);
+  Future<void> retryImageGenerationForMessage(int messageIndex) async =>
+      _imageRecoverySvc.retryImageGenerationForMessage(messageIndex);
 
   ChatSessionService get _sessionSvc => ChatSessionService(ref);
   ChatMessageService get _messageSvc => ChatMessageService(ref);
@@ -117,6 +116,89 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     setState: (s) { state = s; },
     getState: () => state,
   );
+
+  // Controllers
+  late final _messageOpsCtrl = ChatMessageOpsController(
+    ref: ref,
+    charId: arg,
+    setState: (s) { state = s; },
+    getState: () => state,
+    invalidateHistory: _invalidateHistory,
+  );
+
+  late final _swipeCtrl = ChatSwipeController(
+    ref: ref,
+    charId: arg,
+    setState: (s) { state = s; },
+    getState: () => state,
+    invalidateHistory: _invalidateHistory,
+  );
+
+  late final _sessionCtrl = ChatSessionController(
+    ref: ref,
+    charId: arg,
+    setState: (s) { state = s; },
+    getState: () => state,
+    invalidateHistory: _invalidateHistory,
+    fixupSwipesWithImageResults: _fixupSwipesWithImageResults,
+  );
+
+  late final _draftCtrl = ChatDraftController(
+    ref: ref,
+    setState: (s) { state = s; },
+    getState: () => state,
+  );
+
+  void _invalidateHistory() => ref.invalidate(chatHistoryProvider);
+
+  // Delegate methods to controllers
+  Future<void> editMessage(int index, String newContent, {String? tagStart, String? tagEnd}) =>
+      _messageOpsCtrl.editMessage(index, newContent, tagStart: tagStart, tagEnd: tagEnd);
+
+  Future<void> moveMessage(int fromIndex, int toIndex) =>
+      _messageOpsCtrl.moveMessage(fromIndex, toIndex);
+
+  Future<void> deleteMessage(int index) =>
+      _messageOpsCtrl.deleteMessage(index);
+
+  Future<void> toggleMessageHidden(int index) =>
+      _messageOpsCtrl.toggleMessageHidden(index);
+
+  Future<void> unhideAllMessages() =>
+      _messageOpsCtrl.unhideAllMessages();
+
+  Future<void> hideTopMessages(int count) =>
+      _messageOpsCtrl.hideTopMessages(count);
+
+  Future<void> clearChat() =>
+      _messageOpsCtrl.clearChat();
+
+  void setSwipe(int messageIndex, int swipeId) =>
+      _swipeCtrl.setSwipe(messageIndex, swipeId);
+
+  Future<void> changeSwipe(int messageIndex, int dir, {bool fromSwipe = false}) =>
+      _swipeCtrl.changeSwipe(messageIndex, dir, fromSwipe: fromSwipe);
+
+  Future<void> setGreeting(int messageIndex, int direction) =>
+      _swipeCtrl.setGreeting(messageIndex, direction);
+
+  Future<void> switchSession(int sessionIndex) =>
+      _sessionCtrl.switchSession(sessionIndex);
+
+  Future<void> createNewSession() =>
+      _sessionCtrl.createNewSession();
+
+  Future<List<ChatSession>> getSessions() =>
+      _sessionCtrl.getSessions();
+
+  Future<void> branchSession(int index) =>
+      _sessionCtrl.branchSession(index);
+
+  Future<void> newSession() =>
+      _sessionCtrl.createNewSession();
+
+  Future<void> saveDraft(String draftText) =>
+      _draftCtrl.saveDraft(draftText);
 
   Future<void> sendMessage(String text, {String? guidanceText}) async {
     final current = state.value;
@@ -160,9 +242,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   }
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
-    // Abort any in-flight generation immediately (does not await) — correctness
-    // is guaranteed by the isAborted() closure and setCancelToken genId guard,
-    // so we don't need to wait for the old stream to fully close before starting.
     if (state.value?.isGenerating == true) {
       abortGeneration();
     }
@@ -184,7 +263,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       return;
     }
 
-    // Last message is assistant → swipe (new variant)
     final prevAssistant = lastMsg;
     final regenTargetId = prevAssistant.id;
     _abortHandler.restorationMessage = prevAssistant;
@@ -293,252 +371,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     );
   }
 
-  Future<void> clearChat() async {
-    final current = state.value;
-    if (current == null || current.session == null) return;
-    final cleared = await _sessionSvc.clearChat(arg, current.session!);
-    _invalidateHistory();
-    state = AsyncData(ChatState(session: cleared));
-  }
-
-  Future<void> editMessage(int index, String newContent, {String? tagStart, String? tagEnd}) async {
-    final current = state.value;
-    if (current == null || current.session == null) return;
-    var updated = _messageSvc.editMessage(current.session!, index, newContent, tagStart: tagStart, tagEnd: tagEnd);
-    updated = await _applyRunOnEditRegexes(updated, index);
-    _invalidateHistory();
-    TokenBreakdownCache.invalidate();
-    ref.read(cachedTokenBreakdownProvider(arg).notifier).state = null;
-    state = AsyncData(current.copyWith(session: updated));
-  }
-
-  Future<ChatSession> _applyRunOnEditRegexes(ChatSession session, int index) async {
-    if (index < 0 || index >= session.messages.length) return session;
-    final scripts = await ref.read(activeRegexesProvider.future);
-    final editScripts = scripts.where((r) => r.runOnEdit).toList();
-    if (editScripts.isEmpty) return session;
-
-    final char = await ref.read(characterRepoProvider).getById(arg);
-    final msg = session.messages[index];
-    final placement = msg.role == 'user' ? 1 : 2;
-    final personas = ref.read(personaListProvider).value ?? [];
-    final persona = getEffectivePersona(
-      personas,
-      arg,
-      session.id,
-      ref.read(activePersonaIdProvider),
-      ref.read(personaConnectionsProvider),
-    );
-    final depth = session.messages.length - 1 - index;
-    final ctx = RegexApplyContext(
-      char: char,
-      persona: persona,
-      depth: depth,
-    );
-    final content = applyRegexes(
-      msg.content,
-      placement,
-      1,
-      editScripts,
-      ctx,
-      isMarkdown: true,
-    );
-    if (content == msg.content) return session;
-    final newMessages = List<ChatMessage>.from(session.messages);
-    newMessages[index] = msg.copyWith(content: content);
-    final updated = session.copyWith(
-      messages: newMessages,
-      updatedAt: currentTimestampSeconds(),
-    );
-    await ref.read(chatRepoProvider).put(updated);
-    ChatSessionService.updateCache(updated);
-    return updated;
-  }
-
-  Future<void> moveMessage(int fromIndex, int toIndex) async {
-    final current = state.value;
-    if (current == null || current.session == null) return;
-    final updated = _messageSvc.moveMessage(current.session!, fromIndex, toIndex);
-    _invalidateHistory();
-    state = AsyncData(current.copyWith(session: updated));
-  }
-
-  Future<void> deleteMessage(int index) async {
-    final current = state.value;
-    if (current == null || current.session == null) return;
-    final updated = _messageSvc.deleteMessage(current.session!, index);
-    _invalidateHistory();
-    state = AsyncData(current.copyWith(session: updated));
-  }
-
-  Future<void> toggleMessageHidden(int index) async {
-    final current = state.value;
-    if (current == null || current.session == null) return;
-    final updated = _messageSvc.toggleMessageHidden(current.session!, index);
-    _invalidateHistory();
-    state = AsyncData(current.copyWith(session: updated));
-  }
-
-  Future<void> unhideAllMessages() async {
-    final current = state.value;
-    if (current == null || current.session == null) return;
-    final updated = _messageSvc.unhideAllMessages(current.session!);
-    _invalidateHistory();
-    state = AsyncData(current.copyWith(session: updated));
-  }
-
-  Future<void> hideTopMessages(int count) async {
-    final current = state.value;
-    if (current == null || current.session == null) return;
-    final updated = _messageSvc.hideTopMessages(current.session!, count);
-    _invalidateHistory();
-    state = AsyncData(current.copyWith(session: updated));
-  }
-
-  Future<void> saveDraft(String draftText) async {
-    final current = state.value;
-    if (current == null || current.session == null) return;
-    if (current.session!.draft == draftText) return;
-    
-    final updatedSession = current.session!.copyWith(draft: draftText);
-    await ref.read(chatRepoProvider).put(updatedSession);
-    ChatSessionService.updateCache(updatedSession);
-    state = AsyncData(ChatState(
-      session: updatedSession,
-      isGenerating: current.isGenerating,
-      generationStartTime: current.generationStartTime,
-      error: current.error,
-    ));
-  }
-
-  void setSwipe(int messageIndex, int swipeId) {
-    final current = state.value;
-    if (current == null || current.session == null) return;
-    final updated = _messageSvc.setSwipe(current.session!, messageIndex, swipeId);
-    _invalidateHistory();
-    state = AsyncData(current.copyWith(session: updated));
-  }
-
-  /// Ported from useSwipeNavigation.js `changeSwipe`:
-  /// - blocks while generating
-  /// - removes the current swipe if it's an error (with siblings) and slides to a neighbor
-  /// - triggers `regenerateLastAssistant` when stepping past the right edge on the last message
-  /// - clears `isError` on switch
-  Future<void> changeSwipe(int messageIndex, int dir, {bool fromSwipe = false}) async {
-    final current = state.value;
-    if (current == null || current.session == null || current.isGenerating) return;
-    if (messageIndex < 0 || messageIndex >= current.messages.length) return;
-
-    final isLast = messageIndex == current.messages.length - 1;
-    final result = _messageSvc.changeSwipe(
-      current.session!,
-      messageIndex,
-      dir,
-      fromSwipe: fromSwipe,
-      isLastMessage: isLast,
-    );
-
-    if (result.needsRegen) {
-      await regenerateLastAssistant();
-      return;
-    }
-    if (result.isUpdated) {
-      _invalidateHistory();
-      state = AsyncData(current.copyWith(session: result.session));
-    }
-  }
-
-  Future<void> setGreeting(int messageIndex, int direction) async {
-    final current = state.value;
-    if (current == null || current.session == null || current.isGenerating) return;
-    if (messageIndex != 0) return;
-    if (messageIndex >= current.messages.length) return;
-    final msg = current.messages[messageIndex];
-    if (msg.role != 'assistant') return;
-
-    final character = await ref.read(characterRepoProvider).getById(arg);
-    if (character == null) return;
-    final persona = await _sessionSvc.resolvePersona(arg);
-    final greetings = InitialMessageBuilder.resolveGreetings(
-      character: character,
-      persona: persona,
-      sessionId: current.session!.id,
-    );
-    if (greetings.length <= 1) return;
-
-    final currentIdx = msg.greetingIndex ?? 0;
-    final updated = _messageSvc.setGreeting(
-      current.session!,
-      messageIndex,
-      currentIdx + direction,
-      greetings,
-    );
-    _invalidateHistory();
-    state = AsyncData(current.copyWith(session: updated));
-  }
-
-  Future<void> switchSession(int sessionIndex) async {
-    _abortHandler.nextGenId();
-    _abortHandler.restorationMessage = null;
-    _abortHandler.clearStreaming();
-    try {
-      final raw = await _sessionSvc.switchToSession(arg, sessionIndex);
-      final session = _fixupSwipesWithImageResults(raw);
-      if (!identical(session, raw)) {
-        await ref.read(chatRepoProvider).put(session);
-        ChatSessionService.updateCache(session);
-      }
-      _buildComplete = true;
-      final start = session.messages.length > ChatState.initialPageSize
-          ? session.messages.length - ChatState.initialPageSize
-          : 0;
-      state = AsyncData(ChatState(session: session, visibleStartIndex: start));
-    } catch (_) {
-      final current = state.value;
-      if (current != null) {
-        state = AsyncData(current);
-      }
-    }
-  }
-
-  Future<void> createNewSession() async {
-    _abortHandler.nextGenId();
-    _abortHandler.restorationMessage = null;
-    _abortHandler.clearStreaming();
-    final session = await _sessionSvc.createNewSession(arg);
-    _buildComplete = true;
-    _invalidateHistory();
-    state = AsyncData(ChatState(session: session));
-  }
-
-  Future<List<ChatSession>> getSessions() => _sessionSvc.getSessions(arg);
-
-  Future<void> branchSession(int index) async {
-    final current = state.value;
-    if (current == null || current.session == null) return;
-    if (index < 0 || index >= current.messages.length) return;
-    _abortHandler.nextGenId();
-    _abortHandler.restorationMessage = null;
-    _abortHandler.clearStreaming();
-    final session = await _sessionSvc.branchSession(arg, current.session!, index);
-    _invalidateHistory();
-    final start = session.messages.length > ChatState.initialPageSize
-        ? session.messages.length - ChatState.initialPageSize
-        : 0;
-    state = AsyncData(ChatState(session: session, visibleStartIndex: start));
-  }
-
-  Future<void> newSession() async {
-    _abortHandler.nextGenId();
-    _abortHandler.restorationMessage = null;
-    _abortHandler.clearStreaming();
-    final session = await _sessionSvc.createNewSession(arg);
-    _invalidateHistory();
-    state = AsyncData(ChatState(session: session));
-  }
-
-  void _invalidateHistory() => ref.invalidate(chatHistoryProvider);
-
   Future<void> _runGeneration(
     ChatSession session,
     ChatState current, {
@@ -581,7 +413,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       regenTargetId: regenTargetId,
     );
 
-    // A newer generation started while we were awaiting — discard this result.
     if (!_abortHandler.isCurrentGen(genId)) {
       if (!completer.isCompleted) completer.complete();
       return;
@@ -736,11 +567,4 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     } catch (_) {}
     return null;
   }
-
-  Future<void> findImageOnDisk(String messageId, String instruction) async =>
-      _imageRecoverySvc.findImageOnDisk(messageId, instruction);
-
-  Future<void> retryImageGenerationForMessage(int messageIndex) async =>
-      _imageRecoverySvc.retryImageGenerationForMessage(messageIndex);
-
-  }
+}

@@ -9,6 +9,7 @@ import '../../../core/state/chat_session_ops_provider.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/utils/time_formatter.dart';
 import '../../../shared/widgets/rolling_number.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../../shared/widgets/glaze_tab_bar.dart';
@@ -223,13 +224,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
   }
 
   String _formatTime(int seconds) {
-    if (seconds == 0) return '0s';
-    final h = seconds ~/ 3600;
-    final m = (seconds % 3600) ~/ 60;
-    final s = seconds % 60;
-    if (h > 0) return '${h}h ${m}m';
-    if (m > 0) return '${m}m ${s}s';
-    return '${s}s';
+    return formatDuration(seconds);
   }
 
   String _formatNumber(int number) {

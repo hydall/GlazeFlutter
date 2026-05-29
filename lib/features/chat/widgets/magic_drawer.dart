@@ -12,12 +12,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/services/chat_import_export.dart';
 import '../../../core/models/chat_message.dart';
-import '../../../core/state/shared_prefs_provider.dart';
-import '../../../features/settings/app_settings_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
+import '../../../features/settings/app_settings_provider.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/chat_session_ops_provider.dart';
 import '../../../features/chat_history/chat_history_provider.dart';
+import '../../../shared/utils/time_formatter.dart';
 import '../../../shared/theme/app_colors.dart';
 
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -36,6 +36,7 @@ import 'lorebook_coverage_sheet.dart';
 import 'lorebook_quick_sheet.dart';
 import 'magic_drawer_models.dart';
 import 'magic_drawer_stats_service.dart';
+import '../services/magic_drawer_layout_service.dart';
 import 'magic_drawer_widgets.dart';
 import 'memory_books_sheet.dart';
 import 'prompt_preview_screen.dart';
@@ -64,9 +65,6 @@ class MagicDrawerPanel extends ConsumerStatefulWidget {
 }
 
 class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
-  static const _itemsKey = 'magic_drawer_items';
-  static const _deletedItemsKey = 'magic_drawer_deleted_items';
-
   static const _allItems = <MagicDrawerItemDef>[
     MagicDrawerItemDef(id: 'context', label: 'Tokenizer', icon: Icons.segment),
     MagicDrawerItemDef(id: 'summary', label: 'Summary', icon: Icons.subject),
@@ -154,36 +152,17 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _loadLayout() async {
-    final prefs = await ref.read(sharedPreferencesProvider.future);
-    final savedOrder = prefs.getStringList(_itemsKey);
-    final savedDeleted = prefs.getStringList(_deletedItemsKey) ?? const [];
+    final layout = await MagicDrawerLayoutService(ref).loadLayout(_allItems);
     _deletedIds
       ..clear()
-      ..addAll(savedDeleted.where(_isKnownItem));
-
-    final defaultIds = _allItems.map((item) => item.id).toList();
-    if (savedOrder == null || savedOrder.isEmpty) {
-      _itemIds
-        ..clear()
-        ..addAll(defaultIds);
-      return;
-    }
-
-    final filteredSaved = savedOrder.where(_isKnownItem).toList();
-    final missing = defaultIds
-        .where((id) => !filteredSaved.contains(id) && !_deletedIds.contains(id))
-        .toList();
-
+      ..addAll(layout.deletedIds);
     _itemIds
       ..clear()
-      ..addAll(filteredSaved)
-      ..addAll(missing);
+      ..addAll(layout.itemIds);
   }
 
   Future<void> _saveLayout() async {
-    final prefs = await ref.read(sharedPreferencesProvider.future);
-    await prefs.setStringList(_itemsKey, List<String>.from(_itemIds));
-    await prefs.setStringList(_deletedItemsKey, _deletedIds.toList());
+    await MagicDrawerLayoutService(ref).saveLayout(_itemIds, _deletedIds);
   }
 
   Future<void> _loadStats() async {
@@ -228,8 +207,6 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 500), _refreshStats);
   }
-
-  bool _isKnownItem(String id) => _allItems.any((item) => item.id == id);
 
   List<MagicDrawerCardItem> get _displayItems {
     final list = _itemIds
@@ -877,14 +854,7 @@ class _SessionsSheetContentState extends ConsumerState<_SessionsSheetContent> {
   }
 
   String _formatRelativeTime(int updatedAtSeconds) {
-    final updated = DateTime.fromMillisecondsSinceEpoch(
-      updatedAtSeconds * 1000,
-    );
-    final diff = DateTime.now().difference(updated);
-    if (diff.inMinutes < 1) return 'now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m';
-    if (diff.inDays < 1) return '${diff.inHours}h';
-    return '${diff.inDays}d';
+    return formatRelativeTimeFromSeconds(updatedAtSeconds);
   }
 
   @override

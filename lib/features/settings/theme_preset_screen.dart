@@ -9,6 +9,7 @@ import '../../../shared/theme/theme_preset.dart';
 import '../../../shared/theme/theme_preset_storage.dart';
 import '../../../shared/theme/theme_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/utils/color_utils.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/glaze_toast.dart';
@@ -124,25 +125,17 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
   }
 
   static Color _contrastColor(Color accent, Color surface) {
-    if (_contrastRatio(accent, surface) >= 4.5) return accent;
+    if (contrastRatio(accent, surface) >= 4.5) return accent;
     final hsl = HSLColor.fromColor(accent);
     double l = hsl.lightness;
     for (int i = 0; i < 20; i++) {
       l = surface.computeLuminance() < 0.5 ? l + 0.04 : l - 0.04;
       final c = HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, l.clamp(0.0, 1.0)).toColor();
-      if (_contrastRatio(c, surface) >= 4.5) return c;
+      if (contrastRatio(c, surface) >= 4.5) return c;
     }
     return surface.computeLuminance() < 0.5
         ? HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, 0.6).toColor()
         : HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, 0.4).toColor();
-  }
-
-  static double _contrastRatio(Color a, Color b) {
-    final l1 = a.computeLuminance();
-    final l2 = b.computeLuminance();
-    final lighter = l1 > l2 ? l1 : l2;
-    final darker = l1 > l2 ? l2 : l1;
-    return (lighter + 0.05) / (darker + 0.05);
   }
 
   Widget _buildPresetTile(BuildContext context, ThemePreset preset, bool isActive) {

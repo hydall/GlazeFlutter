@@ -1,17 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/state/db_provider.dart';
-import '../../../core/services/image_storage_service.dart';
 import '../../../shared/theme/theme_preset_storage.dart';
 import 'services/sync_conflict.dart';
 import 'services/sync_engine.dart';
 import 'services/sync_service.dart';
 import 'sync_config.dart';
 import 'sync_models.dart';
-
-final imageStorageProvider = FutureProvider<ImageStorageService>((ref) {
-  return ImageStorageService.create();
-});
 
 final syncServiceProvider = FutureProvider<SyncService>((ref) async {
   await SyncConfig.load();
