@@ -189,10 +189,12 @@ PromptResult buildPrompt(PromptPayload payload) {
   final depthBlocks = <_ResolvedDepthBlock>[];
   final relativeBlocks = <_ResolvedRelativeBlock>[];
 
+  final visibleHistory = payload.history.where((m) => !m.isHidden && !m.isTyping).toList();
+
   final loreEntries = payload.preScannedEntries ?? scanLorebooks(
-    history: payload.history,
+    history: visibleHistory,
     char: char,
-    textToScan: payload.history.where((m) => m.role == 'user').lastOrNull?.content ?? '',
+    textToScan: visibleHistory.where((m) => m.role == 'user').lastOrNull?.content ?? '',
     chatId: null,
     lorebooks: payload.lorebooks,
     globalSettings: payload.lorebookSettings,

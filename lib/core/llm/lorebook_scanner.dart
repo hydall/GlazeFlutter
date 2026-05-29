@@ -154,8 +154,10 @@ List<ScannedEntry> scanLorebooks({
           ? scanDepth < temporalDepth ? scanDepth : temporalDepth
           : scanDepth;
 
-      final messagesToScan = history
-          .skip(history.length > effectiveScanDepth ? history.length - effectiveScanDepth : 0)
+      final visibleHistory = history.where((m) => !m.isHidden && !m.isTyping).toList();
+
+      final messagesToScan = visibleHistory
+          .skip(visibleHistory.length > effectiveScanDepth ? visibleHistory.length - effectiveScanDepth : 0)
           .map((m) => m.content)
           .join('\n');
 
@@ -169,11 +171,11 @@ List<ScannedEntry> scanLorebooks({
       if (entry.sticky > 0 || entry.cooldown > 0) {
         final temporalMax = entry.sticky > entry.cooldown ? entry.sticky : entry.cooldown;
         for (var i = 1; i <= temporalMax; i++) {
-          final idx = history.length - i;
+          final idx = visibleHistory.length - i;
           if (idx < 0) break;
           final histSource = caseSensitive
-              ? history[idx].content
-              : history[idx].content.toLowerCase();
+              ? visibleHistory[idx].content
+              : visibleHistory[idx].content.toLowerCase();
           final wasMatched = primaryKeys.any((key) => glazeCheckMatch(key, histSource, caseSensitive, wholeWords));
           if (wasMatched) {
             if (i <= entry.sticky) isStickyActive = true;

@@ -100,6 +100,9 @@ class MagicDrawerStatsService {
             .fold<int>(0, (sum, m) => sum + (m.content.length / 4).round())
         : 0;
 
+    final lastMsg = session?.messages.lastOrNull;
+    final lorebookEntryCount = lastMsg?.triggeredLorebooks.length ?? 0;
+
     return MagicDrawerStats(
       character: character,
       activePreset: activePreset,
@@ -108,7 +111,7 @@ class MagicDrawerStatsService {
       session: session,
       sessionCount: sessionCount,
       messageCount: messageCount,
-      lorebookEntryCount: 0,
+      lorebookEntryCount: lorebookEntryCount,
       memoryEntryCount: memoryEntries,
       regexCount: regexes.length,
       summaryChars: summaryChars,
