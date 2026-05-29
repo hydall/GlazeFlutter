@@ -45,6 +45,47 @@ String _toHex(Color c) {
   return '#$r$g$b'.toUpperCase();
 }
 
+Future<void> _pickCustomFont(
+  BuildContext context,
+  void Function(ThemePreset Function(ThemePreset)) onUpdate, {
+  required bool isUi,
+  required ThemePreset preset,
+}) async {
+  try {
+    final result = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['ttf', 'otf', 'woff', 'woff2'],
+      dialogTitle: 'Select Font File',
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final bytes = file.bytes ?? (file.path != null ? await File(file.path!).readAsBytes() : null);
+    if (bytes == null) return;
+    final fontName = file.name.replaceAll(RegExp(r'\.(ttf|otf|woff2?)$', caseSensitive: false), '');
+    final dataUri = 'data:font/ttf;base64,${base64Encode(bytes)}';
+    if (isUi) {
+      onUpdate((p) => p.copyWith(
+        uiFontMode: 'custom',
+        customFont: dataUri,
+        customFontName: fontName,
+      ));
+    } else {
+      onUpdate((p) => p.copyWith(
+        chatFontMode: 'custom',
+        chatFont: dataUri,
+        chatFontName: fontName,
+      ));
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load font: $e')),
+      );
+    }
+  }
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 class ThemeEditorScreen extends ConsumerStatefulWidget {
@@ -202,9 +243,15 @@ class _GeneralTab extends StatelessWidget {
             _FontModeRow(
               label: 'Font',
               mode: preset.uiFontMode,
-              modes: const ['glaze', 'system'],
-              modeLabels: const ['Glaze (Inter)', 'System'],
-              onChanged: (v) => onUpdate((p) => p.copyWith(uiFontMode: v)),
+              modes: const ['glaze', 'system', 'custom'],
+              modeLabels: const ['Glaze (Inter)', 'System', 'Custom File'],
+              onChanged: (v) async {
+                if (v == 'custom') {
+                  await _pickCustomFont(context, onUpdate, isUi: true, preset: preset);
+                } else {
+                  onUpdate((p) => p.copyWith(uiFontMode: v));
+                }
+              },
             ),
             _ColorRow(
               label: 'Text Color',
@@ -478,9 +525,15 @@ class _ChatFontTab extends StatelessWidget {
             _FontModeRow(
               label: 'Font',
               mode: preset.chatFontMode,
-              modes: const ['ui', 'glaze', 'system'],
-              modeLabels: const ['Same as UI', 'Glaze (Inter)', 'System'],
-              onChanged: (v) => onUpdate((p) => p.copyWith(chatFontMode: v)),
+              modes: const ['ui', 'glaze', 'system', 'custom'],
+              modeLabels: const ['Same as UI', 'Glaze (Inter)', 'System', 'Custom File'],
+              onChanged: (v) async {
+                if (v == 'custom') {
+                  await _pickCustomFont(context, onUpdate, isUi: false, preset: preset);
+                } else {
+                  onUpdate((p) => p.copyWith(chatFontMode: v));
+                }
+              },
             ),
             _FontSizeRow(
               label: 'Font Size',
@@ -1045,11 +1098,23 @@ class _ColorPickerSheet extends StatefulWidget {
 class _ColorPickerSheetState extends State<_ColorPickerSheet> {
   late TextEditingController _hexCtrl;
   String? _error;
+  bool _isHslMode = true;
+  late double _h, _s, _l;
+  late int _r, _g, _b;
+  bool _suppressSliderSync = false;
 
   @override
   void initState() {
     super.initState();
     _hexCtrl = TextEditingController(text: widget.current ?? '');
+    final currentColor = widget.current != null ? _hex(widget.current!) : const Color(0xFF7996CE);
+    final hsl = HSLColor.fromColor(currentColor);
+    _h = hsl.hue;
+    _s = hsl.saturation;
+    _l = hsl.lightness;
+    _r = (currentColor.r * 255).round();
+    _g = (currentColor.g * 255).round();
+    _b = (currentColor.b * 255).round();
   }
 
   @override
@@ -1058,8 +1123,22 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
     super.dispose();
   }
 
-  /// Live-apply on every keystroke when the hex is valid. Empty input applies
-  /// null when `allowNull`; invalid input shows an inline error.
+  void _applyColor(Color color) {
+    final hex = _toHex(color);
+    _suppressSliderSync = true;
+    final hsl = HSLColor.fromColor(color);
+    _h = hsl.hue;
+    _s = hsl.saturation;
+    _l = hsl.lightness;
+    _r = (color.r * 255).round();
+    _g = (color.g * 255).round();
+    _b = (color.b * 255).round();
+    _hexCtrl.text = hex;
+    setState(() => _error = null);
+    widget.onChanged(hex);
+    _suppressSliderSync = false;
+  }
+
   void _onHexChanged(String hex) {
     final clean = hex.trim();
     if (clean.isEmpty) {
@@ -1070,12 +1149,23 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
     final h = clean.startsWith('#') ? clean : '#$clean';
     final parsed = _parseHexSafe(h);
     if (parsed == null) {
-      // Don't show error mid-typing; only flag clearly malformed lengths.
       setState(() => _error = clean.length >= 6 ? 'Invalid hex color' : null);
       return;
     }
     setState(() => _error = null);
-    widget.onChanged(_toHex(parsed));
+    _applyColor(parsed);
+  }
+
+  void _onHslChanged() {
+    if (_suppressSliderSync) return;
+    final color = HSLColor.fromAHSL(1.0, _h, _s.clamp(0.0, 1.0), _l.clamp(0.0, 1.0)).toColor();
+    _applyColor(color);
+  }
+
+  void _onRgbChanged() {
+    if (_suppressSliderSync) return;
+    final color = Color.fromARGB(255, _r.clamp(0, 255), _g.clamp(0, 255), _b.clamp(0, 255));
+    _applyColor(color);
   }
 
   Color? _parseHexSafe(String hex) {
@@ -1092,6 +1182,7 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final currentColor = _parseHexSafe(_hexCtrl.text) ?? const Color(0xFF7996CE);
     return ClipRRect(
       borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       child: BackdropFilter(
@@ -1104,100 +1195,282 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
             child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 16),
-                        decoration: BoxDecoration(
-                          color: cs.outlineVariant,
-                          borderRadius: BorderRadius.circular(2),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 36,
+                          height: 4,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          decoration: BoxDecoration(
+                            color: cs.outlineVariant,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
-                    ),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        if (widget.allowNull)
-                          GestureDetector(
-                            onTap: () {
-                              widget.onChanged(null);
-                              Navigator.pop(context);
-                            },
-                            child: Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                border: Border.all(
-                                    color: cs.outlineVariant, width: 1.5),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(Icons.auto_awesome,
-                                  size: 18, color: cs.onSurfaceVariant),
-                            ),
+                      // Preview swatch
+                      Center(
+                        child: Container(
+                          width: 56,
+                          height: 56,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            color: currentColor,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: cs.outlineVariant, width: 1.5),
                           ),
-                        ...widget.palette.map((hex) {
-                          final color = _hex(hex);
-                          final isSelected = widget.current?.toUpperCase() ==
-                              hex.toUpperCase();
-                          return GestureDetector(
-                            onTap: () {
-                              widget.onChanged(hex.toUpperCase());
-                              Navigator.pop(context);
-                            },
-                            child: Container(
-                              width: 44,
-                              height: 44,
-                              decoration: BoxDecoration(
-                                color: color,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: isSelected
-                                      ? cs.primary
-                                      : cs.outlineVariant,
-                                  width: isSelected ? 3 : 1,
+                        ),
+                      ),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          if (widget.allowNull)
+                            GestureDetector(
+                              onTap: () {
+                                widget.onChanged(null);
+                                Navigator.pop(context);
+                              },
+                              child: Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                      color: cs.outlineVariant, width: 1.5),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(Icons.auto_awesome,
+                                    size: 18, color: cs.onSurfaceVariant),
+                              ),
+                            ),
+                          ...widget.palette.map((hex) {
+                            final color = _hex(hex);
+                            final isSelected = widget.current?.toUpperCase() ==
+                                hex.toUpperCase();
+                            return GestureDetector(
+                              onTap: () {
+                                _applyColor(color);
+                                Navigator.pop(context);
+                              },
+                              child: Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? cs.primary
+                                        : cs.outlineVariant,
+                                    width: isSelected ? 3 : 1,
+                                  ),
+                                ),
+                                child: isSelected
+                                    ? Icon(
+                                        Icons.check,
+                                        size: 20,
+                                        color: color.computeLuminance() > 0.4
+                                            ? Colors.black
+                                            : Colors.white,
+                                      )
+                                    : null,
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      // Mode toggle
+                      Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setState(() => _isHslMode = true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: _isHslMode ? cs.primary.withValues(alpha: 0.15) : Colors.transparent,
+                                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                                  border: Border.all(color: cs.outlineVariant),
+                                ),
+                                child: Text(
+                                  'HSL',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: _isHslMode ? cs.primary : cs.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
                                 ),
                               ),
-                              child: isSelected
-                                  ? Icon(
-                                      Icons.check,
-                                      size: 20,
-                                      color: color.computeLuminance() > 0.4
-                                          ? Colors.black
-                                          : Colors.white,
-                                    )
-                                  : null,
                             ),
-                          );
-                        }),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: _hexCtrl,
-                      decoration: InputDecoration(
-                        hintText: '#7996CE',
-                        labelText: 'Hex Color',
-                        errorText: _error,
-                        prefixText:
-                            _hexCtrl.text.startsWith('#') ? null : '#',
-                        border: const OutlineInputBorder(),
-                        isDense: true,
+                          ),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => setState(() => _isHslMode = false),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: !_isHslMode ? cs.primary.withValues(alpha: 0.15) : Colors.transparent,
+                                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
+                                  border: Border(
+                                    top: BorderSide(color: cs.outlineVariant),
+                                    right: BorderSide(color: cs.outlineVariant),
+                                    bottom: BorderSide(color: cs.outlineVariant),
+                                  ),
+                                ),
+                                child: Text(
+                                  'RGB',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: !_isHslMode ? cs.primary : cs.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      onChanged: _onHexChanged,
-                    ),
-                    const SizedBox(height: 8),
-                  ],
+                      const SizedBox(height: 12),
+                      if (_isHslMode) ...[
+                        _PickerSlider(
+                          label: 'Hue',
+                          value: _h,
+                          min: 0,
+                          max: 360,
+                          divisions: 360,
+                          display: '${_h.round()}\u00B0',
+                          onChanged: (v) { _h = v; _onHslChanged(); setState(() {}); },
+                        ),
+                        _PickerSlider(
+                          label: 'Saturation',
+                          value: _s * 100,
+                          min: 0,
+                          max: 100,
+                          divisions: 100,
+                          display: '${(_s * 100).round()}%',
+                          onChanged: (v) { _s = v / 100; _onHslChanged(); setState(() {}); },
+                        ),
+                        _PickerSlider(
+                          label: 'Lightness',
+                          value: _l * 100,
+                          min: 0,
+                          max: 100,
+                          divisions: 100,
+                          display: '${(_l * 100).round()}%',
+                          onChanged: (v) { _l = v / 100; _onHslChanged(); setState(() {}); },
+                        ),
+                      ] else ...[
+                        _PickerSlider(
+                          label: 'Red',
+                          value: _r.toDouble(),
+                          min: 0,
+                          max: 255,
+                          divisions: 255,
+                          display: '$_r',
+                          activeColor: const Color(0xFFFF4444),
+                          onChanged: (v) { _r = v.round(); _onRgbChanged(); setState(() {}); },
+                        ),
+                        _PickerSlider(
+                          label: 'Green',
+                          value: _g.toDouble(),
+                          min: 0,
+                          max: 255,
+                          divisions: 255,
+                          display: '$_g',
+                          activeColor: const Color(0xFF44BB44),
+                          onChanged: (v) { _g = v.round(); _onRgbChanged(); setState(() {}); },
+                        ),
+                        _PickerSlider(
+                          label: 'Blue',
+                          value: _b.toDouble(),
+                          min: 0,
+                          max: 255,
+                          divisions: 255,
+                          display: '$_b',
+                          activeColor: const Color(0xFF4488FF),
+                          onChanged: (v) { _b = v.round(); _onRgbChanged(); setState(() {}); },
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: _hexCtrl,
+                        decoration: InputDecoration(
+                          hintText: '#7996CE',
+                          labelText: 'Hex Color',
+                          errorText: _error,
+                          prefixText:
+                              _hexCtrl.text.startsWith('#') ? null : '#',
+                          border: const OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: _onHexChanged,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _PickerSlider extends StatelessWidget {
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final int divisions;
+  final String display;
+  final Color? activeColor;
+  final ValueChanged<double> onChanged;
+
+  const _PickerSlider({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.display,
+    required this.onChanged,
+    this.activeColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(label, style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+          ),
+          Expanded(
+            child: Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              divisions: divisions,
+              activeColor: activeColor ?? cs.primary,
+              onChanged: onChanged,
+            ),
+          ),
+          SizedBox(
+            width: 48,
+            child: Text(display, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant), textAlign: TextAlign.end),
+          ),
+        ],
       ),
     );
   }

@@ -1,13 +1,17 @@
+import 'dart:convert';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/services/file_export_service.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../../../shared/theme/theme_preset_storage.dart';
 import '../../../shared/theme/theme_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import 'theme_editor_screen.dart';
 
 class ThemePresetScreen extends ConsumerStatefulWidget {
@@ -204,6 +208,22 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
             _openThemeEditor(preset, isActive: isActive);
           },
         ),
+        BottomSheetItem(
+          icon: Icons.drive_file_rename_outline,
+          label: 'Rename',
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _renamePreset(preset);
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.upload_file,
+          label: 'Export',
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _exportPreset(preset);
+          },
+        ),
         if (preset.id != 'default')
           BottomSheetItem(
             icon: Icons.delete_outline,
@@ -216,6 +236,43 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
           ),
       ],
     );
+  }
+
+  void _renamePreset(ThemePreset preset) {
+    GlazeBottomSheet.show(
+      context,
+      title: 'Rename Theme',
+      input: BottomSheetInput(
+        placeholder: 'Theme name',
+        value: preset.name,
+        confirmLabel: 'Rename',
+        onConfirm: (val) async {
+          Navigator.of(context, rootNavigator: true).pop();
+          if (val.trim().isNotEmpty) {
+            final renamed = preset.copyWith(name: val.trim());
+            await ref.read(themeProvider.notifier).updatePreset(renamed);
+          }
+        },
+      ),
+    );
+  }
+
+  Future<void> _exportPreset(ThemePreset preset) async {
+    try {
+      final json = jsonEncode(preset.toJson());
+      final filename = '${preset.name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')}.json';
+      final path = await FileExportService.export(
+        data: json,
+        filename: filename,
+        subfolder: 'themes',
+      );
+      if (!mounted) return;
+      GlazeToast.show(context, 'Theme exported to $path');
+    } catch (e) {
+      if (e.toString().contains('cancelled')) return;
+      if (!mounted) return;
+      GlazeToast.error(context, 'Export failed: ', e);
+    }
   }
 
   Future<void> _openThemeEditor(ThemePreset preset, {required bool isActive}) async {

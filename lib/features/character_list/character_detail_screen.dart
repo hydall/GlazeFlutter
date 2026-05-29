@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,12 +10,15 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/models/character.dart';
+import '../../core/services/chat_import_export.dart';
 import '../../core/utils/html_to_markdown.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/chat_session_ops_provider.dart';
+import '../../features/chat/chat_actions_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../../shared/widgets/sheet_view.dart';
 import '../../shared/widgets/colored_markdown.dart';
@@ -234,6 +239,14 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
           label: 'New Chat',
           onTap: () => _closeSheetAndNavigate('/chat/$cId?new=1'),
         ),
+        BottomSheetItem(
+          icon: Icons.file_download,
+          label: 'Import Chat',
+          onTap: () {
+            Navigator.of(context).pop();
+            _importChat(cId);
+          },
+        ),
         ...sessions.map(
           (s) => BottomSheetItem(
             icon: Icons.chat_bubble_outline,
@@ -246,6 +259,43 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         ),
       ],
     );
+  }
+
+  Future<void> _importChat(String charId) async {
+    final result = await FilePicker.pickFiles(
+      type: Platform.isIOS ? FileType.any : FileType.custom,
+      allowedExtensions: Platform.isIOS ? null : ['jsonl', 'json'],
+      allowMultiple: false,
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    final filePath = file.path;
+    try {
+      int count;
+      if (file.bytes != null) {
+        final importResult = importChatFromJsonlString(
+          utf8.decode(file.bytes!),
+        );
+        count = await ref.read(chatActionsServiceProvider)
+            .importChatFromResult(charId, importResult);
+      } else if (filePath != null) {
+        count = await ref.read(chatActionsServiceProvider)
+            .importChat(charId, filePath);
+      } else {
+        return;
+      }
+      if (!mounted) return;
+      if (count > 0) {
+        _closeSheetAndNavigate('/chat/$charId');
+      }
+      GlazeToast.show(
+        context,
+        count == 0 ? 'No messages found in file' : 'Imported $count messages',
+      );
+    } catch (e) {
+      if (mounted) GlazeToast.error(context, 'Import failed: ', e);
+    }
   }
 
   @override

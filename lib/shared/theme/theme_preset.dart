@@ -35,6 +35,8 @@ class ThemePreset with _$ThemePreset {
     String? customFontName,
     String? chatFont,
     String? chatFontName,
+    String? googleFontName,
+    String? chatGoogleFontName,
     @Default('glaze') String uiFontMode,
     @Default('ui') String chatFontMode,
     String? uiTextColor,
