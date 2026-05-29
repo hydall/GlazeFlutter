@@ -1224,6 +1224,10 @@ class Bridge {
         const layout = this._normalizeLayout(value);
         container.classList.remove('layout-bubble', 'layout-default');
         container.classList.add(`layout-${layout}`);
+        document.querySelectorAll('.message-section').forEach(el => {
+          el.classList.remove('layout-bubble', 'layout-default');
+          el.classList.add(`layout-${layout}`);
+        });
         continue;
       }
       document.documentElement.style.setProperty(`--${key}`, value);
@@ -1250,6 +1254,10 @@ class Bridge {
     const container = document.getElementById('chat-container') || document.body;
     container.classList.remove('layout-bubble', 'layout-default');
     container.classList.add(`layout-${normalized}`);
+    document.querySelectorAll('.message-section').forEach(el => {
+      el.classList.remove('layout-bubble', 'layout-default');
+      el.classList.add(`layout-${normalized}`);
+    });
   }
 
   setMessageSettings(json) {
