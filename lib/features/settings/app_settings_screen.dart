@@ -175,8 +175,10 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             ),
             MenuItem(
               label: 'Chat Layout',
-              value: s.chatLayout == 'bubble' ? 'Bubbles' : 'Default',
-              onTap: () => _showLayoutPicker(context, ref, s),
+              value: ref.watch(themeProvider).activePreset.chatLayout == 'bubble'
+                  ? 'Bubbles'
+                  : 'Default',
+              onTap: () => _showLayoutPicker(context, ref),
             ),
             MenuSwitchItem(
               label: 'Hide Message ID',
@@ -320,39 +322,41 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     );
   }
 
-  void _showLayoutPicker(BuildContext context, WidgetRef ref, AppSettings s) {
+  void _showLayoutPicker(BuildContext context, WidgetRef ref) {
+    final preset = ref.read(themeProvider).activePreset;
+    final current = preset.chatLayout;
     GlazeBottomSheet.show(
       context,
       title: 'Chat Layout',
       items: [
         BottomSheetItem(
           label: 'Default',
-          icon: s.chatLayout == 'default'
+          icon: current == 'default'
               ? Icons.radio_button_checked
               : Icons.radio_button_off,
-          iconColor: s.chatLayout == 'default'
+          iconColor: current == 'default'
               ? context.cs.primary
               : context.cs.onSurfaceVariant,
           onTap: () {
             Navigator.pop(context);
             ref
-                .read(appSettingsProvider.notifier)
-                .save(s.copyWith(chatLayout: 'default'));
+                .read(themeProvider.notifier)
+                .updatePreset(preset.copyWith(chatLayout: 'default'));
           },
         ),
         BottomSheetItem(
           label: 'Bubbles',
-          icon: s.chatLayout == 'bubble'
+          icon: current == 'bubble'
               ? Icons.radio_button_checked
               : Icons.radio_button_off,
-          iconColor: s.chatLayout == 'bubble'
+          iconColor: current == 'bubble'
               ? context.cs.primary
               : context.cs.onSurfaceVariant,
           onTap: () {
             Navigator.pop(context);
             ref
-                .read(appSettingsProvider.notifier)
-                .save(s.copyWith(chatLayout: 'bubble'));
+                .read(themeProvider.notifier)
+                .updatePreset(preset.copyWith(chatLayout: 'bubble'));
           },
         ),
       ],

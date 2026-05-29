@@ -61,9 +61,9 @@ class GlazeColors extends ThemeExtension<GlazeColors> {
       charBubble: charBubble,
       userText: _ensureContrast(preset.userTextParsed, userBubble),
       charText: _ensureContrast(preset.charTextParsed, charBubble),
-      // If preset sets a quote/italic color — use it; otherwise fall back to JS defaults
-      userQuote: preset.userQuoteParsed ?? _defaultQuote,
-      charQuote: preset.charQuoteParsed ?? _defaultQuote,
+      // If preset sets a quote/italic color — use it; otherwise fall back to accent
+      userQuote: preset.userQuoteParsed ?? accent,
+      charQuote: preset.charQuoteParsed ?? accent,
       userItalic: preset.userItalicParsed ?? _defaultItalic,
       charItalic: preset.charItalicParsed ?? _defaultItalic,
     );

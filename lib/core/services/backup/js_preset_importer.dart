@@ -163,10 +163,6 @@ class JsPresetImporter extends BackupHelpers {
       );
       await storage.setActive(active.id);
 
-      final chatLayout = active.chatLayout;
-      if (chatLayout.isNotEmpty) {
-        await prefs.setString('chatLayout', chatLayout);
-      }
       final accent = active.accentColor;
       if (accent.isNotEmpty) {
         final clean = accent.replaceFirst('#', '');

@@ -8,7 +8,6 @@ import '../../shared/theme/theme_preset.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../chat/widgets/chat_header.dart';
 import '../chat/widgets/chat_input_bar.dart';
-import 'app_settings_provider.dart';
 
 /// Live preview of a theme preset, framed like the avatar card in
 /// generic_editor.dart:319. Intrinsic height; the message style follows the
@@ -35,8 +34,7 @@ class ThemeChatPreview extends ConsumerWidget {
       name: 'Rei',
       color: preset.accentColor,
     );
-    final chatLayout =
-        ref.watch(appSettingsProvider).valueOrNull?.chatLayout ?? 'default';
+    final chatLayout = preset.chatLayout;
     final isStandard = chatLayout == 'default';
 
     return ClipRRect(

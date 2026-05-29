@@ -16,7 +16,6 @@ void main() {
       'batterySaver': bool,
       'hideTooltips': bool,
       'disableSwipeRegeneration': bool,
-      'chatLayout': String,
       'language': String,
       'virtualKeyboardSend': bool,
       'tokenizerHidePercent': double,
@@ -47,9 +46,7 @@ void main() {
               );
             }
           case String:
-            if (entry.key == 'chatLayout') {
-              expect(defaults.chatLayout, 'default');
-            } else if (entry.key == 'language') {
+            if (entry.key == 'language') {
               expect(defaults.language, 'en');
             }
           case double:
@@ -66,20 +63,18 @@ void main() {
       const original = AppSettings(
         enterToSend: false,
         hideMessageId: true,
-        chatLayout: 'bubbles',
         language: 'ru',
         tokenizerHidePercent: 50,
       );
       final copy = original.copyWith();
       expect(copy.enterToSend, original.enterToSend);
       expect(copy.hideMessageId, original.hideMessageId);
-      expect(copy.chatLayout, original.chatLayout);
       expect(copy.language, original.language);
       expect(copy.tokenizerHidePercent, original.tokenizerHidePercent);
     });
 
     test('all expected SharedPrefs keys are covered', () {
-      expect(expectedKeys.length, 14);
+      expect(expectedKeys.length, 13);
     });
 
     test('dialogGrouping key in SharedPrefs is "dialogGrouping" not "groupDialogs"', () {
@@ -141,7 +136,6 @@ void main() {
         'batterySaver',
         'hideTooltips',
         'disableSwipeRegeneration',
-        'chatLayout',
         'language',
         'virtualKeyboardSend',
         'tokenizerHidePercent',
@@ -187,7 +181,7 @@ void main() {
       };
       final deduped = allKeys.toSet();
       expect(deduped.length, allKeys.length, reason: 'All keys must be unique');
-      expect(allKeys.length, greaterThanOrEqualTo(45));
+      expect(allKeys.length, greaterThanOrEqualTo(44));
     });
   });
 }

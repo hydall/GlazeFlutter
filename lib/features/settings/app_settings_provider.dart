@@ -14,7 +14,6 @@ class AppSettings {
   final bool batterySaver;
   final bool hideTooltips;
   final bool disableSwipeRegeneration;
-  final String chatLayout;
   final String language;
   final bool virtualKeyboardSend;
   final double tokenizerHidePercent;
@@ -30,7 +29,6 @@ class AppSettings {
     this.batterySaver = false,
     this.hideTooltips = false,
     this.disableSwipeRegeneration = false,
-    this.chatLayout = 'default',
     this.language = 'en',
     this.virtualKeyboardSend = false,
     this.tokenizerHidePercent = 30,
@@ -47,7 +45,6 @@ class AppSettings {
     bool? batterySaver,
     bool? hideTooltips,
     bool? disableSwipeRegeneration,
-    String? chatLayout,
     String? language,
     bool? virtualKeyboardSend,
     double? tokenizerHidePercent,
@@ -64,11 +61,11 @@ class AppSettings {
       hideTooltips: hideTooltips ?? this.hideTooltips,
       disableSwipeRegeneration:
           disableSwipeRegeneration ?? this.disableSwipeRegeneration,
-      chatLayout: chatLayout ?? this.chatLayout,
       language: language ?? this.language,
       virtualKeyboardSend: virtualKeyboardSend ?? this.virtualKeyboardSend,
       tokenizerHidePercent: tokenizerHidePercent ?? this.tokenizerHidePercent,
-      tokenizerHistoryFillThreshold: tokenizerHistoryFillThreshold ?? this.tokenizerHistoryFillThreshold,
+      tokenizerHistoryFillThreshold:
+          tokenizerHistoryFillThreshold ?? this.tokenizerHistoryFillThreshold,
       showOurPicks: showOurPicks ?? this.showOurPicks,
     );
   }
@@ -88,7 +85,6 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
       hideTooltips: prefs.getBool('hideTooltips') ?? false,
       disableSwipeRegeneration:
           prefs.getBool('disableSwipeRegeneration') ?? false,
-      chatLayout: prefs.getString('chatLayout') ?? 'default',
       language: prefs.getString('language') ?? 'en',
       virtualKeyboardSend: prefs.getBool('virtualKeyboardSend') ?? false,
       tokenizerHidePercent: prefs.getDouble('tokenizerHidePercent') ?? 30,
@@ -107,7 +103,6 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setBool('batterySaver', settings.batterySaver);
     await prefs.setBool('hideTooltips', settings.hideTooltips);
     await prefs.setBool('disableSwipeRegeneration', settings.disableSwipeRegeneration);
-    await prefs.setString('chatLayout', settings.chatLayout);
     await prefs.setString('language', settings.language);
     await prefs.setBool('virtualKeyboardSend', settings.virtualKeyboardSend);
     await prefs.setDouble('tokenizerHidePercent', settings.tokenizerHidePercent);
