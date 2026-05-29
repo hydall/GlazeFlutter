@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/llm/embedding_service.dart';
+import '../../../core/services/api_connection_tester.dart';
 import '../../../core/llm/lorebook_providers.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../core/state/shared_prefs_provider.dart';
@@ -92,27 +92,19 @@ class _EmbeddingSettingsScreenState
 
   Future<void> _testConnection() async {
     setState(() => _isTesting = true);
-    try {
-      final service = EmbeddingService();
-      final config = EmbeddingConfig(
-        endpoint: _endpointCtrl.text.trim(),
-        apiKey: _apiKeyCtrl.text.trim(),
-        model: _modelCtrl.text.trim(),
-        maxChunkTokens: 64,
-      );
-      final result = await service.getEmbeddings(['test'], config);
-      if (result.isNotEmpty && result.first.isNotEmpty) {
-        if (mounted) {
-          GlazeToast.show(context, 'OK — vector dim: ${result.first.length}');
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        GlazeToast.error(context, 'Failed: ', e);
-      }
-    } finally {
-      if (mounted) setState(() => _isTesting = false);
+    final result = await ApiConnectionTester().testEmbedding(
+      endpoint: _endpointCtrl.text.trim(),
+      apiKey: _apiKeyCtrl.text.trim(),
+      model: _modelCtrl.text.trim(),
+    );
+    if (!mounted) return;
+    switch (result) {
+      case ApiTestSuccess(:final message):
+        GlazeToast.show(context, message);
+      case ApiTestFailure(:final error):
+        GlazeToast.error(context, 'Failed: ', error);
     }
+    if (mounted) setState(() => _isTesting = false);
   }
 
   @override

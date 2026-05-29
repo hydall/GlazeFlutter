@@ -1,74 +1,30 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../../core/state/shared_prefs_provider.dart';
+
+part 'app_settings_provider.freezed.dart';
 
 final appSettingsProvider = AsyncNotifierProvider<AppSettingsNotifier, AppSettings>(
     AppSettingsNotifier.new);
 
-class AppSettings {
-  final bool enterToSend;
-  final bool hideMessageId;
-  final bool hideGenerationTime;
-  final bool hideTokenCount;
-  final bool groupDialogs;
-  final bool batterySaver;
-  final bool hideTooltips;
-  final bool disableSwipeRegeneration;
-  final String language;
-  final bool virtualKeyboardSend;
-  final double tokenizerHidePercent;
-  final double tokenizerHistoryFillThreshold;
-  final bool showOurPicks;
-
-  const AppSettings({
-    this.enterToSend = true,
-    this.hideMessageId = false,
-    this.hideGenerationTime = false,
-    this.hideTokenCount = false,
-    this.groupDialogs = false,
-    this.batterySaver = false,
-    this.hideTooltips = false,
-    this.disableSwipeRegeneration = false,
-    this.language = 'en',
-    this.virtualKeyboardSend = false,
-    this.tokenizerHidePercent = 30,
-    this.tokenizerHistoryFillThreshold = 85,
-    this.showOurPicks = true,
-  });
-
-  AppSettings copyWith({
-    bool? enterToSend,
-    bool? hideMessageId,
-    bool? hideGenerationTime,
-    bool? hideTokenCount,
-    bool? groupDialogs,
-    bool? batterySaver,
-    bool? hideTooltips,
-    bool? disableSwipeRegeneration,
-    String? language,
-    bool? virtualKeyboardSend,
-    double? tokenizerHidePercent,
-    double? tokenizerHistoryFillThreshold,
-    bool? showOurPicks,
-  }) {
-    return AppSettings(
-      enterToSend: enterToSend ?? this.enterToSend,
-      hideMessageId: hideMessageId ?? this.hideMessageId,
-      hideGenerationTime: hideGenerationTime ?? this.hideGenerationTime,
-      hideTokenCount: hideTokenCount ?? this.hideTokenCount,
-      groupDialogs: groupDialogs ?? this.groupDialogs,
-      batterySaver: batterySaver ?? this.batterySaver,
-      hideTooltips: hideTooltips ?? this.hideTooltips,
-      disableSwipeRegeneration:
-          disableSwipeRegeneration ?? this.disableSwipeRegeneration,
-      language: language ?? this.language,
-      virtualKeyboardSend: virtualKeyboardSend ?? this.virtualKeyboardSend,
-      tokenizerHidePercent: tokenizerHidePercent ?? this.tokenizerHidePercent,
-      tokenizerHistoryFillThreshold:
-          tokenizerHistoryFillThreshold ?? this.tokenizerHistoryFillThreshold,
-      showOurPicks: showOurPicks ?? this.showOurPicks,
-    );
-  }
+@freezed
+class AppSettings with _$AppSettings {
+  const factory AppSettings({
+    @Default(true) bool enterToSend,
+    @Default(false) bool hideMessageId,
+    @Default(false) bool hideGenerationTime,
+    @Default(false) bool hideTokenCount,
+    @Default(false) bool groupDialogs,
+    @Default(false) bool batterySaver,
+    @Default(false) bool hideTooltips,
+    @Default(false) bool disableSwipeRegeneration,
+    @Default('en') String language,
+    @Default(false) bool virtualKeyboardSend,
+    @Default(30) double tokenizerHidePercent,
+    @Default(85) double tokenizerHistoryFillThreshold,
+    @Default(true) bool showOurPicks,
+  }) = _AppSettings;
 }
 
 class AppSettingsNotifier extends AsyncNotifier<AppSettings> {

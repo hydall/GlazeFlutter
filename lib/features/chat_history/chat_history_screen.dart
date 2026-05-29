@@ -9,6 +9,7 @@ import '../../core/utils/html_to_markdown.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
 
+import '../../shared/utils/time_formatter.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../core/state/character_provider.dart' show avatarVersionProvider;
@@ -578,15 +579,7 @@ class _SessionTile extends ConsumerWidget {
 
   String _formatTime() {
     if (info.lastMessageTime == 0) return '';
-    final dt = DateTime.fromMillisecondsSinceEpoch(info.lastMessageTime);
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-
-    if (diff.inMinutes < 1) return 'now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m';
-    if (diff.inDays < 1) return '${diff.inHours}h';
-    if (diff.inDays < 7) return '${diff.inDays}d';
-    return '${dt.day}/${dt.month}';
+    return formatTimeAgo(info.lastMessageTime);
   }
 
   void _showRenameDialog(BuildContext context, WidgetRef ref) {

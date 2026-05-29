@@ -24,6 +24,7 @@ import '../../shared/widgets/image_viewer.dart';
 import '../settings/app_settings_provider.dart';
 import 'chat_drawer_controller.dart';
 import 'chat_provider.dart';
+import 'controllers/chat_message_selection_controller.dart';
 import 'chat_search_delegate.dart';
 import 'chat_state.dart';
 import 'widgets/chat_header.dart';
@@ -299,9 +300,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   double _inputBarHeight = 130.0;
   final GlobalKey _inputBarKey = GlobalKey();
 
-  bool _isSelectionMode = false;
+  final _selectionCtrl = ChatMessageSelectionController();
   bool _showScrollToBottom = false;
-  Set<String> _selectedMessageIds = {};
   final GlobalKey<ChatWebViewWidgetState> _webViewStateKey = GlobalKey();
 
   @override
@@ -480,10 +480,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           if (widget.drawerCtrl.inputFocus.hasFocus) {
             widget.drawerCtrl.inputFocus.unfocus();
           }
-          if (_isSelectionMode || _selectedMessageIds.isNotEmpty) {
+          if (_selectionCtrl.isSelectionMode || _selectionCtrl.selectedMessageIds.isNotEmpty) {
             setState(() {
-              _isSelectionMode = false;
-              _selectedMessageIds.clear();
+              _selectionCtrl.clearSelection();
             });
           }
         }
@@ -832,8 +831,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       onSelectionChange: (ids) {
                         if (mounted) {
                           setState(() {
-                            _selectedMessageIds = ids.toSet();
-                            _isSelectionMode = _selectedMessageIds.isNotEmpty;
+                            _selectionCtrl.updateSelection(ids);
                           });
                         }
                       },
@@ -841,7 +839,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                         _showImageViewer(context, imageUrl);
                       },
                     ),
-                    isSelectionMode: _isSelectionMode,
+                    isSelectionMode: _selectionCtrl.isSelectionMode,
                     searchQuery: widget.search.searchQuery,
                     searchCurrentIndex: widget.search.searchCurrentIndex,
                   ),
@@ -975,24 +973,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                               child: Builder(
                                 builder: (context) {
                                   final allSelectedHidden =
-                                      _selectedMessageIds.isNotEmpty &&
-                                          _selectedMessageIds.every(
-                                            (id) {
-                                              final idx = widget
-                                                  .state
-                                                  .messages
-                                                  .indexWhere(
-                                                    (m) =>
-                                                        m.id == id,
-                                                  );
-                                              return idx >= 0 &&
-                                                  widget
-                                                      .state
-                                                      .messages[
-                                                          idx]
-                                                      .isHidden;
-                                            },
-                                          );
+                                      _selectionCtrl.allSelectedHidden(
+                                        widget.state.messages,
+                                      );
                                   return ChatInputBar(
                                     focusNode:
                                         widget.drawerCtrl.inputFocus,
@@ -1027,74 +1010,31 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                     isEditingMessage:
                                         isEditingMessage,
                                     isSelectionMode:
-                                        _isSelectionMode,
+                                        _selectionCtrl.isSelectionMode,
                                     selectedCount:
-                                        _selectedMessageIds.length,
+                                        _selectionCtrl.selectedMessageIds.length,
                                     allSelectedHidden:
                                         allSelectedHidden,
                                     onCancelSelection: () {
                                       setState(() {
-                                        _isSelectionMode = false;
-                                        _selectedMessageIds.clear();
+                                        _selectionCtrl.clearSelection();
                                       });
                                     },
-                                    onHideSelected: () {
-                                      final notifier = ref.read(
-                                        chatProvider(
-                                          widget.charId,
-                                        ).notifier,
+                                    onHideSelected: () async {
+                                      await _selectionCtrl.hideSelected(
+                                        ref,
+                                        widget.charId,
+                                        widget.state.messages,
                                       );
-                                      for (final id
-                                          in _selectedMessageIds) {
-                                        final idx = widget
-                                            .state
-                                            .messages
-                                            .indexWhere(
-                                              (m) => m.id == id,
-                                            );
-                                        if (idx >= 0) {
-                                          notifier
-                                              .toggleMessageHidden(
-                                                  idx);
-                                        }
-                                      }
-                                      setState(() {
-                                        _isSelectionMode = false;
-                                        _selectedMessageIds.clear();
-                                      });
+                                      if (mounted) setState(() {});
                                     },
-                                    onDeleteSelected: () {
-                                      final notifier = ref.read(
-                                        chatProvider(
-                                          widget.charId,
-                                        ).notifier,
+                                    onDeleteSelected: () async {
+                                      await _selectionCtrl.deleteSelected(
+                                        ref,
+                                        widget.charId,
+                                        widget.state.messages,
                                       );
-                                      final indices =
-                                          _selectedMessageIds
-                                              .map(
-                                                (id) => widget
-                                                    .state
-                                                    .messages
-                                                    .indexWhere(
-                                                      (m) =>
-                                                          m.id ==
-                                                          id,
-                                                    ),
-                                              )
-                                              .where(
-                                                  (idx) => idx >= 0)
-                                              .toList()
-                                            ..sort(
-                                              (a, b) =>
-                                                  b.compareTo(a),
-                                            );
-                                      for (final idx in indices) {
-                                        notifier.deleteMessage(idx);
-                                      }
-                                      setState(() {
-                                        _isSelectionMode = false;
-                                        _selectedMessageIds.clear();
-                                      });
+                                      if (mounted) setState(() {});
                                     },
                                     isDrawerOpen: widget
                                             .drawerCtrl

@@ -3,14 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/state/character_provider.dart';
-import '../../../core/state/chat_session_ops_provider.dart';
-import '../../../core/state/lorebook_provider.dart';
-import '../../../core/state/shared_prefs_provider.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../shared/theme/theme_provider.dart';
-import '../../personas/persona_list_provider.dart';
-import '../../settings/api_list_provider.dart';
+import '../../../shared/utils/time_formatter.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -18,6 +12,7 @@ import '../sync_provider.dart';
 import '../sync_models.dart';
 import '../services/sync_conflict.dart';
 import '../services/sync_service.dart';
+import '../services/sync_controller.dart';
 import 'sync_icons.dart';
 import 'sync_sheet_widgets.dart';
 
@@ -29,64 +24,21 @@ class SyncSheet extends ConsumerStatefulWidget {
 }
 
 class _SyncSheetState extends ConsumerState<SyncSheet> {
-  bool _isConnecting = false;
-  bool _isConnectingGdrive = false;
-  bool _isDisconnecting = false;
-  bool _isWiping = false;
-  Map<String, dynamic>? _syncResult;
-  bool _syncIncludeApiKeys = false;
-  String? _gdriveFolderId;
+  late final SyncController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _loadIncludeApiKeys();
+    _ctrl = SyncController(ref);
+    _ctrl.initStateFromService();
+    _ctrl.loadIncludeApiKeys().then((_) {
+      if (mounted) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final service = ref.read(syncServiceProvider).value;
-      if (service != null) {
-        ref.read(syncStatusProvider.notifier).state = service.status;
-        ref.read(syncConnectedProvider.notifier).state = service.isConnected();
-        ref.read(syncProviderProvider.notifier).state = service.provider;
-        ref.read(syncAutoEnabledProvider.notifier).state = service.autoSyncEnabled;
-        _resolveFolderIdIfNeeded();
-      }
+      _ctrl.resolveFolderIdIfNeeded().then((_) {
+        if (mounted) setState(() {});
+      });
     });
-  }
-
-  void _loadIncludeApiKeys() async {
-    final prefs = await ref.read(sharedPreferencesProvider.future);
-    final raw = prefs.get('gz_sync_include_api_keys');
-    final val = raw is bool ? raw : false;
-    if (!mounted) return;
-    setState(() {
-      _syncIncludeApiKeys = val;
-    });
-  }
-
-  void _setIncludeApiKeys(bool val) async {
-    final prefs = await ref.read(sharedPreferencesProvider.future);
-    if (prefs.get('gz_sync_include_api_keys') is! bool) {
-      await prefs.remove('gz_sync_include_api_keys');
-    }
-    await prefs.setBool('gz_sync_include_api_keys', val);
-    if (!mounted) return;
-    setState(() {
-      _syncIncludeApiKeys = val;
-    });
-  }
-
-  void _resolveFolderIdIfNeeded() async {
-    final service = ref.read(syncServiceProvider).value;
-    if (service != null && service.provider == SyncProvider.gdrive && service.isConnected()) {
-      if (service.gdriveFolderId != null) {
-        setState(() => _gdriveFolderId = service.gdriveFolderId);
-      } else {
-        final id = await service.resolveGDriveFolderId();
-        if (mounted) {
-          setState(() => _gdriveFolderId = id);
-        }
-      }
-    }
   }
 
   @override
@@ -101,7 +53,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     final autoEnabled = ref.watch(syncAutoEnabledProvider);
     final service = ref.watch(syncServiceProvider).value;
 
-    final isSyncing = status == SyncStatus.syncing || _isWiping;
+    final isSyncing = status == SyncStatus.syncing || _ctrl.isWiping;
 
     return PopScope(
       canPop: false,
@@ -125,16 +77,16 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 const SizedBox(height: 4),
                 buildSyncProviderButton(
                   icon: const DropboxIcon(size: 22, color: Colors.white),
-                  label: _isConnecting ? 'Connecting...' : 'Dropbox',
+                  label: _ctrl.isConnecting ? 'Connecting...' : 'Dropbox',
                   color: context.colors.accent,
-                  onPressed: _isConnecting || _isConnectingGdrive ? null : _connectDropbox,
+                  onPressed: _ctrl.isConnecting || _ctrl.isConnectingGdrive ? null : _connectDropbox,
                 ),
                 const SizedBox(height: 8),
                 buildSyncProviderButton(
                   icon: const GDriveIcon(size: 22, color: Colors.white),
-                  label: _isConnectingGdrive ? 'Connecting...' : 'Google Drive',
+                  label: _ctrl.isConnectingGdrive ? 'Connecting...' : 'Google Drive',
                   color: const Color(0xFF4285F4),
-                  onPressed: _isConnecting || _isConnectingGdrive ? null : _connectGDrive,
+                  onPressed: _ctrl.isConnecting || _ctrl.isConnectingGdrive ? null : _connectGDrive,
                 ),
                 if (lastError != null) ...[
                   const SizedBox(height: 12),
@@ -142,13 +94,13 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 ],
               ] else ...[
                 _buildConnectedCard(context, status, provider, service),
-                if (provider == SyncProvider.gdrive && _gdriveFolderId != null)
+                if (provider == SyncProvider.gdrive && _ctrl.gdriveFolderId != null)
                   _buildFolderIdRow(context),
                 if (conflicts.isNotEmpty)
                   _buildConflictBanner(context, conflicts),
-                if (_syncResult != null)
-                  buildSyncResultCard(context, _syncResult!),
-                if ((status == SyncStatus.syncing || _isWiping) && progress != null)
+                if (_ctrl.syncResult != null)
+                  buildSyncResultCard(context, _ctrl.syncResult!),
+                if ((status == SyncStatus.syncing || _ctrl.isWiping) && progress != null)
                   buildSyncProgressBar(context, progress),
                 if (lastError != null) ...[
                   const SizedBox(height: 12),
@@ -193,13 +145,13 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 buildSyncDangerButton(
                   icon: Icons.logout_rounded,
                   label: 'Disconnect',
-                  onPressed: _isDisconnecting ? null : _disconnect,
+                  onPressed: _ctrl.isDisconnecting ? null : _disconnect,
                 ),
                 const SizedBox(height: 8),
                 buildSyncDangerButton(
                   icon: Icons.delete_outline_rounded,
-                  label: _isWiping ? 'Wiping...' : 'Wipe Cloud Data',
-                  onPressed: _isWiping ? null : _wipeCloudData,
+                  label: _ctrl.isWiping ? 'Wiping...' : 'Wipe Cloud Data',
+                  onPressed: _ctrl.isWiping ? null : _wipeCloudData,
                   light: true,
                 ),
               ],
@@ -304,7 +256,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              _gdriveFolderId!,
+              _ctrl.gdriveFolderId!,
               style: const TextStyle(
                 fontFamily: 'monospace',
                 fontSize: 11,
@@ -318,7 +270,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             constraints: const BoxConstraints(),
             icon: const Icon(Icons.copy, size: 16, color: Colors.white54),
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: _gdriveFolderId!));
+              Clipboard.setData(ClipboardData(text: _ctrl.gdriveFolderId!));
               GlazeToast.show(context, 'Folder ID copied');
             },
           ),
@@ -505,7 +457,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   Widget _buildIncludeApiKeysToggle(BuildContext context) {
     return GestureDetector(
       onTap: () {
-        _setIncludeApiKeys(!_syncIncludeApiKeys);
+        _setIncludeApiKeys(!_ctrl.syncIncludeApiKeys);
       },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8),
@@ -536,7 +488,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               ),
             ),
             Switch(
-              value: _syncIncludeApiKeys,
+              value: _ctrl.syncIncludeApiKeys,
               onChanged: _setIncludeApiKeys,
               activeThumbColor: context.colors.accent,
             ),
@@ -555,7 +507,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   }
 
   String _getStatusLabel(SyncStatus status, SyncService? service) {
-    if (_isWiping) return 'Wiping cloud data...';
+    if (_ctrl.isWiping) return 'Wiping cloud data...';
     if (status == SyncStatus.syncing) return 'Syncing...';
     if (status == SyncStatus.error) return 'Error';
     if (status == SyncStatus.conflict) return 'Conflict detected';
@@ -566,59 +518,28 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   }
 
   String _formatTimeAgo(int ts) {
-    final diff = (DateTime.now().millisecondsSinceEpoch - ts) ~/ 1000;
-    if (diff < 60) return 'just now';
-    if (diff < 3600) return '${diff ~/ 60}m ago';
-    if (diff < 86400) return '${diff ~/ 3600}h ago';
-    return '${diff ~/ 86400}d ago';
+    return formatTimeAgoFromMs(ts);
   }
 
   Future<void> _connectDropbox() async {
-    setState(() => _isConnecting = true);
-    try {
-      final service = await ref.read(syncServiceProvider.future);
-      await service.connectDropbox();
-      ref.read(syncConnectedProvider.notifier).state = true;
-      ref.read(syncProviderProvider.notifier).state = SyncProvider.dropbox;
-      ref.read(syncStatusProvider.notifier).state = service.status;
-      ref.read(syncLastErrorProvider.notifier).state = null;
-      _resolveFolderIdIfNeeded();
-    } catch (e) {
-      if (mounted) {
-        GlazeToast.error(context, 'Dropbox connection failed: ', e);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isConnecting = false);
-      }
+    setState(() {});
+    final error = await _ctrl.connectDropbox();
+    if (mounted) {
+      setState(() {});
+      if (error != null) GlazeToast.error(context, '', error);
     }
   }
 
   Future<void> _connectGDrive() async {
-    setState(() => _isConnectingGdrive = true);
-    try {
-      final service = await ref.read(syncServiceProvider.future);
-      await service.connectGDrive();
-      ref.read(syncConnectedProvider.notifier).state = true;
-      ref.read(syncProviderProvider.notifier).state = SyncProvider.gdrive;
-      ref.read(syncStatusProvider.notifier).state = service.status;
-      ref.read(syncLastErrorProvider.notifier).state = null;
-      _resolveFolderIdIfNeeded();
-    } catch (e) {
-      if (mounted) {
-        GlazeToast.error(context, 'Google Drive connection failed: ', e);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isConnectingGdrive = false);
-      }
+    setState(() {});
+    final error = await _ctrl.connectGDrive();
+    if (mounted) {
+      setState(() {});
+      if (error != null) GlazeToast.error(context, '', error);
     }
   }
 
   Future<void> _disconnect() async {
-    final service = ref.read(syncServiceProvider).valueOrNull;
-    if (service == null) return;
-
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
       title: 'Disconnect',
@@ -643,24 +564,11 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
 
     if (confirmed != true) return;
 
-    setState(() => _isDisconnecting = true);
-    try {
-      await service.disconnect();
-      ref.read(syncConnectedProvider.notifier).state = false;
-      ref.read(syncProviderProvider.notifier).state = SyncProvider.dropbox;
-      ref.read(syncStatusProvider.notifier).state = service.status;
-      setState(() {
-        _syncResult = null;
-        _gdriveFolderId = null;
-      });
-    } catch (e) {
-      if (mounted) {
-        GlazeToast.error(context, 'Disconnect failed: ', e);
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isDisconnecting = false);
-      }
+    setState(() {});
+    final error = await _ctrl.disconnect();
+    if (mounted) {
+      setState(() {});
+      if (error != null) GlazeToast.error(context, '', error);
     }
   }
 
@@ -713,39 +621,22 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             return;
           }
 
-          setState(() {
-            _isWiping = true;
-            _syncResult = null;
-          });
-          ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
-
+          setState(() {});
           try {
-            await service.wipeCloudData(
+            await _ctrl.wipeCloudData(
               onProgress: (p) {
-                if (mounted) {
-                  ref.read(syncProgressProvider.notifier).state = p;
-                }
+                if (mounted) ref.read(syncProgressProvider.notifier).state = p;
               },
+              providerLabel: providerLabel,
             );
-            if (!mounted) return;
-            ref.read(syncStatusProvider.notifier).state = service.status;
-            setState(() {
-              _syncResult = {
-                'type': 'wipe',
-                'total': 'all',
-              };
-            });
-            GlazeToast.show(context, 'Cloud data wiped successfully.');
-          } catch (e) {
-            if (!mounted) return;
-            ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
-            GlazeToast.error(context, 'Wipe failed: ', e);
-          } finally {
             if (mounted) {
-              setState(() => _isWiping = false);
-              ref.read(syncProgressProvider.notifier).state = null;
-              ref.read(syncStatusProvider.notifier).state =
-                  ref.read(syncServiceProvider).value?.status ?? SyncStatus.idle;
+              setState(() {});
+              GlazeToast.show(context, 'Cloud data wiped successfully.');
+            }
+          } catch (e) {
+            if (mounted) {
+              setState(() {});
+              GlazeToast.error(context, 'Wipe failed: ', e);
             }
           }
         },
@@ -754,172 +645,53 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   }
 
   Future<void> _doSync(String mode) async {
-    ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
-    ref.read(syncLastErrorProvider.notifier).state = null;
-    setState(() => _syncResult = null);
-
-    int itemsCount = 0;
-    late final SyncService service;
-    try {
-      service = await ref.read(syncServiceProvider.future);
-      switch (mode) {
-        case 'push':
-          await service.fullPush(
-            includeApiKeys: _syncIncludeApiKeys,
-            onProgress: (p) {
-              if (mounted) {
-                ref.read(syncProgressProvider.notifier).state = p;
-                itemsCount = p.total;
-              }
-            },
-          );
-          if (mounted) {
-            setState(() {
-              _syncResult = {
-                'type': 'push',
-                'pushed': itemsCount,
-              };
-            });
-            GlazeToast.show(context, 'Push completed ($itemsCount items)');
-          }
-          break;
-        case 'pull':
-          await service.fullPull(
-            onProgress: (p) {
-              if (mounted) {
-                ref.read(syncProgressProvider.notifier).state = p;
-                itemsCount = p.total;
-              }
-            },
-          );
-          if (mounted) {
-            setState(() {
-              _syncResult = {
-                'type': 'pull',
-                'pulled': itemsCount,
-                'conflictsCount': service.conflicts.length,
-              };
-            });
-            _invalidateDataProviders();
-            if (service.conflicts.isNotEmpty) {
-              GlazeToast.show(context, 'Pull completed with ${service.conflicts.length} conflicts');
-            } else {
-              GlazeToast.show(context, 'Pull completed ($itemsCount items)');
-            }
-          }
-          break;
-        case 'full':
-          await service.fullSync(
-            includeApiKeys: _syncIncludeApiKeys,
-            onProgress: (p) {
-              if (mounted) {
-                ref.read(syncProgressProvider.notifier).state = p;
-                itemsCount = p.total;
-              }
-            },
-          );
-          if (mounted) {
-            setState(() {
-              _syncResult = {
-                'type': 'full',
-              };
-            });
-            _invalidateDataProviders();
-            GlazeToast.show(context, 'Full sync completed');
-          }
-          break;
+    setState(() {});
+    final result = await _ctrl.doSync(mode);
+    if (mounted) {
+      setState(() {});
+      if (result != null) {
+        if (result.startsWith('Sync failed')) {
+          GlazeToast.errorWithCopy(context, '', result);
+        } else {
+          GlazeToast.show(context, result);
+        }
       }
-      ref.read(syncStatusProvider.notifier).state = service.status;
-      ref.read(syncConflictsProvider.notifier).state = service.conflicts;
-    } catch (e) {
-      ref.read(syncLastErrorProvider.notifier).state = e.toString();
-      ref.read(syncStatusProvider.notifier).state = service.status;
-      ref.read(syncConflictsProvider.notifier).state = service.conflicts;
-      if (mounted) {
-        GlazeToast.errorWithCopy(context, 'Sync failed: ', e);
-      }
-    } finally {
-      ref.read(syncProgressProvider.notifier).state = null;
     }
   }
 
   Future<void> _resolveConflict(SyncConflict conflict, String choice) async {
-    final service = ref.read(syncServiceProvider).valueOrNull;
-    if (service == null) return;
-    try {
-      await service.resolveConflict(conflict, choice);
-      ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
-      ref.read(syncStatusProvider.notifier).state = service.status;
-      if (service.conflicts.isEmpty) {
-        _invalidateDataProviders();
-      }
-      if (service.conflicts.isEmpty && mounted) {
-        GlazeToast.show(
-          context,
-          choice == 'cloud' ? 'Cloud version applied' : 'Local version kept',
-        );
-      }
-    } catch (e) {
-      ref.read(syncLastErrorProvider.notifier).state = e.toString();
-      ref.read(syncStatusProvider.notifier).state = service.status;
-      ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
-      if (mounted) {
-        GlazeToast.errorWithCopy(context, 'Could not resolve conflict: ', e);
+    final result = await _ctrl.resolveConflict(conflict, choice);
+    if (mounted && result != null) {
+      if (result.startsWith('Could not')) {
+        GlazeToast.errorWithCopy(context, '', result);
+      } else {
+        GlazeToast.show(context, result);
       }
     }
   }
 
   Future<void> _resolveAllConflicts(String choice) async {
-    final service = ref.read(syncServiceProvider).valueOrNull;
-    if (service == null) return;
-    ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
-    try {
-      await service.resolveAllConflicts(choice);
-      ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
-      ref.read(syncStatusProvider.notifier).state = service.status;
-      _invalidateDataProviders();
-      if (mounted) {
-        GlazeToast.show(
-          context,
-          choice == 'cloud'
-              ? 'All conflicts resolved: cloud versions applied'
-              : 'All conflicts resolved: local versions kept',
-        );
+    final result = await _ctrl.resolveAllConflicts(choice);
+    if (mounted && result != null) {
+      if (result.startsWith('Could not')) {
+        GlazeToast.errorWithCopy(context, '', result);
+      } else {
+        GlazeToast.show(context, result);
       }
-    } catch (e) {
-      ref.read(syncLastErrorProvider.notifier).state = e.toString();
-      ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
-      if (mounted) {
-        GlazeToast.errorWithCopy(context, 'Could not resolve conflicts: ', e);
-      }
-    } finally {
-      ref.read(syncStatusProvider.notifier).state = service.status;
-      ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
     }
-  }
-
-  void _invalidateDataProviders() {
-    ref.invalidate(charactersProvider);
-    ref.invalidate(personaListProvider);
-    ref.invalidate(apiListProvider);
-    ref.invalidate(lorebooksProvider);
-    ref.invalidate(chatSessionOpsProvider);
-    ref.read(themeProvider.notifier).reload();
   }
 
   void _setAutoSync(bool val) async {
-    final service = ref.read(syncServiceProvider).value;
-    if (service != null) {
-      await service.setAutoSync(val, messageCount: service.autoSyncMessageCount);
-      ref.read(syncAutoEnabledProvider.notifier).state = val;
-    }
+    await _ctrl.setAutoSync(val);
   }
 
   void _updateAutoSyncThreshold(int count) async {
-    final service = ref.read(syncServiceProvider).value;
-    if (service != null) {
-      await service.setAutoSync(service.autoSyncEnabled, messageCount: count);
-      setState(() {});
-    }
+    await _ctrl.updateAutoSyncThreshold(count);
+    if (mounted) setState(() {});
+  }
+
+  void _setIncludeApiKeys(bool val) async {
+    await _ctrl.setIncludeApiKeys(val);
+    if (mounted) setState(() {});
   }
 }

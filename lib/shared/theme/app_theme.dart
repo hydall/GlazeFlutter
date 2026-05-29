@@ -2,6 +2,7 @@ import 'package:flex_color_scheme/flex_color_scheme.dart';
 import 'package:flutter/material.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
+import '../utils/color_utils.dart';
 import 'app_colors.dart';
 import 'theme_preset.dart';
 
@@ -51,8 +52,8 @@ ColorScheme _buildColorScheme(ThemePreset preset, {required bool isDark}) {
       preset.uiColorParsed ?? (isDark ? _vueUiBg : _deriveUiColor(accent, isDark));
   final bgColor =
       preset.bgColorParsed ?? (isDark ? _vueAppBg : uiColor);
-  final onBg = _contrastFor(uiColor);
-  final onBgVariant = _contrastFor(uiColor, secondary: true);
+  final onBg = contrastFor(uiColor);
+  final onBgVariant = contrastFor(uiColor, secondary: true);
   final surfaceHigh = uiColor;
   final outlineColor = _borderFor(uiColor, isDark);
   final outlineVariant = isDark
@@ -113,36 +114,17 @@ Color _deriveUiColor(Color accent, bool isDark) {
 }
 
 Color _ensureButtonContrast(Color accent, Color surface, {required bool isDark}) {
-  if (_contrastRatio(accent, surface) >= 4.5) return accent;
+  if (contrastRatio(accent, surface) >= 4.5) return accent;
   final hsl = HSLColor.fromColor(accent);
   double lightness = hsl.lightness;
   for (int i = 0; i < 20; i++) {
     lightness = isDark ? lightness + 0.04 : lightness - 0.04;
     final candidate = HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, lightness.clamp(0.0, 1.0)).toColor();
-    if (_contrastRatio(candidate, surface) >= 4.5) return candidate;
+    if (contrastRatio(candidate, surface) >= 4.5) return candidate;
   }
   return isDark
       ? HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, 0.6).toColor()
       : HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, 0.4).toColor();
-}
-
-double _contrastRatio(Color a, Color b) {
-  final l1 = a.computeLuminance();
-  final l2 = b.computeLuminance();
-  final lighter = l1 > l2 ? l1 : l2;
-  final darker = l1 > l2 ? l2 : l1;
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-Color _contrastFor(Color bg, {bool secondary = false}) {
-  final lum = bg.computeLuminance();
-  final light = secondary
-      ? const Color(0xFFB0B8C1)
-      : const Color(0xFFE1E3E6);
-  final dark = secondary
-      ? const Color(0xFF6B6D70)
-      : const Color(0xFF1A1A1B);
-  return lum > 0.35 ? dark : light;
 }
 
 Color _borderFor(Color bg, bool isDark) {

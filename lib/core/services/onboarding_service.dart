@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../app.dart' show rootNavigatorKey;
+import '../navigation/router.dart' show rootNavigatorKey;
 import '../../features/onboarding/onboarding_screen.dart';
 
 const _onboardingCompleteKey = 'onboarding_complete';

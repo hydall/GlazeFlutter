@@ -3,13 +3,11 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/persona.dart';
-import '../models/preset.dart';
-import 'db_provider.dart';
-import 'memory_settings_provider.dart';
 import 'shared_prefs_provider.dart';
+import 'memory_settings_provider.dart';
 
-import 'global_regex_provider.dart';
-import '../../features/personas/persona_list_provider.dart';
+export 'active_regex_provider.dart';
+export 'persona_resolution.dart';
 
 final activePresetIdProvider = StateProvider<String?>((ref) => null);
 final activePersonaIdProvider = StateProvider<String?>((ref) => null);
@@ -18,18 +16,6 @@ final globalVarsProvider = StateProvider<Map<String, String>>((ref) => {});
 
 final personaConnectionsProvider = StateProvider<PersonaConnections>((ref) {
   return const PersonaConnections();
-});
-
-final activeRegexesProvider = FutureProvider<List<PresetRegex>>((ref) async {
-  final repo = ref.watch(presetRepoProvider);
-  final presets = await repo.getAll();
-  final activeId = ref.watch(activePresetIdProvider);
-  final preset = activeId != null
-      ? presets.where((p) => p.id == activeId).firstOrNull
-      : (presets.isNotEmpty ? presets.first : null);
-  final presetRegexes = preset?.regexes.where((r) => !r.disabled).toList() ?? <PresetRegex>[];
-  final globalRegexes = ref.watch(globalRegexProvider).valueOrNull?.where((r) => !r.disabled).toList() ?? <PresetRegex>[];
-  return [...presetRegexes, ...globalRegexes];
 });
 
 Future<void> loadActiveSelections(WidgetRef ref) async {
@@ -128,52 +114,6 @@ void setPersonaConnectionRef(
     prefs.setString('personaConnections', jsonEncode(updated.toJson()));
   }
 }
-
-Persona? getEffectivePersona(
-  List<Persona> personas,
-  String? charId,
-  String? sessionId,
-  String? globalPersonaId,
-  PersonaConnections connections,
-) {
-  if (sessionId != null) {
-    final chatPersonaId = connections.chat[sessionId];
-    if (chatPersonaId != null) {
-      final p = personas.where((p) => p.id == chatPersonaId).firstOrNull;
-      if (p != null) return p;
-    }
-  }
-  if (charId != null) {
-    final charPersonaId = connections.character[charId];
-    if (charPersonaId != null) {
-      final p = personas.where((p) => p.id == charPersonaId).firstOrNull;
-      if (p != null) return p;
-    }
-  }
-  if (globalPersonaId != null) {
-    final p = personas.where((p) => p.id == globalPersonaId).firstOrNull;
-    if (p != null) return p;
-  }
-  return personas.isNotEmpty ? personas.first : null;
-}
-
-typedef EffectivePersonaChatKey = ({String charId, String? sessionId});
-
-final effectivePersonaForChatProvider =
-    Provider.family<Persona?, EffectivePersonaChatKey>((ref, key) {
-  final personasAsync = ref.watch(personaListProvider);
-  if (!personasAsync.hasValue) return null;
-
-  final activePersonaId = ref.watch(activePersonaIdProvider);
-  final personaConnections = ref.watch(personaConnectionsProvider);
-  return getEffectivePersona(
-    personasAsync.requireValue,
-    key.charId,
-    key.sessionId,
-    activePersonaId,
-    personaConnections,
-  );
-});
 
 void updateGlobalVarsRef(Ref ref, Map<String, String> vars) {
   ref.read(globalVarsProvider.notifier).state = vars;

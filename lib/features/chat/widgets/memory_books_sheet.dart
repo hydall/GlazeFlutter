@@ -1,22 +1,14 @@
 import 'dart:async';
 
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/llm/lorebook_providers.dart';
-import '../../../features/settings/api_list_provider.dart';
-import '../../../core/llm/memory_injection_service.dart';
-import '../../../core/models/chat_message.dart';
 import '../../../core/models/memory_book.dart';
-import '../../../core/state/memory_book_ops_provider.dart';
 import '../../../core/state/memory_settings_provider.dart';
-import '../../../core/utils/id_generator.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
-import '../chat_provider.dart';
-import '../memory_draft_generator.dart';
+import '../../memory/controllers/memory_book_controller.dart';
 import 'memory_entry_editor_sheet.dart';
 import 'memory_generation_settings_sheet.dart';
 
@@ -31,533 +23,55 @@ class MemoryBooksSheet extends ConsumerStatefulWidget {
 }
 
 class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
-  MemoryBook? _book;
-  bool _loading = true;
-  bool _isReindexing = false;
-  final Map<String, bool> _generatingDrafts = {};
-  final Map<String, DateTime> _genStartTimes = {};
-  final Map<String, CancelToken> _cancelTokens = {};
-  Timer? _genElapsedTimer;
+  late final MemoryBookController _ctrl;
+  Timer? _elapsedTimer;
 
   @override
   void initState() {
     super.initState();
+    _ctrl = MemoryBookController(ref, widget.sessionId, widget.charId);
     _load();
   }
 
   Future<void> _load() async {
-    final book = await ref.read(memoryBookOpsProvider).ensureForSession(widget.sessionId);
-    if (mounted) setState(() { _book = book; _loading = false; });
+    await _ctrl.load();
+    if (mounted) setState(() {});
   }
 
-  Future<void> _save() async {
-    if (_book == null) return;
-    await ref.read(memoryBookOpsProvider).saveMemoryBook(_book!);
+  @override
+  void dispose() {
+    _elapsedTimer?.cancel();
+    _ctrl.dispose();
+    super.dispose();
   }
 
-  MemoryGlobalSettings get _gs => ref.read(memoryGlobalSettingsProvider);
-
-  MemoryBookSettings _globalSettingsAsBookSettings() {
-    final g = _gs;
-    return MemoryBookSettings(
-      enabled: g.enabled,
-      autoCreateEnabled: g.autoCreateEnabled,
-      autoGenerateEnabled: g.autoGenerateEnabled,
-      maxInjectedEntries: g.maxInjectedEntries,
-      autoCreateInterval: g.autoCreateInterval,
-      useDelayedAutomation: g.useDelayedAutomation,
-      injectionTarget: g.injectionTarget,
-      batchSize: g.batchSize,
-      vectorSearchEnabled: g.vectorSearchEnabled,
-      keyMatchMode: g.keyMatchMode,
-      generationSource: g.generationSource,
-      generationModel: g.generationModel,
-      generationEndpoint: g.generationEndpoint,
-      generationApiKey: g.generationApiKey,
-      generationTemperature: g.generationTemperature,
-      generationMaxTokens: g.generationMaxTokens,
-      promptPreset: g.promptPreset,
-    );
-  }
-
-  String get _settingsSummary {
-    if (_book == null) return '';
-    final s = _gs;
-    final interval = s.autoCreateInterval;
-    final autoCreate = s.autoCreateEnabled ? 'Auto ON' : 'Auto OFF';
-    final autoGen = s.autoGenerateEnabled ? 'Auto-gen' : 'Manual';
-    final delayed = s.useDelayedAutomation ? 'Delayed' : 'Immediate';
-    final target = s.injectionTarget == 'summary_macro' ? '{{summary}}' : 'Summary Block';
-    final vectorThreshold = s.vectorThreshold.toStringAsFixed(2);
-    final maxEntries = s.maxInjectedEntries;
-    final batchSize = s.batchSize;
-    final outTokens = (s.generationMaxTokens != null && s.generationMaxTokens! > 0)
-        ? '${s.generationMaxTokens} out'
-        : 'Auto out';
-    return '$interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries in prompt';
-  }
-
-  String get _searchModelLabel {
-    final s = _gs;
-    return s.generationModel.isNotEmpty ? s.generationModel : 'Current LLM model';
-  }
-
-  String get _searchTypeLabel {
-    final s = _book?.settings;
-    if (s == null) return 'Vector';
-    if (!s.vectorSearchEnabled) return 'Keys';
-    if (s.keyMatchMode == 'both') return 'Vector + Keys';
-    return 'Vector';
-  }
-
-  void _scanChat() async {
-    if (_book == null) return;
-    final chatState = ref.read(chatProvider(widget.charId));
-    final session = chatState.value?.session;
-    if (session == null) return;
-
-    final messages = session.messages.where((m) =>
-        !m.isTyping && (m.role == 'user' || m.role == 'assistant')).toList();
-    if (messages.isEmpty) {
-      if (mounted) GlazeToast.show(context, 'No stable messages to scan');
-      return;
-    }
-
-    final coveredIds = <String>{};
-    for (final entry in _book!.entries) {
-      for (final id in entry.messageIds) {
-        coveredIds.add(id);
-      }
-    }
-    for (final draft in _book!.pendingDrafts) {
-      for (final id in draft.messageIds) {
-        coveredIds.add(id);
-      }
-    }
-
-    final uncovered = messages.where((m) => m.id.isNotEmpty && !coveredIds.contains(m.id)).toList();
-    if (uncovered.isEmpty) {
-      if (mounted) GlazeToast.show(context, 'All messages are already covered');
-      return;
-    }
-
-    final interval = _gs.autoCreateInterval;
-    final segments = <List<ChatMessage>>[];
-    for (int i = 0; i + interval <= uncovered.length; i += interval) {
-      segments.add(uncovered.sublist(i, i + interval));
-    }
-
-    if (segments.isEmpty) {
-      if (mounted) GlazeToast.show(context, 'Need more uncovered messages before creating a draft');
-      return;
-    }
-
-    final newDrafts = <MemoryDraft>[];
-    for (int i = 0; i < segments.length; i++) {
-      final segment = segments[i];
-      final segmentIds = segment.map((m) => m.id).toList();
-      final firstIdx = messages.indexOf(segment.first);
-      final lastIdx = messages.indexOf(segment.last);
-
-      final alreadyExists = _book!.pendingDrafts.any((d) =>
-          d.messageIds.toSet().containsAll(segmentIds.toSet()));
-      if (alreadyExists) continue;
-
-      newDrafts.add(MemoryDraft(
-        id: 'draft_${DateTime.now().millisecondsSinceEpoch}_${i}_${generateId().substring(0, 6)}',
-        title: '${firstIdx + 1}-${lastIdx + 1}',
-        messageIds: segmentIds,
-        messageRange: MessageRange(start: firstIdx + 1, end: lastIdx + 1),
-        status: 'pending_generation',
-        source: 'scan_chat',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      ));
-    }
-
-    if (newDrafts.isEmpty) {
-      if (mounted) GlazeToast.show(context, 'All segments already have drafts');
-      return;
-    }
-
-    setState(() {
-      _book = _book!.copyWith(
-        pendingDrafts: [..._book!.pendingDrafts, ...newDrafts],
-      );
+  void _startElapsedTimer() {
+    _elapsedTimer ??= Timer.periodic(const Duration(milliseconds: 200), (_) {
+      if (_ctrl.generatingDrafts.isNotEmpty && mounted) setState(() {});
     });
-    await _save();
-    if (mounted) GlazeToast.show(context, '${newDrafts.length} drafts created');
   }
 
-  void _generateAllPending() {
-    if (_book == null) return;
-    final needsGen = _book!.pendingDrafts.where((d) =>
-        d.content.isEmpty &&
-        (d.status == 'pending_generation' || d.status == 'needs_regeneration') &&
-        _generatingDrafts[d.id] != true).toList();
-
-    for (final draft in needsGen) {
-      _generateDraft(draft.id);
+  void _stopElapsedTimer() {
+    if (_ctrl.generatingDrafts.isEmpty) {
+      _elapsedTimer?.cancel();
+      _elapsedTimer = null;
     }
-  }
-
-  void _generateDraft(String draftId) async {
-    if (_book == null || _generatingDrafts[draftId] == true) return;
-    final draftIndex = _book!.pendingDrafts.indexWhere((d) => d.id == draftId);
-    if (draftIndex < 0) return;
-
-    final chatState = ref.read(chatProvider(widget.charId));
-    final session = chatState.value?.session;
-    if (session == null) return;
-
-    final draft = _book!.pendingDrafts[draftIndex];
-    final draftMessages = session.messages.where((m) => draft.messageIds.contains(m.id)).toList();
-    if (draftMessages.isEmpty) {
-      if (mounted) GlazeToast.show(context, 'Messages not found for this draft');
-      return;
-    }
-
-    final historyText = draftMessages.map((m) => '${m.role}: ${m.content}').join('\n\n');
-    final cancelToken = CancelToken();
-    _cancelTokens[draftId] = cancelToken;
-
-    setState(() {
-      _generatingDrafts[draftId] = true;
-      _genStartTimes[draftId] = DateTime.now();
-      _startGenElapsedTimer();
-    });
-
-    try {
-      final generator = MemoryDraftGenerator(ref);
-      final result = await generator.generate(
-        draft: draft,
-        settings: _globalSettingsAsBookSettings(),
-        historyText: historyText,
-        cancelToken: cancelToken,
-      );
-
-      final updatedDrafts = [..._book!.pendingDrafts];
-      updatedDrafts[draftIndex] = result;
-      setState(() {
-        _book = _book!.copyWith(pendingDrafts: updatedDrafts);
-        _generatingDrafts.remove(draftId);
-        _genStartTimes.remove(draftId);
-        _stopGenElapsedTimer();
-      });
-      await _save();
-    } catch (e) {
-      final updatedDrafts = [..._book!.pendingDrafts];
-      updatedDrafts[draftIndex] = updatedDrafts[draftIndex].copyWith(
-        status: 'needs_regeneration',
-        error: e.toString(),
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-      setState(() {
-        _book = _book!.copyWith(pendingDrafts: updatedDrafts);
-        _generatingDrafts.remove(draftId);
-        _genStartTimes.remove(draftId);
-        _stopGenElapsedTimer();
-      });
-      await _save();
-      if (mounted) GlazeToast.show(context, 'Generation failed: $e');
-    } finally {
-      _cancelTokens.remove(draftId);
-    }
-  }
-
-  void _cancelDraftGeneration(String draftId) {
-    _cancelTokens[draftId]?.cancel();
-    setState(() { _generatingDrafts.remove(draftId); });
-  }
-
-  void _batchGenerate() async {
-    if (_book == null) return;
-    final needsGen = _book!.pendingDrafts.where((d) =>
-        d.content.isEmpty &&
-        (d.status == 'pending_generation' || d.status == 'needs_regeneration') &&
-        _generatingDrafts[d.id] != true).toList();
-    final batchSize = _gs.batchSize;
-    final toGenerate = needsGen.take(batchSize).toList();
-
-    for (final draft in toGenerate) {
-      _generateDraft(draft.id);
-    }
-  }
-
-  void _approveDraft(String draftId) async {
-    if (_book == null) return;
-    final draftIndex = _book!.pendingDrafts.indexWhere((d) => d.id == draftId);
-    if (draftIndex < 0) return;
-    final draft = _book!.pendingDrafts[draftIndex];
-    if (draft.content.isEmpty) return;
-
-    final entry = MemoryEntry(
-      id: draft.id.replaceAll('draft_', 'mem_'),
-      title: draft.title,
-      content: draft.content,
-      keys: draft.keys,
-      vectorSearch: draft.vectorSearch,
-      messageIds: draft.messageIds,
-      status: 'active',
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-    );
-
-    setState(() {
-      _book = _book!.copyWith(
-        entries: [..._book!.entries, entry],
-        pendingDrafts: _book!.pendingDrafts.where((d) => d.id != draftId).toList(),
-      );
-    });
-    await _save();
-    await _autoIndexEntry(entry);
-  }
-
-  void _deleteDraft(String draftId) async {
-    if (_book == null) return;
-    setState(() {
-      _book = _book!.copyWith(
-        pendingDrafts: _book!.pendingDrafts.where((d) => d.id != draftId).toList(),
-      );
-    });
-    await _save();
-  }
-
-  void _deleteAllDrafts() async {
-    if (_book == null) return;
-    setState(() {
-      _book = _book!.copyWith(pendingDrafts: []);
-    });
-    await _save();
-  }
-
-  void _deleteEntry(String entryId) async {
-    if (_book == null) return;
-    setState(() {
-      _book = _book!.copyWith(
-        entries: _book!.entries.where((e) => e.id != entryId).toList(),
-      );
-    });
-    await _save();
-    await ref.read(memoryBookOpsProvider).deleteEmbeddingEntry(entryId);
-  }
-
-  void _openSettings() async {
-    final currentSettings = _globalSettingsAsBookSettings();
-    final newResult = await GlazeBottomSheet.show<MemorySettingsSheetResult>(
-      context,
-      title: 'Memory Settings',
-      child: MemoryGenerationSettingsSheet(settings: currentSettings),
-    );
-    if (newResult != null && mounted) {
-      final newSettings = newResult.settings;
-      final newGlobal = MemoryGlobalSettings(
-        enabled: newSettings.enabled,
-        autoCreateEnabled: newSettings.autoCreateEnabled,
-        autoGenerateEnabled: newSettings.autoGenerateEnabled,
-        maxInjectedEntries: newSettings.maxInjectedEntries,
-        autoCreateInterval: newSettings.autoCreateInterval,
-        useDelayedAutomation: newSettings.useDelayedAutomation,
-        injectionTarget: newSettings.injectionTarget,
-        batchSize: newSettings.batchSize,
-        parallelJobs: _gs.parallelJobs,
-        vectorSearchEnabled: newSettings.vectorSearchEnabled,
-        vectorThreshold: newResult.vectorThreshold,
-        keyMatchMode: newSettings.keyMatchMode,
-        generationSource: newSettings.generationSource,
-        generationModel: newSettings.generationModel,
-        generationUseCurrentModelOverride: _gs.generationUseCurrentModelOverride,
-        generationEndpoint: newSettings.generationEndpoint,
-        generationApiKey: newSettings.generationApiKey,
-        generationTemperature: newSettings.generationTemperature,
-        generationMaxTokens: newSettings.generationMaxTokens,
-        promptPreset: newSettings.promptPreset,
-        customPrompts: _gs.customPrompts,
-      );
-      await ref.read(memoryGlobalSettingsProvider.notifier).save(newGlobal);
-    }
-  }
-
-  void _reindexAll() async {
-    if (_book == null) return;
-    await ref.read(apiListProvider.future);
-    final config = ref.read(embeddingConfigProvider);
-    if (config.endpoint.isEmpty) {
-      if (mounted) GlazeToast.show(context, 'Set up embedding API in Embedding Settings first');
-      return;
-    }
-
-    setState(() { _isReindexing = true; });
-    try {
-      final service = ref.read(memoryEmbeddingServiceProvider);
-      final result = await service.reindexAll(
-        _book!,
-        charId: widget.charId,
-        sessionId: widget.sessionId,
-        config: config,
-        embeddingTarget: _gs.vectorSearchEnabled ? 'content' : 'content',
-      );
-      if (mounted) {
-        setState(() { _isReindexing = false; });
-        GlazeToast.show(context, 'Indexed: ${result.indexed}, Skipped: ${result.skipped}, Failed: ${result.failed}');
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() { _isReindexing = false; });
-        GlazeToast.error(context, 'Reindex failed: ', e);
-      }
-    }
-  }
-
-  Future<void> _autoIndexEntry(MemoryEntry entry) async {
-    if (!_gs.vectorSearchEnabled) return;
-    if (entry.content.trim().isEmpty) return;
-    final config = ref.read(embeddingConfigProvider);
-    if (config.endpoint.isEmpty) return;
-    try {
-      await ref.read(memoryEmbeddingServiceProvider).indexMemoryEntry(
-        entry,
-        charId: widget.charId,
-        sessionId: widget.sessionId,
-        config: config,
-      );
-    } catch (_) {}
-  }
-
-  void _deleteAllMemoryIndexes() async {
-    final confirmed = await GlazeBottomSheet.show<bool>(
-      context,
-      title: 'Delete All Indexes',
-      bigInfo: const BottomSheetBigInfo(
-        icon: Icons.delete_outline,
-        description: 'Remove all stored memory embeddings? You will need to re-index after.',
-      ),
-      items: [
-        BottomSheetItem(
-          label: 'Delete All',
-          isDestructive: true,
-          centered: true,
-          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
-        ),
-        BottomSheetItem(
-          label: 'Cancel',
-          centered: true,
-          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
-        ),
-      ],
-    );
-    if (confirmed != true) return;
-
-    await ref.read(memoryEmbeddingServiceProvider).deleteAllMemoryIndexes();
-    if (mounted) GlazeToast.show(context, 'All memory indexes deleted');
-  }
-
-  void _editEntry(MemoryEntry entry) async {
-    final result = await GlazeBottomSheet.show<MemoryEntry>(
-      context,
-      title: entry.title.isNotEmpty ? entry.title : 'Edit Memory',
-      child: MemoryEntryEditorSheet(entry: entry),
-    );
-    if (result != null && mounted) {
-      final entries = [..._book!.entries];
-      final idx = entries.indexWhere((e) => e.id == entry.id);
-      if (idx >= 0) entries[idx] = result;
-      setState(() { _book = _book!.copyWith(entries: entries); });
-      await _save();
-      await ref.read(memoryBookOpsProvider).deleteEmbeddingEntry(result.id);
-      await _autoIndexEntry(result);
-    }
-  }
-
-  void _addEntry() async {
-    final entry = MemoryEntry(
-      id: 'mem_${DateTime.now().millisecondsSinceEpoch}',
-      status: 'active',
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-    );
-    final result = await GlazeBottomSheet.show<MemoryEntry>(
-      context,
-      title: 'New Memory',
-      child: MemoryEntryEditorSheet(entry: entry),
-    );
-    if (result != null && mounted) {
-      setState(() {
-        _book = _book!.copyWith(entries: [..._book!.entries, result]);
-      });
-      await _save();
-      await _autoIndexEntry(result);
-    }
-  }
-
-  void _editDraft(MemoryDraft draft) async {
-    final entry = MemoryEntry(
-      id: draft.id,
-      title: draft.title,
-      content: draft.content,
-      keys: draft.keys,
-      messageIds: draft.messageIds,
-      status: 'active',
-      createdAt: draft.createdAt,
-    );
-    final result = await GlazeBottomSheet.show<MemoryEntry>(
-      context,
-      title: 'Edit Draft',
-      child: MemoryEntryEditorSheet(entry: entry),
-    );
-    if (result != null && mounted) {
-      final drafts = [..._book!.pendingDrafts];
-      final idx = drafts.indexWhere((d) => d.id == draft.id);
-      if (idx >= 0) {
-        drafts[idx] = drafts[idx].copyWith(
-          title: result.title,
-          content: result.content,
-          keys: result.keys,
-          updatedAt: DateTime.now().millisecondsSinceEpoch,
-        );
-      }
-      setState(() { _book = _book!.copyWith(pendingDrafts: drafts); });
-      await _save();
-    }
-  }
-
-  void _cycleSearchType() async {
-    final s = _gs;
-    String nextMode;
-    bool nextVector;
-    if (!s.vectorSearchEnabled) {
-      nextVector = true;
-      nextMode = 'glaze';
-    } else if (s.keyMatchMode == 'glaze') {
-      nextVector = true;
-      nextMode = 'both';
-    } else if (s.keyMatchMode == 'both') {
-      nextVector = false;
-      nextMode = 'plain';
-    } else {
-      nextVector = false;
-      nextMode = 'plain';
-    }
-    await ref.read(memoryGlobalSettingsProvider.notifier).save(
-      s.copyWith(vectorSearchEnabled: nextVector, keyMatchMode: nextMode),
-    );
-    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
+    if (_ctrl.loading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final settings = _gs;
-    final entries = _book!.entries;
-    final pendingDrafts = _book!.pendingDrafts;
-    final activeCount = entries.where((e) => e.status == 'active').length;
-    final needsRebuildCount = entries.where((e) => e.status == 'needs_rebuild').length;
-    final draftsNeedingGen = pendingDrafts.where((d) =>
-        d.content.isEmpty &&
-        (d.status == 'pending_generation' || d.status == 'needs_regeneration') &&
-        _generatingDrafts[d.id] != true).toList();
-    final isGenerating = _generatingDrafts.values.any((v) => v);
+    final settings = _ctrl.globalSettings;
+    final book = _ctrl.book!;
+    final entries = book.entries;
+    final pendingDrafts = book.pendingDrafts;
+    final activeCount = _ctrl.book!.entries.where((e) => e.status == 'active').length;
+    final needsRebuildCount = _ctrl.book!.entries.where((e) => e.status == 'needs_rebuild').length;
+    final draftsNeedingGen = _ctrl.draftsNeedingGeneration;
+    final isGenerating = _ctrl.isGenerating;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -585,6 +99,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       ),
     );
   }
+
+  // ─── Overview ────────────────────────────────────────────────────
 
   Widget _buildOverview(MemoryGlobalSettings settings) {
     return Container(
@@ -614,20 +130,25 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                   color: context.cs.primary.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(_searchModelLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.cs.primary)),
+                child: Text(_ctrl.searchModelLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: context.cs.primary)),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(_settingsSummary, style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant)),
+          Text(_ctrl.settingsSummary, style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant)),
         ],
       ),
     );
   }
 
+  // ─── Search type ─────────────────────────────────────────────────
+
   Widget _buildSearchTypeSelector(MemoryGlobalSettings settings) {
     return GestureDetector(
-      onTap: _cycleSearchType,
+      onTap: () async {
+        await _ctrl.cycleSearchType();
+        if (mounted) setState(() {});
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
@@ -640,7 +161,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
             Text('Search type', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.cs.onSurface)),
             Row(
               children: [
-                Text(_searchTypeLabel, style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant)),
+                Text(_ctrl.searchTypeLabel, style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant)),
                 const SizedBox(width: 4),
                 Icon(Icons.arrow_drop_down, size: 20, color: context.cs.onSurfaceVariant),
               ],
@@ -650,6 +171,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       ),
     );
   }
+
+  // ─── Status summary ──────────────────────────────────────────────
 
   Widget _buildStatusSummary(int active, int needsRebuild, int drafts) {
     return Row(
@@ -679,6 +202,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       ),
     );
   }
+
+  // ─── Action buttons ──────────────────────────────────────────────
 
   Widget _buildActionButtons() {
     return Column(
@@ -731,9 +256,9 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
           children: [
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _isReindexing ? null : _reindexAll,
+                onPressed: _ctrl.isReindexing ? null : _reindexAll,
                 icon: Icon(Icons.storage, size: 16, color: context.cs.onSurfaceVariant),
-                label: Text(_isReindexing ? 'Indexing...' : 'Reindex All', style: TextStyle(color: context.cs.onSurface)),
+                label: Text(_ctrl.isReindexing ? 'Indexing...' : 'Reindex All', style: TextStyle(color: context.cs.onSurface)),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -744,7 +269,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
             const SizedBox(width: 8),
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _isReindexing ? null : _deleteAllMemoryIndexes,
+                onPressed: _ctrl.isReindexing ? null : _deleteAllMemoryIndexes,
                 icon: Icon(Icons.delete_sweep, size: 16, color: Colors.redAccent.withValues(alpha: 0.7)),
                 label: Text('Clear Indexes', style: TextStyle(color: context.cs.onSurfaceVariant)),
                 style: OutlinedButton.styleFrom(
@@ -792,6 +317,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     );
   }
 
+  // ─── Pending Drafts section ──────────────────────────────────────
+
   Widget _buildPendingDraftsSection(List<MemoryDraft> drafts) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -824,7 +351,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   }
 
   Widget _buildDraftCard(MemoryDraft draft) {
-    final isGen = _generatingDrafts[draft.id] == true;
+    final isGen = _ctrl.generatingDrafts[draft.id] == true;
     final needsGen = draft.content.isEmpty && (draft.status == 'pending_generation' || draft.status == 'needs_regeneration');
     final needsRegen = draft.status == 'needs_regeneration';
     final hasContent = draft.content.isNotEmpty;
@@ -885,7 +412,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               if (isGen)
-                _actionBtn('Stop', Colors.amber, () => _cancelDraftGeneration(draft.id))
+                _actionBtn('Stop', Colors.amber, () => _cancelDraft(draft.id))
               else if (needsGen || needsRegen)
                 _actionBtn('Generate', Colors.amber, () => _generateDraft(draft.id))
               else if (hasContent)
@@ -918,7 +445,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
   String _draftStatusLabel(MemoryDraft draft, bool isGen) {
     if (isGen) {
-      final start = _genStartTimes[draft.id];
+      final start = _ctrl.genStartTimes[draft.id];
       if (start != null) {
         final elapsed = DateTime.now().difference(start).inMilliseconds / 1000.0;
         return 'Generating... ${elapsed.toStringAsFixed(1)}s';
@@ -955,6 +482,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
     );
   }
+
+  // ─── Approved section ────────────────────────────────────────────
 
   Widget _buildApprovedSection(List<MemoryEntry> entries) {
     return Column(
@@ -1066,24 +595,192 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     );
   }
 
-  void _startGenElapsedTimer() {
-    _genElapsedTimer ??= Timer.periodic(const Duration(milliseconds: 200), (_) {
-      if (_generatingDrafts.isNotEmpty && mounted) {
-        setState(() {});
-      }
-    });
-  }
+  // ─── Actions delegating to controller ────────────────────────────
 
-  void _stopGenElapsedTimer() {
-    if (_generatingDrafts.isEmpty) {
-      _genElapsedTimer?.cancel();
-      _genElapsedTimer = null;
+  void _scanChat() async {
+    final msg = await _ctrl.scanChat();
+    if (msg != null && mounted) {
+      setState(() {});
+      GlazeToast.show(context, msg);
     }
   }
 
-  @override
-  void dispose() {
-    _genElapsedTimer?.cancel();
-    super.dispose();
+  void _generateDraft(String draftId) {
+    _ctrl.generateDraft(
+      draftId,
+      onStart: () {
+        if (mounted) {
+          setState(() {});
+          _startElapsedTimer();
+        }
+      },
+      onComplete: () {
+        if (mounted) {
+          setState(() {});
+          _stopElapsedTimer();
+        }
+      },
+      onError: (error) {
+        if (mounted) {
+          setState(() {});
+          _stopElapsedTimer();
+          GlazeToast.show(context, 'Generation failed: $error');
+        }
+      },
+    );
+  }
+
+  void _cancelDraft(String draftId) {
+    _ctrl.cancelDraftGeneration(draftId);
+    if (mounted) setState(() {});
+  }
+
+  void _batchGenerate() {
+    _ctrl.batchGenerate(
+      onStart: () {
+        if (mounted) {
+          setState(() {});
+          _startElapsedTimer();
+        }
+      },
+      onComplete: () {
+        if (mounted) {
+          setState(() {});
+          _stopElapsedTimer();
+        }
+      },
+      onError: (error) {
+        if (mounted) {
+          setState(() {});
+          _stopElapsedTimer();
+          GlazeToast.show(context, 'Generation failed: $error');
+        }
+      },
+    );
+  }
+
+  void _approveDraft(String draftId) async {
+    await _ctrl.approveDraft(draftId);
+    if (mounted) setState(() {});
+  }
+
+  void _deleteDraft(String draftId) async {
+    await _ctrl.deleteDraft(draftId);
+    if (mounted) setState(() {});
+  }
+
+  void _deleteAllDrafts() async {
+    await _ctrl.deleteAllDrafts();
+    if (mounted) setState(() {});
+  }
+
+  void _deleteEntry(String entryId) async {
+    await _ctrl.deleteEntry(entryId);
+    if (mounted) setState(() {});
+  }
+
+  void _openSettings() async {
+    final currentSettings = _ctrl.globalSettingsAsBookSettings();
+    final newResult = await GlazeBottomSheet.show<MemorySettingsSheetResult>(
+      context,
+      title: 'Memory Settings',
+      child: MemoryGenerationSettingsSheet(settings: currentSettings),
+    );
+    if (newResult != null && mounted) {
+      await _ctrl.updateSettings(newResult.settings, newResult.vectorThreshold);
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _reindexAll() async {
+    setState(() {});
+    final msg = await _ctrl.reindexAll();
+    if (mounted) {
+      setState(() {});
+      if (msg != null) {
+        if (msg.startsWith('Reindex failed') || msg.startsWith('Set up')) {
+          GlazeToast.error(context, '', msg);
+        } else {
+          GlazeToast.show(context, msg);
+        }
+      }
+    }
+  }
+
+  void _deleteAllMemoryIndexes() async {
+    final confirmed = await GlazeBottomSheet.show<bool>(
+      context,
+      title: 'Delete All Indexes',
+      bigInfo: const BottomSheetBigInfo(
+        icon: Icons.delete_outline,
+        description: 'Remove all stored memory embeddings? You will need to re-index after.',
+      ),
+      items: [
+        BottomSheetItem(
+          label: 'Delete All',
+          isDestructive: true,
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
+        ),
+        BottomSheetItem(
+          label: 'Cancel',
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
+        ),
+      ],
+    );
+    if (confirmed != true) return;
+    await _ctrl.deleteAllMemoryIndexes();
+    if (mounted) GlazeToast.show(context, 'All memory indexes deleted');
+  }
+
+  void _editEntry(MemoryEntry entry) async {
+    final result = await GlazeBottomSheet.show<MemoryEntry>(
+      context,
+      title: entry.title.isNotEmpty ? entry.title : 'Edit Memory',
+      child: MemoryEntryEditorSheet(entry: entry),
+    );
+    if (result != null && mounted) {
+      await _ctrl.editEntry(entry, result);
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _addEntry() async {
+    final entry = MemoryEntry(
+      id: 'mem_${DateTime.now().millisecondsSinceEpoch}',
+      status: 'active',
+      createdAt: DateTime.now().millisecondsSinceEpoch,
+    );
+    final result = await GlazeBottomSheet.show<MemoryEntry>(
+      context,
+      title: 'New Memory',
+      child: MemoryEntryEditorSheet(entry: entry),
+    );
+    if (result != null && mounted) {
+      await _ctrl.addEntry(result);
+      if (mounted) setState(() {});
+    }
+  }
+
+  void _editDraft(MemoryDraft draft) async {
+    final entry = MemoryEntry(
+      id: draft.id,
+      title: draft.title,
+      content: draft.content,
+      keys: draft.keys,
+      messageIds: draft.messageIds,
+      status: 'active',
+      createdAt: draft.createdAt,
+    );
+    final result = await GlazeBottomSheet.show<MemoryEntry>(
+      context,
+      title: 'Edit Draft',
+      child: MemoryEntryEditorSheet(entry: entry),
+    );
+    if (result != null && mounted) {
+      await _ctrl.editDraft(draft, result);
+      if (mounted) setState(() {});
+    }
   }
 }

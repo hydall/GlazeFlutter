@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/llm/embedding_service.dart';
 import '../../core/llm/sse_client.dart';
+import '../../core/services/api_connection_tester.dart';
 import '../../core/models/api_config.dart';
 import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/app_colors.dart';
@@ -828,57 +828,22 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       _llmStatus = ApiConnectionStatus.connecting;
       _llmError = '';
     });
-    try {
-      final client = SseClient();
-      final models = await client.fetchModels(
-        endpoint: endpoint,
-        apiKey: apiKey,
-      );
-      if (!mounted) return;
-      if (models.isEmpty) {
-        String? responseText;
-        await client.streamChatCompletion(
-          endpoint: endpoint,
-          apiKey: apiKey,
-          model: model,
-          messages: [
-            {'role': 'user', 'content': 'Hi'},
-          ],
-          maxTokens: 8,
-          temperature: 0.0,
-          topP: 1.0,
-          stream: false,
-          onComplete: (text, _, {rawResponseJson}) => responseText = text,
-          onError: (e) => throw e,
-        );
-        if (mounted && responseText != null) {
-          setState(() {
-            _llmStatus = ApiConnectionStatus.connected;
-          });
-          GlazeToast.show(context, 'Connection successful!');
-        }
-      } else {
-        final exists = models.any((m) => m['id'] == model);
-        if (mounted) {
-          setState(() {
-            _llmStatus = ApiConnectionStatus.connected;
-          });
-          GlazeToast.show(
-            context,
-            exists
-                ? 'Connected! Model "$model" found.'
-                : 'Connected, but "$model" not found.',
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
+    final result = await ApiConnectionTester().testLlm(
+      endpoint: endpoint,
+      apiKey: apiKey,
+      model: model,
+    );
+    if (!mounted) return;
+    switch (result) {
+      case ApiTestSuccess(:final message):
+        setState(() => _llmStatus = ApiConnectionStatus.connected);
+        GlazeToast.show(context, message);
+      case ApiTestFailure(:final error):
         setState(() {
           _llmStatus = ApiConnectionStatus.failed;
-          _llmError = e.toString();
+          _llmError = error.toString();
         });
-        GlazeToast.error(context, 'Connection failed: ', e);
-      }
+        GlazeToast.error(context, 'Connection failed: ', error);
     }
   }
 
@@ -902,33 +867,19 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     setState(() {
       _embStatus = ApiConnectionStatus.connecting;
     });
-    try {
-      final config = EmbeddingConfig(
-        endpoint: endpoint,
-        apiKey: apiKey,
-        model: model,
-        maxChunkTokens: 64,
-      );
-      final result = await EmbeddingService().getEmbeddings(['test'], config);
-      if (!mounted) return;
-      if (result.isNotEmpty && result.first.isNotEmpty) {
-        setState(() {
-          _embStatus = ApiConnectionStatus.connected;
-        });
-        GlazeToast.show(context, 'Connected (dim: ${result.first.length})');
-      } else {
-        setState(() {
-          _embStatus = ApiConnectionStatus.failed;
-        });
-        GlazeToast.show(context, 'Empty response from embedding API');
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _embStatus = ApiConnectionStatus.failed;
-        });
-        GlazeToast.error(context, 'Connection failed: ', e);
-      }
+    final result = await ApiConnectionTester().testEmbedding(
+      endpoint: endpoint,
+      apiKey: apiKey,
+      model: model,
+    );
+    if (!mounted) return;
+    switch (result) {
+      case ApiTestSuccess(:final message):
+        setState(() => _embStatus = ApiConnectionStatus.connected);
+        GlazeToast.show(context, message);
+      case ApiTestFailure(:final error):
+        setState(() => _embStatus = ApiConnectionStatus.failed);
+        GlazeToast.error(context, 'Connection failed: ', error);
     }
   }
 }

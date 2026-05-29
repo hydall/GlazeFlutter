@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/llm/embedding_service.dart';
 import '../../../core/llm/sse_client.dart';
 import '../../../core/models/api_config.dart';
+import '../../../core/services/api_connection_tester.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/glaze_toast.dart';
@@ -342,24 +342,17 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
     final model = _selectedModel.trim();
     if (endpoint.isEmpty || apiKey.isEmpty || model.isEmpty) { GlazeToast.show(context, 'Fill endpoint, API key, and model'); return; }
     setState(() => _isTestingLlm = true);
-    try {
-      final client = SseClient();
-      final models = await client.fetchModels(endpoint: endpoint, apiKey: apiKey);
-      if (!mounted) return;
-      if (models.isEmpty) {
-        String? responseText;
-        await client.streamChatCompletion(endpoint: endpoint, apiKey: apiKey, model: model, messages: [{'role': 'user', 'content': 'Hi'}], maxTokens: 8, temperature: 0.0, topP: 1.0, stream: false, onComplete: (text, _, {rawResponseJson}) => responseText = text, onError: (e) => throw e);
-        if (!mounted) return;
-        if (responseText != null) GlazeToast.show(context, 'Connection successful!');
-      } else {
-        final exists = models.any((m) => m['id'] == model);
-        GlazeToast.show(context, exists ? 'Connection successful! Model "$model" found.' : 'Connected, but "$model" not found.');
-      }
-    } catch (e) {
-      if (mounted) GlazeToast.error(context, 'Connection failed: ', e);
-    } finally {
-      if (mounted) setState(() => _isTestingLlm = false);
+    final result = await ApiConnectionTester().testLlm(
+      endpoint: endpoint, apiKey: apiKey, model: model,
+    );
+    if (!mounted) return;
+    switch (result) {
+      case ApiTestSuccess(:final message):
+        GlazeToast.show(context, message);
+      case ApiTestFailure(:final error):
+        GlazeToast.error(context, 'Connection failed: ', error);
     }
+    if (mounted) setState(() => _isTestingLlm = false);
   }
 
   Future<void> _testEmbConnection() async {
@@ -375,21 +368,17 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
     }
     if (endpoint.isEmpty) { GlazeToast.show(context, 'Fill endpoint first'); return; }
     setState(() => _isTestingEmb = true);
-    try {
-      final service = EmbeddingService();
-      final config = EmbeddingConfig(endpoint: endpoint, apiKey: apiKey, model: model, maxChunkTokens: 64);
-      final result = await service.getEmbeddings(['test'], config);
-      if (!mounted) return;
-      if (result.isNotEmpty && result.first.isNotEmpty) {
-        GlazeToast.show(context, 'Connected (dim: ${result.first.length})');
-      } else {
-        GlazeToast.show(context, 'Connection failed: empty response');
-      }
-    } catch (e) {
-      if (mounted) GlazeToast.error(context, 'Connection failed: ', e);
-    } finally {
-      if (mounted) setState(() => _isTestingEmb = false);
+    final result = await ApiConnectionTester().testEmbedding(
+      endpoint: endpoint, apiKey: apiKey, model: model,
+    );
+    if (!mounted) return;
+    switch (result) {
+      case ApiTestSuccess(:final message):
+        GlazeToast.show(context, message);
+      case ApiTestFailure(:final error):
+        GlazeToast.error(context, 'Connection failed: ', error);
     }
+    if (mounted) setState(() => _isTestingEmb = false);
   }
 
   Future<void> _save() async {
