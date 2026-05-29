@@ -338,7 +338,8 @@ class PromptPayloadBuilder {
 
     try {
       final searchService = _ref.read(lorebookVectorSearchProvider);
-      final searchHistory = history
+      final visibleHistory = history.where((m) => !m.isHidden && !m.isTyping).toList();
+      final searchHistory = visibleHistory
           .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
           .toList();
       final activations = _ref.read(lorebookActivationsProvider);

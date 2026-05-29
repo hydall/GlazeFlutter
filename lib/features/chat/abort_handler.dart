@@ -87,11 +87,15 @@ class AbortHandler {
     final current = _getState().value;
     if (current != null && current.isGenerating) {
       final restorationSnapshot = _restorationMessage;
+      final abortGenId = _activeGenId;
       // Phase 1: unblock UI immediately.
       _setState(AsyncData(current.copyWith(isGenerating: false, isGeneratingImage: false)));
 
       // Phase 2: heavier restore/persist work is deferred to avoid first-abort jank.
+      // Guard: if a new generation started (genId bumped again), skip restoration
+      // to avoid overwriting the active regen state and duplicating messages.
       scheduleMicrotask(() {
+        if (_activeGenId != abortGenId) return;
         _finalizeAbortWithPartial(current, partialStreaming, restorationSnapshot);
       });
     } else if (current != null && current.isGeneratingImage) {

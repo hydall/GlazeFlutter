@@ -77,30 +77,31 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
       return false;
     }).toList();
 
-    final nonHiddenMessages = session.messages.where((m) => !m.isHidden).toList();
+    final nonHiddenMessages = session.messages.where((m) => !m.isHidden && !m.isTyping).toList();
     final scanDepth = settings.scanDepth;
     final scanMessages = nonHiddenMessages.length > scanDepth
         ? nonHiddenMessages.sublist(nonHiddenMessages.length - scanDepth)
         : nonHiddenMessages;
     final scanText = scanMessages.map((m) => m.content).join('\n').toLowerCase();
 
-    var triggeredCount = 0;
+    var triggeredCountRaw = 0;
     for (final lb in activeLorebooks) {
       for (final entry in lb.entries) {
         if (!entry.enabled) continue;
         if (entry.constant) {
-          triggeredCount++;
+          triggeredCountRaw++;
           continue;
         }
         for (final key in entry.keys) {
           if (key.isEmpty) continue;
           if (scanText.contains(key.toLowerCase())) {
-            triggeredCount++;
+            triggeredCountRaw++;
             break;
           }
         }
       }
     }
+    final triggeredCount = triggeredCountRaw.clamp(0, settings.maxInjectedEntries);
 
     sources.add(_SourceItem(
       icon: Icons.menu_book,

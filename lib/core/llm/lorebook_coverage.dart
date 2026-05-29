@@ -61,7 +61,7 @@ CoverageResult computeLorebookCoverage({
   // Maps entry.id → lorebookId for correct lorebook lookup without id collisions.
   Map<String, String> vectorEntryLorebookIds = const {},
 }) {
-  Lorebook? _lbForEntry(String entryId) {
+  Lorebook? lbForEntry(String entryId) {
     final lbId = vectorEntryLorebookIds[entryId];
     if (lbId != null) return lorebooks.where((l) => l.id == lbId).firstOrNull;
     return lorebooks.where((l) => l.entries.any((en) => en.id == entryId)).firstOrNull;
@@ -73,7 +73,7 @@ CoverageResult computeLorebookCoverage({
       return const CoverageResult(entries: [], totalCandidates: 0, activatedCount: 0, cutOffCount: 0);
     }
     final entries = vectorEntries.map((e) {
-      final lb = _lbForEntry(e.id);
+      final lb = lbForEntry(e.id);
       return CoverageEntry(
         id: e.id,
         comment: e.comment,
@@ -188,7 +188,7 @@ CoverageResult computeLorebookCoverage({
             : scanMessages[i].content.toLowerCase();
         for (final key in entry.keys) {
           if (key.isNotEmpty && glazeCheckMatch(key, msgText, caseSensitive, wholeWords)) {
-            matchIdx = nonHidden.indexOf(scanMessages[i]);
+            matchIdx = history.indexOf(scanMessages[i]);
             break;
           }
         }
@@ -238,26 +238,46 @@ CoverageResult computeLorebookCoverage({
   final notActivatedList = candidates.values.where((c) => !c.activated).toList()
     ..sort((a, b) => a.entry.order.compareTo(b.entry.order));
 
-  final cutOffCount = activatedList.length > maxInjectedEntries
-      ? activatedList.length - maxInjectedEntries
-      : 0;
+  // Dedupe vector entries against all keyword-activated IDs (not just in-budget).
+  final keywordActivatedIds = activatedList.map((c) => c.entry.id).toSet();
+  final dedupedVectorEntries = vectorEntries
+      .where((e) => !keywordActivatedIds.contains(e.id))
+      .toList();
 
-  for (int i = maxInjectedEntries; i < activatedList.length; i++) {
+  final hasVector = dedupedVectorEntries.isNotEmpty;
+
+  // Apply the same slot-split logic as mergeKeywordVector.
+  final splitPct = globalSettings.keywordVectorSplit;
+  final keywordSlots = hasVector ? (maxInjectedEntries * splitPct / 100).round() : maxInjectedEntries;
+  final vectorSlots = maxInjectedEntries - keywordSlots;
+
+  final usedKeyword = activatedList.take(keywordSlots).toList();
+  final unusedKeywordSlots = keywordSlots - usedKeyword.length;
+  final adjustedVectorSlots = vectorSlots + unusedKeywordSlots;
+
+  final usedVector = dedupedVectorEntries.take(adjustedVectorSlots).toList();
+
+  // Keyword entries beyond keywordSlots are cut off by budget.
+  final keywordCutOffCount = activatedList.length > keywordSlots
+      ? activatedList.length - keywordSlots
+      : 0;
+  for (int i = keywordSlots; i < activatedList.length; i++) {
     activatedList[i].cutOffByBudget = true;
   }
 
-  final inBudget = activatedList.take(maxInjectedEntries).toList();
-  final overBudget = activatedList.skip(maxInjectedEntries).toList();
+  // Vector entries beyond adjustedVectorSlots are cut off by budget.
+  final vectorCutOffCount = dedupedVectorEntries.length > adjustedVectorSlots
+      ? dedupedVectorEntries.length - adjustedVectorSlots
+      : 0;
+  final vectorInBudget = usedVector;
+  final vectorOverBudget = dedupedVectorEntries.skip(adjustedVectorSlots).toList();
 
-  // In hybrid mode, merge in vector-only results that keyword didn't activate.
-  // Use activated IDs (not all candidates) — an entry in candidates but not
-  // activated by keyword should still be shown as a vector hit.
-  final keywordActivatedIds = candidates.values
-      .where((c) => c.activated)
-      .map((c) => c.entry.id)
-      .toSet();
-  final vectorOnlyEntries = vectorEntries.where((e) => !keywordActivatedIds.contains(e.id)).map((e) {
-    final lb = _lbForEntry(e.id);
+  final totalCutOff = keywordCutOffCount + vectorCutOffCount;
+  final totalActivated = usedKeyword.length + vectorInBudget.length;
+
+  // Build vector CoverageEntries for in-budget and over-budget.
+  CoverageEntry vectorToCoverage(LorebookEntry e, bool cutOff) {
+    final lb = lbForEntry(e.id);
     return CoverageEntry(
       id: e.id,
       comment: e.comment,
@@ -269,12 +289,13 @@ CoverageResult computeLorebookCoverage({
       constant: e.constant,
       activated: true,
       matchedKeys: ['[vector]'],
+      cutOffByBudget: cutOff,
     );
-  }).toList();
+  }
 
   final allEntries = <CoverageEntry>[
-    ...inBudget.map(_toCoverage),
-    ...overBudget.map((c) {
+    ...usedKeyword.map(_toCoverage),
+    ...activatedList.skip(keywordSlots).map((c) {
       final base = _toCoverage(c);
       return CoverageEntry(
         id: base.id,
@@ -292,15 +313,16 @@ CoverageResult computeLorebookCoverage({
         cutOffByBudget: true,
       );
     }),
-    ...vectorOnlyEntries,
+    ...vectorInBudget.map((e) => vectorToCoverage(e, false)),
+    ...vectorOverBudget.map((e) => vectorToCoverage(e, true)),
     ...notActivatedList.map(_toCoverage),
   ];
 
   return CoverageResult(
     entries: allEntries,
-    totalCandidates: candidates.length + vectorOnlyEntries.length,
-    activatedCount: activatedList.length + vectorOnlyEntries.length,
-    cutOffCount: cutOffCount,
+    totalCandidates: candidates.length + dedupedVectorEntries.length,
+    activatedCount: totalActivated + totalCutOff,
+    cutOffCount: totalCutOff,
   );
 }
 
