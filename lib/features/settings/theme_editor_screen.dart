@@ -243,16 +243,24 @@ class _GeneralTab extends StatelessWidget {
             _FontModeRow(
               label: 'Font',
               mode: preset.uiFontMode,
-              modes: const ['glaze', 'system', 'custom'],
-              modeLabels: const ['Glaze (Inter)', 'System', 'Custom File'],
+              modes: const ['glaze', 'system', 'custom', 'google'],
+              modeLabels: const ['Glaze (Inter)', 'System', 'Custom File', 'Google Fonts'],
               onChanged: (v) async {
                 if (v == 'custom') {
                   await _pickCustomFont(context, onUpdate, isUi: true, preset: preset);
+                } else if (v == 'google') {
+                  await _pickGoogleFont(context, onUpdate, isUi: true, preset: preset);
                 } else {
                   onUpdate((p) => p.copyWith(uiFontMode: v));
                 }
               },
             ),
+            if (preset.uiFontMode == 'google' && preset.googleFontName != null)
+              _GoogleFontDisplayRow(
+                fontName: preset.googleFontName!,
+                onTap: () => _pickGoogleFont(context, onUpdate, isUi: true, preset: preset),
+                onClear: () => onUpdate((p) => p.copyWith(uiFontMode: 'glaze', googleFontName: null)),
+              ),
             _ColorRow(
               label: 'Text Color',
               value: preset.uiTextColor,
@@ -525,16 +533,24 @@ class _ChatFontTab extends StatelessWidget {
             _FontModeRow(
               label: 'Font',
               mode: preset.chatFontMode,
-              modes: const ['ui', 'glaze', 'system', 'custom'],
-              modeLabels: const ['Same as UI', 'Glaze (Inter)', 'System', 'Custom File'],
+              modes: const ['ui', 'glaze', 'system', 'custom', 'google'],
+              modeLabels: const ['Same as UI', 'Glaze (Inter)', 'System', 'Custom File', 'Google Fonts'],
               onChanged: (v) async {
                 if (v == 'custom') {
                   await _pickCustomFont(context, onUpdate, isUi: false, preset: preset);
+                } else if (v == 'google') {
+                  await _pickGoogleFont(context, onUpdate, isUi: false, preset: preset);
                 } else {
                   onUpdate((p) => p.copyWith(chatFontMode: v));
                 }
               },
             ),
+            if (preset.chatFontMode == 'google' && preset.chatGoogleFontName != null)
+              _GoogleFontDisplayRow(
+                fontName: preset.chatGoogleFontName!,
+                onTap: () => _pickGoogleFont(context, onUpdate, isUi: false, preset: preset),
+                onClear: () => onUpdate((p) => p.copyWith(chatFontMode: 'ui', chatGoogleFontName: null)),
+              ),
             _FontSizeRow(
               label: 'Font Size',
               value: preset.chatFontSize,
@@ -1469,6 +1485,163 @@ class _PickerSlider extends StatelessWidget {
           SizedBox(
             width: 48,
             child: Text(display, style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant), textAlign: TextAlign.end),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Google Fonts ─────────────────────────────────────────────────────────────
+
+const _kPopularGoogleFonts = [
+  'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Oswald',
+  'Raleway', 'Poppins', 'Nunito', 'Ubuntu', 'Playfair Display',
+  'Merriweather', 'PT Sans', 'Source Sans 3', 'Rubik', 'Work Sans',
+  'Fira Sans', 'Quicksand', 'Barlow', 'Mulish', 'Karla',
+  'Inconsolata', 'Bitter', 'Cabin', 'Lora', 'Josefin Sans',
+  'Arimo', 'Dosis', 'Libre Baskerville', 'Oxygen', 'Crimson Text',
+  'Exo 2', 'Abel', 'Comfortaa', 'Varela Round', 'Pacifico',
+  'Lobster', 'Dancing Script', 'Satisfy', 'Caveat', 'Shadows Into Light',
+  'Courier Prime', 'Space Mono', 'IBM Plex Mono', 'JetBrains Mono',
+  'Anonymous Pro', 'Roboto Mono', 'Source Code Pro', 'Fira Code',
+];
+
+Future<void> _pickGoogleFont(
+  BuildContext context,
+  void Function(ThemePreset Function(ThemePreset)) onUpdate, {
+  required bool isUi,
+  required ThemePreset preset,
+}) async {
+  final selected = await showModalBottomSheet<String>(
+    context: context,
+    useRootNavigator: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _GoogleFontPickerSheet(),
+  );
+  if (selected != null && selected.isNotEmpty) {
+    if (isUi) {
+      onUpdate((p) => p.copyWith(uiFontMode: 'google', googleFontName: selected));
+    } else {
+      onUpdate((p) => p.copyWith(chatFontMode: 'google', chatGoogleFontName: selected));
+    }
+  }
+}
+
+class _GoogleFontPickerSheet extends StatefulWidget {
+  @override
+  State<_GoogleFontPickerSheet> createState() => _GoogleFontPickerSheetState();
+}
+
+class _GoogleFontPickerSheetState extends State<_GoogleFontPickerSheet> {
+  final _controller = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final filtered = _kPopularGoogleFonts
+        .where((f) => f.toLowerCase().contains(_query.toLowerCase()))
+        .toList();
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      child: Container(
+        color: cs.surface.withValues(alpha: 0.95),
+        child: SafeArea(
+          child: Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    color: cs.outlineVariant,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Text(
+                    'Google Fonts',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: TextField(
+                    controller: _controller,
+                    decoration: InputDecoration(
+                      hintText: 'Search fonts...',
+                      prefixIcon: Icon(Icons.search, color: cs.onSurfaceVariant),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    onChanged: (v) => setState(() => _query = v),
+                  ),
+                ),
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: filtered.length,
+                    itemBuilder: (_, i) {
+                      final font = filtered[i];
+                      return ListTile(
+                        title: Text(font, style: TextStyle(color: cs.onSurface)),
+                        onTap: () => Navigator.pop(context, font),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GoogleFontDisplayRow extends StatelessWidget {
+  final String fontName;
+  final VoidCallback onTap;
+  final VoidCallback onClear;
+
+  const _GoogleFontDisplayRow({
+    required this.fontName,
+    required this.onTap,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      child: Row(
+        children: [
+          const SizedBox(width: 130),
+          Expanded(
+            child: GestureDetector(
+              onTap: onTap,
+              child: Text(
+                fontName,
+                style: TextStyle(color: context.cs.primary, fontSize: 14),
+              ),
+            ),
+          ),
+          GestureDetector(
+            onTap: onClear,
+            child: Icon(Icons.close, size: 18, color: context.cs.onSurfaceVariant),
           ),
         ],
       ),
