@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/theme_provider.dart';
 import '../theme/theme_preset.dart';
@@ -135,6 +136,13 @@ final chatFontFamilyProvider = FutureProvider<String?>((ref) async {
     if (!preset.hasChatFont || preset.chatFontName == null) return null;
     return _loadFontFromBase64(preset.chatFont!, preset.chatFontName!);
   }
+  if (mode == 'google') {
+    final chatGoogle = preset.chatGoogleFontName;
+    final uiGoogle = preset.googleFontName;
+    final fontName = chatGoogle ?? uiGoogle;
+    if (fontName == null || fontName.isEmpty) return null;
+    return _loadGoogleFont(fontName);
+  }
   return null;
 });
 
@@ -157,7 +165,6 @@ final uiFontFamilyProvider = FutureProvider<String?>((ref) async {
   final preset = settings.activePreset;
   final mode = preset.uiFontMode;
   if (mode == 'glaze') {
-    // Trigger asset preload so the font is ready for both Flutter and WebView.
     unawaited(_loadInterDataUrl());
     return _kInterFontFamily;
   }
@@ -165,8 +172,27 @@ final uiFontFamilyProvider = FutureProvider<String?>((ref) async {
     if (!preset.hasCustomFont || preset.customFontName == null) return null;
     return _loadFontFromBase64(preset.customFont!, preset.customFontName!);
   }
+  if (mode == 'google') {
+    final fontName = preset.googleFontName;
+    if (fontName == null || fontName.isEmpty) return null;
+    return _loadGoogleFont(fontName);
+  }
   return null;
 });
+
+final _loadedGoogleFonts = <String>{};
+
+Future<String?> _loadGoogleFont(String fontName) async {
+  if (_loadedGoogleFonts.contains(fontName)) return fontName;
+  try {
+    final font = GoogleFonts.getFont(fontName);
+    if (font.fontFamily != null) {
+      _loadedGoogleFonts.add(fontName);
+      return font.fontFamily;
+    }
+  } catch (_) {}
+  return null;
+}
 
 /// Decoded background image bytes for native Flutter rendering. Returns null
 /// when the active preset has no image. Recomputed only when the data URI
