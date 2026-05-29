@@ -2,8 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:isolate';
 
-// ignore: depend_on_referenced_packages
-import 'package:path_provider/path_provider.dart';
+import '../utils/platform_paths.dart';
 
 import '../models/character.dart';
 import '../models/persona.dart';
@@ -42,8 +41,7 @@ class PromptWorker {
   }
 
   static Future<PromptWorker> _create() async {
-    final dir = await getApplicationSupportDirectory();
-    final appSupportPath = dir.path;
+    final appSupportPath = await getAppDataDir();
 
     final commandPort = ReceivePort();
     final responsePort = ReceivePort();

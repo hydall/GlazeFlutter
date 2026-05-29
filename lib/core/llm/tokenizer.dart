@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
+import '../utils/platform_paths.dart';
 // ignore: depend_on_referenced_packages, implementation_imports
 import 'package:tiktoken/src/common/byte_array.dart';
 import 'package:tiktoken/tiktoken.dart';
@@ -27,7 +27,7 @@ Future<void> preloadO200kBase({String? appSupportPath}) async {
   if (_o200kBaseEncoder != null) return;
 
   try {
-    final dir = appSupportPath ?? (await getApplicationSupportDirectory()).path;
+    final dir = appSupportPath ?? await getAppDataDir();
     final cacheFile = File('$dir/$_o200kCacheFile');
 
     String bpeData;

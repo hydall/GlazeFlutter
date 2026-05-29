@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/models/preset.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../bridge/chat_bridge_controller.dart';
@@ -133,6 +134,15 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
 
   @override
   bool get wantKeepAlive => true;
+
+  /// Shallow comparison of two regex lists by id + disabled state.
+  bool _regexListChanged(List<PresetRegex> a, List<PresetRegex> b) {
+    if (a.length != b.length) return true;
+    for (int i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id || a[i].disabled != b[i].disabled) return true;
+    }
+    return false;
+  }
 
   Future<void> _syncIdentityFromWidget() async {
     final bridge = _bridge;
@@ -566,6 +576,20 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     if (_bridge != null) {
       _bridge!.setRegexContext(displayRegexes, character, effectivePersona);
     }
+
+    // Re-render all messages when display regex list changes (toggle, add, remove).
+    ref.listen<AsyncValue<List<PresetRegex>>>(
+      displayRegexesProvider,
+      (prev, next) {
+        if (!_ready || _bridge == null) return;
+        final oldList = prev?.valueOrNull ?? [];
+        final newList = next.valueOrNull ?? [];
+        if (_regexListChanged(oldList, newList)) {
+          _bridge!.setRegexContext(newList, character, effectivePersona);
+          _bridge!.setMessages(widget.messages, visibleStartIndex: widget.visibleStartIndex);
+        }
+      },
+    );
 
     ref.listen<String?>(
       editingMessageIdProvider(widget.charId),

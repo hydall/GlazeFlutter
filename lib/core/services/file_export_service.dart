@@ -91,8 +91,12 @@ class FileExportService {
   /// Scoped-storage-safe Downloads/Glaze path on Android; null if unavailable.
   static Future<Directory?> _androidGlazeDir(String subfolder) async {
     try {
-      final downloads = await getDownloadsDirectory();
-      if (downloads == null) return null;
+      var downloads = await getDownloadsDirectory();
+
+      // path_provider may return null on some Android versions/OEMs.
+      // Fall back to the well-known public Downloads path.
+      downloads ??= Directory('/storage/emulated/0/Download');
+
       final dir = Directory('${downloads.path}/Glaze/$subfolder');
       if (!await dir.exists()) {
         await dir.create(recursive: true);

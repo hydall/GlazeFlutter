@@ -146,5 +146,79 @@ void main() {
       const input = 'x';
       expect(applyRegexes(input, 5, 2, [script], ctx(), isPrompt: true), equals('Z'));
     });
+
+    test('HEADER-style: multiline capture groups are resolved', () {
+      // Simplified version of the real HEADER regex script
+      final script = PresetRegex.fromJson({
+        'id': 'header-test',
+        'name': 'HEADER',
+        'regex': r'/\[HEADER\]\s*name:\s*([^\n]+?)\s*status:\s*([^\n]+?)\s*\[\/HEADER\]/g',
+        'replacement': r'<div>Name=$1 Status=$2</div>',
+        'placement': [2],
+      });
+
+      const input = '[HEADER]\nname: Элай Марш\nstatus: idle\n[/HEADER]\nSome text.';
+      final out = applyRegexes(input, 2, 2, [script], ctx());
+      expect(out, equals('<div>Name=Элай Марш Status=idle</div>\nSome text.'));
+    });
+
+    test('BOOTS-style: single capture group resolved for script content', () {
+      final script = PresetRegex.fromJson({
+        'id': 'boots-test',
+        'name': 'BOOTS',
+        'regex': r'/\[BOOTS\]([\s\S]*?)\[\/BOOTS\]/g',
+        'replacement': r'<div class="boots">$1</div>',
+        'placement': [2],
+      });
+
+      const input = '[BOOTS]\ntitle: My Title\nreflection: deep thoughts\n[/BOOTS]';
+      final out = applyRegexes(input, 2, 2, [script], ctx());
+      expect(out, equals('<div class="boots">\ntitle: My Title\nreflection: deep thoughts\n</div>'));
+    });
+
+    test('backrefs work even with substituteRegex != 0', () {
+      final script = PresetRegex.fromJson({
+        'id': 'sub-backref',
+        'name': 'sub-backref',
+        'regex': r'/(hello) (world)/g',
+        'replacement': r'$2 $1',
+        'substituteRegex': 1,
+        'placement': [2],
+      });
+
+      const input = 'hello world';
+      final out = applyRegexes(input, 2, 2, [script], ctx());
+      expect(out, equals('world hello'));
+    });
+
+    test('no replacement without backrefs still works', () {
+      final script = PresetRegex.fromJson({
+        'id': 'plain',
+        'name': 'plain',
+        'regex': r'/foo/g',
+        'replacement': 'bar',
+        'placement': [2],
+      });
+
+      const input = 'foo baz foo';
+      final out = applyRegexes(input, 2, 2, [script], ctx());
+      expect(out, equals('bar baz bar'));
+    });
+
+    test('double-digit capture groups 10+ are resolved correctly', () {
+      // Ensure $10 is not eaten as $1 + "0"
+      final script = PresetRegex.fromJson({
+        'id': 'double-digit',
+        'name': 'double-digit',
+        'regex': r'/(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)/g',
+        'replacement': r'$10-$11',
+        'placement': [2],
+      });
+
+      const input = 'abcdefghijk';
+      final out = applyRegexes(input, 2, 2, [script], ctx());
+      // $10 = 'j', $11 = 'k'
+      expect(out, equals('j-k'));
+    });
   });
 }

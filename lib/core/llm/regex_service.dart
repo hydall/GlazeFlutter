@@ -106,14 +106,15 @@ String _applySingleScript(String text, PresetRegex script, RegexApplyContext ctx
   try {
     final regex = RegExp(parsed.pattern, multiLine: parsed.multiLine, dotAll: parsed.dotAll, caseSensitive: parsed.caseSensitive);
 
-    final hasBackrefs = script.substituteRegex == 0 &&
-        RegExp(r'(\$\d+|\\\d|\{\{match\}\}|\$<[^>]+>)').hasMatch(replacement);
-
-    if (hasBackrefs) {
-      processed = processed.replaceAllMapped(regex, (match) => _resolveReplacement(replacement, match));
-    } else {
-      processed = processed.replaceAll(regex, replacement);
-    }
+    // Always use replaceAllMapped so backreferences ($1, \1, {{match}},
+    // $<name>) are resolved.  Dart's String.replaceAll does NOT interpret
+    // $1/$2 in the replacement string — they stay as literal text.
+    // Previous code skipped resolution when substituteRegex != 0, but
+    // ST scripts routinely combine substituteRegex with capture groups.
+    processed = processed.replaceAllMapped(
+      regex,
+      (match) => _resolveReplacement(replacement, match),
+    );
   } catch (_) {}
 
   return processed;
