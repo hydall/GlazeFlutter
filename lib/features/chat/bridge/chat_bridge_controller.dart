@@ -3,7 +3,10 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import '../../../core/models/character.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../core/models/persona.dart';
+import '../../../core/models/preset.dart';
 import 'chat_message_mapper.dart';
 
 class ChatBridgeController {
@@ -22,6 +25,10 @@ class ChatBridgeController {
   final Set<String> _coveredMemoryIds = {};
   final Set<String> _pendingMemoryIds = {};
   final Set<String> _draftMemoryIds = {};
+  
+  List<PresetRegex> _displayRegexes = [];
+  Character? _regexCharacter;
+  Persona? _regexPersona;
 
   ChatBridgeController(this._controller) {
     _setupHandlers();
@@ -39,6 +46,12 @@ class ChatBridgeController {
     draftMemoryIds: _draftMemoryIds,
     greetingTotal: currentGreetingTotal,
   );
+
+  void setRegexContext(List<PresetRegex> regexes, Character? char, Persona? persona) {
+    _displayRegexes = regexes;
+    _regexCharacter = char;
+    _regexPersona = persona;
+  }
 
   void resolveRequest(String requestId, dynamic result) {
     final completer = _pendingRequests.remove(requestId);
@@ -380,7 +393,7 @@ class ChatBridgeController {
   Future<void> setMessages(List<ChatMessage> messages, {int visibleStartIndex = 0}) async {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
-      final map = ChatMessageMapper.toMap(messages[i], _ctx, isLast: i == messages.length - 1, messageIndex: visibleStartIndex + i);
+      final map = ChatMessageMapper.toMap(messages[i], _ctx, isLast: i == messages.length - 1, messageIndex: visibleStartIndex + i, displayRegexes: _displayRegexes, character: _regexCharacter, persona: _regexPersona);
       mapped.add(map);
     }
     final resolved = await Future.wait(mapped.map((m) => _resolveImgResults(m['text'] as String)));
@@ -392,7 +405,7 @@ class ChatBridgeController {
   }
 
   Future<void> appendMessage(ChatMessage message) async {
-    final map = ChatMessageMapper.toMap(message, _ctx);
+    final map = ChatMessageMapper.toMap(message, _ctx, displayRegexes: _displayRegexes, character: _regexCharacter, persona: _regexPersona);
     map['text'] = await _resolveImgResults(map['text'] as String);
     final json = jsonEncode(map);
     return _callJs('appendMessage', json);
@@ -401,7 +414,7 @@ class ChatBridgeController {
   Future<void> appendMessages(List<ChatMessage> messages, {int startIndex = 0}) async {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
-      final map = ChatMessageMapper.toMap(messages[i], _ctx, isLast: i == messages.length - 1, messageIndex: startIndex + i);
+      final map = ChatMessageMapper.toMap(messages[i], _ctx, isLast: i == messages.length - 1, messageIndex: startIndex + i, displayRegexes: _displayRegexes, character: _regexCharacter, persona: _regexPersona);
       mapped.add(map);
     }
     final resolved = await Future.wait(mapped.map((m) => _resolveImgResults(m['text'] as String)));
@@ -415,7 +428,7 @@ class ChatBridgeController {
   Future<void> prependMessages(List<ChatMessage> messages, {int visibleStartIndex = 0}) async {
     final List<Map<String, dynamic>> mapped = [];
     for (int i = 0; i < messages.length; i++) {
-      final map = ChatMessageMapper.toMap(messages[i], _ctx, messageIndex: visibleStartIndex + i);
+      final map = ChatMessageMapper.toMap(messages[i], _ctx, messageIndex: visibleStartIndex + i, displayRegexes: _displayRegexes, character: _regexCharacter, persona: _regexPersona);
       mapped.add(map);
     }
     final resolved = await Future.wait(mapped.map((m) => _resolveImgResults(m['text'] as String)));
@@ -427,7 +440,7 @@ class ChatBridgeController {
   }
 
   Future<void> updateMessage(ChatMessage message) async {
-    final map = ChatMessageMapper.toMap(message, _ctx, isStreamingUpdate: true);
+    final map = ChatMessageMapper.toMap(message, _ctx, isStreamingUpdate: true, displayRegexes: _displayRegexes, character: _regexCharacter, persona: _regexPersona);
     map['text'] = await _resolveImgResults(map['text'] as String);
     final json = jsonEncode(map);
     return _callJs('updateMessage', json);

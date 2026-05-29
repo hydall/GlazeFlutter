@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/state/active_selection_provider.dart';
+import '../../../core/state/character_provider.dart';
 import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_webview_keep_alive.dart';
 import '../chat_provider.dart';
@@ -150,6 +152,13 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   Future<void> _initWebView() async {
     final bridge = _bridge;
     if (bridge == null) return;
+
+    final character = ref.read(characterByIdProvider(widget.charId));
+    final effectivePersona = ref.read(effectivePersonaForChatProvider(
+      (charId: widget.charId, sessionId: widget.sessionId),
+    ));
+    final displayRegexes = ref.read(displayRegexesProvider).valueOrNull ?? [];
+    bridge.setRegexContext(displayRegexes, character, effectivePersona);
 
     await _syncIdentityFromWidget();
 
@@ -547,6 +556,16 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+
+    final character = ref.watch(characterByIdProvider(widget.charId));
+    final effectivePersona = ref.watch(effectivePersonaForChatProvider(
+      (charId: widget.charId, sessionId: widget.sessionId),
+    ));
+    final displayRegexes = ref.watch(displayRegexesProvider).valueOrNull ?? [];
+    
+    if (_bridge != null) {
+      _bridge!.setRegexContext(displayRegexes, character, effectivePersona);
+    }
 
     ref.listen<String?>(
       editingMessageIdProvider(widget.charId),

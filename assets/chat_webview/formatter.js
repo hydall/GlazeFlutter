@@ -284,9 +284,9 @@ class Formatter {
     // 14. Restore style blocks
     html = html.replace(/\x01STY_BLOCK_(\d+)\x01/g, (_, i) => styleBlocks[parseInt(i)]);
 
-    // 15. Restore script blocks (sandboxed)
+    // 15. Restore script blocks (will be executed by renderer via DOM API)
     html = html.replace(/\x01SCR_BLOCK_(\d+)\x01/g, (_, i) => {
-      return `<div class="script-block-hidden" style="display:none">${scriptBlocks[parseInt(i)]}</div>`;
+      return scriptBlocks[parseInt(i)];
     });
 
     // 16. Restore Code Blocks

@@ -1,5 +1,9 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:glaze_flutter/core/llm/regex_service.dart';
+import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
+import 'package:glaze_flutter/core/models/persona.dart';
+import 'package:glaze_flutter/core/models/preset.dart';
 import 'package:glaze_flutter/core/utils/think_tags.dart';
 
 part 'chat_message_mapper.freezed.dart';
@@ -28,9 +32,22 @@ class ChatMessageMapper {
     bool isLast = false,
     int? messageIndex,
     bool isStreamingUpdate = false,
+    List<PresetRegex>? displayRegexes,
+    Character? character,
+    Persona? persona,
   }) {
     final isAssistant = m.role == 'assistant' || m.role == 'character';
     final isUser = m.role == 'user';
+
+    String content = m.content;
+    if (displayRegexes != null && displayRegexes.isNotEmpty) {
+      final placement = isUser ? 1 : 2;
+      final regexCtx = RegexApplyContext(
+        char: character,
+        persona: persona,
+      );
+      content = applyRegexes(content, placement, 1, displayRegexes, regexCtx, isMarkdown: true);
+    }
 
     String? displayName;
     String? avatarColor;
@@ -66,7 +83,7 @@ class ChatMessageMapper {
     return {
       'id': m.id,
       'role': m.role,
-      'text': stripThinkTags(m.content),
+      'text': stripThinkTags(content),
       'timestamp': m.timestamp,
       'isUser': isUser,
       'isAssistant': isAssistant,

@@ -751,10 +751,23 @@ if (messageData.isEditing) classes.push('editing');
       let formatted = this.formatter.format(text || '', isUser);
       if (this.searchQuery) formatted = this._applySearchHighlight(formatted);
       root.innerHTML = formatted;
+      this._executeInlineScripts(root);
       this._fixDetailsSummaryArrows(root);
     } catch (e) {
       root.textContent = text || '';
       console.error('Formatter error:', e);
+    }
+  }
+
+  _executeInlineScripts(root) {
+    const scripts = Array.from(root.querySelectorAll('script'));
+    for (const oldScript of scripts) {
+      const newScript = document.createElement('script');
+      for (const attr of oldScript.attributes) {
+        newScript.setAttribute(attr.name, attr.value);
+      }
+      newScript.textContent = oldScript.textContent;
+      oldScript.parentNode.replaceChild(newScript, oldScript);
     }
   }
 
