@@ -25,7 +25,10 @@ Map<String, dynamic> normalizeJsGlobalRegex(Map<String, dynamic> raw) {
     }
   }
   if (!map.containsKey('ephemerality')) {
-    map['ephemerality'] = [2];
+    // ST scripts don't have ephemerality — they always apply to both
+    // display (1) and prompt (2). Default [2] was wrong and caused
+    // display-time regex scripts (HEADER, BOOTS, etc.) to be skipped.
+    map['ephemerality'] = [1, 2];
   }
   if (map['placement'] is List) {
     map['placement'] = _migrateGlazePlacementIds(

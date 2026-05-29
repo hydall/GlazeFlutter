@@ -762,12 +762,47 @@ if (messageData.isEditing) classes.push('editing');
   _executeInlineScripts(root) {
     const scripts = Array.from(root.querySelectorAll('script'));
     for (const oldScript of scripts) {
-      const newScript = document.createElement('script');
-      for (const attr of oldScript.attributes) {
-        newScript.setAttribute(attr.name, attr.value);
+      // Inline scripts set via innerHTML are never executed by the browser.
+      // We run them manually with shimmed globals so ST-compatible regex
+      // scripts (BOOTS, HEADER, etc.) work inside shadow DOM:
+      //   • document.currentScript.previousElementSibling → sibling in shadow root
+      //   • document.getElementById → searches inside the shadow root first
+      //   • document.querySelector  → searches inside the shadow root first
+      const prev = oldScript.previousElementSibling;
+      const src = oldScript.textContent || '';
+      try {
+        // Shim document.currentScript
+        const shim = { previousElementSibling: prev, parentNode: prev ? prev.parentNode : null };
+        const csDesc = Object.getOwnPropertyDescriptor(Document.prototype, 'currentScript');
+        Object.defineProperty(document, 'currentScript', { value: shim, configurable: true });
+
+        // Shim getElementById / querySelector to search shadow root first
+        const origGetById = document.getElementById.bind(document);
+        const origQS = document.querySelector.bind(document);
+        document.getElementById = function(id) {
+          const inShadow = root.querySelector('#' + CSS.escape(id));
+          return inShadow || origGetById(id);
+        };
+        document.querySelector = function(sel) {
+          const inShadow = root.querySelector(sel);
+          return inShadow || origQS(sel);
+        };
+
+        try {
+          new Function(src)();
+        } finally {
+          if (csDesc) {
+            Object.defineProperty(document, 'currentScript', csDesc);
+          } else {
+            delete document.currentScript;
+          }
+          document.getElementById = origGetById;
+          document.querySelector = origQS;
+        }
+      } catch (e) {
+        console.error('Inline script error:', e);
       }
-      newScript.textContent = oldScript.textContent;
-      oldScript.parentNode.replaceChild(newScript, oldScript);
+      oldScript.remove();
     }
   }
 
