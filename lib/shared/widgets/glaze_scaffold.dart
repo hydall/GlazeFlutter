@@ -158,10 +158,7 @@ class GlazeAppBar extends ConsumerWidget {
                           style: TextStyle(
                             color: context.cs.onSurface,
                             fontSize: 18,
-                            fontWeight: FontWeight.w500,
-                            fontVariations: const [
-                              FontVariation('wght', 500),
-                            ],
+                            fontWeight: FontWeight.w700,
                           ),
                           overflow: TextOverflow.ellipsis,
                         )
