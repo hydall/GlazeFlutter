@@ -13,6 +13,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/sheet_view.dart';
 import '../../shared/widgets/glaze_toast.dart';
+import 'preset_connections_sheet.dart';
 import 'preset_editor_screen.dart';
 import 'preset_list_provider.dart';
 
@@ -118,6 +119,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
                   setActivePreset(ref, preset.id);
                 }
               },
+              onConnections: () => showPresetConnections(context, preset.id),
               onEdit: () => _openEditor(preset),
               onDuplicate: () => ref
                   .read(presetListProvider.notifier)
@@ -247,10 +249,11 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
 
 // ─── ps-card ─────────────────────────────────────────────────────────────────
 
-class _PsCard extends StatelessWidget {
+class _PsCard extends ConsumerWidget {
   final Preset preset;
   final bool isActive;
   final VoidCallback onActivate;
+  final VoidCallback onConnections;
   final VoidCallback onEdit;
   final VoidCallback onDuplicate;
   final VoidCallback onDelete;
@@ -259,13 +262,18 @@ class _PsCard extends StatelessWidget {
     required this.preset,
     required this.isActive,
     required this.onActivate,
+    required this.onConnections,
     required this.onEdit,
     required this.onDuplicate,
     required this.onDelete,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final connections = ref.watch(presetConnectionsProvider);
+    final hasCharBinding = connections.character.values.contains(preset.id);
+    final hasChatBinding = connections.chat.values.contains(preset.id);
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       decoration: BoxDecoration(
@@ -344,8 +352,13 @@ class _PsCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Connection badge (green = active, gray = none)
-                _ConnBadge(isActive: isActive),
+                // Connection badge — tappable, colour shows binding type
+                _ConnBadge(
+                  isActive: isActive,
+                  hasChatBinding: hasChatBinding,
+                  hasCharBinding: hasCharBinding,
+                  onTap: onConnections,
+                ),
                 const SizedBox(width: 8),
                 // Edit button
                 SizedBox(
@@ -444,27 +457,51 @@ class _SmallBadge extends StatelessWidget {
   }
 }
 
+/// Tappable link badge that shows the preset's binding scope visually.
+///
+/// Colour logic (mirrors JS Glaze `getPresetConnectionType`):
+///   orange  — chat-level binding active
+///   purple  — character-level binding active (no chat binding)
+///   green   — globally active (no specific bindings)
+///   grey    — not active, no bindings
 class _ConnBadge extends StatelessWidget {
   final bool isActive;
-  const _ConnBadge({required this.isActive});
+  final bool hasChatBinding;
+  final bool hasCharBinding;
+  final VoidCallback onTap;
+
+  const _ConnBadge({
+    required this.isActive,
+    required this.hasChatBinding,
+    required this.hasCharBinding,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 30,
-      height: 30,
-      decoration: BoxDecoration(
-        color: isActive
-            ? const Color(0xFF34C759).withValues(alpha: 0.12)
-            : Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Icon(
-        Icons.link,
-        size: 16,
-        color: isActive
-            ? const Color(0xFF34C759)
-            : context.cs.onSurfaceVariant.withValues(alpha: 0.5),
+    final Color color;
+    if (hasChatBinding) {
+      color = const Color(0xFFFF9500); // orange — chat binding
+    } else if (hasCharBinding) {
+      color = const Color(0xFFAF52DE); // purple — character binding
+    } else if (isActive) {
+      color = const Color(0xFF34C759); // green — global active
+    } else {
+      color = context.cs.onSurfaceVariant.withValues(alpha: 0.5); // grey
+    }
+
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: (hasChatBinding || hasCharBinding || isActive)
+              ? color.withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(Icons.link, size: 16, color: color),
       ),
     );
   }
