@@ -13,6 +13,7 @@ import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/generic_editor.dart';
 import 'preset_list_provider.dart';
 import 'widgets/preset_block_row.dart';
+import 'widgets/regex_sheet.dart';
 import 'widgets/widgets.dart';
 
 /// Standalone screen wrapper around [PresetEditorBody].
@@ -545,7 +546,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   void _showRegexSheet() {
     GlazeBottomSheet.show(
       context,
-      child: _RegexSheet(
+      child: RegexSheet(
         regexes: _regexes,
         onChanged: (list) {
           setState(() => _regexes = list);
@@ -917,152 +918,4 @@ class _BlockEditorInline extends StatelessWidget {
   }
 }
 
-// ─── _RegexSheet ──────────────────────────────────────────────────────────────
 
-class _RegexSheet extends StatefulWidget {
-  final List<PresetRegex> regexes;
-  final ValueChanged<List<PresetRegex>> onChanged;
-
-  const _RegexSheet({
-    required this.regexes,
-    required this.onChanged,
-  });
-
-  @override
-  State<_RegexSheet> createState() => _RegexSheetState();
-}
-
-class _RegexSheetState extends State<_RegexSheet> {
-  late final List<PresetRegex> _regexes = List.from(widget.regexes);
-
-  void _addRegex() {
-    setState(() {
-      _regexes.add(PresetRegex(
-        id: generateId(),
-        name: 'Regex ${_regexes.length + 1}',
-        regex: '',
-      ));
-    });
-    widget.onChanged(_regexes);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: Row(
-            children: [
-              Icon(Icons.code, size: 18, color: context.cs.primary),
-              const SizedBox(width: 8),
-               Text(
-                'Regex Scripts',
-                 style: TextStyle(
-                   fontSize: 18,
-                   fontWeight: FontWeight.w700,
-                   color: context.cs.onSurface,
-                 ),
-               ),
-              if (_regexes.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-      color: context.cs.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${_regexes.length}',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: context.cs.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        Divider(color: context.cs.outline, height: 1),
-        // List
-        if (_regexes.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 40),
-            child: Center(
-              child: Text(
-                'No regex scripts',
-                style: TextStyle(
-                  color: context.cs.onSurfaceVariant.withValues(alpha: 0.6),
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          )
-        else
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _regexes.length,
-            itemBuilder: (_, i) => Dismissible(
-              key: ValueKey(_regexes[i].id),
-              direction: DismissDirection.endToStart,
-              background: Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 20),
-                color: const Color(0xFFFF4444).withValues(alpha: 0.15),
-                child: const Icon(Icons.delete,
-                    color: Color(0xFFFF4444)),
-              ),
-              onDismissed: (_) {
-                setState(() => _regexes.removeAt(i));
-                widget.onChanged(_regexes);
-              },
-              child: RegexTile(
-                regex: _regexes[i],
-                onChanged: (r) {
-                  setState(() => _regexes[i] = r);
-                  widget.onChanged(_regexes);
-                },
-              ),
-            ),
-          ),
-        // Add regex button
-        Padding(
-          padding: const EdgeInsets.all(12),
-          child: Material(
-                    color: context.cs.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(12),
-            child: InkWell(
-              onTap: _addRegex,
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 14),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add, size: 20, color: context.cs.primary),
-                    SizedBox(width: 8),
-                    Text(
-                      'Add Regex',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: context.cs.primary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}

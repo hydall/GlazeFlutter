@@ -3,11 +3,13 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/persona.dart';
+import '../models/preset.dart';
 import 'shared_prefs_provider.dart';
 import 'memory_settings_provider.dart';
 
 export 'active_regex_provider.dart';
 export 'persona_resolution.dart';
+export 'preset_resolution.dart';
 
 final activePresetIdProvider = StateProvider<String?>((ref) => null);
 final activePersonaIdProvider = StateProvider<String?>((ref) => null);
@@ -16,6 +18,10 @@ final globalVarsProvider = StateProvider<Map<String, String>>((ref) => {});
 
 final personaConnectionsProvider = StateProvider<PersonaConnections>((ref) {
   return const PersonaConnections();
+});
+
+final presetConnectionsProvider = StateProvider<PresetConnections>((ref) {
+  return const PresetConnections();
 });
 
 Future<void> loadActiveSelections(WidgetRef ref) async {
@@ -37,6 +43,13 @@ Future<void> loadActiveSelections(WidgetRef ref) async {
     try {
       ref.read(personaConnectionsProvider.notifier).state =
           PersonaConnections.fromJson(jsonDecode(pcJson) as Map<String, dynamic>);
+    } catch (_) {}
+  }
+  final prConnJson = prefs.getString('presetConnections');
+  if (prConnJson != null) {
+    try {
+      ref.read(presetConnectionsProvider.notifier).state =
+          PresetConnections.fromJson(jsonDecode(prConnJson) as Map<String, dynamic>);
     } catch (_) {}
   }
   ref.read(memoryGlobalSettingsProvider.notifier).load();
@@ -121,4 +134,44 @@ void updateGlobalVarsRef(Ref ref, Map<String, String> vars) {
   if (prefs != null) {
     prefs.setString('globalVars', jsonEncode(vars));
   }
+}
+
+// ─── Preset connections ───────────────────────────────────────────────────────
+
+PresetConnections _buildUpdatedPresetConnections(
+  PresetConnections current,
+  String type,
+  String targetId,
+  String? presetId,
+) {
+  if (type == 'character') {
+    final map = Map<String, String>.from(current.character);
+    if (presetId == null) {
+      map.remove(targetId);
+    } else {
+      map[targetId] = presetId;
+    }
+    return current.copyWith(character: map);
+  } else {
+    final map = Map<String, String>.from(current.chat);
+    if (presetId == null) {
+      map.remove(targetId);
+    } else {
+      map[targetId] = presetId;
+    }
+    return current.copyWith(chat: map);
+  }
+}
+
+Future<void> setPresetConnection(
+  WidgetRef ref,
+  String type,
+  String targetId,
+  String? presetId,
+) async {
+  final current = ref.read(presetConnectionsProvider);
+  final updated = _buildUpdatedPresetConnections(current, type, targetId, presetId);
+  ref.read(presetConnectionsProvider.notifier).state = updated;
+  final prefs = await ref.read(sharedPreferencesProvider.future);
+  await prefs.setString('presetConnections', jsonEncode(updated.toJson()));
 }

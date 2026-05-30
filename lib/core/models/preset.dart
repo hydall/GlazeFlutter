@@ -153,3 +153,19 @@ String _coerceString(dynamic v, String fallback) {
   if (v is String) return v;
   return fallback;
 }
+
+/// Per-character and per-chat preset bindings.
+///
+/// Shape mirrors [PersonaConnections]:
+///   `character`: charId → presetId  (one preset per character)
+///   `chat`:      sessionId → presetId  (one preset per chat session)
+@freezed
+class PresetConnections with _$PresetConnections {
+  const factory PresetConnections({
+    @Default({}) Map<String, String> character,
+    @Default({}) Map<String, String> chat,
+  }) = _PresetConnections;
+
+  factory PresetConnections.fromJson(Map<String, dynamic> json) =>
+      _$PresetConnectionsFromJson(json);
+}

@@ -47,10 +47,15 @@ class PromptPayloadBuilder {
     if (chatApi == null || chatApi.mode == 'embedding') throw StateError('No chat API config available');
 
     final activePresetId = _ref.read(activePresetIdProvider);
+    final presetConnections = _ref.read(presetConnectionsProvider);
     final presets = await presetRepo.getAll();
-    final preset = activePresetId != null
-        ? presets.where((p) => p.id == activePresetId).firstOrNull
-        : (presets.isNotEmpty ? presets.first : null);
+    final preset = getEffectivePreset(
+      presets,
+      charId,
+      session?.id,
+      activePresetId,
+      presetConnections,
+    );
 
     final personas = await personaRepo.getAll();
     final connections = _ref.read(personaConnectionsProvider);

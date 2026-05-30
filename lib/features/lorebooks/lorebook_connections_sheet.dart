@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/character.dart';
+import '../../../core/models/chat_message.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../core/state/character_provider.dart';
+import '../../../core/state/chat_session_ops_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -135,7 +137,7 @@ class _LorebookConnectionsSheetState
                       .map(
                         (id) => _ConnectionChip(
                           id: id,
-                          futureLabel: Future.value(id),
+                          futureLabel: _chatLabel(id),
                           onRemove: () => _toggleActivation(lb.id, 'chat', id),
                         ),
                       )
@@ -152,6 +154,15 @@ class _LorebookConnectionsSheetState
     final chars = ref.read(charactersProvider).value ?? [];
     final c = chars.where((c) => c.id == id).firstOrNull;
     return c?.name ?? id;
+  }
+
+  Future<String> _chatLabel(String sessionId) async {
+    final sessions = ref.read(chatSessionOpsProvider).value ?? [];
+    final s = sessions.where((s) => s.id == sessionId).firstOrNull;
+    if (s == null) return sessionId;
+    final chars = ref.read(charactersProvider).value ?? [];
+    final char = chars.where((c) => c.id == s.characterId).firstOrNull;
+    return '${char?.name ?? s.characterId} #${s.sessionIndex}';
   }
 
   void _toggleActivation(String lbId, String scope, String targetId) {
@@ -230,10 +241,36 @@ class _LorebookConnectionsSheetState
   }
 
   void _addChatConnection(Lorebook lb) async {
-    GlazeToast.show(
+    final sessions = ref.read(chatSessionOpsProvider).value ?? [];
+    final activations = ref.read(lorebookActivationsProvider);
+    final existingIds = activations.chat.entries
+        .where((e) => e.value.contains(lb.id))
+        .map((e) => e.key)
+        .toSet();
+
+    final available = sessions.where((s) => !existingIds.contains(s.id)).toList();
+    if (available.isEmpty) {
+      GlazeToast.show(context, 'No unbound chat sessions');
+      return;
+    }
+
+    final chars = ref.read(charactersProvider).value ?? [];
+
+    final selected = await GlazeBottomSheet.show<ChatSession>(
       context,
-      'Chat binding: open a chat first, then bind from there',
+      title: 'Add Chat',
+      items: available.map((s) {
+        final char = chars.where((c) => c.id == s.characterId).firstOrNull;
+        return BottomSheetItem(
+          label: '${char?.name ?? s.characterId} #${s.sessionIndex}',
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(s),
+        );
+      }).toList(),
     );
+
+    if (selected != null) {
+      _toggleActivation(lb.id, 'chat', selected.id);
+    }
   }
 }
 

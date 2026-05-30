@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -196,40 +198,53 @@ class RegexListScreen extends ConsumerWidget {
     try {
       result = await FilePicker.pickFiles(
         type: Platform.isIOS ? FileType.any : FileType.custom,
-        allowedExtensions: Platform.isIOS ? null : ['json'],
-        allowMultiple: false,
+        allowedExtensions: Platform.isIOS ? null : ['json', 'zip'],
+        allowMultiple: true,
         withData: true,
       );
     } catch (_) {}
     if (result == null || result.files.isEmpty) return;
-    final picked = result.files.first;
 
     try {
-      String jsonString;
-      if (picked.bytes != null && picked.bytes!.isNotEmpty) {
-        jsonString = utf8.decode(picked.bytes!);
-      } else if (picked.path != null && picked.path!.isNotEmpty) {
-        jsonString = await File(picked.path!).readAsString();
-      } else {
-        if (context.mounted) GlazeToast.show(context, 'Cannot read file');
-        return;
+      // Collect all raw regex entries across all picked files.
+      final List<dynamic> combinedRaw = [];
+
+      for (final picked in result.files) {
+        late Uint8List bytes;
+        if (picked.bytes != null && picked.bytes!.isNotEmpty) {
+          bytes = picked.bytes!;
+        } else if (picked.path != null && picked.path!.isNotEmpty) {
+          bytes = await File(picked.path!).readAsBytes();
+        } else {
+          continue; // skip unreadable file
+        }
+
+        final name = (picked.name).toLowerCase();
+        if (name.endsWith('.zip')) {
+          // Extract all *.json files from the archive and merge their entries.
+          final archive = ZipDecoder().decodeBytes(bytes);
+          for (final entry in archive) {
+            if (!entry.isFile) continue;
+            if (!entry.name.toLowerCase().endsWith('.json')) continue;
+            final jsonStr = utf8.decode(entry.content as List<int>);
+            _appendFromJson(jsonStr, combinedRaw);
+          }
+        } else {
+          // Plain JSON file.
+          final jsonStr = utf8.decode(bytes);
+          _appendFromJson(jsonStr, combinedRaw);
+        }
       }
 
-      final dynamic decoded = jsonDecode(jsonString);
-      final List<dynamic> rawList;
-      if (decoded is List) {
-        rawList = decoded;
-      } else if (decoded is Map<String, dynamic>) {
-        rawList = [decoded];
-      } else {
-        if (context.mounted) GlazeToast.show(context, 'Invalid file format');
+      if (combinedRaw.isEmpty) {
+        if (context.mounted) GlazeToast.show(context, 'No regex scripts found in selected files');
         return;
       }
 
       if (globally) {
-        await ref.read(globalRegexProvider.notifier).importFromJsBackup(rawList);
+        await ref.read(globalRegexProvider.notifier).importFromJsBackup(combinedRaw);
         if (context.mounted) {
-          GlazeToast.show(context, 'Imported ${rawList.length} script(s) globally');
+          GlazeToast.show(context, 'Imported ${combinedRaw.length} script(s) globally');
         }
       } else {
         final activePresetId = ref.read(activePresetIdProvider);
@@ -243,7 +258,7 @@ class RegexListScreen extends ConsumerWidget {
           if (context.mounted) GlazeToast.show(context, 'Preset not found');
           return;
         }
-        final newRegexes = _normalizeRawRegexList(rawList);
+        final newRegexes = _normalizeRawRegexList(combinedRaw);
         await ref.read(presetListProvider.notifier).updatePreset(
               preset.copyWith(regexes: [...preset.regexes, ...newRegexes]),
             );
@@ -253,6 +268,20 @@ class RegexListScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) GlazeToast.error(context, 'Import failed: ', e);
+    }
+  }
+
+  /// Parses a JSON string and appends found regex entries to [out].
+  void _appendFromJson(String jsonStr, List<dynamic> out) {
+    try {
+      final dynamic decoded = jsonDecode(jsonStr);
+      if (decoded is List) {
+        out.addAll(decoded);
+      } else if (decoded is Map<String, dynamic>) {
+        out.add(decoded);
+      }
+    } catch (_) {
+      // Skip malformed JSON files silently.
     }
   }
 
