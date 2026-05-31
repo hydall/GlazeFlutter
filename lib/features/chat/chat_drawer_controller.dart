@@ -104,8 +104,9 @@ class ChatDrawerController extends ChangeNotifier {
   }
 
   void closeDrawer() {
-    if (!_drawerOpen) return;
+    if (!_drawerOpen && !_switchingToDrawer) return;
     _drawerOpen = false;
+    _switchingToDrawer = false;
     _drawerAnimController.reverse();
     notifyListeners();
   }

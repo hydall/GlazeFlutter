@@ -6,6 +6,10 @@ import '../../../shared/theme/app_colors.dart';
 /// Shared shell for bottom slide-up panels (Magic Drawer, Quick Replies).
 /// Provides background, drag handle, top soft-edge blur, header slot,
 /// and an optional loading overlay.
+///
+/// Background is hardcoded to a dark neutral so the panel always looks correct
+/// regardless of the active theme's charBubbleColor (light themes would
+/// otherwise produce a white/light background here).
 class DrawerPanelScaffold extends StatelessWidget {
   final Widget content;
   final Widget? header;
@@ -24,7 +28,7 @@ class DrawerPanelScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: context.colors.charBubble,
+        color: const Color(0xFF1E1E1E),
         border: Border(top: BorderSide(color: context.cs.outlineVariant)),
       ),
       child: Stack(
