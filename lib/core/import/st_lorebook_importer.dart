@@ -35,7 +35,12 @@ LorebookEntry _convertSTEntry(dynamic rawEntry, int index) {
       return metaPosition!;
     }
     if (stPosition is int) {
-      return stPosition == 0 ? 'worldInfoBefore' : 'worldInfoAfter';
+      // ST uses 0=before/1=after, but we honour the user's global injection
+      // position by default. Only map to an explicit position when the entry
+      // comes from a Glaze export that already stored a canonical string value
+      // (handled above via glazeMetadata). Raw ST integers → matchGlobal so
+      // the entry follows the global Lorebook Settings setting.
+      return 'matchGlobal';
     }
     if (stPosition is String) {
       if (['worldInfoBefore', 'worldInfoAfter', 'lorebooksMacro', 'matchGlobal'].contains(stPosition)) {

@@ -49,9 +49,12 @@ int tokensForKey(TokenBreakdown bd, String key) {
 }
 
 int _summaryTokens(TokenBreakdown bd) {
-  final raw = (bd.sourceTokens['summary'] ?? 0) > 0 ? bd.sourceTokens['summary']! : (bd.macroTokens['summary'] ?? 0);
-  final memoryOverlap = (bd.sourceTokens['summary'] ?? 0) > 0 ? (bd.macroTokens['memory'] ?? 0) : 0;
-  return (raw - memoryOverlap).clamp(0, raw);
+  // macroTokens['summary'] already includes summaryMemoryContent (injected via
+  // summary_macro). No overlap deduction needed — memory is shown separately
+  // via the 'memory' key and is skipped in presetNetTokens.
+  return (bd.sourceTokens['summary'] ?? 0) > 0
+      ? bd.sourceTokens['summary']!
+      : (bd.macroTokens['summary'] ?? 0);
 }
 
 int _unusedLorebookReserve(TokenBreakdown bd) {

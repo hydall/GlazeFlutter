@@ -13,6 +13,7 @@ import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/generic_editor.dart';
 import 'preset_list_provider.dart';
+import 'preset_export.dart';
 import 'widgets/preset_block_row.dart';
 import 'widgets/regex_sheet.dart';
 import 'widgets/widgets.dart';
@@ -528,6 +529,37 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
           onTap: () {
             Navigator.pop(context);
             _showAuthorDialog();
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.upload_file_outlined,
+          label: 'Export',
+          onTap: () {
+            Navigator.pop(context);
+            final name = _nameCtrl.text.trim().isEmpty
+                ? 'New Preset'
+                : _nameCtrl.text.trim();
+            final snapshot = Preset(
+              id: _currentId,
+              name: name,
+              author: _author.trim().isEmpty ? null : _author.trim(),
+              blocks: _blocks,
+              regexes: _regexes,
+              reasoningEnabled: _parseInlineReasoning,
+              reasoningStart:
+                  _parseInlineReasoning ? _reasoningStartCtrl.text : null,
+              reasoningEnd:
+                  _parseInlineReasoning ? _reasoningEndCtrl.text : null,
+              mergePrompts: _mergePrompts,
+              mergeRole: widget.preset?.mergeRole ?? 'system',
+              guidedGenerationPrompt:
+                  widget.preset?.guidedGenerationPrompt,
+              guidedImpersonationPrompt:
+                  widget.preset?.guidedImpersonationPrompt,
+              summaryPrompt: widget.preset?.summaryPrompt,
+              createdAt: _createdAt,
+            );
+            exportPreset(context, snapshot);
           },
         ),
         if (widget.preset != null)

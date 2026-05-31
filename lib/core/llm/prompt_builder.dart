@@ -347,8 +347,20 @@ PromptResult buildPrompt(PromptPayload payload) {
   if (currentMacroCtx.lorebooksContent != null && currentMacroCtx.lorebooksContent!.isNotEmpty) {
     macroTokens['lorebooks'] = estimateTokens(currentMacroCtx.lorebooksContent!);
   }
-  if (currentMacroCtx.summaryContent != null && currentMacroCtx.summaryContent!.isNotEmpty) {
-    macroTokens['summary'] = estimateTokens(currentMacroCtx.summaryContent!);
+  // Count summary tokens as the full {{summary}} expansion (summary + memory),
+  // mirroring exactly what macro_engine produces at line 247-253.
+  final _summaryParts = [
+    if (currentMacroCtx.summaryContent?.isNotEmpty == true) currentMacroCtx.summaryContent!,
+    if (currentMacroCtx.summaryMemoryContent?.isNotEmpty == true) currentMacroCtx.summaryMemoryContent!,
+  ];
+  if (_summaryParts.isNotEmpty) {
+    macroTokens['summary'] = estimateTokens(_summaryParts.join('\n\n'));
+  }
+  // Track memory separately so the tokenizer can show it as its own row.
+  // In presetNetTokens we skip 'memory' to avoid double-deducting it
+  // (it's already included in macroTokens['summary'] above).
+  if (currentMacroCtx.summaryMemoryContent?.isNotEmpty == true) {
+    macroTokens['memory'] = estimateTokens(currentMacroCtx.summaryMemoryContent!);
   }
   if (currentMacroCtx.charDescription != null && currentMacroCtx.charDescription!.isNotEmpty) {
     macroTokens['description'] = estimateTokens(currentMacroCtx.charDescription!);

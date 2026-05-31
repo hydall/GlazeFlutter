@@ -16,6 +16,7 @@ import '../../shared/widgets/sheet_view.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import 'preset_connections_sheet.dart';
 import 'preset_editor_screen.dart';
+import 'preset_export.dart';
 import 'preset_list_provider.dart';
 
 class PresetListScreen extends ConsumerStatefulWidget {
@@ -252,6 +253,8 @@ int _presetTokenCount(Preset preset) => preset.blocks
     .where((b) => b.enabled && !b.isStashed && b.content.isNotEmpty)
     .fold(0, (sum, b) => sum + estimateTokens(b.content));
 
+
+
 // ─── ps-card ─────────────────────────────────────────────────────────────────
 
 class _PsCard extends ConsumerWidget {
@@ -411,6 +414,14 @@ class _PsCard extends ConsumerWidget {
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             onDuplicate();
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.upload_file_outlined,
+          label: 'Export',
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            exportPreset(context, preset);
           },
         ),
         BottomSheetItem(
