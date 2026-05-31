@@ -88,16 +88,16 @@ class FileExportService {
     return file.path;
   }
 
-  /// Scoped-storage-safe Downloads/Glaze path on Android; null if unavailable.
+  /// Public Downloads/Glaze path on Android; null if unavailable.
+  ///
+  /// `getDownloadsDirectory()` returns the app-scoped
+  /// `Android/data/<package>/files/Downloads` path, not the public Downloads
+  /// folder visible to the user. Apps targeting Android 10+ can write to a
+  /// subdirectory of public Downloads without permission, so we use the
+  /// well-known path directly.
   static Future<Directory?> _androidGlazeDir(String subfolder) async {
     try {
-      var downloads = await getDownloadsDirectory();
-
-      // path_provider may return null on some Android versions/OEMs.
-      // Fall back to the well-known public Downloads path.
-      downloads ??= Directory('/storage/emulated/0/Download');
-
-      final dir = Directory('${downloads.path}/Glaze/$subfolder');
+      final dir = Directory('/storage/emulated/0/Download/Glaze/$subfolder');
       if (!await dir.exists()) {
         await dir.create(recursive: true);
       }
