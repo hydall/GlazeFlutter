@@ -4,6 +4,7 @@ import '../../core/models/api_config.dart';
 import '../../core/models/character.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/models/lorebook.dart';
+import '../../core/models/memory_book.dart';
 import '../../core/models/persona.dart';
 import '../../core/models/preset.dart';
 import '../../shared/theme/theme_preset.dart';
@@ -49,6 +50,13 @@ abstract class SyncLorebookStore {
   Future<Lorebook?> getById(String id);
   Future<void> put(Lorebook l);
   Future<void> delete(String id);
+}
+
+abstract class SyncMemoryBookStore {
+  Future<List<MemoryBook>> getAll();
+  Future<MemoryBook?> getBySessionId(String sessionId);
+  Future<void> put(MemoryBook book);
+  Future<void> deleteBySessionId(String sessionId);
 }
 
 abstract class SyncThemePresetStore {

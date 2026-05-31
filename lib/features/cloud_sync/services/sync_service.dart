@@ -19,6 +19,7 @@ class SyncService {
   final SyncPersonaStore _personaRepo;
   final SyncPresetStore _presetRepo;
   final SyncApiConfigStore _apiRepo;
+  final SyncMemoryBookStore _memoryBookRepo;
   final SyncLorebookStore _lorebookRepo;
   final SyncEmbeddingStore _embeddingRepo;
   final SyncImageStore _imageStorage;
@@ -73,6 +74,7 @@ class SyncService {
     required SyncPersonaStore personaRepo,
     required SyncPresetStore presetRepo,
     required SyncApiConfigStore apiRepo,
+    required SyncMemoryBookStore memoryBookRepo,
     required SyncLorebookStore lorebookRepo,
     required SyncEmbeddingStore embeddingRepo,
     required SyncImageStore imageStorage,
@@ -82,6 +84,7 @@ class SyncService {
         _personaRepo = personaRepo,
         _presetRepo = presetRepo,
         _apiRepo = apiRepo,
+        _memoryBookRepo = memoryBookRepo,
         _lorebookRepo = lorebookRepo,
         _embeddingRepo = embeddingRepo,
         _imageStorage = imageStorage,
@@ -102,6 +105,7 @@ class SyncService {
         personaRepo: _personaRepo,
         presetRepo: _presetRepo,
         apiRepo: _apiRepo,
+        memoryBookRepo: _memoryBookRepo,
         lorebookRepo: _lorebookRepo,
         themePresetRepo: _themePresetRepo,
         imageStore: _imageStorage,
@@ -115,6 +119,7 @@ class SyncService {
         _personaRepo,
         _presetRepo,
         _apiRepo,
+        _memoryBookRepo,
         _lorebookRepo,
         _embeddingRepo,
         _imageStorage,

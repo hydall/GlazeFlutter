@@ -11,6 +11,7 @@ import 'sync_queue.dart';
 import 'sync_serialization.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/gallery_entry.dart';
+import '../../../core/models/memory_book.dart';
 import '../../../core/models/persona.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/lorebook.dart';
@@ -44,6 +45,7 @@ class SyncEngine {
   final SyncPersonaStore _personaRepo;
   final SyncPresetStore _presetRepo;
   final SyncApiConfigStore _apiRepo;
+  final SyncMemoryBookStore _memoryBookRepo;
   final SyncLorebookStore _lorebookRepo;
   final SyncEmbeddingStore _embeddingRepo;
   final SyncImageStore _imageStorage;
@@ -59,6 +61,7 @@ class SyncEngine {
     this._personaRepo,
     this._presetRepo,
     this._apiRepo,
+    this._memoryBookRepo,
     this._lorebookRepo,
     this._embeddingRepo,
     this._imageStorage,
@@ -74,6 +77,7 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/characters');
     await _adapter.ensureFolder('$cloudBase/personas');
     await _adapter.ensureFolder('$cloudBase/chats');
+    await _adapter.ensureFolder('$cloudBase/memory_books');
 
     final localManifest = await _manifestBuilder.buildLocalManifest();
     SyncManifest? cloudManifest;
@@ -490,6 +494,10 @@ class SyncEngine {
           final s = await _chatRepo.getById(id);
           if (s == null) return null;
           return _stripImagesFromSession(s.toJson());
+        case 'memory_book':
+          final mb = await _memoryBookRepo.getBySessionId(id);
+          if (mb == null) return null;
+          return mb.toJson();
         case 'lorebooks':
           final all = await _lorebookRepo.getAll();
           return {'__singleton': true, 'items': all.map((l) => l.toJson()).toList()};
@@ -527,6 +535,9 @@ class SyncEngine {
           break;
         case 'chat':
           await _chatRepo.put(ChatSession.fromJson(data));
+          break;
+        case 'memory_book':
+          await _memoryBookRepo.put(MemoryBook.fromJson(data));
           break;
         case 'lorebooks':
           await _applyLorebooksWithEmbeddingCleanup(data);
@@ -717,6 +728,9 @@ class SyncEngine {
           break;
         case 'chat':
           await _chatRepo.delete(id);
+          break;
+        case 'memory_book':
+          await _memoryBookRepo.deleteBySessionId(id);
           break;
         case 'lorebooks':
           final all = await _lorebookRepo.getAll();

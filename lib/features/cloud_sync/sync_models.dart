@@ -6,6 +6,7 @@ enum EntityType {
   character,
   persona,
   chat,
+  memoryBook,
   lorebooks,
   apiPresets,
   themePresets,
@@ -156,6 +157,8 @@ String cloudPath(String type, String id) {
       return '$cloudBase/personas/$id.json';
     case 'chat':
       return '$cloudBase/chats/$id.json';
+    case 'memory_book':
+      return '$cloudBase/memory_books/$id.json';
     case 'lorebooks':
       return '$cloudBase/lorebooks.json';
     case 'api_presets':

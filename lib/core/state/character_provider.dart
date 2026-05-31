@@ -84,6 +84,7 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
       final deletedSessionIds = await chatRepo.deleteByCharacterId(id);
       for (final sid in deletedSessionIds) {
         await SyncDeletionTracker.record('chat', sid);
+        await SyncDeletionTracker.record('memory_book', sid);
       }
 
       final lorebooks = await lorebookRepo.getByScopeAndTarget('character', id);
