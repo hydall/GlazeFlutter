@@ -7,9 +7,11 @@ import '../../../shared/theme/app_colors.dart';
 /// Provides background, drag handle, top soft-edge blur, header slot,
 /// and an optional loading overlay.
 ///
-/// Background is hardcoded to a dark neutral so the panel always looks correct
-/// regardless of the active theme's charBubbleColor (light themes would
-/// otherwise produce a white/light background here).
+/// Background is intentionally hardcoded to [Color(0xFF1E1E1E)] so the panel
+/// is always dark regardless of the active theme. [GlazeColors.charBubble]
+/// is the chat-bubble colour and must not drive panel backgrounds — themes
+/// with a light charBubbleColor (e.g. Fox) would otherwise produce a
+/// white/bright panel.
 class DrawerPanelScaffold extends StatelessWidget {
   final Widget content;
   final Widget? header;
