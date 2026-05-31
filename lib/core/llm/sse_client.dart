@@ -359,6 +359,12 @@ class SseClient {
   /// Builds a stable JSON payload for "Request Preview -> Response" from the
   /// streamed deltas, so UI shows the actual assistant text/reasoning instead
   /// of an arbitrary last SSE chunk.
+  ///
+  /// Strategy: use [fallbackRawJsonPayload] (the last SSE chunk before [DONE])
+  /// as the base — it carries top-level metadata like `id`, `model`,
+  /// `system_fingerprint`, `usage`, `finish_reason`, etc. We then replace only
+  /// the `choices[0].message` content with the fully-aggregated text so that
+  /// all provider metadata is preserved in the preview.
   String? _buildAggregatedRawResponse({
     required String fullText,
     required String fullReasoning,
@@ -367,14 +373,57 @@ class SseClient {
     if (fullText.isEmpty && fullReasoning.isEmpty) {
       return fallbackRawJsonPayload;
     }
+
     final message = <String, dynamic>{'role': 'assistant', 'content': fullText};
     if (fullReasoning.isNotEmpty) {
       message['reasoning'] = fullReasoning;
     }
+
+    // Try to enrich with metadata from the last SSE chunk.
+    if (fallbackRawJsonPayload != null) {
+      try {
+        final base = jsonDecode(fallbackRawJsonPayload) as Map<String, dynamic>;
+
+        // Rebuild choices: keep all fields from the last chunk's choice
+        // (finish_reason, logprobs, etc.) but replace delta/message content.
+        final rawChoices = base['choices'];
+        List<dynamic> newChoices;
+        if (rawChoices is List && rawChoices.isNotEmpty) {
+          newChoices = rawChoices.asMap().entries.map((entry) {
+            final choice = Map<String, dynamic>.from(
+                entry.value is Map ? entry.value as Map<String, dynamic> : <String, dynamic>{});
+            if (entry.key == 0) {
+              // Replace delta with a proper message containing full text.
+              choice.remove('delta');
+              choice['message'] = message;
+            }
+            return choice;
+          }).toList();
+        } else {
+          newChoices = [
+            {'index': 0, 'message': message, 'finish_reason': 'stop'},
+          ];
+        }
+
+        // Merge usage: prefer base usage, but also check if a separate
+        // usage-only chunk was stored (some providers send usage in the
+        // last delta before [DONE]).
+        final merged = Map<String, dynamic>.from(base);
+        merged['choices'] = newChoices;
+        // Ensure object type is correct.
+        merged['object'] = merged['object'] ?? 'chat.completion';
+
+        return jsonEncode(merged);
+      } catch (_) {
+        // Parsing failed — fall through to minimal synthetic response.
+      }
+    }
+
+    // Fallback: minimal synthetic response when no metadata is available.
     return jsonEncode({
       'object': 'chat.completion',
       'choices': [
-        {'index': 0, 'message': message},
+        {'index': 0, 'message': message, 'finish_reason': 'stop'},
       ],
     });
   }
