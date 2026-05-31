@@ -232,40 +232,51 @@ CoverageResult computeLorebookCoverage({
     }
   }
 
-  final activatedList = candidates.values.where((c) => c.activated).toList()
+  // Separate constant entries from keyword-triggered ones.
+  // Constants are always injected and never count toward the slot cap.
+  final constantActivated = candidates.values
+      .where((c) => c.activated && c.entry.constant)
+      .toList()
+    ..sort((a, b) => a.entry.order.compareTo(b.entry.order));
+
+  final keywordActivatedList = candidates.values
+      .where((c) => c.activated && !c.entry.constant)
+      .toList()
     ..sort((a, b) => a.entry.order.compareTo(b.entry.order));
 
   final notActivatedList = candidates.values.where((c) => !c.activated).toList()
     ..sort((a, b) => a.entry.order.compareTo(b.entry.order));
 
-  // Dedupe vector entries against all keyword-activated IDs (not just in-budget).
-  final keywordActivatedIds = activatedList.map((c) => c.entry.id).toSet();
+  // Dedupe vector entries against all keyword-activated IDs (constants excluded —
+  // they can't be vector-matched anyway since constant=true disables vectorSearch).
+  final keywordActivatedIds = keywordActivatedList.map((c) => c.entry.id).toSet();
   final dedupedVectorEntries = vectorEntries
       .where((e) => !keywordActivatedIds.contains(e.id))
       .toList();
 
   final hasVector = dedupedVectorEntries.isNotEmpty;
 
-  // Apply the same slot-split logic as mergeKeywordVector.
+  // Apply the same slot-split logic as mergeKeywordVector / lorebook_scanner.
+  // Constants bypass this entirely — they are always in-budget.
   final splitPct = globalSettings.keywordVectorSplit;
   final keywordSlots = hasVector ? (maxInjectedEntries * splitPct / 100).round() : maxInjectedEntries;
   final vectorSlots = maxInjectedEntries - keywordSlots;
 
-  final usedKeyword = activatedList.take(keywordSlots).toList();
+  final usedKeyword = keywordActivatedList.take(keywordSlots).toList();
   final unusedKeywordSlots = keywordSlots - usedKeyword.length;
   final adjustedVectorSlots = vectorSlots + unusedKeywordSlots;
 
   final usedVector = dedupedVectorEntries.take(adjustedVectorSlots).toList();
 
-  // Keyword entries beyond keywordSlots are cut off by budget.
-  final keywordCutOffCount = activatedList.length > keywordSlots
-      ? activatedList.length - keywordSlots
+  // Keyword entries beyond keywordSlots are cut off by the entry cap.
+  final keywordCutOffCount = keywordActivatedList.length > keywordSlots
+      ? keywordActivatedList.length - keywordSlots
       : 0;
-  for (int i = keywordSlots; i < activatedList.length; i++) {
-    activatedList[i].cutOffByBudget = true;
+  for (int i = keywordSlots; i < keywordActivatedList.length; i++) {
+    keywordActivatedList[i].cutOffByBudget = true;
   }
 
-  // Vector entries beyond adjustedVectorSlots are cut off by budget.
+  // Vector entries beyond adjustedVectorSlots are cut off by the entry cap.
   final vectorCutOffCount = dedupedVectorEntries.length > adjustedVectorSlots
       ? dedupedVectorEntries.length - adjustedVectorSlots
       : 0;
@@ -273,7 +284,9 @@ CoverageResult computeLorebookCoverage({
   final vectorOverBudget = dedupedVectorEntries.skip(adjustedVectorSlots).toList();
 
   final totalCutOff = keywordCutOffCount + vectorCutOffCount;
-  final totalActivated = usedKeyword.length + vectorInBudget.length;
+  // Constants are always active; keyword/vector cut-offs still count as "activated"
+  // for the summary bar (they were triggered, just not injected).
+  final totalActivated = constantActivated.length + usedKeyword.length + vectorInBudget.length;
 
   // Build vector CoverageEntries for in-budget and over-budget.
   CoverageEntry vectorToCoverage(LorebookEntry e, bool cutOff) {
@@ -294,8 +307,12 @@ CoverageResult computeLorebookCoverage({
   }
 
   final allEntries = <CoverageEntry>[
+    // Constants first — always active, never cut off.
+    ...constantActivated.map(_toCoverage),
+    // In-budget keyword entries.
     ...usedKeyword.map(_toCoverage),
-    ...activatedList.skip(keywordSlots).map((c) {
+    // Over-budget keyword entries (cut off by entry cap).
+    ...keywordActivatedList.skip(keywordSlots).map((c) {
       final base = _toCoverage(c);
       return CoverageEntry(
         id: base.id,
