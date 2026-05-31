@@ -249,11 +249,16 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                   const SizedBox(height: 12),
                   _field('Content', _contentController, maxLines: 5),
                   const SizedBox(height: 8),
-                  _dropdown('Position', _position, const {
+                  _dropdown('Position', _position, {
                     'matchGlobal': 'Match global setting',
                     'worldInfoBefore': 'Before char card',
                     'worldInfoAfter': 'After chat history',
                     'lorebooksMacro': '{{lorebooks}} macro',
+                    if (_constant) ...{
+                      'charScenario': '{{scenario}} field (prepend)',
+                      'charPersonality': '{{personality}} field (prepend)',
+                      'charDescription': '{{description}} field (prepend)',
+                    },
                   }, (v) => setState(() => _position = v)),
                   const SizedBox(height: 8),
                   Row(
@@ -296,7 +301,13 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                       _chip(
                         'Constant',
                         _constant,
-                        (v) => setState(() => _constant = v),
+                        (v) => setState(() {
+                          _constant = v;
+                          // Reset position if it requires constant=true
+                          if (!v && (_position == 'charScenario' || _position == 'charPersonality' || _position == 'charDescription')) {
+                            _position = 'matchGlobal';
+                          }
+                        }),
                       ),
                       _chip(
                         'Case Sensitive',

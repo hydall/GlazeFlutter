@@ -193,8 +193,17 @@ class SyncEngine {
 
       if (SyncConflictDetector.needsConflict(localEntry, cloudEntry)) {
         final localData = await _readLocalEntity(cloudEntry.type, cloudEntry.id);
+        String? characterName;
+        if (cloudEntry.type == 'chat') {
+          final charId = localData?['characterId'] as String?;
+          if (charId != null) {
+            final character = await _characterRepo.getById(charId);
+            characterName = character?.name;
+          }
+        }
         final name = SyncConflictDetector.getConflictName(
           cloudEntry.type, localData, null, cloudEntry.id,
+          characterName: characterName,
         );
         conflicts.add(SyncConflict(
           key: cloudEntry.key,

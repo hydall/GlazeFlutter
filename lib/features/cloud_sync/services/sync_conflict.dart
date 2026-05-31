@@ -35,16 +35,19 @@ class SyncConflictDetector {
     String type,
     dynamic localEntity,
     dynamic cloudEntity,
-    String id,
-  ) {
+    String id, {
+    String? characterName,
+  }) {
     switch (type) {
       case 'character':
         return (localEntity?['name'] ?? cloudEntity?['name'] ?? id) as String;
       case 'persona':
         return (localEntity?['name'] ?? cloudEntity?['name'] ?? id) as String;
       case 'chat':
-        final charId = localEntity?['characterId'] ?? cloudEntity?['characterId'];
         final idx = localEntity?['sessionIndex'] ?? cloudEntity?['sessionIndex'];
+        if (characterName != null && idx != null) return '$characterName — Chat #$idx';
+        if (characterName != null) return characterName;
+        final charId = localEntity?['characterId'] ?? cloudEntity?['characterId'];
         if (charId != null && idx != null) return 'Chat #$idx ($charId)';
         if (charId != null) return 'Chat ($charId)';
         return 'Chat $id';

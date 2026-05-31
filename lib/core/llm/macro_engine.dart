@@ -46,6 +46,9 @@ class MacroContext {
   MacroContext copyWith({
     Map<String, String>? sessionVars,
     Map<String, String>? globalVars,
+    String? charScenario,
+    String? charPersonality,
+    String? charDescription,
     String? summaryContent,
     String? lorebooksContent,
     String? guidanceText,
@@ -53,9 +56,9 @@ class MacroContext {
   }) {
     return MacroContext(
       charName: charName,
-      charDescription: charDescription,
-      charScenario: charScenario,
-      charPersonality: charPersonality,
+      charDescription: charDescription ?? this.charDescription,
+      charScenario: charScenario ?? this.charScenario,
+      charPersonality: charPersonality ?? this.charPersonality,
       charMesExample: charMesExample,
       userName: userName,
       personaPrompt: personaPrompt,

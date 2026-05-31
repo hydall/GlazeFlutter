@@ -82,6 +82,8 @@ class LorebookEntryTile extends StatelessWidget {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
+            if (entry.constant)
+              const LorebookEntryBadge(label: 'const', color: Colors.purple),
             if (entry.vectorSearch) ...[
               const LorebookEntryBadge(label: 'vec', color: Colors.cyan),
               if (embeddingStatus == 'indexed')

@@ -239,12 +239,45 @@ PromptResult buildPrompt(PromptPayload payload) {
     }
   }
 
-  final (loreBefore, loreAfter, loreMacroBuffer) = _classifyLorebooks(mergedEntries, currentMacroCtx, payload.lorebookSettings);
-  final macroLoreContent = loreMacroBuffer.join('\n\n');
+  final classified = _classifyLorebooks(mergedEntries, currentMacroCtx, payload.lorebookSettings);
+  final loreBefore = classified.loreBefore;
+  final loreAfter = classified.loreAfter;
+  final macroLoreContent = classified.loreMacroBuffer.join('\n\n');
+
+  // Apply char-field injections: prepend constant lore entries to the corresponding
+  // MacroContext field so that {{scenario}}, {{personality}}, {{description}} macros
+  // expand with the prepended content everywhere in the preset.
+  String? patchedScenario = currentMacroCtx.charScenario;
+  String? patchedPersonality = currentMacroCtx.charPersonality;
+  String? patchedDescription = currentMacroCtx.charDescription;
+
+  if (classified.loreScenario.isNotEmpty) {
+    final prefix = classified.loreScenario.join('\n\n');
+    patchedScenario = patchedScenario != null && patchedScenario.isNotEmpty
+        ? '$prefix\n\n$patchedScenario'
+        : prefix;
+  }
+  if (classified.lorePersonality.isNotEmpty) {
+    final prefix = classified.lorePersonality.join('\n\n');
+    patchedPersonality = patchedPersonality != null && patchedPersonality.isNotEmpty
+        ? '$prefix\n\n$patchedPersonality'
+        : prefix;
+  }
+  if (classified.loreDescription.isNotEmpty) {
+    final prefix = classified.loreDescription.join('\n\n');
+    patchedDescription = patchedDescription != null && patchedDescription.isNotEmpty
+        ? '$prefix\n\n$patchedDescription'
+        : prefix;
+  }
 
   // Populate lorebooksContent in MacroContext so macro_engine can expand {{lorebooks}}
   // inline at the exact position of the placeholder inside any preset block.
-  currentMacroCtx = currentMacroCtx.copyWith(lorebooksContent: macroLoreContent);
+  currentMacroCtx = currentMacroCtx.copyWith(
+    lorebooksContent: macroLoreContent,
+    charScenario: patchedScenario,
+    charPersonality: patchedPersonality,
+    charDescription: patchedDescription,
+  );
 
   for (final rawBlock in preset.blocks) {
     final id = normalizeBlockId(rawBlock.id);
@@ -361,7 +394,14 @@ int _calculateLorebookReserve(PromptPayload payload) {
   return settings.reserveValue;
 }
 
-(List<PromptMessage> loreBefore, List<PromptMessage> loreAfter, List<String> loreMacroBuffer) _classifyLorebooks(
+({
+  List<PromptMessage> loreBefore,
+  List<PromptMessage> loreAfter,
+  List<String> loreMacroBuffer,
+  List<String> loreScenario,
+  List<String> lorePersonality,
+  List<String> loreDescription,
+}) _classifyLorebooks(
   List<LorebookEntry> entries,
   MacroContext macroCtx,
   LorebookGlobalSettings settings,
@@ -369,6 +409,9 @@ int _calculateLorebookReserve(PromptPayload payload) {
   final loreBefore = <PromptMessage>[];
   final loreAfter = <PromptMessage>[];
   final loreMacroBuffer = <String>[];
+  final loreScenario = <String>[];
+  final lorePersonality = <String>[];
+  final loreDescription = <String>[];
 
   for (final entry in entries) {
     var content = replaceMacros(entry.content, macroCtx).text;
@@ -376,7 +419,13 @@ int _calculateLorebookReserve(PromptPayload payload) {
 
     final pos = entry.position == 'matchGlobal' ? settings.injectionPosition : entry.position;
 
-    if (pos == 'lorebooksMacro') {
+    if (pos == 'charScenario') {
+      loreScenario.add(content);
+    } else if (pos == 'charPersonality') {
+      lorePersonality.add(content);
+    } else if (pos == 'charDescription') {
+      loreDescription.add(content);
+    } else if (pos == 'lorebooksMacro') {
       loreMacroBuffer.add(content);
     } else if (pos == 'worldInfoAfter') {
       loreAfter.add(PromptMessage(role: 'system', content: content, isLorebook: true, blockId: 'worldInfoAfter', blockName: 'Lorebook: ${entry.comment.isNotEmpty ? entry.comment : entry.id}'));
@@ -384,7 +433,14 @@ int _calculateLorebookReserve(PromptPayload payload) {
       loreBefore.add(PromptMessage(role: 'system', content: content, isLorebook: true, blockId: 'worldInfoBefore', blockName: 'Lorebook: ${entry.comment.isNotEmpty ? entry.comment : entry.id}'));
     }
   }
-  return (loreBefore, loreAfter, loreMacroBuffer);
+  return (
+    loreBefore: loreBefore,
+    loreAfter: loreAfter,
+    loreMacroBuffer: loreMacroBuffer,
+    loreScenario: loreScenario,
+    lorePersonality: lorePersonality,
+    loreDescription: loreDescription,
+  );
 }
 
 PromptResult _assembleMessages({

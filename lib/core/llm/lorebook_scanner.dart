@@ -225,7 +225,10 @@ List<ScannedEntry> scanLorebooks({
 
   allRelevantEntries.sort((a, b) => a.order.compareTo(b.order));
 
-  var result = allRelevantEntries;
+  // Separate constant entries from keyword-triggered ones.
+  // Constant entries are always injected and do not count toward any cap.
+  final constantEntries = allRelevantEntries.where((e) => e.constant).toList();
+  var triggeredEntries = allRelevantEntries.where((e) => !e.constant).toList();
 
   final perBookLimits = <String, int>{};
   for (final c in candidateEntries) {
@@ -237,7 +240,7 @@ List<ScannedEntry> scanLorebooks({
   if (perBookLimits.isNotEmpty) {
     final lorebookCounts = <String, int>{};
     final filtered = <ScannedEntry>[];
-    for (final entry in result) {
+    for (final entry in triggeredEntries) {
       final limit = perBookLimits[entry.lorebookId];
       if (limit != null) {
         final count = lorebookCounts[entry.lorebookId] ?? 0;
@@ -246,10 +249,10 @@ List<ScannedEntry> scanLorebooks({
       }
       filtered.add(entry);
     }
-    result = filtered;
+    triggeredEntries = filtered;
   }
 
-  return result.take(globalMaxInjected).toList();
+  return [...constantEntries, ...triggeredEntries.take(globalMaxInjected)];
 }
 
 int _randomPercent() => _rng.nextInt(100);
