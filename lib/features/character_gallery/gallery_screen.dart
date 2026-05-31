@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../core/models/gallery_entry.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
@@ -20,7 +21,7 @@ class GalleryScreen extends ConsumerWidget {
     final galleryAsync = ref.watch(galleryProvider(charId));
 
     return GlazeScaffold(
-      title: 'Gallery',
+      title: 'menu_image_viewer'.tr(),
       onBack: () {
         if (context.canPop()) {
           context.pop();
@@ -30,7 +31,7 @@ class GalleryScreen extends ConsumerWidget {
       },
       body: galleryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text('${'title_error'.tr()}: $e')),
         data: (entries) {
           if (entries.isEmpty) {
             return Center(
@@ -41,7 +42,7 @@ class GalleryScreen extends ConsumerWidget {
                       size: 64,
                       color: Theme.of(context).colorScheme.onSurfaceVariant),
                   const SizedBox(height: 16),
-                  Text('No images yet',
+                  Text('no_results'.tr(),
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                             color:
                                 Theme.of(context).colorScheme.onSurfaceVariant,
@@ -50,7 +51,7 @@ class GalleryScreen extends ConsumerWidget {
                   FilledButton.icon(
                     onPressed: () => _addImage(context, ref),
                     icon: const Icon(Icons.add_photo_alternate),
-                    label: const Text('Add Image'),
+                    label: Text('action_import'.tr()),
                   ),
                 ],
               ),
@@ -86,7 +87,7 @@ class GalleryScreen extends ConsumerWidget {
                       FilledButton.icon(
                         onPressed: () => _addImage(context, ref),
                         icon: const Icon(Icons.add_photo_alternate),
-                        label: const Text('Add Image'),
+                        label: Text('action_import'.tr()),
                       ),
                     ],
                   ),
@@ -116,7 +117,7 @@ class GalleryScreen extends ConsumerWidget {
       ref.invalidate(galleryProvider(charId));
     } catch (e) {
       if (context.mounted) {
-        GlazeToast.error(context, 'Failed to add image: ', e);
+        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
       }
     }
   }
@@ -191,11 +192,11 @@ class _GalleryTile extends ConsumerWidget {
   void _showActions(BuildContext context, WidgetRef ref) {
     GlazeBottomSheet.show(
       context,
-      title: 'Image',
+      title: 'avatar'.tr(),
       items: [
         BottomSheetItem(
           icon: Icons.face,
-          label: 'Set as avatar',
+          label: 'avatar'.tr(),
           onTap: () async {
             Navigator.pop(context);
             try {
@@ -204,12 +205,12 @@ class _GalleryTile extends ConsumerWidget {
               await service.setAsAvatar(entry.characterId, entry.id);
               if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Avatar updated')),
+                  SnackBar(content: Text('import_success'.tr())),
                 );
               }
             } catch (e) {
               if (context.mounted) {
-                GlazeToast.error(context, 'Failed: ', e);
+                GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
               }
             }
           },
@@ -217,7 +218,7 @@ class _GalleryTile extends ConsumerWidget {
         BottomSheetItem(
           icon: Icons.delete,
           iconColor: Colors.red,
-          label: 'Delete',
+          label: 'action_delete_msg'.tr(),
           isDestructive: true,
           onTap: () async {
             Navigator.pop(context);
@@ -228,7 +229,7 @@ class _GalleryTile extends ConsumerWidget {
               ref.invalidate(galleryProvider(charId));
             } catch (e) {
               if (context.mounted) {
-                GlazeToast.error(context, 'Failed: ', e);
+                GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
               }
             }
           },
@@ -286,7 +287,7 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
         actions: [
           IconButton(
             icon: const Icon(Icons.face),
-            tooltip: 'Set as avatar',
+            tooltip: 'avatar'.tr(),
             onPressed: () async {
               try {
                 final service =
@@ -294,30 +295,30 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
                 await service.setAsAvatar(entry.characterId, entry.id);
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Avatar updated')),
+                    SnackBar(content: Text('import_success'.tr())),
                   );
                 }
               } catch (e) {
                 if (mounted) {
-                  GlazeToast.error(context, 'Failed: ', e);
+                  GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
                 }
               }
             },
           ),
           IconButton(
             icon: const Icon(Icons.delete),
-            tooltip: 'Delete',
+            tooltip: 'action_delete_msg'.tr(),
             onPressed: () {
               GlazeBottomSheet.show(
                 context,
-                title: 'Delete image?',
-                bigInfo: const BottomSheetBigInfo(
+                title: '${'action_delete_msg'.tr()}?',
+                bigInfo: BottomSheetBigInfo(
                   icon: Icons.delete_outline,
-                  description: 'This action cannot be undone.',
+                  description: 'action_delete_msg'.tr(),
                 ),
                 items: [
                   BottomSheetItem(
-                    label: 'Delete',
+                    label: 'action_delete_msg'.tr(),
                     isDestructive: true,
                     centered: true,
                     onTap: () async {
@@ -330,13 +331,13 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
                         if (mounted) Navigator.pop(context);
                       } catch (e) {
                         if (mounted) {
-                          GlazeToast.error(context, 'Failed: ', e);
+                          GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
                         }
                       }
                     },
                   ),
                   BottomSheetItem(
-                    label: 'Cancel',
+                    label: 'btn_cancel'.tr(),
                     centered: true,
                     onTap: () => Navigator.pop(context),
                   ),
@@ -359,13 +360,13 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
               child: Image.file(
                 File(e.imagePath),
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Column(
+                errorBuilder: (_, __, ___) => Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.broken_image, color: Colors.white54, size: 64),
-                    SizedBox(height: 8),
-                    Text('Image not found',
-                        style: TextStyle(color: Colors.white54)),
+                    const Icon(Icons.broken_image, color: Colors.white54, size: 64),
+                    const SizedBox(height: 8),
+                    Text('no_results'.tr(),
+                        style: const TextStyle(color: Colors.white54)),
                   ],
                 ),
               ),

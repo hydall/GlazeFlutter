@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../core/models/character.dart';
 import '../../core/state/character_provider.dart';
@@ -116,7 +117,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
 
   void _saveAndClose() {
     if ((_item['name'] as String?)?.trim().isEmpty ?? true) {
-      GlazeToast.show(context, 'Enter a character name first');
+      GlazeToast.show(context, 'error_name_required'.tr());
       return;
     }
     _save(_item);
@@ -282,7 +283,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
-        title: Text('Edit Greeting #${index + 1}'),
+        title: Text("${'action_edit'.tr()} ${'placeholder_greeting'.tr().replaceAll('.', '')} #${index + 1}"),
         content: SizedBox(
           width: MediaQuery.of(ctx).size.width * 0.8,
           child: TextField(
@@ -300,7 +301,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('btn_cancel'.tr())),
           FilledButton(
             onPressed: () {
               final newText = ctrl.text;
@@ -314,12 +315,28 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
               Navigator.pop(ctx);
               setState(() {});
             },
-            child: const Text('Save'),
+            child: Text('btn_save'.tr()),
           ),
         ],
       ),
     );
   }
+
+  String _getFieldLabel(String field) => switch (field) {
+        'name' => 'label_name'.tr(),
+        'creator' => 'placeholder_author_name'.tr(),
+        'tags' => 'label_tags'.tr(),
+        'description' => 'label_description'.tr(),
+        'personality' => 'label_personality'.tr(),
+        'scenario' => 'label_scenario'.tr(),
+        'first_mes' => 'label_first_mes'.tr(),
+        'mes_example' => 'label_mes_example'.tr(),
+        'system_prompt' => 'label_char_prompt'.tr().replaceAll(RegExp(r'Character|персонажа', caseSensitive: false), 'role_system'.tr()),
+        'post_history_instructions' => "${'block_chat_history'.tr()} ${'guidance_placeholder'.tr().replaceAll('...', '')}",
+        'creator_notes' => 'onboarding_placeholder_desc'.tr().split(' ')[0] + ' ' + 'label_description'.tr(),
+        'depth_prompt' => 'label_depth'.tr() + ' ' + 'placeholder_prompt_text'.tr().replaceAll('...', ''),
+        _ => field.replaceAll('_', ' ').replaceFirstMapped(RegExp(r'[a-z]'), (m) => m.group(0)!.toUpperCase()),
+      };
 
   void _editExpandableField(String field) {
     final ctrl = TextEditingController(text: (_item[field] as String?) ?? '');
@@ -327,7 +344,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
-        title: Text(field.replaceAll('_', ' ').replaceFirstMapped(RegExp(r'[a-z]'), (m) => m.group(0)!.toUpperCase())),
+        title: Text(_getFieldLabel(field)),
         content: SizedBox(
           width: MediaQuery.of(ctx).size.width * 0.8,
           child: TextField(
@@ -345,14 +362,14 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('btn_cancel'.tr())),
           FilledButton(
             onPressed: () {
               _item[field] = ctrl.text;
               Navigator.pop(ctx);
               setState(() {});
             },
-            child: const Text('Save'),
+            child: Text('btn_save'.tr()),
           ),
         ],
       ),
@@ -362,9 +379,9 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const SheetView(
-        title: 'Edit Character',
-        body: Center(child: CircularProgressIndicator()),
+      return SheetView(
+        title: "${'action_edit'.tr()} ${'sheet_title_char_options'.tr()}",
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -372,64 +389,64 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
       GenericEditorSection(
         title: null,
         fields: [
-          const GenericEditorField(key: 'name', label: 'Name', type: 'text'),
-          const GenericEditorField(key: 'creator', label: 'Creator', type: 'text'),
-          const GenericEditorField(key: 'tags', label: 'Tags', type: 'tags', placeholder: 'tag1, tag2, tag3'),
+          GenericEditorField(key: 'name', label: 'label_name'.tr(), type: 'text'),
+          GenericEditorField(key: 'creator', label: 'placeholder_author_name'.tr(), type: 'text'),
+          GenericEditorField(key: 'tags', label: 'label_tags'.tr(), type: 'tags', placeholder: 'tag1, tag2, tag3'),
         ],
       ),
       GenericEditorSection(
-        title: 'Character',
+        title: 'sheet_title_char_options'.tr(),
         fields: [
-          const GenericEditorField(key: 'description', label: 'Description', type: 'textarea', rows: 4, expandable: true),
-          const GenericEditorField(key: 'personality', label: 'Personality', type: 'textarea', rows: 4, expandable: true),
-          const GenericEditorField(key: 'scenario', label: 'Scenario', type: 'textarea', rows: 4, expandable: true),
+          GenericEditorField(key: 'description', label: 'label_description'.tr(), type: 'textarea', rows: 4, expandable: true),
+          GenericEditorField(key: 'personality', label: 'label_personality'.tr(), type: 'textarea', rows: 4, expandable: true),
+          GenericEditorField(key: 'scenario', label: 'label_scenario'.tr(), type: 'textarea', rows: 4, expandable: true),
         ],
       ),
       GenericEditorSection(
-        title: 'First Message & Examples',
+        title: "${'label_first_mes'.tr()} & ${'block_example_dialogue'.tr()}",
         fields: [
-          const GenericEditorField(key: 'first_mes', label: 'First Message', type: 'greeting_list'),
-          const GenericEditorField(key: 'mes_example', label: 'Example Messages', type: 'textarea', rows: 6, expandable: true),
+          GenericEditorField(key: 'first_mes', label: 'label_first_mes'.tr(), type: 'greeting_list'),
+          GenericEditorField(key: 'mes_example', label: 'label_mes_example'.tr(), type: 'textarea', rows: 6, expandable: true),
         ],
       ),
       GenericEditorSection(
-        title: 'Prompts',
+        title: 'section_prompt_blocks'.tr(),
         fields: [
-          const GenericEditorField(key: 'system_prompt', label: 'System Prompt', type: 'textarea', rows: 6, expandable: true),
-          const GenericEditorField(key: 'post_history_instructions', label: 'Post-History Instructions', type: 'textarea', rows: 4, expandable: true),
-          const GenericEditorField(key: 'creator_notes', label: 'Short Description', type: 'textarea', rows: 3),
+          GenericEditorField(key: 'system_prompt', label: _getFieldLabel('system_prompt'), type: 'textarea', rows: 6, expandable: true),
+          GenericEditorField(key: 'post_history_instructions', label: _getFieldLabel('post_history_instructions'), type: 'textarea', rows: 4, expandable: true),
+          GenericEditorField(key: 'creator_notes', label: _getFieldLabel('creator_notes'), type: 'textarea', rows: 3),
         ],
       ),
       GenericEditorSection(
-        title: 'Advanced',
+        title: 'section_advanced_settings'.tr(),
         fields: [
-          const GenericEditorField(key: 'depth_prompt', label: 'Depth Prompt', type: 'textarea', rows: 4, placeholder: 'Injected at a specific depth in the prompt'),
-          const GenericEditorField(
+          GenericEditorField(key: 'depth_prompt', label: _getFieldLabel('depth_prompt'), type: 'textarea', rows: 4, placeholder: 'Injected at a specific depth in the prompt'),
+          GenericEditorField(
             key: 'depth_prompt_role',
-            label: 'Depth Role',
+            label: "${'label_depth'.tr()} ${'label_role'.tr()}",
             type: 'select',
             options: [
-              {'label': 'System', 'value': 'system'},
-              {'label': 'User', 'value': 'user'},
-              {'label': 'Assistant', 'value': 'assistant'},
+              {'label': 'role_system'.tr(), 'value': 'system'},
+              {'label': 'role_user'.tr(), 'value': 'user'},
+              {'label': 'role_assistant'.tr(), 'value': 'assistant'},
             ],
           ),
           GenericEditorField(
             key: 'depth_prompt_depth',
-            label: 'Depth',
+            label: 'label_depth'.tr(),
             type: 'select',
             options: List.generate(20, (i) => {'label': '${i + 1}', 'value': i + 1}),
           ),
           GenericEditorField(
             key: 'world',
-            label: 'World Lorebook',
+            label: 'menu_lorebooks'.tr(),
             type: 'select',
             options: [
-              {'label': 'None', 'value': null},
+              {'label': 'label_none'.tr(), 'value': null},
               ..._lorebookNames.map((name) => {'label': name, 'value': name}),
             ],
           ),
-          const GenericEditorField(key: 'talkativeness', label: 'Talkativeness (0.0 to 1.0)', type: 'number'),
+          GenericEditorField(key: 'talkativeness', label: "${'tab_chat'.tr()} ${'label_probability'.tr().replaceAll(' (%)', '')} (0.0 - 1.0)", type: 'number'),
         ],
       ),
     ];
@@ -439,7 +456,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            widget.isNew ? 'New Character' : 'Edit Character',
+            widget.isNew ? "${'create_new'.tr()} ${'sheet_title_char_options'.tr()}" : "${'action_edit'.tr()} ${'sheet_title_char_options'.tr()}",
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -455,7 +472,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
           ? [
               SheetViewAction(
                 icon: const Icon(Icons.check_rounded, size: 20),
-                tooltip: 'Save',
+                tooltip: 'btn_save'.tr(),
                 onPressed: _saveAndClose,
               ),
             ]
@@ -465,7 +482,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         config: config,
         showAvatar: true,
         avatarField: 'avatarPath',
-        avatarHint: 'Tap to change avatar',
+        avatarHint: 'hint_change_avatar'.tr(),
         avatarPlaceholder: (_item['name']?.toString().isNotEmpty ?? false) ? _item['name'].toString()[0].toUpperCase() : '?',
         onAvatarTap: _pickAvatar,
         onChanged: (values) {

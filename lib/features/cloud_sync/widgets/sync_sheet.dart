@@ -15,6 +15,7 @@ import '../services/sync_service.dart';
 import '../services/sync_controller.dart';
 import 'sync_icons.dart';
 import 'sync_sheet_widgets.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 class SyncSheet extends ConsumerStatefulWidget {
   const SyncSheet({super.key});
@@ -62,7 +63,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
         _goBack();
       },
       child: SheetView(
-        title: 'Cloud Sync',
+        title: 'menu_cloud_sync'.tr(),
         showBack: true,
         fitContent: true,
         onBack: _goBack,
@@ -73,18 +74,18 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (!connected) ...[
-                buildSyncSectionHeader(context, 'Connect a Cloud Provider'),
+                buildSyncSectionHeader(context, 'sync_connect_provider'.tr()),
                 const SizedBox(height: 4),
                 buildSyncProviderButton(
                   icon: const DropboxIcon(size: 22, color: Colors.white),
-                  label: _ctrl.isConnecting ? 'Connecting...' : 'Dropbox',
+                  label: _ctrl.isConnecting ? 'sync_connecting'.tr() : 'Dropbox',
                   color: context.colors.accent,
                   onPressed: _ctrl.isConnecting || _ctrl.isConnectingGdrive ? null : _connectDropbox,
                 ),
                 const SizedBox(height: 8),
                 buildSyncProviderButton(
                   icon: const GDriveIcon(size: 22, color: Colors.white),
-                  label: _ctrl.isConnectingGdrive ? 'Connecting...' : 'Google Drive',
+                  label: _ctrl.isConnectingGdrive ? 'sync_connecting'.tr() : 'Google Drive',
                   color: const Color(0xFF4285F4),
                   onPressed: _ctrl.isConnecting || _ctrl.isConnectingGdrive ? null : _connectGDrive,
                 ),
@@ -107,7 +108,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                   buildSyncErrorCard(lastError),
                 ],
                 const SizedBox(height: 16),
-                buildSyncSectionHeader(context, 'Manual Sync'),
+                buildSyncSectionHeader(context, 'sync_manual'.tr()),
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -116,7 +117,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                         context: context,
                         onPressed: isSyncing ? null : () => _doSync('push'),
                         icon: Icons.cloud_upload_outlined,
-                        label: 'Push',
+                        label: 'sync_push'.tr(),
                         primary: false,
                       ),
                     ),
@@ -126,14 +127,14 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                         context: context,
                         onPressed: isSyncing ? null : () => _doSync('pull'),
                         icon: Icons.cloud_download_outlined,
-                        label: 'Pull',
+                        label: 'sync_pull'.tr(),
                         primary: true,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                buildSyncSectionHeader(context, 'Sync Settings'),
+                buildSyncSectionHeader(context, 'section_sync_settings'.tr()),
                 const SizedBox(height: 4),
                 _buildAutoSyncToggle(context, autoEnabled, service),
                 if (autoEnabled && service != null)
@@ -144,13 +145,13 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 const SizedBox(height: 16),
                 buildSyncDangerButton(
                   icon: Icons.logout_rounded,
-                  label: 'Disconnect',
+                  label: 'sync_disconnect'.tr(),
                   onPressed: _ctrl.isDisconnecting ? null : _disconnect,
                 ),
                 const SizedBox(height: 8),
                 buildSyncDangerButton(
                   icon: Icons.delete_outline_rounded,
-                  label: _ctrl.isWiping ? 'Wiping...' : 'Wipe Cloud Data',
+                  label: _ctrl.isWiping ? 'sync_wiping'.tr() : 'sync_wipe_cloud'.tr(),
                   onPressed: _ctrl.isWiping ? null : _wipeCloudData,
                   light: true,
                 ),
@@ -247,7 +248,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       child: Row(
         children: [
           Text(
-            'Folder ID',
+            'sync_gdrive_folder_id'.tr(),
             style: TextStyle(
               fontSize: 12,
               color: context.cs.onSurfaceVariant,
@@ -271,7 +272,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             icon: const Icon(Icons.copy, size: 16, color: Colors.white54),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: _ctrl.gdriveFolderId!));
-              GlazeToast.show(context, 'Folder ID copied');
+              GlazeToast.show(context, "${'sync_gdrive_folder_id'.tr()} ${'action_copy'.tr().toLowerCase()}");
             },
           ),
         ],
@@ -296,7 +297,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
               const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Sync Conflicts (${conflicts.length})',
+                "${'sync_conflicts_title'.tr()} (${conflicts.length})",
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
@@ -316,7 +317,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                     backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  child: const Text('Keep All Local', style: TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                  child: Text('sync_keep_all_local'.tr(), style: const TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(width: 8),
@@ -328,7 +329,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                     backgroundColor: Colors.greenAccent.withValues(alpha: 0.15),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  child: const Text('Use All Cloud', style: TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                  child: Text('sync_keep_all_cloud'.tr(), style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -346,11 +347,11 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                   ),
                   TextButton(
                     onPressed: () => _resolveConflict(c, 'local'),
-                    child: const Text('Keep Local', style: TextStyle(color: Colors.blueAccent)),
+                    child: Text('sync_keep_local'.tr(), style: const TextStyle(color: Colors.blueAccent)),
                   ),
                   TextButton(
                     onPressed: () => _resolveConflict(c, 'cloud'),
-                    child: const Text('Use Cloud', style: TextStyle(color: Colors.greenAccent)),
+                    child: Text('sync_keep_cloud'.tr(), style: const TextStyle(color: Colors.greenAccent)),
                   ),
                 ],
               ),
@@ -375,7 +376,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Enable Auto-Sync',
+                    'sync_enable_auto'.tr(),
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
@@ -384,7 +385,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Automatically sync after every N messages',
+                    'sync_auto_desc'.tr(),
                     style: TextStyle(
                       fontSize: 12,
                       color: context.cs.onSurfaceVariant,
@@ -410,7 +411,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       child: Row(
         children: [
           Text(
-            'Every ',
+            'sync_every'.tr() + ' ',
             style: TextStyle(
               fontSize: 14,
               color: context.cs.onSurfaceVariant,
@@ -443,7 +444,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
           ),
           const SizedBox(width: 8),
           Text(
-            ' messages',
+            ' ' + 'sync_messages'.tr(),
             style: TextStyle(
               fontSize: 14,
               color: context.cs.onSurfaceVariant,
@@ -469,7 +470,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Include API Keys in Sync',
+                    'label_sync_include_keys'.tr(),
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
@@ -478,7 +479,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Send provider API keys to cloud backup',
+                    'desc_sync_include_keys'.tr(),
                     style: TextStyle(
                       fontSize: 12,
                       color: context.cs.onSurfaceVariant,
@@ -507,14 +508,14 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   }
 
   String _getStatusLabel(SyncStatus status, SyncService? service) {
-    if (_ctrl.isWiping) return 'Wiping cloud data...';
-    if (status == SyncStatus.syncing) return 'Syncing...';
-    if (status == SyncStatus.error) return 'Error';
-    if (status == SyncStatus.conflict) return 'Conflict detected';
+    if (_ctrl.isWiping) return 'sync_wiping'.tr();
+    if (status == SyncStatus.syncing) return 'sync_status_syncing'.tr();
+    if (status == SyncStatus.error) return 'sync_status_error'.tr();
+    if (status == SyncStatus.conflict) return 'sync_status_conflict'.tr();
     if (service?.lastSyncTime != null) {
-      return 'Last sync: ${_formatTimeAgo(service!.lastSyncTime!)}';
+      return "${'sync_last_sync'.tr()}: ${_formatTimeAgo(service!.lastSyncTime!)}";
     }
-    return 'Ready';
+    return 'sync_status_idle'.tr();
   }
 
   String _formatTimeAgo(int ts) {
@@ -542,20 +543,20 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   Future<void> _disconnect() async {
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
-      title: 'Disconnect',
-      bigInfo: const BottomSheetBigInfo(
+      title: 'sync_disconnect'.tr(),
+      bigInfo: BottomSheetBigInfo(
         icon: Icons.link_off_rounded,
-        description: 'Disconnect cloud sync? Your local data will remain intact.',
+        description: 'sync_confirm_disconnect'.tr(),
       ),
       items: [
         BottomSheetItem(
-          label: 'Disconnect',
+          label: 'sync_disconnect'.tr(),
           isDestructive: true,
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'btn_cancel'.tr(),
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
         ),
@@ -580,20 +581,20 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
 
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
-      title: 'Wipe Cloud Data',
-      bigInfo: const BottomSheetBigInfo(
+      title: 'sync_wipe_cloud'.tr(),
+      bigInfo: BottomSheetBigInfo(
         icon: Icons.warning_amber_rounded,
-        description: 'Delete ALL data from cloud? This cannot be undone. Your local data will remain intact.',
+        description: 'sync_confirm_wipe'.tr(),
       ),
       items: [
         BottomSheetItem(
-          label: 'Wipe Cloud Data',
+          label: 'sync_wipe_cloud'.tr(),
           isDestructive: true,
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'btn_cancel'.tr(),
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
         ),
@@ -605,18 +606,18 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     if (!mounted) return;
     await GlazeBottomSheet.show<void>(
       context,
-      title: 'Wipe Cloud Data',
+      title: 'sync_wipe_cloud'.tr(),
       bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_forever_rounded,
-        description: 'Are you sure? Type "$providerLabel" to confirm.',
+        description: 'sync_confirm_wipe_final'.tr(),
       ),
       input: BottomSheetInput(
         placeholder: providerLabel,
-        confirmLabel: 'Confirm',
+        confirmLabel: 'btn_ok'.tr(),
         onConfirm: (typed) async {
           if (typed.trim().toLowerCase() != providerLabel.toLowerCase()) {
             if (context.mounted) {
-              GlazeToast.show(context, 'Wipe cancelled: Provider name did not match.', isError: true);
+              GlazeToast.show(context, "${'title_error'.tr()}: ${'sync_invalid_phrase'.tr()}", isError: true);
             }
             return;
           }
@@ -631,12 +632,12 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             );
             if (mounted) {
               setState(() {});
-              GlazeToast.show(context, 'Cloud data wiped successfully.');
+              GlazeToast.show(context, 'sync_wipe_done'.tr());
             }
           } catch (e) {
             if (mounted) {
               setState(() {});
-              GlazeToast.error(context, 'Wipe failed: ', e);
+              GlazeToast.error(context, "${'title_error'.tr()}: ", e);
             }
           }
         },

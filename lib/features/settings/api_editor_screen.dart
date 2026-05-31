@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -79,12 +80,14 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
   @override
   Widget build(BuildContext context) {
     return GlazeScaffold(
-      title: widget.config != null ? 'Edit API Config' : 'New API Config',
+      title: widget.config != null
+          ? '${'action_edit'.tr()} ${'tab_api'.tr()}'
+          : 'settings_new_config_title'.tr(),
       onBack: () => Navigator.of(context).pop(),
       actions: [
         TextButton(
           onPressed: _save,
-          child: const Text('Save', style: TextStyle(color: Colors.white)),
+          child: Text('btn_save'.tr(), style: const TextStyle(color: Colors.white)),
         ),
       ],
       body: Column(
@@ -93,10 +96,10 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: TextField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Config Name',
+              decoration: InputDecoration(
+                labelText: 'settings_config_name'.tr(),
                 hintText: 'My OpenAI',
-                prefixIcon: Icon(Icons.label),
+                prefixIcon: const Icon(Icons.label),
                 isDense: true,
               ),
             ),
@@ -106,9 +109,9 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
             labelColor: context.cs.primary,
             unselectedLabelColor: context.cs.onSurfaceVariant,
             indicatorColor: context.cs.primary,
-            tabs: const [
-              Tab(icon: Icon(Icons.chat_bubble_outline, size: 18), text: 'LLM'),
-              Tab(icon: Icon(Icons.layers_outlined, size: 18), text: 'Embeddings'),
+            tabs: [
+              const Tab(icon: Icon(Icons.chat_bubble_outline, size: 18), text: 'LLM'),
+              Tab(icon: const Icon(Icons.layers_outlined, size: 18), text: 'tab_embeddings'.tr()),
             ],
           ),
           Expanded(
@@ -129,11 +132,11 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const _SectionHeader('Connection', helpTerm: 'api'),
+        _SectionHeader('onboarding_connection'.tr(), helpTerm: 'api'),
         TextField(
           controller: _endpointCtrl,
           decoration: const InputDecoration(
-            labelText: 'API Endpoint',
+            labelText: 'onboarding_label_endpoint',
             hintText: 'http://127.0.0.1:5000/v1',
             prefixIcon: Icon(Icons.link),
           ),
@@ -146,12 +149,12 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
           decoration: InputDecoration(
             label: Row(
               mainAxisSize: MainAxisSize.min,
-              children: const [Text('API Key'), HelpTip(term: 'apikey')],
+              children: [Text('onboarding_label_key'.tr()), const HelpTip(term: 'apikey')],
             ),
             prefixIcon: const Icon(Icons.key),
             suffixIcon: IconButton(
               icon: const Icon(Icons.download),
-              tooltip: 'Fetch models',
+              tooltip: 'settings_fetch_models'.tr(),
               onPressed: _isLoadingModels ? null : _fetchModels,
             ),
           ),
@@ -160,29 +163,29 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
         SwitchListTile(
           title: Row(
             mainAxisSize: MainAxisSize.min,
-            children: const [
-              Text('Streaming response'),
-              HelpTip(term: 'streaming'),
+            children: [
+              Text('label_stream'.tr()),
+              const HelpTip(term: 'streaming'),
             ],
           ),
-          subtitle: const Text('Show text as it is being generated'),
+          subtitle: Text('desc_stream'.tr()),
           value: _stream,
           onChanged: (v) => setState(() => _stream = v),
         ),
         const SizedBox(height: 12),
-        const _SectionHeader('Generation Parameters', helpTerm: 'guided'),
-        ParamSlider(label: 'Temperature', value: _temperature, min: 0, max: 2, onChanged: (v) => setState(() => _temperature = v)),
-        ParamSlider(label: 'Top P', value: _topP, min: 0, max: 1, onChanged: (v) => setState(() => _topP = v)),
+        _SectionHeader('section_gen_params'.tr(), helpTerm: 'guided'),
+        ParamSlider(label: 'label_temperature'.tr(), value: _temperature, min: 0, max: 2, onChanged: (v) => setState(() => _temperature = v)),
+        ParamSlider(label: 'label_top_p'.tr(), value: _topP, min: 0, max: 1, onChanged: (v) => setState(() => _topP = v)),
         Row(children: [
-          Expanded(child: TextField(controller: _maxTokensCtrl, decoration: const InputDecoration(labelText: 'Max Output Tokens', prefixIcon: Icon(Icons.numbers)), keyboardType: TextInputType.number)),
+          Expanded(child: TextField(controller: _maxTokensCtrl, decoration: InputDecoration(labelText: 'label_max_tokens'.tr(), prefixIcon: const Icon(Icons.numbers)), keyboardType: TextInputType.number)),
           const SizedBox(width: 12),
-          Expanded(child: TextField(controller: _contextSizeCtrl, decoration: const InputDecoration(labelText: 'Context Size', prefixIcon: Icon(Icons.data_array)), keyboardType: TextInputType.number)),
+          Expanded(child: TextField(controller: _contextSizeCtrl, decoration: InputDecoration(labelText: 'label_context_size'.tr(), prefixIcon: const Icon(Icons.data_array)), keyboardType: TextInputType.number)),
         ]),
         const SizedBox(height: 12),
-        const _SectionHeader('Reasoning', helpTerm: 'preset-reasoning'),
+        _SectionHeader('label_reasoning_settings'.tr(), helpTerm: 'preset-reasoning'),
         SwitchListTile(
-          title: const Text('Show Native Reasoning'),
-          subtitle: const Text("Shows reasoning_content. Doesn't affect model's reasoning."),
+          title: Text('label_reasoning'.tr()),
+          subtitle: Text('desc_reasoning'.tr()),
           value: _requestReasoning,
           onChanged: (v) => setState(() => _requestReasoning = v),
         ),
@@ -190,12 +193,12 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(children: [
-              const Text('Reasoning Effort:', style: TextStyle(fontSize: 13)),
+              Text('${'label_reasoning_effort'.tr()}:', style: const TextStyle(fontSize: 13)),
               const SizedBox(width: 8),
               ...['auto', 'low', 'medium', 'high'].map((e) => Padding(
                 padding: const EdgeInsets.only(right: 6),
                 child: ChoiceChip(
-                  label: Text(e[0].toUpperCase() + e.substring(1), style: const TextStyle(fontSize: 12)),
+                  label: Text(_reasoningEffortLabel(e), style: const TextStyle(fontSize: 12)),
                   selected: _reasoningEffort == e,
                   onSelected: (_) => setState(() => _reasoningEffort = e),
                   visualDensity: VisualDensity.compact,
@@ -205,16 +208,16 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
           ),
         ],
         const SizedBox(height: 12),
-        const _SectionHeader('Omit Parameters'),
-        SwitchListTile(title: const Text('Omit Temperature'), subtitle: const Text("Don't send temperature to API"), value: _omitTemperature, onChanged: (v) => setState(() => _omitTemperature = v)),
-        SwitchListTile(title: const Text('Omit Top P'), subtitle: const Text("Don't send top_p to API"), value: _omitTopP, onChanged: (v) => setState(() => _omitTopP = v)),
-        SwitchListTile(title: const Text('Omit Reasoning'), subtitle: const Text("Don't send reasoning params to API"), value: _omitReasoning, onChanged: (v) => setState(() => _omitReasoning = v)),
-        SwitchListTile(title: const Text('Omit Reasoning Effort'), subtitle: const Text("Don't send reasoning_effort to API"), value: _omitReasoningEffort, onChanged: (v) => setState(() => _omitReasoningEffort = v)),
+        _SectionHeader('section_omit_params'.tr()),
+        SwitchListTile(title: Text('label_omit_temperature'.tr()), subtitle: Text('desc_omit_temperature'.tr()), value: _omitTemperature, onChanged: (v) => setState(() => _omitTemperature = v)),
+        SwitchListTile(title: Text('label_omit_top_p'.tr()), subtitle: Text('desc_omit_top_p'.tr()), value: _omitTopP, onChanged: (v) => setState(() => _omitTopP = v)),
+        SwitchListTile(title: Text('label_omit_reasoning'.tr()), subtitle: Text('desc_omit_reasoning'.tr()), value: _omitReasoning, onChanged: (v) => setState(() => _omitReasoning = v)),
+        SwitchListTile(title: Text('label_omit_reasoning_effort'.tr()), subtitle: Text('desc_omit_reasoning_effort'.tr()), value: _omitReasoningEffort, onChanged: (v) => setState(() => _omitReasoningEffort = v)),
         const SizedBox(height: 16),
         OutlinedButton.icon(
           onPressed: _isTestingLlm ? null : _testLlmConnection,
           icon: _isTestingLlm ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.wifi_find),
-          label: Text(_isTestingLlm ? 'Testing...' : 'Test Connection'),
+          label: Text(_isTestingLlm ? 'settings_testing'.tr() : 'settings_test_connection'.tr()),
         ),
         const SizedBox(height: 32),
       ],
@@ -225,45 +228,45 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        const _SectionHeader('Embeddings', helpTerm: 'embeddings'),
+        _SectionHeader('tab_embeddings'.tr(), helpTerm: 'embeddings'),
         SwitchListTile(
-          title: const Text('Vector Search'),
-          subtitle: const Text('Enable semantic search for lorebook entries'),
+          title: Text('search_type_vector'.tr()),
+          subtitle: Text('settings_enable_vector_desc'.tr()),
           value: _embeddingEnabled,
           onChanged: (v) => setState(() => _embeddingEnabled = v),
         ),
         if (_embeddingEnabled) ...[
           SwitchListTile(
-            title: const Text('Use LLM API'),
-            subtitle: const Text('Use the same endpoint as LLM for embeddings'),
+            title: Text('settings_use_llm_api'.tr()),
+            subtitle: Text('settings_use_llm_api_desc'.tr()),
             value: _embeddingUseSame,
             onChanged: (v) => setState(() => _embeddingUseSame = v),
           ),
           if (!_embeddingUseSame) ...[
             TextField(
               controller: _embEndpointCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Embedding Endpoint',
+              decoration: InputDecoration(
+                labelText: 'settings_embedding_endpoint'.tr(),
                 hintText: 'http://127.0.0.1:11434/v1',
-                prefixIcon: Icon(Icons.link),
+                prefixIcon: const Icon(Icons.link),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _embModelCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Model',
+              decoration: InputDecoration(
+                labelText: 'settings_embedding_model'.tr(),
                 hintText: 'text-embedding-3-small',
-                prefixIcon: Icon(Icons.hub),
+                prefixIcon: const Icon(Icons.hub),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _embApiKeyCtrl,
-              decoration: const InputDecoration(
-                labelText: 'API Key',
+              decoration: InputDecoration(
+                labelText: 'onboarding_label_key'.tr(),
                 hintText: 'sk-...',
-                prefixIcon: Icon(Icons.key),
+                prefixIcon: const Icon(Icons.key),
               ),
               obscureText: true,
             ),
@@ -271,10 +274,10 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
           if (_embeddingUseSame) ...[
             TextField(
               controller: _embModelCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Embedding Model',
+              decoration: InputDecoration(
+                labelText: 'settings_embedding_model'.tr(),
                 hintText: 'text-embedding-3-small',
-                prefixIcon: Icon(Icons.hub),
+                prefixIcon: const Icon(Icons.hub),
                 suffixText: '(uses LLM endpoint & key)',
               ),
             ),
@@ -282,10 +285,10 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
           const SizedBox(height: 12),
           TextField(
             controller: _embChunkTokensCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Max Tokens Per Chunk',
+            decoration: InputDecoration(
+              labelText: 'settings_max_tokens_chunk'.tr(),
               hintText: '512',
-              prefixIcon: Icon(Icons.data_array),
+              prefixIcon: const Icon(Icons.data_array),
               helperText: 'Auto-splits long texts into chunks',
             ),
             keyboardType: TextInputType.number,
@@ -294,7 +297,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
           OutlinedButton.icon(
             onPressed: _isTestingEmb ? null : _testEmbConnection,
             icon: _isTestingEmb ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.wifi_find),
-            label: Text(_isTestingEmb ? 'Testing...' : 'Test Connection'),
+            label: Text(_isTestingEmb ? 'settings_testing'.tr() : 'settings_test_connection'.tr()),
           ),
         ],
         const SizedBox(height: 32),
@@ -313,7 +316,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
       }
       return DropdownButtonFormField<String>(
         value: modelNames.contains(_selectedModel) ? _selectedModel : null,
-        decoration: const InputDecoration(labelText: 'Model Name', prefixIcon: Icon(Icons.smart_toy)),
+        decoration: InputDecoration(labelText: 'onboarding_label_model'.tr(), prefixIcon: const Icon(Icons.smart_toy)),
         items: modelNames.map((m) => DropdownMenuItem(value: m, child: Text(m, overflow: TextOverflow.ellipsis))).toList(),
         onChanged: (v) { if (v != null) setState(() => _selectedModel = v); },
       );
@@ -321,26 +324,36 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
     return TextField(
       controller: TextEditingController(text: _selectedModel),
       decoration: InputDecoration(
-        labelText: 'Model Name',
+        labelText: 'onboarding_label_model'.tr(),
         hintText: 'gemini-3-pro-preview',
         prefixIcon: const Icon(Icons.smart_toy),
-        suffixIcon: IconButton(icon: const Icon(Icons.download, size: 20), tooltip: 'Fetch models', onPressed: _isLoadingModels ? null : _fetchModels),
+        suffixIcon: IconButton(icon: const Icon(Icons.download, size: 20), tooltip: 'settings_fetch_models'.tr(), onPressed: _isLoadingModels ? null : _fetchModels),
       ),
       onChanged: (v) => _selectedModel = v,
     );
   }
 
+  String _reasoningEffortLabel(String effort) {
+    return switch (effort) {
+      'auto' => 'theme_auto'.tr(),
+      'low' => 'reasoning_effort_low'.tr(),
+      'medium' => 'reasoning_effort_medium'.tr(),
+      'high' => 'reasoning_effort_high'.tr(),
+      _ => effort,
+    };
+  }
+
   Future<void> _fetchModels() async {
     final endpoint = _endpointCtrl.text.trim();
     final apiKey = _keyCtrl.text.trim();
-    if (endpoint.isEmpty || apiKey.isEmpty) { GlazeToast.show(context, 'Enter endpoint and API key first'); return; }
+    if (endpoint.isEmpty || apiKey.isEmpty) { GlazeToast.show(context, 'settings_err_endpoint_key'.tr()); return; }
     setState(() { _isLoadingModels = true; });
     try {
       final client = SseClient();
       final models = await client.fetchModels(endpoint: endpoint, apiKey: apiKey);
       if (!mounted) return;
       setState(() { _fetchedModels = models; _isLoadingModels = false; });
-      if (models.isEmpty) GlazeToast.show(context, 'No models returned by API');
+      if (models.isEmpty) GlazeToast.show(context, 'settings_err_no_models'.tr());
     } catch (e) {
       if (mounted) setState(() { _isLoadingModels = false; });
     }
@@ -350,7 +363,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
     final endpoint = _endpointCtrl.text.trim();
     final apiKey = _keyCtrl.text.trim();
     final model = _selectedModel.trim();
-    if (endpoint.isEmpty || apiKey.isEmpty || model.isEmpty) { GlazeToast.show(context, 'Fill endpoint, API key, and model'); return; }
+    if (endpoint.isEmpty || apiKey.isEmpty || model.isEmpty) { GlazeToast.show(context, 'settings_err_fill_all'.tr()); return; }
     setState(() => _isTestingLlm = true);
     final result = await ApiConnectionTester().testLlm(
       endpoint: endpoint, apiKey: apiKey, model: model,
@@ -360,7 +373,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
       case ApiTestSuccess(:final message):
         GlazeToast.show(context, message);
       case ApiTestFailure(:final error):
-        GlazeToast.error(context, 'Connection failed: ', error);
+        GlazeToast.error(context, 'settings_err_conn_failed'.tr(), error);
     }
     if (mounted) setState(() => _isTestingLlm = false);
   }
@@ -376,7 +389,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
       apiKey = _embApiKeyCtrl.text.trim();
       model = _embModelCtrl.text.trim();
     }
-    if (endpoint.isEmpty) { GlazeToast.show(context, 'Fill endpoint first'); return; }
+    if (endpoint.isEmpty) { GlazeToast.show(context, 'settings_err_fill_endpoint'.tr()); return; }
     setState(() => _isTestingEmb = true);
     final result = await ApiConnectionTester().testEmbedding(
       endpoint: endpoint, apiKey: apiKey, model: model,
@@ -386,7 +399,7 @@ class _ApiEditorScreenState extends ConsumerState<ApiEditorScreen>
       case ApiTestSuccess(:final message):
         GlazeToast.show(context, message);
       case ApiTestFailure(:final error):
-        GlazeToast.error(context, 'Connection failed: ', error);
+        GlazeToast.error(context, 'settings_err_conn_failed'.tr(), error);
     }
     if (mounted) setState(() => _isTestingEmb = false);
   }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../core/models/lorebook.dart';
 import '../../core/llm/embedding_error_labels.dart';
@@ -101,7 +102,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     final lb = Lorebook(
       id: widget.lorebookId,
       name: _nameController.text.trim().isEmpty
-          ? 'Untitled'
+          ? 'new_lorebook'.tr()
           : _nameController.text.trim(),
       enabled: existing?.enabled ?? true,
       activationScope: existing?.activationScope ?? 'global',
@@ -112,7 +113,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     );
     await ref.read(lorebooksProvider.notifier).updateLorebook(lb);
     if (mounted) {
-      GlazeToast.show(context, 'Saved');
+      GlazeToast.show(context, 'btn_save'.tr());
     }
   }
 
@@ -155,7 +156,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     if (config.endpoint.isEmpty) {
       GlazeToast.show(
         context,
-        'Set up embedding API in Embedding Settings first',
+        'vector_error_config_endpoint'.tr(),
       );
       return;
     }
@@ -164,13 +165,13 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         .where((e) => e.vectorSearch && e.enabled && !e.constant)
         .toList();
     if (vectorEntries.isEmpty) {
-      GlazeToast.show(context, 'No vector-enabled entries to index');
+      GlazeToast.show(context, 'no_entries_found'.tr());
       return;
     }
 
     setState(() {
       _isIndexing = true;
-      _indexStatus = 'Indexing 0/${vectorEntries.length}...';
+      _indexStatus = 'index_progress'.tr(namedArgs: {'done': '0', 'total': '${vectorEntries.length}'});
     });
 
     try {
@@ -181,7 +182,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         config,
         embeddingTarget: _settings?.embeddingTarget ?? 'content',
         onProgress: (current, total, name) {
-          setState(() => _indexStatus = 'Indexing $current/$total...');
+          setState(() => _indexStatus = 'index_progress'.tr(namedArgs: {'done': '$current', 'total': '$total'}));
         },
       );
 
@@ -195,9 +196,15 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           }
         });
         _loadEmbeddingStatuses();
+        final statusParts = [
+          'index_done'.tr(namedArgs: {'count': '${result.indexed}'}),
+          if (result.skipped > 0) 'index_skipped'.tr(namedArgs: {'skipped': '${result.skipped}'}),
+          if (result.failed > 0) 'index_failed'.tr(namedArgs: {'failed': '${result.failed}'}),
+          if (result.rateLimited) ' (${"btn_rate_limited".tr(namedArgs: {"seconds": "${result.retryAfter}"})})',
+        ];
         GlazeToast.show(
           context,
-          'Indexed: ${result.indexed}, Skipped: ${result.skipped}, Failed: ${result.failed}${result.rateLimited ? ' (Rate limited)' : ''}',
+          statusParts.join(),
         );
       }
     } catch (e) {
@@ -207,7 +214,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           _indexStatus = '';
         });
         _loadEmbeddingStatuses();
-        GlazeToast.error(context, 'Indexing failed: ', e);
+        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
       }
     }
   }
@@ -216,13 +223,13 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     await ref.read(apiListProvider.future);
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
-      GlazeToast.show(context, 'Set up embedding API in Embedding Settings first');
+      GlazeToast.show(context, 'vector_error_config_endpoint'.tr());
       return;
     }
 
     setState(() {
       _isIndexing = true;
-      _indexStatus = 'Retrying failed...';
+      _indexStatus = 'btn_retry_failed'.tr();
     });
 
     try {
@@ -234,7 +241,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         retryFailedOnly: true,
         embeddingTarget: _settings?.embeddingTarget ?? 'content',
         onProgress: (current, total, name) {
-          setState(() => _indexStatus = 'Indexing $current/$total...');
+          setState(() => _indexStatus = 'index_progress'.tr(namedArgs: {'done': '$current', 'total': '$total'}));
         },
       );
 
@@ -248,7 +255,13 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           }
         });
         _loadEmbeddingStatuses();
-        GlazeToast.show(context, 'Retried: ${result.indexed}, Skipped: ${result.skipped}, Failed: ${result.failed}${result.rateLimited ? ' (Rate limited)' : ''}');
+        final statusParts = [
+          'index_done'.tr(namedArgs: {'count': '${result.indexed}'}),
+          if (result.skipped > 0) 'index_skipped'.tr(namedArgs: {'skipped': '${result.skipped}'}),
+          if (result.failed > 0) 'index_failed'.tr(namedArgs: {'failed': '${result.failed}'}),
+          if (result.rateLimited) ' (${"btn_rate_limited".tr(namedArgs: {"seconds": "${result.retryAfter}"})})',
+        ];
+        GlazeToast.show(context, statusParts.join());
       }
     } catch (e) {
       if (mounted) {
@@ -257,7 +270,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           _indexStatus = '';
         });
         _loadEmbeddingStatuses();
-        GlazeToast.error(context, 'Retry failed: ', e);
+        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
       }
     }
   }
@@ -265,20 +278,20 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   Future<void> _clearAndReindex() async {
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
-      title: 'Clear & Reindex',
-      bigInfo: const BottomSheetBigInfo(
+      title: 'action_delete_indexes'.tr(),
+      bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_sweep,
-        description: 'Delete all existing embeddings for this lorebook and reindex from scratch?',
+        description: 'action_delete_indexes'.tr(),
       ),
       items: [
         BottomSheetItem(
-          label: 'Reindex',
+          label: 'memory_books_btn_reindex'.tr(),
           isDestructive: true,
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'btn_cancel'.tr(),
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
         ),
@@ -289,19 +302,19 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     await ref.read(apiListProvider.future);
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
-      GlazeToast.show(context, 'Set up embedding API in Embedding Settings first');
+      GlazeToast.show(context, 'vector_error_config_endpoint'.tr());
       return;
     }
 
     final vectorEntries = _entries.where((e) => e.vectorSearch && e.enabled && !e.constant).toList();
     if (vectorEntries.isEmpty) {
-      GlazeToast.show(context, 'No vector-enabled entries to index');
+      GlazeToast.show(context, 'no_entries_found'.tr());
       return;
     }
 
     setState(() {
       _isIndexing = true;
-      _indexStatus = 'Clearing embeddings...';
+      _indexStatus = '${'action_delete_indexes'.tr()}...';
     });
 
     try {
@@ -315,7 +328,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         forceReindex: true,
         embeddingTarget: _settings?.embeddingTarget ?? 'content',
         onProgress: (current, total, name) {
-          setState(() => _indexStatus = 'Indexing $current/$total...');
+          setState(() => _indexStatus = 'index_progress'.tr(namedArgs: {'done': '$current', 'total': '$total'}));
         },
       );
 
@@ -329,13 +342,18 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           }
         });
         _loadEmbeddingStatuses();
-        GlazeToast.show(context, 'Reindexed: ${result.indexed}, Failed: ${result.failed}${result.rateLimited ? ' (Rate limited)' : ''}');
+        final statusParts = [
+          'index_done'.tr(namedArgs: {'count': '${result.indexed}'}),
+          if (result.failed > 0) 'index_failed'.tr(namedArgs: {'failed': '${result.failed}'}),
+          if (result.rateLimited) ' (${"btn_rate_limited".tr(namedArgs: {"seconds": "${result.retryAfter}"})})',
+        ];
+        GlazeToast.show(context, statusParts.join());
       }
     } catch (e) {
       if (mounted) {
         setState(() { _isIndexing = false; _indexStatus = ''; });
         _loadEmbeddingStatuses();
-        GlazeToast.error(context, 'Reindex failed: ', e);
+        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
       }
     }
   }
@@ -355,20 +373,20 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   void _deleteAllIndexes() async {
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
-      title: 'Delete All Indexes',
-      bigInfo: const BottomSheetBigInfo(
+      title: 'action_delete_indexes'.tr(),
+      bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
-        description: 'This will remove all stored embeddings for this lorebook. You will need to re-index entries after.',
+        description: 'action_delete_indexes'.tr(),
       ),
       items: [
         BottomSheetItem(
-          label: 'Delete All',
+          label: 'btn_delete'.tr(),
           isDestructive: true,
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'btn_cancel'.tr(),
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
         ),
@@ -378,7 +396,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
 
     await ref.read(embeddingRepoProvider).deleteBySourceId(widget.lorebookId);
     _loadEmbeddingStatuses();
-    if (mounted) GlazeToast.show(context, 'All indexes deleted');
+    if (mounted) GlazeToast.show(context, 'action_delete_indexes'.tr());
   }
 
   void _toggleEntry(int index) {
@@ -401,7 +419,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
       }
     });
     _save();
-    GlazeToast.show(context, 'Entry settings reset to global defaults');
+    GlazeToast.show(context, 'action_reset'.tr());
   }
 
   void _enableVectorForAll() {
@@ -417,7 +435,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     _loadEmbeddingStatuses();
     GlazeToast.show(
       context,
-      alreadyAll ? 'Vector search disabled for all entries' : 'Vector search enabled for all entries',
+      alreadyAll ? 'action_disable_vector_all'.tr() : 'action_enable_vector_all'.tr(),
     );
   }
 
@@ -430,7 +448,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           builder: (ctx, setDialogState) {
             return AlertDialog(
               backgroundColor: context.cs.surfaceContainerHighest,
-              title: Text('Test Key Matching', style: TextStyle(color: context.cs.onSurface)),
+              title: Text('btn_test_connection'.tr(), style: TextStyle(color: context.cs.onSurface)),
               content: SizedBox(
                 width: 400,
                 child: Column(
@@ -443,7 +461,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                       textInputAction: TextInputAction.newline,
                       style: TextStyle(color: context.cs.onSurface),
                       decoration: InputDecoration(
-                        hintText: 'Type test text...',
+                        hintText: 'placeholder_search_lore'.tr(),
                         hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.05),
@@ -453,7 +471,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                       onChanged: (_) => setDialogState(() {}),
                     ),
                     const SizedBox(height: 12),
-                    Text('Matched entries:', style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12)),
+                    Text('label_entries'.tr(), style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12)),
                     const SizedBox(height: 4),
                     ..._matchEntries(testCtrl.text).map((e) => Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -473,14 +491,14 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                       ),
                     )),
                     if (testCtrl.text.isNotEmpty && _matchEntries(testCtrl.text).isEmpty)
-                      Text('No matches', style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 13)),
+                      Text('no_results'.tr(), style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 13)),
                   ],
                 ),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text('Close', style: TextStyle(color: context.cs.onSurfaceVariant)),
+                  child: Text('btn_close'.tr(), style: TextStyle(color: context.cs.onSurfaceVariant)),
                 ),
               ],
             );
@@ -559,8 +577,8 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         if (lb == null) {
           return Scaffold(
             backgroundColor: context.cs.surface,
-            appBar: AppBar(title: const Text('Not Found')),
-            body: const Center(child: Text('Lorebook not found')),
+            appBar: AppBar(title: Text('no_results'.tr())),
+            body: Center(child: Text('no_lorebooks'.tr())),
           );
         }
         _loadFrom(lb);
@@ -583,7 +601,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Edit Lorebook',
+                          'header_editor'.tr() + ' (' + 'label_lorebooks'.tr() + ')',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -599,7 +617,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                     actions: [
                       IconButton(
                         icon: const Icon(Icons.restore, size: 20),
-                        tooltip: 'Reset Entry Settings to Global',
+                        tooltip: 'action_reset'.tr(),
                         onPressed: _resetEntriesToGlobal,
                       ),
                       IconButton(
@@ -610,8 +628,8 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                           size: 20,
                         ),
                         tooltip: _entries.every((e) => e.vectorSearch || e.constant)
-                            ? 'Disable Vector Search for All'
-                            : 'Enable Vector Search for All',
+                            ? 'action_disable_vector_all'.tr()
+                            : 'action_enable_vector_all'.tr(),
                         onPressed: _entries.isEmpty ? null : _enableVectorForAll,
                       ),
                       if (_isIndexing || _rateLimitCooldown > 0)
@@ -620,7 +638,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                           child: Center(
                             child: Text(
                               _rateLimitCooldown > 0
-                                  ? 'Rate limited ($_rateLimitCooldown s)'
+                                  ? 'btn_rate_limited'.tr(namedArgs: {'seconds': '$_rateLimitCooldown'})
                                   : _indexStatus,
                               style: TextStyle(
                                 fontSize: 12,
@@ -632,12 +650,12 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                        else ...[
                         IconButton(
                           icon: const Icon(Icons.delete_sweep_outlined, size: 20),
-                          tooltip: 'Clear & Reindex (force)',
+                          tooltip: 'action_delete_indexes'.tr(),
                           onPressed: _clearAndReindex,
                         ),
                         IconButton(
                           icon: const Icon(Icons.auto_fix_high, size: 20),
-                          tooltip: 'Index Vector Entries',
+                          tooltip: 'action_index_all'.tr(),
                           onPressed: _indexEntries,
                         ),
                        ],
@@ -653,7 +671,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                       controller: _nameController,
                       style: TextStyle(color: context.cs.onSurface),
                       decoration: InputDecoration(
-                        labelText: 'Name',
+                        labelText: 'placeholder_name'.tr(),
                         labelStyle: TextStyle(color: context.cs.onSurfaceVariant),
                         filled: true,
                         fillColor: Colors.white.withValues(alpha: 0.05),
@@ -677,7 +695,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                           ),
                         IconButton(
                           icon: const Icon(Icons.settings_outlined, size: 18),
-                          tooltip: 'Lorebook Settings',
+                          tooltip: 'menu_app_settings'.tr(),
                           onPressed: () async {
                             final result = await Navigator.push<Map<String, dynamic>>(
                               context,
@@ -692,7 +710,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                               setState(() {
                                 if (result['reset'] == true) {
                                   _settings = null;
-                                } else if (result['settings'] != null) {
+                               } else if (result['settings'] != null) {
                                   _settings = LorebookSettings.fromJson(
                                       result['settings'] as Map<String, dynamic>);
                                 }
@@ -703,7 +721,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.link, size: 18),
-                          tooltip: 'Connections',
+                          tooltip: 'count_bindings'.tr(args: ['2']),
                           onPressed: () {
                             GlazeBottomSheet.show(
                               context,
@@ -713,7 +731,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.science_outlined, size: 18),
-                          tooltip: 'Test Keys',
+                          tooltip: 'btn_test_connection'.tr(),
                           onPressed: _showTestDialog,
                         ),
                       ],
@@ -731,7 +749,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                     fontSize: 14,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Search keys, content...',
+                    hintText: 'placeholder_search_lore'.tr(),
                     hintStyle: TextStyle(
                       color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
                     ),
@@ -771,7 +789,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Vector entries need reindexing',
+                                'vector_reindex_title'.tr(),
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
@@ -780,7 +798,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                               ),
                               SizedBox(height: 2),
                               Text(
-                                '$_missingVectorCount entries without embeddings',
+                                'vector_reindex_desc'.tr(namedArgs: {'count': '$_missingVectorCount'}),
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: context.cs.onSurfaceVariant,
@@ -798,7 +816,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                           ),
                           onPressed: _isIndexing ? null : _indexEntries,
                           child: Text(
-                            _isIndexing ? '...' : 'Index All',
+                            _isIndexing ? '...' : 'btn_index_all'.tr(),
                             style: const TextStyle(fontSize: 12),
                           ),
                         ),
@@ -810,7 +828,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                             side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                           ),
                           onPressed: _isIndexing ? null : _retryFailed,
-                          child: const Text('Retry Failed', style: TextStyle(fontSize: 12)),
+                          child: Text('btn_retry_failed'.tr(), style: const TextStyle(fontSize: 12)),
                         ),
                         const SizedBox(width: 6),
                         OutlinedButton(
@@ -820,7 +838,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                             side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),
                           ),
                           onPressed: _isIndexing ? null : _deleteAllIndexes,
-                          child: const Text('Delete Indexes', style: TextStyle(fontSize: 12)),
+                          child: Text('action_delete_indexes'.tr(), style: const TextStyle(fontSize: 12)),
                         ),
                       ],
                     ),
@@ -839,12 +857,12 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'No entries yet',
+                              'no_entries_found'.tr(),
                               style: TextStyle(color: context.cs.onSurfaceVariant),
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Tap + to add one',
+                              'empty_lorebooks_desc'.tr(),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: context.cs.onSurfaceVariant,

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,7 +34,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   void _blockClose() {
     GlazeToast.show(
       context,
-      _isExporting ? 'Export in progress' : 'Import in progress',
+      _isExporting ? 'exporting_data'.tr() : 'importing_data'.tr(),
       isError: true,
     );
   }
@@ -47,7 +48,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
         _blockClose();
       },
       child: SheetView(
-        title: 'Backups',
+        title: 'menu_backups'.tr(),
         showBack: true,
         fitContent: true,
         onBack: () {
@@ -81,7 +82,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     if (_isImporting && !_importComplete) {
       return _ProgressView(
         key: const ValueKey('progress'),
-        title: 'Importing Data',
+        title: 'importing_data'.tr(),
         subtitle: _importProgressText,
         progress: _importStage / _totalStages,
       );
@@ -89,10 +90,9 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     if (_importComplete) {
       return _SuccessView(
         key: const ValueKey('complete'),
-        title: 'Restore Complete',
-        subtitle:
-            'Restore successful! The app will now reload to apply changes.',
-        buttonText: 'Reload App',
+        title: 'backup_success_title'.tr(),
+        subtitle: 'backup_success_desc'.tr(),
+        buttonText: 'btn_reload'.tr(),
         onPressed: _reloadApp,
       );
     }
@@ -112,12 +112,12 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Backup saved to $path')),
+          SnackBar(content: Text('${'msg_saved_to'.tr()} $path')),
         );
       }
     } catch (e) {
       if (mounted) {
-        GlazeToast.error(context, 'Export failed: ', e);
+        GlazeToast.error(context, 'settings_err_failed'.tr(), e);
       }
     } finally {
       if (mounted) setState(() => _isExporting = false);
@@ -138,20 +138,20 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     if (!mounted) return;
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
-      title: 'Replace all data?',
+      title: 'confirm_restore'.tr(),
       bigInfo: const BottomSheetBigInfo(
         icon: Icons.warning_amber_rounded,
-        description: 'This will overwrite current data. This cannot be undone.',
+        description: '', // Desc is already in title of confirm_restore
       ),
       items: [
         BottomSheetItem(
-          label: 'Continue',
+          label: 'btn_yes'.tr(),
           isDestructive: true,
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'btn_no'.tr(),
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
         ),
@@ -165,14 +165,14 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       _isImporting = true;
       _importComplete = false;
       _importStage = 0;
-      _importProgressText = 'Preparing import...';
+      _importProgressText = 'backup_progress_preparing'.tr();
     });
 
     try {
       if (ext == 'glz' || ext == 'json' || ext == 'zip' || ext == 'tbk') {
         setState(() {
           _importStage = 1;
-          _importProgressText = 'Parsing backup...';
+          _importProgressText = 'backup_progress_reading'.tr();
         });
         final file = File(path);
         final bytes = await file.readAsBytes();
@@ -201,7 +201,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
         _isImporting = false;
         _importComplete = false;
       });
-      GlazeToast.errorWithCopy(context, 'Restore failed: ', '$e\n\n$st');
+      GlazeToast.errorWithCopy(context, 'settings_err_failed'.tr(), '$e\n\n$st');
     }
   }
 
@@ -239,12 +239,12 @@ class _NormalView extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _Section(
-            title: 'Import',
+            title: 'menu_import'.tr(),
             children: [
               _BsButton(
                 onPressed: onImport,
                 icon: Icons.file_upload_outlined,
-                label: 'Import Backup',
+                label: 'menu_import'.tr(),
                 primary: true,
               ),
               const SizedBox(height: 4),
@@ -268,19 +268,19 @@ class _NormalView extends StatelessWidget {
           ),
           const _Separator(),
           _Section(
-            title: 'Export',
+            title: 'menu_export'.tr(),
             children: [
               _BsButton(
                 onPressed: isExporting ? null : onExport,
                 icon: Icons.file_download_outlined,
-                label: isExporting ? 'Exporting...' : 'Export Data (.glz)',
+                label: isExporting ? 'backup_progress_preparing'.tr() : 'menu_export'.tr(),
                 primary: false,
                 loading: isExporting,
               ),
-              const _Hint(
+              _Hint(
                 lines: [
                   _HintLine(
-                    text: 'Create a full backup of your current application state.',
+                    text: 'backup_hint_export'.tr(),
                   ),
                 ],
               ),

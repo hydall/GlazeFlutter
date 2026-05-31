@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -159,9 +160,9 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
                   border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Center(
+                child: Center(
                   child: Text(
-                    'Модель не поддерживает референсы',
+                    'imggen_no_refs_hint'.tr(),
                     style: TextStyle(
                       color: Colors.red,
                       fontWeight: FontWeight.w500,

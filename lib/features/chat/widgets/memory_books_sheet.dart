@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -118,9 +119,9 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Memory Books', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.cs.onSurface)),
+                    Text('magic_memory_books'.tr(), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.cs.onSurface)),
                     const SizedBox(height: 2),
-                    Text('Session ${widget.sessionId.substring(0, 8)}...', style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant)),
+                    Text('${'memory_books_session'.tr()} ${widget.sessionId.substring(0, 8)}...', style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant)),
                   ],
                 ),
               ),
@@ -158,7 +159,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Search type', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.cs.onSurface)),
+            Text('label_search_type'.tr(), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: context.cs.onSurface)),
             Row(
               children: [
                 Text(_ctrl.searchTypeLabel, style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant)),
@@ -177,11 +178,11 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   Widget _buildStatusSummary(int active, int needsRebuild, int drafts) {
     return Row(
       children: [
-        Expanded(child: _statusCard('$active', 'Active', Colors.green)),
+        Expanded(child: _statusCard('$active', 'memory_books_status_active'.tr(), Colors.green)),
         const SizedBox(width: 8),
-        Expanded(child: _statusCard('$needsRebuild', 'Rebuild', Colors.orange)),
+        Expanded(child: _statusCard('$needsRebuild', 'memory_books_entry_needs_rebuild'.tr(), Colors.orange)),
         const SizedBox(width: 8),
-        Expanded(child: _statusCard('$drafts', 'Drafts', Colors.amber)),
+        Expanded(child: _statusCard('$drafts', 'memory_books_status_drafts'.tr(), Colors.amber)),
       ],
     );
   }
@@ -214,7 +215,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
               child: OutlinedButton.icon(
                 onPressed: _openSettings,
                 icon: Icon(Icons.settings, size: 16, color: context.cs.onSurfaceVariant),
-                label: Text('Settings', style: TextStyle(color: context.cs.onSurface)),
+                label: Text('title_settings'.tr(), style: TextStyle(color: context.cs.onSurface)),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -227,7 +228,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
               child: OutlinedButton.icon(
                 onPressed: _scanChat,
                 icon: Icon(Icons.search, size: 16, color: context.cs.onSurfaceVariant),
-                label: Text('Scan Chat', style: TextStyle(color: context.cs.onSurface)),
+                label: Text('memory_books_btn_scan_chat'.tr(), style: TextStyle(color: context.cs.onSurface)),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -239,8 +240,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
             Expanded(
               child: FilledButton.icon(
                 onPressed: _addEntry,
-                icon: Icon(Icons.add, size: 16),
-                label: Text('Add'),
+                icon: const Icon(Icons.add, size: 16),
+                label: Text('action_add'.tr()),
                 style: FilledButton.styleFrom(
                   backgroundColor: context.cs.primary,
                   foregroundColor: Colors.black,
@@ -258,7 +259,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
               child: OutlinedButton.icon(
                 onPressed: _ctrl.isReindexing ? null : _reindexAll,
                 icon: Icon(Icons.storage, size: 16, color: context.cs.onSurfaceVariant),
-                label: Text(_ctrl.isReindexing ? 'Indexing...' : 'Reindex All', style: TextStyle(color: context.cs.onSurface)),
+                label: Text(_ctrl.isReindexing ? 'btn_indexing'.tr() : 'memory_books_btn_reindex'.tr(), style: TextStyle(color: context.cs.onSurface)),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -271,7 +272,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
               child: OutlinedButton.icon(
                 onPressed: _ctrl.isReindexing ? null : _deleteAllMemoryIndexes,
                 icon: Icon(Icons.delete_sweep, size: 16, color: Colors.redAccent.withValues(alpha: 0.7)),
-                label: Text('Clear Indexes', style: TextStyle(color: context.cs.onSurfaceVariant)),
+                label: Text('action_delete_indexes'.tr(), style: TextStyle(color: context.cs.onSurfaceVariant)),
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.2)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -298,8 +299,8 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
         children: [
           Text(
             isGenerating
-                ? 'Generating drafts...'
-                : '${needsGen.length} draft${needsGen.length > 1 ? 's' : ''} need generation',
+                ? 'memory_books_badge_generating'.tr()
+                : '${needsGen.length} ${'memory_books_needs_generation'.tr()}',
             style: TextStyle(fontSize: 14, color: context.cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
@@ -310,7 +311,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
               foregroundColor: Colors.black,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
-            child: Text(isGenerating ? 'Generate Remaining' : 'Generate Batch'),
+            child: Text(isGenerating ? 'memory_books_btn_generate_remaining'.tr() : 'memory_books_btn_generate_batch'.tr()),
           ),
         ],
       ),
@@ -325,13 +326,13 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       children: [
         Row(
           children: [
-            Text('Pending Drafts', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.cs.onSurface)),
+            Text('memory_books_section_pending'.tr(), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.cs.onSurface)),
             const Spacer(),
             if (drafts.length > 1)
               TextButton(
                 onPressed: _deleteAllDrafts,
                 style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
-                child: Text('Delete All', style: TextStyle(fontSize: 12)),
+                child: Text('memory_books_delete_all_pending'.tr(), style: const TextStyle(fontSize: 12)),
               ),
             const SizedBox(width: 8),
             Container(
@@ -380,7 +381,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      draft.title.isNotEmpty ? draft.title : 'Untitled Draft',
+                      draft.title.isNotEmpty ? draft.title : 'memory_books_untitled_draft'.tr(),
                       style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: context.cs.onSurface),
                     ),
                     const SizedBox(height: 2),
@@ -405,23 +406,23 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
           ],
           if (draft.error != null && needsRegen) ...[
             const SizedBox(height: 4),
-            Text(draft.error!, style: TextStyle(fontSize: 11, color: Colors.redAccent), maxLines: 2, overflow: TextOverflow.ellipsis),
+            Text(draft.error!, style: const TextStyle(fontSize: 11, color: Colors.redAccent), maxLines: 2, overflow: TextOverflow.ellipsis),
           ],
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               if (isGen)
-                _actionBtn('Stop', Colors.amber, () => _cancelDraft(draft.id))
+                _actionBtn('memory_books_btn_stop'.tr(), Colors.amber, () => _cancelDraft(draft.id))
               else if (needsGen || needsRegen)
-                _actionBtn('Generate', Colors.amber, () => _generateDraft(draft.id))
+                _actionBtn('memory_books_btn_generate'.tr(), Colors.amber, () => _generateDraft(draft.id))
               else if (hasContent)
-                _actionBtn('Approve', Colors.green, () => _approveDraft(draft.id)),
+                _actionBtn('memory_books_btn_approve'.tr(), Colors.green, () => _approveDraft(draft.id)),
               const SizedBox(width: 6),
               if (hasContent && !isGen)
-                _actionBtn('Edit', context.cs.primary, () => _editDraft(draft)),
+                _actionBtn('action_edit'.tr(), context.cs.primary, () => _editDraft(draft)),
               const SizedBox(width: 6),
-              _actionBtn('Delete', Colors.redAccent, () => _deleteDraft(draft.id)),
+              _actionBtn('btn_delete'.tr(), Colors.redAccent, () => _deleteDraft(draft.id)),
             ],
           ),
         ],
@@ -448,13 +449,13 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       final start = _ctrl.genStartTimes[draft.id];
       if (start != null) {
         final elapsed = DateTime.now().difference(start).inMilliseconds / 1000.0;
-        return 'Generating... ${elapsed.toStringAsFixed(1)}s';
+        return "${'memory_books_generating_elapsed'.tr()} ${elapsed.toStringAsFixed(1)}s";
       }
-      return 'Generating...';
+      return 'memory_books_generating_elapsed'.tr();
     }
-    if (draft.status == 'needs_regeneration') return 'Needs regeneration';
-    if (draft.content.isEmpty && draft.status == 'pending_generation') return 'Needs generation';
-    if (draft.content.isNotEmpty) return 'Pending approval';
+    if (draft.status == 'needs_regeneration') return 'memory_books_badge_needs_regen'.tr();
+    if (draft.content.isEmpty && draft.status == 'pending_generation') return 'memory_books_needs_generation'.tr();
+    if (draft.content.isNotEmpty) return 'memory_books_pending_approval'.tr();
     return draft.status;
   }
 
@@ -467,12 +468,12 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
 
   Widget _draftStatusBadge(MemoryDraft draft, bool isGen) {
     final (String label, Color color) = isGen
-        ? ('GEN', Colors.amber)
+        ? ('memory_books_badge_generating'.tr(), Colors.amber)
         : draft.status == 'needs_regeneration'
-            ? ('REGEN', Colors.redAccent)
+            ? ('memory_books_badge_needs_regen'.tr(), Colors.redAccent)
             : draft.content.isEmpty && draft.status == 'pending_generation'
-                ? ('TODO', Colors.amber)
-                : ('DRAFT', Colors.cyan);
+                ? ('memory_books_badge_needs_gen'.tr(), Colors.amber)
+                : ('memory_books_badge_draft'.tr(), Colors.cyan);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -491,7 +492,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       children: [
         Row(
           children: [
-            Text('Approved Memories', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.cs.onSurface)),
+            Text('memory_books_section_approved'.tr(), style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.cs.onSurface)),
             const Spacer(),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -512,7 +513,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(
-              child: Text('No approved memories yet', style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant)),
+              child: Text('memory_books_no_entries'.tr(), style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant)),
             ),
           )
         else
@@ -543,12 +544,12 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      entry.title.isNotEmpty ? entry.title : 'Untitled Memory',
+                      entry.title.isNotEmpty ? entry.title : 'memory_books_untitled_memory'.tr(),
                       style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: isActive ? context.cs.onSurface : context.cs.onSurfaceVariant),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${entry.status == "needs_rebuild" ? "Needs rebuild" : "Active"} • ${entry.messageIds.length} msgs • ${entry.keys.take(3).join(", ")}',
+                      '${entry.status == "needs_rebuild" ? "memory_books_entry_needs_rebuild".tr() : "memory_books_entry_active".tr()} • ${entry.messageIds.length} msgs • ${entry.keys.take(3).join(", ")}',
                       style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
                     ),
                   ],
@@ -570,9 +571,9 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              _actionBtn('Edit', context.cs.primary, () => _editEntry(entry)),
+              _actionBtn('action_edit'.tr(), context.cs.primary, () => _editEntry(entry)),
               const SizedBox(width: 6),
-              _actionBtn('Delete', Colors.redAccent, () => _deleteEntry(entry.id)),
+              _actionBtn('btn_delete'.tr(), Colors.redAccent, () => _deleteEntry(entry.id)),
             ],
           ),
         ],
@@ -624,7 +625,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
         if (mounted) {
           setState(() {});
           _stopElapsedTimer();
-          GlazeToast.show(context, 'Generation failed: $error');
+          GlazeToast.show(context, "${'error_generation'.tr()}: $error");
         }
       },
     );
@@ -653,7 +654,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
         if (mounted) {
           setState(() {});
           _stopElapsedTimer();
-          GlazeToast.show(context, 'Generation failed: $error');
+          GlazeToast.show(context, "${'error_generation'.tr()}: $error");
         }
       },
     );
@@ -683,7 +684,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     final currentSettings = _ctrl.globalSettingsAsBookSettings();
     final newResult = await GlazeBottomSheet.show<MemorySettingsSheetResult>(
       context,
-      title: 'Memory Settings',
+      title: 'memory_books_btn_gen_settings'.tr(),
       child: MemoryGenerationSettingsSheet(settings: currentSettings),
     );
     if (newResult != null && mounted) {
@@ -710,20 +711,20 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
   void _deleteAllMemoryIndexes() async {
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
-      title: 'Delete All Indexes',
-      bigInfo: const BottomSheetBigInfo(
+      title: 'action_delete_indexes'.tr(),
+      bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
-        description: 'Remove all stored memory embeddings? You will need to re-index after.',
+        description: 'theme_confirm_delete_preset'.tr(),
       ),
       items: [
         BottomSheetItem(
-          label: 'Delete All',
+          label: 'btn_delete'.tr(),
           isDestructive: true,
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'btn_cancel'.tr(),
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
         ),
@@ -731,13 +732,13 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     );
     if (confirmed != true) return;
     await _ctrl.deleteAllMemoryIndexes();
-    if (mounted) GlazeToast.show(context, 'All memory indexes deleted');
+    if (mounted) GlazeToast.show(context, 'export_success'.tr());
   }
 
   void _editEntry(MemoryEntry entry) async {
     final result = await GlazeBottomSheet.show<MemoryEntry>(
       context,
-      title: entry.title.isNotEmpty ? entry.title : 'Edit Memory',
+      title: entry.title.isNotEmpty ? entry.title : 'action_edit'.tr(),
       child: MemoryEntryEditorSheet(entry: entry),
     );
     if (result != null && mounted) {
@@ -754,7 +755,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     );
     final result = await GlazeBottomSheet.show<MemoryEntry>(
       context,
-      title: 'New Memory',
+      title: 'action_create_new'.tr(),
       child: MemoryEntryEditorSheet(entry: entry),
     );
     if (result != null && mounted) {
@@ -775,7 +776,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     );
     final result = await GlazeBottomSheet.show<MemoryEntry>(
       context,
-      title: 'Edit Draft',
+      title: 'action_edit'.tr(),
       child: MemoryEntryEditorSheet(entry: entry),
     );
     if (result != null && mounted) {

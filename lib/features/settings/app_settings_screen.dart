@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -24,7 +25,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     final settingsAsync = ref.watch(appSettingsProvider);
 
     return GlazeScaffold(
-      title: _currentScreen == 'main' ? 'Settings' : 'Interface Settings',
+      title: _currentScreen == 'main' ? 'section_settings'.tr() : 'menu_interface_settings'.tr(),
       onBack: () {
         if (_currentScreen == 'interface') {
           setState(() => _currentScreen = 'main');
@@ -51,11 +52,11 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       children: [
         const SizedBox(height: 12),
         MenuGroup(
-          header: 'General',
+          header: 'tab_general'.tr(),
           items: [
             MenuItem(
               icon: Icons.palette_outlined,
-              label: 'Themes',
+              label: 'theme_presets'.tr(),
               trailing: Container(
                 width: 12,
                 height: 12,
@@ -68,28 +69,28 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             ),
             MenuItem(
               icon: Icons.brightness_6_outlined,
-              label: 'Theme Mode',
+              label: 'theme_title'.tr(),
               value: _themeModeLabel(ref.watch(themeProvider).mode),
               onTap: () => _showThemeModePicker(context, ref),
             ),
             MenuItem(
               icon: Icons.language_outlined,
-              label: 'Language',
+              label: 'menu_language'.tr(),
               value: s.language == 'en' ? 'English' : 'Русский',
               onTap: () => _showLanguagePicker(context, ref, s),
             ),
             MenuItem(
               icon: Icons.notifications_none_outlined,
-              label: 'Notifications',
+              label: 'menu_notifications'.tr(),
               onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Notification settings not implemented')),
+                  SnackBar(content: Text('settings_notifications_not_implemented'.tr())),
                 );
               },
             ),
             MenuItem(
               icon: Icons.settings_outlined,
-              label: 'Interface Settings',
+              label: 'menu_interface_settings'.tr(),
               trailing: const Icon(Icons.chevron_right,
                   size: 20, color: Color(0xFF99A2AD)),
               onTap: () => setState(() => _currentScreen = 'interface'),
@@ -108,24 +109,24 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         MenuGroup(
           items: [
             MenuSwitchItem(
-              label: 'Battery Saver UI',
-              description: 'Applies lower-animation, lower-update chat rendering',
+              label: 'menu_battery_saver_ui'.tr(),
+              description: 'desc_battery_saver_ui'.tr(),
               value: s.batterySaver,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(batterySaver: v)),
             ),
             MenuSwitchItem(
-              label: 'Enter to Send',
-              description: 'Press Enter to send message. Applies only to physical keyboards.',
+              label: 'menu_enter_to_send'.tr(),
+              description: 'desc_enter_to_send'.tr(),
               value: s.enterToSend,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(enterToSend: v)),
             ),
             MenuSwitchItem(
-              label: 'Virtual Keyboard Send',
-              description: 'Show Send button instead of Enter on virtual keyboards',
+              label: 'menu_virtual_keyboard_send'.tr(),
+              description: 'desc_virtual_keyboard_send'.tr(),
               value: s.virtualKeyboardSend,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
@@ -134,27 +135,27 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           ],
         ),
         MenuGroup(
-          header: 'Interface Settings',
+          header: 'menu_interface_settings'.tr(),
           items: [
             MenuSwitchItem(
-              label: 'Group Dialogs',
-              description: 'Groups all sessions by character, sorted by latest message',
+              label: 'menu_dialog_grouping'.tr(),
+              description: 'desc_dialog_grouping'.tr(),
               value: s.groupDialogs,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(groupDialogs: v)),
             ),
             MenuSwitchItem(
-              label: 'Hide Tooltips',
-              description: 'Hides contextual help buttons (?) across the app',
+              label: 'menu_hide_help_tips'.tr(),
+              description: 'desc_hide_help_tips'.tr(),
               value: s.hideTooltips,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(hideTooltips: v)),
             ),
             MenuSwitchItem(
-              label: 'Show Our Picks',
-              description: 'Shows "Our Picks" card at the beginning of My Characters list',
+              label: 'menu_show_our_picks'.tr(),
+              description: 'desc_show_our_picks'.tr(),
               value: s.showOurPicks,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
@@ -163,42 +164,42 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           ],
         ),
         MenuGroup(
-          header: 'Message Settings',
+          header: 'menu_message_settings'.tr(),
           items: [
             MenuSwitchItem(
-              label: 'Disable Swipe Regeneration',
-              description: 'Disables regenerating messages by swiping left',
+              label: 'menu_disable_swipe_regeneration'.tr(),
+              description: 'desc_disable_swipe_regeneration'.tr(),
               value: s.disableSwipeRegeneration,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(disableSwipeRegeneration: v)),
             ),
             MenuItem(
-              label: 'Chat Layout',
+              label: 'menu_chat_layout'.tr(),
               value: ref.watch(themeProvider).activePreset.chatLayout == 'bubble'
-                  ? 'Bubbles'
-                  : 'Default',
+                  ? 'layout_bubble'.tr()
+                  : 'layout_default'.tr(),
               onTap: () => _showLayoutPicker(context, ref),
             ),
             MenuSwitchItem(
-              label: 'Hide Message ID',
-              description: 'Hides the unique message identifier in the chat interface',
+              label: 'menu_hide_msg_id'.tr(),
+              description: 'desc_hide_msg_id'.tr(),
               value: s.hideMessageId,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(hideMessageId: v)),
             ),
             MenuSwitchItem(
-              label: 'Hide Gen Time',
-              description: 'Hides the generation time statistics for AI messages',
+              label: 'menu_hide_gen_time'.tr(),
+              description: 'desc_hide_gen_time'.tr(),
               value: s.hideGenerationTime,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(hideGenerationTime: v)),
             ),
             MenuSwitchItem(
-              label: 'Hide Token Count',
-              description: 'Hides token usage statistics attached to messages',
+              label: 'menu_hide_token_count'.tr(),
+              description: 'desc_hide_token_count'.tr(),
               value: s.hideTokenCount,
               onChanged: (v) => ref
                   .read(appSettingsProvider.notifier)
@@ -213,11 +214,11 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   String _themeModeLabel(ThemeMode mode) {
     switch (mode) {
       case ThemeMode.dark:
-        return 'Dark';
+        return 'theme_dark'.tr();
       case ThemeMode.light:
-        return 'Light';
+        return 'theme_light'.tr();
       case ThemeMode.system:
-        return 'System';
+        return 'theme_system'.tr();
     }
   }
 
@@ -225,7 +226,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     final current = ref.read(themeProvider).mode;
     GlazeBottomSheet.show(
       context,
-      title: 'Theme Mode',
+      title: 'theme_title'.tr(),
       items: ThemeMode.values
           .map((mode) => BottomSheetItem(
                 label: _themeModeLabel(mode),
@@ -258,7 +259,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     final current = ref.read(themeProvider).accentColor;
     GlazeBottomSheet.show(
       context,
-      title: 'Accent Color',
+      title: 'theme_accent_color'.tr(),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: Wrap(
@@ -292,7 +293,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   void _showLanguagePicker(BuildContext context, WidgetRef ref, AppSettings s) {
     GlazeBottomSheet.show(
       context,
-      title: 'Language',
+      title: 'menu_language'.tr(),
       items: [
         BottomSheetItem(
           label: 'English',
@@ -325,12 +326,12 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   void _showLayoutPicker(BuildContext context, WidgetRef ref) {
     final preset = ref.read(themeProvider).activePreset;
     final current = preset.chatLayout;
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
-      title: 'Chat Layout',
+      title: 'menu_chat_layout'.tr(),
       items: [
         BottomSheetItem(
-          label: 'Default',
+          label: 'layout_default'.tr(),
           icon: current == 'default'
               ? Icons.radio_button_checked
               : Icons.radio_button_off,
@@ -345,7 +346,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           },
         ),
         BottomSheetItem(
-          label: 'Bubbles',
+          label: 'layout_bubble'.tr(),
           icon: current == 'bubble'
               ? Icons.radio_button_checked
               : Icons.radio_button_off,

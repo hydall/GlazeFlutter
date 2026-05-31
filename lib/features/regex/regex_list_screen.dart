@@ -8,6 +8,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../core/models/preset.dart';
 import '../../core/services/file_export_service.dart';
@@ -152,7 +153,7 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
       items: [
         BottomSheetItem(
           icon: Icons.download_outlined,
-          label: 'Export',
+          label: 'action_export'.tr(),
           onTap: () async {
             Navigator.of(context, rootNavigator: true).pop();
             await _exportScript(context, script);
@@ -161,7 +162,7 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
         BottomSheetItem(
           icon: Icons.delete_outline,
           iconColor: const Color(0xFFFF4444),
-          label: 'Delete',
+          label: 'action_delete_msg'.tr(),
           isDestructive: true,
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
@@ -175,11 +176,11 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
   void _showAddMenu(BuildContext context) {
     GlazeBottomSheet.show<void>(
       context,
-      title: 'Regex Scripts',
+      title: 'menu_regex'.tr(),
       items: [
         BottomSheetItem(
           icon: Icons.label_outline,
-          label: 'Add to Preset',
+          label: 'regex_add_to_preset'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _showDestinationMenu(context, toPreset: true);
@@ -187,7 +188,7 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
         ),
         BottomSheetItem(
           icon: Icons.public,
-          label: 'Add Globally',
+          label: 'regex_add_globally'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _showDestinationMenu(context, toPreset: false);
@@ -205,9 +206,9 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
       final preset = activePresetId != null
           ? presets.where((p) => p.id == activePresetId).firstOrNull
           : presets.firstOrNull;
-      title = preset?.name ?? 'Active Preset';
+      title = preset?.name ?? 'label_active_preset'.tr();
     } else {
-      title = 'Global Regexes';
+      title = 'regex_global_scripts'.tr();
     }
 
     GlazeBottomSheet.show<void>(
@@ -216,7 +217,7 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
       items: [
         BottomSheetItem(
           icon: Icons.add,
-          label: 'Create New',
+          label: 'action_create_new'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             if (toPreset) {
@@ -231,7 +232,7 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
         ),
         BottomSheetItem(
           icon: Icons.upload_file_outlined,
-          label: 'Import from File',
+          label: 'action_import'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _importRegex(context, globally: !toPreset);
@@ -249,9 +250,9 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
     final filename = 'regex-$safe.json';
     try {
       await FileExportService.export(data: json, filename: filename, subfolder: 'regexes');
-      if (context.mounted) GlazeToast.show(context, 'Exported');
+      if (context.mounted) GlazeToast.show(context, 'export_success'.tr());
     } catch (e) {
-      if (context.mounted) GlazeToast.error(context, 'Export failed: ', e);
+      if (context.mounted) GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
     }
   }
 
@@ -290,23 +291,23 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
       }
 
       if (combinedRaw.isEmpty) {
-        if (context.mounted) GlazeToast.show(context, 'No regex scripts found');
+        if (context.mounted) GlazeToast.show(context, 'no_results'.tr());
         return;
       }
 
       if (globally) {
         await ref.read(globalRegexProvider.notifier).importFromJsBackup(combinedRaw);
-        if (context.mounted) GlazeToast.show(context, 'Imported ${combinedRaw.length} script(s) globally');
+        if (context.mounted) GlazeToast.show(context, 'import_success'.tr());
       } else {
         final activePresetId = ref.read(activePresetIdProvider);
         if (activePresetId == null) {
-          if (context.mounted) GlazeToast.show(context, 'No active preset');
+          if (context.mounted) GlazeToast.show(context, 'label_active_preset'.tr());
           return;
         }
         final presets = ref.read(presetListProvider).value ?? [];
         final preset = presets.where((p) => p.id == activePresetId).firstOrNull;
         if (preset == null) {
-          if (context.mounted) GlazeToast.show(context, 'Preset not found');
+          if (context.mounted) GlazeToast.show(context, 'no_results'.tr());
           return;
         }
         final newRegexes = _normalizeRawRegexList(combinedRaw);
@@ -314,11 +315,11 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
           preset.copyWith(regexes: [...preset.regexes, ...newRegexes]),
         );
         if (context.mounted) {
-          GlazeToast.show(context, 'Imported ${newRegexes.length} script(s) to "${preset.name}"');
+          GlazeToast.show(context, 'import_success'.tr());
         }
       }
     } catch (e) {
-      if (context.mounted) GlazeToast.error(context, 'Import failed: ', e);
+      if (context.mounted) GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
     }
   }
 
@@ -364,7 +365,7 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
 
     return SheetView(
       startExpanded: widget.startExpanded,
-      title: isEdit ? 'Regex Editor' : 'Regex Scripts',
+      title: isEdit ? 'regex_editor'.tr() : 'menu_regex'.tr(),
       showBack: isEdit || widget.startExpanded,
       onBack: isEdit ? _goBack : _goBackFromList,
       body: isEdit && _activeScript != null
@@ -402,7 +403,7 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
       ),
       children: [
         if (presetRegexes.isNotEmpty) ...[
-          const _SectionTitle('Preset Regexes'),
+          _SectionTitle('regex_preset_scripts'.tr()),
           if (activePreset != null)
             _PresetChip(
               presetName: activePreset.name,
@@ -417,7 +418,7 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
             ),
           const SizedBox(height: 16),
         ],
-        const _SectionTitle('Global Regexes'),
+        _SectionTitle('regex_global_scripts'.tr()),
         if (globalRegexes.isEmpty)
           const _EmptyState()
         else
@@ -587,7 +588,7 @@ class _EmptyState extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 32),
       child: Center(
         child: Text(
-          'No scripts',
+          'no_results'.tr(),
           style: TextStyle(color: context.cs.onSurfaceVariant),
         ),
       ),
@@ -641,14 +642,14 @@ class _RegexEditViewState extends State<_RegexEditView> {
   void _update(PresetRegex updated) => widget.onChanged(updated);
 
   void _openMacroSelector() {
-    const options = [
-      ('0', "Don't substitute"),
-      ('1', 'Substitute raw'),
-      ('2', 'Substitute escaped'),
+    final options = [
+      ('0', "regex_macro_none".tr()),
+      ('1', 'regex_macro_raw'.tr()),
+      ('2', 'regex_macro_escaped'.tr()),
     ];
     GlazeBottomSheet.show<void>(
       context,
-      title: 'Macros in Find Regex',
+      title: 'regex_macros_find'.tr(),
       items: options.map((o) {
         return BottomSheetItem(
           label: o.$2,
@@ -675,12 +676,12 @@ class _RegexEditViewState extends State<_RegexEditView> {
       ),
       children: [
         _MenuGroup(
-          title: 'Script Settings',
+          title: 'regex_script_settings'.tr(),
           children: [
-            _SettingsTextField(label: 'Script Name', controller: _nameCtrl, onChanged: (v) => _update(s.copyWith(name: v))),
-            _SettingsTextField(label: 'Find Regex', controller: _regexCtrl, onChanged: (v) => _update(s.copyWith(regex: v))),
-            _SettingsTextField(label: 'Replace With', controller: _replacementCtrl, onChanged: (v) => _update(s.copyWith(replacement: v)), maxLines: 3),
-            _SettingsTextField(label: 'Trim Out', controller: _trimOutCtrl, onChanged: (v) => _update(s.copyWith(trimOut: v)), maxLines: 2),
+            _SettingsTextField(label: 'regex_script_name'.tr(), controller: _nameCtrl, onChanged: (v) => _update(s.copyWith(name: v))),
+            _SettingsTextField(label: 'regex_find'.tr(), controller: _regexCtrl, onChanged: (v) => _update(s.copyWith(regex: v))),
+            _SettingsTextField(label: 'regex_replace_with'.tr(), controller: _replacementCtrl, onChanged: (v) => _update(s.copyWith(replacement: v)), maxLines: 3),
+            _SettingsTextField(label: 'regex_trim_out'.tr(), controller: _trimOutCtrl, onChanged: (v) => _update(s.copyWith(trimOut: v)), maxLines: 2),
           ],
         ),
         const SizedBox(height: 12),
@@ -703,17 +704,17 @@ class _RegexEditViewState extends State<_RegexEditView> {
   }
 
   Widget _buildCol1(BuildContext context, PresetRegex s) {
-    const placements = [
-      (1, 'User Input'),
-      (2, 'AI Output'),
-      (3, 'Slash Commands'),
-      (5, 'World Info'),
-      (6, 'Reasoning'),
+    final placements = [
+      (1, 'regex_user_input'.tr()),
+      (2, 'regex_ai_output'.tr()),
+      (3, 'regex_slash_commands'.tr()),
+      (5, 'regex_world_info'.tr()),
+      (6, 'regex_reasoning'.tr()),
     ];
     return Column(
       children: [
         _MenuGroup(
-          title: 'Affects',
+          title: 'regex_affects'.tr(),
           compact: true,
           children: placements.map((opt) {
             return _CheckboxOption(
@@ -732,7 +733,7 @@ class _RegexEditViewState extends State<_RegexEditView> {
           children: [
             Expanded(
               child: _DepthInput(
-                label: 'Min Depth',
+                label: 'regex_min_depth'.tr(),
                 controller: _minDepthCtrl,
                 onChanged: (v) => _update(s.copyWith(minDepth: v)),
               ),
@@ -740,7 +741,7 @@ class _RegexEditViewState extends State<_RegexEditView> {
             const SizedBox(width: 12),
             Expanded(
               child: _DepthInput(
-                label: 'Max Depth',
+                label: 'regex_max_depth'.tr(),
                 controller: _maxDepthCtrl,
                 onChanged: (v) => _update(s.copyWith(maxDepth: v)),
               ),
@@ -752,23 +753,23 @@ class _RegexEditViewState extends State<_RegexEditView> {
   }
 
   Widget _buildCol2(BuildContext context, PresetRegex s) {
-    const ephemeralities = [
-      (1, 'Alter Chat Display'),
-      (2, 'Alter Outgoing Prompt'),
+    final ephemeralities = [
+      (1, 'regex_alter_display'.tr()),
+      (2, 'regex_alter_prompt'.tr()),
     ];
     final macroLabel = switch (s.macroRules) {
-      '1' => 'Substitute raw',
-      '2' => 'Substitute escaped',
-      _ => "Don't substitute",
+      '1' => 'regex_macro_raw'.tr(),
+      '2' => 'regex_macro_escaped'.tr(),
+      _ => "regex_macro_none".tr(),
     };
     return Column(
       children: [
         _MenuGroup(
-          title: 'Other Options',
+          title: 'regex_other_options'.tr(),
           compact: true,
           children: [
             _CheckboxOption(
-              label: 'Run On Edit',
+              label: 'regex_run_on_edit'.tr(),
               value: s.runOnEdit,
               onChanged: (v) => _update(s.copyWith(runOnEdit: v)),
             ),
@@ -776,13 +777,13 @@ class _RegexEditViewState extends State<_RegexEditView> {
         ),
         const SizedBox(height: 12),
         _MenuGroup(
-          title: 'Macros in Find Regex',
+          title: 'regex_macros_find'.tr(),
           compact: true,
           children: [_MacroSelector(label: macroLabel, onTap: _openMacroSelector)],
         ),
         const SizedBox(height: 12),
         _MenuGroup(
-          title: 'Ephemerality',
+          title: 'regex_ephemerality'.tr(),
           compact: true,
           children: ephemeralities.map((opt) {
             return _CheckboxOption(
@@ -951,7 +952,7 @@ class _DepthInput extends StatelessWidget {
               isDense: true,
               border: InputBorder.none,
               contentPadding: EdgeInsets.zero,
-              hintText: 'Unlimited',
+              hintText: 'regex_unlimited_placeholder'.tr(),
               hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.4), fontSize: 15),
             ),
           ),

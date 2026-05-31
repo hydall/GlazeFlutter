@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -55,29 +56,29 @@ class _MemoryEntryEditorSheetState extends State<MemoryEntryEditorSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _field('Title', _titleController, hint: 'Optional label'),
+          _field('label_block_name'.tr(), _titleController, hint: 'placeholder_block_name'.tr()),
           const SizedBox(height: 12),
-          _field('Keys', _keysController, hint: 'Comma-separated trigger keywords'),
+          _field('search_type_keys'.tr(), _keysController, hint: 'hint_comma_separated'.tr()),
           const SizedBox(height: 4),
           Padding(
             padding: const EdgeInsets.only(left: 4),
-            child: Text('Only this field is used for keyword retrieval', style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant.withValues(alpha: 0.6))),
+            child: Text('search_type_keys'.tr(), style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant.withValues(alpha: 0.6))),
           ),
           const SizedBox(height: 12),
-          _field('Content', _contentController, hint: 'Memory text injected into prompt', maxLines: 8),
+          _field('label_content'.tr(), _contentController, hint: 'placeholder_lore_content'.tr(), maxLines: 8),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: Text('btn_cancel'.tr()),
               ),
               const SizedBox(width: 8),
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: context.cs.primary, foregroundColor: Colors.black),
                 onPressed: _save,
-                child: const Text('Save'),
+                child: Text('btn_save'.tr()),
               ),
             ],
           ),

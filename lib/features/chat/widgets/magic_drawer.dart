@@ -42,6 +42,7 @@ import 'prompt_preview_screen.dart';
 import 'summary_sheet.dart';
 import '../state/token_breakdown_cache.dart';
 import 'tokenizer_sheet.dart';
+import '../../glossary/glossary_sheet.dart';
 
 class MagicDrawerPanel extends ConsumerStatefulWidget {
   final String charId;
@@ -107,6 +108,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       id: 'authors-note',
       label: "Author's Note",
       icon: Icons.edit_note,
+    ),
+    MagicDrawerItemDef(
+      id: 'glossary',
+      label: 'Glossary',
+      icon: Icons.menu_book,
     ),
   ];
 
@@ -446,6 +452,10 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         return;
       case 'authors-note':
         showAuthorsNoteSheet(context, widget.charId);
+        return;
+      case 'glossary':
+        widget.onClose?.call();
+        if (mounted) GlossarySheet.show(context);
         return;
     }
   }

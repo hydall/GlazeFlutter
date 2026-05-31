@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../../core/models/persona.dart';
 import '../../../core/state/active_selection_provider.dart';
@@ -40,9 +41,9 @@ class _PersonaConnectionsSheetState
 
     return personaListAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (error, stack) => Center(child: Text('Error: $error')),
+      error: (error, stack) => Center(child: Text("${'title_error'.tr()}: $error")),
       data: (personas) {
-        final persona = personas.where((p) => p.id == widget.personaId).firstOrNull ?? Persona(id: widget.personaId, name: 'Persona');
+        final persona = personas.where((p) => p.id == widget.personaId).firstOrNull ?? Persona(id: widget.personaId, name: 'tab_personas'.tr());
 
         return SheetView(
           titleWidget: Row(
@@ -50,7 +51,7 @@ class _PersonaConnectionsSheetState
             children: [
               Flexible(
                 child: Text(
-                  'Connections: ${persona.name}',
+                  "${'header_connections'.tr()}: ${persona.name}",
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 18,
@@ -72,9 +73,9 @@ class _PersonaConnectionsSheetState
             children: [
               _Section(
                 icon: Icons.public,
-                title: 'Global',
+                title: 'label_global'.tr(),
                 child: _ToggleRow(
-                  label: 'Active for all chats (fallback)',
+                  label: 'label_global_enabled'.tr(),
                   value: isGlobal,
                   onChanged: (v) {
                     setActivePersona(ref, v ? widget.personaId : null);
@@ -83,10 +84,10 @@ class _PersonaConnectionsSheetState
               ),
               _Section(
                 icon: Icons.person,
-                title: 'Characters',
+                title: 'header_characters'.tr(),
                 onAdd: () => _addCharacterConnection(),
                 child: charIds.isEmpty
-                    ? const _EmptyHint('Not bound to any character')
+                    ? _EmptyHint('no_char_connections'.tr())
                     : Wrap(
                         spacing: 6,
                         runSpacing: 4,
@@ -103,10 +104,10 @@ class _PersonaConnectionsSheetState
               ),
               _Section(
                 icon: Icons.chat,
-                title: 'Chats',
+                title: 'tab_dialogs'.tr(),
                 onAdd: () => _addChatConnection(),
                 child: chatIds.isEmpty
-                    ? const _EmptyHint('Not bound to any chat')
+                    ? _EmptyHint('no_chat_connections'.tr())
                     : Wrap(
                         spacing: 6,
                         runSpacing: 4,
@@ -155,13 +156,13 @@ class _PersonaConnectionsSheetState
         chars.where((c) => !existingIds.contains(c.id)).toList();
     if (available.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('All characters already connected')));
+          SnackBar(content: Text("${'header_characters'.tr()}: ${'preset_selected'.tr()}")));
       return;
     }
 
     final selected = await GlazeBottomSheet.show<dynamic>(
       context,
-      title: 'Bind to Character',
+      title: "${'header_connections'.tr()} ${'sheet_title_char_options'.tr()}",
       items: available
           .map((c) => BottomSheetItem(
                 label: c.name,
@@ -187,7 +188,7 @@ class _PersonaConnectionsSheetState
         sessions.where((s) => !existingIds.contains(s.id)).toList();
     if (available.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No unbound chat sessions')));
+          SnackBar(content: Text('no_sessions'.tr())));
       return;
     }
 
@@ -195,7 +196,7 @@ class _PersonaConnectionsSheetState
 
     final selected = await GlazeBottomSheet.show<dynamic>(
       context,
-      title: 'Bind to Chat',
+      title: "${'header_connections'.tr()} ${'tab_dialogs'.tr()}",
       items: available
           .map((s) {
         final char = chars.where((c) => c.id == s.characterId).firstOrNull;

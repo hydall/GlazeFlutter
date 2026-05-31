@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -83,7 +84,7 @@ class _LorebookQuickSheetState extends ConsumerState<_LorebookQuickSheet> {
       actions = [
         SheetViewAction(
           icon: const Icon(Icons.settings_outlined, size: 20),
-          tooltip: 'Open full editor',
+          tooltip: 'action_edit'.tr(),
           onPressed: () {
             Navigator.of(context).pop();
             context.go('/tools/lorebooks/${lb.id}');
@@ -91,12 +92,12 @@ class _LorebookQuickSheetState extends ConsumerState<_LorebookQuickSheet> {
         ),
       ];
     } else {
-      title = 'Lorebooks';
+      title = 'label_lorebooks'.tr();
       showBack = false;
       actions = [
         SheetViewAction(
           icon: const Icon(Icons.open_in_new_outlined, size: 20),
-          tooltip: 'Open Lorebook Manager',
+          tooltip: 'section_settings'.tr(),
           onPressed: () {
             Navigator.of(context).pop();
             context.go('/tools/lorebooks');
@@ -148,7 +149,7 @@ class _LorebookQuickSheetState extends ConsumerState<_LorebookQuickSheet> {
                 onChanged: (_) => setState(() {}),
                 style: TextStyle(color: context.cs.onSurface, fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'Search entries...',
+                  hintText: "${'search'.tr()}...",
                   hintStyle: TextStyle(color: context.cs.onSurfaceVariant),
                   prefixIcon: Icon(Icons.search, size: 18, color: context.cs.onSurfaceVariant),
                   isDense: true,
@@ -207,7 +208,7 @@ class _ListView extends ConsumerWidget {
                 Icon(Icons.tune_outlined, size: 16, color: context.cs.primary),
                 const SizedBox(width: 8),
                 Text(
-                  'Global Settings',
+                  'section_global_settings'.tr(),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -243,12 +244,12 @@ class _ListView extends ConsumerWidget {
                 Icon(Icons.menu_book_outlined, size: 40, color: context.cs.onSurfaceVariant),
                 const SizedBox(height: 12),
                 Text(
-                  'No lorebooks yet.',
+                  'no_lorebooks'.tr(),
                   style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Import a backup or create one in the Lorebook Manager.',
+                  'empty_lorebooks_desc'.tr(),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.6), fontSize: 12),
                 ),
@@ -288,20 +289,20 @@ class _ListView extends ConsumerWidget {
                           Row(
                             children: [
                               Text(
-                                '${lb.entries.length} entries',
+                                '${lb.entries.length} ${'label_entries'.tr()}',
                                 style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
                               ),
                               if (lb.enabled) ...[
                                 const SizedBox(width: 6),
-                                _Badge('Global', Colors.green),
+                                _Badge('label_global'.tr(), Colors.green),
                               ],
                               if (charCount > 0) ...[
                                 const SizedBox(width: 4),
-                                _Badge('$charCount char', Colors.purple),
+                                _Badge('$charCount ${'tab_characters'.tr()}', Colors.purple),
                               ],
                               if (chatCount > 0) ...[
                                 const SizedBox(width: 4),
-                                _Badge('$chatCount chat', Colors.orange),
+                                _Badge('$chatCount ${'tab_chat'.tr()}', Colors.orange),
                               ],
                             ],
                           ),
@@ -317,7 +318,7 @@ class _ListView extends ConsumerWidget {
                             ? context.cs.primary
                             : context.cs.onSurfaceVariant,
                       ),
-                      tooltip: 'Connections',
+                      tooltip: 'header_connections'.tr(),
                       onPressed: () => onOpenConnections(lb),
                     ),
                     Icon(Icons.chevron_right, size: 18, color: context.cs.onSurfaceVariant),
@@ -370,11 +371,11 @@ class _EntriesView extends ConsumerWidget {
             children: [
               Icon(Icons.description_outlined, size: 40, color: context.cs.onSurfaceVariant),
               const SizedBox(height: 12),
-              Text('No entries', style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
+              Text('no_entries_found'.tr(), style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
               const SizedBox(height: 16),
               FilledButton.tonal(
                 onPressed: onOpenEditor,
-                child: const Text('Open Editor'),
+                child: Text('action_edit'.tr()),
               ),
             ],
           ),
@@ -392,7 +393,7 @@ class _EntriesView extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: OutlinedButton.icon(
               icon: const Icon(Icons.open_in_new, size: 16),
-              label: const Text('Open Full Editor'),
+              label: Text('action_edit'.tr()),
               onPressed: onOpenEditor,
               style: OutlinedButton.styleFrom(
                 foregroundColor: context.cs.primary,
@@ -437,12 +438,12 @@ class _EntriesView extends ConsumerWidget {
                 if (entry.vectorSearch)
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
-                    child: _Badge('vec', Colors.blue),
+                    child: _Badge('search_type_vector'.tr(), Colors.blue),
                   ),
                 if (entry.constant)
                   Padding(
                     padding: const EdgeInsets.only(right: 6),
-                    child: _Badge('const', Colors.amber),
+                    child: _Badge('label_constant'.tr(), Colors.amber),
                   ),
                 Switch(
                   value: entry.enabled,
@@ -483,25 +484,25 @@ class _GlobalSettingsPanel extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _SettingsRow(
-            label: 'Search Type',
+            label: 'label_search_type'.tr(),
             child: _SegmentedPicker<String>(
               value: settings.searchType,
-              options: const [
-                ('keyword', 'Keys'),
-                ('vector', 'Vector'),
-                ('both', 'Hybrid'),
+              options: [
+                ('keyword', 'search_type_keys'.tr()),
+                ('vector', 'search_type_vector'.tr()),
+                ('both', 'search_type_both'.tr()),
               ],
               onChanged: (v) => _update(ref, settings.copyWith(searchType: v)),
             ),
           ),
           const SizedBox(height: 10),
           _SettingsRow(
-            label: 'Injection Position',
+            label: 'label_injection_position'.tr(),
             child: _SegmentedPicker<String>(
               value: settings.injectionPosition,
-              options: const [
-                ('worldInfoBefore', 'Before char'),
-                ('worldInfoAfter', 'After char'),
+              options: [
+                ('worldInfoBefore', 'pos_before_char'.tr()),
+                ('worldInfoAfter', 'pos_after_char'.tr()),
                 ('lorebooksMacro', '{{lorebooks}}'),
               ],
               onChanged: (v) => _update(ref, settings.copyWith(injectionPosition: v)),
@@ -512,7 +513,7 @@ class _GlobalSettingsPanel extends ConsumerWidget {
             children: [
               Expanded(
                 child: _SettingsRow(
-                  label: 'Scan Depth',
+                  label: 'label_scan_depth_lore'.tr(),
                   child: _SmallNumberField(
                     value: settings.scanDepth,
                     onChanged: (v) => _update(ref, settings.copyWith(scanDepth: v)),
@@ -522,7 +523,7 @@ class _GlobalSettingsPanel extends ConsumerWidget {
               const SizedBox(width: 16),
               Expanded(
                 child: _SettingsRow(
-                  label: 'Max Entries',
+                  label: 'label_max_depth'.tr(),
                   child: _SmallNumberField(
                     value: settings.maxInjectedEntries,
                     onChanged: (v) => _update(ref, settings.copyWith(maxInjectedEntries: v)),
@@ -534,7 +535,7 @@ class _GlobalSettingsPanel extends ConsumerWidget {
           if (settings.searchType != 'keyword') ...[
             const SizedBox(height: 10),
             _SettingsRow(
-              label: 'Similarity Threshold',
+              label: 'label_similarity_threshold'.tr(),
               child: Row(
                 children: [
                   Expanded(

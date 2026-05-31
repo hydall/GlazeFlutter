@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -149,7 +150,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     final title = character?.name ?? 'Chat';
     final sessionName = chatState?.session != null
         ? 'Session #${chatState!.session!.sessionIndex + 1}'
-        : 'Loading...';
+        : 'status_connecting'.tr();
     final sessionIndex = chatState?.session?.sessionIndex ?? 0;
 
     final appSettings = ref.watch(appSettingsProvider).valueOrNull;
@@ -203,7 +204,7 @@ child: PopScope(
                   autofocus: true,
                   style: TextStyle(color: context.cs.onSurface, fontSize: 16),
                   decoration: InputDecoration(
-                    hintText: 'Search messages...',
+                    hintText: 'search_messages'.tr(),
                     hintStyle: TextStyle(
                       color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
                     ),
@@ -694,7 +695,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           _showTriggeredItemsSheet(
                             context,
                             msg.triggeredMemories,
-                            'Memories',
+                            'chat_memories'.tr(),
                           );
                         }
                       },
@@ -729,7 +730,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                           _showTriggeredItemsSheet(
                             context,
                             all,
-                            'Triggered Entries',
+                            'chat_triggered_entries'.tr(),
                           );
                         }
                       },

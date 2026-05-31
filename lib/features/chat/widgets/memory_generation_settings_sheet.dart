@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -118,20 +119,20 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _switchTile('Enabled', _enabled, (v) => setState(() => _enabled = v)),
-          _switchTile('Auto-Create Drafts', _autoCreate, (v) => setState(() => _autoCreate = v),
-              subtitle: 'Automatically create draft placeholders after enough messages'),
-          _switchTile('Auto-Generate Text', _autoGenerate, (v) => setState(() => _autoGenerate = v),
-              subtitle: 'Immediately generate text for auto-created drafts'),
+          _switchTile('label_enabled'.tr(), _enabled, (v) => setState(() => _enabled = v)),
+          _switchTile('memory_books_summary_auto_on'.tr(), _autoCreate, (v) => setState(() => _autoCreate = v),
+              subtitle: 'memory_books_summary_auto_text'.tr()),
+          _switchTile('memory_books_summary_auto_on'.tr(), _autoGenerate, (v) => setState(() => _autoGenerate = v),
+              subtitle: 'memory_books_summary_auto_text'.tr()),
           if (_autoCreate) ...[
-            _switchTile('Delayed Automation', _useDelayedAutomation, (v) => setState(() => _useDelayedAutomation = v),
-                subtitle: 'Wait for extra turns before creating drafts'),
-            _numberField('Create Memory Every N Messages', _autoCreateInterval, (v) => setState(() => _autoCreateInterval = v), min: 1, max: 200),
+            _switchTile('memory_books_summary_delayed'.tr(), _useDelayedAutomation, (v) => setState(() => _useDelayedAutomation = v),
+                subtitle: 'memory_books_summary_delayed'.tr()),
+            _numberField('memory_books_summary_msgs'.tr(), _autoCreateInterval, (v) => setState(() => _autoCreateInterval = v), min: 1, max: 200),
           ],
-          _numberField('Max Generate Batch', _batchSize, (v) => setState(() => _batchSize = v), min: 1, max: 50),
-          _numberField('Memory Entries In Prompt', _maxInjected, (v) => setState(() => _maxInjected = v), min: 1, max: 20),
+          _numberField('memory_books_summary_batch'.tr(), _batchSize, (v) => setState(() => _batchSize = v), min: 1, max: 50),
+          _numberField('memory_books_summary_in_prompt'.tr(), _maxInjected, (v) => setState(() => _maxInjected = v), min: 1, max: 20),
           const SizedBox(height: 12),
-          _sectionLabel('Injection Target'),
+          _sectionLabel('label_embedding_target'.tr()),
           SegmentedButton<String>(
             segments: const [
               ButtonSegment(value: 'summary_block', label: Text('worldinfo')),
@@ -142,33 +143,33 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
             style: ButtonStyle(visualDensity: VisualDensity.compact),
           ),
           const SizedBox(height: 12),
-          _sectionLabel('Generation Rules'),
+          _sectionLabel('regex_script_settings'.tr()),
           _promptPresetSelector(),
           const SizedBox(height: 12),
-          _sectionLabel('Generation API'),
-          _switchTile('Use LLM API', _generationSource != 'custom', (v) => setState(() => _generationSource = v ? 'current' : 'custom'),
-              subtitle: 'Use the same endpoint as LLM for memory generation'),
+          _sectionLabel('tab_api'.tr()),
+          _switchTile('settings_use_llm_api'.tr(), _generationSource != 'custom', (v) => setState(() => _generationSource = v ? 'current' : 'custom'),
+              subtitle: 'settings_use_llm_api_desc'.tr()),
           if (_generationSource == 'custom') ...[
             const SizedBox(height: 8),
-            _labeledField('Endpoint', _generationEndpointCtrl, hint: 'https://...'),
+            _labeledField('settings_embedding_endpoint'.tr(), _generationEndpointCtrl, hint: 'https://...'),
             const SizedBox(height: 8),
             _modelField(_generationModelCtrl, hint: 'gpt-4o-mini', isCustom: true),
             const SizedBox(height: 8),
-            _labeledField('API Key', _generationApiKeyCtrl, hint: 'sk-...', obscure: true),
+            _labeledField('label_embedding_key'.tr(), _generationApiKeyCtrl, hint: 'sk-...', obscure: true),
           ] else ...[
             const SizedBox(height: 8),
             _modelField(_generationModelCtrl, hint: 'Leave blank for current LLM model', isCustom: false),
           ],
           const SizedBox(height: 8),
-          _labeledField('Temperature Override', _temperatureCtrl, hint: '0 = use API default', inputType: TextInputType.number),
-          _labeledField('Output Token Limit', _maxTokensCtrl, hint: '0 = auto (recommended 2000-4000)', inputType: TextInputType.number),
+          _labeledField('label_temperature'.tr(), _temperatureCtrl, hint: '0 = use API default', inputType: TextInputType.number),
+          _labeledField('label_max_tokens'.tr(), _maxTokensCtrl, hint: '0 = auto (recommended 2000-4000)', inputType: TextInputType.number),
           const SizedBox(height: 12),
-          _sectionLabel('Search'),
-          _switchTile('Vector Search', _vectorSearchEnabled, (v) => setState(() => _vectorSearchEnabled = v)),
+          _sectionLabel('search'.tr()),
+          _switchTile('label_vector_search'.tr(), _vectorSearchEnabled, (v) => setState(() => _vectorSearchEnabled = v)),
           if (_vectorSearchEnabled) ...[
             const SizedBox(height: 8),
             _sliderField(
-              label: 'Vector threshold',
+              label: 'label_similarity_threshold'.tr(),
               value: _vectorThreshold,
               min: 0.0,
               max: 1.0,
@@ -192,12 +193,12 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              TextButton(onPressed: () => Navigator.pop(context), child: Text('btn_cancel'.tr())),
               const SizedBox(width: 8),
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: context.cs.primary, foregroundColor: Colors.black),
                 onPressed: _save,
-                child: const Text('Save'),
+                child: Text('btn_save'.tr()),
               ),
             ],
           ),
@@ -261,7 +262,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
       controller: controller,
       style: TextStyle(color: context.cs.onSurface, fontSize: 14),
       decoration: InputDecoration(
-        labelText: isCustom ? 'Model' : 'Model Override (optional)',
+        labelText: isCustom ? 'label_model'.tr() : "${'label_model'.tr()} (${'hint_optional'.tr()})",
         labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
         hintText: hint,
         hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.4)),
@@ -273,7 +274,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
           icon: _fetchingModels
               ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: context.cs.primary))
               : Icon(Icons.download_rounded, size: 20, color: context.cs.onSurfaceVariant),
-          tooltip: 'Fetch models from API',
+          tooltip: 'memory_books_loading_models'.tr(),
           onPressed: _fetchingModels ? null : _fetchAndPickModel,
         ),
       ),
@@ -293,26 +294,26 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
       } else {
         final config = ref.read(activeApiConfigProvider);
         if (config == null) {
-          if (mounted) GlazeToast.show(context, 'No API config available');
+          if (mounted) GlazeToast.show(context, 'settings_no_api_configs'.tr());
           return;
         }
         endpoint = config.endpoint;
         apiKey = config.apiKey;
       }
       if (endpoint.isEmpty) {
-        if (mounted) GlazeToast.show(context, 'Endpoint is empty');
+        if (mounted) GlazeToast.show(context, 'settings_err_fill_endpoint'.tr());
         return;
       }
       final models = await SseClient().fetchModels(endpoint: endpoint, apiKey: apiKey);
       if (models.isEmpty) {
-        if (mounted) GlazeToast.show(context, 'No models found');
+        if (mounted) GlazeToast.show(context, 'settings_err_no_models'.tr());
         return;
       }
       if (!mounted) return;
       final ids = models.map((m) => m['id'] as String?).where((id) => id != null).cast<String>().toList()..sort();
       final selected = await GlazeBottomSheet.show<String>(
         context,
-        title: 'Select Model',
+        title: 'settings_select_model'.tr(),
         items: ids.map((id) => BottomSheetItem(
           label: id,
           icon: id == _generationModelCtrl.text ? Icons.check : null,
@@ -324,7 +325,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
         _generationModelCtrl.text = selected;
       }
     } catch (e) {
-      if (mounted) GlazeToast.show(context, 'Failed to fetch models: $e');
+      if (mounted) GlazeToast.show(context, "${'settings_err_failed'.tr()} $e");
     } finally {
       if (mounted) setState(() => _fetchingModels = false);
     }
@@ -338,7 +339,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
           onTap: () async {
             final result = await GlazeBottomSheet.show<String>(
               context,
-              title: 'Prompt Preset',
+              title: 'regex_script_settings'.tr(),
               items: [
                 ...MemoryPromptPresets.builtIn.map((p) => BottomSheetItem(
                   label: p.label,
@@ -383,7 +384,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
           child: TextButton.icon(
             onPressed: _openPromptManager,
             icon: const Icon(Icons.manage_accounts_rounded, size: 16),
-            label: const Text('Manage prompts'),
+            label: Text('regex_script_settings'.tr()),
             style: TextButton.styleFrom(
               foregroundColor: context.cs.primary,
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -398,7 +399,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
     final custom = _customPrompts;
     final result = await GlazeBottomSheet.show<List<MemoryPromptPreset>>(
       context,
-      title: 'Custom Prompts',
+      title: "${'theme_custom_font_size'.tr()} ${'label_preset_prompts'.tr()}",
       child: CustomPromptManagerSheet(
         customPrompts: custom,
         onChanged: (_) {},

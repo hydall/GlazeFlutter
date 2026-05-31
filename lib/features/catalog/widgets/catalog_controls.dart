@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
 import 'catalog_filter_sheet.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 class CatalogControls extends StatelessWidget {
   final CatalogState state;
@@ -18,42 +19,42 @@ class CatalogControls extends StatelessWidget {
   });
 
   static String providerLabel(CatalogProvider p) => switch (p) {
-    CatalogProvider.janitor => 'JanitorAI',
-    CatalogProvider.janny => 'JannyAI',
-    CatalogProvider.datacat => 'DataCat',
-    CatalogProvider.chub => 'Chub.ai',
+    CatalogProvider.janitor => 'catalog_provider_janitor_label'.tr(),
+    CatalogProvider.janny => 'catalog_provider_janny_label'.tr(),
+    CatalogProvider.datacat => 'catalog_provider_datacat_label'.tr(),
+    CatalogProvider.chub => 'catalog_provider_chub_label'.tr(),
   };
 
   static Map<String, String> sortOptionsForProvider(CatalogProvider p) =>
       switch (p) {
         CatalogProvider.janitor => {
-          'trending': 'Trending',
-          'trending_24h': 'Trending 24h',
-          'popular': 'Popular',
-          'latest': 'Latest',
+          'trending': 'catalog_sort_janitor_trending'.tr(),
+          'trending_24h': 'catalog_sort_janitor_trending24'.tr(),
+          'popular': 'catalog_sort_janitor_popular'.tr(),
+          'latest': 'catalog_sort_janitor_latest'.tr(),
         },
         CatalogProvider.janny => {
-          'newest': 'Newest',
-          'oldest': 'Oldest',
-          'tokens_desc': 'Most Tokens',
-          'tokens_asc': 'Least Tokens',
-          'relevant': 'Relevant',
+          'newest': 'catalog_sort_janny_newest'.tr(),
+          'oldest': 'catalog_sort_janny_oldest'.tr(),
+          'tokens_desc': 'catalog_sort_janny_tokens_desc'.tr(),
+          'tokens_asc': 'catalog_sort_janny_tokens_asc'.tr(),
+          'relevant': 'catalog_sort_janny_relevant'.tr(),
         },
         CatalogProvider.datacat => {
-          'recent': 'Recent',
-          'fresh': 'Fresh',
-          'score_week': 'Score (Week)',
-          'score_24h': 'Score (24h)',
-          'chat_count_week': 'Chats (Week)',
-          'chat_count_24h': 'Chats (24h)',
+          'recent': 'catalog_sort_datacat_recent'.tr(),
+          'fresh': 'catalog_sort_datacat_fresh'.tr(),
+          'score_week': 'catalog_sort_datacat_score_week'.tr(),
+          'score_24h': 'catalog_sort_datacat_score_24h'.tr(),
+          'chat_count_week': 'catalog_sort_datacat_chat_count_week'.tr(),
+          'chat_count_24h': 'catalog_sort_datacat_chat_count_24h'.tr(),
         },
         CatalogProvider.chub => {
-          'popular': 'Popular',
-          'trending_week': 'Trending (Week)',
-          'trending_24h': 'Trending (24h)',
-          'latest': 'Latest',
-          'rating': 'Rating',
-          'updated': 'Updated',
+          'popular': 'catalog_sort_chub_popular'.tr(),
+          'trending_week': 'catalog_sort_chub_trending_week'.tr(),
+          'trending_24h': 'catalog_sort_chub_trending_24h'.tr(),
+          'latest': 'catalog_sort_chub_latest'.tr(),
+          'rating': 'catalog_sort_chub_rating'.tr(),
+          'updated': 'catalog_sort_chub_updated'.tr(),
         },
       };
 
@@ -82,7 +83,7 @@ class CatalogControls extends StatelessWidget {
           label: providerLabel(state.activeProvider),
           onTap: () => _showPickerSheet(
             context,
-            title: 'Provider',
+            title: 'blacklist_glossary_chip'.tr(),
             items: CatalogProvider.values
                 .map(
                   (p) => _PickerItem(
@@ -116,7 +117,7 @@ class CatalogControls extends StatelessWidget {
           label: _currentSortLabel(),
           onTap: () => _showPickerSheet(
             context,
-            title: 'Sort',
+            title: 'sort_by'.tr(),
             items: sortOptionsForProvider(state.activeProvider).entries
                 .map(
                   (e) => _PickerItem(

@@ -21,6 +21,7 @@ import '../../features/cloud_sync/widgets/sync_sheet.dart';
 import '../../features/settings/app_settings_screen.dart';
 import '../../features/settings/theme_preset_screen.dart';
 import '../../features/tools/tools_screen.dart';
+import '../../features/glossary/glossary_sheet.dart';
 import '../../shared/shell/shell_screen.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -97,7 +98,16 @@ final routerProvider = Provider<GoRouter>(
           ),
           StatefulShellBranch(
             routes: [
-              GoRoute(path: '/menu', builder: (_, __) => const MenuScreen()),
+              GoRoute(
+                path: '/menu',
+                builder: (_, __) => const MenuScreen(),
+                routes: [
+                  GoRoute(
+                    path: 'glossary',
+                    builder: (_, __) => const GlossarySheet(startExpanded: true),
+                  ),
+                ],
+              ),
             ],
           ),
           StatefulShellBranch(

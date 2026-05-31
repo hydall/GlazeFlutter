@@ -74,6 +74,11 @@ class MenuScreen extends ConsumerWidget {
                   header: 'Info',
                   items: [
                     MenuItem(
+                      icon: Icons.menu_book_rounded,
+                      label: 'Glossary',
+                      onTap: () => context.push('/menu/glossary'),
+                    ),
+                    MenuItem(
                       icon: Icons.info_outline_rounded,
                       label: 'About',
                       onTap: () => context.push('/about'),

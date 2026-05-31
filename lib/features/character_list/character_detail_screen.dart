@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -41,9 +42,9 @@ const _kText35 = Color(0x59FFFFFF);
 
 // ─── Tabs ──────────────────────────────────────────────────────────────────
 
-const _kTabs = [
-  GlazeTabItem(label: 'Information', icon: Icons.info_outline_rounded),
-  GlazeTabItem(label: 'Prompts', icon: Icons.description_outlined),
+final _kTabs = [
+  GlazeTabItem(label: 'section_info'.tr(), icon: Icons.info_outline_rounded),
+  GlazeTabItem(label: 'section_prompt_blocks'.tr(), icon: Icons.description_outlined),
 ];
 
 // ─── Screen ────────────────────────────────────────────────────────────────
@@ -163,7 +164,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
       items: [
         BottomSheetItem(
           icon: Icons.edit_outlined,
-          label: 'Edit',
+          label: 'action_edit'.tr(),
           onTap: () {
             rootNav.pop();
             if (!mounted) return;
@@ -172,7 +173,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         ),
         BottomSheetItem(
           icon: Icons.photo_library_outlined,
-          label: 'Gallery',
+          label: 'menu_image_viewer'.tr(),
           onTap: () {
             rootNav.pop();
             if (!mounted) return;
@@ -181,7 +182,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         ),
         BottomSheetItem(
           icon: Icons.delete_outline,
-          label: 'Delete',
+          label: 'action_delete_msg'.tr(),
           isDestructive: true,
           onTap: () {
             rootNav.pop();
@@ -201,14 +202,14 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
     final rootNav = Navigator.of(context, rootNavigator: true);
     GlazeBottomSheet.show(
       context,
-      title: 'Delete Character',
+      title: 'action_delete_char'.tr(),
       bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
-        description: 'Delete ${char.name}? This cannot be undone.',
+        description: '${'confirm_delete_character'.tr().replaceAll('?', '')} "${char.name}"?',
       ),
       items: [
         BottomSheetItem(
-          label: 'Delete',
+          label: 'action_delete_msg'.tr(),
           isDestructive: true,
           centered: true,
           onTap: () async {
@@ -218,7 +219,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
           },
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'btn_cancel'.tr(),
           centered: true,
           onTap: () => rootNav.pop(),
         ),
@@ -232,16 +233,16 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
 
     GlazeBottomSheet.show(
       context,
-      title: 'Open Chat',
+      title: 'btn_open_chat'.tr(),
       items: [
         BottomSheetItem(
           icon: Icons.add,
-          label: 'New Chat',
+          label: 'btn_new_chat'.tr(),
           onTap: () => _closeSheetAndNavigate('/chat/$cId?new=1'),
         ),
         BottomSheetItem(
           icon: Icons.file_download,
-          label: 'Import Chat',
+          label: 'action_import'.tr(),
           onTap: () {
             Navigator.of(context).pop();
             _importChat(cId);
@@ -250,8 +251,8 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         ...sessions.map(
           (s) => BottomSheetItem(
             icon: Icons.chat_bubble_outline,
-            label: 'Session ${s.sessionIndex + 1}',
-            hint: '${s.messages.length} messages',
+            label: '${'count_sessions'.tr(args: ['1'])} ${s.sessionIndex + 1}',
+            hint: 'count_messages'.tr(args: ['${s.messages.length}']),
             onTap: () => _closeSheetAndNavigate(
               '/chat/$cId?session=${s.sessionIndex}',
             ),
@@ -291,10 +292,10 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
       }
       GlazeToast.show(
         context,
-        count == 0 ? 'No messages found in file' : 'Imported $count messages',
+        count == 0 ? 'no_results'.tr() : 'import_success'.tr(),
       );
     } catch (e) {
-      if (mounted) GlazeToast.error(context, 'Import failed: ', e);
+      if (mounted) GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
     }
   }
 
@@ -341,7 +342,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
     if (char == null) {
       return Center(
         child: Text(
-          'Character not found',
+          'no_results'.tr(),
           style: TextStyle(color: context.cs.onSurface),
         ),
       );
@@ -405,14 +406,14 @@ class _ChatFab extends StatelessWidget {
             BoxShadow(blurRadius: 16, color: Color(0x80000000)),
           ],
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.chat_bubble_rounded, color: Colors.white, size: 18),
-            SizedBox(width: 8),
+            const Icon(Icons.chat_bubble_rounded, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
             Text(
-              'Open Chat',
-              style: TextStyle(
+              'btn_open_chat'.tr(),
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
                 fontSize: 15,
@@ -461,9 +462,9 @@ class _ImportFab extends StatelessWidget {
             else
               const Icon(Icons.download_rounded, color: Colors.white, size: 20),
             const SizedBox(width: 8),
-            const Text(
-              'Import Character',
-              style: TextStyle(
+            Text(
+              'catalog_import'.tr(),
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
                 fontSize: 15,
@@ -628,11 +629,11 @@ class _InfoTab extends StatelessWidget {
             ),
           ),
         if (hasNotes) ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
             child: Text(
-              'SHORT DESCRIPTION',
-              style: TextStyle(
+              'label_description'.tr().toUpperCase(),
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.77,
@@ -693,12 +694,12 @@ class _InfoTab extends StatelessWidget {
           ),
         ],
         if (tags.isEmpty && !hasNotes)
-          const Center(
+          Center(
             child: Padding(
-              padding: EdgeInsets.all(40),
+              padding: const EdgeInsets.all(40),
               child: Text(
-                'No information available',
-                style: TextStyle(color: _kText35),
+                'no_preview_available'.tr(),
+                style: const TextStyle(color: _kText35),
               ),
             ),
           ),
@@ -762,14 +763,14 @@ class _PromptsTabState extends State<_PromptsTab> {
   List<({String key, String label, String text})> get _sections {
     final c = widget.character;
     return [
-      (key: 'description', label: 'Description', text: c.description ?? ''),
-      (key: 'personality', label: 'Personality', text: c.personality ?? ''),
-      (key: 'scenario', label: 'Scenario', text: c.scenario ?? ''),
-      (key: 'mesExample', label: 'Example Dialogue', text: c.mesExample ?? ''),
-      (key: 'systemPrompt', label: 'System Prompt', text: c.systemPrompt ?? ''),
+      (key: 'description', label: 'label_description'.tr(), text: c.description ?? ''),
+      (key: 'personality', label: 'label_personality'.tr(), text: c.personality ?? ''),
+      (key: 'scenario', label: 'label_scenario'.tr(), text: c.scenario ?? ''),
+      (key: 'mesExample', label: 'label_mes_example'.tr(), text: c.mesExample ?? ''),
+      (key: 'systemPrompt', label: 'role_system'.tr(), text: c.systemPrompt ?? ''),
       (
         key: 'postHistory',
-        label: 'Post-History Instructions',
+        label: 'role_system'.tr(),
         text: c.postHistoryInstructions ?? '',
       ),
     ].where((s) => s.text.isNotEmpty).toList();
@@ -796,7 +797,7 @@ class _PromptsTabState extends State<_PromptsTab> {
         if (firstMes.isNotEmpty)
           _AccordionCard(
             key: const ValueKey('firstMes'),
-            label: 'First Message',
+            label: 'label_first_mes'.tr(),
             text: firstMes,
             expanded: _expanded['firstMes'] ?? false,
             onToggle: () => setState(
@@ -807,7 +808,7 @@ class _PromptsTabState extends State<_PromptsTab> {
           if (altGreetings[i].isNotEmpty)
             _AccordionCard(
               key: ValueKey('altGreeting_$i'),
-              label: 'Greeting ${i + 2}',
+              label: '${'placeholder_greeting'.tr()} ${i + 2}',
               text: altGreetings[i],
               expanded: _expanded['altGreeting_$i'] ?? false,
               onToggle: () => setState(

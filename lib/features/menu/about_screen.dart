@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -157,7 +158,7 @@ class _CommunitySection extends StatelessWidget {
               cs: cs,
               svgAsset: 'assets/logos/discord.svg',
               label: 'Discord',
-              subtitle: 'Join the community',
+              subtitle: 'about_join_community'.tr(),
               brandColor: const Color(0xFF5865F2),
               onTap: () => onLink('https://discord.gg/jnGhd7p6Ht'),
             )
@@ -166,7 +167,7 @@ class _CommunitySection extends StatelessWidget {
               cs: cs,
               svgAsset: 'assets/logos/telegram.svg',
               label: 'Telegram',
-              subtitle: 'Присоединиться к сообществу',
+              subtitle: 'about_join_community'.tr(),
               brandColor: const Color(0xFF2AABEE),
               onTap: () => onLink('https://t.me/glazeapp'),
             ),
@@ -174,7 +175,7 @@ class _CommunitySection extends StatelessWidget {
             cs: cs,
             svgAsset: 'assets/logos/github.svg',
             label: 'GitHub',
-            subtitle: lang == 'ru' ? 'Исходный код' : 'Source code & issues',
+            subtitle: 'about_source_code'.tr(),
             brandColor: cs.onSurface,
             onTap: () => onLink('https://github.com/hydall/Glaze'),
           ),
@@ -183,7 +184,7 @@ class _CommunitySection extends StatelessWidget {
               cs: cs,
               svgAsset: 'assets/logos/boosty.svg',
               label: 'Boosty',
-              subtitle: 'Поддержать проект',
+              subtitle: 'about_support_project'.tr(),
               brandColor: const Color(0xFFF15F2C),
               onTap: () => onLink('https://boosty.to/hydall'),
             )
@@ -192,7 +193,7 @@ class _CommunitySection extends StatelessWidget {
               cs: cs,
               svgAsset: 'assets/logos/bmc-logo.svg',
               label: 'Buy Me a Coffee',
-              subtitle: 'Support the project',
+              subtitle: 'about_support_project'.tr(),
               brandColor: const Color(0xFFFFDD00),
               useIconColor: false,
               onTap: () => onLink('https://buymeacoffee.com/hydall'),

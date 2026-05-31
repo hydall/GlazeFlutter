@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 import '../../core/models/persona.dart';
 import '../../core/state/active_selection_provider.dart';
@@ -18,8 +19,7 @@ import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/help_tip.dart';
 import '../../shared/widgets/sheet_view.dart';
-import 'persona_connections_sheet.dart';
-import 'persona_list_provider.dart';
+
 
 class PersonaListScreen extends ConsumerWidget {
   final bool startExpanded;
@@ -35,7 +35,7 @@ class PersonaListScreen extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            'Personas',
+            'menu_personas'.tr(),
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -52,23 +52,23 @@ class PersonaListScreen extends ConsumerWidget {
       actions: [
         SheetViewAction(
           icon: const Icon(Icons.add, size: 20),
-          tooltip: 'Add Persona',
+          tooltip: "${'create_new'.tr()} ${'tab_personas'.tr()}",
           onPressed: () => _showEditor(context, ref),
         ),
       ],
       body: personas.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text("${'title_error'.tr()}: $e")),
         data: (list) => list.isEmpty
             ? Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('No personas yet'),
+                    Text('no_results'.tr()),
                     const SizedBox(height: 8),
                     FilledButton.tonal(
                       onPressed: () => _showEditor(context, ref),
-                      child: const Text('Create Persona'),
+                      child: Text("${'create_new'.tr()} ${'tab_personas'.tr()}"),
                     ),
                   ],
                 ),
@@ -149,7 +149,7 @@ class _PersonaTile extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
               )
             : Text(
-                'No prompt',
+                'no_prompt'.tr(),
                 style: TextStyle(color: context.cs.onSurfaceVariant),
               ),
         trailing: Row(
@@ -157,19 +157,19 @@ class _PersonaTile extends ConsumerWidget {
           children: [
             IconButton(
               icon: const Icon(Icons.link, size: 18),
-              tooltip: 'Connections',
+              tooltip: 'header_connections'.tr(),
               onPressed: () => showPersonaConnections(context, persona.id),
             ),
             IconButton(
               icon: const Icon(Icons.more_vert, size: 20),
-              tooltip: 'More options',
+              tooltip: 'header_more'.tr(),
               onPressed: () {
                 GlazeBottomSheet.show(
                   context,
-                  title: 'Persona Options',
+                  title: "${'tab_personas'.tr()} ${'header_more'.tr()}",
                   items: [
                     BottomSheetItem(
-                      label: 'Edit',
+                      label: 'action_edit'.tr(),
                       icon: Icons.edit,
                       onTap: () {
                         Navigator.pop(context);
@@ -181,7 +181,7 @@ class _PersonaTile extends ConsumerWidget {
                       },
                     ),
                     BottomSheetItem(
-                      label: 'Delete',
+                      label: 'action_delete'.tr(),
                       icon: Icons.delete,
                       isDestructive: true,
                       onTap: () {
@@ -214,24 +214,24 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
   late final String _personaId;
   late final int _createdAt;
 
-  static const _config = [
-    GenericEditorSection(
-      fields: [
-        GenericEditorField(
-          key: 'name',
-          label: 'Name',
-          placeholder: 'Your persona name',
+  List<GenericEditorSection> get _config => [
+        GenericEditorSection(
+          fields: [
+            GenericEditorField(
+              key: 'name',
+              label: 'label_name'.tr(),
+              placeholder: 'placeholder_enter_name'.tr(),
+            ),
+            GenericEditorField(
+              key: 'prompt',
+              label: "${'tab_personas'.tr()} ${'label_char_prompt'.tr().replaceAll(RegExp(r'Character |Персонажа ', caseSensitive: false), '')}",
+              type: 'textarea',
+              rows: 12,
+              placeholder: 'placeholder_prompt_text'.tr(),
+            ),
+          ],
         ),
-        GenericEditorField(
-          key: 'prompt',
-          label: 'Persona Prompt',
-          type: 'textarea',
-          rows: 12,
-          placeholder: 'Describe your persona — this gets injected into the prompt',
-        ),
-      ],
-    ),
-  ];
+      ];
 
   @override
   void initState() {
@@ -275,7 +275,7 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
 
     final persona = Persona(
       id: _personaId,
-      name: name.isEmpty ? 'Unnamed' : name,
+      name: name.isEmpty ? 'unnamed_entry'.tr().split(' ')[0] : name,
       prompt: promptStr.isEmpty ? null : promptStr,
       avatarPath: values['avatarPath'] as String?,
       createdAt: _createdAt,
@@ -287,13 +287,13 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
   @override
   Widget build(BuildContext context) {
     return GlazeScaffold(
-      title: widget.existing != null ? 'Edit Persona' : 'New Persona',
+      title: widget.existing != null ? "${'action_edit'.tr()} ${'tab_personas'.tr()}" : "${'create_new'.tr()} ${'tab_personas'.tr()}",
       onBack: () => Navigator.of(context).pop(),
       body: GenericEditor(
         item: _item,
         config: _config,
         showAvatar: true,
-        avatarHint: 'Tap to change avatar',
+        avatarHint: 'hint_change_avatar'.tr(),
         onAvatarTap: _pickAvatar,
         onChanged: (values) {
           _item = values;

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -221,7 +222,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
 
     return SheetView(
       startExpanded: widget.startExpanded,
-      title: 'API Settings',
+      title: 'menu_app_settings'.tr(),
       showBack: true,
       onBack: _goBack,
       scrollController: _scrollController,
@@ -238,10 +239,10 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   }
 
   String _activeName(ApiConfig? config, List<ApiConfig> list) {
-    if (config == null) return list.isEmpty ? 'No configs' : 'Unnamed';
+    if (config == null) return list.isEmpty ? 'no_active_connections'.tr() : 'unnamed_entry'.tr();
     if (config.name.isNotEmpty) return config.name;
     if (config.model.isNotEmpty) return config.model;
-    return 'Unnamed';
+    return 'unnamed_entry'.tr();
   }
 
   Widget _buildTopControls(List<ApiConfig> list, String activeName) {
@@ -250,9 +251,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GlazeTabBar(
-          tabs: const [
+          tabs: [
             GlazeTabItem(label: 'LLM', icon: Icons.chat_bubble_outline_rounded),
-            GlazeTabItem(label: 'Embeddings', icon: Icons.layers_outlined),
+            GlazeTabItem(label: 'tab_embeddings'.tr(), icon: Icons.layers_outlined),
           ],
           activeIndex: _tab,
           onChanged: (i) => setState(() => _tab = i),
@@ -322,13 +323,13 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           Icon(Icons.cloud, size: 64, color: context.cs.onSurfaceVariant),
           const SizedBox(height: 16),
           Text(
-            'No API configs yet',
+            'settings_no_api_configs'.tr(),
             style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 15),
           ),
           const SizedBox(height: 12),
           FilledButton.tonal(
             onPressed: () => _createNewPreset([]),
-            child: const Text('Add API Config'),
+            child: Text('settings_add_api_config'.tr()),
           ),
         ],
       ),
@@ -351,20 +352,20 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             child: _buildTopControls(list, activeName),
           ),
           SettingsGroup(
-            header: 'Connection',
+            header: 'onboarding_connection'.tr(),
             children: [
               SettingsItemField(
-                label: 'Config Name',
+                label: 'settings_config_name'.tr(),
                 controller: _nameCtrl,
                 placeholder: 'My OpenAI',
               ),
               SettingsItemField(
-                label: 'API Endpoint',
+                label: 'onboarding_label_endpoint'.tr(),
                 controller: _endpointCtrl,
                 placeholder: 'http://127.0.0.1:5000/v1',
               ),
               SettingsItemField(
-                label: 'Model Name',
+                label: 'onboarding_label_model'.tr(),
                 controller: _modelCtrl,
                 placeholder: 'gemini-3-pro-preview',
                 suffix: _isLoadingModels
@@ -383,13 +384,13 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                           size: 22,
                         ),
                         tooltip: _fetchedModels.isEmpty
-                            ? 'Fetch models'
-                            : 'Select model',
+                            ? 'settings_fetch_models'.tr()
+                            : 'settings_select_model'.tr(),
                         onPressed: _openModelSelector,
                       ),
               ),
               SettingsItemField(
-                label: 'API Key',
+                label: 'onboarding_label_key'.tr(),
                 controller: _keyCtrl,
                 placeholder: 'sk-...',
                 obscure: !_showApiKey,
@@ -405,8 +406,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 ),
               ),
               SettingsItemSwitch(
-                label: 'Streaming response',
-                subtitle: 'Show text as it is being generated',
+                label: 'label_stream'.tr(),
+                subtitle: 'desc_stream'.tr(),
                 value: _stream,
                 onChanged: (v) {
                   setState(() => _stream = v);
@@ -416,10 +417,10 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             ],
           ),
           SettingsGroup(
-            header: 'Generation Parameters',
+            header: 'section_gen_params'.tr(),
             children: [
               SettingsItemRange(
-                label: 'Temperature',
+                label: 'label_temperature'.tr(),
                 value: _temperature,
                 min: 0,
                 max: 2,
@@ -430,7 +431,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 },
               ),
               SettingsItemRange(
-                label: 'Top P',
+                label: 'label_top_p'.tr(),
                 value: _topP,
                 min: 0,
                 max: 1,
@@ -441,13 +442,13 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 },
               ),
               SettingsItemField(
-                label: 'Max Output Tokens',
+                label: 'label_max_tokens'.tr(),
                 controller: _maxTokensCtrl,
                 placeholder: '8000',
                 keyboardType: TextInputType.number,
               ),
               SettingsItemField(
-                label: 'Context Size',
+                label: 'label_context_size'.tr(),
                 controller: _contextSizeCtrl,
                 placeholder: '32000',
                 keyboardType: TextInputType.number,
@@ -455,12 +456,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             ],
           ),
           SettingsGroup(
-            header: 'Reasoning',
+            header: 'label_reasoning_settings'.tr(),
             children: [
               SettingsItemSwitch(
-                label: 'Show Native Reasoning',
-                subtitle:
-                    "Shows reasoning_content. Doesn't affect model's reasoning.",
+                label: 'label_reasoning'.tr(),
+                subtitle: 'desc_reasoning'.tr(),
                 value: _requestReasoning,
                 onChanged: (v) {
                   setState(() => _requestReasoning = v);
@@ -468,20 +468,18 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 },
               ),
               SettingsItemSelector(
-                label: 'Reasoning Effort',
-                currentValue:
-                    _reasoningEffort[0].toUpperCase() +
-                    _reasoningEffort.substring(1),
+                label: 'label_reasoning_effort'.tr(),
+                currentValue: _reasoningEffortLabel(_reasoningEffort),
                 onTap: _openReasoningEffortSelector,
               ),
             ],
           ),
           SettingsGroup(
-            header: 'Omit Parameters',
+            header: 'section_omit_params'.tr(),
             children: [
               SettingsItemSwitch(
-                label: 'Omit Temperature',
-                subtitle: "Don't send temperature to API",
+                label: 'label_omit_temperature'.tr(),
+                subtitle: 'desc_omit_temperature'.tr(),
                 value: _omitTemperature,
                 onChanged: (v) {
                   setState(() => _omitTemperature = v);
@@ -489,8 +487,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 },
               ),
               SettingsItemSwitch(
-                label: 'Omit Top P',
-                subtitle: "Don't send top_p to API",
+                label: 'label_omit_top_p'.tr(),
+                subtitle: 'desc_omit_top_p'.tr(),
                 value: _omitTopP,
                 onChanged: (v) {
                   setState(() => _omitTopP = v);
@@ -498,8 +496,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 },
               ),
               SettingsItemSwitch(
-                label: 'Omit Reasoning',
-                subtitle: "Don't send reasoning params to API",
+                label: 'label_omit_reasoning'.tr(),
+                subtitle: 'desc_omit_reasoning'.tr(),
                 value: _omitReasoning,
                 onChanged: (v) {
                   setState(() => _omitReasoning = v);
@@ -507,8 +505,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 },
               ),
               SettingsItemSwitch(
-                label: 'Omit Reasoning Effort',
-                subtitle: "Don't send reasoning_effort to API",
+                label: 'label_omit_reasoning_effort'.tr(),
+                subtitle: 'desc_omit_reasoning_effort'.tr(),
                 value: _omitReasoningEffort,
                 onChanged: (v) {
                   setState(() => _omitReasoningEffort = v);
@@ -538,11 +536,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             child: _buildTopControls(list, activeName),
           ),
           SettingsGroup(
-            header: 'Embeddings',
+            header: 'tab_embeddings'.tr(),
             children: [
               SettingsItemSwitch(
-                label: 'Vector Search',
-                subtitle: 'Enable semantic search for lorebook entries',
+                label: 'search_type_vector'.tr(),
+                subtitle: 'settings_enable_vector_desc'.tr(),
                 value: _embeddingEnabled,
                 onChanged: (v) {
                   setState(() => _embeddingEnabled = v);
@@ -551,8 +549,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               ),
               if (_embeddingEnabled) ...[
                 SettingsItemSwitch(
-                  label: 'Use LLM API',
-                  subtitle: 'Use the same endpoint as LLM for embeddings',
+                  label: 'settings_use_llm_api'.tr(),
+                  subtitle: 'settings_use_llm_api_desc'.tr(),
                   value: _embeddingUseSame,
                   onChanged: (v) {
                     setState(() => _embeddingUseSame = v);
@@ -561,17 +559,17 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 ),
                 if (!_embeddingUseSame) ...[
                   SettingsItemField(
-                    label: 'Embedding Endpoint',
+                    label: 'settings_embedding_endpoint'.tr(),
                     controller: _embEndpointCtrl,
                     placeholder: 'http://127.0.0.1:11434/v1',
                   ),
                   SettingsItemField(
-                    label: 'Embedding Model',
+                    label: 'settings_embedding_model'.tr(),
                     controller: _embModelCtrl,
                     placeholder: 'text-embedding-3-small',
                   ),
                   SettingsItemField(
-                    label: 'API Key',
+                    label: 'onboarding_label_key'.tr(),
                     controller: _embApiKeyCtrl,
                     placeholder: 'sk-...',
                     obscure: true,
@@ -579,12 +577,12 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 ],
                 if (_embeddingUseSame)
                   SettingsItemField(
-                    label: 'Embedding Model',
+                    label: 'settings_embedding_model'.tr(),
                     controller: _embModelCtrl,
                     placeholder: 'text-embedding-3-small',
                   ),
                 SettingsItemField(
-                  label: 'Max Tokens Per Chunk',
+                  label: 'settings_max_tokens_chunk'.tr(),
                   controller: _embChunkTokensCtrl,
                   placeholder: '512',
                   keyboardType: TextInputType.number,
@@ -615,8 +613,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                     : const Icon(Icons.wifi_find_rounded),
                 label: Text(
                   _embStatus == ApiConnectionStatus.connecting
-                      ? 'Testing...'
-                      : 'Test Connection',
+                      ? 'settings_testing'.tr()
+                      : 'settings_test_connection'.tr(),
                 ),
               ),
             ),
@@ -636,13 +634,13 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         (list.isNotEmpty ? list.first.id : null);
     await GlazeBottomSheet.show(
       context,
-      title: 'API Configs',
+      title: 'settings_api_configs_title'.tr(),
       headerAction: IconButton(
         icon: Icon(
           Icons.add_circle_outline_rounded,
           color: context.cs.primary,
         ),
-        tooltip: 'New config',
+        tooltip: 'settings_new_config_tooltip'.tr(),
         onPressed: () {
           Navigator.of(context, rootNavigator: true).pop();
           _createNewPreset(list);
@@ -654,7 +652,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             ? config.name
             : config.model.isNotEmpty
             ? config.model
-            : 'Unnamed';
+            : 'unnamed_entry'.tr();
         
         String? faviconUrl;
         if (config.endpoint.isNotEmpty) {
@@ -714,10 +712,10 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   Future<void> _createNewPreset(List<ApiConfig> existing) async {
     await GlazeBottomSheet.show(
       context,
-      title: 'New API Config',
+      title: 'settings_new_config_title'.tr(),
       input: BottomSheetInput(
         placeholder: 'My OpenAI',
-        confirmLabel: 'Create',
+        confirmLabel: 'btn_create'.tr(),
         onConfirm: (name) async {
           Navigator.of(context, rootNavigator: true).pop();
           final trimmed = name.trim();
@@ -727,10 +725,6 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             id: DateTime.now().millisecondsSinceEpoch.toString(),
             name: trimmed,
           );
-          // Set active id BEFORE put() so the rebuild triggered by
-          // invalidateSelf() picks the new config (and the build's
-          // _loadedPresetId check below doesn't schedule a reload of
-          // the previous active config, which would clobber our data).
           ref.read(activeApiPresetIdProvider.notifier).state = newConfig.id;
           _persistActiveId(newConfig.id);
           _loadedPresetId = null;
@@ -754,7 +748,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     }
     await GlazeBottomSheet.show(
       context,
-      title: 'Select Model',
+      title: 'onboarding_select_model'.tr(),
       items: models.map((m) => BottomSheetItem(
         label: m,
         icon: m == current ? Icons.check : null,
@@ -767,13 +761,23 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     );
   }
 
+  String _reasoningEffortLabel(String effort) {
+    return switch (effort) {
+      'auto' => 'reasoning_effort_auto'.tr(),
+      'low' => 'reasoning_effort_low'.tr(),
+      'medium' => 'reasoning_effort_medium'.tr(),
+      'high' => 'reasoning_effort_high'.tr(),
+      _ => effort,
+    };
+  }
+
   void _openReasoningEffortSelector() {
     const options = ['auto', 'low', 'medium', 'high'];
     GlazeBottomSheet.show(
       context,
-      title: 'Reasoning Effort',
+      title: 'label_reasoning_effort'.tr(),
       items: options.map((e) {
-        final label = e[0].toUpperCase() + e.substring(1);
+        final label = _reasoningEffortLabel(e);
         final active = e == _reasoningEffort;
         return BottomSheetItem(
           label: label,
@@ -793,7 +797,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     final endpoint = _endpointCtrl.text.trim();
     final apiKey = _keyCtrl.text.trim();
     if (endpoint.isEmpty || apiKey.isEmpty) {
-      GlazeToast.show(context, 'Enter endpoint and API key first');
+      GlazeToast.show(context, 'settings_err_endpoint_key'.tr());
       return;
     }
     setState(() => _isLoadingModels = true);
@@ -807,11 +811,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         _fetchedModels = models;
         _isLoadingModels = false;
       });
-      if (models.isEmpty) GlazeToast.show(context, 'No models returned');
+      if (models.isEmpty) GlazeToast.show(context, 'settings_err_no_models'.tr());
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingModels = false);
-        GlazeToast.error(context, 'Failed: ', e);
+        GlazeToast.error(context, 'settings_err_failed'.tr(), e);
       }
     }
   }
@@ -821,7 +825,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     final apiKey = _keyCtrl.text.trim();
     final model = _modelCtrl.text.trim();
     if (endpoint.isEmpty || apiKey.isEmpty || model.isEmpty) {
-      GlazeToast.show(context, 'Fill endpoint, API key, and model');
+      GlazeToast.show(context, 'settings_err_fill_all'.tr());
       return;
     }
     setState(() {
@@ -843,7 +847,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           _llmStatus = ApiConnectionStatus.failed;
           _llmError = error.toString();
         });
-        GlazeToast.error(context, 'Connection failed: ', error);
+        GlazeToast.error(context, 'settings_err_conn_failed'.tr(), error);
     }
   }
 
@@ -861,7 +865,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       model = _embModelCtrl.text.trim();
     }
     if (endpoint.isEmpty) {
-      GlazeToast.show(context, 'Fill endpoint first');
+      GlazeToast.show(context, 'settings_err_fill_endpoint'.tr());
       return;
     }
     setState(() {
@@ -879,7 +883,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         GlazeToast.show(context, message);
       case ApiTestFailure(:final error):
         setState(() => _embStatus = ApiConnectionStatus.failed);
-        GlazeToast.error(context, 'Connection failed: ', error);
+        GlazeToast.error(context, 'settings_err_conn_failed'.tr(), error);
     }
   }
 }

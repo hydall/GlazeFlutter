@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -328,8 +329,8 @@ class _OurPicksCardState extends State<_OurPicksCard>
                           items: [
                             BottomSheetItem(
                               icon: Icons.visibility_off_rounded,
-                              label: 'Hide',
-                              hint: 'можно вернуть из настроек приложения',
+                              label: 'action_hide_msg'.tr(),
+                              hint: 'our_picks_restore_hint'.tr(),
                               onTap: () {
                                 Navigator.of(context, rootNavigator: true).pop();
                                 widget.onHide?.call();

@@ -10,6 +10,7 @@ import '../services/datacat_provider.dart';
 import '../services/janitor_provider.dart';
 import '../services/janny_provider.dart';
 import '../services/chub_provider.dart';
+import 'package:easy_localization/easy_localization.dart';
 
 class CatalogPreviewSheet extends ConsumerStatefulWidget {
   final CatalogItem item;
@@ -94,7 +95,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             ),
             const SizedBox(height: 16),
             Text(
-              _error ?? 'Unknown error',
+              _error ?? 'title_error'.tr(),
               style: TextStyle(
                 color: context.cs.onSurfaceVariant,
                 fontSize: 13,
@@ -113,9 +114,9 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
                   color: context.cs.primary,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Text(
-                  'Retry',
-                  style: TextStyle(
+                child: Text(
+                  'btn_retry'.tr(),
+                  style: const TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
                   ),
@@ -168,7 +169,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
                     if (char.creator.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'by @${char.creator}',
+                        "${'placeholder_author_name'.tr()}: @${char.creator}",
                         style: TextStyle(
                           fontSize: 13,
                           color: context.cs.onSurfaceVariant,
@@ -214,7 +215,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
           ),
           const SizedBox(height: 20),
           if (char.creatorNotes.isNotEmpty) ...[
-            _sectionTitle('Short Description'),
+            _sectionTitle('onboarding_placeholder_desc'.tr().split(' ')[0] + ' ' + 'label_description'.tr()),
             const SizedBox(height: 4),
             Text(
               char.creatorNotes,
@@ -227,7 +228,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             const SizedBox(height: 16),
           ],
           if (char.description.isNotEmpty) ...[
-            _sectionTitle('Description'),
+            _sectionTitle('label_description'.tr()),
             const SizedBox(height: 4),
             Text(
               char.description,
@@ -240,7 +241,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             const SizedBox(height: 16),
           ],
           if (char.scenario.isNotEmpty) ...[
-            _sectionTitle('Scenario'),
+            _sectionTitle('label_scenario'.tr()),
             const SizedBox(height: 4),
             Text(
               char.scenario,
@@ -253,7 +254,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             const SizedBox(height: 16),
           ],
           if (char.firstMes.isNotEmpty) ...[
-            _sectionTitle('First Message'),
+            _sectionTitle('label_first_mes'.tr()),
             const SizedBox(height: 4),
             Container(
               width: double.infinity,
@@ -315,12 +316,12 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
       await ref.read(catalogProvider.notifier).importCharacter(_downloaded!);
       if (mounted) {
         Navigator.pop(context);
-        GlazeToast.show(context, 'Imported ${_downloaded!.charData.name}');
+        GlazeToast.show(context, "${'catalog_imported'.tr()} ${_downloaded!.charData.name}");
       }
     } catch (e) {
       if (mounted) {
         setState(() => _importing = false);
-        GlazeToast.error(context, 'Import failed: ', e);
+        GlazeToast.error(context, "${'catalog_error_import'.tr()}: ", e);
       }
     }
   }
@@ -361,14 +362,14 @@ class _ImportButton extends StatelessWidget {
                     color: Colors.white,
                   ),
                 )
-              : const Row(
+              : Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.download_rounded, color: Colors.white, size: 22),
-                    SizedBox(width: 8),
+                    const Icon(Icons.download_rounded, color: Colors.white, size: 22),
+                    const SizedBox(width: 8),
                     Text(
-                      'Import Character',
-                      style: TextStyle(
+                      'catalog_import'.tr(),
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.w600,

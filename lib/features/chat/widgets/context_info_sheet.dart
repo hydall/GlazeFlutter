@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -44,9 +45,9 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
     final summary = await summaryService.getSummary(session.id);
     sources.add(_SourceItem(
       icon: Icons.summarize,
-      label: 'Summary',
+      label: 'magic_summary'.tr(),
       active: summary != null && summary.isNotEmpty,
-      detail: summary != null && summary.isNotEmpty ? '${summary.length} chars' : 'Not generated',
+      detail: summary != null && summary.isNotEmpty ? '${summary.length}' : 'placeholder_empty'.tr(),
       color: summary != null && summary.isNotEmpty ? Colors.green : context.cs.onSurfaceVariant,
     ));
 
@@ -59,11 +60,11 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
     );
     sources.add(_SourceItem(
       icon: Icons.auto_stories,
-      label: 'Memory Book',
+      label: 'magic_memory_books'.tr(),
       active: memoryResult.entries.isNotEmpty,
       detail: memoryResult.entries.isNotEmpty
-          ? '${memoryResult.entries.length} entries injected (${memoryResult.injectionTarget})'
-          : 'No active entries matched',
+          ? '${memoryResult.entries.length} (${memoryResult.injectionTarget})'
+          : 'memory_books_no_entries'.tr(),
       color: memoryResult.entries.isNotEmpty ? Colors.orange : context.cs.onSurfaceVariant,
     ));
 
@@ -105,17 +106,17 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
 
     sources.add(_SourceItem(
       icon: Icons.menu_book,
-      label: 'Lorebooks',
+      label: 'label_lorebooks'.tr(),
       active: activeLorebooks.isNotEmpty,
-      detail: '${activeLorebooks.length} active book${activeLorebooks.length != 1 ? 's' : ''}, $triggeredCount entr${triggeredCount != 1 ? 'ies' : 'y'} triggered',
+      detail: '${activeLorebooks.length} (${triggeredCount})',
       color: activeLorebooks.isNotEmpty ? Colors.cyan : context.cs.onSurfaceVariant,
     ));
 
     sources.add(_SourceItem(
       icon: Icons.chat_bubble_outline,
-      label: 'Chat History',
+      label: 'block_chat_history'.tr(),
       active: true,
-      detail: '${nonHiddenMessages.length} visible message${nonHiddenMessages.length != 1 ? 's' : ''}${session.messages.where((m) => m.isHidden).isNotEmpty ? ', ${session.messages.where((m) => m.isHidden).length} hidden' : ''}',
+      detail: '${nonHiddenMessages.length}',
       color: context.cs.primary,
     ));
 
@@ -139,7 +140,7 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
               Icon(Icons.info_outline, color: context.cs.primary, size: 22),
               const SizedBox(width: 8),
               Expanded(
-                child: Text('Context Sources', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: context.cs.onSurface)),
+                child: Text('section_advanced_settings'.tr(), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: context.cs.onSurface)),
               ),
               IconButton(
                 icon: const Icon(Icons.close, size: 20),

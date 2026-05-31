@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -151,11 +152,11 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                                 onOurPicksHide: () {
                                   final s = ref.read(appSettingsProvider).valueOrNull;
                                   if (s != null) {
-                                    ref.read(appSettingsProvider.notifier).save(
-                                      s.copyWith(showOurPicks: false),
-                                    );
-                                    GlazeToast.show(context, 'Our Picks скрыт. Восстановить можно в настройках.');
-                                  }
+                                      ref.read(appSettingsProvider.notifier).save(
+                                        s.copyWith(showOurPicks: false),
+                                      );
+                                      GlazeToast.show(context, 'our_picks_hidden_toast'.tr());
+                                    }
                                 },
                                 onSortDirToggle: () => setState(() {
                                   _sortDir = _sortDir == SortDir.asc

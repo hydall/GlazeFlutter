@@ -7,6 +7,7 @@ import '../../core/glossary/glossary_models.dart';
 import '../../core/glossary/glossary_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/sheet_view.dart';
+import '../../shared/widgets/glass_surface.dart';
 import '../settings/app_settings_provider.dart';
 
 /// Bottom-sheet glossary viewer — port of `GlossarySheet.vue`.
@@ -15,11 +16,12 @@ import '../settings/app_settings_provider.dart';
 /// When opened with [initialTerm], jumps straight to that article.
 class GlossarySheet extends ConsumerStatefulWidget {
   final String? initialTerm;
+  final bool startExpanded;
 
-  const GlossarySheet({super.key, this.initialTerm});
+  const GlossarySheet({super.key, this.initialTerm, this.startExpanded = false});
 
   /// Convenience launcher used by `HelpTip` and menu entries.
-  static Future<void> show(BuildContext context, {String? initialTerm}) {
+  static Future<void> show(BuildContext context, {String? initialTerm, bool startExpanded = false}) {
     return showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
@@ -27,7 +29,7 @@ class GlossarySheet extends ConsumerStatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black54,
-      builder: (_) => GlossarySheet(initialTerm: initialTerm),
+      builder: (_) => GlossarySheet(initialTerm: initialTerm, startExpanded: startExpanded),
     );
   }
 
@@ -119,6 +121,10 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
       return;
     }
     if (_openedViaHelptip) {
+      Navigator.of(context).maybePop();
+      return;
+    }
+    if (_view == _View.categories) {
       Navigator.of(context).maybePop();
       return;
     }
@@ -220,28 +226,36 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
 
         return SheetView(
           title: _title(),
-          showBack: _view != _View.categories,
+          showBack: _view != _View.categories || ModalRoute.of(context) is! ModalBottomSheetRoute,
           onBack: _goBack,
-          startExpanded: true,
+          startExpanded: widget.startExpanded,
           headerBottom: showSearch ? _buildSearchBar(context) : null,
-          body: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 200),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            transitionBuilder: (child, anim) {
-              final offsetTween = Tween<Offset>(
-                begin: Offset(_forward ? 0.08 : -0.08, 0),
-                end: Offset.zero,
+          body: Builder(
+            builder: (innerContext) {
+              final mediaPad = EdgeInsets.only(
+                top: MediaQuery.paddingOf(innerContext).top,
+                bottom: MediaQuery.paddingOf(innerContext).bottom,
               );
-              return FadeTransition(
-                opacity: anim,
-                child: SlideTransition(
-                  position: offsetTween.animate(anim),
-                  child: child,
-                ),
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, anim) {
+                  final offsetTween = Tween<Offset>(
+                    begin: Offset(_forward ? 0.08 : -0.08, 0),
+                    end: Offset.zero,
+                  );
+                  return FadeTransition(
+                    opacity: anim,
+                    child: SlideTransition(
+                      position: offsetTween.animate(anim),
+                      child: child,
+                    ),
+                  );
+                },
+                child: _buildContent(innerContext, categories, mediaPad),
               );
             },
-            child: _buildContent(context, categories),
           ),
         );
       },
@@ -249,14 +263,12 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
   }
 
   Widget _buildSearchBar(BuildContext context) {
-    return Container(
-      height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        borderRadius: BorderRadius.circular(14),
-      ),
+    return GlassSurface(
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: context.cs.outlineVariant),
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
           Icon(Icons.search,
@@ -297,35 +309,36 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
             ),
         ],
       ),
-    );
+    ));
   }
 
-  Widget _buildContent(BuildContext context, List<GlossaryCategory> cats) {
+  Widget _buildContent(
+      BuildContext context, List<GlossaryCategory> cats, EdgeInsets mediaPad) {
     switch (_view) {
       case _View.categories:
         return KeyedSubtree(
           key: const ValueKey('cats'),
           child: _query.trim().isEmpty
-              ? _buildCategoriesGrid(context, cats)
-              : _buildSearchResults(context, cats),
+              ? _buildCategoriesGrid(context, cats, mediaPad)
+              : _buildSearchResults(context, cats, mediaPad),
         );
       case _View.terms:
         return KeyedSubtree(
           key: ValueKey('terms-${_cat?.id}'),
-          child: _buildTermsList(context, cats),
+          child: _buildTermsList(context, cats, mediaPad),
         );
       case _View.article:
         return KeyedSubtree(
           key: ValueKey('article-${_term?.id}'),
-          child: _buildArticle(context, cats),
+          child: _buildArticle(context, cats, mediaPad),
         );
     }
   }
 
   Widget _buildCategoriesGrid(
-      BuildContext context, List<GlossaryCategory> cats) {
+      BuildContext context, List<GlossaryCategory> cats, EdgeInsets mediaPad) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 80).add(mediaPad),
       children: [
         for (final c in cats) ...[
           _CategoryCard(
@@ -343,7 +356,7 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
   }
 
   Widget _buildSearchResults(
-      BuildContext context, List<GlossaryCategory> cats) {
+      BuildContext context, List<GlossaryCategory> cats, EdgeInsets mediaPad) {
     final q = _query.trim().toLowerCase();
     final results = <(GlossaryTerm, String)>[];
     for (final c in cats) {
@@ -356,7 +369,7 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
     }
     if (results.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.fromLTRB(20, 40, 20, 40),
+        padding: const EdgeInsets.fromLTRB(20, 40, 20, 40).add(mediaPad),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -376,7 +389,7 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
       );
     }
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 80),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 80).add(mediaPad),
       itemCount: results.length,
       separatorBuilder: (_, __) => const SizedBox(height: 6),
       itemBuilder: (_, i) {
@@ -393,10 +406,10 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
   }
 
   Widget _buildTermsList(
-      BuildContext context, List<GlossaryCategory> cats) {
+      BuildContext context, List<GlossaryCategory> cats, EdgeInsets mediaPad) {
     final terms = _cat?.terms ?? const [];
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 80),
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 80).add(mediaPad),
       itemCount: terms.length,
       separatorBuilder: (_, __) => const SizedBox(height: 6),
       itemBuilder: (_, i) {
@@ -411,11 +424,11 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
   }
 
   Widget _buildArticle(
-      BuildContext context, List<GlossaryCategory> cats) {
+      BuildContext context, List<GlossaryCategory> cats, EdgeInsets mediaPad) {
     final term = _term;
     if (term == null) return const SizedBox.shrink();
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80).add(mediaPad),
       children: [
         Text(
           term.name,
@@ -482,20 +495,16 @@ class _CategoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.05),
+    return GlassSurface(
       borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border:
-                Border.all(color: Colors.white.withValues(alpha: 0.09)),
-          ),
-          padding: const EdgeInsets.all(14),
-          child: Row(
+      border: Border.all(color: context.cs.outlineVariant),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
             children: [
               Container(
                 width: 42,
@@ -537,7 +546,7 @@ class _CategoryCard extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -550,21 +559,17 @@ class _TermTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white.withValues(alpha: 0.05),
+    return GlassSurface(
       borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border:
-                Border.all(color: Colors.white.withValues(alpha: 0.09)),
-          ),
-          padding: const EdgeInsets.symmetric(
-              horizontal: 14, vertical: 12),
-          child: Row(
+      border: Border.all(color: context.cs.outlineVariant),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: 14, vertical: 12),
+            child: Row(
             children: [
               Expanded(
                 child: Column(
@@ -598,7 +603,7 @@ class _TermTile extends StatelessWidget {
           ),
         ),
       ),
-    );
+    ));
   }
 }
 

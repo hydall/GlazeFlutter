@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../../core/services/memory_prompt_presets.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -38,13 +39,13 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'Custom Prompts',
+                "${'theme_custom_font_size'.tr()} ${'label_preset_prompts'.tr()}",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.cs.onSurface),
               ),
               IconButton(
                 onPressed: _addPrompt,
                 icon: Icon(Icons.add_rounded, color: context.cs.primary),
-                tooltip: 'Add prompt',
+                tooltip: 'action_add'.tr(),
               ),
             ],
           ),
@@ -54,7 +55,7 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
               padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
                 child: Text(
-                  'No custom prompts yet.\nTap + to create one.',
+                  "${'no_prompt'.tr()}...",
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
                 ),
@@ -68,7 +69,7 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
             children: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: Text('btn_cancel'.tr()),
               ),
               const SizedBox(width: 8),
               FilledButton(
@@ -80,7 +81,7 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
                   widget.onChanged(_prompts);
                   Navigator.pop(context);
                 },
-                child: const Text('Save'),
+                child: Text('btn_save'.tr()),
               ),
             ],
           ),
@@ -131,7 +132,7 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
   void _addPrompt() async {
     final result = await GlazeBottomSheet.show<MemoryPromptPreset>(
       context,
-      title: 'New Prompt',
+      title: "${'btn_create'.tr()} ${'label_char_prompt'.tr()}",
       child: _PromptEditor(
         existingKeys: {...MemoryPromptPresets.builtIn.map((p) => p.key), ..._prompts.map((p) => p.key)},
       ),
@@ -144,7 +145,7 @@ class _CustomPromptManagerSheetState extends State<CustomPromptManagerSheet> {
   void _editPrompt(int index) async {
     final result = await GlazeBottomSheet.show<MemoryPromptPreset>(
       context,
-      title: 'Edit Prompt',
+      title: "${'action_edit'.tr()} ${'label_char_prompt'.tr()}",
       child: _PromptEditor(
         existingKeys: {...MemoryPromptPresets.builtIn.map((p) => p.key), ..._prompts.map((p) => p.key).where((k) => k != _prompts[index].key)},
         initial: _prompts[index],
@@ -204,7 +205,7 @@ class _PromptEditorState extends State<_PromptEditor> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            isEdit ? 'Edit Prompt' : 'New Prompt',
+            isEdit ? "${'action_edit'.tr()} ${'label_char_prompt'.tr()}" : "${'btn_create'.tr()} ${'label_char_prompt'.tr()}",
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: context.cs.onSurface),
           ),
           const SizedBox(height: 16),
@@ -213,7 +214,7 @@ class _PromptEditorState extends State<_PromptEditor> {
             onChanged: (_) => setState(() => _labelError = null),
             style: TextStyle(color: context.cs.onSurface, fontSize: 14),
             decoration: InputDecoration(
-              labelText: 'Name',
+              labelText: 'label_name'.tr(),
               labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
               errorText: _labelError,
               filled: true,
@@ -230,8 +231,8 @@ class _PromptEditorState extends State<_PromptEditor> {
             textInputAction: TextInputAction.newline,
             style: TextStyle(color: context.cs.onSurface, fontSize: 13),
             decoration: InputDecoration(
-              labelText: 'Prompt template',
-              hintText: 'Use {{history}} for chat text injection',
+              labelText: 'label_char_prompt'.tr(),
+              hintText: 'chat_history_anchor_hint'.tr(),
               labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
               hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.4)),
               alignLabelWithHint: true,
@@ -247,7 +248,7 @@ class _PromptEditorState extends State<_PromptEditor> {
             children: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
+                child: Text('btn_cancel'.tr()),
               ),
               const SizedBox(width: 8),
               FilledButton(
@@ -256,7 +257,7 @@ class _PromptEditorState extends State<_PromptEditor> {
                   foregroundColor: Colors.black,
                 ),
                 onPressed: _save,
-                child: Text(isEdit ? 'Update' : 'Create'),
+                child: Text(isEdit ? 'btn_save'.tr() : 'btn_create'.tr()),
               ),
             ],
           ),
@@ -268,7 +269,7 @@ class _PromptEditorState extends State<_PromptEditor> {
   void _save() {
     final label = _labelCtrl.text.trim();
     if (label.isEmpty) {
-      setState(() => _labelError = 'Name is required');
+      setState(() => _labelError = 'error_name_required'.tr());
       return;
     }
     final key = widget.initial?.key ?? 'custom_${DateTime.now().millisecondsSinceEpoch}';

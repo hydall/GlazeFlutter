@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -102,7 +103,7 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  isNew ? 'New Quick Reply' : 'Edit Quick Reply',
+                  isNew ? "${'action_create_new'.tr()}" : "${'action_edit'.tr()}",
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
@@ -113,10 +114,10 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
                 TextField(
                   controller: labelCtrl,
                   autofocus: isNew,
-                  decoration: const InputDecoration(
-                    labelText: 'Label',
-                    hintText: 'Short name',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: 'label_block_name'.tr(),
+                    hintText: 'placeholder_block_name'.tr(),
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -124,10 +125,10 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
                   controller: textCtrl,
                   maxLines: 4,
                   minLines: 2,
-                  decoration: const InputDecoration(
-                    labelText: 'Message text',
-                    hintText: 'Text to send when tapped',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: 'label_content'.tr(),
+                    hintText: 'placeholder_prompt_text'.tr(),
+                    border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -141,15 +142,15 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
                         },
                         icon: const Icon(Icons.delete_outline,
                             color: Colors.redAccent),
-                        label: const Text(
-                          'Delete',
-                          style: TextStyle(color: Colors.redAccent),
+                        label: Text(
+                          'btn_delete'.tr(),
+                          style: const TextStyle(color: Colors.redAccent),
                         ),
                       ),
                     const Spacer(),
                     TextButton(
                       onPressed: () => Navigator.of(sheetCtx).pop(),
-                      child: const Text('Cancel'),
+                      child: Text('btn_cancel'.tr()),
                     ),
                     const SizedBox(width: 8),
                     FilledButton(
@@ -167,7 +168,7 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
                               label: label, text: text);
                         }
                       },
-                      child: Text(isNew ? 'Add' : 'Save'),
+                      child: Text(isNew ? 'action_add'.tr() : 'btn_save'.tr()),
                     ),
                   ],
                 ),
@@ -182,7 +183,7 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
   }
 
   String _previewText(QuickReply reply) {
-    if (reply.isContinueAction) return 'Continue the response';
+    if (reply.isContinueAction) return 'magic_regenerate'.tr();
     final t = reply.text.replaceAll('\n', ' ').trim();
     return t.isEmpty ? '—' : t;
   }
@@ -205,10 +206,10 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
           status: _previewText(r),
         ),
       if (_editing)
-        const MagicDrawerCardItem(
+        MagicDrawerCardItem(
           def: MagicDrawerItemDef(
             id: '__add__',
-            label: 'Add',
+            label: 'action_add'.tr(),
             icon: Icons.add,
           ),
           isAddButton: true,
@@ -347,7 +348,7 @@ class QuickRepliesHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
-            'Quick Replies',
+            'sheet_title_magic_drawer'.tr(),
             style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
@@ -384,7 +385,7 @@ class QuickRepliesHeader extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    editing ? 'Done' : 'Edit',
+                    editing ? 'btn_ok'.tr() : 'action_edit'.tr(),
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
