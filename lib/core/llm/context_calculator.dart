@@ -68,13 +68,19 @@ class ContextCalculator {
     final fixedTotal = staticTotal + effectiveReserve + memoryTokens + vectorLoreTokens;
     final remaining = safeContext - fixedTotal - historyTokens;
 
+    // sentTokens = tokens actually sent in the request (no unspent reserve).
+    // fixedTotal includes effectiveReserve which shrinks the history budget but
+    // is never literally in the payload; exclude it so HeroCard matches
+    // the provider's prompt_tokens as closely as possible.
+    final sentTokens = staticTotal + memoryTokens + vectorLoreTokens + historyTokens;
+
     return TokenBreakdown(
       sourceTokens: sourceTokens,
       macroTokens: macroTokens,
       staticTotal: staticTotal,
       historyBudget: historyBudget,
       historyTokens: historyTokens,
-      totalTokens: fixedTotal + historyTokens,
+      totalTokens: sentTokens,
       cutoffIndex: cutoffIndex,
       trimmedHistory: trimmedHistory,
       lorebookReserveTokens: lorebookReserveTokens,
