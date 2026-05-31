@@ -167,6 +167,15 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       onBack: () => _showSettings
           ? setState(() => _showSettings = false)
           : Navigator.of(context).maybePop(),
+      actions: _showSettings
+          ? []
+          : [
+              SheetViewAction(
+                icon: const Icon(Icons.refresh, size: 20),
+                tooltip: 'Recalculate',
+                onPressed: _loading ? () {} : _calculate,
+              ),
+            ],
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : bd == null

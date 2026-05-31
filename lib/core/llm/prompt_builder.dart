@@ -225,7 +225,7 @@ PromptResult buildPrompt(PromptPayload payload) {
         name: kw.comment.isNotEmpty ? kw.comment : kw.id,
         lorebookName: kw.lorebookName,
         lorebookId: kw.lorebookId,
-        source: 'keyword',
+        source: kw.constant ? 'constant' : 'keyword',
       ));
       continue;
     }

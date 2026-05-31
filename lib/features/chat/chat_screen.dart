@@ -430,6 +430,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                       ? Colors.purple.withValues(alpha: 0.15)
                                       : e.source == 'memory'
                                       ? Colors.teal.withValues(alpha: 0.15)
+                                      : e.source == 'constant'
+                                      ? Colors.deepPurple.withValues(alpha: 0.18)
                                       : context.cs.primaryContainer,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
@@ -438,6 +440,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                       ? 'vector'
                                       : e.source == 'memory'
                                       ? 'memory'
+                                      : e.source == 'constant'
+                                      ? 'const'
                                       : 'keyword',
                                   style: TextStyle(
                                     fontSize: 10,
@@ -446,6 +450,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                         ? Colors.purple
                                         : e.source == 'memory'
                                         ? Colors.teal
+                                        : e.source == 'constant'
+                                        ? Colors.deepPurple.shade200
                                         : context.cs.onPrimaryContainer,
                                   ),
                                 ),
