@@ -536,12 +536,7 @@ class SyncEngine {
           );
           break;
         case 'api_presets':
-          await _applySingleton<ApiConfig>(
-            data,
-            ApiConfig.fromJson,
-            _apiRepo,
-            idOf: (a) => a.id,
-          );
+          await _applyApiConfigs(data);
           break;
         case 'theme_presets':
           await _applySingleton<Preset>(
@@ -599,6 +594,49 @@ class SyncEngine {
 
     for (final entity in parsed) {
       await put(entity);
+    }
+  }
+
+  /// Applies cloud api_presets while preserving local API keys and embedding
+  /// keys. Cloud payloads strip keys (empty string) when includeApiKeys=false;
+  /// blindly writing them would wipe the user's credentials on every pull.
+  Future<void> _applyApiConfigs(Map<String, dynamic> data) async {
+    final List<Map<String, dynamic>> items;
+    if (data['__singleton'] == true) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else if (data.containsKey('items')) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else {
+      items = [data];
+    }
+
+    final existing = await _apiRepo.getAll();
+    final localById = {for (final a in existing) a.id: a};
+
+    final cloudIds = <String>{};
+    for (final item in items) {
+      final cloudConfig = ApiConfig.fromJson(item);
+      cloudIds.add(cloudConfig.id);
+
+      final local = localById[cloudConfig.id];
+      final merged = cloudConfig.copyWith(
+        // Preserve local keys: use cloud key only when it is non-empty
+        // (i.e. when includeApiKeys=true was used during push).
+        apiKey: cloudConfig.apiKey.isNotEmpty
+            ? cloudConfig.apiKey
+            : (local?.apiKey ?? ''),
+        embeddingApiKey: cloudConfig.embeddingApiKey.isNotEmpty
+            ? cloudConfig.embeddingApiKey
+            : (local?.embeddingApiKey ?? ''),
+      );
+      await _apiRepo.put(merged);
+    }
+
+    // Delete local configs that no longer exist in cloud.
+    for (final local in existing) {
+      if (!cloudIds.contains(local.id)) {
+        await _apiRepo.delete(local.id);
+      }
     }
   }
 
