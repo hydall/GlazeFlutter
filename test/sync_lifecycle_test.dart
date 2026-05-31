@@ -8,6 +8,7 @@ import 'package:glaze_flutter/core/models/api_config.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
 import 'package:glaze_flutter/core/models/lorebook.dart';
+import 'package:glaze_flutter/core/models/memory_book.dart';
 import 'package:glaze_flutter/core/models/persona.dart';
 import 'package:glaze_flutter/core/models/preset.dart';
 import 'package:glaze_flutter/shared/theme/theme_preset.dart';
@@ -165,6 +166,26 @@ class FakeLorebookStore implements SyncLorebookStore {
   }
 }
 
+class FakeMemoryBookStore implements SyncMemoryBookStore {
+  final Map<String, MemoryBook> data = {};
+
+  @override
+  Future<List<MemoryBook>> getAll() async => data.values.toList();
+
+  @override
+  Future<MemoryBook?> getBySessionId(String sessionId) async => data[sessionId];
+
+  @override
+  Future<void> put(MemoryBook book) async {
+    data[book.sessionId] = book;
+  }
+
+  @override
+  Future<void> deleteBySessionId(String sessionId) async {
+    data.remove(sessionId);
+  }
+}
+
 class FakeEmbeddingStore implements SyncEmbeddingStore {
   final List<String> deletedIds = [];
 
@@ -261,6 +282,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     required SyncPersonaStore personaRepo,
     required SyncPresetStore presetRepo,
     required SyncApiConfigStore apiRepo,
+    required SyncMemoryBookStore memoryBookRepo,
     required SyncLorebookStore lorebookRepo,
     required SyncThemePresetStore themePresetRepo,
   }) : _builder = SyncManifestBuilder(
@@ -269,6 +291,7 @@ class InMemoryManifestProvider implements SyncManifestProvider {
           personaRepo: personaRepo,
           presetRepo: presetRepo,
           apiRepo: apiRepo,
+          memoryBookRepo: memoryBookRepo,
           lorebookRepo: lorebookRepo,
           themePresetRepo: themePresetRepo,
         );
@@ -321,6 +344,7 @@ class SyncWorld {
   late final FakePersonaStore personas;
   late final FakePresetStore presets;
   late final FakeApiConfigStore apiConfigs;
+  late final FakeMemoryBookStore memoryBooks;
   late final FakeLorebookStore lorebooks;
   late final FakeEmbeddingStore embeddings;
   late final FakeImageStore images;
@@ -334,6 +358,7 @@ class SyncWorld {
     personas = FakePersonaStore();
     presets = FakePresetStore();
     apiConfigs = FakeApiConfigStore();
+    memoryBooks = FakeMemoryBookStore();
     lorebooks = FakeLorebookStore();
     embeddings = FakeEmbeddingStore();
     images = FakeImageStore();
@@ -345,6 +370,7 @@ class SyncWorld {
       personaRepo: personas,
       presetRepo: presets,
       apiRepo: apiConfigs,
+      memoryBookRepo: memoryBooks,
       lorebookRepo: lorebooks,
       themePresetRepo: uiThemes,
     );
@@ -358,6 +384,7 @@ class SyncWorld {
         personas,
         presets,
         apiConfigs,
+        memoryBooks,
         lorebooks,
         embeddings,
         images,
@@ -384,6 +411,12 @@ Preset makePreset(String id, {String name = 'Preset'}) =>
 
 Lorebook makeLorebook(String id, {String name = 'Lorebook'}) =>
     Lorebook(id: id, name: name);
+
+MemoryBook makeMemoryBook(String sessionId, {int updatedAt = 1000}) => MemoryBook(
+      id: 'memorybook_$sessionId',
+      sessionId: sessionId,
+      updatedAt: updatedAt,
+    );
 
 // ─── Tests ──────────────────────────────────────────────────────────
 
@@ -1468,6 +1501,73 @@ void main() {
       manifest.entries['character:c1']?.hash,
       reason: 'Finalize must persist hashes from local DB, not stale cloud manifest',
     );
+  });
+
+  test('memory_book push/pull per-entity: push → pull syncs entries', () async {
+    final deviceA = SyncWorld();
+
+    final mb = makeMemoryBook('s1', updatedAt: 1000);
+    await deviceA.memoryBooks.put(mb);
+    await deviceA.chats.put(makeChat('s1', charId: 'char1'));
+
+    final manifest = await deviceA.manifestProvider.buildLocalManifest();
+    await deviceA.manifestProvider.writeLocalManifest(manifest);
+    await deviceA.engine.pushEntities(onProgress: (_) {});
+
+    expect(
+      deviceA.cloud.files.containsKey(cloudPath('memory_book', 's1')),
+      isTrue,
+      reason: 'memory_book should be pushed as a per-entity file',
+    );
+
+    final deviceB = SyncWorld();
+    deviceB.cloud.files.addAll(deviceA.cloud.files);
+
+    final conflicts = <SyncConflict>[];
+    await deviceB.engine.pullEntities(
+      onProgress: (_) {},
+      onConflict: (c) => conflicts.add(c),
+    );
+
+    expect(conflicts.where((c) => c.type == 'memory_book'), isEmpty,
+        reason: 'Empty device should have no memory_book conflicts on first pull');
+    expect(deviceB.memoryBooks.data['s1'], isNotNull,
+        reason: 'memory_book should be pulled to device B');
+    expect(deviceB.memoryBooks.data['s1']?.sessionId, equals('s1'));
+  });
+
+  test('memory_book deletion tombstone propagates to cloud on next push',
+      () async {
+    final world = SyncWorld();
+
+    final mb = makeMemoryBook('s1', updatedAt: 1000);
+    await world.memoryBooks.put(mb);
+    await world.chats.put(makeChat('s1', charId: 'char1'));
+
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    expect(world.cloud.files.containsKey(cloudPath('memory_book', 's1')), isTrue);
+
+    // Simulate deletion: remove from local store + record tombstone
+    world.memoryBooks.data.remove('s1');
+    world.chats.data.remove('s1');
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('gz_sync_deleted_entries');
+    final deleted = raw != null
+        ? (jsonDecode(raw) as List).cast<Map<String, dynamic>>().toList()
+        : <Map<String, dynamic>>[];
+    deleted.add({'type': 'memory_book', 'id': 's1'});
+    deleted.add({'type': 'chat', 'id': 's1'});
+    await prefs.setString('gz_sync_deleted_entries', jsonEncode(deleted));
+
+    final manifest2 = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest2);
+
+    final deletedEntry = manifest2.entries['memory_book:s1'];
+    expect(deletedEntry?.deleted, isTrue,
+        reason: 'Deleted memory_book should appear as tombstone in manifest');
   });
 
   test('chat conflict detection uses metadata hash and updatedAt', () {

@@ -112,8 +112,10 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
 
   Future<void> deleteSession(String sessionId) async {
     await ref.read(chatRepoProvider).delete(sessionId);
+    await ref.read(memoryBookRepoProvider).deleteBySessionId(sessionId);
     ChatSessionService.clearCache();
     await SyncDeletionTracker.record('chat', sessionId);
+    await SyncDeletionTracker.record('memory_book', sessionId);
   }
 
   Future<void> clearChat(String sessionId) async {

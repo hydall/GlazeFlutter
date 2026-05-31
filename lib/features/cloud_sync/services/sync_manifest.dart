@@ -14,6 +14,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
   final SyncPersonaStore _personaRepo;
   final SyncPresetStore _presetRepo;
   final SyncApiConfigStore _apiRepo;
+  final SyncMemoryBookStore _memoryBookRepo;
   final SyncLorebookStore _lorebookRepo;
   final SyncThemePresetStore _themePresetRepo;
   final SyncImageStore? _imageStore;
@@ -28,6 +29,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     required SyncPersonaStore personaRepo,
     required SyncPresetStore presetRepo,
     required SyncApiConfigStore apiRepo,
+    required SyncMemoryBookStore memoryBookRepo,
     required SyncLorebookStore lorebookRepo,
     required SyncThemePresetStore themePresetRepo,
     SyncImageStore? imageStore,
@@ -36,6 +38,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
         _personaRepo = personaRepo,
         _presetRepo = presetRepo,
         _apiRepo = apiRepo,
+        _memoryBookRepo = memoryBookRepo,
         _lorebookRepo = lorebookRepo,
         _themePresetRepo = themePresetRepo,
         _imageStore = imageStore;
@@ -130,6 +133,30 @@ class SyncManifestBuilder implements SyncManifestProvider {
         type: 'chat',
         id: s.sessionId,
         path: cloudPath('chat', s.sessionId),
+        updatedAt: updatedAt,
+        hash: hash,
+      );
+    }
+
+    final memoryBooks = await _memoryBookRepo.getAll();
+    for (final mb in memoryBooks) {
+      final json = mb.toJson();
+      final hash = SyncSerialization.computeSyncHash(json);
+      final key = entryKey('memory_book', mb.sessionId);
+      final prevEntry = previous.entries[key];
+      final cloudEntry = cloudManifest?.entries[key];
+      var updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+      if (mb.updatedAt > updatedAt) updatedAt = mb.updatedAt;
+
+      entries[key] = SyncManifestEntry(
+        type: 'memory_book',
+        id: mb.sessionId,
+        path: cloudPath('memory_book', mb.sessionId),
         updatedAt: updatedAt,
         hash: hash,
       );

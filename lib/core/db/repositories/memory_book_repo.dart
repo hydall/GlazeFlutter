@@ -8,12 +8,14 @@ import '../tables.dart';
 import '../../models/memory_book.dart';
 import '../../state/memory_settings_provider.dart';
 import '../../utils/time_helpers.dart';
+import '../../../features/cloud_sync/sync_repo_interfaces.dart';
 
 part 'memory_book_repo.g.dart';
 
 @DriftAccessor(tables: [MemoryBookRows])
 class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
-    with _$MemoryBookRepoMixin {
+    with _$MemoryBookRepoMixin
+    implements SyncMemoryBookStore {
   MemoryBookRepo(super.db, this._ref);
 
   final Ref _ref;
@@ -49,11 +51,13 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     return book;
   }
 
+  @override
   Future<List<MemoryBook>> getAll() async {
     final rows = await select(memoryBookRows).get();
     return rows.map(_rowToModel).toList();
   }
 
+  @override
   Future<void> put(MemoryBook book) {
     return into(memoryBookRows).insertOnConflictUpdate(
       MemoryBookRowsCompanion.insert(
@@ -70,12 +74,14 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     );
   }
 
+  @override
   Future<void> deleteBySessionId(String sessionId) {
     return (delete(memoryBookRows)
           ..where((t) => t.sessionId.equals(sessionId)))
         .go();
   }
 
+  @override
   Future<MemoryBook?> getBySessionId(String sessionId) async {
     final row = await (select(memoryBookRows)
           ..where((t) => t.sessionId.equals(sessionId)))
