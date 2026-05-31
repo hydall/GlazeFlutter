@@ -1,5 +1,3 @@
-import 'dart:isolate';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -50,6 +48,7 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() => _loading = true);
     final chatState = ref.read(chatProvider(widget.charId)).value;
     final session = chatState?.session;
     if (session == null) {
@@ -112,21 +111,17 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
     }
 
 
-    // Run the CPU-intensive keyword scan in a separate isolate so the UI
-    // thread stays responsive (no frozen spinner).
-    final messages = session.messages;
-    final chatId = session.id;
-    final vecIds = Map<String, String>.from(_vectorEntryLorebookIds);
-    final result = await Isolate.run(() => computeLorebookCoverage(
-      history: messages,
+    // Run on the event loop to avoid blocking the current frame.
+    final result = await Future(() => computeLorebookCoverage(
+      history: session.messages,
       char: character,
       textToScan: lastUserMsg,
-      chatId: chatId,
+      chatId: session.id,
       lorebooks: lorebooks,
       globalSettings: settings,
       activations: activations,
       vectorEntries: vectorEntries,
-      vectorEntryLorebookIds: vecIds,
+      vectorEntryLorebookIds: Map<String, String>.from(_vectorEntryLorebookIds),
     ));
 
     if (mounted)
