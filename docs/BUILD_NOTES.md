@@ -22,7 +22,11 @@ dependency_overrides:
 
 **Periodic check (every few weeks):**
 1. Remove the `dependency_overrides` block from `pubspec.yaml`.
-2. `flutter pub get`
+2. `flutter pub upgrade path_provider path_provider_foundation`
 3. `flutter build windows`
 4. If it passes — drop the override and delete this section.
-5. If it fails — keep the override, check again later.
+5. If it fails — restore the override and run `flutter pub get`.
+
+**Checked 2026-05-31 (Flutter 3.44.0):** `path_provider_foundation 2.6.0` — still broken.
+Hook folder is gone from the repo, but `objective_c`/`hooks` transitively still
+triggers "Building native assets failed" on Windows. Override stays.
