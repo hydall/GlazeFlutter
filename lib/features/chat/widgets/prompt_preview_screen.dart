@@ -217,12 +217,25 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
             );
           }
           String displayString = raw;
-          if (_previewTabIndex == 0) {
+          if (_previewTabIndex == 1) {
+            // Raw/code view: pretty-print the full JSON so fields like
+            // completion_tokens, usage, etc. are visible and readable.
             try {
               final decoded = jsonDecode(raw);
               displayString = const JsonEncoder.withIndent('  ').convert(decoded);
-            } catch (_) {
-            }
+            } catch (_) {}
+          } else {
+            // Pretty/preview view: extract just the assistant text content.
+            try {
+              final decoded = jsonDecode(raw) as Map<String, dynamic>;
+              final choices = decoded['choices'] as List?;
+              final content = choices?.firstOrNull?['message']?['content']
+                  ?? choices?.firstOrNull?['delta']?['content']
+                  ?? decoded['content'];
+              if (content is String && content.isNotEmpty) {
+                displayString = content;
+              }
+            } catch (_) {}
           }
           return _buildRawView(displayString, topPad);
         }
@@ -305,7 +318,28 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       }
     } else {
       final chatState = ref.read(chatProvider(widget.charId)).value;
-      textToCopy = chatState?.lastRawResponse ?? '';
+      final raw = chatState?.lastRawResponse ?? '';
+      if (_previewTabIndex == 1) {
+        // Raw view: copy pretty-printed full JSON.
+        try {
+          final decoded = jsonDecode(raw);
+          textToCopy = const JsonEncoder.withIndent('  ').convert(decoded);
+        } catch (_) {
+          textToCopy = raw;
+        }
+      } else {
+        // Pretty view: copy just the assistant text.
+        try {
+          final decoded = jsonDecode(raw) as Map<String, dynamic>;
+          final choices = decoded['choices'] as List?;
+          final content = choices?.firstOrNull?['message']?['content']
+              ?? choices?.firstOrNull?['delta']?['content']
+              ?? decoded['content'];
+          textToCopy = content is String ? content : raw;
+        } catch (_) {
+          textToCopy = raw;
+        }
+      }
     }
 
     if (textToCopy.isEmpty) return;
