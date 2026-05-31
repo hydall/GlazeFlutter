@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -15,6 +16,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
   final SyncApiConfigStore _apiRepo;
   final SyncLorebookStore _lorebookRepo;
   final SyncThemePresetStore _themePresetRepo;
+  final SyncImageStore? _imageStore;
 
   static const _manifestKey = 'gz_sync_manifest_v2';
   static const _deviceIdKey = 'gz_sync_device_id';
@@ -28,13 +30,15 @@ class SyncManifestBuilder implements SyncManifestProvider {
     required SyncApiConfigStore apiRepo,
     required SyncLorebookStore lorebookRepo,
     required SyncThemePresetStore themePresetRepo,
+    SyncImageStore? imageStore,
   })  : _characterRepo = characterRepo,
         _chatRepo = chatRepo,
         _personaRepo = personaRepo,
         _presetRepo = presetRepo,
         _apiRepo = apiRepo,
         _lorebookRepo = lorebookRepo,
-        _themePresetRepo = themePresetRepo;
+        _themePresetRepo = themePresetRepo,
+        _imageStore = imageStore;
 
   @override
   Future<String> getDeviceId() async {
@@ -61,7 +65,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     for (final c in characters) {
       final json = c.toJson();
       final hash = SyncSerialization.computeSyncHash(
-        _stripLocalPaths(json),
+        _normalizeForHash(json),
       );
       final key = entryKey('character', c.id);
       final prevEntry = previous.entries[key];
@@ -87,7 +91,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     for (final p in personas) {
       final json = p.toJson();
       final hash = SyncSerialization.computeSyncHash(
-        _stripLocalPaths(json),
+        _normalizeForHash(json),
       );
       final key = entryKey('persona', p.id);
       final prevEntry = previous.entries[key];
@@ -167,15 +171,44 @@ class SyncManifestBuilder implements SyncManifestProvider {
     return prevEntry?.updatedAt ?? 0;
   }
 
+  /// Returns the size of the avatar file in bytes, or 0 if the file doesn't
+  /// exist or avatarPath is null. The size is platform-neutral (same bytes on
+  /// Android and Windows for the same image), unlike the path itself.
+  int _avatarFileSize(String? avatarPath) {
+    if (avatarPath == null || avatarPath.isEmpty) return 0;
+    final store = _imageStore;
+    if (store == null) return 0;
+    try {
+      final absPath = store.absolutePath(avatarPath);
+      if (absPath == null) return 0;
+      final file = File(absPath);
+      if (!file.existsSync()) return 0;
+      return file.lengthSync();
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// Remove device-specific fields from entity JSON before hashing so that
   /// the same logical entity produces the same hash on every device.
+  /// avatarPath is replaced by _avatarFileSize (platform-neutral) so that
+  /// a missing or changed avatar binary triggers a re-push without causing
+  /// Android↔Windows false-conflicts from differing absolute paths.
   /// Gallery is excluded entirely: image paths are device-local, and gallery
   /// metadata (ids, labels, order) can drift between devices without
   /// representing a meaningful content change.
-  static Map<String, dynamic> _stripLocalPaths(Map<String, dynamic> json) {
+  Map<String, dynamic> _normalizeForHash(Map<String, dynamic> json) {
     final out = Map<String, dynamic>.from(json);
+    final avatarPath = out['avatarPath'] as String?;
     out.remove('avatarPath');
     out.remove('gallery');
+    // Include avatar file size so that uploading/deleting the avatar binary
+    // changes the hash and triggers a re-push, even when the JSON is unchanged.
+    // Using file size (not path) keeps hashes consistent across platforms.
+    final avatarSize = _avatarFileSize(avatarPath);
+    if (avatarSize > 0) {
+      out['_avatarFileSize'] = avatarSize;
+    }
     return out;
   }
 

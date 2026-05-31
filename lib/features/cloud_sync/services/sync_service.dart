@@ -104,6 +104,7 @@ class SyncService {
         apiRepo: _apiRepo,
         lorebookRepo: _lorebookRepo,
         themePresetRepo: _themePresetRepo,
+        imageStore: _imageStorage,
       );
 
   SyncEngine get _engine => SyncEngine(
