@@ -18,6 +18,7 @@ import '../../../core/models/api_config.dart';
 import '../../../core/models/preset.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../sync_repo_interfaces.dart';
+import '../../../core/state/lorebook_provider.dart' show saveLorebookActivations;
 
 class SyncProgress {
   final int current;
@@ -528,12 +529,7 @@ class SyncEngine {
           await _chatRepo.put(ChatSession.fromJson(data));
           break;
         case 'lorebooks':
-          await _applySingleton<Lorebook>(
-            data,
-            Lorebook.fromJson,
-            _lorebookRepo,
-            idOf: (lb) => lb.id,
-          );
+          await _applyLorebooksWithEmbeddingCleanup(data);
           break;
         case 'api_presets':
           await _applyApiConfigs(data);
@@ -595,6 +591,63 @@ class SyncEngine {
     for (final entity in parsed) {
       await put(entity);
     }
+  }
+
+  /// Applies the lorebook singleton from cloud data, cleaning up embeddings for
+  /// removed lorebooks and rebuilding the lorebookActivations SharedPreferences
+  /// from the DB truth after the apply completes.
+  Future<void> _applyLorebooksWithEmbeddingCleanup(
+      Map<String, dynamic> data) async {
+    final List<Map<String, dynamic>> items;
+    if (data['__singleton'] == true) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else if (data.containsKey('items')) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else {
+      items = [data];
+    }
+
+    final parsed = items.map(Lorebook.fromJson).toList();
+    final cloudIds = {for (final lb in parsed) lb.id};
+
+    // Delete lorebooks no longer in the cloud, including their embedding vectors.
+    final existing = await _lorebookRepo.getAll();
+    for (final lb in existing) {
+      if (!cloudIds.contains(lb.id)) {
+        await _lorebookRepo.delete(lb.id);
+        await _embeddingRepo.deleteBySourceId(lb.id);
+      }
+    }
+
+    // Upsert all cloud lorebooks.
+    for (final lb in parsed) {
+      await _lorebookRepo.put(lb);
+    }
+
+    // Rebuild lorebookActivations prefs from the DB truth so that the
+    // connections UI and the scanner use consistent data across devices.
+    await _rebuildLorebookActivationsPrefs();
+  }
+
+  /// Reads all lorebooks from the DB and rewrites the `lorebookActivations`
+  /// SharedPreferences key from their activationScope / activationTargetId
+  /// fields. Called after a lorebook pull to eliminate stale prefs that would
+  /// otherwise show phantom character/chat connections in the UI.
+  Future<void> _rebuildLorebookActivationsPrefs() async {
+    final all = await _lorebookRepo.getAll();
+    final charMap = <String, List<String>>{};
+    final chatMap = <String, List<String>>{};
+    for (final lb in all) {
+      final targetId = lb.activationTargetId;
+      if (targetId == null) continue;
+      if (lb.activationScope == 'character') {
+        charMap.putIfAbsent(targetId, () => []).add(lb.id);
+      } else if (lb.activationScope == 'chat') {
+        chatMap.putIfAbsent(targetId, () => []).add(lb.id);
+      }
+    }
+    final activations = LorebookActivations(character: charMap, chat: chatMap);
+    await saveLorebookActivations(activations);
   }
 
   /// Applies cloud api_presets while preserving local API keys and embedding
