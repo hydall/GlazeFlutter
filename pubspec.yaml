@@ -59,6 +59,7 @@ flutter:
   assets:
     - assets/logos/
     - assets/hydall.jpg
+    - assets/danvitv.png
     - assets/chat_webview/
     - assets/translations/
     - .env

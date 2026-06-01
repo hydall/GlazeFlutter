@@ -34,7 +34,7 @@ class MenuScreen extends ConsumerWidget {
                     MenuItem(
                       icon: Icons.settings_outlined,
                       label: 'App Settings',
-                      onTap: () => context.push('/settings'),
+                      onTap: () => context.push('/menu/settings'),
                     ),
                     MenuItem(
                       icon: Icons.replay_rounded,
@@ -96,7 +96,7 @@ class MenuScreen extends ConsumerWidget {
                     MenuItem(
                       icon: Icons.info_outline_rounded,
                       label: 'About',
-                      onTap: () => context.push('/about'),
+                      onTap: () => context.push('/menu/about'),
                     ),
                   ],
                 ),

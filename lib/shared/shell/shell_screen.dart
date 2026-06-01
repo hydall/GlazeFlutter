@@ -51,7 +51,11 @@ class _ShellScreenState extends State<ShellScreen>
   @override
   Widget build(BuildContext context) {
     final currentIndex = widget.navigationShell.currentIndex;
-    final showNavBar = currentIndex < 4;
+    final location = GoRouterState.of(context).uri.toString();
+    final hideNavBarRoutes = <String>{
+      '/menu/about',
+    };
+    final showNavBar = currentIndex < 4 && !hideNavBarRoutes.contains(location);
     return GlazeBackground(
       child: PopScope(
         canPop: false,
@@ -175,6 +179,15 @@ class _FadeBranchContainerState extends State<FadeBranchContainer>
     }
 
     final opacity = isCurrent ? t : (1.0 - t);
+
+    // Hide platform-view-heavy branches once fade-out is nearly complete
+    // to prevent native WebView from flashing through Opacity(0).
+    if (isPrevious && opacity < 0.01) {
+      return Offstage(
+        offstage: true,
+        child: TickerMode(enabled: false, child: child),
+      );
+    }
 
     return IgnorePointer(
       ignoring: !isCurrent || animating,

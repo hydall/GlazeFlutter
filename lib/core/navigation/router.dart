@@ -26,6 +26,72 @@ import '../../shared/shell/shell_screen.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
+CustomTransitionPage<void> _overlayPage({
+  required GoRouterState state,
+  required Widget child,
+}) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    transitionDuration: const Duration(milliseconds: 260),
+    reverseTransitionDuration: const Duration(milliseconds: 220),
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final primary = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeOutCubic,
+      );
+      final secondary = CurvedAnimation(
+        parent: secondaryAnimation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeOutCubic,
+      );
+      final incomingSlide = Tween<Offset>(
+        begin: const Offset(0.06, 0),
+        end: Offset.zero,
+      ).animate(primary);
+      final incomingFade = Tween<double>(
+        begin: 0.0,
+        end: 1.0,
+      ).animate(
+        CurvedAnimation(
+          parent: animation,
+          curve: const Interval(0.0, 0.85, curve: Curves.easeOutCubic),
+          reverseCurve: Curves.easeOutCubic,
+        ),
+      );
+      final outgoingSlide = Tween<Offset>(
+        begin: Offset.zero,
+        end: const Offset(-0.03, 0),
+      ).animate(secondary);
+      final outgoingFade = Tween<double>(
+        begin: 1.0,
+        end: 0.0,
+      ).animate(
+        CurvedAnimation(
+          parent: secondaryAnimation,
+          curve: const Interval(0.0, 1.0, curve: Curves.easeOutCubic),
+          reverseCurve: Curves.easeOutCubic,
+        ),
+      );
+
+      return SlideTransition(
+        position: incomingSlide,
+        child: FadeTransition(
+          opacity: incomingFade,
+          child: SlideTransition(
+            position: outgoingSlide,
+            child: FadeTransition(
+              opacity: outgoingFade,
+              child: child,
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 /// Constructs a [GoRouter] with the given [navigatorKey].
 ///
 /// Extracted so tests can call `buildRouter(GlobalKey())` to get a fresh
@@ -67,34 +133,52 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
             routes: [
               GoRoute(
                 path: '/tools',
-                builder: (_, __) => const ToolsScreen(),
+                pageBuilder: (_, state) => _overlayPage(
+                  state: state,
+                  child: const ToolsScreen(),
+                ),
                 routes: [
                   GoRoute(
                     path: 'api',
-                    builder: (_, __) => const ApiSettingsScreen(startExpanded: true),
+                    pageBuilder: (_, state) => _overlayPage(
+                      state: state,
+                      child: const ApiSettingsScreen(startExpanded: true),
+                    ),
                   ),
                   GoRoute(
                     path: 'personas',
-                    builder: (_, __) =>
-                        const PersonaListScreen(startExpanded: true),
+                    pageBuilder: (_, state) => _overlayPage(
+                      state: state,
+                      child: const PersonaListScreen(startExpanded: true),
+                    ),
                   ),
                   GoRoute(
                     path: 'presets',
-                    builder: (_, __) =>
-                        const PresetListScreen(startExpanded: true),
+                    pageBuilder: (_, state) => _overlayPage(
+                      state: state,
+                      child: const PresetListScreen(startExpanded: true),
+                    ),
                   ),
                   GoRoute(
                     path: 'regex',
-                    builder: (_, __) =>
-                        const RegexSheet(startExpanded: true),
+                    pageBuilder: (_, state) => _overlayPage(
+                      state: state,
+                      child: const RegexSheet(startExpanded: true),
+                    ),
                   ),
                   GoRoute(
                     path: 'lorebooks',
-                    builder: (_, __) => const LorebookListScreen(),
+                    pageBuilder: (_, state) => _overlayPage(
+                      state: state,
+                      child: const LorebookListScreen(),
+                    ),
                   ),
                   GoRoute(
                     path: 'embeddings',
-                    builder: (_, __) => const EmbeddingSettingsScreen(),
+                    pageBuilder: (_, state) => _overlayPage(
+                      state: state,
+                      child: const EmbeddingSettingsScreen(),
+                    ),
                   ),
                 ],
               ),
@@ -104,11 +188,38 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
             routes: [
               GoRoute(
                 path: '/menu',
-                builder: (_, __) => const MenuScreen(),
+                pageBuilder: (_, state) => _overlayPage(
+                  state: state,
+                  child: const MenuScreen(),
+                ),
                 routes: [
                   GoRoute(
+                    path: 'settings',
+                    pageBuilder: (_, state) => _overlayPage(
+                      state: state,
+                      child: const AppSettingsScreen(),
+                    ),
+                  ),
+                  GoRoute(
+                    path: 'themes',
+                    pageBuilder: (_, state) => _overlayPage(
+                      state: state,
+                      child: const ThemePresetScreen(),
+                    ),
+                  ),
+                  GoRoute(
+                    path: 'about',
+                    pageBuilder: (_, state) => _overlayPage(
+                      state: state,
+                      child: const AboutScreen(),
+                    ),
+                  ),
+                  GoRoute(
                     path: 'glossary',
-                    builder: (_, __) => const GlossarySheet(startExpanded: true),
+                    pageBuilder: (_, state) => _overlayPage(
+                      state: state,
+                      child: const GlossarySheet(startExpanded: true),
+                    ),
                   ),
                 ],
               ),
@@ -162,11 +273,13 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
         builder: (_, state) =>
             GalleryScreen(charId: state.pathParameters['charId']!),
       ),
-
-      GoRoute(path: '/settings', builder: (_, __) => const AppSettingsScreen()),
-      GoRoute(path: '/themes', builder: (_, __) => const ThemePresetScreen()),
-      GoRoute(path: '/sync', builder: (_, __) => const SyncSheet()),
-      GoRoute(path: '/about', builder: (_, __) => const AboutScreen()),
+      GoRoute(
+        path: '/sync',
+        pageBuilder: (_, state) => _overlayPage(
+          state: state,
+          child: const SyncSheet(),
+        ),
+      ),
     ],
   );
 

@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:ui' as ui;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
@@ -174,7 +176,6 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
 
     await _applyThemeToBridge();
 
-    await _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
     await _bridge!.setBackgroundNoise(widget.bgNoiseOpacity, widget.bgNoiseIntensity);
 
     await _bridge!.setChatFont(
@@ -251,7 +252,8 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     final bridge = _bridge;
     if (bridge == null) return;
 
-    _sessionSwitching = true;
+    bridge.evalJs('window.bridge?.clearAll();');
+    if (mounted) setState(() => _sessionSwitching = true);
     if (widget.charId != old.charId) {
       await bridge.setIdentity(
         charName: widget.charName,
@@ -263,11 +265,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         greetingTotal: widget.greetingTotal,
       );
       await _applyThemeToBridge();
-      await bridge.setBackgroundImage(
-        widget.bgImagePath,
-        widget.bgBlur.toInt(),
-        widget.bgOpacity,
-      );
+
       await bridge.setBackgroundNoise(
         widget.bgNoiseOpacity,
         widget.bgNoiseIntensity,
@@ -297,7 +295,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     );
     Future.delayed(const Duration(milliseconds: 150), () {
       bridge.scrollToBottom();
-      _sessionSwitching = false;
+      if (mounted) setState(() => _sessionSwitching = false);
     });
     _wasGenerating = widget.isGenerating;
     _streamingSent = false;
@@ -340,13 +338,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       _bridge!.applyTheme(_buildThemeMap());
     }
 
-    if (widget.bgImagePath != old.bgImagePath ||
-        widget.bgBlur != old.bgBlur ||
-        widget.bgOpacity != old.bgOpacity ||
-        widget.bgDim != old.bgDim) {
-      _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
-      _bridge!.applyTheme({'bg-dim': widget.bgDim.toStringAsFixed(2)});
-    }
+
 
     if (widget.bgNoiseOpacity != old.bgNoiseOpacity ||
         widget.bgNoiseIntensity != old.bgNoiseIntensity) {
@@ -650,13 +642,42 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
 
     return Stack(
       children: [
-        InAppWebView(
+        // Flutter-rendered background image (visible through transparent WebView).
+        if (widget.bgImagePath != null) ...[
+          Positioned.fill(
+            child: Opacity(
+              opacity: widget.bgOpacity,
+              child: ImageFiltered(
+                imageFilter: ui.ImageFilter.blur(
+                  sigmaX: widget.bgBlur,
+                  sigmaY: widget.bgBlur,
+                ),
+                child: Image.file(
+                  File(widget.bgImagePath!),
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          ),
+          if (widget.bgDim > 0)
+            Positioned.fill(
+              child: Container(color: Colors.black.withValues(alpha: widget.bgDim)),
+            ),
+        ],
+        AnimatedOpacity(
+          opacity: _sessionSwitching ? 0.45 : 1.0,
+          duration: const Duration(milliseconds: 200),
+          child: IgnorePointer(
+            ignoring: _sessionSwitching,
+            child: InAppWebView(
           keepAlive: chatWebViewKeepAlive,
           initialFile: 'assets/chat_webview/index.html',
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             domStorageEnabled: true,
             transparentBackground: true,
+            isInspectable: true,
             useHybridComposition: true,
             cacheEnabled: true,
             useWideViewPort: true,
@@ -750,12 +771,26 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           },
           onLoadStop: (controller, url) async {
             if (_bridge == null || _ready) return;
+            controller.evaluateJavascript(source: '''
+              (function() {
+                var els = [document.documentElement, document.body, document.getElementById('chat-container'), document.getElementById('loading-screen')];
+                els.forEach(function(el) {
+                  if (!el) return;
+                  var cs = getComputedStyle(el);
+                  console.log('DIAG ' + (el.id || el.tagName) + ' bg=' + cs.backgroundColor + ' opacity=' + el.style.opacity);
+                });
+              })();
+            ''');
             await _initWebView();
           },
           onConsoleMessage: (controller, consoleMessage) {
             debugPrint('[JS] ${consoleMessage.message}');
           },
+            ),
+          ),
         ),
+        if (_sessionSwitching)
+          const Center(child: CircularProgressIndicator(strokeWidth: 3)),
         if (widget.bottomInset > 0)
           Positioned.fill(
             child: IgnorePointer(

@@ -39,6 +39,7 @@ class _ChatWebViewPreloaderState extends State<ChatWebViewPreloader> {
                     javaScriptEnabled: true,
                     domStorageEnabled: true,
                     transparentBackground: true,
+                    isInspectable: true,
                     useHybridComposition: true,
                     cacheEnabled: true,
                     allowFileAccess: true,

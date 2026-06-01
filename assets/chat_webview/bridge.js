@@ -1286,23 +1286,7 @@ class Bridge {
   }
 
   setBackgroundImage(url, blur, opacity) {
-    let bg = document.getElementById('bg-layer');
-    if (!bg) {
-      bg = document.createElement('div');
-      bg.id = 'bg-layer';
-      document.body.insertBefore(bg, document.body.firstChild);
-    }
-    const hasUrl = !!(url && String(url).length > 0);
-    document.documentElement.classList.toggle('has-bg-image', hasUrl);
-    if (hasUrl) {
-      bg.style.backgroundImage = `url("${String(url).replace(/"/g, '\\"')}")`;
-      bg.style.display = 'block';
-    } else {
-      bg.style.backgroundImage = '';
-      bg.style.display = 'none';
-    }
-    bg.style.filter = `blur(${blur || 0}px)`;
-    bg.style.opacity = opacity != null ? opacity : 1;
+    // Background is handled by Flutter layer behind the transparent WebView.
   }
 
   setBackgroundNoise(opacity, intensity) {

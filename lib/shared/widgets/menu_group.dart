@@ -16,6 +16,7 @@ class MenuGroup extends StatelessWidget {
   final String? helpTerm;
   final List<Widget> items;
   final MenuGroupHeaderVariant headerVariant;
+  final IconData? headerIcon;
 
   /// Kept for call-site compatibility; no longer affects visual style.
   // ignore: avoid_unused_constructor_parameters
@@ -27,6 +28,7 @@ class MenuGroup extends StatelessWidget {
     this.helpTerm,
     required this.items,
     this.headerVariant = MenuGroupHeaderVariant.standard,
+    this.headerIcon,
     this.compact = false,
   });
 
@@ -57,6 +59,14 @@ class MenuGroup extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (headerIcon != null) ...[
+            Icon(
+              headerIcon,
+              size: isAccentCaps ? 16 : 18,
+              color: context.cs.primary,
+            ),
+            const SizedBox(width: 8),
+          ],
           Text(
             isAccentCaps ? header!.toUpperCase() : header!,
             style: TextStyle(

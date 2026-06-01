@@ -21,6 +21,7 @@ class GlazeScaffold extends StatelessWidget {
   final bool extendBodyBehindHeader;
   final bool resizeToAvoidBottomInset;
   final bool hideHeader;
+  final bool showBackground;
 
   const GlazeScaffold({
     super.key,
@@ -33,6 +34,7 @@ class GlazeScaffold extends StatelessWidget {
     this.extendBodyBehindHeader = false,
     this.resizeToAvoidBottomInset = true,
     this.hideHeader = false,
+    this.showBackground = true,
   });
 
   @override
@@ -65,38 +67,42 @@ class GlazeScaffold extends StatelessWidget {
       ),
     );
 
-    return GlazeBackground(
-      child: PopScope(
-        canPop: !showBack,
-        onPopInvokedWithResult: (didPop, _) {
-          if (didPop) return;
-          backHandler();
-        },
-        child: Scaffold(
-          backgroundColor: Colors.transparent,
-          resizeToAvoidBottomInset: resizeToAvoidBottomInset,
-          body: extendBodyBehindHeader
-              ? Stack(
-                  children: [
-                    Positioned.fill(child: body),
-                    Positioned(top: 0, left: 0, right: 0, child: animatedHeader),
-                  ],
-                )
-              : Column(
-                  children: [
-                    animatedHeader,
-                    Expanded(
-                      child: MediaQuery.removePadding(
-                        context: context,
-                        removeTop: true,
-                        child: body,
-                      ),
+    final scaffold = PopScope(
+      canPop: !showBack,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        backHandler();
+      },
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        resizeToAvoidBottomInset: resizeToAvoidBottomInset,
+        body: extendBodyBehindHeader
+            ? Stack(
+                children: [
+                  Positioned.fill(child: body),
+                  Positioned(top: 0, left: 0, right: 0, child: animatedHeader),
+                ],
+              )
+            : Column(
+                children: [
+                  animatedHeader,
+                  Expanded(
+                    child: MediaQuery.removePadding(
+                      context: context,
+                      removeTop: true,
+                      child: body,
                     ),
-                  ],
-                ),
-        ),
+                  ),
+                ],
+              ),
       ),
     );
+
+    return showBackground
+        ? GlazeBackground(
+            child: scaffold,
+          )
+        : scaffold;
   }
 }
 

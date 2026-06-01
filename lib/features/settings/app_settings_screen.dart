@@ -33,6 +33,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           context.go('/menu');
         }
       },
+      showBackground: false,
       body: settingsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Error: $e')),
@@ -65,7 +66,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                   shape: BoxShape.circle,
                 ),
               ),
-              onTap: () => context.push('/themes'),
+              onTap: () => context.push('/menu/themes'),
             ),
             MenuItem(
               icon: Icons.brightness_6_outlined,
