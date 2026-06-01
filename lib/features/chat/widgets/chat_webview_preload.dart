@@ -17,7 +17,11 @@ class _ChatWebViewPreloaderState extends State<ChatWebViewPreloader> {
 
   @override
   Widget build(BuildContext context) {
-    final shouldPreload = !Platform.isWindows;
+    // Skip webview preloading on Windows (no InAppWebView implementation) and
+    // in widget tests (FLUTTER_TEST=true). In tests the InAppWebView platform
+    // channel isn't mocked and would block forever.
+    const isTest = bool.fromEnvironment('FLUTTER_TEST');
+    final shouldPreload = !isTest && !Platform.isWindows;
     return Stack(
       children: [
         widget.child,
