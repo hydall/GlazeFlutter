@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -103,12 +104,12 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
       themeMode: mode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
-      localizationsDelegates: <LocalizationsDelegate<dynamic>>[
-        DefaultMaterialLocalizations.delegate,
-        DefaultWidgetsLocalizations.delegate,
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
       ],
       supportedLocales: const [Locale('en'), Locale('ru')],
-      locale: const Locale('en'),
       builder: (context, child) => ChatWebViewPreloader(
         child: Overlay(
           key: toastOverlayKey,
