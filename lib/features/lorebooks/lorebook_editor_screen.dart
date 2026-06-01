@@ -721,7 +721,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.link, size: 18),
-                          tooltip: 'count_bindings'.tr(args: ['2']),
+                          tooltip: 'header_connections'.tr(),
                           onPressed: () {
                             GlazeBottomSheet.show(
                               context,

@@ -42,9 +42,12 @@ const _kText35 = Color(0x59FFFFFF);
 
 // ─── Tabs ──────────────────────────────────────────────────────────────────
 
-final _kTabs = [
+List<GlazeTabItem> _detailTabs(BuildContext context) => [
   GlazeTabItem(label: 'section_info'.tr(), icon: Icons.info_outline_rounded),
-  GlazeTabItem(label: 'section_prompt_blocks'.tr(), icon: Icons.description_outlined),
+  GlazeTabItem(
+    label: 'section_prompt_blocks'.tr(),
+    icon: Icons.description_outlined,
+  ),
 ];
 
 // ─── Screen ────────────────────────────────────────────────────────────────
@@ -251,8 +254,11 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         ...sessions.map(
           (s) => BottomSheetItem(
             icon: Icons.chat_bubble_outline,
-            label: '${'count_sessions'.tr(args: ['1'])} ${s.sessionIndex + 1}',
-            hint: 'count_messages'.tr(args: ['${s.messages.length}']),
+            label: 'session_name'.tr(
+              namedArgs: {'id': '${s.sessionIndex + 1}'},
+            ),
+            hint:
+                '${s.messages.length} ${'count_messages'.plural(s.messages.length)}',
             onTap: () => _closeSheetAndNavigate(
               '/chat/$cId?session=${s.sessionIndex}',
             ),
@@ -362,7 +368,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
               child: GlazeTabBar(
-                tabs: _kTabs,
+                tabs: _detailTabs(context),
                 activeIndex: _activeTabIndex,
                 onChanged: (i) => setState(() => _activeTabIndex = i),
               ),

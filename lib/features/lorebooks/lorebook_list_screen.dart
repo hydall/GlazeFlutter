@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -284,7 +285,7 @@ class _LorebookTile extends ConsumerWidget {
           children: [
             IconButton(
               icon: const Icon(Icons.link, size: 18),
-              tooltip: 'Connections',
+              tooltip: 'header_connections'.tr(),
               onPressed: () => showLorebookConnections(context, lorebook.id),
             ),
             Switch(
