@@ -179,4 +179,6 @@ test_failures.txt
 # OpenCode local config
 opencode.json
 opencode.jsonc
+.opencode.json
+.opencode.jsonc
 .opencode/
