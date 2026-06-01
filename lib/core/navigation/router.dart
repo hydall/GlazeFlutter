@@ -15,7 +15,7 @@ import '../../features/menu/about_screen.dart';
 import '../../features/menu/menu_screen.dart';
 import '../../features/personas/persona_list_screen.dart';
 import '../../features/presets/preset_list_screen.dart';
-import '../../features/regex/regex_list_screen.dart';
+import '../../features/regex/regex_sheet.dart';
 import '../../features/settings/api_settings_screen.dart';
 import '../../features/cloud_sync/widgets/sync_sheet.dart';
 import '../../features/settings/app_settings_screen.dart';
@@ -82,7 +82,7 @@ final routerProvider = Provider<GoRouter>(
                   GoRoute(
                     path: 'regex',
                     builder: (_, __) =>
-                        const RegexListScreen(startExpanded: true),
+                        const RegexSheet(startExpanded: true),
                   ),
                   GoRoute(
                     path: 'lorebooks',

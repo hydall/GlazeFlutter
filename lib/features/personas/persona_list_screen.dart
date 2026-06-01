@@ -31,6 +31,7 @@ class PersonaListScreen extends ConsumerWidget {
 
     return SheetView(
       startExpanded: startExpanded,
+      showRouteBackground: false,
       titleWidget: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -90,7 +91,7 @@ class PersonaListScreen extends ConsumerWidget {
   }
 
   void _showEditor(BuildContext context, WidgetRef ref, [Persona? existing]) {
-    Navigator.of(context).push(
+    Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute(
         builder: (_) => _PersonaEditorScreen(existing: existing),
       ),
@@ -173,7 +174,7 @@ class _PersonaTile extends ConsumerWidget {
                       icon: Icons.edit,
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.of(context).push(
+                        Navigator.of(context, rootNavigator: true).push(
                           MaterialPageRoute(
                             builder: (_) => _PersonaEditorScreen(existing: persona),
                           ),
@@ -216,6 +217,7 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
 
   List<GenericEditorSection> get _config => [
         GenericEditorSection(
+          title: 'section_basic_info'.tr(),
           fields: [
             GenericEditorField(
               key: 'name',

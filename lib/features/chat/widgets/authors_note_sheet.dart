@@ -129,11 +129,9 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
           onChanged: (val) => setState(() => _localItem = val),
           onSave: _performSave,
           useWindows: false,
-          padding: EdgeInsets.fromLTRB(
-            16, 
-            MediaQuery.paddingOf(innerContext).top + 4, 
-            16, 
-            MediaQuery.paddingOf(innerContext).bottom + 24
+          padding: EdgeInsets.only(
+            top: MediaQuery.paddingOf(innerContext).top + 4,
+            bottom: MediaQuery.paddingOf(innerContext).bottom + 24,
           ),
         ),
       ),

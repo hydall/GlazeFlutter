@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 import 'glaze_bottom_sheet.dart';
+import 'menu_group.dart';
 
 class GenericEditorField {
   final String key;
@@ -51,6 +52,8 @@ class GenericEditor extends StatefulWidget {
   final Future<void> Function()? onAvatarTap;
   final void Function(Map<String, dynamic> values) onChanged;
   final void Function(String field, int index)? onOpenFsEditor;
+
+  // ignore: avoid_unused_constructor_parameters
   final bool useWindows;
   final bool scrollable;
   final void Function(Map<String, dynamic> values)? onSave;
@@ -95,7 +98,6 @@ class _GenericEditorState extends State<GenericEditor> {
   @override
   void didUpdateWidget(GenericEditor oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Minimal sync to prevent controller overwrites, usually item shouldn't change identity often
     bool changed = false;
     for (final k in widget.item.keys) {
       if (widget.item[k] != _localItem[k]) {
@@ -178,15 +180,13 @@ class _GenericEditorState extends State<GenericEditor> {
     super.dispose();
   }
 
-  // --- Greetings Logic ---
+  // ── Greetings ──────────────────────────────────────────────────────────────────
 
   List<String> get _allGreetings {
     final list = <String>[];
     list.add((_localItem['first_mes'] as String?) ?? '');
     final alt = _localItem['alternate_greetings'];
-    if (alt is List) {
-      list.addAll(alt.cast<String>());
-    }
+    if (alt is List) list.addAll(alt.cast<String>());
     return list;
   }
 
@@ -199,13 +199,11 @@ class _GenericEditorState extends State<GenericEditor> {
     widget.onChanged(_localItem);
     _scheduleSave();
     setState(() {});
-    if (widget.onOpenFsEditor != null) {
-      widget.onOpenFsEditor!('alternate_greetings', alt.length); // index represents position
-    }
+    widget.onOpenFsEditor?.call('alternate_greetings', alt.length);
   }
 
   void _confirmDeleteGreeting(int index) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Delete?',
       items: [
@@ -239,16 +237,14 @@ class _GenericEditorState extends State<GenericEditor> {
     } else {
       final altIndex = index - 1;
       final alt = _localItem['alternate_greetings'];
-      if (alt is List && alt.length > altIndex) {
-        alt.removeAt(altIndex);
-      }
+      if (alt is List && alt.length > altIndex) alt.removeAt(altIndex);
     }
     widget.onChanged(_localItem);
     _scheduleSave();
     setState(() {});
   }
 
-  // --- Selectors ---
+  // ── Selectors ──────────────────────────────────────────────────────────────────
 
   void _openSelectSelector(GenericEditorField field) {
     final currentVal = _localItem[field.key];
@@ -266,12 +262,7 @@ class _GenericEditorState extends State<GenericEditor> {
         },
       );
     }).toList() ?? [];
-
-    GlazeBottomSheet.show(
-      context,
-      title: field.label,
-      items: items,
-    );
+    GlazeBottomSheet.show<void>(context, title: field.label, items: items);
   }
 
   String _getSelectedLabel(GenericEditorField field) {
@@ -280,46 +271,198 @@ class _GenericEditorState extends State<GenericEditor> {
     return (opt?['label'] as String?) ?? val?.toString() ?? '';
   }
 
-  // --- UI ---
+  // ── Build ──────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final children = [
       if (widget.showAvatar) _buildAvatarCard(),
-      for (int sIdx = 0; sIdx < widget.config.length; sIdx++) _buildSection(widget.config[sIdx]),
+      for (final section in widget.config) _buildSection(section),
     ];
 
-    Widget body;
     if (widget.scrollable) {
-      body = ListView(
-        padding: widget.padding ?? EdgeInsets.fromLTRB(
-          16, 
-          MediaQuery.of(context).padding.top + 16, 
-          16, 
-          MediaQuery.of(context).padding.bottom + 60
+      return Material(
+        type: MaterialType.transparency,
+        child: ListView(
+          padding: widget.padding ?? EdgeInsets.only(
+            top: MediaQuery.of(context).padding.top + 16,
+            bottom: MediaQuery.of(context).padding.bottom + 60,
+          ),
+          children: children,
         ),
-        children: children,
       );
-    } else {
-      body = Padding(
+    }
+    return Material(
+      type: MaterialType.transparency,
+      child: Padding(
         padding: widget.padding ?? EdgeInsets.zero,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: children,
         ),
-      );
-    }
+      ),
+    );
+  }
 
-    return Material(
-      type: MaterialType.transparency,
-      child: body,
+  Widget _buildSection(GenericEditorSection section) {
+    final visibleFields = section.fields
+        .where((f) => f.showIf == null || f.showIf!(_localItem))
+        .toList();
+    if (visibleFields.isEmpty) return const SizedBox.shrink();
+    return MenuGroup(
+      header: section.title,
+      headerVariant: MenuGroupHeaderVariant.accentCaps,
+      items: visibleFields.map(_buildFieldItem).toList(),
+    );
+  }
+
+  Widget _buildFieldItem(GenericEditorField field) {
+    if (field.showIf != null && !field.showIf!(_localItem)) {
+      return const SizedBox.shrink();
+    }
+    switch (field.type) {
+      case 'text':
+      case 'number':
+      case 'tags':
+      case 'textarea':
+        final ctrl = _controllers[field.key];
+        if (ctrl == null) return const SizedBox.shrink();
+        return MenuFieldItem(
+          label: field.label,
+          helpTerm: field.helpTerm,
+          controller: ctrl,
+          placeholder: field.placeholder,
+          keyboardType: field.type == 'number'
+              ? TextInputType.number
+              : field.type == 'textarea'
+                  ? TextInputType.multiline
+                  : TextInputType.text,
+          maxLines: field.type == 'textarea' ? (field.rows ?? 3) : 1,
+          onExpand: field.expandable && widget.onOpenFsEditor != null
+              ? () => widget.onOpenFsEditor!(field.key, -1)
+              : null,
+        );
+      case 'select':
+        return MenuSelectorItem(
+          label: field.label,
+          currentValue: _getSelectedLabel(field),
+          onTap: () => _openSelectSelector(field),
+        );
+      case 'greeting_list':
+        return _buildGreetingItems();
+      case 'info':
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          child: Text(
+            field.text ?? _localItem[field.key]?.toString() ?? '',
+            style: TextStyle(
+              color: context.cs.onSurfaceVariant,
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _buildGreetingItems() {
+    final greets = _allGreetings;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (int i = 0; i < greets.length; i++)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: context.cs.outlineVariant.withValues(alpha: 0.08),
+                border: Border.all(color: context.cs.outlineVariant),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '#${i + 1}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () => widget.onOpenFsEditor?.call('first_mes', i),
+                              child: Icon(Icons.edit_outlined, size: 18, color: context.cs.primary),
+                            ),
+                            const SizedBox(width: 12),
+                            GestureDetector(
+                              onTap: () => _confirmDeleteGreeting(i),
+                              child: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF4444)),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    GestureDetector(
+                      onTap: () => widget.onOpenFsEditor?.call('first_mes', i),
+                      child: Text(
+                        greets[i].isEmpty ? 'Empty' : greets[i],
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: context.cs.onSurface.withValues(alpha: 0.9),
+                          height: 1.4,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: GestureDetector(
+            onTap: _addGreeting,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: context.cs.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add, size: 20, color: context.cs.primary),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Add Message',
+                    style: TextStyle(color: context.cs.primary, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildAvatarCard() {
     final avatarPath = _localItem[widget.avatarField] as String?;
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: GestureDetector(
         onTap: widget.onAvatarTap,
         child: ClipRRect(
@@ -337,7 +480,7 @@ class _GenericEditorState extends State<GenericEditor> {
                             gradient: LinearGradient(
                               begin: Alignment.topLeft,
                               end: Alignment.bottomRight,
-                              colors: [Color(0xFF66CCFF), context.cs.primary],
+                              colors: [const Color(0xFF66CCFF), context.cs.primary],
                             ),
                           ),
                           alignment: Alignment.center,
@@ -353,9 +496,7 @@ class _GenericEditorState extends State<GenericEditor> {
                 ),
               ),
               Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
+                top: 0, left: 0, right: 0,
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 30),
                   decoration: const BoxDecoration(
@@ -377,9 +518,7 @@ class _GenericEditorState extends State<GenericEditor> {
                 ),
               ),
               Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
+                bottom: 0, left: 0, right: 0,
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
                   decoration: const BoxDecoration(
@@ -392,305 +531,12 @@ class _GenericEditorState extends State<GenericEditor> {
                   alignment: Alignment.center,
                   child: Text(
                     widget.avatarHint,
-                    style: const TextStyle(
-                      color: Color(0xE6FFFFFF),
-                      fontSize: 14,
-                    ),
+                    style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 14),
                   ),
                 ),
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSection(GenericEditorSection section) {
-    final visibleFields = section.fields
-        .where((f) => f.showIf == null || f.showIf!(_localItem))
-        .toList();
-
-    if (visibleFields.isEmpty && (section.title == null || section.title!.isEmpty)) {
-      return const SizedBox();
-    }
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      decoration: widget.useWindows
-          ? BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.03),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: context.cs.outlineVariant),
-            )
-          : null,
-      clipBehavior: widget.useWindows ? Clip.antiAlias : Clip.none,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (section.title != null && section.title!.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.03))),
-              ),
-              child: Text(
-                section.title!.toUpperCase(),
-                style: TextStyle(
-                  color: context.cs.primary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
-          for (int fIdx = 0; fIdx < visibleFields.length; fIdx++)
-            _buildField(visibleFields[fIdx], fIdx == visibleFields.length - 1),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildField(GenericEditorField field, bool isLast) {
-    if (field.showIf != null && !field.showIf!(_localItem)) {
-      return const SizedBox.shrink();
-    }
-    return Container(
-      padding: widget.useWindows 
-          ? const EdgeInsets.all(16)
-          : const EdgeInsets.symmetric(vertical: 12),
-      decoration: (isLast || !widget.useWindows)
-          ? null
-          : BoxDecoration(
-              border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
-            ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (field.type != 'greeting_list') _buildLabelRow(field),
-          if (field.type != 'greeting_list') const SizedBox(height: 10),
-          _buildInput(field),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLabelRow(GenericEditorField field) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Text(
-              field.label,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w500,
-                 color: context.cs.onSurface,
-              ),
-            ),
-            if (field.helpTerm != null) ...[
-              const SizedBox(width: 8),
-              Icon(Icons.help_outline, size: 16, color: context.cs.onSurfaceVariant),
-            ]
-          ],
-        ),
-        if (field.expandable && widget.onOpenFsEditor != null)
-          GestureDetector(
-            onTap: () => widget.onOpenFsEditor!(field.key, -1),
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.open_in_full, size: 20, color: context.cs.primary),
-            ),
-          )
-      ],
-    );
-  }
-
-  Widget _buildInput(GenericEditorField field) {
-    switch (field.type) {
-      case 'text':
-      case 'number':
-      case 'tags':
-      case 'textarea':
-        return _buildTextField(field);
-      case 'greeting_list':
-        return _buildGreetingList(field);
-      case 'select':
-        return _buildSelect(field);
-      case 'info':
-        return Text(
-          field.text ?? _localItem[field.key]?.toString() ?? '',
-          style: TextStyle(
-            color: context.cs.onSurfaceVariant,
-            fontSize: 14,
-            height: 1.5,
-          ),
-        );
-      default:
-        return const SizedBox();
-    }
-  }
-
-  Widget _buildTextField(GenericEditorField field) {
-    final ctrl = _controllers[field.key];
-    if (ctrl == null) return const SizedBox();
-
-    final isTextarea = field.type == 'textarea';
-    return TextField(
-      controller: ctrl,
-      maxLines: isTextarea ? (field.rows ?? 3) : 1,
-      minLines: isTextarea ? (field.rows ?? 3) : 1,
-      keyboardType: field.type == 'number'
-          ? TextInputType.number
-          : isTextarea
-              ? TextInputType.multiline
-              : TextInputType.text,
-      textInputAction: isTextarea ? TextInputAction.newline : null,
-      style: TextStyle(fontSize: 15, color: context.cs.onSurface),
-      decoration: InputDecoration(
-        hintText: field.placeholder,
-        hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
-        filled: true,
-        fillColor: Colors.black.withValues(alpha: 0.2),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide(color: context.cs.primary),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildGreetingList(GenericEditorField field) {
-    final greets = _allGreetings;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildLabelRow(field),
-        const SizedBox(height: 10),
-        for (int gIdx = 0; gIdx < greets.length; gIdx++)
-          Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.03),
-              border: Border.all(color: context.cs.outlineVariant),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      '#${gIdx + 1}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: context.cs.onSurfaceVariant,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () {
-                            if (widget.onOpenFsEditor != null) {
-                              widget.onOpenFsEditor!('first_mes', gIdx);
-                            }
-                          },
-                          child: Icon(Icons.edit, size: 18, color: context.cs.primary),
-                        ),
-                        const SizedBox(width: 12),
-                        GestureDetector(
-                          onTap: () => _confirmDeleteGreeting(gIdx),
-                          child: const Icon(Icons.delete, size: 18, color: Color(0xFFFF4444)),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                GestureDetector(
-                  onTap: () {
-                    if (widget.onOpenFsEditor != null) {
-                      widget.onOpenFsEditor!('first_mes', gIdx);
-                    }
-                  },
-                  child: Text(
-                    greets[gIdx].isEmpty ? 'Empty' : greets[gIdx],
-                    style: TextStyle(
-                      fontSize: 14,
-                        color: context.cs.onSurface.withValues(alpha: 0.9),
-                      height: 1.4,
-                    ),
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        GestureDetector(
-          onTap: _addGreeting,
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: context.cs.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.add, size: 20, color: context.cs.primary),
-                SizedBox(width: 8),
-                Text(
-                  'Add Message',
-                  style: TextStyle(
-                    color: context.cs.primary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSelect(GenericEditorField field) {
-    return GestureDetector(
-      onTap: () => _openSelectSelector(field),
-      child: Container(
-        height: 48,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: context.cs.surfaceContainerHighest,
-          border: Border.all(color: context.cs.outlineVariant),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              _getSelectedLabel(field),
-              style: TextStyle(fontSize: 15, color: context.cs.onSurface),
-            ),
-            Icon(Icons.arrow_drop_down, color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
-          ],
         ),
       ),
     );

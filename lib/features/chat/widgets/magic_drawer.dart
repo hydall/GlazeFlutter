@@ -26,7 +26,7 @@ import '../chat_provider.dart';
 import '../../character_list/character_detail_screen.dart';
 import '../../personas/persona_list_screen.dart';
 import '../../presets/preset_list_screen.dart';
-import '../../regex/regex_list_screen.dart';
+import '../../regex/regex_sheet.dart';
 import '../../settings/api_settings_screen.dart';
 import 'authors_note_sheet.dart';
 import 'chat_stats_sheet.dart';
@@ -390,7 +390,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             backgroundColor: Colors.transparent,
             barrierColor: Colors.black54,
             isScrollControlled: true,
-            builder: (_) => const RegexListScreen(),
+            builder: (_) => const RegexSheet(),
           );
         }
         return;

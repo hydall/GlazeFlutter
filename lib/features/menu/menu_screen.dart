@@ -3,11 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/services/onboarding_service.dart';
+import '../../core/state/dev_mode_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/widgets/glaze_scaffold.dart' show GlazeAppBar;
 import '../../shared/widgets/menu_group.dart';
 import '../backup/backup_screen.dart';
 import '../cloud_sync/widgets/sync_sheet.dart';
+import '../dev/menu_group_demo_screen.dart';
 
 class MenuScreen extends ConsumerWidget {
   const MenuScreen({super.key});
@@ -70,6 +72,19 @@ class MenuScreen extends ConsumerWidget {
                     ),
                   ],
                 ),
+                if (ref.watch(devModeProvider))
+                  MenuGroup(
+                    header: 'Dev',
+                    items: [
+                      MenuItem(
+                        icon: Icons.widgets_outlined,
+                        label: 'MenuGroup Demo',
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                          builder: (_) => const MenuGroupDemoScreen(),
+                        )),
+                      ),
+                    ],
+                  ),
                 MenuGroup(
                   header: 'Info',
                   items: [

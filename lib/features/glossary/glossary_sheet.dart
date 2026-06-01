@@ -391,7 +391,7 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 80).add(mediaPad),
       itemCount: results.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 6),
+      separatorBuilder: (_, _) => const SizedBox(height: 6),
       itemBuilder: (_, i) {
         final (term, catLabel) = results[i];
         final sub =
@@ -411,7 +411,7 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 80).add(mediaPad),
       itemCount: terms.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 6),
+      separatorBuilder: (_, _) => const SizedBox(height: 6),
       itemBuilder: (_, i) {
         final t = terms[i];
         return _TermTile(

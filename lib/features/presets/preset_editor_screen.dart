@@ -16,8 +16,7 @@ import '../../shared/widgets/help_tip.dart';
 import 'preset_list_provider.dart';
 import 'preset_export.dart';
 import 'widgets/preset_block_row.dart';
-import 'widgets/regex_sheet.dart';
-import 'widgets/widgets.dart';
+import '../regex/regex_sheet.dart';
 
 /// Standalone screen wrapper around [PresetEditorBody].
 class PresetEditorScreen extends StatefulWidget {
@@ -583,23 +582,23 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
     );
   }
 
-  void _showRegexSheet() {
-    showModalBottomSheet<void>(
+  Future<void> _showRegexSheet() async {
+    _saveTimer?.cancel();
+    await _performSave();
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black54,
       isScrollControlled: true,
-      builder: (_) => RegexSheet(
-        regexes: _regexes,
-        presetName: _nameCtrl.text,
-        onChanged: (list) {
-          setState(() => _regexes = list);
-          _scheduleSave();
-        },
-      ),
+      builder: (_) => RegexSheet(presetId: _currentId),
     );
+    if (!mounted) return;
+    final presets = ref.read(presetListProvider).value ?? [];
+    final preset = presets.where((p) => p.id == _currentId).firstOrNull;
+    if (preset != null) setState(() => _regexes = List.from(preset.regexes));
   }
 
   InputDecoration _inputDecoration(String hint) {

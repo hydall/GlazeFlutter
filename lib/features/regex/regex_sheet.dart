@@ -19,18 +19,26 @@ import '../presets/preset_list_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_toast.dart';
+import '../../shared/widgets/glass_surface.dart';
+import '../../shared/widgets/menu_group.dart';
 import '../../shared/widgets/sheet_view.dart';
 
-class RegexListScreen extends ConsumerStatefulWidget {
+class RegexSheet extends ConsumerStatefulWidget {
   final bool startExpanded;
-  const RegexListScreen({super.key, this.startExpanded = false});
+
+  /// When set, overrides the active-preset lookup so this sheet always edits
+  /// the specified preset regardless of which preset is currently active.
+  final String? presetId;
+
+  const RegexSheet({super.key, this.startExpanded = false, this.presetId});
 
   @override
-  ConsumerState<RegexListScreen> createState() => _RegexListScreenState();
+  ConsumerState<RegexSheet> createState() => _RegexSheetState();
 }
 
-class _RegexListScreenState extends ConsumerState<RegexListScreen> {
+class _RegexSheetState extends ConsumerState<RegexSheet> {
   String _view = 'list';
+  bool _isForward = true;
   PresetRegex? _activeScript;
   bool _isPresetScript = false;
   Timer? _saveTimer;
@@ -45,6 +53,7 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
 
   void _selectScript(PresetRegex script, {required bool isPreset}) {
     setState(() {
+      _isForward = true;
       _activeScript = script;
       _isPresetScript = isPreset;
       _view = 'edit';
@@ -57,6 +66,7 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
       final s = _activeScript;
       if (s != null) _saveActiveScript(s);
       setState(() {
+        _isForward = false;
         _view = 'list';
         _activeScript = null;
         _isPresetScript = false;
@@ -72,6 +82,8 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
     }
   }
 
+  String? get _effectivePresetId => widget.presetId ?? ref.read(activePresetIdProvider);
+
   // ── Script changes ───────────────────────────────────────────────────────────
 
   void _onScriptChanged(PresetRegex updated) {
@@ -84,10 +96,10 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
 
   Future<void> _saveActiveScript(PresetRegex script) async {
     if (_isPresetScript) {
-      final activePresetId = ref.read(activePresetIdProvider);
-      if (activePresetId == null) return;
+      final pid = _effectivePresetId;
+      if (pid == null) return;
       final presets = ref.read(presetListProvider).value ?? [];
-      final preset = presets.where((p) => p.id == activePresetId).firstOrNull;
+      final preset = presets.where((p) => p.id == pid).firstOrNull;
       if (preset == null) return;
       final updated = preset.regexes.map((r) => r.id == script.id ? script : r).toList();
       await ref.read(presetListProvider.notifier).updatePreset(preset.copyWith(regexes: updated));
@@ -99,10 +111,10 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
   Future<void> _toggleScript(PresetRegex script, bool enabled, {required bool isPreset}) async {
     final updated = script.copyWith(disabled: !enabled);
     if (isPreset) {
-      final activePresetId = ref.read(activePresetIdProvider);
-      if (activePresetId == null) return;
+      final pid = _effectivePresetId;
+      if (pid == null) return;
       final presets = ref.read(presetListProvider).value ?? [];
-      final preset = presets.where((p) => p.id == activePresetId).firstOrNull;
+      final preset = presets.where((p) => p.id == pid).firstOrNull;
       if (preset == null) return;
       final updatedRegexes = preset.regexes.map((r) => r.id == script.id ? updated : r).toList();
       await ref.read(presetListProvider.notifier).updatePreset(preset.copyWith(regexes: updatedRegexes));
@@ -113,10 +125,10 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
 
   Future<void> _deleteScript(PresetRegex script, bool isPreset) async {
     if (isPreset) {
-      final activePresetId = ref.read(activePresetIdProvider);
-      if (activePresetId == null) return;
+      final pid = _effectivePresetId;
+      if (pid == null) return;
       final presets = ref.read(presetListProvider).value ?? [];
-      final preset = presets.where((p) => p.id == activePresetId).firstOrNull;
+      final preset = presets.where((p) => p.id == pid).firstOrNull;
       if (preset == null) return;
       final updatedRegexes = preset.regexes.where((r) => r.id != script.id).toList();
       await ref.read(presetListProvider.notifier).updatePreset(preset.copyWith(regexes: updatedRegexes));
@@ -126,10 +138,10 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
   }
 
   Future<PresetRegex?> _addPresetRegex() async {
-    final activePresetId = ref.read(activePresetIdProvider);
-    if (activePresetId == null) return null;
+    final pid = _effectivePresetId;
+    if (pid == null) return null;
     final presets = ref.read(presetListProvider).value ?? [];
-    final preset = presets.where((p) => p.id == activePresetId).firstOrNull;
+    final preset = presets.where((p) => p.id == pid).firstOrNull;
     if (preset == null) return null;
     final newScript = PresetRegex(id: generateId(), name: 'New Script', regex: '');
     await ref.read(presetListProvider.notifier).updatePreset(
@@ -201,10 +213,10 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
   void _showDestinationMenu(BuildContext context, {required bool toPreset}) {
     String title;
     if (toPreset) {
-      final activePresetId = ref.read(activePresetIdProvider);
+      final pid = _effectivePresetId;
       final presets = ref.read(presetListProvider).value ?? [];
-      final preset = activePresetId != null
-          ? presets.where((p) => p.id == activePresetId).firstOrNull
+      final preset = pid != null
+          ? presets.where((p) => p.id == pid).firstOrNull
           : presets.firstOrNull;
       title = preset?.name ?? 'label_active_preset'.tr();
     } else {
@@ -299,13 +311,13 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
         await ref.read(globalRegexProvider.notifier).importFromJsBackup(combinedRaw);
         if (context.mounted) GlazeToast.show(context, 'import_success'.tr());
       } else {
-        final activePresetId = ref.read(activePresetIdProvider);
-        if (activePresetId == null) {
+        final pid = _effectivePresetId;
+        if (pid == null) {
           if (context.mounted) GlazeToast.show(context, 'label_active_preset'.tr());
           return;
         }
         final presets = ref.read(presetListProvider).value ?? [];
-        final preset = presets.where((p) => p.id == activePresetId).firstOrNull;
+        final preset = presets.where((p) => p.id == pid).firstOrNull;
         if (preset == null) {
           if (context.mounted) GlazeToast.show(context, 'no_results'.tr());
           return;
@@ -346,6 +358,22 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
     return result;
   }
 
+  // ── Transition ───────────────────────────────────────────────────────────────
+
+  Widget _buildTransition(Widget child, Animation<double> animation) {
+    final dir = _isForward ? 1.0 : -1.0;
+    final isEntering = _isForward
+        ? child.key != const ValueKey('regex-list')
+        : child.key == const ValueKey('regex-list');
+    return SlideTransition(
+      position: Tween<Offset>(
+        begin: isEntering ? Offset(dir * 0.06, 0) : Offset(-dir * 0.06, 0),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+      child: FadeTransition(opacity: animation, child: child),
+    );
+  }
+
   // ── Build ────────────────────────────────────────────────────────────────────
 
   @override
@@ -355,8 +383,9 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
     final activePresetId = ref.watch(activePresetIdProvider);
 
     final presets = presetsAsync.valueOrNull ?? [];
-    final activePreset = activePresetId != null
-        ? presets.where((p) => p.id == activePresetId).firstOrNull
+    final effectivePresetId = widget.presetId ?? activePresetId;
+    final activePreset = effectivePresetId != null
+        ? presets.where((p) => p.id == effectivePresetId).firstOrNull
         : presets.firstOrNull;
     final presetRegexes = activePreset?.regexes ?? <PresetRegex>[];
     final globalRegexes = globalAsync.valueOrNull ?? <PresetRegex>[];
@@ -365,16 +394,21 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
 
     return SheetView(
       startExpanded: widget.startExpanded,
+      showRouteBackground: false,
       title: isEdit ? 'regex_editor'.tr() : 'menu_regex'.tr(),
       showBack: isEdit || widget.startExpanded,
       onBack: isEdit ? _goBack : _goBackFromList,
-      body: isEdit && _activeScript != null
-          ? _RegexEditView(
-              key: ValueKey(_activeScript!.id),
-              script: _activeScript!,
-              onChanged: _onScriptChanged,
-            )
-          : _buildListView(context, activePreset, presetRegexes, globalRegexes),
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 280),
+        transitionBuilder: _buildTransition,
+        child: isEdit && _activeScript != null
+            ? _RegexEditView(
+                key: ValueKey(_activeScript!.id),
+                script: _activeScript!,
+                onChanged: _onScriptChanged,
+              )
+            : _buildListView(context, activePreset, presetRegexes, globalRegexes),
+      ),
       floatingActionButton: isEdit
           ? null
           : FloatingActionButton.small(
@@ -393,75 +427,69 @@ class _RegexListScreenState extends ConsumerState<RegexListScreen> {
     List<PresetRegex> globalRegexes,
   ) {
     return Builder(
+      key: const ValueKey('regex-list'),
       builder: (innerContext) => ListView(
-      key: const PageStorageKey('regex_list'),
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16).add(
-        EdgeInsets.only(
-          top: MediaQuery.paddingOf(innerContext).top,
-          bottom: MediaQuery.paddingOf(innerContext).bottom,
+        key: const PageStorageKey('regex_list'),
+        padding: const EdgeInsets.fromLTRB(0, 20, 0, 16).add(
+          EdgeInsets.only(
+            top: MediaQuery.paddingOf(innerContext).top,
+            bottom: MediaQuery.paddingOf(innerContext).bottom,
+          ),
         ),
-      ),
-      children: [
-        if (presetRegexes.isNotEmpty) ...[
-          _SectionTitle('regex_preset_scripts'.tr()),
-          if (activePreset != null)
-            _PresetChip(
-              presetName: activePreset.name,
-              onTap: () => context.go('/tools/presets'),
+        children: [
+          if (presetRegexes.isNotEmpty)
+            MenuGroup(
+              header: 'regex_preset_scripts'.tr(),
+              items: [
+                if (activePreset != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                    child: _PresetChip(
+                      presetName: activePreset.name,
+                      onTap: widget.presetId == null
+                          ? () => context.go('/tools/presets')
+                          : null,
+                    ),
+                  ),
+                ...presetRegexes.map((r) => MenuScriptItem(
+                  name: r.name,
+                  subtitle: r.regex.isNotEmpty ? r.regex : null,
+                  enabled: !r.disabled,
+                  onToggle: (v) => _toggleScript(r, v, isPreset: true),
+                  onTap: () => _selectScript(r, isPreset: true),
+                  onMore: () => _showScriptMenu(innerContext, r, true),
+                )),
+              ],
             ),
-          for (final r in presetRegexes)
-            _ScriptListItem(
-              script: r,
-              onTap: () => _selectScript(r, isPreset: true),
-              onToggle: (v) => _toggleScript(r, v, isPreset: true),
-              onMore: () => _showScriptMenu(context, r, true),
-            ),
-          const SizedBox(height: 16),
+          MenuGroup(
+            header: 'regex_global_scripts'.tr(),
+            items: [
+              if (globalRegexes.isEmpty)
+                const _EmptyState()
+              else
+                ...globalRegexes.map((r) => MenuScriptItem(
+                  name: r.name,
+                  subtitle: r.regex.isNotEmpty ? r.regex : null,
+                  enabled: !r.disabled,
+                  onToggle: (v) => _toggleScript(r, v, isPreset: false),
+                  onTap: () => _selectScript(r, isPreset: false),
+                  onMore: () => _showScriptMenu(innerContext, r, false),
+                )),
+            ],
+          ),
+          const SizedBox(height: 80),
         ],
-        _SectionTitle('regex_global_scripts'.tr()),
-        if (globalRegexes.isEmpty)
-          const _EmptyState()
-        else
-          for (final r in globalRegexes)
-            _ScriptListItem(
-              script: r,
-              onTap: () => _selectScript(r, isPreset: false),
-              onToggle: (v) => _toggleScript(r, v, isPreset: false),
-              onMore: () => _showScriptMenu(context, r, false),
-            ),
-        const SizedBox(height: 80),
-      ],
-    ));
-  }
-}
-
-// ── List UI widgets ────────────────────────────────────────────────────────────
-
-class _SectionTitle extends StatelessWidget {
-  final String text;
-  const _SectionTitle(this.text);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: context.cs.onSurfaceVariant,
-          letterSpacing: 0.6,
-        ),
       ),
     );
   }
 }
 
+// ── List UI widgets ────────────────────────────────────────────────────────────
+
 class _PresetChip extends StatelessWidget {
   final String presetName;
-  final VoidCallback onTap;
-  const _PresetChip({required this.presetName, required this.onTap});
+  final VoidCallback? onTap;
+  const _PresetChip({required this.presetName, this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -488,90 +516,11 @@ class _PresetChip extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 4),
-              Icon(Icons.chevron_right, size: 16, color: context.cs.primary.withValues(alpha: 0.7)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _ScriptListItem extends StatelessWidget {
-  final PresetRegex script;
-  final VoidCallback onTap;
-  final ValueChanged<bool> onToggle;
-  final VoidCallback onMore;
-
-  const _ScriptListItem({
-    required this.script,
-    required this.onTap,
-    required this.onToggle,
-    required this.onMore,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: Colors.white.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(16),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        script.name,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: script.disabled ? context.cs.onSurfaceVariant : context.cs.onSurface,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (script.regex.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          script.regex,
-                          style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Switch(
-                  value: !script.disabled,
-                  onChanged: onToggle,
-                  activeTrackColor: context.cs.primary,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: onMore,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 8, 0, 8),
-                    child: Icon(Icons.more_vert, size: 20, color: context.cs.onSurfaceVariant),
-                  ),
-                ),
+              if (onTap != null) ...[
+                const SizedBox(width: 4),
+                Icon(Icons.chevron_right, size: 16, color: context.cs.primary.withValues(alpha: 0.7)),
               ],
-            ),
+            ],
           ),
         ),
       ),
@@ -668,23 +617,23 @@ class _RegexEditViewState extends State<_RegexEditView> {
     final s = widget.script;
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 80).add(
+      padding: const EdgeInsets.fromLTRB(0, 20, 0, 80).add(
         EdgeInsets.only(
           top: MediaQuery.paddingOf(context).top,
           bottom: MediaQuery.paddingOf(context).bottom,
         ),
       ),
       children: [
-        _MenuGroup(
-          title: 'regex_script_settings'.tr(),
-          children: [
-            _SettingsTextField(label: 'regex_script_name'.tr(), controller: _nameCtrl, onChanged: (v) => _update(s.copyWith(name: v))),
-            _SettingsTextField(label: 'regex_find'.tr(), controller: _regexCtrl, onChanged: (v) => _update(s.copyWith(regex: v))),
-            _SettingsTextField(label: 'regex_replace_with'.tr(), controller: _replacementCtrl, onChanged: (v) => _update(s.copyWith(replacement: v)), maxLines: 3),
-            _SettingsTextField(label: 'regex_trim_out'.tr(), controller: _trimOutCtrl, onChanged: (v) => _update(s.copyWith(trimOut: v)), maxLines: 2),
+        MenuGroup(
+          header: 'regex_script_settings'.tr(),
+          items: [
+            MenuFieldItem(label: 'regex_script_name'.tr(), controller: _nameCtrl, onChanged: (v) => _update(s.copyWith(name: v))),
+            MenuFieldItem(label: 'regex_find'.tr(), controller: _regexCtrl, onChanged: (v) => _update(s.copyWith(regex: v))),
+            MenuFieldItem(label: 'regex_replace_with'.tr(), controller: _replacementCtrl, onChanged: (v) => _update(s.copyWith(replacement: v)), maxLines: 3),
+            MenuFieldItem(label: 'regex_trim_out'.tr(), controller: _trimOutCtrl, onChanged: (v) => _update(s.copyWith(trimOut: v)), maxLines: 2),
           ],
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 4),
         LayoutBuilder(
           builder: (context, constraints) {
             final wide = constraints.maxWidth >= 500;
@@ -693,10 +642,10 @@ class _RegexEditViewState extends State<_RegexEditView> {
             if (wide) {
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [Expanded(child: col1), const SizedBox(width: 12), Expanded(child: col2)],
+                children: [Expanded(child: col1), Expanded(child: col2)],
               );
             }
-            return Column(children: [col1, const SizedBox(height: 12), col2]);
+            return Column(children: [col1, col2]);
           },
         ),
       ],
@@ -713,10 +662,9 @@ class _RegexEditViewState extends State<_RegexEditView> {
     ];
     return Column(
       children: [
-        _MenuGroup(
-          title: 'regex_affects'.tr(),
-          compact: true,
-          children: placements.map((opt) {
+        MenuGroup(
+          header: 'regex_affects'.tr(),
+          items: placements.map((opt) {
             return _CheckboxOption(
               label: opt.$2,
               value: s.placement.contains(opt.$1),
@@ -728,25 +676,27 @@ class _RegexEditViewState extends State<_RegexEditView> {
             );
           }).toList(),
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: _DepthInput(
-                label: 'regex_min_depth'.tr(),
-                controller: _minDepthCtrl,
-                onChanged: (v) => _update(s.copyWith(minDepth: v)),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: _DepthInput(
+                  label: 'regex_min_depth'.tr(),
+                  controller: _minDepthCtrl,
+                  onChanged: (v) => _update(s.copyWith(minDepth: v)),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _DepthInput(
-                label: 'regex_max_depth'.tr(),
-                controller: _maxDepthCtrl,
-                onChanged: (v) => _update(s.copyWith(maxDepth: v)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _DepthInput(
+                  label: 'regex_max_depth'.tr(),
+                  controller: _maxDepthCtrl,
+                  onChanged: (v) => _update(s.copyWith(maxDepth: v)),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -764,10 +714,9 @@ class _RegexEditViewState extends State<_RegexEditView> {
     };
     return Column(
       children: [
-        _MenuGroup(
-          title: 'regex_other_options'.tr(),
-          compact: true,
-          children: [
+        MenuGroup(
+          header: 'regex_other_options'.tr(),
+          items: [
             _CheckboxOption(
               label: 'regex_run_on_edit'.tr(),
               value: s.runOnEdit,
@@ -775,17 +724,19 @@ class _RegexEditViewState extends State<_RegexEditView> {
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        _MenuGroup(
-          title: 'regex_macros_find'.tr(),
-          compact: true,
-          children: [_MacroSelector(label: macroLabel, onTap: _openMacroSelector)],
+        MenuGroup(
+          header: 'regex_macros_find'.tr(),
+          items: [
+            MenuSelectorItem(
+              label: 'Substitution',
+              currentValue: macroLabel,
+              onTap: _openMacroSelector,
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        _MenuGroup(
-          title: 'regex_ephemerality'.tr(),
-          compact: true,
-          children: ephemeralities.map((opt) {
+        MenuGroup(
+          header: 'regex_ephemerality'.tr(),
+          items: ephemeralities.map((opt) {
             return _CheckboxOption(
               label: opt.$2,
               value: s.ephemerality.contains(opt.$1),
@@ -803,89 +754,6 @@ class _RegexEditViewState extends State<_RegexEditView> {
 }
 
 // ── Edit sub-widgets ────────────────────────────────────────────────────────────
-
-class _MenuGroup extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-  final bool compact;
-
-  const _MenuGroup({required this.title, required this.children, this.compact = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(16, compact ? 8 : 12, 16, compact ? 4 : 8),
-            child: Text(
-              title.toUpperCase(),
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-                color: context.cs.onSurfaceVariant,
-                letterSpacing: 0.6,
-              ),
-            ),
-          ),
-          Divider(height: 1, color: Colors.white.withValues(alpha: 0.06)),
-          for (int i = 0; i < children.length; i++) ...[
-            if (i > 0) Divider(height: 1, color: Colors.white.withValues(alpha: 0.04)),
-            children[i],
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsTextField extends StatelessWidget {
-  final String label;
-  final TextEditingController controller;
-  final ValueChanged<String>? onChanged;
-  final int maxLines;
-
-  const _SettingsTextField({
-    required this.label,
-    required this.controller,
-    this.onChanged,
-    this.maxLines = 1,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant),
-          ),
-          const SizedBox(height: 6),
-          TextField(
-            controller: controller,
-            onChanged: onChanged,
-            maxLines: maxLines,
-            style: const TextStyle(fontSize: 15),
-            decoration: const InputDecoration(
-              isDense: true,
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _CheckboxOption extends StatelessWidget {
   final String label;
@@ -914,7 +782,7 @@ class _CheckboxOption extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500)),
+            Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: context.cs.onSurface)),
           ],
         ),
       ),
@@ -931,64 +799,30 @@ class _DepthInput extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
-          const SizedBox(height: 4),
-          TextField(
-            controller: controller,
-            keyboardType: TextInputType.number,
-            style: const TextStyle(fontSize: 15),
-            onChanged: (v) => onChanged(int.tryParse(v)),
-            decoration: InputDecoration(
-              isDense: true,
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.zero,
-              hintText: 'regex_unlimited_placeholder'.tr(),
-              hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.4), fontSize: 15),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MacroSelector extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-
-  const _MacroSelector({required this.label, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
+    return GlassSurface(
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: context.cs.outlineVariant),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Container(
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.04),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(label, style: const TextStyle(fontSize: 14)),
-              Icon(Icons.expand_more, size: 20, color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
-            ],
-          ),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
+            const SizedBox(height: 4),
+            TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              style: TextStyle(fontSize: 15, color: context.cs.onSurface),
+              onChanged: (v) => onChanged(int.tryParse(v)),
+              decoration: InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                hintText: 'regex_unlimited_placeholder'.tr(),
+                hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.4), fontSize: 15),
+              ),
+            ),
+          ],
         ),
       ),
     );

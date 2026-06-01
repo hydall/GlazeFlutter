@@ -25,6 +25,7 @@ class LorebookListScreen extends ConsumerWidget {
     final lorebooksAsync = ref.watch(lorebooksProvider);
 
     return SheetView(
+      showRouteBackground: false,
       title: 'Lorebooks',
       showBack: true,
       onBack: () => context.go('/tools'),

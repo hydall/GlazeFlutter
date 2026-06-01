@@ -12,6 +12,7 @@ import '../personas/persona_list_provider.dart';
 import '../presets/preset_list_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart' show GlazeAppBar;
+import '../../shared/widgets/glass_surface.dart';
 
 class PersonaInfo {
   final String name;
@@ -193,14 +194,11 @@ class _HeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final card = GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: GlassSurface(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: context.cs.outlineVariant),
+        child: SizedBox(
         height: isAvatar ? null : 140,
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-        clipBehavior: Clip.antiAlias,
         child: Stack(
           children: [
             if (isAvatar) ...[
@@ -284,6 +282,7 @@ class _HeroCard extends StatelessWidget {
             ),
           ],
         ),
+        ),
       ),
     );
 
@@ -341,13 +340,11 @@ class _GridTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: GlassSurface(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: context.cs.outlineVariant),
+        child: Padding(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.start,
@@ -405,6 +402,7 @@ class _GridTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ],
+        ),
         ),
       ),
     );

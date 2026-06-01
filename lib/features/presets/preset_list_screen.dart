@@ -70,6 +70,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
 
     return SheetView(
       startExpanded: widget.startExpanded,
+      showRouteBackground: false,
       title: _inEditor
           ? (_editingPreset != null ? 'Edit Preset' : 'New Preset')
           : 'Presets',

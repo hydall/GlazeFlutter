@@ -16,7 +16,7 @@ import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/sheet_view.dart';
 import 'api_list_provider.dart';
 import 'widgets/connection_status.dart';
-import 'widgets/settings_items.dart';
+import '../../shared/widgets/menu_group.dart';
 
 class ApiSettingsScreen extends ConsumerStatefulWidget {
   final bool startExpanded;
@@ -222,6 +222,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
 
     return SheetView(
       startExpanded: widget.startExpanded,
+      showRouteBackground: false,
       title: 'menu_app_settings'.tr(),
       showBack: true,
       onBack: _goBack,
@@ -351,20 +352,22 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: _buildTopControls(list, activeName),
           ),
-          SettingsGroup(
+          MenuGroup(
+            compact: true,
             header: 'onboarding_connection'.tr(),
-            children: [
-              SettingsItemField(
+            helpTerm: 'api',
+            items: [
+              MenuFieldItem(
                 label: 'settings_config_name'.tr(),
                 controller: _nameCtrl,
                 placeholder: 'My OpenAI',
               ),
-              SettingsItemField(
+              MenuFieldItem(
                 label: 'onboarding_label_endpoint'.tr(),
                 controller: _endpointCtrl,
                 placeholder: 'http://127.0.0.1:5000/v1',
               ),
-              SettingsItemField(
+              MenuFieldItem(
                 label: 'onboarding_label_model'.tr(),
                 controller: _modelCtrl,
                 placeholder: 'gemini-3-pro-preview',
@@ -389,8 +392,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                         onPressed: _openModelSelector,
                       ),
               ),
-              SettingsItemField(
+              MenuFieldItem(
                 label: 'onboarding_label_key'.tr(),
+                helpTerm: 'apikey',
                 controller: _keyCtrl,
                 placeholder: 'sk-...',
                 obscure: !_showApiKey,
@@ -405,9 +409,10 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   onPressed: () => setState(() => _showApiKey = !_showApiKey),
                 ),
               ),
-              SettingsItemSwitch(
+              MenuSwitchItem(
                 label: 'label_stream'.tr(),
-                subtitle: 'desc_stream'.tr(),
+                helpTerm: 'streaming',
+                description: 'desc_stream'.tr(),
                 value: _stream,
                 onChanged: (v) {
                   setState(() => _stream = v);
@@ -416,10 +421,12 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               ),
             ],
           ),
-          SettingsGroup(
+          MenuGroup(
+            compact: true,
             header: 'section_gen_params'.tr(),
-            children: [
-              SettingsItemRange(
+            helpTerm: 'guided',
+            items: [
+              MenuRangeItem(
                 label: 'label_temperature'.tr(),
                 value: _temperature,
                 min: 0,
@@ -430,7 +437,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   _scheduleSave();
                 },
               ),
-              SettingsItemRange(
+              MenuRangeItem(
                 label: 'label_top_p'.tr(),
                 value: _topP,
                 min: 0,
@@ -441,13 +448,13 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   _scheduleSave();
                 },
               ),
-              SettingsItemField(
+              MenuFieldItem(
                 label: 'label_max_tokens'.tr(),
                 controller: _maxTokensCtrl,
                 placeholder: '8000',
                 keyboardType: TextInputType.number,
               ),
-              SettingsItemField(
+              MenuFieldItem(
                 label: 'label_context_size'.tr(),
                 controller: _contextSizeCtrl,
                 placeholder: '32000',
@@ -455,58 +462,61 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               ),
             ],
           ),
-          SettingsGroup(
+          MenuGroup(
+            compact: true,
             header: 'label_reasoning_settings'.tr(),
-            children: [
-              SettingsItemSwitch(
+            helpTerm: 'preset-reasoning',
+            items: [
+              MenuSwitchItem(
                 label: 'label_reasoning'.tr(),
-                subtitle: 'desc_reasoning'.tr(),
+                description: 'desc_reasoning'.tr(),
                 value: _requestReasoning,
                 onChanged: (v) {
                   setState(() => _requestReasoning = v);
                   _scheduleSave();
                 },
               ),
-              SettingsItemSelector(
+              MenuSelectorItem(
                 label: 'label_reasoning_effort'.tr(),
                 currentValue: _reasoningEffortLabel(_reasoningEffort),
                 onTap: _openReasoningEffortSelector,
               ),
             ],
           ),
-          SettingsGroup(
+          MenuGroup(
+            compact: true,
             header: 'section_omit_params'.tr(),
-            children: [
-              SettingsItemSwitch(
+            items: [
+              MenuSwitchItem(
                 label: 'label_omit_temperature'.tr(),
-                subtitle: 'desc_omit_temperature'.tr(),
+                description: 'desc_omit_temperature'.tr(),
                 value: _omitTemperature,
                 onChanged: (v) {
                   setState(() => _omitTemperature = v);
                   _scheduleSave();
                 },
               ),
-              SettingsItemSwitch(
+              MenuSwitchItem(
                 label: 'label_omit_top_p'.tr(),
-                subtitle: 'desc_omit_top_p'.tr(),
+                description: 'desc_omit_top_p'.tr(),
                 value: _omitTopP,
                 onChanged: (v) {
                   setState(() => _omitTopP = v);
                   _scheduleSave();
                 },
               ),
-              SettingsItemSwitch(
+              MenuSwitchItem(
                 label: 'label_omit_reasoning'.tr(),
-                subtitle: 'desc_omit_reasoning'.tr(),
+                description: 'desc_omit_reasoning'.tr(),
                 value: _omitReasoning,
                 onChanged: (v) {
                   setState(() => _omitReasoning = v);
                   _scheduleSave();
                 },
               ),
-              SettingsItemSwitch(
+              MenuSwitchItem(
                 label: 'label_omit_reasoning_effort'.tr(),
-                subtitle: 'desc_omit_reasoning_effort'.tr(),
+                description: 'desc_omit_reasoning_effort'.tr(),
                 value: _omitReasoningEffort,
                 onChanged: (v) {
                   setState(() => _omitReasoningEffort = v);
@@ -535,12 +545,14 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: _buildTopControls(list, activeName),
           ),
-          SettingsGroup(
+          MenuGroup(
+            compact: true,
             header: 'tab_embeddings'.tr(),
-            children: [
-              SettingsItemSwitch(
+            helpTerm: 'embeddings',
+            items: [
+              MenuSwitchItem(
                 label: 'search_type_vector'.tr(),
-                subtitle: 'settings_enable_vector_desc'.tr(),
+                description: 'settings_enable_vector_desc'.tr(),
                 value: _embeddingEnabled,
                 onChanged: (v) {
                   setState(() => _embeddingEnabled = v);
@@ -548,9 +560,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 },
               ),
               if (_embeddingEnabled) ...[
-                SettingsItemSwitch(
+                MenuSwitchItem(
                   label: 'settings_use_llm_api'.tr(),
-                  subtitle: 'settings_use_llm_api_desc'.tr(),
+                  description: 'settings_use_llm_api_desc'.tr(),
                   value: _embeddingUseSame,
                   onChanged: (v) {
                     setState(() => _embeddingUseSame = v);
@@ -558,17 +570,17 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   },
                 ),
                 if (!_embeddingUseSame) ...[
-                  SettingsItemField(
+                  MenuFieldItem(
                     label: 'settings_embedding_endpoint'.tr(),
                     controller: _embEndpointCtrl,
                     placeholder: 'http://127.0.0.1:11434/v1',
                   ),
-                  SettingsItemField(
+                  MenuFieldItem(
                     label: 'settings_embedding_model'.tr(),
                     controller: _embModelCtrl,
                     placeholder: 'text-embedding-3-small',
                   ),
-                  SettingsItemField(
+                  MenuFieldItem(
                     label: 'onboarding_label_key'.tr(),
                     controller: _embApiKeyCtrl,
                     placeholder: 'sk-...',
@@ -576,12 +588,12 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   ),
                 ],
                 if (_embeddingUseSame)
-                  SettingsItemField(
+                  MenuFieldItem(
                     label: 'settings_embedding_model'.tr(),
                     controller: _embModelCtrl,
                     placeholder: 'text-embedding-3-small',
                   ),
-                SettingsItemField(
+                MenuFieldItem(
                   label: 'settings_max_tokens_chunk'.tr(),
                   controller: _embChunkTokensCtrl,
                   placeholder: '512',

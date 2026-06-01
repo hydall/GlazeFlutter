@@ -10,6 +10,7 @@ import 'core/services/generation_notification_service.dart';
 import 'core/state/active_selection_provider.dart';
 import 'core/state/lorebook_provider.dart';
 import 'core/services/preset_seeder.dart';
+import 'features/settings/app_settings_provider.dart';
 import 'shared/theme/theme_font_provider.dart';
 import 'core/services/onboarding_service.dart';
 import 'features/cloud_sync/sync_provider.dart';
@@ -88,6 +89,13 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AsyncValue<AppSettings>>(appSettingsProvider, (prev, next) {
+      final lang = next.valueOrNull?.language;
+      if (lang != null && lang != prev?.valueOrNull?.language) {
+        context.setLocale(Locale(lang));
+      }
+    });
+
     final router = ref.watch(routerProvider);
     final themeSettings = ref.watch(themeProvider);
     final uiFont = ref.watch(uiFontFamilyProvider).valueOrNull;
