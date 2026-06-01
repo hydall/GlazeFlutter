@@ -173,6 +173,19 @@ Within a single `MacroEngine.replaceMacros()` call, macros resolve in this order
 `LorebookScanner` limits recursion to `maxIterations = 5` when `recursiveScan` is enabled,
 or `1` when disabled. This prevents infinite loops from circular entry references.
 
+### INV-PS9: Block-level append-to-last-user-message
+
+`PresetBlock.appendToLastMessage = true` causes the block's content (after macro expansion) to be **appended to the last user-role message in the chat history** at prompt-assembly time.
+
+Rules (enforced in `lib/core/llm/prompt_builder.dart:_assembleMessages` via `_applyAppendToLastMessage`):
+
+1. The block's own `role` is irrelevant in this mode — the content is always merged into the **last** user message found in `historyMsgs`. Block role may be `system`, `user`, or `assistant`; the merged message keeps the user role.
+2. Macros (`{{lorebooks}}`, `{{summary}}`, etc.) are expanded **before** append, in `resolveBlockContent()` — see INV-PS7. A block like `<lorebooks>{{lorebooks}}</lorebooks><summary>{{summary}}</summary>` expands to fully-rendered text and is appended as-is.
+3. Multiple blocks with `appendToLastMessage = true` are appended in **preset order**, joined with `\n\n`. Their `blockName`s are listed in the merged message's `blockName` as `"<orig> + <name1>, <name2>"` for preview attribution.
+4. If the history has no user-role messages (empty chat / first message is assistant or system), the appended blocks are **silently dropped**.
+5. The block is still subject to the standard `enabled` and `isStashed` gates — disabled or stashed blocks are ignored.
+6. The append happens in `_assembleMessages` **after** `HistoryAssembler.assemble(history)` and **before** `interleaveDepthWithHistory`, so depth blocks are still positioned by history depth and regex pipeline sees a single merged user message.
+
 ---
 
 ## 6. Stream vs Non-Stream Parity

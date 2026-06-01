@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../models/character.dart';
 import '../models/persona.dart';
 import '../models/preset.dart';
@@ -132,10 +134,19 @@ class _ResolvedDepthBlock {
 
 class _ResolvedRelativeBlock {
   final String id;
+  final String name;
   final String role;
   final String content;
   final bool isSummary;
-  const _ResolvedRelativeBlock({required this.id, required this.role, required this.content, this.isSummary = false});
+  final bool appendToLastMessage;
+  const _ResolvedRelativeBlock({
+    required this.id,
+    required this.name,
+    required this.role,
+    required this.content,
+    this.isSummary = false,
+    this.appendToLastMessage = false,
+  });
 }
 
 PromptResult buildPrompt(PromptPayload payload) {
@@ -322,12 +333,12 @@ PromptResult buildPrompt(PromptPayload payload) {
       if (anMode == 'depth') {
         depthBlocks.add(_ResolvedDepthBlock(id: id, role: resolved.role, content: resolved.content, depth: anDepth, isSummary: blockIsSummary));
       } else {
-        relativeBlocks.add(_ResolvedRelativeBlock(id: id, role: resolved.role, content: resolved.content, isSummary: blockIsSummary));
+        relativeBlocks.add(_ResolvedRelativeBlock(id: id, name: rawBlock.name, role: resolved.role, content: resolved.content, isSummary: blockIsSummary, appendToLastMessage: rawBlock.appendToLastMessage));
       }
     } else if (rawBlock.insertionMode == 'depth' && id != 'chat_history') {
       depthBlocks.add(_ResolvedDepthBlock(id: id, role: resolved.role, content: resolved.content, depth: rawBlock.depth ?? 0, isSummary: blockIsSummary));
     } else {
-      relativeBlocks.add(_ResolvedRelativeBlock(id: id, role: resolved.role, content: resolved.content, isSummary: blockIsSummary));
+      relativeBlocks.add(_ResolvedRelativeBlock(id: id, name: rawBlock.name, role: resolved.role, content: resolved.content, isSummary: blockIsSummary, appendToLastMessage: rawBlock.appendToLastMessage));
     }
   }
 
@@ -500,6 +511,17 @@ PromptResult _assembleMessages({
     loreAfterInjected = true;
   }
 
+  // Collect blocks with appendToLastMessage set. Macros are already expanded
+  // in block.content at this point (resolveBlockContent ran in buildPrompt
+  // before relativeBlocks was built). See docs/INVARIANTS.md INV-PSx.
+  final appendedEntries = <_ResolvedRelativeBlock>[];
+  for (final block in relativeBlocks) {
+    if (block.id == 'chat_history') continue;
+    if (!block.appendToLastMessage) continue;
+    if (block.content.trim().isEmpty) continue;
+    appendedEntries.add(block);
+  }
+
   for (final block in relativeBlocks) {
     // worldInfoBefore injects just before char_card (mirrors JS generationWorker.js:739)
     if (block.id == 'char_card') injectLoreBefore();
@@ -519,6 +541,10 @@ PromptResult _assembleMessages({
         macroName: macroCtx.macroName,
       );
       final historyMsgs = HistoryAssembler(historyMacroCtx).assemble(history);
+      final appendedForHistory = appendedEntries
+          .map((b) => (name: b.name, content: b.content))
+          .toList();
+      applyAppendToLastMessage(historyMsgs, appendedForHistory);
       messages.addAll(interleaveDepthWithHistory(historyMsgs, resolvedDepthMsgs));
       for (final db in resolvedDepthMsgs) {
         attributionBlocks.add(StaticBlock(id: db.blockId ?? 'preset', content: db.content));
@@ -665,4 +691,41 @@ void _injectMemoryBlock(List<PromptMessage> messages, List<StaticBlock> attribut
   } else {
     messages.add(memMsg);
   }
+}
+
+/// Appends the contents of preset blocks with `appendToLastMessage = true` to
+/// the last user-role history message. No-op when [historyMsgs] has no user
+/// message or no appendable blocks. Macros in the block content must already
+/// be expanded before this is called (handled in [buildPrompt]).
+///
+/// See docs/INVARIANTS.md INV-PS9 for the full contract.
+@visibleForTesting
+void applyAppendToLastMessage(
+  List<PromptMessage> historyMsgs,
+  List<({String name, String content})> appendedEntries,
+) {
+  if (appendedEntries.isEmpty || historyMsgs.isEmpty) return;
+
+  final lastUserIdx = historyMsgs.lastIndexWhere(
+    (m) => m.role == 'user' && m.isHistory,
+  );
+  if (lastUserIdx < 0) return;
+
+  final original = historyMsgs[lastUserIdx];
+  final joined = appendedEntries
+      .map((b) => b.content.trim())
+      .where((s) => s.isNotEmpty)
+      .join('\n\n');
+  if (joined.isEmpty) return;
+
+  final blockNames = appendedEntries
+      .map((b) => b.name.isNotEmpty ? b.name : 'block')
+      .join(', ');
+
+  historyMsgs[lastUserIdx] = PromptMessage(
+    role: original.role,
+    content: '${original.content}\n\n$joined',
+    isHistory: true,
+    blockName: '${original.blockName ?? 'Last user'} + $blockNames',
+  );
 }

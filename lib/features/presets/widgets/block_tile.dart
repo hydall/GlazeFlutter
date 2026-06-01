@@ -24,6 +24,11 @@ class BlockTile extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          if (block.appendToLastMessage) ...[
+            const SizedBox(width: 6),
+            _appendBadge(context),
+            const SizedBox(width: 6),
+          ],
           _roleChip(),
         ],
       ),
@@ -125,6 +130,28 @@ class BlockTile extends StatelessWidget {
           fontSize: 11,
           color: color,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _appendBadge(BuildContext context) {
+    return Tooltip(
+      message: 'Appended to last user message',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          '↩ Last User',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: Theme.of(context).colorScheme.primary,
+            letterSpacing: 0.2,
+          ),
         ),
       ),
     );

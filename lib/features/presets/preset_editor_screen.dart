@@ -921,6 +921,15 @@ class _BlockEditorInline extends StatelessWidget {
             showIf: (item) => item['insertionMode'] == 'depth',
           ),
           const GenericEditorField(
+            key: 'appendToLastMessage',
+            label: 'Append to last user message',
+            type: 'select',
+            options: [
+              {'label': 'No', 'value': false},
+              {'label': 'Yes', 'value': true},
+            ],
+          ),
+          const GenericEditorField(
             key: 'content',
             label: 'Content',
             type: 'textarea',

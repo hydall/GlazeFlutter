@@ -22,6 +22,7 @@ Future<void> exportPreset(BuildContext context, Preset preset) async {
                 'insertion_mode': b.insertionMode,
                 if (b.depth != null) 'depth': b.depth,
                 if (b.isStashed) 'isStashed': true,
+                if (b.appendToLastMessage) 'appendToLastMessage': true,
               })
           .toList(),
       'regexes': preset.regexes

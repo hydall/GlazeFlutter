@@ -16,6 +16,12 @@ class PresetBlock with _$PresetBlock {
     int? depth,
     String? prefix,
     @Default(false) bool isStashed,
+    /// When true, this block's content is appended (after macro expansion) to
+    /// the last user-role message in the chat history at prompt-assembly time.
+    /// The block's own `role` is ignored in this mode — content is always
+    /// merged into the last user message. If no user message exists in
+    /// history, the block is silently dropped. See docs/INVARIANTS.md.
+    @Default(false) bool appendToLastMessage,
   }) = _PresetBlock;
 
   factory PresetBlock.fromJson(Map<String, dynamic> json) =>
@@ -74,6 +80,7 @@ Map<String, dynamic> _normalizeBlock(Map<String, dynamic> json) {
   n['enabled'] = _coerceBool(n['enabled'], true);
   n['isStatic'] = _coerceBool(n['isStatic'], false);
   n['isStashed'] = _coerceBool(n['isStashed'], false);
+  n['appendToLastMessage'] = _coerceBool(n['appendToLastMessage'], false);
   n['depth'] = _coerceInt(n['depth']);
   return n;
 }

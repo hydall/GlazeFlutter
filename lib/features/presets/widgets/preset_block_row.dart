@@ -65,6 +65,10 @@ class PresetBlockRow extends StatelessWidget {
               color: context.cs.onSurface.withValues(alpha: 0.6),
             ),
             const SizedBox(width: 8),
+            if (block.appendToLastMessage) ...[
+              _appendBadge(context),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
@@ -134,4 +138,26 @@ class PresetBlockRow extends StatelessWidget {
       ),
     );
   }
+}
+
+Widget _appendBadge(BuildContext context) {
+  return Tooltip(
+    message: 'Appended to last user message',
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: context.cs.primary.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        '↩ Last User',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: context.cs.primary,
+          letterSpacing: 0.2,
+        ),
+      ),
+    ),
+  );
 }
