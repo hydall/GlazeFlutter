@@ -559,6 +559,12 @@ PromptResult _assembleMessages({
 
       attributionBlocks.add(StaticBlock(id: block.id, content: content));
 
+      // appendToLastMessage blocks are merged into the last user message in
+      // applyAppendToLastMessage (see appendedEntries above). They must NOT
+      // also be added to messages here — that would send the same content
+      // twice. See docs/INVARIANTS.md INV-PS9.
+      if (block.appendToLastMessage) continue;
+
       if (preset.mergePrompts && block.role != 'assistant') {
         if (mergeBuffer != null) { mergeBuffer = '$mergeBuffer\n\n$content'; } else { mergeBuffer = content; mergeRole = preset.mergeRole; }
       } else {

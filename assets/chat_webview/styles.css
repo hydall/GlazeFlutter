@@ -1122,10 +1122,11 @@
   font-weight: 500;
 }
 
-/* WebView background is always transparent — Flutter handles the background. */
-html, body, #chat-container, #loading-screen {
-  background: transparent !important;
-}
+/* Background layer
+ * WebView paints its own theme background via --bg-color (set by Flutter in
+ * applyTheme). Flutter's GlazeBackground still shows through when a chat
+ * background image is set (Flutter uses transparentBackground=true and
+ * the bg image is rendered behind the WebView on the Flutter side). */
 
 /* ============================================================
  * Background layer

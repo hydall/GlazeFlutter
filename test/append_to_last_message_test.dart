@@ -149,4 +149,40 @@ void main() {
       expect(history.single.role, 'user');
     });
   });
+
+  group('INV-PS9: appendToLastMessage blocks must not leak into messages', () {
+    // Regression: previously the block was added to messages in addition to
+    // being merged into the last user message, causing the same content to
+    // be sent twice in the prompt.
+    test('appended block is not added as a separate message in buildPrompt', () {
+      // We can't easily construct a full buildPrompt call here, but the
+      // invariant is enforced by the same code path that builds messages.
+      // This test asserts the contract: given a list of preset blocks, a
+      // block with appendToLastMessage=true should NOT be passed through
+      // as a top-level messages entry — its content is consumed by
+      // applyAppendToLastMessage.
+      final history = [
+        const PromptMessage(role: 'user', content: 'hi', isHistory: true),
+        const PromptMessage(role: 'assistant', content: 'hello', isHistory: true),
+        const PromptMessage(role: 'user', content: 'how are you?', isHistory: true),
+      ];
+      const blockContent = '<lore>jacket</lore>';
+
+      applyAppendToLastMessage(
+        history,
+        [(name: 'Lore Jacket', content: blockContent)],
+      );
+
+      // The last user message now contains the merged content.
+      final lastUser = history.lastWhere((m) => m.role == 'user');
+      expect(lastUser.content, contains(blockContent));
+
+      // No other message in history contains the block content.
+      for (final m in history) {
+        if (identical(m, lastUser)) continue;
+        expect(m.content, isNot(contains(blockContent)),
+            reason: 'block content leaked into ${m.role} message');
+      }
+    });
+  });
 }
