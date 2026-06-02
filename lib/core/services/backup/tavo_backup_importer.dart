@@ -161,7 +161,7 @@ class TavoBackupImporter {
       if (lower.endsWith('charactercards/$filename') ||
           lower.endsWith('/$filename') ||
           lower == filename) {
-        return Uint8List.fromList(f.content as List<int>);
+        return f.readBytes();
       }
     }
     return null;

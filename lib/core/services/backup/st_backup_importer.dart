@@ -20,6 +20,7 @@ import '../character_book_converter.dart';
 import '../character_importer.dart';
 import '../chat_import_export.dart';
 import '../image_storage_service.dart';
+import 'archive_stream.dart';
 import 'backup_cancel.dart';
 
 class StImportResult {
@@ -134,7 +135,8 @@ class StBackupImporter {
     for (final f in paths) {
       _cancel.check();
       try {
-        final bytes = Uint8List.fromList(f.content as List<int>);
+        final bytes = f.readBytes();
+        if (bytes == null) continue;
         final fileName = f.name.split('/').last;
         final imported = await _charImporter.importFromBytes(bytes, fileName);
         await _charRepo.put(imported.character);
@@ -225,8 +227,13 @@ class StBackupImporter {
           continue;
         }
 
-        final text = utf8.decode(f.content as List<int>, allowMalformed: true);
-        final parsed = importChatFromJsonlString(text);
+        ChatImportResult parsed;
+        if (f.name.toLowerCase().endsWith('.jsonl')) {
+          parsed = await _parseJsonlChat(f);
+        } else {
+          parsed = importChatFromJsonlString(
+              utf8.decode(f.content as List<int>, allowMalformed: true));
+        }
         if (parsed.messages.isEmpty) continue;
 
         final idx = (nextIdxByChar[glazeCharId] ?? 0) + 1;
@@ -253,6 +260,33 @@ class StBackupImporter {
             .put(character.copyWith(currentSessionIndex: entry.value));
       }
     }
+  }
+
+  /// Streams a `.jsonl` chat file line-by-line, never holding the whole
+  /// file in memory.
+  Future<ChatImportResult> _parseJsonlChat(ArchiveFile file) async {
+    final messages = <ChatMessage>[];
+    String? userName;
+    var index = 0;
+    await for (final line in readArchiveFileLines(file)) {
+      _cancel.check();
+      if (line.trim().isEmpty) continue;
+      Map<String, dynamic> obj;
+      try {
+        obj = jsonDecode(line) as Map<String, dynamic>;
+      } catch (_) {
+        continue;
+      }
+      if (obj.containsKey('chat_metadata')) {
+        userName = obj['user_name'] as String?;
+        continue;
+      }
+      final msg = convertStMessage(obj, index);
+      if (msg == null) continue;
+      messages.add(msg);
+      index++;
+    }
+    return ChatImportResult(messages: messages, userName: userName);
   }
 
   Future<void> _importPersonas(Archive zip, StImportResult result) async {
@@ -304,8 +338,9 @@ class StBackupImporter {
           if (!f.isFile) continue;
           final n = f.name.toLowerCase();
           if (n.contains('user avatars') && n.endsWith(avatarLower)) {
-            avatarPath = await _imageStorage.saveAvatar(
-                id, Uint8List.fromList(f.content as List<int>));
+            final avatarBytes = f.readBytes();
+            if (avatarBytes == null) break;
+            avatarPath = await _imageStorage.saveAvatar(id, avatarBytes);
             break;
           }
         }
