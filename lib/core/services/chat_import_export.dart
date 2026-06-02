@@ -109,7 +109,7 @@ ChatImportResult importChatFromJsonlString(String content) {
       continue;
     }
 
-    final msg = _convertStMessage(obj, messages.length);
+    final msg = convertStMessage(obj, messages.length);
     if (msg == null) continue;
 
     messages.add(msg);
@@ -118,7 +118,7 @@ ChatImportResult importChatFromJsonlString(String content) {
   return ChatImportResult(messages: messages, userName: userName);
 }
 
-ChatMessage? _convertStMessage(Map<String, dynamic> obj, int index) {
+ChatMessage? convertStMessage(Map<String, dynamic> obj, int index) {
   try {
     final isUser = _parseBool(obj['is_user']) ?? false;
     final isSystem = _parseBool(obj['is_system']) ?? false;

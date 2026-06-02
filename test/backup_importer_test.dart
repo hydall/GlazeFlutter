@@ -2,15 +2,17 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:glaze_flutter/core/db/app_db.dart';
+import 'package:glaze_flutter/core/services/backup/backup_cancel.dart';
 import 'package:glaze_flutter/core/services/backup/js_api_config_importer.dart';
 import 'package:glaze_flutter/core/services/backup/js_lorebook_importer.dart';
+import 'package:glaze_flutter/core/services/backup/st_backup_importer.dart';
 import 'package:glaze_flutter/core/services/image_storage_service.dart';
-
 AppDatabase _testDb() => AppDatabase.forTesting(NativeDatabase.memory());
 
 class _TestImageStorage extends ImageStorageService {
@@ -826,6 +828,77 @@ void main() {
       expect(entry['secondaryKeys'], equals(['secondary1', 'secondary2']));
       expect(entry['selectiveLogic'], equals(1));
       expect(entry['constant'], isTrue);
+    });
+  });
+
+  group('ImportCancellationToken', () {
+    test('check throws ImportCancelledException when cancelled', () {
+      var cancelled = false;
+      var checks = 0;
+      final token = ImportCancellationToken.wrap(
+        isCancelled: () => cancelled,
+        check: () {
+          checks++;
+          if (cancelled) {
+            throw const ImportCancelledException();
+          }
+        },
+      );
+      expect(token.isCancelled, isFalse);
+      token.check();
+      expect(checks, 1);
+      cancelled = true;
+      expect(token.isCancelled, isTrue);
+      expect(() => token.check(), throwsA(isA<ImportCancelledException>()));
+      expect(checks, 2);
+    });
+  });
+
+  group('StBackupImporter streaming import', () {
+    test('importFromFile opens a SillyTavern ZIP via decodeStream and '
+        'attempts to import chats from JSONL', () async {
+      // Build a tiny ZIP that contains a single chat JSONL file. The
+      // character-folder part of the path does not match a real
+      // character in the DB, so the importer records an error in
+      // result.errors instead of writing to the DB. The point of the
+      // test is to exercise the decodeStream + LineSplitter path with
+      // a real ZIP fixture and verify no exceptions bubble up.
+      final archive = Archive();
+      final chatJsonl = utf8.encode(
+        '{"user_name":"Tester","character_name":"Test","chat_metadata":{}}\n'
+        '{"name":"Tester","is_user":true,"is_system":false,"mes":"hi","send_date":"2024-01-01 12:00:00"}\n'
+        '{"name":"Test","is_user":false,"is_system":false,"mes":"hello!","send_date":"2024-01-01 12:00:01"}\n',
+      );
+      archive.addFile(ArchiveFile.bytes(
+        'chats/UnknownChar/abc.jsonl',
+        chatJsonl,
+      ));
+
+      final fixturePath =
+          '${Directory.systemTemp.path}/st_smoke_${DateTime.now().microsecondsSinceEpoch}.zip';
+      final bytes = ZipEncoder().encode(archive);
+      File(fixturePath).writeAsBytesSync(bytes!);
+
+      try {
+        final importer = StBackupImporter(db, imageStorage);
+        final result = await importer.importFromFile(fixturePath);
+        // No chat row written, but no crash either. The expected
+        // error is a 'no character matched folder' message.
+        expect(result.chats, 0);
+        expect(
+          result.errors,
+          isNotEmpty,
+          reason: 'expected an error for unmatched char folder, '
+              'got ${result.errors}',
+        );
+        expect(result.errors.any((e) => e.contains('no character matched')),
+            isTrue,
+            reason: 'errors were: ${result.errors}');
+      } finally {
+        try {
+          File(fixturePath).deleteSync();
+        } catch (_) {}
+      }
     });
   });
 }

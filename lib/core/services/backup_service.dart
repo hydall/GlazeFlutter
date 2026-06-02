@@ -1,11 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
-import 'dart:isolate';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../db/app_db.dart';
+import 'backup/backup_cancel.dart';
 import 'backup/backup_exporter.dart';
 import 'backup/flutter_backup_importer.dart';
 import 'backup/js_backup_importer.dart';
@@ -13,57 +15,141 @@ import 'backup/st_backup_importer.dart';
 import 'backup/tavo_backup_importer.dart';
 import 'image_storage_service.dart';
 
+/// Decoded backup envelope routed to a specific importer.
+enum BackupFormat { legacyJsonGlaze, flutterZip, sillyTavernZip, tavoZip }
+
 class BackupService {
+  static const _zipMagic = [0x50, 0x4B, 0x03, 0x04];
+  static const _legacyV1JsonGlazeMaxBytes = 4;
+
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
+  final _CancelFlag _cancelFlag = _CancelFlag();
+  late final ImportCancellationToken _cancel = ImportCancellationToken.wrap(
+    isCancelled: _cancelFlag.isCancelled,
+    check: _cancelFlag.check,
+  );
 
-  BackupService(this._db, ImageStorageService _imageStorage) : _imageStorage = _imageStorage;
+  BackupService(this._db, ImageStorageService _imageStorage)
+      : _imageStorage = _imageStorage;
 
-  Future<String> exportBackup() => BackupExporter(_db, _imageStorage).export();
+  Future<String> exportBackup() =>
+      BackupExporter(_db, _imageStorage).export();
 
-  Future<void> importBackup(
-    Uint8List bytes, {
+  /// Cancels an in-flight import. The importer checks the flag at every
+  /// major stage (before each table wipe and between batches).
+  void cancelImport() => _cancelFlag.cancel();
+
+  /// Token shared with importers. They call [ImportCancellationToken.check]
+  /// at safe points and bail out with [ImportCancelledException].
+  ImportCancellationToken get cancelToken => _cancel;
+
+  /// Imports a backup from a file path. Streamed — the file is never read
+  /// fully into memory.
+  ///
+  /// [onProgress] is called with a human-readable stage label.
+  /// [onDetected] (optional) is called once with the detected format,
+  /// useful for UI to show a stage-specific label.
+  Future<void> importBackupFromFile(
+    String filePath, {
+    void Function(String stage)? onProgress,
+    void Function(BackupFormat format)? onDetected,
+  }) async {
+    _cancelFlag.reset();
+    final format = await _detectFormat(filePath);
+    onDetected?.call(format);
+    switch (format) {
+      case BackupFormat.sillyTavernZip:
+        await StBackupImporter(_db, _imageStorage, _cancel)
+            .importFromFile(filePath, onProgress: onProgress);
+        return;
+      case BackupFormat.tavoZip:
+        await TavoBackupImporter(_db, _imageStorage, _cancel)
+            .importFromFile(filePath, onProgress: onProgress);
+        return;
+      case BackupFormat.flutterZip:
+        await FlutterBackupImporter(_db, _imageStorage, _cancel)
+            .importFromZipFile(filePath, onProgress: onProgress);
+        return;
+      case BackupFormat.legacyJsonGlaze:
+        await _importLegacyJsonGlaze(filePath, onProgress: onProgress);
+        return;
+    }
+  }
+
+  Future<BackupFormat> _detectFormat(String filePath) async {
+    final raf = await File(filePath).open();
+    try {
+      final header = await raf.read(_legacyV1JsonGlazeMaxBytes);
+      if (header.length >= 4 &&
+          header[0] == _zipMagic[0] &&
+          header[1] == _zipMagic[1] &&
+          header[2] == _zipMagic[2] &&
+          header[3] == _zipMagic[3]) {
+        final archive = ZipDecoder().decodeStream(InputFileStream(filePath));
+        if (_isTavoArchive(archive)) return BackupFormat.tavoZip;
+        if (_isSillyTavernArchive(archive)) return BackupFormat.sillyTavernZip;
+        if (_isFlutterGlazeArchive(archive)) return BackupFormat.flutterZip;
+        throw const FormatException(
+            'ZIP is neither a Tavo (.tbk), SillyTavern, nor Glaze backup');
+      }
+      if (header.isNotEmpty && header[0] == 0x7B) {
+        return BackupFormat.legacyJsonGlaze;
+      }
+      throw const FormatException('Unsupported backup file format');
+    } finally {
+      await raf.close();
+    }
+  }
+
+  Future<void> _importLegacyJsonGlaze(
+    String filePath, {
     void Function(String stage)? onProgress,
   }) async {
-    if (_isZip(bytes)) {
-      onProgress?.call('Reading archive...');
-      final archive = ZipDecoder().decodeBytes(bytes);
-      if (_isTavoArchive(archive)) {
-        await TavoBackupImporter(_db, _imageStorage)
-            .import(bytes, onProgress: onProgress);
-        return;
+    onProgress?.call('Reading legacy backup...');
+    final raf = await File(filePath).open();
+    final builder = BytesBuilder(copy: false);
+    try {
+      const chunk = 1 << 20; // 1 MB
+      while (true) {
+        _cancel.check();
+        final dst = Uint8List(chunk);
+        final n = await raf.readInto(dst);
+        if (n <= 0) break;
+        if (n == chunk) {
+          builder.add(dst);
+        } else {
+          builder.add(Uint8List.sublistView(dst, 0, n));
+        }
       }
-      if (_isSillyTavernArchive(archive)) {
-        await StBackupImporter(_db, _imageStorage)
-            .import(bytes, onProgress: onProgress);
-        return;
-      }
-      throw const FormatException(
-          'ZIP is neither a Tavo (.tbk) nor SillyTavern backup');
+    } finally {
+      await raf.close();
     }
-
-    onProgress?.call('Parsing backup...');
+    final bytes = builder.toBytes();
+    onProgress?.call('Parsing legacy backup...');
     final jsonString = utf8.decode(bytes, allowMalformed: true);
-    final data = await Isolate.run(
-      () => jsonDecode(jsonString) as Map<String, dynamic>,
-    );
+    final data = jsonDecode(jsonString) as Map<String, dynamic>;
+    onProgress?.call('Importing legacy backup...');
     final isGlazeBackup = data['_isGlazeBackup'] == true ||
         data.containsKey('tables') ||
         data.containsKey('characters');
     if (!isGlazeBackup) {
-      throw const FormatException('Not a valid Glaze backup file');
+      throw const FormatException(
+          'Legacy backup is not a valid Glaze file. Please re-export from the source app.');
     }
-
     if (data['_source'] == 'flutter') {
-      await FlutterBackupImporter(_db, _imageStorage)
-          .import(data, onProgress: onProgress);
-    } else {
-      await JsBackupImporter(_db, _imageStorage)
-          .import(data, onProgress: onProgress);
+      // Old Glaze Flutter v1 monolith. Refused by policy — tell the user
+      // to re-export from a v2 build.
+      throw const FormatException(
+          'Old Glaze backup format detected. Please re-export from the source app to continue.');
     }
-
+    await JsBackupImporter(_db, _imageStorage)
+        .import(data, onProgress: onProgress);
     await _deleteOrphanedSessions();
+    await _applyPreferences(data);
+  }
 
+  Future<void> _applyPreferences(Map<String, dynamic> data) async {
     final prefs = await SharedPreferences.getInstance();
     final prefsData = data['preferences'] as Map<String, dynamic>?;
     if (prefsData != null) {
@@ -85,7 +171,6 @@ class BackupService {
         }
       }
     }
-
     final lsData = data['localStorage'] as Map<String, dynamic>?;
     if (lsData != null) {
       final personaConnsRaw = lsData['gz_persona_connections'];
@@ -102,14 +187,6 @@ class BackupService {
         } catch (_) {}
       }
     }
-  }
-
-  bool _isZip(Uint8List bytes) {
-    if (bytes.length < 4) return false;
-    return bytes[0] == 0x50 &&
-        bytes[1] == 0x4B &&
-        bytes[2] == 0x03 &&
-        bytes[3] == 0x04;
   }
 
   bool _isTavoArchive(Archive archive) {
@@ -134,6 +211,13 @@ class BackupService {
     return false;
   }
 
+  bool _isFlutterGlazeArchive(Archive archive) {
+    for (final f in archive.files) {
+      if (f.isFile && f.name == 'manifest.json') return true;
+    }
+    return false;
+  }
+
   Future<void> _deleteOrphanedSessions() async {
     final charIds =
         (await _db.select(_db.characters).get()).map((r) => r.charId).toSet();
@@ -153,5 +237,23 @@ class BackupService {
         await (_db.delete(_db.chatSummaries)..where((t) => t.sessionId.equals(sid))).go();
       }
     });
+  }
+}
+
+/// Cancellation flag shared between the service and importers.
+class _CancelFlag {
+  bool _cancelled = false;
+
+  bool isCancelled() => _cancelled;
+
+  void cancel() => _cancelled = true;
+
+  void reset() => _cancelled = false;
+
+  /// Throws [ImportCancelledException] if cancellation was requested.
+  void check() {
+    if (_cancelled) {
+      throw const ImportCancelledException();
+    }
   }
 }

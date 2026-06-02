@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -21,6 +22,7 @@ import '../../utils/id_generator.dart';
 import '../../utils/time_helpers.dart';
 import '../character_importer.dart';
 import '../image_storage_service.dart';
+import 'backup_cancel.dart';
 import 'tavo_lmdb_reader.dart';
 
 class TavoImportResult {
@@ -37,6 +39,7 @@ class TavoImportResult {
 class TavoBackupImporter {
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
+  final ImportCancellationToken _cancel;
   late final CharacterRepo _charRepo;
   late final PersonaRepo _personaRepo;
   late final LorebookRepo _lorebookRepo;
@@ -45,7 +48,7 @@ class TavoBackupImporter {
   late final ChatRepo _chatRepo;
   late final CharacterImporter _charImporter;
 
-  TavoBackupImporter(this._db, this._imageStorage) {
+  TavoBackupImporter(this._db, this._imageStorage, [this._cancel = noCancel]) {
     _charRepo = CharacterRepo(_db);
     _personaRepo = PersonaRepo(_db);
     _lorebookRepo = LorebookRepo(_db);
@@ -55,15 +58,31 @@ class TavoBackupImporter {
     _charImporter = CharacterImporter(_imageStorage);
   }
 
+  Future<TavoImportResult> importFromFile(
+    String filePath, {
+    void Function(String stage)? onProgress,
+  }) async {
+    final archive = ZipDecoder().decodeStream(InputFileStream(filePath));
+    return _import(archive, onProgress: onProgress);
+  }
+
   Future<TavoImportResult> import(
     Uint8List zipBytes, {
     void Function(String stage)? onProgress,
   }) async {
+    final archive = ZipDecoder().decodeBytes(zipBytes);
+    return _import(archive, onProgress: onProgress);
+  }
+
+  Future<TavoImportResult> _import(
+    Archive zip, {
+    void Function(String stage)? onProgress,
+  }) async {
     final result = TavoImportResult();
-    final zip = ZipDecoder().decodeBytes(zipBytes);
 
     onProgress?.call('Clearing existing data...');
     await _clearAllTables();
+    _cancel.check();
 
     onProgress?.call('Reading database...');
     final mdbFile = zip.files.firstWhere(
@@ -71,31 +90,39 @@ class TavoBackupImporter {
       orElse: () => throw const FormatException(
           'No data.mdb found in Tavo backup zip.'),
     );
-    final mdbBytes = Uint8List.fromList(mdbFile.content as List<int>);
-    final tavoData = parseTavoLmdb(mdbBytes);
+    final mdbContent = mdbFile.content;
+    final tavoData = parseTavoLmdb(
+        mdbContent is Uint8List ? mdbContent : Uint8List.fromList(mdbContent));
 
     final charEntityIdToGlazeId = <int, String>{};
 
     onProgress?.call('Importing personas...');
     await _importPersonas(tavoData, zip, result);
+    _cancel.check();
 
     onProgress?.call('Importing API endpoints...');
     await _importApiEndpoints(tavoData, result);
+    _cancel.check();
 
     onProgress?.call('Importing regex scripts...');
     await _importRegexes(tavoData, result);
+    _cancel.check();
 
     onProgress?.call('Importing lorebooks...');
     await _importLorebooks(tavoData, result);
+    _cancel.check();
 
     onProgress?.call('Importing presets...');
     await _importPresets(tavoData, result);
+    _cancel.check();
 
     onProgress?.call('Importing characters...');
     await _importCharacters(tavoData, zip, charEntityIdToGlazeId, result);
+    _cancel.check();
 
     onProgress?.call('Importing chats...');
     await _importChats(tavoData, charEntityIdToGlazeId, result);
+    _cancel.check();
 
     onProgress?.call('Finalizing...');
     return result;
@@ -134,7 +161,7 @@ class TavoBackupImporter {
       if (lower.endsWith('charactercards/$filename') ||
           lower.endsWith('/$filename') ||
           lower == filename) {
-        return Uint8List.fromList(f.content as List<int>);
+        return f.readBytes();
       }
     }
     return null;
@@ -146,6 +173,7 @@ class TavoBackupImporter {
     if (personas == null || personas.isEmpty) return;
 
     for (final pref in personas) {
+      _cancel.check();
       try {
         final s = pref.structured;
         final name = (s['name'] as String?) ?? '';
@@ -217,6 +245,7 @@ class TavoBackupImporter {
 
     final seen = <String>{};
     for (final ep in endpoints) {
+      _cancel.check();
       try {
         final s = ep.structured;
         final url = (s['url'] as String?) ?? '';
@@ -273,6 +302,7 @@ class TavoBackupImporter {
     final seenIds = <String>{};
 
     for (final regGroup in regexes) {
+      _cancel.check();
       try {
         final s = regGroup.structured;
         final groupName = (s['name'] as String?) ?? '';
@@ -365,6 +395,7 @@ class TavoBackupImporter {
     if (lorebooks == null || lorebooks.isEmpty) return;
 
     for (final lb in lorebooks) {
+      _cancel.check();
       try {
         final s = lb.structured;
         String lbName = (s['name'] as String?) ?? '';
@@ -445,6 +476,7 @@ class TavoBackupImporter {
     if (presets == null || presets.isEmpty) return;
 
     for (final pre in presets) {
+      _cancel.check();
       try {
         final s = pre.structured;
         String name = (s['name'] as String?) ?? 'Tavo Preset';
@@ -500,6 +532,7 @@ class TavoBackupImporter {
     if (chars == null || chars.isEmpty) return;
 
     for (final ch in chars) {
+      _cancel.check();
       try {
         final s = ch.structured;
 
@@ -606,6 +639,7 @@ class TavoBackupImporter {
     final nextIdxByChar = <String, int>{};
 
     for (final chatBlock in data.chats) {
+      _cancel.check();
       try {
         final msgs = chatBlock.messages
             .where((m) => (m.structured['text'] as String?) != null)

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -19,6 +20,8 @@ import '../character_book_converter.dart';
 import '../character_importer.dart';
 import '../chat_import_export.dart';
 import '../image_storage_service.dart';
+import 'archive_stream.dart';
+import 'backup_cancel.dart';
 
 class StImportResult {
   int characters = 0;
@@ -32,6 +35,7 @@ class StImportResult {
 class StBackupImporter {
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
+  final ImportCancellationToken _cancel;
   late final CharacterRepo _charRepo;
   late final PersonaRepo _personaRepo;
   late final LorebookRepo _lorebookRepo;
@@ -39,7 +43,7 @@ class StBackupImporter {
   late final ChatRepo _chatRepo;
   late final CharacterImporter _charImporter;
 
-  StBackupImporter(this._db, this._imageStorage) {
+  StBackupImporter(this._db, this._imageStorage, [this._cancel = noCancel]) {
     _charRepo = CharacterRepo(_db);
     _personaRepo = PersonaRepo(_db);
     _lorebookRepo = LorebookRepo(_db);
@@ -48,32 +52,52 @@ class StBackupImporter {
     _charImporter = CharacterImporter(_imageStorage);
   }
 
+  Future<StImportResult> importFromFile(
+    String filePath, {
+    void Function(String stage)? onProgress,
+  }) async {
+    final archive = ZipDecoder().decodeStream(InputFileStream(filePath));
+    return _import(archive, onProgress: onProgress);
+  }
+
   Future<StImportResult> import(
     Uint8List zipBytes, {
     void Function(String stage)? onProgress,
   }) async {
+    final archive = ZipDecoder().decodeBytes(zipBytes);
+    return _import(archive, onProgress: onProgress);
+  }
+
+  Future<StImportResult> _import(
+    Archive zip, {
+    void Function(String stage)? onProgress,
+  }) async {
     final result = StImportResult();
-    final zip = ZipDecoder().decodeBytes(zipBytes);
+    final charNameToId = <String, String>{};
 
     onProgress?.call('Clearing existing data...');
     await _clearAllTables();
-
-    final charNameToId = <String, String>{};
+    _cancel.check();
 
     onProgress?.call('Importing characters...');
     await _importCharacters(zip, charNameToId, result);
+    _cancel.check();
 
     onProgress?.call('Importing lorebooks...');
     await _importLorebooks(zip, result);
+    _cancel.check();
 
     onProgress?.call('Importing presets...');
     await _importPresets(zip, result);
+    _cancel.check();
 
     onProgress?.call('Importing chats...');
     await _importChats(zip, charNameToId, result);
+    _cancel.check();
 
     onProgress?.call('Importing personas...');
     await _importPersonas(zip, result);
+    _cancel.check();
 
     onProgress?.call('Finalizing...');
     return result;
@@ -116,8 +140,10 @@ class StBackupImporter {
         .toList();
 
     for (final f in paths) {
+      _cancel.check();
       try {
-        final bytes = Uint8List.fromList(f.content as List<int>);
+        final bytes = f.readBytes();
+        if (bytes == null) continue;
         final fileName = f.name.split('/').last;
         final imported = await _charImporter.importFromBytes(bytes, fileName);
         await _charRepo.put(imported.character);
@@ -144,6 +170,7 @@ class StBackupImporter {
         f.name.toLowerCase().endsWith('.json'));
 
     for (final f in paths) {
+      _cancel.check();
       try {
         final text = utf8.decode(f.content as List<int>, allowMalformed: true);
         final json = jsonDecode(text) as Map<String, dynamic>;
@@ -164,6 +191,7 @@ class StBackupImporter {
         f.name.toLowerCase().endsWith('.json'));
 
     for (final f in paths) {
+      _cancel.check();
       try {
         final text = utf8.decode(f.content as List<int>, allowMalformed: true);
         final json = jsonDecode(text) as Map<String, dynamic>;
@@ -194,6 +222,7 @@ class StBackupImporter {
     final nextIdxByChar = <String, int>{};
 
     for (final f in paths) {
+      _cancel.check();
       try {
         final parts = f.name.split('/');
         if (parts.length < 3) continue;
@@ -205,8 +234,13 @@ class StBackupImporter {
           continue;
         }
 
-        final text = utf8.decode(f.content as List<int>, allowMalformed: true);
-        final parsed = importChatFromJsonlString(text);
+        ChatImportResult parsed;
+        if (f.name.toLowerCase().endsWith('.jsonl')) {
+          parsed = await _parseJsonlChat(f);
+        } else {
+          parsed = importChatFromJsonlString(
+              utf8.decode(f.content as List<int>, allowMalformed: true));
+        }
         if (parsed.messages.isEmpty) continue;
 
         final idx = (nextIdxByChar[glazeCharId] ?? 0) + 1;
@@ -226,12 +260,40 @@ class StBackupImporter {
     }
 
     for (final entry in nextIdxByChar.entries) {
+      _cancel.check();
       final character = await _charRepo.getById(entry.key);
       if (character != null) {
         await _charRepo
             .put(character.copyWith(currentSessionIndex: entry.value));
       }
     }
+  }
+
+  /// Streams a `.jsonl` chat file line-by-line, never holding the whole
+  /// file in memory.
+  Future<ChatImportResult> _parseJsonlChat(ArchiveFile file) async {
+    final messages = <ChatMessage>[];
+    String? userName;
+    var index = 0;
+    await for (final line in readArchiveFileLines(file)) {
+      _cancel.check();
+      if (line.trim().isEmpty) continue;
+      Map<String, dynamic> obj;
+      try {
+        obj = jsonDecode(line) as Map<String, dynamic>;
+      } catch (_) {
+        continue;
+      }
+      if (obj.containsKey('chat_metadata')) {
+        userName = obj['user_name'] as String?;
+        continue;
+      }
+      final msg = convertStMessage(obj, index);
+      if (msg == null) continue;
+      messages.add(msg);
+      index++;
+    }
+    return ChatImportResult(messages: messages, userName: userName);
   }
 
   Future<void> _importPersonas(Archive zip, StImportResult result) async {
@@ -264,6 +326,7 @@ class StBackupImporter {
             {};
 
     for (final entry in personasMap.entries) {
+      _cancel.check();
       try {
         final avatarFilename = entry.key;
         final personaName = entry.value.toString();
@@ -282,8 +345,9 @@ class StBackupImporter {
           if (!f.isFile) continue;
           final n = f.name.toLowerCase();
           if (n.contains('user avatars') && n.endsWith(avatarLower)) {
-            avatarPath = await _imageStorage.saveAvatar(
-                id, Uint8List.fromList(f.content as List<int>));
+            final avatarBytes = f.readBytes();
+            if (avatarBytes == null) break;
+            avatarPath = await _imageStorage.saveAvatar(id, avatarBytes);
             break;
           }
         }

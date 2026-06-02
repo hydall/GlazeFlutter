@@ -1,14 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../db/app_db.dart';
 import '../file_export_service.dart';
-import '../image_storage_service.dart';
+import '../image_storage_service.dart';class BackupExporter {
+  static const int _schemaVersion = 2;
 
-class BackupExporter {
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
 
@@ -21,11 +23,12 @@ class BackupExporter {
         '${now.hour.toString().padLeft(2, '0')}-${now.minute.toString().padLeft(2, '0')}-${now.second.toString().padLeft(2, '0')}.glz';
 
     final tempFile = File('${Directory.systemTemp.path}/$filename');
-    final sink = tempFile.openWrite();
+    final encoder = ZipFileEncoder();
+    encoder.create(tempFile.path);
 
     try {
-      await _writeJsonTo(sink);
-      await sink.close();
+      await _writeZip(encoder);
+      await encoder.close();
       final path = await FileExportService.exportFile(
         sourcePath: tempFile.path,
         filename: filename,
@@ -36,7 +39,9 @@ class BackupExporter {
       } catch (_) {}
       return path;
     } catch (e) {
-      await sink.close();
+      try {
+        await encoder.close();
+      } catch (_) {}
       try {
         await tempFile.delete();
       } catch (_) {}
@@ -44,153 +49,134 @@ class BackupExporter {
     }
   }
 
-  Future<void> _writeJsonTo(IOSink sink) async {
-    final tables = await _readAllTables();
+  Future<void> _writeZip(ZipFileEncoder encoder) async {
+    // 1. manifest.json
+    final manifest = <String, dynamic>{
+      '_isGlazeBackup': true,
+      '_glazeVersion': _schemaVersion,
+      '_source': 'flutter',
+      'schemaVersion': _schemaVersion,
+      'exportedAt': DateTime.now().toIso8601String(),
+    };
+    final manifestBytes = utf8.encode(jsonEncode(manifest));
+    encoder.addArchiveFile(
+      ArchiveFile.bytes('manifest.json', manifestBytes),
+    );
 
+    // 2. tables/<name>.jsonl — streamed per row.
+    for (final tableName in _knownTableNames()) {
+      final bytes = await _streamTableAsNdjson(tableName);
+      if (bytes.isEmpty) continue;
+      encoder.addArchiveFile(
+        ArchiveFile.bytes('tables/$tableName.jsonl', bytes),
+      );
+    }
+
+    // 3. preferences.json
     final prefs = await SharedPreferences.getInstance();
     final prefsMap = <String, dynamic>{};
     for (final key in prefs.getKeys()) {
       final value = prefs.get(key);
       if (value != null) prefsMap[key] = value;
     }
+    final prefsBytes = utf8.encode(jsonEncode(prefsMap));
+    encoder.addArchiveFile(
+      ArchiveFile.bytes('preferences.json', prefsBytes),
+    );
 
-    final charRows = tables['characters'] as List<dynamic>?;
+    // 4. avatars/characters/<id>.png and avatars/personas/<id>.png —
+    // copy directly from disk into the zip via streams. We do not
+    // encode them as base64, which is the main memory win over v1.
+    final avatarIds = <String>{};
+    final charactersRows =
+        await _db.customSelect('SELECT char_id FROM characters').get();
+    for (final row in charactersRows) {
+      final id = row.data['char_id'] as String?;
+      if (id != null && id.isNotEmpty) avatarIds.add(id);
+    }
+    final personasRows =
+        await _db.customSelect('SELECT persona_id FROM personas').get();
+    final personaIds = <String>{};
+    for (final row in personasRows) {
+      final id = row.data['persona_id'] as String?;
+      if (id != null && id.isNotEmpty) personaIds.add(id);
+    }
 
-    sink.write('{');
-    sink.write('"_isGlazeBackup":true,');
-    sink.write('"_glazeVersion":1,');
-    sink.write('"_source":"flutter",');
-    sink.write(
-        '"exportedAt":${jsonEncode(DateTime.now().toIso8601String())},');
-    sink.write('"tables":${jsonEncode(tables)},');
-    sink.write('"preferences":${jsonEncode(prefsMap)}');
-
-    await _writeGallerySection(sink, charRows);
-    await _writeAvatarsSection(
-        sink, charRows, tables['personas'] as List<dynamic>?);
-
-    sink.write('}');
-  }
-
-  Future<void> _writeGallerySection(
-      IOSink sink, List<dynamic>? charRows) async {
-    if (charRows == null || charRows.isEmpty) return;
-
-    var hasGallery = false;
-
-    for (final row in charRows) {
-      final charId = row['char_id'] as String?;
-      if (charId == null) continue;
-
-      final galleryJson = row['gallery_json'] as String?;
-      if (galleryJson == null || galleryJson.isEmpty) continue;
-
-      final entries = jsonDecode(galleryJson) as List<dynamic>;
-      if (entries.isEmpty) continue;
-
-      final images = <Map<String, dynamic>>[];
-      for (final e in entries) {
-        final entry = e as Map<String, dynamic>;
-        final imagePath = entry['imagePath'] as String?;
-        if (imagePath == null) continue;
-
-        final file = File(imagePath);
-        if (await file.exists()) {
-          images.add({
-            'entry': entry,
-            'base64': base64Encode(await file.readAsBytes()),
-          });
+    final avatarsDir = Directory(p.join(_imageStorage.baseDir, 'avatars'));
+    if (await avatarsDir.exists()) {
+      await for (final entity in avatarsDir.list(followLinks: false)) {
+        if (entity is! File) continue;
+        final id = p.basenameWithoutExtension(entity.path);
+        final ext = p.extension(entity.path).replaceFirst('.', '');
+        final inArchive = ext.isEmpty
+            ? 'avatars/$id'
+            : 'avatars/$id.$ext';
+        // If the id is a known character or persona, group it under the
+        // matching subfolder so the importer can route it correctly.
+        String? subfolder;
+        if (avatarIds.contains(id)) {
+          subfolder = 'characters';
+        } else if (personaIds.contains(id)) {
+          subfolder = 'personas';
         }
-      }
-
-      if (images.isEmpty) continue;
-
-      if (!hasGallery) {
-        sink.write(',"gallery":{');
-        hasGallery = true;
-      } else {
-        sink.write(',');
-      }
-      sink.write('${jsonEncode(charId)}:${jsonEncode(images)}');
-    }
-
-    if (hasGallery) sink.write('}');
-  }
-
-  Future<void> _writeAvatarsSection(
-      IOSink sink, List<dynamic>? charRows, List<dynamic>? personaRows) async {
-    final avatarsDir = p.join(_imageStorage.baseDir, 'avatars');
-
-    Future<String?> readAvatar(String id) async {
-      final file = File(p.join(avatarsDir, '$id.png'));
-      if (!await file.exists()) return null;
-      return base64Encode(await file.readAsBytes());
-    }
-
-    var hasAvatars = false;
-
-    if (charRows != null) {
-      for (final row in charRows) {
-        final charId = (row as Map<String, dynamic>)['char_id'] as String?;
-        if (charId == null) continue;
-        final b64 = await readAvatar(charId);
-        if (b64 == null) continue;
-
-        if (!hasAvatars) {
-          sink.write(',"avatars":{"characters":{');
-          hasAvatars = true;
+        if (subfolder != null) {
+          final out = ext.isEmpty
+              ? 'avatars/$subfolder/$id'
+              : 'avatars/$subfolder/$id.$ext';
+          encoder.addFile(entity, out);
         } else {
-          sink.write(',');
+          // Unknown id — keep the flat path for forward-compat.
+          encoder.addFile(entity, inArchive);
         }
-        sink.write('${jsonEncode(charId)}:${jsonEncode(b64)}');
       }
-      if (hasAvatars) sink.write('}');
     }
 
-    var hasPersonaAvatars = false;
-    if (personaRows != null) {
-      for (final row in personaRows) {
-        final personaId =
-            (row as Map<String, dynamic>)['persona_id'] as String?;
-        if (personaId == null) continue;
-        final b64 = await readAvatar(personaId);
-        if (b64 == null) continue;
-
-        if (!hasPersonaAvatars) {
-          if (hasAvatars) {
-            sink.write(',"personas":{');
-          } else {
-            sink.write(',"avatars":{"personas":{');
-          }
-          hasPersonaAvatars = true;
-        } else {
-          sink.write(',');
+    // 5. gallery/<charId>/<id>.<ext> — copy from disk as-is.
+    final galleryDir = Directory(p.join(_imageStorage.baseDir, 'gallery'));
+    if (await galleryDir.exists()) {
+      await for (final charDir in galleryDir.list(followLinks: false)) {
+        if (charDir is! Directory) continue;
+        final charId = p.basename(charDir.path);
+        await for (final f in charDir.list(followLinks: false)) {
+          if (f is! File) continue;
+          encoder.addFile(f, 'gallery/$charId/${p.basename(f.path)}');
         }
-        sink.write('${jsonEncode(personaId)}:${jsonEncode(b64)}');
       }
-      if (hasPersonaAvatars) sink.write('}');
     }
-
-    if (hasAvatars || hasPersonaAvatars) sink.write('}');
   }
 
-  Future<Map<String, dynamic>> _readAllTables() async {
-    final result = <String, dynamic>{};
-
-    final tableMaps = await _db.customSelect(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'drift_%'",
-    ).get();
-
-    for (final row in tableMaps) {
-      final tableName = row.read<String>('name');
+  /// Serializes a table to NDJSON bytes. Loads the table fully into memory
+  /// (Drift doesn't support true row-streaming), but does so one table at
+  /// a time, so peak RAM is bounded by the largest single table instead of
+  /// the whole database.
+  Future<List<int>> _streamTableAsNdjson(String tableName) async {
+    final builder = BytesBuilder(copy: false);
+    final rows = await _db.customSelect('SELECT * FROM $tableName').get();
+    for (final row in rows) {
       try {
-        final rows = await _db.customSelect(
-          'SELECT * FROM $tableName',
-        ).get();
-        result[tableName] = rows.map((r) => r.data).toList();
-      } catch (_) {}
+        final data = row.data;
+        builder.add(utf8.encode(jsonEncode(data)));
+        builder.add([0x0A]); // '\n'
+      } catch (_) {
+        // skip unserializable rows
+      }
     }
+    return builder.takeBytes();
+  }
 
-    return result;
+  List<String> _knownTableNames() {
+    return const [
+      'characters',
+      'chat_sessions',
+      'presets',
+      'api_configs',
+      'personas',
+      'lorebooks',
+      'embeddings',
+      'chat_summaries',
+      'memory_book_rows',
+      'extension_presets',
+      'info_blocks',
+    ];
   }
 }
