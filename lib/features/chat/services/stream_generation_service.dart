@@ -3,6 +3,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/prompt_cache_fingerprinter.dart';
+import '../../../core/llm/prompt_cache_fingerprint_store.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/sse_client.dart';
@@ -127,7 +129,11 @@ class StreamGenerationService {
         endpoint: apiConfig.endpoint,
         apiKey: apiConfig.apiKey,
         model: apiConfig.model,
-        messages: apiMessages,
+        messages: _withCacheBreakpoint(
+          apiMessages,
+          charId: _charId,
+          cacheControlTtl: apiConfig.cacheControlTtl,
+        ),
         maxTokens: apiConfig.maxTokens,
         temperature: apiConfig.temperature,
         topP: apiConfig.topP,
@@ -436,5 +442,39 @@ class StreamGenerationService {
       sessionVars: sessionVars,
     );
     return ChatState(session: finalSession, regenTargetId: regenTargetId, visibleStartIndex: visibleStartIndex);
+  }
+
+  /// If [cacheControlTtl] is `5min` or `1h`, this finds the last message
+  /// whose content is byte-identical to the previous request, and converts
+  /// it into an Anthropic explicit `cache_control` content block. Everything
+  /// up to and including that message is then a stable prefix for the cache;
+  /// only the changed tail gets recomputed.
+  ///
+  /// The previous fingerprint is held in memory (not persisted) keyed by
+  /// [charId] — see [PromptCacheFingerprintStore].
+  List<Map<String, dynamic>> _withCacheBreakpoint(
+    List<Map<String, dynamic>> messages, {
+    required String charId,
+    required String cacheControlTtl,
+  }) {
+    if (cacheControlTtl != '5min' && cacheControlTtl != '1h') {
+      return messages;
+    }
+    final store = _ref.read(promptCacheFingerprintStoreProvider);
+    final prev = store.read(charId);
+    final curr = fingerprintMessages(messages);
+    int lastCommon = -1;
+    if (prev != null) {
+      lastCommon = findLastCommonPrefixIndex(previous: prev, current: curr);
+    }
+    final result = <Map<String, dynamic>>[...messages];
+    if (lastCommon >= 0 && lastCommon < result.length) {
+      result[lastCommon] = withExplicitCacheBreakpoint(
+        result[lastCommon],
+        ttl: cacheControlTtl,
+      );
+    }
+    store.write(charId, curr);
+    return result;
   }
 }

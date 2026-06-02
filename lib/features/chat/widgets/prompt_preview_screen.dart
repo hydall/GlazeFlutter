@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import '../../../core/llm/history_assembler.dart';
 import '../../../core/llm/prompt_builder.dart';
+import '../../../core/llm/prompt_cache_fingerprinter.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/tokenizer.dart';
@@ -352,6 +353,14 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   String _getRawPromptJson() {
     if (_result == null || _apiConfig == null) return '';
     try {
+      final apiMessages = _result!.messages
+          .where((m) => m.content.trim().isNotEmpty)
+          .map((m) => m.toApiMap())
+          .toList();
+      final withBreakpoint = _withCacheBreakpoint(
+        apiMessages,
+        cacheControlTtl: _apiConfig!.cacheControlTtl,
+      );
       final body = <String, dynamic>{
         'model': _apiConfig!.model,
       };
@@ -365,12 +374,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       if (_sessionId != null && _sessionId!.isNotEmpty) {
         body['session_id'] = _sessionId;
       }
-      body['messages'] = _result!.messages.map((m) {
-        final map = <String, dynamic>{'role': m.role, 'content': m.content};
-        if (m.isLorebook) map['lorebook'] = true;
-        if (m.blockName != null) map['block'] = m.blockName;
-        return map;
-      }).toList();
+      body['messages'] = withBreakpoint;
       body['max_tokens'] = _apiConfig!.maxTokens;
       body['temperature'] = _apiConfig!.temperature;
       body['top_p'] = _apiConfig!.topP;
@@ -379,6 +383,33 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
     } catch (_) {
       return '';
     }
+  }
+
+  /// Mirror of the production injection in `StreamGenerationService` —
+  /// finds the last message whose fingerprint matches the previously-sent
+  /// request and rewrites it as an Anthropic explicit `cache_control` block.
+  /// In preview mode we only need the *shape*, not persistence: the user
+  /// sees the same body that sse_client will dispatch.
+  ///
+  /// Falls back to using a static single-prefix state (no real prev
+  /// tracking here) — breakpoint is therefore shown on the *last system
+  /// block* (a reasonable default) so users can see what an explicit
+  /// breakpoint looks like in the preview.
+  List<Map<String, dynamic>> _withCacheBreakpoint(
+    List<Map<String, dynamic>> messages, {
+    required String cacheControlTtl,
+  }) {
+    if (cacheControlTtl != '5min' && cacheControlTtl != '1h') return messages;
+    final result = <Map<String, dynamic>>[...messages];
+    final systemIdx = result.lastIndexWhere(
+      (m) => (m['role']?.toString() ?? '') == 'system',
+    );
+    final target = systemIdx >= 0 ? systemIdx : 0;
+    result[target] = withExplicitCacheBreakpoint(
+      result[target],
+      ttl: cacheControlTtl,
+    );
+    return result;
   }
 }
 

@@ -46,7 +46,7 @@ class SseClient {
     required String endpoint,
     required String apiKey,
     required String model,
-    required List<Map<String, String>> messages,
+    required List<Map<String, dynamic>> messages,
     required int maxTokens,
     required double temperature,
     required double topP,
