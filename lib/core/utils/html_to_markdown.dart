@@ -450,7 +450,9 @@ String ensureLineBreaks(String text) {
       }
       final newlineCount = nextNonNewline - i;
       if (newlineCount >= 2) {
-        for (var n = 0; n < newlineCount; n++) buffer.write('\n');
+        for (var n = 0; n < newlineCount; n++) {
+          buffer.write('\n');
+        }
       } else {
         buffer.write('  \n');
       }

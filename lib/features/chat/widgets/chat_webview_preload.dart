@@ -49,7 +49,7 @@ class _ChatWebViewPreloaderState extends State<ChatWebViewPreloader> {
                     mixedContentMode:
                         MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
                   ),
-                  onLoadStop: (_, __) {
+                  onLoadStop: (_, _) {
                     if (mounted) setState(() => _preloaded = true);
                   },
                 ),

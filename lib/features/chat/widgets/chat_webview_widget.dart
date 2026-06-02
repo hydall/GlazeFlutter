@@ -213,7 +213,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     await _bridge!.scrollToBottom();
     final initialAnyGen = widget.isGenerating || widget.isGeneratingImage;
     _bridge!.isGenerating = initialAnyGen;
-    _bridge!.evalJs('if (window.bridge) window.bridge.isGenerating = ${initialAnyGen};');
+    _bridge!.evalJs('if (window.bridge) window.bridge.isGenerating = $initialAnyGen;');
     _ready = true;
   }
 
@@ -302,23 +302,23 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   }
 
   @override
-  void didUpdateWidget(ChatWebViewWidget old) {
-    super.didUpdateWidget(old);
+  void didUpdateWidget(ChatWebViewWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
     if (!_ready || _bridge == null) return;
 
-    if (widget.memoryEntries != old.memoryEntries || widget.memoryDrafts != old.memoryDrafts) {
+    if (widget.memoryEntries != oldWidget.memoryEntries || widget.memoryDrafts != oldWidget.memoryDrafts) {
       _bridge!.updateMemoryBookData(
         entries: widget.memoryEntries.map((e) => {'status': e.status, 'messageIds': e.messageIds}).toList(),
         pendingDrafts: widget.memoryDrafts.map((e) => {'messageIds': e.messageIds}).toList(),
       );
     }
 
-    if (widget.charId != old.charId || widget.sessionId != old.sessionId) {
-      unawaited(_applySessionSwitch(old));
+    if (widget.charId != oldWidget.charId || widget.sessionId != oldWidget.sessionId) {
+      unawaited(_applySessionSwitch(oldWidget));
       return;
     }
 
-    if (_identityChanged(old)) {
+    if (_identityChanged(oldWidget)) {
       _bridge!.setIdentity(
         charName: widget.charName,
         charColor: widget.charColor,
@@ -330,25 +330,31 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       );
     }
 
-    if (widget.themeSyncKey != old.themeSyncKey ||
-        widget.chatLayout != old.chatLayout ||
-        widget.elementOpacity != old.elementOpacity ||
-        widget.elementBlur != old.elementBlur ||
-        widget.chatFontSize != old.chatFontSize) {
+    if (widget.themeSyncKey != oldWidget.themeSyncKey ||
+        widget.chatLayout != oldWidget.chatLayout ||
+        widget.elementOpacity != oldWidget.elementOpacity ||
+        widget.elementBlur != oldWidget.elementBlur ||
+        widget.chatFontSize != oldWidget.chatFontSize) {
       _bridge!.applyTheme(_buildThemeMap());
     }
 
+    if (widget.bgImagePath != oldWidget.bgImagePath ||
+        widget.bgBlur != oldWidget.bgBlur ||
+        widget.bgOpacity != oldWidget.bgOpacity ||
+        widget.bgDim != oldWidget.bgDim) {
+      _bridge!.setBackgroundImage(widget.bgImagePath, widget.bgBlur.toInt(), widget.bgOpacity);
+      _bridge!.applyTheme({'bg-dim': widget.bgDim.toStringAsFixed(2)});
+    }
 
-
-    if (widget.bgNoiseOpacity != old.bgNoiseOpacity ||
-        widget.bgNoiseIntensity != old.bgNoiseIntensity) {
+    if (widget.bgNoiseOpacity != oldWidget.bgNoiseOpacity ||
+        widget.bgNoiseIntensity != oldWidget.bgNoiseIntensity) {
       _bridge!.setBackgroundNoise(widget.bgNoiseOpacity, widget.bgNoiseIntensity);
     }
 
-    if (widget.chatFontName != old.chatFontName ||
-        widget.chatFontDataUrl != old.chatFontDataUrl ||
-        widget.chatFontSize != old.chatFontSize ||
-        widget.chatLetterSpacing != old.chatLetterSpacing) {
+    if (widget.chatFontName != oldWidget.chatFontName ||
+        widget.chatFontDataUrl != oldWidget.chatFontDataUrl ||
+        widget.chatFontSize != oldWidget.chatFontSize ||
+        widget.chatLetterSpacing != oldWidget.chatLetterSpacing) {
       _bridge!.setChatFont(
         fontName: widget.chatFontName,
         fontDataUrl: widget.chatFontDataUrl,
@@ -357,15 +363,15 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       );
     }
 
-    if (widget.isSelectionMode != old.isSelectionMode) {
+    if (widget.isSelectionMode != oldWidget.isSelectionMode) {
       _bridge!.setSelectionMode(widget.isSelectionMode);
     }
 
-    if (widget.batterySaver != old.batterySaver ||
-        widget.hideMessageId != old.hideMessageId ||
-        widget.hideGenerationTime != old.hideGenerationTime ||
-        widget.hideTokenCount != old.hideTokenCount ||
-        widget.disableSwipeRegeneration != old.disableSwipeRegeneration) {
+    if (widget.batterySaver != oldWidget.batterySaver ||
+        widget.hideMessageId != oldWidget.hideMessageId ||
+        widget.hideGenerationTime != oldWidget.hideGenerationTime ||
+        widget.hideTokenCount != oldWidget.hideTokenCount ||
+        widget.disableSwipeRegeneration != oldWidget.disableSwipeRegeneration) {
       _bridge!.setMessageSettings(
         batterySaver: widget.batterySaver,
         hideMessageId: widget.hideMessageId,
@@ -375,7 +381,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       );
     }
 
-    if (widget.searchQuery != old.searchQuery || widget.searchCurrentIndex != old.searchCurrentIndex) {
+    if (widget.searchQuery != oldWidget.searchQuery || widget.searchCurrentIndex != oldWidget.searchCurrentIndex) {
       if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
         _bridge!.setSearch(query: widget.searchQuery!, activeIndex: widget.searchCurrentIndex);
       } else {
@@ -383,17 +389,17 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       }
     }
 
-    if (widget.bottomInset != old.bottomInset) {
+    if (widget.bottomInset != oldWidget.bottomInset) {
       _bridge!.setBottomPadding(widget.bottomInset);
     }
 
-    if (widget.topInset != old.topInset) {
+    if (widget.topInset != oldWidget.topInset) {
       _bridge!.setTopPadding(widget.topInset);
     }
 
     final anyGenerating = widget.isGenerating || widget.isGeneratingImage;
-    final oldAnyGenerating = old.isGenerating || old.isGeneratingImage;
-    if (anyGenerating != oldAnyGenerating || widget.isGenerating != old.isGenerating) {
+    final oldAnyGenerating = oldWidget.isGenerating || oldWidget.isGeneratingImage;
+    if (anyGenerating != oldAnyGenerating || widget.isGenerating != oldWidget.isGenerating) {
       _bridge!.isGenerating = widget.isGenerating;
       _bridge!.isGeneratingImage = widget.isGeneratingImage;
       _bridge!.evalJs('if (window.bridge) { window.bridge.setGenerating(${widget.isGenerating}); window.bridge.isGeneratingImage = ${widget.isGeneratingImage}; }');
@@ -408,7 +414,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     }
 
     if (_wasGenerating && !widget.isGenerating) {
-      final finishedRegenId = old.regenTargetId;
+      final finishedRegenId = oldWidget.regenTargetId;
       if (finishedRegenId != null) {
         final finalMsg = widget.messages.where((m) => m.id == finishedRegenId).firstOrNull;
         if (finalMsg != null) {
@@ -424,9 +430,9 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
 
     // Sync messages BEFORE injecting the typing placeholder, so the new user
     // message lands at its correct position (placeholder is appended after).
-    if (!identical(old.messages, widget.messages) &&
-        !_listsEqual(old.messages, widget.messages)) {
-      _syncMessages(old.messages);
+    if (!identical(oldWidget.messages, widget.messages) &&
+        !_listsEqual(oldWidget.messages, widget.messages)) {
+      _syncMessages(oldWidget.messages);
     }
 
     // Fresh generation started (no regenTargetId) → inject typing placeholder immediately

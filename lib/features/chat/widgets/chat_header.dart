@@ -39,7 +39,7 @@ class ChatHeader extends ConsumerWidget {
       avatar = CircleAvatar(
         radius: 17,
         backgroundImage: FileImage(File(character.avatarPath!)),
-        onBackgroundImageError: (_, __) {},
+        onBackgroundImageError: (_, _) {},
         backgroundColor: avatarColor.withValues(alpha: 0.2),
         child: const SizedBox.shrink(),
       );

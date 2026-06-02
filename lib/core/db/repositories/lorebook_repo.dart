@@ -10,11 +10,13 @@ class LorebookRepo implements SyncLorebookStore {
   final AppDatabase _db;
   LorebookRepo(this._db);
 
+  @override
   Future<List<Lorebook>> getAll() async {
     final rows = await _db.select(_db.lorebooks).get();
     return rows.map(_toModel).toList();
   }
 
+  @override
   Future<Lorebook?> getById(String id) async {
     final row = await (_db.select(_db.lorebooks)
           ..where((t) => t.lorebookId.equals(id)))
@@ -22,10 +24,12 @@ class LorebookRepo implements SyncLorebookStore {
     return row != null ? _toModel(row) : null;
   }
 
+  @override
   Future<void> put(Lorebook lorebook) async {
     await _db.into(_db.lorebooks).insertOnConflictUpdate(_toCompanion(lorebook));
   }
 
+  @override
   Future<void> delete(String id) async {
     await (_db.delete(_db.lorebooks)..where((t) => t.lorebookId.equals(id))).go();
   }

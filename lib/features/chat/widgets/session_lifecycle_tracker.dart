@@ -66,7 +66,7 @@ class _SessionLifecycleTrackerState extends ConsumerState<SessionLifecycleTracke
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(chatProvider(widget.charId), (_, __) => _syncActiveContext());
+    ref.listen(chatProvider(widget.charId), (_, _) => _syncActiveContext());
     return widget.child;
   }
 }

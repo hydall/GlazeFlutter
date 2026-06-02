@@ -1,13 +1,14 @@
-/// Tests for the regen → abort rapid-cycling race conditions.
-///
-/// These tests are pure-Dart unit tests — no Flutter widgets, no Riverpod,
-/// no DB required. They verify the two invariants that prevent "response
-/// leaking after abort":
-///
-///  1. setCancelToken genId guard — a stale generation that arrives late at
-///     setCancelToken must have its token cancelled immediately, so the SSE
-///     stream never fires onComplete for that generation.
-///
+// Tests for the regen → abort rapid-cycling race conditions.
+//
+// These tests are pure-Dart unit tests — no Flutter widgets, no Riverpod,
+// no DB required. They verify the two invariants that prevent "response
+// leaking after abort":
+//
+//  1. setCancelToken genId guard — a stale generation that arrives late at
+//     setCancelToken must have its token cancelled immediately, so the SSE
+//     stream never fires onComplete for that generation.
+//
+library;
 ///  2. isAborted closure — the lambda captures _activeGenId by reference;
 ///     incrementing the counter must make every in-flight isAborted() call
 ///     return true, regardless of how many generations have been started.
@@ -73,7 +74,7 @@ class _FakeNotifier {
     activeCompleter = completer;
 
     // Simulate async work before the CancelToken is ready (e.g. buildPromptInIsolate)
-    await Future.delayed(delay);
+    await Future<void>.delayed(delay);
 
     final token = CancelToken();
     setCancelToken(token, genId: genId);
@@ -90,7 +91,7 @@ class _FakeNotifier {
 
     // Simulate streaming: pump a few microtasks, check abort each time
     for (int i = 0; i < 5; i++) {
-      await Future.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
       if (isAborted()) {
         if (!completer.isCompleted) completer.complete();
         onDone(true);
@@ -298,7 +299,7 @@ void main() {
       );
 
       // Wait for all stragglers
-      await Future.delayed(const Duration(milliseconds: 150));
+      await Future<void>.delayed(const Duration(milliseconds: 150));
 
       // Only the final generation should have leaked (completed), all others aborted
       expect(leakedCompletions, equals(1),

@@ -295,11 +295,17 @@ Uint8List _buildPngChunk(String type, Uint8List data) {
   final typeBytes = Uint8List.fromList(utf8.encode(type));
   final chunk = ByteData(4 + 4 + data.length + 4);
   chunk.setUint32(0, data.length, Endian.big);
-  for (int i = 0; i < 4; i++) chunk.setUint8(4 + i, typeBytes[i]);
-  for (int i = 0; i < data.length; i++) chunk.setUint8(8 + i, data[i]);
+  for (int i = 0; i < 4; i++) {
+    chunk.setUint8(4 + i, typeBytes[i]);
+  }
+  for (int i = 0; i < data.length; i++) {
+    chunk.setUint8(8 + i, data[i]);
+  }
 
   final crcInput = Uint8List(4 + data.length);
-  for (int i = 0; i < 4; i++) crcInput[i] = typeBytes[i];
+  for (int i = 0; i < 4; i++) {
+    crcInput[i] = typeBytes[i];
+  }
   crcInput.setRange(4, crcInput.length, data);
   final crc = _crc32(crcInput);
   chunk.setUint32(8 + data.length, crc, Endian.big);

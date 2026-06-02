@@ -213,7 +213,7 @@ class _PanelContent extends StatelessWidget {
                 child: ListView.separated(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   itemCount: blocks.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 6),
+                  separatorBuilder: (_, _) => const SizedBox(height: 6),
                   itemBuilder: (context, index) {
                     final block = blocks[index];
                     return _BlockCard(block: block);

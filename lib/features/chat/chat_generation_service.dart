@@ -40,7 +40,6 @@ class ChatGenerationService {
       charId: charId,
       genId: genId,
       isAborted: isAborted,
-      onStateUpdate: onStateUpdate,
     ).run(
       session: session,
       saveSession: saveSession,

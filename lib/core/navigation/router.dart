@@ -120,14 +120,14 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
         branches: [
           StatefulShellBranch(
             routes: [
-              GoRoute(path: '/', builder: (_, __) => const ChatHistoryScreen()),
+              GoRoute(path: '/', builder: (_, _) => const ChatHistoryScreen()),
             ],
           ),
           StatefulShellBranch(
             routes: [
               GoRoute(
                 path: '/characters',
-                builder: (_, __) => const CharacterListScreen(),
+                builder: (_, _) => const CharacterListScreen(),
               ),
             ],
           ),
@@ -231,7 +231,7 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
             routes: [
               GoRoute(
                 path: '/chat',
-                builder: (_, __) => const SizedBox.shrink(),
+                builder: (_, _) => const SizedBox.shrink(),
                 routes: [
                   GoRoute(
                     path: ':charId',

@@ -5,8 +5,6 @@ import '../models/chat_message.dart';
 import '../models/api_config.dart';
 import '../models/lorebook.dart';
 import '../models/memory_book.dart';
-import 'lorebook_scanner.dart';
-import 'prompt_builder.dart';
 
 /// Raw inputs collected from DB/providers on the main thread.
 /// Fully serializable for cross-isolate transfer.

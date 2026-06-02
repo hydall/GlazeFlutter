@@ -81,6 +81,7 @@ class ImageStorageService implements SyncImageStore {
     return File(thumb).existsSync() ? thumb : null;
   }
 
+  @override
   Future<String> saveBytes(
     Uint8List bytes,
     String subfolder,
@@ -96,6 +97,7 @@ class ImageStorageService implements SyncImageStore {
     return path;
   }
 
+  @override
   String? absolutePath(String? relativePath) {
     if (relativePath == null) return null;
     if (File(relativePath).isAbsolute) return relativePath;

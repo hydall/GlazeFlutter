@@ -32,7 +32,7 @@ class GDriveFiles {
     final existingId = _fileIdCache[cacheKey];
     if (existingId != null) {
       try {
-        await _dio.patch(
+        await _dio.patch<void>(
           'https://www.googleapis.com/upload/drive/v3/files/$existingId?uploadType=media',
           data: data,
           options: Options(headers: {
@@ -49,7 +49,7 @@ class GDriveFiles {
 
     final fileId = await _findFileByName(fileName, parentId, token);
     if (fileId != null) {
-      await _dio.patch(
+      await _dio.patch<void>(
         'https://www.googleapis.com/upload/drive/v3/files/$fileId?uploadType=media',
         data: data,
         options: Options(headers: {
@@ -94,7 +94,7 @@ class GDriveFiles {
 
     final existingId = _fileIdCache[path] ?? await _findFileByName(fileName, parentId, token);
     if (existingId != null) {
-      await _dio.patch(
+      await _dio.patch<void>(
         'https://www.googleapis.com/upload/drive/v3/files/$existingId?uploadType=media',
         data: Stream.fromIterable([data]),
         options: Options(headers: {
@@ -117,14 +117,14 @@ class GDriveFiles {
     final location = metaResponse.headers['location']?.first;
     if (location == null) throw Exception('No resumable upload URL');
 
-    final uploadResponse = await _dio.put(
+    final uploadResponse = await _dio.put<Map<String, dynamic>>(
       location,
       data: Stream.fromIterable([data]),
       options: Options(headers: {
         'Content-Length': data.length.toString(),
       }, contentType: 'application/octet-stream'),
     );
-    final newId = (uploadResponse.data as Map<String, dynamic>?)?['id'] as String?;
+    final newId = uploadResponse.data?['id'] as String?;
     if (newId != null) _fileIdCache[path] = newId;
   }
 
@@ -155,7 +155,7 @@ class GDriveFiles {
   Future<void> deleteFile(String path) async {
     final token = await _getToken();
     final fileId = await _resolveFileId(path, token);
-    await _dio.delete(
+    await _dio.delete<void>(
       'https://www.googleapis.com/drive/v3/files/$fileId',
       options: Options(headers: {'Authorization': 'Bearer $token'}),
     );

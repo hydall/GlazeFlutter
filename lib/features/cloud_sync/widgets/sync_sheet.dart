@@ -411,7 +411,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       child: Row(
         children: [
           Text(
-            'sync_every'.tr() + ' ',
+            '${'sync_every'.tr()} ',
             style: TextStyle(
               fontSize: 14,
               color: context.cs.onSurfaceVariant,
@@ -444,7 +444,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
           ),
           const SizedBox(width: 8),
           Text(
-            ' ' + 'sync_messages'.tr(),
+            ' ${'sync_messages'.tr()}',
             style: TextStyle(
               fontSize: 14,
               color: context.cs.onSurfaceVariant,

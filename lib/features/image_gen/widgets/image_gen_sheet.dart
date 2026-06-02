@@ -476,7 +476,7 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
               setState(() {
                 _isFetchingModels = true;
               });
-              await Future.delayed(const Duration(seconds: 1));
+              await Future<void>.delayed(const Duration(seconds: 1));
               setState(() {
                 _isFetchingModels = false;
               });
@@ -583,12 +583,13 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
             description: 'Use character\'s avatar as visual reference',
             value: sendCharAvatar,
             onChanged: (v) {
-              if (isRoutmy)
+              if (isRoutmy) {
                 _update(s.copyWith(routmySendCharAvatar: v));
-              else if (isRuRoutmy)
+              } else if (isRuRoutmy) {
                 _update(s.copyWith(ruRoutmySendCharAvatar: v));
-              else
+              } else {
                 _update(s.copyWith(naisteraSendCharAvatar: v));
+              }
             },
           ),
           _CheckboxRow(
@@ -596,12 +597,13 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
             description: 'Use active persona\'s avatar as visual reference',
             value: sendUserAvatar,
             onChanged: (v) {
-              if (isRoutmy)
+              if (isRoutmy) {
                 _update(s.copyWith(routmySendUserAvatar: v));
-              else if (isRuRoutmy)
+              } else if (isRuRoutmy) {
                 _update(s.copyWith(ruRoutmySendUserAvatar: v));
-              else
+              } else {
                 _update(s.copyWith(naisteraSendUserAvatar: v));
+              }
             },
           ),
         ],
@@ -620,27 +622,30 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
               onNameChanged: (v) {
                 final copy = List<ReferenceImage>.from(refs);
                 copy[i] = copy[i].copyWith(name: v);
-                if (isRoutmy || isRuRoutmy)
+                if (isRoutmy || isRuRoutmy) {
                   _update(s.copyWith(routmyAdditionalRefs: copy));
-                else
+                } else {
                   _update(s.copyWith(additionalReferences: copy));
+                }
               },
               onMatchModeChanged: (v) {
                 final copy = List<ReferenceImage>.from(refs);
                 copy[i] = copy[i].copyWith(matchMode: v);
-                if (isRoutmy || isRuRoutmy)
+                if (isRoutmy || isRuRoutmy) {
                   _update(s.copyWith(routmyAdditionalRefs: copy));
-                else
+                } else {
                   _update(s.copyWith(additionalReferences: copy));
+                }
               },
               onPickImage: () {},
               onRemove: () {
                 final copy = List<ReferenceImage>.from(refs);
                 copy.removeAt(i);
-                if (isRoutmy || isRuRoutmy)
+                if (isRoutmy || isRuRoutmy) {
                   _update(s.copyWith(routmyAdditionalRefs: copy));
-                else
+                } else {
                   _update(s.copyWith(additionalReferences: copy));
+                }
               },
             ),
           if (refs.length < 8)
@@ -656,10 +661,11 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
                       matchMode: 'match',
                     ),
                   );
-                  if (isRoutmy || isRuRoutmy)
+                  if (isRoutmy || isRuRoutmy) {
                     _update(s.copyWith(routmyAdditionalRefs: copy));
-                  else
+                  } else {
                     _update(s.copyWith(additionalReferences: copy));
+                  }
                 },
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
@@ -831,7 +837,6 @@ class _TextFieldItem extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final Widget? suffix;
   const _TextFieldItem({
-    super.key,
     required this.label,
     required this.value,
     this.obscure = false,

@@ -9,7 +9,7 @@ part 'info_blocks_repository.g.dart';
 @DriftAccessor(tables: [InfoBlocks])
 class InfoBlocksRepository extends DatabaseAccessor<AppDatabase>
     with _$InfoBlocksRepositoryMixin {
-  InfoBlocksRepository(AppDatabase db) : super(db);
+  InfoBlocksRepository(super.db);
 
   Future<void> insert(InfoBlock block) async {
     await into(infoBlocks).insert(InfoBlocksCompanion.insert(

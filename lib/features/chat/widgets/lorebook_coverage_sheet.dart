@@ -124,11 +124,12 @@ class _CoveragePanelState extends ConsumerState<_CoveragePanel> {
       vectorEntryLorebookIds: Map<String, String>.from(_vectorEntryLorebookIds),
     ));
 
-    if (mounted)
+    if (mounted) {
       setState(() {
         _result = result;
         _loading = false;
       });
+    }
   }
 
   @override

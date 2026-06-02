@@ -1,7 +1,7 @@
 import 'dart:async';
 
 class EventHub {
-  static final _controllers = <String, StreamController<Event>>{};
+  static final Map<String, StreamController<Event>> _controllers = {};
 
   static void publish(String event, [dynamic data]) {
     final controller = _controllers[event];
@@ -17,8 +17,18 @@ class EventHub {
   }
 
   static void dispose(String event) {
-    _controllers[event]?.close();
-    _controllers.remove(event);
+    final controller = _controllers[event];
+    if (controller != null) {
+      controller.close();
+      _controllers.remove(event);
+    }
+  }
+
+  static void closeAll() {
+    for (final controller in _controllers.values) {
+      controller.close();
+    }
+    _controllers.clear();
   }
 }
 

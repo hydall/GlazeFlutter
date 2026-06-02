@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/menu_group.dart';
-import '../models/extension_preset.dart';
 import '../providers/extension_presets_provider.dart';
 import '../providers/extensions_settings_provider.dart';
 

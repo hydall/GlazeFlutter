@@ -202,8 +202,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                                       context: context,
                                       delegate: _CharacterSearchDelegate(ref),
                                     );
-                                    if (query != null)
+                                    if (query != null) {
                                       setState(() => _searchQuery = query);
+                                    }
                                   },
                                 ),
                               ),

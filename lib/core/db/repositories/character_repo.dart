@@ -13,6 +13,7 @@ class CharacterRepo implements SyncCharacterStore {
   final AppDatabase _db;
   CharacterRepo(this._db);
 
+  @override
   Future<List<Character>> getAll() async {
     final rows = await (_db.select(_db.characters)
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
@@ -27,6 +28,7 @@ class CharacterRepo implements SyncCharacterStore {
         .map((rows) => rows.map(_toModel).toList());
   }
 
+  @override
   Future<Character?> getById(String id) async {
     final row = await (_db.select(_db.characters)
           ..where((t) => t.charId.equals(id)))
@@ -42,10 +44,12 @@ class CharacterRepo implements SyncCharacterStore {
     return {for (final r in rows) r.charId: _toModel(r)};
   }
 
+  @override
   Future<void> put(Character character) async {
     await _db.into(_db.characters).insertOnConflictUpdate(_toCompanion(character));
   }
 
+  @override
   Future<void> delete(String id) async {
     final sessionIds = (await (_db.select(_db.chatSessions)
               ..where((t) => t.characterId.equals(id)))

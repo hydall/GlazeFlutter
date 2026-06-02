@@ -8,11 +8,13 @@ class ApiConfigRepo implements SyncApiConfigStore {
   final AppDatabase _db;
   ApiConfigRepo(this._db);
 
+  @override
   Future<List<ApiConfig>> getAll() async {
     final rows = await _db.select(_db.apiConfigs).get();
     return rows.map(_toModel).toList();
   }
 
+  @override
   Future<ApiConfig?> getById(String id) async {
     final row = await (_db.select(_db.apiConfigs)
           ..where((t) => t.configId.equals(id)))
@@ -20,10 +22,12 @@ class ApiConfigRepo implements SyncApiConfigStore {
     return row != null ? _toModel(row) : null;
   }
 
+  @override
   Future<void> put(ApiConfig config) async {
     await _db.into(_db.apiConfigs).insertOnConflictUpdate(_toCompanion(config));
   }
 
+  @override
   Future<void> delete(String id) async {
     await (_db.delete(_db.apiConfigs)..where((t) => t.configId.equals(id))).go();
   }

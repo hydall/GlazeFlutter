@@ -380,7 +380,7 @@ Future<ExtractionResult> datacatExtractAndPoll(
 
     const maxAttempts = 60;
     for (var attempt = 0; attempt < maxAttempts; attempt++) {
-      await Future.delayed(const Duration(seconds: 3));
+      await Future<void>.delayed(const Duration(seconds: 3));
 
       try {
         final status = await _datacatExtractionStatus();

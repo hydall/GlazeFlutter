@@ -99,7 +99,7 @@ class DropboxAdapter implements CloudAdapter {
         'autorename': false,
         'mute': true,
       });
-      await _dio.post(
+      await _dio.post<void>(
         '$_contentBase/files/upload',
         data: data,
         options: Options(headers: headers),
@@ -118,7 +118,7 @@ class DropboxAdapter implements CloudAdapter {
         'autorename': false,
         'mute': true,
       });
-      await _dio.post(
+      await _dio.post<void>(
         '$_contentBase/files/upload',
         data: Stream.fromIterable([data]),
         options: Options(headers: headers, contentType: 'application/octet-stream'),
@@ -209,7 +209,7 @@ class DropboxAdapter implements CloudAdapter {
             {'path': entry['path_lower'] ?? entry['path_display']},
           );
         } catch (_) {}
-        await Future.delayed(const Duration(milliseconds: 300));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
       }
     }
   }
@@ -237,7 +237,7 @@ class DropboxAdapter implements CloudAdapter {
     });
   }
 
-  List<CloudFileInfo> _parseEntries(List entries) {
+  List<CloudFileInfo> _parseEntries(List<Object?> entries) {
     return entries
         .whereType<Map<String, dynamic>>()
         .map((e) => CloudFileInfo(

@@ -1420,10 +1420,6 @@ void main() {
     await deviceB.characters.put(makeChar('c2', name: 'Bob'));
 
     // Stale manifest: wrong hashes but same DB content as cloud.
-    final cloudManifest = SyncManifest.fromJson(
-      jsonDecode(deviceB.cloud.files[cloudPath('manifest', 'manifest')]!)
-          as Map<String, dynamic>,
-    );
     final stale = await deviceB.manifestProvider.buildLocalManifest();
     final staleEntries = Map<String, SyncManifestEntry>.from(stale.entries);
     for (final key in ['character:c1', 'character:c2']) {

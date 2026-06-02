@@ -103,7 +103,7 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  isNew ? "${'action_create_new'.tr()}" : "${'action_edit'.tr()}",
+                  isNew ? 'action_create_new'.tr() : 'action_edit'.tr(),
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,

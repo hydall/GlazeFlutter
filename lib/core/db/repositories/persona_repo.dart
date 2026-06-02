@@ -8,6 +8,7 @@ class PersonaRepo implements SyncPersonaStore {
   final AppDatabase _db;
   PersonaRepo(this._db);
 
+  @override
   Future<List<Persona>> getAll() async {
     final rows = await (_db.select(_db.personas)
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
@@ -15,6 +16,7 @@ class PersonaRepo implements SyncPersonaStore {
     return rows.map(_toModel).toList();
   }
 
+  @override
   Future<Persona?> getById(String id) async {
     final row = await (_db.select(_db.personas)
           ..where((t) => t.personaId.equals(id)))
@@ -22,10 +24,12 @@ class PersonaRepo implements SyncPersonaStore {
     return row != null ? _toModel(row) : null;
   }
 
+  @override
   Future<void> put(Persona persona) async {
     await _db.into(_db.personas).insertOnConflictUpdate(_toCompanion(persona));
   }
 
+  @override
   Future<void> delete(String id) async {
     await (_db.delete(_db.personas)..where((t) => t.personaId.equals(id))).go();
   }

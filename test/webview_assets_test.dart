@@ -360,17 +360,6 @@ void main() {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-/// Extracts the SHADOW_STYLE template literal from renderer.js.
-/// Returns everything between `const SHADOW_STYLE = \`` and the closing backtick.
-String _extractShadowStyle(String src) {
-  final start = src.indexOf('const SHADOW_STYLE = `');
-  if (start == -1) return '';
-  final contentStart = src.indexOf('`', start) + 1;
-  final end = src.indexOf('`', contentStart);
-  if (end == -1) return '';
-  return src.substring(contentStart, end);
-}
-
 /// Extracts the summary::before CSS block from SHADOW_STYLE in renderer.js.
 String _extractSummaryBeforeBlock(String src) {
   final marker = 'summary::before {';
@@ -400,8 +389,9 @@ String _extractWriteShadowContent(String src) {
   int start = src.indexOf('{', idx);
   if (start == -1) return '';
   for (int i = start; i < src.length; i++) {
-    if (src[i] == '{') depth++;
-    else if (src[i] == '}') {
+    if (src[i] == '{') {
+      depth++;
+    } else if (src[i] == '}') {
       depth--;
       if (depth == 0) return src.substring(start, i + 1);
     }
@@ -439,8 +429,9 @@ String _extractBlockBody(String src, int fromIndex) {
   if (start == -1) return '';
   int depth = 0;
   for (int i = start; i < src.length; i++) {
-    if (src[i] == '{') depth++;
-    else if (src[i] == '}') {
+    if (src[i] == '{') {
+      depth++;
+    } else if (src[i] == '}') {
       depth--;
       if (depth == 0) return src.substring(start, i + 1);
     }

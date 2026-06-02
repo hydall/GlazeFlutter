@@ -164,7 +164,7 @@ class GDriveAuth {
   Future<void> disconnect() async {
     if (_accessToken != null) {
       try {
-        await _dio.post(
+        await _dio.post<void>(
           _revokeUrl,
           queryParameters: {'token': _accessToken},
         );

@@ -30,14 +30,6 @@ class SyncProgress {
 }
 
 class SyncEngine {
-  static bool _isSingletonType(String type) =>
-      type == 'lorebooks' ||
-      type == 'api_presets' ||
-      type == 'theme_presets' ||
-      type == 'ui_themes' ||
-      type == 'theme_state' ||
-      type == 'local_storage';
-
   final CloudAdapter _adapter;
   final SyncManifestProvider _manifestBuilder;
   final SyncCharacterStore _characterRepo;
@@ -425,7 +417,7 @@ class SyncEngine {
 
     onProgress(const SyncProgress(message: 'Waiting for cloud to finalize...'));
     for (var i = 0; i < 10; i++) {
-      await Future.delayed(const Duration(seconds: 2));
+      await Future<void>.delayed(const Duration(seconds: 2));
       try {
         final files = await _adapter.listFolder(cloudBase);
         if (files.isEmpty) break;

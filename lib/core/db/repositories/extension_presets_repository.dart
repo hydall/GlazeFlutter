@@ -11,7 +11,7 @@ part 'extension_presets_repository.g.dart';
 @DriftAccessor(tables: [ExtensionPresets])
 class ExtensionPresetsRepository extends DatabaseAccessor<AppDatabase>
     with _$ExtensionPresetsRepositoryMixin {
-  ExtensionPresetsRepository(AppDatabase db) : super(db);
+  ExtensionPresetsRepository(super.db);
 
   Future<void> insert(ExtensionPreset preset) async {
     await into(extensionPresets).insert(ExtensionPresetsCompanion.insert(

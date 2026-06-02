@@ -48,7 +48,7 @@ class InfoBlockInjector {
         // Добавляем блоки в конец сообщения
         final blockContent = blocks.map((b) => b.content).join('\n');
         result[targetIndex] = result[targetIndex].copyWith(
-          content: result[targetIndex].content + '\n\n' + blockContent,
+          content: '${result[targetIndex].content}\n\n$blockContent',
         );
       }
     }

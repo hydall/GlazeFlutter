@@ -83,10 +83,6 @@ void main() {
   });
 
   test('saveAvatarFromDataUrl decodes base64 and saves', () async {
-    final png = makePng(50, 50);
-    final base64Str = Uri.encodeComponent(png.toList().toString());
-    final dataUrl = 'data:image/png;base64,${Uri.encodeComponent(png.map((b) => b.toRadixString(16).padLeft(2, '0')).join())}';
-
     final simplePng = makePng(50, 50);
     final b64 = base64Encode(simplePng);
     final dataUrl2 = 'data:image/png;base64,$b64';

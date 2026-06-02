@@ -108,7 +108,7 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
       icon: Icons.menu_book,
       label: 'label_lorebooks'.tr(),
       active: activeLorebooks.isNotEmpty,
-      detail: '${activeLorebooks.length} (${triggeredCount})',
+      detail: '${activeLorebooks.length} ($triggeredCount)',
       color: activeLorebooks.isNotEmpty ? Colors.cyan : context.cs.onSurfaceVariant,
     ));
 

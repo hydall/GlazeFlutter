@@ -13,7 +13,7 @@ class SyncQueue {
 
   Future<T> enqueue<T>(Future<T> Function() operation, {String? label}) async {
     while (_isPaused) {
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
     }
 
     if (_isAborted) throw Exception('Sync queue aborted');
@@ -39,7 +39,7 @@ class SyncQueue {
       while (index < tasks.length) {
         if (_isAborted) throw Exception('Sync queue aborted');
         while (_isPaused) {
-          await Future.delayed(const Duration(milliseconds: 100));
+          await Future<void>.delayed(const Duration(milliseconds: 100));
         }
         final i = index++;
         if (i >= tasks.length) break;
@@ -50,7 +50,7 @@ class SyncQueue {
           errors.add(e);
         }
         if (delayMs > 0 && index < tasks.length) {
-          await Future.delayed(Duration(milliseconds: delayMs));
+          await Future<void>.delayed(Duration(milliseconds: delayMs));
         }
       }
     }
@@ -81,7 +81,7 @@ class SyncQueue {
           rethrow;
         }
         final delay = _calculateDelay(attempt);
-        await Future.delayed(Duration(milliseconds: delay));
+        await Future<void>.delayed(Duration(milliseconds: delay));
       }
     }
   }
