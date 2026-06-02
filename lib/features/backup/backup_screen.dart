@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app.dart';
+import '../../core/services/backup_service.dart';
 import '../../core/services/onboarding_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_toast.dart';
@@ -26,10 +27,14 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   bool _isExporting = false;
   bool _isImporting = false;
   bool _importComplete = false;
+  bool _hasCleared = false;
   int _importStage = 0;
   String _importProgressText = '';
+  BackupFormat? _detectedFormat;
 
   bool get _isBusy => _isExporting || (_isImporting && !_importComplete);
+
+  bool get _canCancel => _isImporting && !_hasCleared;
 
   void _blockClose() {
     GlazeToast.show(
@@ -85,6 +90,8 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
         title: 'importing_data'.tr(),
         subtitle: _importProgressText,
         progress: _importStage / _totalStages,
+        canCancel: _canCancel,
+        onCancel: _cancelImport,
       );
     }
     if (_importComplete) {
@@ -164,6 +171,8 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
     setState(() {
       _isImporting = true;
       _importComplete = false;
+      _hasCleared = false;
+      _detectedFormat = null;
       _importStage = 0;
       _importProgressText = 'backup_progress_preparing'.tr();
     });
@@ -174,14 +183,17 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
           _importStage = 1;
           _importProgressText = 'backup_progress_reading'.tr();
         });
-        final file = File(path);
-        final bytes = await file.readAsBytes();
         final service = await ref.read(backupServiceProvider.future);
-        await service.importBackup(
-          bytes,
+        await service.importBackupFromFile(
+          path,
+          onDetected: (format) {
+            if (!mounted) return;
+            setState(() => _detectedFormat = format);
+          },
           onProgress: (stage) {
             if (!mounted) return;
             setState(() {
+              _hasCleared = true;
               _importStage = (_importStage + 1).clamp(1, _totalStages - 1);
               _importProgressText = stage;
             });
@@ -195,14 +207,32 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       } else {
         throw FormatException('Unsupported file format: .$ext');
       }
+    } on ImportCancelledException {
+      if (!mounted) return;
+      setState(() {
+        _isImporting = false;
+        _importComplete = false;
+        _hasCleared = false;
+      });
+      GlazeToast.show(
+        context,
+        'cancel_import_done'.tr(),
+        isError: false,
+      );
     } catch (e, st) {
       if (!mounted) return;
       setState(() {
         _isImporting = false;
         _importComplete = false;
+        _hasCleared = false;
       });
       GlazeToast.errorWithCopy(context, 'settings_err_failed'.tr(), '$e\n\n$st');
     }
+  }
+
+  Future<void> _cancelImport() async {
+    final service = await ref.read(backupServiceProvider.future);
+    service.cancelImport();
   }
 
   Future<void> _reloadApp() async {
@@ -449,12 +479,16 @@ class _ProgressView extends StatelessWidget {
   final String title;
   final String subtitle;
   final double progress;
+  final bool canCancel;
+  final VoidCallback onCancel;
 
   const _ProgressView({
     super.key,
     required this.title,
     required this.subtitle,
     required this.progress,
+    required this.canCancel,
+    required this.onCancel,
   });
 
   @override
@@ -524,6 +558,15 @@ class _ProgressView extends StatelessWidget {
               ),
             ),
           ),
+          if (canCancel) ...[
+            const SizedBox(height: 24),
+            _BsButton(
+              onPressed: onCancel,
+              icon: Icons.close,
+              label: 'btn_cancel'.tr(),
+              primary: false,
+            ),
+          ],
         ],
       ),
     );
