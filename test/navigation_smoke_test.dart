@@ -63,19 +63,19 @@ const screenRegistry = <ScreenEntry>[
     description: 'Menu (shell tab 3)',
   ),
   ScreenEntry(
-    path: '/settings',
+    path: '/menu/settings',
     screenType: AppSettingsScreen,
     parentPath: '/menu',
     description: 'App settings',
   ),
   ScreenEntry(
-    path: '/themes',
+    path: '/menu/themes',
     screenType: ThemePresetScreen,
     parentPath: '/settings',
     description: 'Theme presets',
   ),
   ScreenEntry(
-    path: '/about',
+    path: '/menu/about',
     screenType: AboutScreen,
     parentPath: '/menu',
     description: 'About screen',
@@ -224,17 +224,17 @@ void main() {
   // shell reachability is already covered by "Shell tabs are all reachable".
   testWidgets('Back navigation: App settings renders', (tester) async {
     await pumpGlazeApp(tester, container: container);
-    router().go('/settings');
+    router().go('/menu/settings');
     await pumpNavigation(tester);
     expect(find.byType(AppSettingsScreen, skipOffstage: false), findsWidgets,
-        reason: 'AppSettingsScreen at /settings not found');
+        reason: 'AppSettingsScreen at /menu/settings not found');
   });
 
   testWidgets('Back navigation: About screen renders', (tester) async {
     await pumpGlazeApp(tester, container: container);
-    router().go('/about');
+    router().go('/menu/about');
     await pumpNavigation(tester);
     expect(find.byType(AboutScreen, skipOffstage: false), findsWidgets,
-        reason: 'AboutScreen at /about not found');
+        reason: 'AboutScreen at /menu/about not found');
   });
 }
