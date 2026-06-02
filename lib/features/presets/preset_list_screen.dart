@@ -237,7 +237,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
 
       final json = jsonDecode(jsonString) as Map<String, dynamic>;
       final preset = parseSillyTavernPreset(json, picked.name);
-      ref.read(presetListProvider.notifier).add(preset);
+      await ref.read(presetListProvider.notifier).add(preset);
       if (mounted) {
         GlazeToast.show(
           ctx,

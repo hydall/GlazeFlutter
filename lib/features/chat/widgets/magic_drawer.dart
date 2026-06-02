@@ -393,7 +393,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       case 'regex':
         widget.onClose?.call();
         if (mounted) {
-          showModalBottomSheet<void>(
+          await showModalBottomSheet<void>(
             context: context,
             useRootNavigator: true,
             backgroundColor: Colors.transparent,
@@ -406,7 +406,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       case 'api':
         widget.onClose?.call();
         if (mounted) {
-          showModalBottomSheet<void>(
+          await showModalBottomSheet<void>(
             context: context,
             useRootNavigator: true,
             backgroundColor: Colors.transparent,
@@ -419,7 +419,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       case 'presets':
         widget.onClose?.call();
         if (mounted) {
-          showModalBottomSheet<void>(
+          await showModalBottomSheet<void>(
             context: context,
             useRootNavigator: true,
             backgroundColor: Colors.transparent,
@@ -438,7 +438,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       case 'personas':
         widget.onClose?.call();
         if (mounted) {
-          showModalBottomSheet<void>(
+          await showModalBottomSheet<void>(
             context: context,
             useRootNavigator: true,
             isScrollControlled: true,
@@ -450,7 +450,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       case 'image-gen':
         widget.onClose?.call();
         if (mounted) {
-          showModalBottomSheet<void>(
+          await showModalBottomSheet<void>(
             context: context,
             useRootNavigator: true,
             isScrollControlled: true,
@@ -464,11 +464,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         return;
       case 'glossary':
         widget.onClose?.call();
-        if (mounted) GlossarySheet.show(context);
+        if (mounted) await GlossarySheet.show(context);
         return;
       case 'ext-blocks':
         widget.onClose?.call();
-        if (mounted) _showExtBlocksSheet();
+        if (mounted) await _showExtBlocksSheet();
         return;
     }
   }
@@ -486,7 +486,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   Future<void> _showMemoryBooks() async {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
     if (session == null) return;
-    GlazeBottomSheet.show<void>(
+    await GlazeBottomSheet.show<void>(
       context,
       child: MemoryBooksSheet(sessionId: session.id, charId: widget.charId),
     );
@@ -582,7 +582,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             sessionId: sessionId,
           );
         case 'rename':
-          _showRenameDialog(sessionId);
+          await _showRenameDialog(sessionId);
         case 'delete':
           await ref.read(chatHistoryProvider.notifier).deleteSession(sessionId);
           ref.invalidate(chatProvider(widget.charId));
@@ -590,13 +590,13 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     });
   }
 
-  void _showRenameDialog(String sessionId) async {
+  Future<void> _showRenameDialog(String sessionId) async {
     final session = await ref.read(chatSessionOpsProvider.notifier).getSession(sessionId);
     if (!mounted || session == null) return;
     final currentName = session.sessionVars['sessionName']?.isNotEmpty == true
         ? session.sessionVars['sessionName']!
         : 'Session #${session.sessionIndex + 1}';
-    GlazeBottomSheet.show<void>(
+    await GlazeBottomSheet.show<void>(
       context,
       title: 'Rename Session',
       input: BottomSheetInput(

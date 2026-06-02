@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -43,7 +44,7 @@ void showRawPromptDialog(
 
   if (!context.mounted) return;
 
-  GlazeBottomSheet.show<void>(
+  await GlazeBottomSheet.show<void>(
     context,
     title: 'Raw Prompt',
     headerAction: IconButton(
@@ -74,7 +75,7 @@ void showRawResponseDialog(BuildContext context, WidgetRef ref, String charId) {
     return;
   }
 
-  GlazeBottomSheet.show<void>(
+  unawaited(GlazeBottomSheet.show<void>(
     context,
     title: 'Raw Response',
     headerAction: IconButton(
@@ -91,7 +92,7 @@ void showRawResponseDialog(BuildContext context, WidgetRef ref, String charId) {
         style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
       ),
     ),
-  );
+  ));
 }
 
 void showPresetPickerDialog(BuildContext context, WidgetRef ref) async {
@@ -99,7 +100,7 @@ void showPresetPickerDialog(BuildContext context, WidgetRef ref) async {
   final activeId = ref.read(activePresetIdProvider);
   if (!context.mounted) return;
 
-  GlazeBottomSheet.show<void>(
+  await GlazeBottomSheet.show<void>(
     context,
     title: 'Select Preset',
     items: [
@@ -132,7 +133,7 @@ void showPersonaPickerDialog(BuildContext context, WidgetRef ref) async {
   final activeId = ref.read(activePersonaIdProvider);
   if (!context.mounted) return;
 
-  GlazeBottomSheet.show<void>(
+  await GlazeBottomSheet.show<void>(
     context,
     title: 'Select Persona',
     items: [
@@ -165,7 +166,7 @@ void confirmClearChatDialog(
   WidgetRef ref,
   String charId,
 ) {
-  GlazeBottomSheet.show<void>(
+  unawaited(GlazeBottomSheet.show<void>(
     context,
     title: 'Clear Chat',
     bigInfo: const BottomSheetBigInfo(
@@ -179,7 +180,7 @@ void confirmClearChatDialog(
         centered: true,
         onTap: () {
           Navigator.pop(context);
-          ref.read(chatProvider(charId).notifier).clearChat();
+          unawaited(ref.read(chatProvider(charId).notifier).clearChat());
         },
       ),
       BottomSheetItem(
@@ -188,5 +189,5 @@ void confirmClearChatDialog(
         onTap: () => Navigator.pop(context),
       ),
     ],
-  );
+  ));
 }

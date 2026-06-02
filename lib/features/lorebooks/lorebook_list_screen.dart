@@ -162,7 +162,7 @@ class LorebookListScreen extends ConsumerWidget {
           context,
           'Imported "${importResult.lorebook.name}" (${importResult.entryCount} entries)',
         );
-        Navigator.of(context).push(
+        await Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) =>
                 LorebookEditorScreen(lorebookId: importResult.lorebook.id),

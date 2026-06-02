@@ -43,14 +43,13 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
 
   @override
   Future<List<ChatSessionInfo>> build() async {
-    _sub?.cancel();
     final chatRepo = ref.read(chatRepoProvider);
     final charRepo = ref.read(characterRepoProvider);
-
+    await _sub?.cancel();
     _sub = chatRepo.watchAllSessionMetadata().listen((allMeta) {
       _updateFromMetadata(allMeta, charRepo);
     });
-    ref.onDispose(() => _sub?.cancel());
+    ref.onDispose(() => unawaited(_sub?.cancel()));
 
     final allMeta = await chatRepo.getAllSessionMetadata();
     return _buildFromMetadata(allMeta, charRepo);

@@ -101,7 +101,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         'talkativeness': char.extensions['talkativeness'] ?? 1.0,
       };
       setState(() => _loading = false);
-      _loadLorebookNames();
+      unawaited(_loadLorebookNames());
     } else if (mounted) {
       setState(() => _loading = false);
     }
@@ -143,7 +143,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         _item['avatarPath'] = savedPath;
         _item = Map.from(_item); // Force update
       });
-      _save(_item);
+      unawaited(_save(_item));
     }
   }
 

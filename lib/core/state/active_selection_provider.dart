@@ -52,7 +52,7 @@ Future<void> loadActiveSelections(WidgetRef ref) async {
           PresetConnections.fromJson(jsonDecode(prConnJson) as Map<String, dynamic>);
     } catch (_) {}
   }
-  ref.read(memoryGlobalSettingsProvider.notifier).load();
+  await ref.read(memoryGlobalSettingsProvider.notifier).load();
 }
 
 Future<void> setActivePreset(WidgetRef ref, String? id) async {

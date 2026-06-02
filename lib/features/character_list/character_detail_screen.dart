@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -203,7 +204,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
     if (!context.mounted) return;
 
     final rootNav = Navigator.of(context, rootNavigator: true);
-    GlazeBottomSheet.show<void>(
+    unawaited(GlazeBottomSheet.show<void>(
       context,
       title: 'action_delete_char'.tr(),
       bigInfo: BottomSheetBigInfo(
@@ -227,14 +228,14 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
           onTap: () => rootNav.pop(),
         ),
       ],
-    );
+    ));
   }
 
   Future<void> _openChat(BuildContext context, String cId) async {
     final sessions = await ref.read(chatSessionOpsProvider.notifier).getSessionsByCharacter(cId);
     if (!context.mounted) return;
 
-    GlazeBottomSheet.show<void>(
+    await GlazeBottomSheet.show<void>(
       context,
       title: 'btn_open_chat'.tr(),
       items: [

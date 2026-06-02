@@ -162,7 +162,7 @@ class _PresetConnectionsSheetState
     );
 
     if (selected != null) {
-      setPresetConnection(ref, 'character', selected.id as String, widget.presetId);
+      await setPresetConnection(ref, 'character', selected.id as String, widget.presetId);
     }
   }
 
@@ -198,7 +198,7 @@ class _PresetConnectionsSheetState
     );
 
     if (selected != null) {
-      setPresetConnection(ref, 'chat', selected.id, widget.presetId);
+      await setPresetConnection(ref, 'chat', selected.id, widget.presetId);
     }
   }
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -114,7 +116,7 @@ class _SummarySheetState extends ConsumerState<SummarySheet> {
     final chatApi = ref.read(activeApiConfigProvider);
     if (chatApi == null || chatApi.mode == 'embedding') {
       if (mounted) {
-        GlazeBottomSheet.show<void>(
+        await GlazeBottomSheet.show<void>(
           context,
           title: 'Summary',
           bigInfo: const BottomSheetBigInfo(
@@ -141,7 +143,7 @@ class _SummarySheetState extends ConsumerState<SummarySheet> {
       setState(() {
         _localItem = Map.from(_localItem)..['content'] = summary;
       });
-      _performSave(_localItem);
+      unawaited(_performSave(_localItem));
     } catch (e) {
       if (!mounted) return;
       GlazeToast.error(context, 'Summary Failed', e);

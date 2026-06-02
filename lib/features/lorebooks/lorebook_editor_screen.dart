@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:easy_localization/easy_localization.dart';
@@ -126,7 +128,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     );
     if (entry != null) {
       setState(() => _entries.add(entry));
-      _save();
+      unawaited(_save());
     }
   }
 
@@ -141,7 +143,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     );
     if (entry != null) {
       setState(() => _entries[index] = entry);
-      _save();
+      unawaited(_save());
     }
   }
 
@@ -197,7 +199,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
             _startCooldownTimer();
           }
         });
-        _loadEmbeddingStatuses();
+        await _loadEmbeddingStatuses();
         final statusParts = [
           'index_done'.tr(namedArgs: {'count': '${result.indexed}'}),
           if (result.skipped > 0) 'index_skipped'.tr(namedArgs: {'skipped': '${result.skipped}'}),
@@ -215,7 +217,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           _isIndexing = false;
           _indexStatus = '';
         });
-        _loadEmbeddingStatuses();
+        await _loadEmbeddingStatuses();
         GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
       }
     }
@@ -256,7 +258,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
             _startCooldownTimer();
           }
         });
-        _loadEmbeddingStatuses();
+        await _loadEmbeddingStatuses();
         final statusParts = [
           'index_done'.tr(namedArgs: {'count': '${result.indexed}'}),
           if (result.skipped > 0) 'index_skipped'.tr(namedArgs: {'skipped': '${result.skipped}'}),
@@ -271,7 +273,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           _isIndexing = false;
           _indexStatus = '';
         });
-        _loadEmbeddingStatuses();
+        await _loadEmbeddingStatuses();
         GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
       }
     }
@@ -343,7 +345,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
             _startCooldownTimer();
           }
         });
-        _loadEmbeddingStatuses();
+        await _loadEmbeddingStatuses();
         final statusParts = [
           'index_done'.tr(namedArgs: {'count': '${result.indexed}'}),
           if (result.failed > 0) 'index_failed'.tr(namedArgs: {'failed': '${result.failed}'}),
@@ -354,7 +356,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     } catch (e) {
       if (mounted) {
         setState(() { _isIndexing = false; _indexStatus = ''; });
-        _loadEmbeddingStatuses();
+        await _loadEmbeddingStatuses();
         GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
       }
     }
@@ -397,7 +399,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     if (confirmed != true) return;
 
     await ref.read(embeddingRepoProvider).deleteBySourceId(widget.lorebookId);
-    _loadEmbeddingStatuses();
+    await _loadEmbeddingStatuses();
     if (mounted) GlazeToast.show(context, 'action_delete_indexes'.tr());
   }
 
@@ -717,7 +719,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                                       result['settings'] as Map<String, dynamic>);
                                 }
                               });
-                              _save();
+                              unawaited(_save());
                             }
                           },
                         ),

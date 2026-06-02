@@ -83,7 +83,7 @@ class GlobalRegexNotifier extends AsyncNotifier<List<PresetRegex>> {
     try {
       final list = jsonDecode(raw) as List;
       final result = list.map((e) => PresetRegex.fromJson(normalizeJsGlobalRegex(e as Map<String, dynamic>))).toList();
-      _persist(result);
+      await _persist(result);
       return result;
     } catch (_) {
       return [];
