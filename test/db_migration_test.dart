@@ -63,14 +63,14 @@ void main() {
       expect(names, contains('picks_hash'));
     });
 
-    test('19 after import', () async {
+    test('20 after import', () async {
       final importer = JsBackupImporter(db, imageStorage);
       await importer.import(_minimalBackup(), onProgress: (_) {});
 
       final result = await db.customSelect('PRAGMA user_version').get();
       final version = result.first.read<int>('user_version');
 
-      expect(version, 19);
+      expect(version, 20);
     });
   });
 }

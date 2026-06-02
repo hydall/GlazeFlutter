@@ -292,7 +292,7 @@ class _DropdownField<T> extends StatelessWidget {
         Flexible(
           flex: 2,
           child: DropdownButtonFormField<T>(
-            value: value,
+            initialValue: value,
             items: items,
             isExpanded: true,
             onChanged: (v) { if (v != null) onChanged(v); },

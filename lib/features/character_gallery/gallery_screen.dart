@@ -160,7 +160,7 @@ class _GalleryTile extends ConsumerWidget {
             Image.file(
               File(entry.imagePath),
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
+              errorBuilder: (_, _, _) => Container(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: Icon(Icons.broken_image,
                     color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -190,7 +190,7 @@ class _GalleryTile extends ConsumerWidget {
   }
 
   void _showActions(BuildContext context, WidgetRef ref) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'avatar'.tr(),
       items: [
@@ -293,13 +293,13 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
                 final service =
                     await ref.read(galleryServiceProvider.future);
                 await service.setAsAvatar(entry.characterId, entry.id);
-                if (mounted) {
+                if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text('import_success'.tr())),
                   );
                 }
               } catch (e) {
-                if (mounted) {
+                if (context.mounted) {
                   GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
                 }
               }
@@ -309,7 +309,7 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
             icon: const Icon(Icons.delete),
             tooltip: 'action_delete_msg'.tr(),
             onPressed: () {
-              GlazeBottomSheet.show(
+              GlazeBottomSheet.show<void>(
                 context,
                 title: '${'action_delete_msg'.tr()}?',
                 bigInfo: BottomSheetBigInfo(
@@ -328,9 +328,9 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
                             await ref.read(galleryServiceProvider.future);
                         await service.deleteImage(entry.characterId, entry.id);
                         ref.invalidate(galleryProvider(widget.charId));
-                        if (mounted) Navigator.pop(context);
+                        if (context.mounted) Navigator.pop(context);
                       } catch (e) {
-                        if (mounted) {
+                        if (context.mounted) {
                           GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
                         }
                       }
@@ -360,7 +360,7 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
               child: Image.file(
                 File(e.imagePath),
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => Column(
+                errorBuilder: (_, _, _) => Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Icon(Icons.broken_image, color: Colors.white54, size: 64),

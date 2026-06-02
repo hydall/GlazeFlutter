@@ -69,26 +69,17 @@ class SyncService {
   }
 
   SyncService({
-    required SyncCharacterStore characterRepo,
-    required SyncChatStore chatRepo,
-    required SyncPersonaStore personaRepo,
-    required SyncPresetStore presetRepo,
-    required SyncApiConfigStore apiRepo,
-    required SyncMemoryBookStore memoryBookRepo,
-    required SyncLorebookStore lorebookRepo,
-    required SyncEmbeddingStore embeddingRepo,
-    required SyncImageStore imageStorage,
-    required SyncThemePresetStore themePresetRepo,
-  })  : _characterRepo = characterRepo,
-        _chatRepo = chatRepo,
-        _personaRepo = personaRepo,
-        _presetRepo = presetRepo,
-        _apiRepo = apiRepo,
-        _memoryBookRepo = memoryBookRepo,
-        _lorebookRepo = lorebookRepo,
-        _embeddingRepo = embeddingRepo,
-        _imageStorage = imageStorage,
-        _themePresetRepo = themePresetRepo;
+    required this._characterRepo,
+    required this._chatRepo,
+    required this._personaRepo,
+    required this._presetRepo,
+    required this._apiRepo,
+    required this._memoryBookRepo,
+    required this._lorebookRepo,
+    required this._embeddingRepo,
+    required this._imageStorage,
+    required this._themePresetRepo,
+  });
 
   CloudAdapter get _adapter {
     switch (_provider) {

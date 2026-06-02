@@ -99,7 +99,7 @@ class CatalogControls extends StatelessWidget {
         const Spacer(),
         _FilterIconButton(
           count: _activeFilterCount(),
-          onTap: () => showModalBottomSheet(
+          onTap: () => showModalBottomSheet<void>(
             context: context,
             isScrollControlled: true,
             useRootNavigator: true,
@@ -140,7 +140,7 @@ class CatalogControls extends StatelessWidget {
     required List<_PickerItem> items,
     required ValueChanged<dynamic> onSelect,
   }) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: title,
       items: items

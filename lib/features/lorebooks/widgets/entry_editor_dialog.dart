@@ -102,6 +102,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
   Future<void> _indexEntry() async {
     if (widget.entry?.id == null || widget.lorebookId == null) return;
     await ref.read(apiListProvider.future);
+    if (!mounted) return;
     final config = ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
       GlazeToast.show(

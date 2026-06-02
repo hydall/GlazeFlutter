@@ -47,7 +47,7 @@ class MenuScreen extends ConsumerWidget {
                     MenuItem(
                       icon: Icons.backup_outlined,
                       label: 'Backups',
-                      onTap: () => showModalBottomSheet(
+                      onTap: () => showModalBottomSheet<void>(
                         context: context,
                         useRootNavigator: true,
                         useSafeArea: true,
@@ -60,7 +60,7 @@ class MenuScreen extends ConsumerWidget {
                     MenuItem(
                       icon: Icons.sync_rounded,
                       label: 'Cloud Sync',
-                      onTap: () => showModalBottomSheet(
+                      onTap: () => showModalBottomSheet<void>(
                         context: context,
                         useRootNavigator: true,
                         useSafeArea: true,

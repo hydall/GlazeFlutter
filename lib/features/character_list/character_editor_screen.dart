@@ -101,7 +101,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         'talkativeness': char.extensions['talkativeness'] ?? 1.0,
       };
       setState(() => _loading = false);
-      _loadLorebookNames();
+      unawaited(_loadLorebookNames());
     } else if (mounted) {
       setState(() => _loading = false);
     }
@@ -143,7 +143,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         _item['avatarPath'] = savedPath;
         _item = Map.from(_item); // Force update
       });
-      _save(_item);
+      unawaited(_save(_item));
     }
   }
 
@@ -279,7 +279,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
     if (index < 0 || index >= greetings.length) return;
 
     final ctrl = TextEditingController(text: greetings[index]);
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
@@ -333,14 +333,14 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         'mes_example' => 'label_mes_example'.tr(),
         'system_prompt' => 'label_char_prompt'.tr().replaceAll(RegExp(r'Character|персонажа', caseSensitive: false), 'role_system'.tr()),
         'post_history_instructions' => "${'block_chat_history'.tr()} ${'guidance_placeholder'.tr().replaceAll('...', '')}",
-        'creator_notes' => 'onboarding_placeholder_desc'.tr().split(' ')[0] + ' ' + 'label_description'.tr(),
-        'depth_prompt' => 'label_depth'.tr() + ' ' + 'placeholder_prompt_text'.tr().replaceAll('...', ''),
+        'creator_notes' => '${'onboarding_placeholder_desc'.tr().split(' ')[0]} ${'label_description'.tr()}',
+        'depth_prompt' => '${'label_depth'.tr()} ${'placeholder_prompt_text'.tr().replaceAll('...', '')}',
         _ => field.replaceAll('_', ' ').replaceFirstMapped(RegExp(r'[a-z]'), (m) => m.group(0)!.toUpperCase()),
       };
 
   void _editExpandableField(String field) {
     final ctrl = TextEditingController(text: (_item[field] as String?) ?? '');
-    showDialog(
+    showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,

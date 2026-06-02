@@ -101,7 +101,7 @@ Map<String, dynamic> normalizeJsMessage(
   };
 }
 
-List<TriggeredEntry> parseTriggeredEntries(List raw) {
+List<TriggeredEntry> parseTriggeredEntries(List<dynamic> raw) {
   return raw.map((item) {
     if (item is Map<String, dynamic>) {
       return TriggeredEntry(

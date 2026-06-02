@@ -200,7 +200,7 @@ class CatalogGrid extends ConsumerWidget {
     CatalogItem item,
     CatalogProvider provider,
   ) {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       useRootNavigator: true,

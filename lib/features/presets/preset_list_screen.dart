@@ -185,7 +185,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
   }
 
   void _showAddSheet(BuildContext context, WidgetRef ref) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Add Preset',
       items: [
@@ -231,21 +231,21 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
       } else if (picked.path != null && picked.path!.isNotEmpty) {
         jsonString = await File(picked.path!).readAsString();
       } else {
-        if (mounted) GlazeToast.show(ctx, 'Cannot read file');
+        if (ctx.mounted) GlazeToast.show(ctx, 'Cannot read file');
         return;
       }
 
       final json = jsonDecode(jsonString) as Map<String, dynamic>;
       final preset = parseSillyTavernPreset(json, picked.name);
-      ref.read(presetListProvider.notifier).add(preset);
-      if (mounted) {
+      await ref.read(presetListProvider.notifier).add(preset);
+      if (ctx.mounted) {
         GlazeToast.show(
           ctx,
           'Imported "${preset.name}" (${preset.blocks.length} blocks)',
         );
       }
     } catch (e) {
-      if (mounted) GlazeToast.error(ctx, 'Import failed: ', e);
+      if (ctx.mounted) GlazeToast.error(ctx, 'Import failed: ', e);
     }
   }
 }
@@ -397,7 +397,7 @@ class _PsCard extends ConsumerWidget {
   }
 
   void _showContextMenu(BuildContext context) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: preset.name,
       items: [

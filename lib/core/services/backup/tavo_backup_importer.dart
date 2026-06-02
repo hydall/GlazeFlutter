@@ -92,7 +92,7 @@ class TavoBackupImporter {
     );
     final mdbContent = mdbFile.content;
     final tavoData = parseTavoLmdb(
-        mdbContent is Uint8List ? mdbContent : Uint8List.fromList(mdbContent));
+        mdbContent);
 
     final charEntityIdToGlazeId = <int, String>{};
 

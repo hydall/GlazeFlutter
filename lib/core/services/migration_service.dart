@@ -44,18 +44,13 @@ class MigrationService {
   final ImageStorageService _imageStorage;
 
   MigrationService({
-    required CharacterRepo charRepo,
-    required ChatRepo chatRepo,
-    required PersonaRepo personaRepo,
-    required PresetRepo presetRepo,
-    required ApiConfigRepo apiRepo,
-    required ImageStorageService imageStorage,
-  })  : _charRepo = charRepo,
-        _chatRepo = chatRepo,
-        _personaRepo = personaRepo,
-        _presetRepo = presetRepo,
-        _apiRepo = apiRepo,
-        _imageStorage = imageStorage;
+    required this._charRepo,
+    required this._chatRepo,
+    required this._personaRepo,
+    required this._presetRepo,
+    required this._apiRepo,
+    required this._imageStorage,
+  });
 
   Future<MigrationResult> importGlzBackup(String filePath) async {
     final bytes = await File(filePath).readAsBytes();
@@ -276,16 +271,16 @@ class MigrationService {
       try {
         final parsed = jsonDecode(personaConnsRaw) as Map<String, dynamic>;
         final conns = PersonaConnections.fromJson({
-          'character': parsed['character'] ?? {},
-          'chat': parsed['chat'] ?? {},
+          'character': parsed['character'] ?? <String, dynamic>{},
+          'chat': parsed['chat'] ?? <String, dynamic>{},
         });
         await prefs.setString('personaConnections', jsonEncode(conns.toJson()));
       } catch (_) {}
     } else if (personaConnsRaw is Map) {
       try {
         final conns = PersonaConnections.fromJson({
-          'character': personaConnsRaw['character'] ?? {},
-          'chat': personaConnsRaw['chat'] ?? {},
+          'character': personaConnsRaw['character'] ?? <String, dynamic>{},
+          'chat': personaConnsRaw['chat'] ?? <String, dynamic>{},
         });
         await prefs.setString('personaConnections', jsonEncode(conns.toJson()));
       } catch (_) {}
@@ -450,7 +445,7 @@ class MigrationService {
   }
 }
 
-extension on List {
+extension on List<dynamic> {
   dynamic safeGet(int index) =>
       index >= 0 && index < length ? this[index] : null;
 }

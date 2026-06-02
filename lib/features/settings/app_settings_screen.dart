@@ -232,7 +232,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
 
   void _showThemeModePicker(BuildContext context, WidgetRef ref) {
     final current = ref.read(themeProvider).mode;
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'theme_title'.tr(),
       items: ThemeMode.values
@@ -253,7 +253,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   }
 
   void _showLanguagePicker(BuildContext context, WidgetRef ref, AppSettings s) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'menu_language'.tr(),
       items: [

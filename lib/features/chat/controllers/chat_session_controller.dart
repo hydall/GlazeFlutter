@@ -14,18 +14,13 @@ class ChatSessionController {
   final ChatSession Function(ChatSession) _fixupSwipesWithImageResults;
 
   ChatSessionController({
-    required Ref ref,
-    required String charId,
-    required void Function(AsyncValue<ChatState>) setState,
-    required AsyncValue<ChatState> Function() getState,
-    required void Function() invalidateHistory,
-    required ChatSession Function(ChatSession) fixupSwipesWithImageResults,
-  })  : _ref = ref,
-        _charId = charId,
-        _setState = setState,
-        _getState = getState,
-        _invalidateHistory = invalidateHistory,
-        _fixupSwipesWithImageResults = fixupSwipesWithImageResults;
+    required this._ref,
+    required this._charId,
+    required this._setState,
+    required this._getState,
+    required this._invalidateHistory,
+    required this._fixupSwipesWithImageResults,
+  });
 
   ChatSessionService get _sessionSvc => ChatSessionService(_ref);
 

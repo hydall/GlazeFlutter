@@ -11,7 +11,7 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 
 void showContextInfoSheet(BuildContext context, WidgetRef ref, String charId) {
-  GlazeBottomSheet.show(context, child: _ContextInfoPanel(charId: charId));
+  GlazeBottomSheet.show<void>(context, child: _ContextInfoPanel(charId: charId));
 }
 
 class _ContextInfoPanel extends ConsumerStatefulWidget {
@@ -43,6 +43,7 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
 
     final summaryService = ref.read(summaryServiceProvider);
     final summary = await summaryService.getSummary(session.id);
+    if (!mounted) return;
     sources.add(_SourceItem(
       icon: Icons.summarize,
       label: 'magic_summary'.tr(),
@@ -58,6 +59,7 @@ class _ContextInfoPanelState extends ConsumerState<_ContextInfoPanel> {
       historyText: historyText,
       messageCount: session.messages.length,
     );
+    if (!mounted) return;
     sources.add(_SourceItem(
       icon: Icons.auto_stories,
       label: 'magic_memory_books'.tr(),

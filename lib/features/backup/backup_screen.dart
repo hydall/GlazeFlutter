@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app.dart';
 import '../../core/services/backup/backup_cancel.dart';
-import '../../core/services/backup_service.dart';
 import '../../core/services/onboarding_service.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_toast.dart';
@@ -72,7 +71,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   ...previousChildren,
-                  if (currentChild != null) currentChild,
+                  ?currentChild,
                 ],
               );
             },

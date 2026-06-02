@@ -135,6 +135,7 @@ class LorebookListScreen extends ConsumerWidget {
       updatedAt: currentTimestampSeconds(),
     );
     ref.read(lorebooksProvider.notifier).addLorebook(lorebook).then((_) {
+      if (!context.mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute<void>(builder: (_) => LorebookEditorScreen(lorebookId: id)),
       );
@@ -162,7 +163,7 @@ class LorebookListScreen extends ConsumerWidget {
           context,
           'Imported "${importResult.lorebook.name}" (${importResult.entryCount} entries)',
         );
-        Navigator.of(context).push(
+        await Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) =>
                 LorebookEditorScreen(lorebookId: importResult.lorebook.id),
@@ -177,7 +178,7 @@ class LorebookListScreen extends ConsumerWidget {
   }
 
   void _deleteLorebook(BuildContext context, WidgetRef ref, Lorebook lb) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Delete Lorebook',
       bigInfo: BottomSheetBigInfo(

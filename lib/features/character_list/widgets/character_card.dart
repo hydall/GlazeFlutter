@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// Pinned via dependency_overrides to keep Windows builds green; see docs/BUILD_NOTES.md.
+// ignore: depend_on_referenced_packages
 import 'package:path_provider/path_provider.dart';
 import 'package:go_router/go_router.dart';
 
@@ -275,7 +277,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   }
 
   void _showActions(BuildContext context, WidgetRef ref) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       items: [
         BottomSheetItem(
@@ -318,7 +320,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   }
 
   void _showExportOptions(BuildContext context) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Export ${character.name}',
       items: [
@@ -467,7 +469,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
 
 
   void _confirmDelete(BuildContext context, WidgetRef ref) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Delete Character',
       bigInfo: BottomSheetBigInfo(

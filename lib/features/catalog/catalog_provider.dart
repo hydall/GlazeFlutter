@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -94,7 +95,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       activeProvider: provider,
       filters: state.filters.copyWith(sort: savedSort, tagIds: savedFilters.tagIds, tagNames: savedFilters.tagNames),
     );
-    search(reset: true);
+    await search(reset: true);
   }
 
   CatalogFilters _loadFilters(SharedPreferences prefs) {
@@ -174,7 +175,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     try {
       final provider = state.activeProvider;
       if (provider == CatalogProvider.janitor || provider == CatalogProvider.janny) {
-        fetchJanitorTags().catchError((_) => <CatalogTag>[]);
+        unawaited(fetchJanitorTags().catchError((_) => <CatalogTag>[]));
       }
 
       final result = await _fetchFromProvider(provider);

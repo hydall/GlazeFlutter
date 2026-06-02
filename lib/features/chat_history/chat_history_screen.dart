@@ -307,7 +307,7 @@ class _ChatHistoryGroupSectionState extends State<_ChatHistoryGroupSection>
             opacity: _fadeAnimation,
             child: SizeTransition(
               sizeFactor: _sizeAnimation,
-              axisAlignment: -1,
+              alignment: AlignmentDirectional.topStart,
               child: SlideTransition(
                 position: _slideAnimation,
                 child: Padding(
@@ -603,7 +603,7 @@ class _SessionTile extends ConsumerWidget {
     final currentName = info.sessionName?.isNotEmpty == true
         ? info.sessionName!
         : 'Session #${info.sessionIndex + 1}';
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Rename Session',
       input: BottomSheetInput(
@@ -621,7 +621,7 @@ class _SessionTile extends ConsumerWidget {
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Delete Chat',
       bigInfo: BottomSheetBigInfo(

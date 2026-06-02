@@ -443,7 +443,7 @@ class _ScopeChip extends StatelessWidget {
 }
 
 void showLorebookConnections(BuildContext context, String lorebookId) {
-  GlazeBottomSheet.show(
+  GlazeBottomSheet.show<void>(
     context,
     child: LorebookConnectionsSheet(lorebookId: lorebookId),
   );

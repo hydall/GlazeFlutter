@@ -140,7 +140,7 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
 }
 
 void showAuthorsNoteSheet(BuildContext context, String charId) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,

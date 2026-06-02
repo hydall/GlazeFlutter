@@ -736,7 +736,7 @@ class _SegmentedToggle extends StatelessWidget {
 }
 
 void showPromptPreviewScreen(BuildContext context, String charId) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,

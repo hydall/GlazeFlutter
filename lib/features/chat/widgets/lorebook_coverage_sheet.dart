@@ -18,7 +18,7 @@ void showLorebookCoverageSheet(
   WidgetRef ref,
   String charId,
 ) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,

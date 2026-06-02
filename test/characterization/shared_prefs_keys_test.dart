@@ -122,8 +122,8 @@ void main() {
       });
       final prefs = await SharedPreferences.getInstance();
       final decoded = jsonDecode(prefs.getString('personaConnections')!) as Map<String, dynamic>;
-      expect(decoded['character'], isA<Map>());
-      expect(decoded['chat'], isA<Map>());
+      expect(decoded['character'], isA<Map<String, dynamic>>());
+      expect(decoded['chat'], isA<Map<String, dynamic>>());
     });
   });
 

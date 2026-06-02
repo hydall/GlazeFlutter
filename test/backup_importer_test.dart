@@ -877,7 +877,7 @@ void main() {
       final fixturePath =
           '${Directory.systemTemp.path}/st_smoke_${DateTime.now().microsecondsSinceEpoch}.zip';
       final bytes = ZipEncoder().encode(archive);
-      File(fixturePath).writeAsBytesSync(bytes!);
+      File(fixturePath).writeAsBytesSync(bytes);
 
       try {
         final importer = StBackupImporter(db, imageStorage);

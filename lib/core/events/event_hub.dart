@@ -4,6 +4,9 @@ class EventHub {
   static final Map<String, StreamController<Event>> _controllers = {};
 
   static void publish(String event, [dynamic data]) {
+    // Controllers are managed via [dispose]/[closeAll] — a static cache
+    // pattern the analyzer can't verify, hence the ignore.
+    // ignore: close_sinks
     final controller = _controllers[event];
     if (controller != null && !controller.isClosed) {
       controller.add(Event(event, data));

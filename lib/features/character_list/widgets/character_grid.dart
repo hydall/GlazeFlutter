@@ -323,7 +323,7 @@ class _OurPicksCardState extends State<_OurPicksCard>
                     right: 8,
                     child: _OurPicksCardMenuButton(
                       onTap: () {
-                        GlazeBottomSheet.show(
+                        GlazeBottomSheet.show<void>(
                           context,
                           title: 'Our Picks',
                           items: [
@@ -521,7 +521,7 @@ class _SortTypePill extends StatelessWidget {
           },
         );
 
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Sort by',
       items: [

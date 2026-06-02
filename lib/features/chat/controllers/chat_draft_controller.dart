@@ -9,12 +9,10 @@ class ChatDraftController {
   final AsyncValue<ChatState> Function() _getState;
 
   ChatDraftController({
-    required Ref ref,
-    required void Function(AsyncValue<ChatState>) setState,
-    required AsyncValue<ChatState> Function() getState,
-  })  : _ref = ref,
-        _setState = setState,
-        _getState = getState;
+    required this._ref,
+    required this._setState,
+    required this._getState,
+  });
 
   Future<void> saveDraft(String draftText) async {
     final current = _getState().value;

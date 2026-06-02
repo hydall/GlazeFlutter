@@ -20,14 +20,11 @@ class ImageGenProcessor {
   final void Function(ChatState) _onStateUpdate;
 
   ImageGenProcessor({
-    required Ref ref,
-    required String charId,
-    CancelToken? cancelToken,
-    required void Function(ChatState) onStateUpdate,
-  })  : _ref = ref,
-        _charId = charId,
-        _cancelToken = cancelToken,
-        _onStateUpdate = onStateUpdate;
+    required this._ref,
+    required this._charId,
+    this._cancelToken,
+    required this._onStateUpdate,
+  });
 
   Future<void> process(ChatState currentState) async {
     final session = currentState.session;

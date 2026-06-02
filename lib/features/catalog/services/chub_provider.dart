@@ -140,7 +140,7 @@ CatalogItem _normalizeNode(Map<String, dynamic> node) {
 }
 
 CharacterData _convertToGlaze(Map<String, dynamic> node) {
-  final def = (node['definition'] ?? {}) as Map<String, dynamic>;
+  final def = (node['definition'] ?? <String, dynamic>{}) as Map<String, dynamic>;
   final fullPath = (node['fullPath'] ?? node['full_path'] ?? '') as String;
   final creator = fullPath.split('/').first;
   final topics = (node['topics'] as List?)?.cast<String>() ?? [];

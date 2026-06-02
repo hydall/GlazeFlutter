@@ -425,7 +425,7 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
-          if (action case final a?) a,
+          ?action,
         ],
       ),
     );

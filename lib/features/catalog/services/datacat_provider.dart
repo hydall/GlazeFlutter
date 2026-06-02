@@ -257,7 +257,7 @@ Future<DownloadedCharacter> datacatGetCharacter(String uuid) async {
     _authHeaders(token),
   );
   final raw = (data['data'] ?? data) as Map<String, dynamic>;
-  final meta = (data['metadata'] ?? {}) as Map<String, dynamic>;
+  final meta = (data['metadata'] ?? <String, dynamic>{}) as Map<String, dynamic>;
   return DownloadedCharacter(
     charData: CharacterData(
       name: (raw['name'] ?? raw['chatName'] ?? raw['chat_name'] ?? 'Unknown') as String,
@@ -340,7 +340,7 @@ Future<String?> datacatGetCharacterAvatar(String uuid) async {
     _authHeaders(token),
   );
   final char = (data['character'] ?? data) as Map<String, dynamic>;
-  final meta = (data['metadata'] ?? {}) as Map<String, dynamic>;
+  final meta = (data['metadata'] ?? <String, dynamic>{}) as Map<String, dynamic>;
   return _resolveAvatarUrl(_pickAvatarSource(char, meta));
 }
 

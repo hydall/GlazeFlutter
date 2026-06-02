@@ -14,16 +14,12 @@ class ChatSwipeController {
   final void Function() _invalidateHistory;
 
   ChatSwipeController({
-    required Ref ref,
-    required String charId,
-    required void Function(AsyncValue<ChatState>) setState,
-    required AsyncValue<ChatState> Function() getState,
-    required void Function() invalidateHistory,
-  })  : _ref = ref,
-        _charId = charId,
-        _setState = setState,
-        _getState = getState,
-        _invalidateHistory = invalidateHistory;
+    required this._ref,
+    required this._charId,
+    required this._setState,
+    required this._getState,
+    required this._invalidateHistory,
+  });
 
   ChatMessageService get _messageSvc => ChatMessageService(_ref);
 

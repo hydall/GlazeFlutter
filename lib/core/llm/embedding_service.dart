@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:collection';
+
 import 'package:dio/dio.dart';
 
 class EmbeddingConfig {
@@ -28,11 +31,54 @@ class EmbeddingChunk {
   const EmbeddingChunk({required this.text, required this.vector});
 }
 
+/// Caches embedding results for a short window so repeat calls during
+/// a single generation (memory + lorebook + macro lookup often share
+/// queries) hit the cache instead of the network. Entries expire after
+/// [ttl] and the cache is bounded by [maxEntries] LRU.
+class _EmbeddingCache {
+  static const Duration ttl = Duration(seconds: 60);
+  static const int maxEntries = 100;
+
+  final LinkedHashMap<String, _Entry> _store = LinkedHashMap();
+
+  String _key(String text, EmbeddingConfig config) =>
+      '${config.endpoint}|${config.model}|${text.hashCode}|$text';
+
+  List<double>? get(String text, EmbeddingConfig config) {
+    final entry = _store[_key(text, config)];
+    if (entry == null) return null;
+    if (DateTime.now().difference(entry.createdAt) > ttl) {
+      _store.remove(_key(text, config));
+      return null;
+    }
+    // Refresh recency: move-to-end on hit (LRU semantics).
+    _store.remove(_key(text, config));
+    _store[_key(text, config)] = entry;
+    return entry.vector;
+  }
+
+  void put(String text, EmbeddingConfig config, List<double> vector) {
+    final key = _key(text, config);
+    _store.remove(key);
+    _store[key] = _Entry(DateTime.now(), vector);
+    while (_store.length > maxEntries) {
+      _store.remove(_store.keys.first);
+    }
+  }
+}
+
+class _Entry {
+  final DateTime createdAt;
+  final List<double> vector;
+  _Entry(this.createdAt, this.vector);
+}
+
 class EmbeddingService {
   final Dio _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 30),
     receiveTimeout: const Duration(seconds: 60),
   ));
+  final _EmbeddingCache _cache = _EmbeddingCache();
 
   Future<List<List<double>>> getEmbeddings(
     List<String> texts,
@@ -120,12 +166,40 @@ class EmbeddingService {
 
     for (int i = 0; i < chunks.length; i += batchSize) {
       final batch = chunks.sublist(i, (i + batchSize).clamp(0, chunks.length));
+
+      // Split the batch into cache hits and misses so we only spend HTTP
+      // budget on the misses, and slot the returned vectors back in the
+      // same positions for the caller.
+      final cached = <int, List<double>>{};
+      final missingIndices = <int>[];
+      for (int j = 0; j < batch.length; j++) {
+        final hit = _cache.get(batch[j], config);
+        if (hit != null) {
+          cached[j] = hit;
+        } else {
+          missingIndices.add(j);
+        }
+      }
+
+      if (missingIndices.isEmpty) {
+        for (int j = 0; j < batch.length; j++) {
+          allVectors.add(cached[j]!);
+        }
+        continue;
+      }
+
+      final missingTexts = [for (final idx in missingIndices) batch[idx]];
       final vectors = await _callEmbeddingApi(
-        batch,
+        missingTexts,
         config,
         cancelToken: cancelToken,
       );
-      allVectors.addAll(vectors);
+      for (int k = 0; k < missingIndices.length; k++) {
+        final originalIdx = missingIndices[k];
+        final vector = vectors[k];
+        _cache.put(batch[originalIdx], config, vector);
+        allVectors.add(vector);
+      }
 
       if (i + batchSize < chunks.length) {
         if (cancelToken?.isCancelled == true) {

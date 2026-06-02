@@ -13,14 +13,11 @@ class ChatImageRecoveryController {
   final AsyncValue<ChatState> Function() _getState;
 
   ChatImageRecoveryController({
-    required Ref ref,
-    required String charId,
-    required void Function(AsyncValue<ChatState>) setState,
-    required AsyncValue<ChatState> Function() getState,
-  })  : _ref = ref,
-        _charId = charId,
-        _setState = setState,
-        _getState = getState;
+    required this._ref,
+    required this._charId,
+    required this._setState,
+    required this._getState,
+  });
 
   // Image recovery methods will be implemented here
   // For now, these are placeholders that delegate to the existing ImageRecoveryService

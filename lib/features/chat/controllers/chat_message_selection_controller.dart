@@ -29,7 +29,7 @@ class ChatMessageSelectionController {
     final notifier = ref.read(chatProvider(charId).notifier);
     for (final id in selectedMessageIds) {
       final idx = messages.indexWhere((m) => m.id == id);
-      if (idx >= 0) notifier.toggleMessageHidden(idx);
+      if (idx >= 0) await notifier.toggleMessageHidden(idx);
     }
     clearSelection();
   }
@@ -42,7 +42,7 @@ class ChatMessageSelectionController {
         .toList()
       ..sort((a, b) => b.compareTo(a));
     for (final idx in indices) {
-      notifier.deleteMessage(idx);
+      await notifier.deleteMessage(idx);
     }
     clearSelection();
   }

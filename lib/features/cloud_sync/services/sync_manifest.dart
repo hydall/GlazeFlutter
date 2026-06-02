@@ -24,24 +24,16 @@ class SyncManifestBuilder implements SyncManifestProvider {
   static const _deletedKey = 'gz_sync_deleted_entries';
 
   SyncManifestBuilder({
-    required SyncCharacterStore characterRepo,
-    required SyncChatStore chatRepo,
-    required SyncPersonaStore personaRepo,
-    required SyncPresetStore presetRepo,
-    required SyncApiConfigStore apiRepo,
-    required SyncMemoryBookStore memoryBookRepo,
-    required SyncLorebookStore lorebookRepo,
-    required SyncThemePresetStore themePresetRepo,
-    SyncImageStore? imageStore,
-  })  : _characterRepo = characterRepo,
-        _chatRepo = chatRepo,
-        _personaRepo = personaRepo,
-        _presetRepo = presetRepo,
-        _apiRepo = apiRepo,
-        _memoryBookRepo = memoryBookRepo,
-        _lorebookRepo = lorebookRepo,
-        _themePresetRepo = themePresetRepo,
-        _imageStore = imageStore;
+    required this._characterRepo,
+    required this._chatRepo,
+    required this._personaRepo,
+    required this._presetRepo,
+    required this._apiRepo,
+    required this._memoryBookRepo,
+    required this._lorebookRepo,
+    required this._themePresetRepo,
+    this._imageStore,
+  });
 
   @override
   Future<String> getDeviceId() async {

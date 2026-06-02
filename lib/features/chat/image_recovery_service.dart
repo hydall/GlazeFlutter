@@ -21,13 +21,12 @@ class ImageRecoveryService {
   final AsyncValue<ChatState> Function() _getState;
 
   ImageRecoveryService({
-    required Ref ref,
-    required String charId,
-    required void Function(CancelToken?) setImgGenCancelToken,
-    required void Function(AsyncValue<ChatState>) setState,
-    required AsyncValue<ChatState> Function() getState,
-  }) : _ref = ref, _charId = charId, _setImgGenCancelToken = setImgGenCancelToken,
-       _setState = setState, _getState = getState;
+    required this._ref,
+    required this._charId,
+    required this._setImgGenCancelToken,
+    required this._setState,
+    required this._getState,
+  });
 
   static ChatSession fixupSwipesWithImageResults(ChatSession session) {
     bool changed = false;

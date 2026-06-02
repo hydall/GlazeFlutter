@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
+// Pinned via dependency_overrides to keep Windows builds green; see docs/BUILD_NOTES.md.
+// ignore: depend_on_referenced_packages
 import 'package:path_provider/path_provider.dart';
 
 Future<String> getAppDataDir() async {

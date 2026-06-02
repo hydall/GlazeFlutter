@@ -19,7 +19,7 @@ bool glazeCheckMatch(
   if (wholeWords == WholeWordMode.glaze) {
     final escaped = RegExp.escape(key);
     final beforeBoundary = '(?:^|$glazeBoundaries)';
-    final afterBoundary = r'(?:$|' + glazeBoundaries + ')';
+    final afterBoundary = r'(?:$|' + glazeBoundaries + r')';
     final pattern = beforeBoundary + escaped + afterBoundary;
     final regex = _tryCreateRegex(pattern, caseSensitive);
     if (regex != null) return regex.hasMatch(text);

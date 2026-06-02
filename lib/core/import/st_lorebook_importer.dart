@@ -14,8 +14,8 @@ class STLorebookImportResult {
 LorebookEntry _convertSTEntry(dynamic rawEntry, int index) {
   final e = rawEntry as Map<String, dynamic>;
 
-  final rawKeys = e['keys'] ?? e['key'] ?? [];
-  final rawSecondary = e['secondary_keys'] ?? e['keysecondary'] ?? [];
+  final rawKeys = e['keys'] ?? e['key'] ?? <dynamic>[];
+  final rawSecondary = e['secondary_keys'] ?? e['keysecondary'] ?? <dynamic>[];
 
   List<String> parseKeys(dynamic v) {
     if (v is List) return v.map((k) => k.toString().trim()).where((k) => k.isNotEmpty).toList();
@@ -96,7 +96,7 @@ Future<STLorebookImportResult> importSTLorebookFromFile(String filePath, {String
 }
 
 STLorebookImportResult importSTLorebook(Map<String, dynamic> json, {String nameOverride = 'Imported'}) {
-  final entriesRaw = json['entries'] ?? [];
+  final entriesRaw = json['entries'] ?? <dynamic>[];
 
   List<dynamic> normalizedEntries;
   if (entriesRaw is List) {

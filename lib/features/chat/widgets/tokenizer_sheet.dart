@@ -372,7 +372,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
 }
 
 void showTokenizerSheet(BuildContext context, String charId) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,

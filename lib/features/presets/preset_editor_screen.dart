@@ -322,6 +322,8 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
       padding: EdgeInsets.zero,
       buildDefaultDragHandles: false,
       itemCount: _blocks.length,
+      // TODO: migrate to onReorderItem (newIndex semantics differ — see Flutter changelog).
+      // ignore: deprecated_member_use
       onReorder: (oldIndex, newIndex) {
         setState(() {
           if (newIndex > oldIndex) newIndex -= 1;
@@ -479,7 +481,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
 
 
   void _showRenameDialog() {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Rename Preset',
       input: BottomSheetInput(
@@ -496,7 +498,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   }
 
   void _showAuthorDialog() {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Set Author',
       input: BottomSheetInput(
@@ -513,7 +515,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   }
 
   void _showOptionsMenu() {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Options',
       items: [

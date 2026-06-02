@@ -100,7 +100,7 @@ class ExtBlocksSettingsSheet extends ConsumerWidget {
       createdAt: DateTime.now().millisecondsSinceEpoch,
     );
     await ref.read(extensionPresetsProvider.notifier).add(preset);
-    ref.read(extensionsSettingsProvider.notifier).setActivePresetId(preset.id);
+    await ref.read(extensionsSettingsProvider.notifier).setActivePresetId(preset.id);
   }
 
   void _showPresetSelector(

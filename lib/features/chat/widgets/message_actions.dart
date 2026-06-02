@@ -101,6 +101,6 @@ void showMessageContextMenu({
     ],
   ];
 
-  GlazeBottomSheet.show(context, items: items);
+  GlazeBottomSheet.show<void>(context, items: items);
 }
 

@@ -165,7 +165,7 @@ class _PersonaTile extends ConsumerWidget {
               icon: const Icon(Icons.more_vert, size: 20),
               tooltip: 'header_more'.tr(),
               onPressed: () {
-                GlazeBottomSheet.show(
+                GlazeBottomSheet.show<void>(
                   context,
                   title: "${'tab_personas'.tr()} ${'header_more'.tr()}",
                   items: [

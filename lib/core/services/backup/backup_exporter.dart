@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
@@ -123,10 +124,10 @@ import '../image_storage_service.dart';class BackupExporter {
           final out = ext.isEmpty
               ? 'avatars/$subfolder/$id'
               : 'avatars/$subfolder/$id.$ext';
-          encoder.addFile(entity, out);
+          await encoder.addFile(entity, out);
         } else {
           // Unknown id — keep the flat path for forward-compat.
-          encoder.addFile(entity, inArchive);
+          await encoder.addFile(entity, inArchive);
         }
       }
     }
@@ -139,7 +140,7 @@ import '../image_storage_service.dart';class BackupExporter {
         final charId = p.basename(charDir.path);
         await for (final f in charDir.list(followLinks: false)) {
           if (f is! File) continue;
-          encoder.addFile(f, 'gallery/$charId/${p.basename(f.path)}');
+          await encoder.addFile(f, 'gallery/$charId/${p.basename(f.path)}');
         }
       }
     }

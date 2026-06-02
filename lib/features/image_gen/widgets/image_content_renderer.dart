@@ -95,7 +95,7 @@ class ImageContentRenderer extends StatelessWidget {
   }
 
   void _showImageDialog(BuildContext context, File file) {
-    showDialog(
+    showDialog<void>(
       context: context,
       barrierColor: Colors.black87,
       builder: (_) => Dialog(

@@ -18,7 +18,7 @@ import '../../lorebooks/lorebook_connections_sheet.dart';
 ///
 /// Mirrors JS LorebookSheet.vue list/entries views.
 void showLorebookQuickSheet(BuildContext context, WidgetRef ref, String charId) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
     useRootNavigator: true,
@@ -123,7 +123,7 @@ class _LorebookQuickSheetState extends ConsumerState<_LorebookQuickSheet> {
           onGlobalExpandToggle: () => setState(() => _globalExpanded = !_globalExpanded),
           onSelect: _selectLorebook,
           onOpenConnections: (lb) {
-            showModalBottomSheet(
+            showModalBottomSheet<void>(
               context: context,
               useRootNavigator: true,
               useSafeArea: true,

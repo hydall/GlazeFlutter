@@ -110,7 +110,7 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
     },
     routes: [
       StatefulShellRoute(
-        builder: (_, __, navigationShell) =>
+        builder: (_, _, navigationShell) =>
             ShellScreen(navigationShell: navigationShell),
         navigatorContainerBuilder: (_, navigationShell, children) =>
             FadeBranchContainer(

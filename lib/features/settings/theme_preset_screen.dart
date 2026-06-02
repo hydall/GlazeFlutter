@@ -232,7 +232,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
   }
 
   void _renamePreset(ThemePreset preset) {
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'Rename Theme',
       input: BottomSheetInput(

@@ -32,7 +32,7 @@ class JsMemoryImporter with TypeConverters {
   }
 
   Future<void> _importMemoryBooksFromMap(
-      String charId, Map memoryBooksRaw) async {
+      String charId, Map<dynamic, dynamic> memoryBooksRaw) async {
     for (final mbEntry in memoryBooksRaw.entries) {
       final mbSessionIdx = mbEntry.key;
       final mbData = mbEntry.value;
@@ -41,7 +41,7 @@ class JsMemoryImporter with TypeConverters {
       final mbFullSessionId = '${charId}_$mbSessionIdx';
       final rawEntries = mbData['entries'];
       final rawSettings =
-          mbData['settings'] is Map ? mbData['settings'] as Map : {};
+          mbData['settings'] is Map ? mbData['settings'] as Map : <String, dynamic>{};
 
       if (rawEntries is List) {
         await _importMemoryBookEntries(
@@ -59,9 +59,9 @@ class JsMemoryImporter with TypeConverters {
   Future<void> _importMemoryBookEntries(
       String charId,
       String sessionId,
-      List rawEntries,
-      Map rawSettings,
-      Map? mbData) async {
+      List<dynamic> rawEntries,
+      Map<dynamic, dynamic> rawSettings,
+      Map<dynamic, dynamic>? mbData) async {
     final entries = <Map<String, dynamic>>[];
     for (final e in rawEntries) {
       if (e is! Map) continue;
@@ -120,7 +120,7 @@ class JsMemoryImporter with TypeConverters {
         );
   }
 
-  Map<String, dynamic> _parseMemorySettings(Map rawSettings) {
+  Map<String, dynamic> _parseMemorySettings(Map<dynamic, dynamic> rawSettings) {
     return <String, dynamic>{
       'enabled': rawSettings['enabled'] == true,
       'autoCreateEnabled': rawSettings['autoCreateEnabled'] == true,
@@ -158,7 +158,7 @@ class JsMemoryImporter with TypeConverters {
   }
 
   Future<void> _importMemoryDraftsForSession(
-      String sessionId, List rawDrafts) async {
+      String sessionId, List<dynamic> rawDrafts) async {
     final drafts = <Map<String, dynamic>>[];
     for (final d in rawDrafts) {
       if (d is! Map) continue;
@@ -207,7 +207,7 @@ class JsMemoryImporter with TypeConverters {
     }
   }
 
-  Map<String, dynamic>? _convertMessageRange(Map raw) {
+  Map<String, dynamic>? _convertMessageRange(Map<dynamic, dynamic> raw) {
     if (raw.containsKey('start') && raw.containsKey('end')) {
       return {
         'start': toInt(raw['start']) ?? 0,

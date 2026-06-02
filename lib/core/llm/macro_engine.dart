@@ -18,8 +18,8 @@ class MacroContext {
   final String? lorebooksContent;
   final String? guidanceText;
   final String? macroName;
-  /// Memory content to be appended when expanding {{summary}} in summary_macro mode.
-  /// This allows <wrapper>{{summary}}</wrapper> to enclose both the summary and the injected memories.
+  /// Memory content to be appended when expanding `{{summary}}` in summary_macro mode.
+  /// This allows `<wrapper>{{summary}}</wrapper>` to enclose both the summary and the injected memories.
   final String? summaryMemoryContent;
 
   const MacroContext({

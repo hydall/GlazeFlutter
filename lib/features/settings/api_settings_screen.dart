@@ -644,7 +644,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     final activeId =
         ref.read(activeApiPresetIdProvider) ??
         (list.isNotEmpty ? list.first.id : null);
-    await GlazeBottomSheet.show(
+    await GlazeBottomSheet.show<void>(
       context,
       title: 'settings_api_configs_title'.tr(),
       headerAction: IconButton(
@@ -722,7 +722,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   }
 
   Future<void> _createNewPreset(List<ApiConfig> existing) async {
-    await GlazeBottomSheet.show(
+    await GlazeBottomSheet.show<void>(
       context,
       title: 'settings_new_config_title'.tr(),
       input: BottomSheetInput(
@@ -758,7 +758,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     if (current.isNotEmpty && !models.contains(current)) {
       models.insert(0, current);
     }
-    await GlazeBottomSheet.show(
+    await GlazeBottomSheet.show<void>(
       context,
       title: 'onboarding_select_model'.tr(),
       items: models.map((m) => BottomSheetItem(
@@ -785,7 +785,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
 
   void _openReasoningEffortSelector() {
     const options = ['auto', 'low', 'medium', 'high'];
-    GlazeBottomSheet.show(
+    GlazeBottomSheet.show<void>(
       context,
       title: 'label_reasoning_effort'.tr(),
       items: options.map((e) {

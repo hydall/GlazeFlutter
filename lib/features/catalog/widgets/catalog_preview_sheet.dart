@@ -218,7 +218,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
           ),
           const SizedBox(height: 20),
           if (char.creatorNotes.isNotEmpty) ...[
-            _sectionTitle('onboarding_placeholder_desc'.tr().split(' ')[0] + ' ' + 'label_description'.tr()),
+            _sectionTitle('${'onboarding_placeholder_desc'.tr().split(' ')[0]} ${'label_description'.tr()}'),
             const SizedBox(height: 4),
             Text(
               char.creatorNotes,

@@ -213,7 +213,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     await _bridge!.scrollToBottom();
     final initialAnyGen = widget.isGenerating || widget.isGeneratingImage;
     _bridge!.isGenerating = initialAnyGen;
-    _bridge!.evalJs('if (window.bridge) window.bridge.isGenerating = $initialAnyGen;');
+    unawaited(_bridge!.evalJs('if (window.bridge) window.bridge.isGenerating = $initialAnyGen;'));
     _ready = true;
   }
 
@@ -252,7 +252,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     final bridge = _bridge;
     if (bridge == null) return;
 
-    bridge.evalJs('window.bridge?.clearAll();');
+    unawaited(bridge.evalJs('window.bridge?.clearAll();'));
     if (mounted) setState(() => _sessionSwitching = true);
     if (widget.charId != old.charId) {
       await bridge.setIdentity(
@@ -712,7 +712,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           ),
           onWebViewCreated: (controller) async {
             _bridge = ChatBridgeController(controller);
-            controller.evaluateJavascript(source: 'if(window.bridge) window.bridge.clearAll();');
+            unawaited(controller.evaluateJavascript(source: 'if(window.bridge) window.bridge.clearAll();'));
             _bridge!.onMessageContext = (id, isUser, isSystem, content) {
               final allMsgs = ref.read(chatProvider(widget.charId)).value?.messages ?? [];
               final idx = allMsgs.indexWhere((m) => m.id == id);
@@ -793,7 +793,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           },
           onLoadStop: (controller, url) async {
             if (_bridge == null || _ready) return;
-            controller.evaluateJavascript(source: '''
+            unawaited(controller.evaluateJavascript(source: '''
               (function() {
                 var els = [document.documentElement, document.body, document.getElementById('chat-container'), document.getElementById('loading-screen')];
                 els.forEach(function(el) {
@@ -802,7 +802,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
                   console.log('DIAG ' + (el.id || el.tagName) + ' bg=' + cs.backgroundColor + ' opacity=' + el.style.opacity);
                 });
               })();
-            ''');
+            '''));
             await _initWebView();
           },
           onConsoleMessage: (controller, consoleMessage) {

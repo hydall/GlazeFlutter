@@ -162,7 +162,7 @@ class _PresetConnectionsSheetState
     );
 
     if (selected != null) {
-      setPresetConnection(ref, 'character', selected.id as String, widget.presetId);
+      await setPresetConnection(ref, 'character', selected.id as String, widget.presetId);
     }
   }
 
@@ -198,7 +198,7 @@ class _PresetConnectionsSheetState
     );
 
     if (selected != null) {
-      setPresetConnection(ref, 'chat', selected.id, widget.presetId);
+      await setPresetConnection(ref, 'chat', selected.id, widget.presetId);
     }
   }
 }
@@ -287,7 +287,7 @@ class _EmptyHint extends StatelessWidget {
 }
 
 void showPresetConnections(BuildContext context, String presetId) {
-  showModalBottomSheet(
+  showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,

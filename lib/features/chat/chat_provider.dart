@@ -14,7 +14,6 @@ import '../cloud_sync/sync_provider.dart' show notifySyncMessageGenerated;
 import '../chat_history/chat_history_provider.dart';
 import 'abort_handler.dart';
 import 'chat_generation_service.dart';
-import 'chat_message_service.dart';
 import 'chat_session_service.dart';
 import 'chat_state.dart';
 import 'image_recovery_service.dart';

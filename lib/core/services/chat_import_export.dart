@@ -189,6 +189,6 @@ int _parseSTDate(String? dateStr) {
 }
 
 String _formatSTDate(DateTime dt) {
-  final pad = (int n) => n.toString().padLeft(2, '0');
+  String pad(int n) => n.toString().padLeft(2, '0');
   return '${dt.year}-${pad(dt.month)}-${pad(dt.day)} ${pad(dt.hour)}:${pad(dt.minute)}:${pad(dt.second)}';
 }

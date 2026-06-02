@@ -23,14 +23,11 @@ class StreamGenerationService {
   final bool Function() _isAborted;
 
   StreamGenerationService({
-    required Ref ref,
-    required String charId,
-    required int genId,
-    required bool Function() isAborted,
-  })  : _ref = ref,
-        _charId = charId,
-        _genId = genId,
-        _isAborted = isAborted;
+    required this._ref,
+    required this._charId,
+    required this._genId,
+    required this._isAborted,
+  });
 
   Future<ChatState> run({
     required ChatSession session,

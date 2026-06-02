@@ -136,7 +136,7 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
   void _onNsflToggle(bool value) {
     if (value) {
       // Trying to enable — show warning
-      GlazeBottomSheet.show(
+      GlazeBottomSheet.show<void>(
         context,
         title: 'catalog_nsfl_warning_title'.tr(),
         bigInfo: BottomSheetBigInfo(
@@ -318,7 +318,7 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
             value: value,
             onChanged: onChanged,
             activeTrackColor: isDanger ? Colors.redAccent : context.cs.primary,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
             inactiveThumbColor: Colors.white,
           ),

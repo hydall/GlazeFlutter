@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+// Pinned via dependency_overrides to keep Windows builds green; see docs/BUILD_NOTES.md.
+// ignore: depend_on_referenced_packages
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 

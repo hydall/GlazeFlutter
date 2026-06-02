@@ -866,7 +866,7 @@ class _FontModeRow extends StatelessWidget {
           const Spacer(),
           GestureDetector(
             onTap: () {
-              GlazeBottomSheet.show(
+              GlazeBottomSheet.show<void>(
                 context,
                 title: label,
                 items: List.generate(

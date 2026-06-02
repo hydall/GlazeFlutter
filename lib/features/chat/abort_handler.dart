@@ -24,20 +24,20 @@ class AbortHandler {
   int _activeGenId = 0;
 
   AbortHandler({
-    required Ref ref,
-    required String charId,
-    required void Function(AsyncValue<ChatState>) setState,
-    required AsyncValue<ChatState> Function() getState,
-    required void Function(ChatSession) persistSession,
-  }) : _ref = ref, _charId = charId, _setState = setState,
-       _getState = getState, _persistSession = persistSession;
+    required this._ref,
+    required this._charId,
+    required this._setState,
+    required this._getState,
+    required this._persistSession,
+  });
 
   int nextGenId() => ++_activeGenId;
   bool isCurrentGen(int genId) => _activeGenId == genId;
 
+  // ignore: unnecessary_getters_setters
   ChatMessage? get restorationMessage => _restorationMessage;
   set restorationMessage(ChatMessage? msg) => _restorationMessage = msg;
-
+  // ignore: unnecessary_getters_setters
   CancelToken? get imgGenCancelToken => _imgGenCancelToken;
   set imgGenCancelToken(CancelToken? t) => _imgGenCancelToken = t;
 

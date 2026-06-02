@@ -25,8 +25,8 @@ void main() {
       final tables = <String, dynamic>{};
       if (characters != null) tables['characters'] = characters;
       if (personas != null) tables['personas'] = personas;
-      tables['chat_sessions'] = [];
-      tables['chat_messages'] = [];
+      tables['chat_sessions'] = <dynamic>[];
+      tables['chat_messages'] = <dynamic>[];
       return tables;
     }
 
@@ -362,7 +362,7 @@ void main() {
           jsonDecode(await file.readAsString()) as Map<String, dynamic>;
 
       expect(data['_isGlazeBackup'], isTrue);
-      expect(data['tables'], isA<Map>());
+      expect(data['tables'], isA<Map<String, dynamic>>());
     });
   });
 }

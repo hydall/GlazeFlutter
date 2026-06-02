@@ -30,11 +30,9 @@ class ChatDrawerController extends ChangeNotifier {
 
   ChatDrawerController({
     required TickerProvider vsync,
-    required Future<double> Function() readKeyboardHeight,
-    required Future<void> Function(double) persistKeyboardHeight,
-  }) : _readKeyboardHeight = readKeyboardHeight,
-       _persistKeyboardHeight = persistKeyboardHeight,
-       _drawerAnimController = AnimationController(
+    required this._readKeyboardHeight,
+    required this._persistKeyboardHeight,
+  }) : _drawerAnimController = AnimationController(
          vsync: vsync,
          duration: const Duration(milliseconds: 260),
        ) {

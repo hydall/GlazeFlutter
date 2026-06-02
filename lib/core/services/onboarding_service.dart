@@ -23,6 +23,7 @@ Future<void> resetOnboarding([SharedPreferences? prefs]) async {
 
 Future<void> checkAndShowOnboarding(BuildContext context) async {
   if (await isOnboardingComplete()) return;
+  if (!context.mounted) return;
   showOnboarding(context);
 }
 
@@ -34,7 +35,7 @@ void showOnboarding(BuildContext context) {
       opaque: true,
       fullscreenDialog: true,
       pageBuilder: (_, _, _) => const OnboardingScreen(),
-      transitionsBuilder: (_, anim, __, child) =>
+      transitionsBuilder: (_, anim, _, child) =>
           FadeTransition(opacity: anim, child: child),
     ),
   );

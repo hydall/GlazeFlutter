@@ -44,7 +44,7 @@ class PresetTile extends ConsumerWidget {
             icon: const Icon(Icons.more_vert, size: 20),
             tooltip: 'More options',
             onPressed: () {
-              GlazeBottomSheet.show(
+              GlazeBottomSheet.show<void>(
                 context,
                 title: 'Preset Options',
                 items: [

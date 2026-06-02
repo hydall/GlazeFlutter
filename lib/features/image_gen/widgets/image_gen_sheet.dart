@@ -39,7 +39,7 @@ class _ImageGenSheetState extends ConsumerState<ImageGenSheet> {
     required bool Function(T) isSelected,
     required void Function(T) onSelected,
   }) {
-    showModalBottomSheet(
+    showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
@@ -727,7 +727,7 @@ class _MenuGroup extends StatelessWidget {
                   ),
                 ),
               ),
-              if (trailing != null) trailing!,
+              ?trailing,
             ],
           ),
         ),
@@ -997,7 +997,7 @@ class _ReferenceRowState extends State<_ReferenceRow> {
           ),
           InkWell(
             onTap: () {
-              showModalBottomSheet(
+              showModalBottomSheet<void>(
                 context: context,
                 backgroundColor: Colors.transparent,
                 builder: (context) => Container(

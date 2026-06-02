@@ -382,7 +382,7 @@ class _DropdownField<T> extends StatelessWidget {
         SizedBox(
           width: 180,
           child: DropdownButtonFormField<T>(
-            value: value,
+            initialValue: value,
             items: items,
             onChanged: (v) {
               if (v != null) onChanged(v);

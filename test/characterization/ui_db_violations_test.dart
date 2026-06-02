@@ -12,7 +12,7 @@ void main() {
       'lib/features/chat/widgets/context_info_sheet.dart',
       'lib/features/chat/widgets/chat_dialogs.dart',
       'lib/features/chat/widgets/memory_books_sheet.dart',
-      'lib/features/regex/regex_list_screen.dart',
+      'lib/features/regex/regex_sheet.dart',
       'lib/features/personas/persona_list_screen.dart',
       'lib/features/personas/persona_connections_sheet.dart',
       'lib/features/character_list/character_editor_screen.dart',

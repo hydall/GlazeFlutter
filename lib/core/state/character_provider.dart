@@ -31,7 +31,7 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
   @override
   Future<List<Character>> build() async {
     ref.keepAlive();
-    _sub?.cancel();
+    await _sub?.cancel();
     final repo = ref.read(characterRepoProvider);
     _sub = repo.watchAll().listen(
       (data) {
