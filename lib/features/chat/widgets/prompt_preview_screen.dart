@@ -30,6 +30,7 @@ class PromptPreviewScreen extends ConsumerStatefulWidget {
 class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   PromptResult? _result;
   ApiConfig? _apiConfig;
+  String? _sessionId;
   bool _loading = true;
   _SectionFilter _filter = _SectionFilter.all;
   int _dataTabIndex = 0;
@@ -58,6 +59,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
         session: session,
       );
       _apiConfig = inputs.apiConfig;
+      _sessionId = session.id;
 
       final result = await buildFromInputsInIsolate(inputs);
       ref
@@ -350,20 +352,30 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   String _getRawPromptJson() {
     if (_result == null || _apiConfig == null) return '';
     try {
-      final rawJson = const JsonEncoder.withIndent('  ').convert({
+      final body = <String, dynamic>{
         'model': _apiConfig!.model,
-        'messages': _result!.messages.map((m) {
-          final map = <String, dynamic>{'role': m.role, 'content': m.content};
-          if (m.isLorebook) map['lorebook'] = true;
-          if (m.blockName != null) map['block'] = m.blockName;
-          return map;
-        }).toList(),
-        'max_tokens': _apiConfig!.maxTokens,
-        'temperature': _apiConfig!.temperature,
-        'top_p': _apiConfig!.topP,
-        'stream': _apiConfig!.stream,
-      });
-      return rawJson;
+      };
+      if (_apiConfig!.cacheControlTtl == '5min' ||
+          _apiConfig!.cacheControlTtl == '1h') {
+        body['cache_control'] = <String, dynamic>{
+          'type': 'ephemeral',
+          if (_apiConfig!.cacheControlTtl == '1h') 'ttl': '1h',
+        };
+      }
+      if (_sessionId != null && _sessionId!.isNotEmpty) {
+        body['session_id'] = _sessionId;
+      }
+      body['messages'] = _result!.messages.map((m) {
+        final map = <String, dynamic>{'role': m.role, 'content': m.content};
+        if (m.isLorebook) map['lorebook'] = true;
+        if (m.blockName != null) map['block'] = m.blockName;
+        return map;
+      }).toList();
+      body['max_tokens'] = _apiConfig!.maxTokens;
+      body['temperature'] = _apiConfig!.temperature;
+      body['top_p'] = _apiConfig!.topP;
+      body['stream'] = _apiConfig!.stream;
+      return const JsonEncoder.withIndent('  ').convert(body);
     } catch (_) {
       return '';
     }
