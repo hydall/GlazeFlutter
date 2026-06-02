@@ -585,8 +585,14 @@ PromptResult _assembleMessages({
   if (payload.memoryContent != null && payload.memoryContent!.isNotEmpty) {
     final macroText = payload.memoryMacroContent ?? payload.memoryContent!;
     if (payload.memoryInjectionTarget == 'summary_macro' && macroText.isNotEmpty) {
-      final msgSummaryIdx = messages.indexWhere((m) => m.isSummary);
-      if (msgSummaryIdx >= 0) {
+      // Check both the message list AND appendToLastMessage blocks: the latter
+      // are merged into the last user message and never added to [messages]
+      // (see docs/INVARIANTS.md INV-PS9), so their isSummary flag is otherwise
+      // invisible to the lookup here. Without this check, memory gets injected
+      // both inline via {{summary}} AND as a separate "Memory Book" system msg.
+      final hasSummaryBlock = messages.any((m) => m.isSummary) ||
+          appendedEntries.any((b) => b.isSummary);
+      if (hasSummaryBlock) {
         // Memory injection for summary_macro is now performed at macro-expansion time
         // inside replaceMacros() (see macro_engine.dart). This preserves the user's
         // custom wrapper tags around {{summary}}, e.g. <summary>{{summary}}</summary>.
