@@ -40,6 +40,7 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
     return (delete(embeddings)..where((e) => e.sourceType.equals(sourceType))).go();
   }
 
+  @override
   Future<void> deleteBySourceId(String sourceId) {
     return (delete(embeddings)..where((e) => e.sourceId.equals(sourceId))).go();
   }

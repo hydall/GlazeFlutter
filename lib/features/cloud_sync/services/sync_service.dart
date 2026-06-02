@@ -29,8 +29,8 @@ class SyncService {
   SyncStatus _status = SyncStatus.idle;
   String? _lastError;
   int? _lastSyncTime;
-  List<SyncConflict> _conflicts = [];
-  List<String> _resolvedAsCloud = [];
+  final List<SyncConflict> _conflicts = [];
+  final List<String> _resolvedAsCloud = [];
   Map<String, dynamic>? _accountInfo;
   bool _autoSyncEnabled = false;
   int _autoSyncMessageCount = 5;

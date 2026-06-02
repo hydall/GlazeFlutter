@@ -1,26 +1,11 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/llm/prompt_isolate.dart';
-import '../../core/llm/prompt_payload_builder.dart';
-import '../../core/llm/sse_client.dart';
-import '../../core/llm/stream_accumulator.dart';
-import '../../core/llm/tokenizer.dart';
-import '../../core/models/api_config.dart';
+import '../../core/models/character.dart';
 import '../../core/models/chat_message.dart';
-import '../../core/state/active_selection_provider.dart';
-import '../../core/utils/id_generator.dart';
-import '../../core/utils/time_helpers.dart';
-import '../../core/state/db_provider.dart';
-import '../../shared/widgets/glaze_toast.dart';
-import '../image_gen/image_gen_provider.dart';
-import '../settings/api_list_provider.dart';
-import '../image_gen/services/image_gen_service.dart';
-import 'chat_provider.dart';
+import '../extensions/services/extension_post_gen_service.dart';
 import 'chat_state.dart';
-import 'state/cached_token_breakdown.dart';
 import 'services/stream_generation_service.dart';
 import 'services/image_gen_processor.dart';
 
@@ -55,7 +40,6 @@ class ChatGenerationService {
       charId: charId,
       genId: genId,
       isAborted: isAborted,
-      onStateUpdate: onStateUpdate,
     ).run(
       session: session,
       saveSession: saveSession,
@@ -83,5 +67,23 @@ class ChatGenerationService {
       cancelToken: cancelToken,
       onStateUpdate: onStateUpdate,
     ).process(currentState);
+  }
+
+  Future<void> processExtensions({
+    required String charId,
+    required ChatSession session,
+    required Character character,
+  }) async {
+    try {
+      final extensionService = _ref.read(extensionPostGenServiceProvider);
+      await extensionService.processAfterGeneration(
+        charId: charId,
+        session: session,
+        character: character,
+      );
+    } catch (e) {
+      debugPrint('[ChatGenerationService] Extension processing failed: $e');
+      // Don't fail the main generation flow if extensions fail
+    }
   }
 }

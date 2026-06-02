@@ -9,6 +9,7 @@ class NoiseOverlay extends StatefulWidget {
   final Color tint;
 
   const NoiseOverlay({
+    super.key,
     required this.opacity,
     required this.intensity,
     this.tint = const Color(0xFF000000),

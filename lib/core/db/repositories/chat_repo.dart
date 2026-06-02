@@ -28,6 +28,7 @@ class ChatRepo implements SyncChatStore {
     return rows.map(_toModel).toList();
   }
 
+  @override
   Future<List<SessionMetadata>> getAllSessionMetadata() async {
     final rows = await (_db.select(
       _db.chatSessions,
@@ -53,11 +54,14 @@ class ChatRepo implements SyncChatStore {
     for (int i = 0; i < a.length; i++) {
       if (a[i].sessionId != b[i].sessionId ||
           a[i].updatedAt != b[i].updatedAt ||
-          a[i].messageCount != b[i].messageCount) return false;
+          a[i].messageCount != b[i].messageCount) {
+        return false;
+      }
     }
     return true;
   }
 
+  @override
   Future<ChatSession?> getById(String sessionId) async {
     final row = await (_db.select(
       _db.chatSessions,
@@ -65,12 +69,14 @@ class ChatRepo implements SyncChatStore {
     return row != null ? _toModel(row) : null;
   }
 
+  @override
   Future<void> put(ChatSession session) async {
     await _db
         .into(_db.chatSessions)
         .insertOnConflictUpdate(_toCompanion(session));
   }
 
+  @override
   Future<void> delete(String sessionId) async {
     await (_db.delete(
       _db.chatSessions,

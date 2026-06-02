@@ -53,7 +53,7 @@ class PresetTile extends ConsumerWidget {
                     icon: Icons.edit,
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => PresetEditorScreen(preset: preset)));
+                      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => PresetEditorScreen(preset: preset)));
                     },
                   ),
                   BottomSheetItem(

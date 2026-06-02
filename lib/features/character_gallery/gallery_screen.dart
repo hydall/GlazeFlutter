@@ -125,7 +125,7 @@ class GalleryScreen extends ConsumerWidget {
   void _openViewer(BuildContext context, WidgetRef ref,
       List<GalleryEntry> entries, int initialIndex) {
     Navigator.of(context).push(
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => _GalleryViewer(
           charId: charId,
           entries: entries,

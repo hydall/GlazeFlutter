@@ -58,6 +58,8 @@ class MagicDrawerStats {
   final String memoryInjectionTarget;
   final Map<String, dynamic> memoryCoverage;
   final List<dynamic> triggeredMemories;
+  final bool extBlocksEnabled;
+  final String? extBlocksActivePresetName;
 
   const MagicDrawerStats({
     this.character,
@@ -86,6 +88,8 @@ class MagicDrawerStats {
     this.memoryInjectionTarget = 'summary_block',
     this.memoryCoverage = const {},
     this.triggeredMemories = const [],
+    this.extBlocksEnabled = false,
+    this.extBlocksActivePresetName,
   });
 
   MagicDrawerStats copyWith({

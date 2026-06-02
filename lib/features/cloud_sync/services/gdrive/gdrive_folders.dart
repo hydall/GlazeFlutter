@@ -58,9 +58,7 @@ class GDriveFolders {
       }
 
       var folderId = await _findFolderByName(part, parentId, token);
-      if (folderId == null) {
-        folderId = await createFolder(part, parentId);
-      }
+      folderId ??= await createFolder(part, parentId);
       _folderIdCache[currentPath] = folderId;
       parentId = folderId;
     }
@@ -100,7 +98,7 @@ class GDriveFolders {
     final token = await _getAccessToken();
     final folderId = _folderIdCache[path];
     if (folderId == null) return;
-    await _dio.delete(
+    await _dio.delete<void>(
       'https://www.googleapis.com/drive/v3/files/$folderId',
       options: Options(headers: {'Authorization': 'Bearer $token'}),
     );

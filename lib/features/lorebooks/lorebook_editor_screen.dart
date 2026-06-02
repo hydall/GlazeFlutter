@@ -90,10 +90,12 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         statuses[entry.id] = 'none';
       }
     }
-    if (mounted) setState(() {
-      _embeddingStatuses = statuses;
-      _embeddingErrorLabels = errorLabels;
-    });
+    if (mounted) {
+      setState(() {
+        _embeddingStatuses = statuses;
+        _embeddingErrorLabels = errorLabels;
+      });
+    }
   }
 
   Future<void> _save() async {
@@ -360,7 +362,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
 
   void _startCooldownTimer() {
     Future.doWhile(() async {
-      await Future.delayed(const Duration(seconds: 1));
+      await Future<void>.delayed(const Duration(seconds: 1));
       if (!mounted) return false;
       setState(() {
         _rateLimitCooldown--;
@@ -587,8 +589,8 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           backgroundColor: context.cs.surface,
           floatingActionButton: FloatingActionButton(
             backgroundColor: context.cs.primary,
-            child: const Icon(Icons.add, color: Colors.black),
             onPressed: _addEntry,
+            child: const Icon(Icons.add, color: Colors.black),
           ),
           body: Column(
             children: [
@@ -601,7 +603,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'header_editor'.tr() + ' (' + 'label_lorebooks'.tr() + ')',
+                          '${'header_editor'.tr()} (${'label_lorebooks'.tr()})',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,

@@ -189,3 +189,37 @@ class ChatSummaries extends Table {
   @override
   Set<Column> get primaryKey => {sessionId};
 }
+
+@DataClassName('ExtensionPresetRow')
+class ExtensionPresets extends Table {
+  @override
+  String get tableName => 'extension_presets';
+
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  TextColumn get configJson => text()();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('InfoBlockRow')
+@TableIndex(name: 'idx_info_blocks_session_id', columns: {#sessionId})
+@TableIndex(name: 'idx_info_blocks_message_id', columns: {#messageId})
+class InfoBlocks extends Table {
+  @override
+  String get tableName => 'info_blocks';
+
+  TextColumn get id => text()();
+  TextColumn get sessionId => text()();
+  TextColumn get messageId => text()();
+  TextColumn get blockId => text()();
+  TextColumn get blockName => text()();
+  TextColumn get blockType => text()();
+  TextColumn get content => text()();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}

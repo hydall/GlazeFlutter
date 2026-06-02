@@ -9,8 +9,9 @@ String _extractBlockBody(String src, int fromIndex) {
   if (start == -1) return '';
   int depth = 0;
   for (int i = start; i < src.length; i++) {
-    if (src[i] == '{') depth++;
-    else if (src[i] == '}') {
+    if (src[i] == '{') {
+      depth++;
+    } else if (src[i] == '}') {
       depth--;
       if (depth == 0) return src.substring(start, i + 1);
     }
@@ -20,11 +21,9 @@ String _extractBlockBody(String src, int fromIndex) {
 
 void main() {
   late String bridgeJs;
-  late String rendererJs;
 
   setUpAll(() {
     bridgeJs = _asset('bridge.js');
-    rendererJs = _asset('renderer.js'); // kept for future renderer-specific tests
   });
 
   // ─── Phase 3.2: SelectionManager ────────────────────────────────────────

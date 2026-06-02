@@ -30,10 +30,10 @@ void showOnboarding(BuildContext context) {
   final nav = rootNavigatorKey.currentState;
   if (nav == null) return;
   nav.push(
-    PageRouteBuilder(
+    PageRouteBuilder<void>(
       opaque: true,
       fullscreenDialog: true,
-      pageBuilder: (_, __, ___) => const OnboardingScreen(),
+      pageBuilder: (_, _, _) => const OnboardingScreen(),
       transitionsBuilder: (_, anim, __, child) =>
           FadeTransition(opacity: anim, child: child),
     ),

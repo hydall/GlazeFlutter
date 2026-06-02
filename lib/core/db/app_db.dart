@@ -19,6 +19,8 @@ part 'app_db.g.dart';
   Embeddings,
   ChatSummaries,
   MemoryBookRows,
+  ExtensionPresets,
+  InfoBlocks,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -26,7 +28,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -106,6 +108,10 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'UPDATE characters SET created_at = updated_at WHERE created_at = 0',
             );
+          }
+          if (from < 20) {
+            await m.createTable(extensionPresets);
+            await m.createTable(infoBlocks);
           }
         },
       );

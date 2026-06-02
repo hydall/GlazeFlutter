@@ -10,6 +10,7 @@ class PresetRepo implements SyncPresetStore {
   final AppDatabase _db;
   PresetRepo(this._db);
 
+  @override
   Future<List<Preset>> getAll() async {
     final rows = await _db.select(_db.presets).get();
     final presets = rows.map(_toModel).toList();
@@ -29,6 +30,7 @@ class PresetRepo implements SyncPresetStore {
     return presets;
   }
 
+  @override
   Future<Preset?> getById(String id) async {
     final row = await (_db.select(_db.presets)
           ..where((t) => t.presetId.equals(id)))
@@ -36,10 +38,12 @@ class PresetRepo implements SyncPresetStore {
     return row != null ? _toModel(row) : null;
   }
 
+  @override
   Future<void> put(Preset preset) async {
     await _db.into(_db.presets).insertOnConflictUpdate(_toCompanion(preset));
   }
 
+  @override
   Future<void> delete(String id) async {
     await (_db.delete(_db.presets)..where((t) => t.presetId.equals(id))).go();
   }

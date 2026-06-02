@@ -43,6 +43,7 @@ import 'summary_sheet.dart';
 import '../state/token_breakdown_cache.dart';
 import 'tokenizer_sheet.dart';
 import '../../glossary/glossary_sheet.dart';
+import '../../extensions/widgets/ext_blocks_settings_sheet.dart';
 
 class MagicDrawerPanel extends ConsumerStatefulWidget {
   final String charId;
@@ -113,6 +114,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       id: 'glossary',
       label: 'Glossary',
       icon: Icons.menu_book,
+    ),
+    MagicDrawerItemDef(
+      id: 'ext-blocks',
+      label: 'Ext Blocks',
+      icon: Icons.extension_outlined,
     ),
   ];
 
@@ -284,6 +290,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
                 _stats.session!.authorsNote!.content.isNotEmpty
             ? '${_stats.session!.authorsNote!.content.length} chars'
             : 'Empty',
+      'ext-blocks' => !_stats.extBlocksEnabled
+          ? 'Off'
+          : _stats.extBlocksActivePresetName ?? 'No preset',
       _ => null,
     };
   }
@@ -457,7 +466,21 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         widget.onClose?.call();
         if (mounted) GlossarySheet.show(context);
         return;
+      case 'ext-blocks':
+        widget.onClose?.call();
+        if (mounted) _showExtBlocksSheet();
+        return;
     }
+  }
+
+  Future<void> _showExtBlocksSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: context.cs.surfaceContainerHigh,
+      isScrollControlled: true,
+      builder: (_) => const ExtBlocksSettingsSheet(),
+    );
   }
 
   Future<void> _showMemoryBooks() async {

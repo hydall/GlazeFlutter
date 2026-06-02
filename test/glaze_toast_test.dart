@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:glaze_flutter/features/settings/app_settings_provider.dart';
 import 'package:glaze_flutter/shared/widgets/glaze_toast.dart';
 
 void main() {
@@ -12,7 +11,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  Widget _buildTestApp({required Widget child}) {
+  Widget buildTestApp({required Widget child}) {
     return ProviderScope(
       child: MaterialApp(
         home: Overlay(
@@ -31,7 +30,7 @@ void main() {
 
   testWidgets('GlazeToast.show renders toast text above content',
       (tester) async {
-    await tester.pumpWidget(_buildTestApp(
+    await tester.pumpWidget(buildTestApp(
       child: Builder(
         builder: (context) {
           return ElevatedButton(
@@ -54,7 +53,7 @@ void main() {
 
   testWidgets('GlazeToast.error renders error toast at top',
       (tester) async {
-    await tester.pumpWidget(_buildTestApp(
+    await tester.pumpWidget(buildTestApp(
       child: Builder(
         builder: (context) {
           return ElevatedButton(
@@ -77,7 +76,7 @@ void main() {
 
   testWidgets('GlazeToast.showWithoutContext works without BuildContext',
       (tester) async {
-    await tester.pumpWidget(_buildTestApp(
+    await tester.pumpWidget(buildTestApp(
       child: ElevatedButton(
         onPressed: () => GlazeToast.showWithoutContext('Contextless toast'),
         child: const Text('Show'),
@@ -155,7 +154,7 @@ void main() {
   });
 
   testWidgets('New toast replaces previous toast', (tester) async {
-    await tester.pumpWidget(_buildTestApp(
+    await tester.pumpWidget(buildTestApp(
       child: Builder(
         builder: (context) {
           return Column(

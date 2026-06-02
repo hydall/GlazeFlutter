@@ -53,29 +53,32 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
             widget.item.fullPath ?? widget.item.id,
           );
       }
-      if (mounted)
+      if (mounted) {
         setState(() {
           _downloaded = result;
           _loading = false;
         });
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = e.toString();
           _loading = false;
         });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading)
+    if (_loading) {
       return Padding(
         padding: const EdgeInsets.all(32),
         child: Center(
           child: CircularProgressIndicator(color: context.cs.primary),
         ),
       );
+    }
     if (_error != null) return _buildError();
     if (_downloaded == null) return const SizedBox.shrink();
     return _buildPreview();

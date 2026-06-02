@@ -321,7 +321,6 @@ class _AvatarGradientPlaceholder extends StatelessWidget {
 
 class _GridTile extends StatelessWidget {
   final String? iconPath;
-  final IconData? iconData;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -329,7 +328,6 @@ class _GridTile extends StatelessWidget {
 
   const _GridTile({
     this.iconPath,
-    this.iconData,
     required this.title,
     required this.subtitle,
     required this.onTap,
@@ -360,9 +358,7 @@ class _GridTile extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Center(
-                    child: iconData != null
-                        ? Icon(iconData, color: context.cs.onSurfaceVariant, size: 22)
-                        : _svgPath(iconPath!, fill: context.cs.onSurfaceVariant, size: 22),
+                    child: _svgPath(iconPath!, fill: context.cs.onSurfaceVariant, size: 22),
                   ),
                 ),
                 if (showStatusDot)

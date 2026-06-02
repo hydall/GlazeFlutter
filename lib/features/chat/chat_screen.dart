@@ -15,6 +15,7 @@ import '../../core/state/character_provider.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../extensions/widgets/info_block_drawer_widget.dart';
 import 'widgets/message_actions.dart';
 import '../../shared/theme/theme_font_provider.dart';
 import '../../shared/theme/theme_preset.dart';
@@ -193,7 +194,9 @@ child: PopScope(
             return;
           }
         },
-        child: GlazeScaffold(
+        child: InfoBlockDrawerWidget(
+          sessionId: chatState?.session?.id ?? '',
+          child: GlazeScaffold(
           extendBodyBehindHeader: true,
           resizeToAvoidBottomInset: false,
           hideHeader: _isHeaderHidden,
@@ -266,6 +269,7 @@ child: PopScope(
               enterToSend: enterToSend,
             ),
           ),
+        ),
         ),
       ),
     );

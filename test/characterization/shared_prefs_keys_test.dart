@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:glaze_flutter/features/settings/app_settings_provider.dart';
-import 'package:glaze_flutter/core/state/active_selection_provider.dart';
 import 'package:glaze_flutter/core/models/persona.dart';
 
 void main() {
@@ -30,6 +29,7 @@ void main() {
 
       for (final entry in expectedKeys.entries) {
         switch (entry.value) {
+          // ignore: type_literal_in_constant_pattern
           case bool:
             if (entry.key == 'enterToSend' ||
                 entry.key == 'showOurPicks') {
@@ -45,10 +45,12 @@ void main() {
                 reason: '${entry.key} default should be false',
               );
             }
+          // ignore: type_literal_in_constant_pattern
           case String:
             if (entry.key == 'language') {
               expect(defaults.language, 'en');
             }
+          // ignore: type_literal_in_constant_pattern
           case double:
             if (entry.key == 'tokenizerHidePercent') {
               expect(defaults.tokenizerHidePercent, 30);

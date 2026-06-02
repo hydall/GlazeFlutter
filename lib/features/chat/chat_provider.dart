@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/llm/tokenizer.dart';
 import '../../core/models/chat_message.dart';
-import '../../core/state/active_selection_provider.dart';
 import '../../core/services/generation_notification_service.dart';
 import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
@@ -108,7 +107,6 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       _imageRecoverySvc.retryImageGenerationForMessage(messageIndex);
 
   ChatSessionService get _sessionSvc => ChatSessionService(ref);
-  ChatMessageService get _messageSvc => ChatMessageService(ref);
   ImageRecoveryService get _imageRecoverySvc => ImageRecoveryService(
     ref: ref,
     charId: arg,
@@ -502,6 +500,15 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       cancelToken: imgCancelToken,
       onStateUpdate: (s) { if (_abortHandler.isCurrentGen(genId)) state = AsyncData(s); },
     );
+
+    // Process extensions (infoblocks and images)
+    if (character != null && result.session != null) {
+      await service.processExtensions(
+        charId: arg,
+        session: result.session!,
+        character: character,
+      );
+    }
 
     _abortHandler.imgGenCancelToken = null;
 

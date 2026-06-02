@@ -3,9 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../chat_state.dart';
 
 class ChatImageRecoveryController {
+  // ignore: unused_field
   final Ref _ref;
+  // ignore: unused_field
   final String _charId;
+  // ignore: unused_field
   final void Function(AsyncValue<ChatState>) _setState;
+  // ignore: unused_field
   final AsyncValue<ChatState> Function() _getState;
 
   ChatImageRecoveryController({

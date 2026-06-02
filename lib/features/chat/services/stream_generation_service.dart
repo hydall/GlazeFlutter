@@ -8,12 +8,10 @@ import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/sse_client.dart';
 import '../../../core/llm/stream_accumulator.dart';
 import '../../../core/llm/tokenizer.dart';
-import '../../../core/models/api_config.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../core/utils/time_helpers.dart';
-import '../../../core/state/db_provider.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
 import '../state/cached_token_breakdown.dart';
@@ -23,19 +21,16 @@ class StreamGenerationService {
   final String _charId;
   final int _genId;
   final bool Function() _isAborted;
-  final void Function(ChatState) _onStateUpdate;
 
   StreamGenerationService({
     required Ref ref,
     required String charId,
     required int genId,
     required bool Function() isAborted,
-    required void Function(ChatState) onStateUpdate,
   })  : _ref = ref,
         _charId = charId,
         _genId = genId,
-        _isAborted = isAborted,
-        _onStateUpdate = onStateUpdate;
+        _isAborted = isAborted;
 
   Future<ChatState> run({
     required ChatSession session,

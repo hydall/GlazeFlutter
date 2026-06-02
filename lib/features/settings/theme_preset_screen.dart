@@ -275,7 +275,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
     if (!mounted) return;
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ThemeEditorScreen()),
+      MaterialPageRoute<void>(builder: (_) => const ThemeEditorScreen()),
     );
   }
 
@@ -289,7 +289,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
     if (!mounted) return;
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const ThemeEditorScreen()),
+      MaterialPageRoute<void>(builder: (_) => const ThemeEditorScreen()),
     );
   }
 

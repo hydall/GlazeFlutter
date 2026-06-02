@@ -92,7 +92,7 @@ class PersonaListScreen extends ConsumerWidget {
 
   void _showEditor(BuildContext context, WidgetRef ref, [Persona? existing]) {
     Navigator.of(context, rootNavigator: true).push(
-      MaterialPageRoute(
+      MaterialPageRoute<void>(
         builder: (_) => _PersonaEditorScreen(existing: existing),
       ),
     );
@@ -175,7 +175,7 @@ class _PersonaTile extends ConsumerWidget {
                       onTap: () {
                         Navigator.pop(context);
                         Navigator.of(context, rootNavigator: true).push(
-                          MaterialPageRoute(
+                          MaterialPageRoute<void>(
                             builder: (_) => _PersonaEditorScreen(existing: persona),
                           ),
                         );

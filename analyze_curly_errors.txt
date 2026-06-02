@@ -1,0 +1,9 @@
+﻿   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\core\db\repositories\chat_repo.dart:57:51 - curly_braces_in_flow_control_structures
+   info - Statements in a for should be enclosed in a block. Try wrapping the statement in a block - lib\core\services\character_exporter.dart:298:31 - curly_braces_in_flow_control_structures
+   info - Statements in a for should be enclosed in a block. Try wrapping the statement in a block - lib\core\services\character_exporter.dart:299:41 - curly_braces_in_flow_control_structures
+   info - Statements in a for should be enclosed in a block. Try wrapping the statement in a block - lib\core\services\character_exporter.dart:302:31 - curly_braces_in_flow_control_structures
+   info - Statements in a for should be enclosed in a block. Try wrapping the statement in a block - lib\core\utils\html_to_markdown.dart:453:48 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\features\catalog\widgets\catalog_preview_sheet.dart:57:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\features\catalog\widgets\catalog_preview_sheet.dart:63:9 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\features\catalog\widgets\catalog_preview_sheet.dart:73:7 - curly_braces_in_flow_control_structures
+   info - Statements in an if should be enclosed in a block. Try wrapping the statement in a block - lib\features\character_list\character_list_screen.dart:206:39 - curly_braces_in_flow_control_structures

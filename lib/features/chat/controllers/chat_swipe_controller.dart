@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/models/chat_message.dart';
 import '../../../core/state/db_provider.dart';
 import '../chat_message_service.dart';
 import '../chat_session_service.dart';

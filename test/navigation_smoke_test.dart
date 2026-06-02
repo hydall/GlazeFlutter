@@ -19,7 +19,6 @@ import 'package:glaze_flutter/features/lorebooks/embedding_settings_screen.dart'
 import 'package:glaze_flutter/features/settings/api_settings_screen.dart';
 import 'package:glaze_flutter/features/personas/persona_list_screen.dart';
 import 'package:glaze_flutter/features/presets/preset_list_screen.dart';
-import 'package:glaze_flutter/features/regex/regex_list_screen.dart';
 
 import 'helpers/pump_glaze_app.dart';
 import 'helpers/test_container.dart';
@@ -98,12 +97,6 @@ const screenRegistry = <ScreenEntry>[
     screenType: PresetListScreen,
     parentPath: '/tools',
     description: 'Preset list',
-  ),
-  ScreenEntry(
-    path: '/tools/regex',
-    screenType: RegexListScreen,
-    parentPath: '/tools',
-    description: 'Regex list',
   ),
   ScreenEntry(
     path: '/tools/lorebooks',

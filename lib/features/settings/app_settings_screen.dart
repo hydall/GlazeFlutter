@@ -96,6 +96,13 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                   size: 20, color: Color(0xFF99A2AD)),
               onTap: () => setState(() => _currentScreen = 'interface'),
             ),
+            MenuItem(
+              icon: Icons.extension_outlined,
+              label: 'Расширения',
+              trailing: const Icon(Icons.chevron_right,
+                  size: 20, color: Color(0xFF99A2AD)),
+              onTap: () => context.push('/extensions'),
+            ),
           ],
         ),
       ],
@@ -242,52 +249,6 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                 },
               ))
           .toList(),
-    );
-  }
-
-  void _showAccentPicker(BuildContext context, WidgetRef ref) {
-    const presets = [
-      Color(0xFF7996CE),
-      Color(0xFFCE7979),
-      Color(0xFF79CE96),
-      Color(0xFFCEB479),
-      Color(0xFFB479CE),
-      Color(0xFF79CECE),
-      Color(0xFF96CE79),
-      Color(0xFFCE79B4),
-      Color(0xFFFF9F43),
-    ];
-    final current = ref.read(themeProvider).accentColor;
-    GlazeBottomSheet.show(
-      context,
-      title: 'theme_accent_color'.tr(),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        child: Wrap(
-          spacing: 12,
-          runSpacing: 12,
-          alignment: WrapAlignment.center,
-          children: presets
-              .map((c) => GestureDetector(
-                    onTap: () {
-                      Navigator.pop(context);
-                      ref.read(themeProvider.notifier).setAccentColor(c);
-                    },
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: c,
-                        shape: BoxShape.circle,
-                        border: c.toARGB32() == current.toARGB32()
-                            ? Border.all(color: Colors.white, width: 3)
-                            : Border.all(color: Colors.white24, width: 1),
-                      ),
-                    ),
-                  ))
-              .toList(),
-        ),
-      ),
     );
   }
 

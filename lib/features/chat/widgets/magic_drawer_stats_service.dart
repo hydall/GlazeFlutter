@@ -9,6 +9,8 @@ import '../../../core/llm/summary_service.dart';
 import '../../../core/models/preset.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
+import '../../extensions/providers/extension_presets_provider.dart';
+import '../../extensions/providers/extensions_settings_provider.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../chat_provider.dart';
 import '../state/cached_token_breakdown.dart';
@@ -92,6 +94,15 @@ class MagicDrawerStatsService {
       imageGenEnabled = _ref.read(imageGenSettingsProvider).value?.enabled == true;
     } catch (_) {}
 
+    final extSettings = _ref.read(extensionsSettingsProvider);
+    final extPresets = _ref.read(extensionPresetsProvider);
+    final extActivePresetName = extSettings.activePresetId == null
+        ? null
+        : extPresets
+            .where((p) => p.id == extSettings.activePresetId)
+            .firstOrNull
+            ?.name;
+
     final cached = _ref.read(cachedTokenBreakdownProvider(charId));
 
     final approxHistoryTokens = session != null
@@ -125,6 +136,8 @@ class MagicDrawerStatsService {
       imageGenEnabled: imageGenEnabled,
       lorebooks: lorebooks,
       summaryContent: summaryContent,
+      extBlocksEnabled: extSettings.enabled,
+      extBlocksActivePresetName: extActivePresetName,
     );
   }
 

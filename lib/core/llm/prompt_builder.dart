@@ -360,12 +360,12 @@ PromptResult buildPrompt(PromptPayload payload) {
   }
   // Count summary tokens as the full {{summary}} expansion (summary + memory),
   // mirroring exactly what macro_engine produces at line 247-253.
-  final _summaryParts = [
+  final summaryParts = [
     if (currentMacroCtx.summaryContent?.isNotEmpty == true) currentMacroCtx.summaryContent!,
     if (currentMacroCtx.summaryMemoryContent?.isNotEmpty == true) currentMacroCtx.summaryMemoryContent!,
   ];
-  if (_summaryParts.isNotEmpty) {
-    macroTokens['summary'] = estimateTokens(_summaryParts.join('\n\n'));
+  if (summaryParts.isNotEmpty) {
+    macroTokens['summary'] = estimateTokens(summaryParts.join('\n\n'));
   }
   // Track memory separately so the tokenizer can show it as its own row.
   // In presetNetTokens we skip 'memory' to avoid double-deducting it

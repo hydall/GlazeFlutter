@@ -40,7 +40,7 @@ class LorebookListScreen extends ConsumerWidget {
           icon: const Icon(Icons.settings_outlined, size: 20),
           tooltip: 'Global Settings',
           onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(
+            MaterialPageRoute<void>(
               builder: (_) => const LorebookGlobalSettingsScreen(),
             ),
           ),
@@ -54,7 +54,7 @@ class LorebookListScreen extends ConsumerWidget {
           icon: const Icon(Icons.search, size: 20),
           tooltip: 'Embedding Settings',
           onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const EmbeddingSettingsScreen()),
+            MaterialPageRoute<void>(builder: (_) => const EmbeddingSettingsScreen()),
           ),
         ),
       ],
@@ -105,7 +105,7 @@ class LorebookListScreen extends ConsumerWidget {
               itemBuilder: (_, i) => _LorebookTile(
                 lorebook: lorebooks[i],
                 onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
+                  MaterialPageRoute<void>(
                     builder: (_) =>
                         LorebookEditorScreen(lorebookId: lorebooks[i].id),
                   ),
@@ -136,7 +136,7 @@ class LorebookListScreen extends ConsumerWidget {
     );
     ref.read(lorebooksProvider.notifier).addLorebook(lorebook).then((_) {
       Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => LorebookEditorScreen(lorebookId: id)),
+        MaterialPageRoute<void>(builder: (_) => LorebookEditorScreen(lorebookId: id)),
       );
     });
   }
@@ -163,7 +163,7 @@ class LorebookListScreen extends ConsumerWidget {
           'Imported "${importResult.lorebook.name}" (${importResult.entryCount} entries)',
         );
         Navigator.of(context).push(
-          MaterialPageRoute(
+          MaterialPageRoute<void>(
             builder: (_) =>
                 LorebookEditorScreen(lorebookId: importResult.lorebook.id),
           ),
