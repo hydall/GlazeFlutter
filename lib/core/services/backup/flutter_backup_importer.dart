@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -174,7 +173,7 @@ class FlutterBackupImporter extends BackupHelpers {
             }
           }
           buffer.add((sql, args));
-          batch.rawInsert(sql, args);
+          batch.customStatement(sql, args);
         }
       });
     });
@@ -236,7 +235,7 @@ class FlutterBackupImporter extends BackupHelpers {
                   args.add(v);
                 }
               }
-              batch.rawInsert(sql, args);
+              batch.customStatement(sql, args);
             }
           });
         });

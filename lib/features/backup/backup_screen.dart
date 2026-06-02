@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app.dart';
+import '../../core/services/backup/backup_cancel.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/onboarding_service.dart';
 import '../../shared/theme/app_colors.dart';
@@ -30,7 +31,6 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   bool _hasCleared = false;
   int _importStage = 0;
   String _importProgressText = '';
-  BackupFormat? _detectedFormat;
 
   bool get _isBusy => _isExporting || (_isImporting && !_importComplete);
 
@@ -172,7 +172,6 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       _isImporting = true;
       _importComplete = false;
       _hasCleared = false;
-      _detectedFormat = null;
       _importStage = 0;
       _importProgressText = 'backup_progress_preparing'.tr();
     });
@@ -187,8 +186,8 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
         await service.importBackupFromFile(
           path,
           onDetected: (format) {
-            if (!mounted) return;
-            setState(() => _detectedFormat = format);
+            // No-op for now; reserved for future format-specific UI.
+            format.toString();
           },
           onProgress: (stage) {
             if (!mounted) return;

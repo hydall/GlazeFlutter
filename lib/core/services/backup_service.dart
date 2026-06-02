@@ -25,13 +25,13 @@ class BackupService {
   final AppDatabase _db;
   final ImageStorageService _imageStorage;
   final _CancelFlag _cancelFlag = _CancelFlag();
-  late final ImportCancellationToken _cancel =
-      ImportCancellationToken._(_cancelFlag.isCancelled, _cancelFlag.check);
+  late final ImportCancellationToken _cancel = ImportCancellationToken.wrap(
+    isCancelled: _cancelFlag.isCancelled,
+    check: _cancelFlag.check,
+  );
 
   BackupService(this._db, ImageStorageService _imageStorage)
       : _imageStorage = _imageStorage;
-
-  ImportCancellationToken get cancelToken => _cancel;
 
   Future<String> exportBackup() =>
       BackupExporter(_db, _imageStorage).export();

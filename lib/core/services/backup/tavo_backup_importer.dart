@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
@@ -91,7 +90,9 @@ class TavoBackupImporter {
       orElse: () => throw const FormatException(
           'No data.mdb found in Tavo backup zip.'),
     );
-    final tavoData = parseTavoLmdb(mdbFile.content as List<int>);
+    final mdbContent = mdbFile.content;
+    final tavoData = parseTavoLmdb(
+        mdbContent is Uint8List ? mdbContent : Uint8List.fromList(mdbContent));
 
     final charEntityIdToGlazeId = <int, String>{};
 

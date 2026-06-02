@@ -118,13 +118,7 @@ import '../image_storage_service.dart';class BackupExporter {
   /// the whole database.
   Future<List<int>> _streamTableAsNdjson(String tableName) async {
     final builder = BytesBuilder(copy: false);
-    List<QueryRow> rows;
-    try {
-      rows = await _db.customSelect('SELECT * FROM $tableName').get();
-    } catch (_) {
-      // table may not exist
-      return builder.takeBytes();
-    }
+    final rows = await _db.customSelect('SELECT * FROM $tableName').get();
     for (final row in rows) {
       try {
         final data = row.data;
@@ -134,7 +128,6 @@ import '../image_storage_service.dart';class BackupExporter {
         // skip unserializable rows
       }
     }
-    rows = const [];
     return builder.takeBytes();
   }
 
