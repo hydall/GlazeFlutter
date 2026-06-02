@@ -189,7 +189,24 @@ class PromptPayloadBuilder {
           .where((m) => !m.isHidden && !m.isTyping)
           .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
           .toList();
-      final memoryResult = await memoryService.buildInjection(
+
+      // Run memory injection and lorebook vector search in parallel. They
+      // hit different data sources and are independent; sequential execution
+      // doubles wall-clock time when the embedding endpoint is slow.
+      // Guard with shouldAbort before/after each; the second guard is
+      // necessary to avoid stale writes after a quick abort.
+      final lorebookFuture = (!skipVectorSearch)
+          ? _runVectorSearch(
+              session.messages,
+              session.messages.lastOrNull?.content ?? '',
+              character.world,
+              character,
+              chatId: session.id,
+              cancelToken: cancelToken,
+            ).timeout(const Duration(seconds: 15))
+          : Future<List<LorebookEntry>>.value(const []);
+
+      final memoryFuture = memoryService.buildInjection(
         sessionId: session.id,
         historyText: historyText,
         messageCount: session.messages.length,
@@ -200,6 +217,15 @@ class PromptPayloadBuilder {
         shouldAbort: shouldAbort,
         cancelToken: cancelToken,
       );
+
+      throwIfAborted();
+      final results = await Future.wait([
+        memoryFuture,
+        lorebookFuture,
+      ]);
+      throwIfAborted();
+      final memoryResult = results[0] as MemoryInjectionResult;
+      vectorEntries = results[1] as List<LorebookEntry>;
       throwIfAborted();
       debugPrint('[payload] memory injection complete, entries=${memoryResult.entries.length}');
       memoryContent = memoryResult.content.isNotEmpty ? memoryResult.content : null;
@@ -220,22 +246,7 @@ class PromptPayloadBuilder {
       }
 
       if (!skipVectorSearch) {
-        debugPrint('[payload] running vector search...');
-        try {
-          vectorEntries = await _runVectorSearch(
-            session.messages,
-            session.messages.lastOrNull?.content ?? '',
-            character.world,
-            character,
-            chatId: session.id,
-            cancelToken: cancelToken,
-          )
-              .timeout(const Duration(seconds: 15));
-          throwIfAborted();
-          debugPrint('[payload] vector search complete, entries=${vectorEntries.length}');
-        } catch (e) {
-          debugPrint('[payload] vector search timed out or failed: $e');
-        }
+        debugPrint('[payload] vector search complete, entries=${vectorEntries.length}');
       }
     }
 
