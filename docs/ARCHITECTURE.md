@@ -65,7 +65,10 @@ lib/
 │   ├── llm/                          # LLM pipeline specialists
 │   │   ├── prompt_builder.dart        # Orchestrator: block ordering, lorebook merge, trimming
 │   │   ├── prompt_block_resolver.dart # Maps preset block ID → resolved text
-│   │   ├── prompt_payload_builder.dart # Riverpod-aware: assembles PromptPayload from state
+│   │   ├── prompt_inputs.dart         # Freezed value object: inputs for isolate build
+│   │   ├── prompt_inputs_collector.dart # Reads Riverpod state, assembles PromptInputs (no async work)
+│   │   ├── prompt_payload_assembler.dart # Pure: PromptInputs → PromptPayload (no Riverpod)
+│   │   ├── prompt_payload_builder.dart # Riverpod-aware: assembles PromptPayload from state (with vector/memory work)
 │   │   ├── prompt_isolate.dart        # Runs buildPrompt() in a Dart isolate
 │   │   ├── history_assembler.dart     # ChatMessage[] → PromptMessage[], macro application
 │   │   ├── context_calculator.dart    # Token budget: trims history from oldest end
