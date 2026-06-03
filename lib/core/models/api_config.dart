@@ -32,6 +32,7 @@ class ApiConfig with _$ApiConfig {
     @Default('') String embeddingApiKey,
     @Default('') String embeddingModel,
     @Default(512) int embeddingMaxChunkTokens,
+    @Default('off') String cacheControlTtl,
   }) = _ApiConfig;
 
   factory ApiConfig.fromJson(Map<String, dynamic> json) =>

@@ -114,6 +114,7 @@ class ApiConfigs extends Table {
   TextColumn get embeddingApiKey => text().nullable()();
   TextColumn get embeddingModel => text().nullable()();
   IntColumn get embeddingMaxChunkTokens => integer().withDefault(const Constant(512))();
+  TextColumn get cacheControlTtl => text().withDefault(const Constant('off'))();
 
   @override
   Set<Column> get primaryKey => {configId};

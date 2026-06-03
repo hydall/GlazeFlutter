@@ -94,6 +94,12 @@ class _SheetViewState extends ConsumerState<SheetView>
   double _currentHeight = 0;
   bool _heightInit = false;
 
+  /// Fallback controller used when [SheetView.scrollController] is null.
+  /// Ensures the [RawScrollbar] always has a valid controller attached,
+  /// even if the child [Scrollable] uses [PrimaryScrollController] or its own.
+  late final ScrollController _fallbackScrollController =
+      ScrollController();
+
   /// Whether this SheetView is hosted inside [showModalBottomSheet]. When
   /// false (e.g. opened as a route via GoRouter), we behave as a regular
   /// fullscreen page: no drag handle, no resize, no drag-down dismiss.
@@ -189,6 +195,7 @@ class _SheetViewState extends ConsumerState<SheetView>
   void dispose() {
     _anim?.removeListener(_onTick);
     _ctrl.dispose();
+    _fallbackScrollController.dispose();
     super.dispose();
   }
 
@@ -332,16 +339,10 @@ class _SheetViewState extends ConsumerState<SheetView>
 
                   return MediaQuery(
                     data: mediaQuery.copyWith(padding: newPadding),
-                    child: widget.scrollController != null
-                        ? RawScrollbar(
-                            controller: widget.scrollController,
-                            thumbColor: Colors.white.withValues(alpha: 0.15),
-                            radius: const Radius.circular(3),
-                            thickness: 4,
-                            padding: EdgeInsets.only(top: extraTop, right: 3),
-                            child: innerChild,
-                          )
-                        : innerChild,
+                    child: _MaybeScrollbar(
+                      controller: widget.scrollController ?? _fallbackScrollController,
+                      child: innerChild,
+                    ),
                   );
                 },
               ),
@@ -560,16 +561,10 @@ class _SheetViewState extends ConsumerState<SheetView>
 
           return MediaQuery(
             data: mediaQuery.copyWith(padding: newPadding),
-            child: widget.scrollController != null
-                ? RawScrollbar(
-                    controller: widget.scrollController,
-                    thumbColor: Colors.white.withValues(alpha: 0.15),
-                    radius: const Radius.circular(3),
-                    thickness: 4,
-                    padding: EdgeInsets.only(top: extraTop, right: 3),
-                    child: innerChild,
-                  )
-                : innerChild,
+            child: _MaybeScrollbar(
+              controller: widget.scrollController ?? _fallbackScrollController,
+              child: innerChild,
+            ),
           );
         },
       ),
@@ -830,6 +825,68 @@ class _SheetTabButton extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Wraps [child] in a [RawScrollbar] with a persistent thumb, but only
+/// when the subtree actually contains a [Scrollable] using the same
+/// [controller]. If the child has no matching scrollable (e.g. a static
+/// placeholder while async data is loading), the bar is omitted to avoid
+/// Flutter's "no ScrollPosition attached" assertion in debug builds.
+class _MaybeScrollbar extends StatefulWidget {
+  final ScrollController controller;
+  final Widget child;
+  const _MaybeScrollbar({required this.controller, required this.child});
+
+  @override
+  State<_MaybeScrollbar> createState() => _MaybeScrollbarState();
+}
+
+class _MaybeScrollbarState extends State<_MaybeScrollbar> {
+  bool _hasAttached = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_onControllerChange);
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MaybeScrollbar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!identical(oldWidget.controller, widget.controller)) {
+      oldWidget.controller.removeListener(_onControllerChange);
+      widget.controller.addListener(_onControllerChange);
+      _sync();
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerChange);
+    super.dispose();
+  }
+
+  void _onControllerChange() => _sync();
+
+  void _sync() {
+    final has = widget.controller.hasClients;
+    if (has != _hasAttached) {
+      if (mounted) setState(() => _hasAttached = has);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_hasAttached) return widget.child;
+    return RawScrollbar(
+      controller: widget.controller,
+      thumbVisibility: true,
+      thickness: 6,
+      radius: const Radius.circular(3),
+      child: widget.child,
     );
   }
 }

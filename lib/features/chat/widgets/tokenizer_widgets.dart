@@ -59,7 +59,12 @@ int _summaryTokens(TokenBreakdown bd) {
 
 int _unusedLorebookReserve(TokenBreakdown bd) {
   final actual = (bd.sourceTokens['lorebook'] ?? 0) + (bd.macroTokens['lorebooks'] ?? 0);
-  return bd.lorebookReserveTokens > actual ? bd.lorebookReserveTokens - actual : 0;
+  // Vector lorebook entries also consume the reserve budget; without
+  // subtracting them, the "Lorebook Reserve" row would inflate by
+  // vectorLoreTokens and double-count what the dedicated "Vector Lorebook"
+  // row already shows.
+  final used = actual + bd.vectorLoreTokens;
+  return bd.lorebookReserveTokens > used ? bd.lorebookReserveTokens - used : 0;
 }
 
 List<BarRow> buildOrderedRows(TokenBreakdown bd, List<String> keys) {

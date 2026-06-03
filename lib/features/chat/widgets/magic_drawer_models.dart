@@ -50,6 +50,8 @@ class MagicDrawerStats {
   final int presetTokens;
   final int personaTokens;
   final int summaryTokens;
+  final int vectorLoreTokens;
+  final int keywordLoreTokens;
   final bool imageGenEnabled;
   final List<Lorebook> lorebooks;
   final String? summaryContent;
@@ -80,6 +82,8 @@ class MagicDrawerStats {
     this.presetTokens = 0,
     this.personaTokens = 0,
     this.summaryTokens = 0,
+    this.vectorLoreTokens = 0,
+    this.keywordLoreTokens = 0,
     this.imageGenEnabled = false,
     this.lorebooks = const [],
     this.summaryContent,
@@ -100,6 +104,8 @@ class MagicDrawerStats {
     int? presetTokens,
     int? personaTokens,
     int? summaryTokens,
+    int? vectorLoreTokens,
+    int? keywordLoreTokens,
   }) {
     return MagicDrawerStats(
       character: character,
@@ -120,6 +126,8 @@ class MagicDrawerStats {
       presetTokens: presetTokens ?? this.presetTokens,
       personaTokens: personaTokens ?? this.personaTokens,
       summaryTokens: summaryTokens ?? this.summaryTokens,
+      vectorLoreTokens: vectorLoreTokens ?? this.vectorLoreTokens,
+      keywordLoreTokens: keywordLoreTokens ?? this.keywordLoreTokens,
       imageGenEnabled: imageGenEnabled,
       lorebooks: lorebooks,
       summaryContent: summaryContent,

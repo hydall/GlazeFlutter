@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'dart:convert';
 
+import '../../../core/llm/context_calculator.dart';
 import '../../../core/llm/history_assembler.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
@@ -30,6 +31,7 @@ class PromptPreviewScreen extends ConsumerStatefulWidget {
 class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   PromptResult? _result;
   ApiConfig? _apiConfig;
+  String? _sessionId;
   bool _loading = true;
   _SectionFilter _filter = _SectionFilter.all;
   int _dataTabIndex = 0;
@@ -58,14 +60,51 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
         session: session,
       );
       _apiConfig = inputs.apiConfig;
+      _sessionId = session.id;
 
       final result = await buildFromInputsInIsolate(inputs);
+      var breakdown = result.breakdown;
+
+      final lastVectorTokens = ref.read(lastVectorLoreTokensProvider(widget.charId));
+      if (lastVectorTokens > 0 && breakdown.vectorLoreTokens == 0) {
+        // The fast-path collectInputs skips vector search (it can take
+        // seconds via the embedding endpoint), but vector entries were
+        // counted on the last real generation. Reuse that count here so
+        // the preview reflects what was actually sent to the model.
+        final newSources = Map<String, int>.from(breakdown.sourceTokens)
+          ..['vectorLore'] = lastVectorTokens;
+        breakdown = TokenBreakdown(
+          sourceTokens: newSources,
+          macroTokens: breakdown.macroTokens,
+          staticTotal: breakdown.staticTotal,
+          historyBudget: breakdown.historyBudget,
+          historyTokens: breakdown.historyTokens,
+          totalTokens: breakdown.totalTokens + lastVectorTokens,
+          cutoffIndex: breakdown.cutoffIndex,
+          trimmedHistory: breakdown.trimmedHistory,
+          lorebookReserveTokens: breakdown.lorebookReserveTokens,
+          memoryTokens: breakdown.memoryTokens,
+          vectorLoreTokens: lastVectorTokens,
+          fixedTotal: breakdown.fixedTotal + lastVectorTokens,
+          remaining: breakdown.remaining - lastVectorTokens,
+        );
+      }
+
+      final mergedResult = PromptResult(
+        messages: result.messages,
+        breakdown: breakdown,
+        sessionVars: result.sessionVars,
+        globalVars: result.globalVars,
+        triggeredLorebooks: result.triggeredLorebooks,
+        triggeredMemories: result.triggeredMemories,
+      );
+
       ref
           .read(cachedTokenBreakdownProvider(widget.charId).notifier)
-          .state = result.breakdown;
+          .state = breakdown;
       if (mounted) {
         setState(() {
-          _result = result;
+          _result = mergedResult;
           _loading = false;
         });
       }
@@ -350,20 +389,29 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   String _getRawPromptJson() {
     if (_result == null || _apiConfig == null) return '';
     try {
-      final rawJson = const JsonEncoder.withIndent('  ').convert({
+      final apiMessages = _result!.messages
+          .where((m) => m.content.trim().isNotEmpty)
+          .map((m) => m.toApiMap())
+          .toList();
+      final body = <String, dynamic>{
         'model': _apiConfig!.model,
-        'messages': _result!.messages.map((m) {
-          final map = <String, dynamic>{'role': m.role, 'content': m.content};
-          if (m.isLorebook) map['lorebook'] = true;
-          if (m.blockName != null) map['block'] = m.blockName;
-          return map;
-        }).toList(),
-        'max_tokens': _apiConfig!.maxTokens,
-        'temperature': _apiConfig!.temperature,
-        'top_p': _apiConfig!.topP,
-        'stream': _apiConfig!.stream,
-      });
-      return rawJson;
+      };
+      if (_apiConfig!.cacheControlTtl == '5min' ||
+          _apiConfig!.cacheControlTtl == '1h') {
+        body['cache_control'] = <String, dynamic>{
+          'type': 'ephemeral',
+          if (_apiConfig!.cacheControlTtl == '1h') 'ttl': '1h',
+        };
+      }
+      if (_sessionId != null && _sessionId!.isNotEmpty) {
+        body['session_id'] = _sessionId;
+      }
+      body['messages'] = apiMessages;
+      body['max_tokens'] = _apiConfig!.maxTokens;
+      body['temperature'] = _apiConfig!.temperature;
+      body['top_p'] = _apiConfig!.topP;
+      body['stream'] = _apiConfig!.stream;
+      return const JsonEncoder.withIndent('  ').convert(body);
     } catch (_) {
       return '';
     }

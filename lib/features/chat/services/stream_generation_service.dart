@@ -75,6 +75,9 @@ class StreamGenerationService {
       _ref.read(cachedTokenBreakdownProvider(_charId).notifier).state =
           promptResult.breakdown;
 
+      _ref.read(lastVectorLoreTokensProvider(_charId).notifier).state =
+          promptResult.breakdown.vectorLoreTokens;
+
       Map<String, String>? pendingSessionVars;
       if (promptResult.sessionVars.isNotEmpty || promptResult.globalVars.isNotEmpty) {
         pendingSessionVars = promptResult.sessionVars;
@@ -139,6 +142,8 @@ class StreamGenerationService {
         omitTopP: apiConfig.omitTopP,
         omitReasoning: apiConfig.omitReasoning,
         omitReasoningEffort: apiConfig.omitReasoningEffort,
+        sessionId: session.id,
+        cacheControlTtl: apiConfig.cacheControlTtl,
         onUpdate: (delta, reasoningDelta) {
           if (_isAborted()) return;
           accumulator.consumeDelta(delta, reasoningDelta: reasoningDelta);

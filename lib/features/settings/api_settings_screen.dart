@@ -60,6 +60,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   bool _omitReasoningEffort = false;
   bool _embeddingEnabled = false;
   bool _embeddingUseSame = true;
+  String _cacheControlTtl = 'off';
 
   String? _loadedPresetId;
   final _scrollController = ScrollController();
@@ -163,6 +164,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       _omitReasoningEffort = config.omitReasoningEffort;
       _embeddingEnabled = config.embeddingEnabled;
       _embeddingUseSame = config.embeddingUseSame;
+      _cacheControlTtl = config.cacheControlTtl;
       _fetchedModels = [];
     });
 
@@ -194,6 +196,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             omitReasoningEffort: _omitReasoningEffort,
             embeddingEnabled: _embeddingEnabled,
             embeddingUseSame: _embeddingUseSame,
+            cacheControlTtl: _cacheControlTtl,
             embeddingEndpoint: _embEndpointCtrl.text.trim(),
             embeddingApiKey: _embApiKeyCtrl.text.trim(),
             embeddingModel: _embModelCtrl.text.trim(),
@@ -480,6 +483,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 label: 'label_reasoning_effort'.tr(),
                 currentValue: _reasoningEffortLabel(_reasoningEffort),
                 onTap: _openReasoningEffortSelector,
+              ),
+              MenuSelectorItem(
+                label: 'label_prompt_cache_ttl'.tr(),
+                currentValue: _cacheControlTtlLabel(_cacheControlTtl),
+                onTap: _openCacheControlTtlSelector,
               ),
             ],
           ),
@@ -798,6 +806,36 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             setState(() => _reasoningEffort = e);
+            _scheduleSave();
+          },
+        );
+      }).toList(),
+    );
+  }
+
+  String _cacheControlTtlLabel(String ttl) {
+    return switch (ttl) {
+      '5min' => 'prompt_cache_ttl_5min'.tr(),
+      '1h' => 'prompt_cache_ttl_1h'.tr(),
+      _ => 'prompt_cache_ttl_off'.tr(),
+    };
+  }
+
+  void _openCacheControlTtlSelector() {
+    const options = ['off', '5min', '1h'];
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'label_prompt_cache_ttl'.tr(),
+      items: options.map((e) {
+        final label = _cacheControlTtlLabel(e);
+        final active = e == _cacheControlTtl;
+        return BottomSheetItem(
+          label: label,
+          icon: active ? Icons.check : null,
+          iconColor: context.cs.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            setState(() => _cacheControlTtl = e);
             _scheduleSave();
           },
         );

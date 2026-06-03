@@ -46,7 +46,7 @@ class SseClient {
     required String endpoint,
     required String apiKey,
     required String model,
-    required List<Map<String, String>> messages,
+    required List<Map<String, dynamic>> messages,
     required int maxTokens,
     required double temperature,
     required double topP,
@@ -61,6 +61,8 @@ class SseClient {
     bool omitTopP = false,
     bool omitReasoning = false,
     bool omitReasoningEffort = false,
+    String? sessionId,
+    String cacheControlTtl = 'off',
   }) async {
     if (apiKey.isEmpty) {
       onError?.call(Exception('API key is empty'));
@@ -88,6 +90,16 @@ class SseClient {
         reasoningEffort != null &&
         reasoningEffort != 'auto') {
       body['reasoning_effort'] = reasoningEffort;
+    }
+
+    if (cacheControlTtl == '5min' || cacheControlTtl == '1h') {
+      body['cache_control'] = <String, dynamic>{
+        'type': 'ephemeral',
+        if (cacheControlTtl == '1h') 'ttl': '1h',
+      };
+    }
+    if (sessionId != null && sessionId.isNotEmpty) {
+      body['session_id'] = sessionId;
     }
 
 

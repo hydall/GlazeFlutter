@@ -48,6 +48,7 @@ class ChatMessageOpsController {
     _invalidateHistory();
     TokenBreakdownCache.invalidate();
     _ref.read(cachedTokenBreakdownProvider(_charId).notifier).state = null;
+    _ref.read(lastVectorLoreTokensProvider(_charId).notifier).state = 0;
     _setState(AsyncData(current.copyWith(session: updated)));
   }
 

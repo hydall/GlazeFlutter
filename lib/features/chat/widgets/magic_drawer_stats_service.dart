@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/llm/context_calculator.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/summary_service.dart';
@@ -133,6 +134,8 @@ class MagicDrawerStatsService {
       presetTokens: cached?.presetNetTokens ?? 0,
       personaTokens: (cached?.sourceTokens['persona'] ?? 0) > 0 ? cached!.sourceTokens['persona']! : (cached?.macroTokens['persona'] ?? 0),
       summaryTokens: (cached?.sourceTokens['summary'] ?? 0) > 0 ? cached!.sourceTokens['summary']! : (cached?.macroTokens['summary'] ?? 0),
+      vectorLoreTokens: cached?.vectorLoreTokens ?? 0,
+      keywordLoreTokens: ((cached?.sourceTokens['lorebook'] ?? 0) + (cached?.macroTokens['lorebooks'] ?? 0)),
       imageGenEnabled: imageGenEnabled,
       lorebooks: lorebooks,
       summaryContent: summaryContent,
@@ -183,6 +186,9 @@ class MagicDrawerStatsService {
           summaryTokens: (cached.sourceTokens['summary'] ?? 0) > 0
               ? cached.sourceTokens['summary']!
               : (cached.macroTokens['summary'] ?? 0),
+          vectorLoreTokens: cached.vectorLoreTokens,
+          keywordLoreTokens: (cached.sourceTokens['lorebook'] ?? 0) +
+              (cached.macroTokens['lorebooks'] ?? 0),
         );
       }
 
@@ -192,7 +198,29 @@ class MagicDrawerStatsService {
         session: session,
       );
       final result = await buildFromInputsInIsolate(inputs);
-      final breakdown = result.breakdown;
+      var breakdown = result.breakdown;
+
+      final lastVectorTokens = _ref.read(lastVectorLoreTokensProvider(charId));
+      if (lastVectorTokens > 0 && breakdown.vectorLoreTokens == 0) {
+        final newSources = Map<String, int>.from(breakdown.sourceTokens)
+          ..['vectorLore'] = lastVectorTokens;
+        breakdown = TokenBreakdown(
+          sourceTokens: newSources,
+          macroTokens: breakdown.macroTokens,
+          staticTotal: breakdown.staticTotal,
+          historyBudget: breakdown.historyBudget,
+          historyTokens: breakdown.historyTokens,
+          totalTokens: breakdown.totalTokens + lastVectorTokens,
+          cutoffIndex: breakdown.cutoffIndex,
+          trimmedHistory: breakdown.trimmedHistory,
+          lorebookReserveTokens: breakdown.lorebookReserveTokens,
+          memoryTokens: breakdown.memoryTokens,
+          vectorLoreTokens: lastVectorTokens,
+          fixedTotal: breakdown.fixedTotal + lastVectorTokens,
+          remaining: breakdown.remaining - lastVectorTokens,
+        );
+      }
+
       final sourceTokens = breakdown.sourceTokens;
 
       TokenBreakdownCache.set(hash, breakdown);
@@ -210,6 +238,9 @@ class MagicDrawerStatsService {
         summaryTokens: (sourceTokens['summary'] ?? 0) > 0
             ? sourceTokens['summary']!
             : (breakdown.macroTokens['summary'] ?? 0),
+        vectorLoreTokens: breakdown.vectorLoreTokens,
+        keywordLoreTokens: (sourceTokens['lorebook'] ?? 0) +
+            (breakdown.macroTokens['lorebooks'] ?? 0),
       );
     } catch (e) {
       debugPrint('[MagicDrawer] computeTokenStats error: $e');

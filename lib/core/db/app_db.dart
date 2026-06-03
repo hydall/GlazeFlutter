@@ -28,7 +28,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -112,6 +112,9 @@ class AppDatabase extends _$AppDatabase {
           if (from < 20) {
             await m.createTable(extensionPresets);
             await m.createTable(infoBlocks);
+          }
+          if (from < 21) {
+            await m.addColumn(apiConfigs, apiConfigs.cacheControlTtl);
           }
         },
       );

@@ -64,6 +64,7 @@ class ApiConfigRepo implements SyncApiConfigStore {
         omitTopP: c.omitTopP,
         omitReasoning: c.omitReasoning,
         omitReasoningEffort: c.omitReasoningEffort,
+        cacheControlTtl: c.cacheControlTtl,
       );
 
   ApiConfigsCompanion _toCompanion(ApiConfig m) => ApiConfigsCompanion(
@@ -93,5 +94,6 @@ class ApiConfigRepo implements SyncApiConfigStore {
         omitTopP: Value(m.omitTopP),
         omitReasoning: Value(m.omitReasoning),
         omitReasoningEffort: Value(m.omitReasoningEffort),
+        cacheControlTtl: Value(m.cacheControlTtl),
       );
 }
