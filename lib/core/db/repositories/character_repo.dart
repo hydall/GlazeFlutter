@@ -9,9 +9,62 @@ import '../../models/gallery_entry.dart';
 import '../../utils/time_helpers.dart';
 import '../../../features/cloud_sync/sync_repo_interfaces.dart';
 
+enum CharacterSortField { name, date, lastChat }
+
+enum CharacterSortDir { asc, desc }
+
 class CharacterRepo implements SyncCharacterStore {
   final AppDatabase _db;
   CharacterRepo(this._db);
+
+  List<OrderClauseGenerator<$CharactersTable>> _orderBy(
+    CharacterSortField field,
+    CharacterSortDir dir,
+  ) {
+    if (field == CharacterSortField.lastChat) {
+      return _lastChatOrder(dir);
+    }
+    final mode = dir == CharacterSortDir.asc ? OrderingMode.asc : OrderingMode.desc;
+    final primaryExpr = switch (field) {
+      CharacterSortField.name => _db.characters.name,
+      CharacterSortField.date => _db.characters.createdAt,
+      CharacterSortField.lastChat => _db.characters.createdAt,
+    };
+    return [
+      ($CharactersTable t) => OrderingTerm(expression: primaryExpr, mode: mode),
+      ($CharactersTable t) =>
+          OrderingTerm(expression: t.charId, mode: OrderingMode.asc),
+    ];
+  }
+
+  Expression<int> _lastChatAtColumn() {
+    return _db.chatSessions.updatedAt.max();
+  }
+
+  List<OrderClauseGenerator<$CharactersTable>> _lastChatOrder(
+    CharacterSortDir dir,
+  ) {
+    final mode = dir == CharacterSortDir.asc ? OrderingMode.asc : OrderingMode.desc;
+    final nullExpr = _lastChatAtColumn().isNull();
+    final chatExpr = _lastChatAtColumn();
+    return [
+      ($CharactersTable t) => OrderingTerm(expression: nullExpr, mode: OrderingMode.asc),
+      ($CharactersTable t) => OrderingTerm(expression: chatExpr, mode: mode),
+      ($CharactersTable t) =>
+          OrderingTerm(expression: t.charId, mode: OrderingMode.asc),
+    ];
+  }
+
+  List<OrderingTerm> _lastChatOrderTerms(CharacterSortDir dir) {
+    final mode = dir == CharacterSortDir.asc ? OrderingMode.asc : OrderingMode.desc;
+    final nullExpr = _lastChatAtColumn().isNull();
+    final chatExpr = _lastChatAtColumn();
+    return [
+      OrderingTerm(expression: nullExpr, mode: OrderingMode.asc),
+      OrderingTerm(expression: chatExpr, mode: mode),
+      OrderingTerm(expression: _db.characters.charId, mode: OrderingMode.asc),
+    ];
+  }
 
   @override
   Future<List<Character>> getAll() async {
@@ -26,6 +79,67 @@ class CharacterRepo implements SyncCharacterStore {
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .watch()
         .map((rows) => rows.map(_toModel).toList());
+  }
+
+  Future<List<Character>> getPage({
+    required int limit,
+    required int offset,
+    required CharacterSortField sort,
+    required CharacterSortDir dir,
+  }) async {
+    if (sort == CharacterSortField.lastChat) {
+      final rows = await (_db.select(_db.characters).join([
+            leftOuterJoin(
+              _db.chatSessions,
+              _db.chatSessions.characterId.equalsExp(_db.characters.charId),
+            ),
+          ])
+            ..addColumns([_lastChatAtColumn()])
+            ..groupBy([_db.characters.charId])
+            ..orderBy(_lastChatOrderTerms(dir))
+            ..limit(limit, offset: offset))
+          .get();
+      return rows.map((r) => _toModel(r.readTable(_db.characters))).toList();
+    }
+    final rows = await (_db.select(_db.characters)
+          ..orderBy(_orderBy(sort, dir))
+          ..limit(limit, offset: offset))
+        .get();
+    return rows.map(_toModel).toList();
+  }
+
+  Stream<List<Character>> watchPage({
+    required int limit,
+    required int offset,
+    required CharacterSortField sort,
+    required CharacterSortDir dir,
+  }) {
+    if (sort == CharacterSortField.lastChat) {
+      return (_db.select(_db.characters).join([
+            leftOuterJoin(
+              _db.chatSessions,
+              _db.chatSessions.characterId.equalsExp(_db.characters.charId),
+            ),
+          ])
+            ..addColumns([_lastChatAtColumn()])
+            ..groupBy([_db.characters.charId])
+            ..orderBy(_lastChatOrderTerms(dir))
+            ..limit(limit, offset: offset))
+          .watch()
+          .map((rows) =>
+              rows.map((r) => _toModel(r.readTable(_db.characters))).toList());
+    }
+    return (_db.select(_db.characters)
+          ..orderBy(_orderBy(sort, dir))
+          ..limit(limit, offset: offset))
+        .watch()
+        .map((rows) => rows.map(_toModel).toList());
+  }
+
+  Stream<int> watchTotalCount() {
+    final countExp = _db.characters.charId.count();
+    final query = _db.selectOnly(_db.characters)..addColumns([countExp]);
+    return query.watchSingle().map((row) => row.read(countExp) ?? 0);
   }
 
   @override

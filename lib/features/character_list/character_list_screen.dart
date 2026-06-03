@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/db/repositories/character_repo.dart';
 import '../../core/models/character.dart';
 import '../../core/services/character_book_converter.dart';
 import '../../core/services/character_importer.dart';
@@ -40,14 +41,23 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   SortDir _sortDir = SortDir.desc;
   int _tabIndex = 0;
   String _searchQuery = '';
+  int _page = 1;
   String _picksTitle = 'Our Picks';
   bool _picksCanGoBack = false;
   VoidCallback? _picksGoBackFn;
 
+  CharacterSortField get _sortField => switch (_sortBy) {
+        SortType.name => CharacterSortField.name,
+        SortType.date => CharacterSortField.date,
+        SortType.lastChat => CharacterSortField.lastChat,
+      };
+
+  CharacterSortDir get _sortDirEnum => _sortDir == SortDir.asc
+      ? CharacterSortDir.asc
+      : CharacterSortDir.desc;
+
   @override
   Widget build(BuildContext context) {
-    final characters = ref.watch(charactersProvider);
-
     final navHeight = ref.watch(navHeightProvider);
 
     final topPad = MediaQuery.of(context).padding.top + 74.0;
@@ -102,71 +112,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                         )
                       : KeyedSubtree(
                           key: const ValueKey('my_characters'),
-                          child: characters.when(
-                            loading: () => Center(
-                              child: CircularProgressIndicator(color: context.cs.primary),
-                            ),
-                            error: (e, _) => Center(
-                              child: Text(
-                                'Error: $e',
-                                style: TextStyle(color: context.cs.onSurfaceVariant),
-                              ),
-                            ),
-                            data: (chars) {
-                              final showOurPicks = _searchQuery.isEmpty &&
-                                  (ref.watch(appSettingsProvider).valueOrNull?.showOurPicks ?? true);
-
-                              if (chars.isEmpty && !showOurPicks) {
-                                return CustomScrollView(
-                                  slivers: [
-                                    SliverToBoxAdapter(child: SizedBox(height: topPad)),
-                                    SliverToBoxAdapter(child: _buildTabBar()),
-                                    SliverFillRemaining(
-                                      child: EmptyCharacterState(
-                                        onImport: () => _importCharacter(context, ref),
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }
-                              var filtered = chars;
-                              if (_searchQuery.isNotEmpty) {
-                                final q = _searchQuery.toLowerCase();
-                                filtered = filtered
-                                    .where(
-                                      (c) =>
-                                          c.fav || c.name.toLowerCase().contains(q),
-                                    )
-                                    .toList();
-                              }
-                              final sorted = _sortChars(filtered);
-                              return CharacterGrid(
-                                characters: sorted,
-                                sortBy: _sortBy,
-                                sortDir: _sortDir,
-                                topPadding: topPad,
-                                bottomPadding: navHeight + 20,
-                                tabBar: _buildTabBar(),
-                                showOurPicksCard: showOurPicks,
-                                onOurPicksTap: () => setState(() => _tabIndex = 2),
-                                onOurPicksHide: () {
-                                  final s = ref.read(appSettingsProvider).valueOrNull;
-                                  if (s != null) {
-                                      ref.read(appSettingsProvider.notifier).save(
-                                        s.copyWith(showOurPicks: false),
-                                      );
-                                      GlazeToast.show(context, 'our_picks_hidden_toast'.tr());
-                                    }
-                                },
-                                onSortDirToggle: () => setState(() {
-                                  _sortDir = _sortDir == SortDir.asc
-                                      ? SortDir.desc
-                                      : SortDir.asc;
-                                }),
-                                onSortTypeChanged: (t) => setState(() => _sortBy = t),
-                              );
-                            },
-                          ),
+                          child: _buildMyCharacters(context, topPad, navHeight),
                         ),
             ),
           ),
@@ -226,6 +172,144 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     );
   }
 
+  Widget _buildMyCharacters(BuildContext context, double topPad, double navHeight) {
+    final showOurPicks = _searchQuery.isEmpty &&
+        (ref.watch(appSettingsProvider).valueOrNull?.showOurPicks ?? true);
+
+    if (_searchQuery.isNotEmpty) {
+      return _buildSearchResults(context, topPad, navHeight);
+    }
+
+    final paged = ref.watch(pagedCharactersProvider(PagedCharactersKey(
+      page: _page,
+      sort: _sortField,
+      dir: _sortDirEnum,
+    )));
+
+    return paged.when(
+      loading: () => Center(
+        child: CircularProgressIndicator(color: context.cs.primary),
+      ),
+      error: (e, _) => Center(
+        child: Text(
+          'Error: $e',
+          style: TextStyle(color: context.cs.onSurfaceVariant),
+        ),
+      ),
+      data: (state) {
+        if (state.totalCount == 0 && !showOurPicks) {
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: SizedBox(height: topPad)),
+              SliverToBoxAdapter(child: _buildTabBar()),
+              SliverFillRemaining(
+                child: EmptyCharacterState(
+                  onImport: () => _importCharacter(context, ref),
+                ),
+              ),
+            ],
+          );
+        }
+        return CharacterGrid(
+          characters: state.items,
+          totalCount: state.totalCount,
+          page: state.page,
+          pageSize: state.pageSize,
+          sortBy: _sortBy,
+          sortDir: _sortDir,
+          topPadding: topPad,
+          bottomPadding: navHeight + 20,
+          tabBar: _buildTabBar(),
+          showOurPicksCard: showOurPicks,
+          onOurPicksTap: () => setState(() => _tabIndex = 2),
+          onOurPicksHide: () {
+            final s = ref.read(appSettingsProvider).valueOrNull;
+            if (s != null) {
+              ref.read(appSettingsProvider.notifier).save(
+                s.copyWith(showOurPicks: false),
+              );
+              GlazeToast.show(context, 'our_picks_hidden_toast'.tr());
+            }
+          },
+          onSortDirToggle: () => setState(() {
+            _sortDir = _sortDir == SortDir.asc ? SortDir.desc : SortDir.asc;
+          }),
+          onSortTypeChanged: (t) => setState(() {
+            _sortBy = t;
+            _page = 1;
+          }),
+          onPageChanged: (p) => _goToPage(p, state.pageCount),
+        );
+      },
+    );
+  }
+
+  Widget _buildSearchResults(BuildContext context, double topPad, double navHeight) {
+    final chars = ref.watch(charactersProvider);
+    return chars.when(
+      loading: () => Center(
+        child: CircularProgressIndicator(color: context.cs.primary),
+      ),
+      error: (e, _) => Center(
+        child: Text(
+          'Error: $e',
+          style: TextStyle(color: context.cs.onSurfaceVariant),
+        ),
+      ),
+      data: (all) {
+        final q = _searchQuery.toLowerCase();
+        final filtered = all
+            .where((c) => c.fav || c.name.toLowerCase().contains(q))
+            .toList();
+        final sorted = _sortChars(filtered);
+
+        if (sorted.isEmpty) {
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: SizedBox(height: topPad)),
+              SliverToBoxAdapter(child: _buildTabBar()),
+              SliverFillRemaining(
+                child: Center(
+                  child: Text(
+                    'No characters found',
+                    style: TextStyle(color: context.cs.onSurfaceVariant),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+        return CharacterGrid(
+          characters: sorted,
+          totalCount: sorted.length,
+          page: 1,
+          pageSize: sorted.length,
+          sortBy: _sortBy,
+          sortDir: _sortDir,
+          topPadding: topPad,
+          bottomPadding: navHeight + 20,
+          tabBar: _buildTabBar(),
+          showPaginator: false,
+          onSortDirToggle: () => setState(() {
+            _sortDir = _sortDir == SortDir.asc ? SortDir.desc : SortDir.asc;
+          }),
+          onSortTypeChanged: (t) => setState(() => _sortBy = t),
+          onPageChanged: (_) {},
+        );
+      },
+    );
+  }
+
+  void _goToPage(int requested, int pageCount) {
+    if (pageCount == 0) {
+      if (_page != 1) setState(() => _page = 1);
+      return;
+    }
+    final clamped = requested.clamp(1, pageCount);
+    if (clamped == _page) return;
+    setState(() => _page = clamped);
+  }
+
   Widget _buildTabBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -242,11 +326,15 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
 
   List<Character> _sortChars(List<Character> chars) {
     final list = List<Character>.from(chars);
+    final effectiveSort =
+        _sortBy == SortType.lastChat ? SortType.name : _sortBy;
     list.sort((a, b) {
       if (a.fav != b.fav) return a.fav ? -1 : 1;
-      final cmp = switch (_sortBy) {
+      final cmp = switch (effectiveSort) {
         SortType.name => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
         SortType.date => a.createdAt.compareTo(b.createdAt),
+        SortType.lastChat =>
+          a.name.toLowerCase().compareTo(b.name.toLowerCase()),
       };
       if (cmp != 0) return _sortDir == SortDir.desc ? -cmp : cmp;
       return a.id.compareTo(b.id);
