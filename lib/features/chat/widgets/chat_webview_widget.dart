@@ -12,6 +12,7 @@ import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_webview_keep_alive.dart';
+import '../bridge/chat_webview_settings.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
 import '../editing_message_provider.dart';
@@ -698,7 +699,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           initialSettings: InAppWebViewSettings(
             javaScriptEnabled: true,
             domStorageEnabled: true,
-            transparentBackground: true,
+            transparentBackground: chatWebViewTransparentBackground(),
             isInspectable: true,
             useHybridComposition: true,
             cacheEnabled: true,

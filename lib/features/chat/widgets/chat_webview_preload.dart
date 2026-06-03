@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../bridge/chat_webview_keep_alive.dart';
+import '../bridge/chat_webview_settings.dart';
 
 class ChatWebViewPreloader extends StatefulWidget {
   final Widget child;
@@ -38,7 +39,7 @@ class _ChatWebViewPreloaderState extends State<ChatWebViewPreloader> {
                   initialSettings: InAppWebViewSettings(
                     javaScriptEnabled: true,
                     domStorageEnabled: true,
-                    transparentBackground: true,
+                    transparentBackground: chatWebViewTransparentBackground(),
                     isInspectable: true,
                     useHybridComposition: true,
                     cacheEnabled: true,

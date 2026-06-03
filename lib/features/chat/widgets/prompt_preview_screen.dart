@@ -402,9 +402,9 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
           'type': 'ephemeral',
           if (_apiConfig!.cacheControlTtl == '1h') 'ttl': '1h',
         };
-      }
-      if (_sessionId != null && _sessionId!.isNotEmpty) {
-        body['session_id'] = _sessionId;
+        if (_sessionId != null && _sessionId!.isNotEmpty) {
+          body['session_id'] = _sessionId;
+        }
       }
       body['messages'] = apiMessages;
       body['max_tokens'] = _apiConfig!.maxTokens;

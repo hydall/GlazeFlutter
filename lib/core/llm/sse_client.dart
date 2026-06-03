@@ -97,9 +97,9 @@ class SseClient {
         'type': 'ephemeral',
         if (cacheControlTtl == '1h') 'ttl': '1h',
       };
-    }
-    if (sessionId != null && sessionId.isNotEmpty) {
-      body['session_id'] = sessionId;
+      if (sessionId != null && sessionId.isNotEmpty) {
+        body['session_id'] = sessionId;
+      }
     }
 
 
