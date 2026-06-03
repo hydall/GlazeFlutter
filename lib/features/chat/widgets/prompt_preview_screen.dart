@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'dart:convert';
 
+import '../../../core/llm/context_calculator.dart';
 import '../../../core/llm/history_assembler.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
@@ -62,12 +63,48 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       _sessionId = session.id;
 
       final result = await buildFromInputsInIsolate(inputs);
+      var breakdown = result.breakdown;
+
+      final lastVectorTokens = ref.read(lastVectorLoreTokensProvider(widget.charId));
+      if (lastVectorTokens > 0 && breakdown.vectorLoreTokens == 0) {
+        // The fast-path collectInputs skips vector search (it can take
+        // seconds via the embedding endpoint), but vector entries were
+        // counted on the last real generation. Reuse that count here so
+        // the preview reflects what was actually sent to the model.
+        final newSources = Map<String, int>.from(breakdown.sourceTokens)
+          ..['vectorLore'] = lastVectorTokens;
+        breakdown = TokenBreakdown(
+          sourceTokens: newSources,
+          macroTokens: breakdown.macroTokens,
+          staticTotal: breakdown.staticTotal,
+          historyBudget: breakdown.historyBudget,
+          historyTokens: breakdown.historyTokens,
+          totalTokens: breakdown.totalTokens + lastVectorTokens,
+          cutoffIndex: breakdown.cutoffIndex,
+          trimmedHistory: breakdown.trimmedHistory,
+          lorebookReserveTokens: breakdown.lorebookReserveTokens,
+          memoryTokens: breakdown.memoryTokens,
+          vectorLoreTokens: lastVectorTokens,
+          fixedTotal: breakdown.fixedTotal + lastVectorTokens,
+          remaining: breakdown.remaining - lastVectorTokens,
+        );
+      }
+
+      final mergedResult = PromptResult(
+        messages: result.messages,
+        breakdown: breakdown,
+        sessionVars: result.sessionVars,
+        globalVars: result.globalVars,
+        triggeredLorebooks: result.triggeredLorebooks,
+        triggeredMemories: result.triggeredMemories,
+      );
+
       ref
           .read(cachedTokenBreakdownProvider(widget.charId).notifier)
-          .state = result.breakdown;
+          .state = breakdown;
       if (mounted) {
         setState(() {
-          _result = result;
+          _result = mergedResult;
           _loading = false;
         });
       }

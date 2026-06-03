@@ -75,6 +75,9 @@ class StreamGenerationService {
       _ref.read(cachedTokenBreakdownProvider(_charId).notifier).state =
           promptResult.breakdown;
 
+      _ref.read(lastVectorLoreTokensProvider(_charId).notifier).state =
+          promptResult.breakdown.vectorLoreTokens;
+
       Map<String, String>? pendingSessionVars;
       if (promptResult.sessionVars.isNotEmpty || promptResult.globalVars.isNotEmpty) {
         pendingSessionVars = promptResult.sessionVars;

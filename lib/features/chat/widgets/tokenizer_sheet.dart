@@ -117,7 +117,33 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       _contextSize = inputs.apiConfig.contextSize;
 
       final result = await buildFromInputsInIsolate(inputs);
-      final breakdown = result.breakdown;
+      var breakdown = result.breakdown;
+
+      final lastVectorTokens = ref.read(lastVectorLoreTokensProvider(widget.charId));
+      if (lastVectorTokens > 0 && breakdown.vectorLoreTokens == 0) {
+        // The fast-path collectInputs skips vector search (it can take
+        // seconds via the embedding endpoint), but vector entries were
+        // counted on the last real generation. Reuse that count here so
+        // the tokenizer/preview screen shows a "Vector Lorebook" row
+        // instead of silently folding them into the lorebook reserve.
+        final newSources = Map<String, int>.from(breakdown.sourceTokens)
+          ..['vectorLore'] = lastVectorTokens;
+        breakdown = TokenBreakdown(
+          sourceTokens: newSources,
+          macroTokens: breakdown.macroTokens,
+          staticTotal: breakdown.staticTotal,
+          historyBudget: breakdown.historyBudget,
+          historyTokens: breakdown.historyTokens,
+          totalTokens: breakdown.totalTokens + lastVectorTokens,
+          cutoffIndex: breakdown.cutoffIndex,
+          trimmedHistory: breakdown.trimmedHistory,
+          lorebookReserveTokens: breakdown.lorebookReserveTokens,
+          memoryTokens: breakdown.memoryTokens,
+          vectorLoreTokens: lastVectorTokens,
+          fixedTotal: breakdown.fixedTotal + lastVectorTokens,
+          remaining: breakdown.remaining - lastVectorTokens,
+        );
+      }
 
       final hash = TokenBreakdownCache.computeHash(
         charId: widget.charId,
