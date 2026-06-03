@@ -607,6 +607,21 @@ PromptResult _assembleMessages({
 
   final lorebookReserve = _calculateLorebookReserve(payload);
 
+  // Count vector-only tokens so the tokenizer can show "Vector Lorebook" as
+  // its own row. Without this, vector entries silently inflate the
+  // "Lorebook Reserve" row (which is computed as reserve minus keyword+macro
+  // usage) and the user can never see how much vector lore was actually
+  // injected. We approximate the actual payload bytes by joining the
+  // content of every vector entry — the merge with keyword dedups at most
+  // maxInjectedEntries, and the user-visible goal is "see vector lore in
+  // flight", not an exact budget.
+  final vectorContent = payload.vectorEntries
+      .map((e) => e.content)
+      .join('\n\n');
+  final vectorLoreTokens = vectorContent.isEmpty
+      ? 0
+      : estimateTokens(vectorContent);
+
   final calculator = ContextCalculator(contextSize: payload.apiConfig.contextSize, maxTokens: payload.apiConfig.maxTokens);
   final historyOnly = messages.where((m) => m.isHistory).toList();
 
@@ -615,6 +630,7 @@ PromptResult _assembleMessages({
     historyMessages: historyOnly,
     lorebookReserveTokens: lorebookReserve,
     macroTokens: macroTokens,
+    vectorLoreTokens: vectorLoreTokens,
   );
 
   final finalMessages = <PromptMessage>[];
