@@ -360,19 +360,6 @@ class SwipeGestureHandler {
       setTimeout(() => { body.style.transition = ''; }, 300);
     };
 
-    const animateOut = (body, after) => {
-      body.style.opacity = '0';
-      requestAnimationFrame(() => {
-        body.style.transform = '';
-        setTimeout(() => {
-          body.style.transition = 'opacity 0.2s ease';
-          body.style.opacity = '1';
-          setTimeout(() => { body.style.transition = ''; }, 200);
-          after();
-        }, 50);
-      });
-    };
-
     const onStart = (e) => {
       if (self._isGenerating()) return;
 
@@ -449,15 +436,19 @@ class SwipeGestureHandler {
       const msgId = section.dataset.messageId;
 
       if (canSwitchGreeting) {
-        if (dx < -THRESHOLD) animateOut(body, () => self._sendToFlutter('onChangeGreeting', [msgId, 1]));
-        else if (dx > THRESHOLD) animateOut(body, () => self._sendToFlutter('onChangeGreeting', [msgId, -1]));
-        else reset(body);
+        if (dx < -THRESHOLD) {
+          self.animateVariantSwap(msgId, 'next', () => self._sendToFlutter('onChangeGreeting', [msgId, 1]), dx);
+        } else if (dx > THRESHOLD) {
+          self.animateVariantSwap(msgId, 'prev', () => self._sendToFlutter('onChangeGreeting', [msgId, -1]), dx);
+        } else {
+          reset(body);
+        }
         return;
       }
 
       if (dx < -THRESHOLD) {
         if (swipeId < swipeTotal - 1) {
-          animateOut(body, () => self._sendToFlutter('onSwipe', [JSON.stringify({ id: msgId, direction: 'right' })]));
+          self.animateVariantSwap(msgId, 'next', () => self._sendToFlutter('onSwipe', [JSON.stringify({ id: msgId, direction: 'right' })]), dx);
         } else if (isLast && !self._disableRegen()) {
           body.style.transition = 'transform 0.1s';
           body.style.transform = 'translateX(-20px)';
@@ -471,7 +462,7 @@ class SwipeGestureHandler {
         }
       } else if (dx > THRESHOLD) {
         if (swipeId > 0) {
-          animateOut(body, () => self._sendToFlutter('onSwipe', [JSON.stringify({ id: msgId, direction: 'left' })]));
+          self.animateVariantSwap(msgId, 'prev', () => self._sendToFlutter('onSwipe', [JSON.stringify({ id: msgId, direction: 'left' })]), dx);
         } else {
           reset(body);
         }
@@ -485,6 +476,74 @@ class SwipeGestureHandler {
     container.addEventListener('touchmove', onMove, { passive: false });
     container.addEventListener('touchend', onEnd);
     container.addEventListener('touchcancel', onEnd);
+  }
+
+  /* Slide + fade animation for variant switching.  Used by both the prev/next
+   * buttons and the touch-swipe gesture.  The body's height is locked through
+   * the swap and then animated to the new content's natural height, so the
+   * page doesn't jump when variants have different lengths.
+   *
+   * `currentX` lets the touch path pass the drag's current offset so the exit
+   * continues the gesture outward instead of snapping back toward center. */
+  animateVariantSwap(messageId, dir, after, currentX = 0) {
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    const body = section?.querySelector('.msg-body');
+    if (!body) { after(); return; }
+
+    // dir: 'next' → exit to left, enter from right.  'prev' → mirror.
+    const sign = dir === 'next' ? -1 : (dir === 'prev' ? 1 : 0);
+    // Exit: continue past current drag position; click case uses a small hint.
+    const outX = currentX !== 0 ? currentX + sign * 40 : sign * 28;
+    // Entrance always slides in from a fixed offset on the opposite side.
+    const inX = sign * -28;
+
+    // Lock current height so the (async) content swap doesn't reflow the page.
+    const startHeight = body.offsetHeight;
+    body.style.height = `${startHeight}px`;
+    body.style.overflow = 'hidden';
+    body.style.transition = 'opacity 0.12s ease, transform 0.12s ease';
+    body.style.opacity = '0';
+    if (outX) body.style.transform = `translateX(${outX}px)`;
+
+    setTimeout(() => {
+      let done = false;
+      let fallback;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        mo.disconnect();
+        clearTimeout(fallback);
+
+        // Measure new content's natural height
+        body.style.height = 'auto';
+        const targetHeight = body.offsetHeight;
+        body.style.height = `${startHeight}px`;
+
+        requestAnimationFrame(() => {
+          body.style.transition = 'opacity 0.22s ease, transform 0.22s ease, height 0.22s ease';
+          body.style.opacity = '1';
+          body.style.transform = '';
+          body.style.height = `${targetHeight}px`;
+          setTimeout(() => {
+            body.style.transition = '';
+            body.style.transform = '';
+            body.style.height = '';
+            body.style.overflow = '';
+          }, 240);
+        });
+      };
+
+      // The renderer rewrites section dataset (rawText / swipeId / etc) when
+      // Flutter's updateMessage arrives — that's our cue to animate in.
+      const mo = new MutationObserver(finish);
+      mo.observe(section, { attributes: true });
+      // Fallback in case the update is a no-op or attribute setter is skipped.
+      fallback = setTimeout(finish, 300);
+
+      after();
+      body.style.transition = 'none';
+      if (inX) body.style.transform = `translateX(${inX}px)`;
+    }, 130);
   }
 
   toggleGuidedSwipe(messageId) {
@@ -673,10 +732,30 @@ class InteractionDispatch {
         const section = el.closest('.message-section');
         bridge._sendToFlutter('onToggleImageHidden', [section ? section.dataset.messageId : '']);
       },
-      'swipe-left': (e, el) => bridge._sendToFlutter('onSwipe', [JSON.stringify({ id: el.dataset.messageId, direction: 'left' })]),
-      'swipe-right': (e, el) => bridge._sendToFlutter('onSwipe', [JSON.stringify({ id: el.dataset.messageId, direction: 'right' })]),
-      'greeting-prev': (e, el) => bridge._sendToFlutter('onChangeGreeting', [el.dataset.messageId, -1]),
-      'greeting-next': (e, el) => bridge._sendToFlutter('onChangeGreeting', [el.dataset.messageId, 1]),
+      'swipe-left': (e, el) => {
+        const id = el.dataset.messageId;
+        bridge._swipeHandler.animateVariantSwap(id, 'prev', () =>
+          bridge._sendToFlutter('onSwipe', [JSON.stringify({ id, direction: 'left' })])
+        );
+      },
+      'swipe-right': (e, el) => {
+        const id = el.dataset.messageId;
+        bridge._swipeHandler.animateVariantSwap(id, 'next', () =>
+          bridge._sendToFlutter('onSwipe', [JSON.stringify({ id, direction: 'right' })])
+        );
+      },
+      'greeting-prev': (e, el) => {
+        const id = el.dataset.messageId;
+        bridge._swipeHandler.animateVariantSwap(id, 'prev', () =>
+          bridge._sendToFlutter('onChangeGreeting', [id, -1])
+        );
+      },
+      'greeting-next': (e, el) => {
+        const id = el.dataset.messageId;
+        bridge._swipeHandler.animateVariantSwap(id, 'next', () =>
+          bridge._sendToFlutter('onChangeGreeting', [id, 1])
+        );
+      },
       'stop': (e, el) => bridge._sendToFlutter('onStop', []),
       'regenerate': (e, el) => bridge._sendToFlutter('onRegenerate', [el.dataset.messageId, el.dataset.mode || 'magic']),
       'toggle-guided': (e, el) => bridge._swipeHandler.toggleGuidedSwipe(el.dataset.messageId),

@@ -526,6 +526,29 @@
 .stop-btn:hover { background: rgba(255, 107, 107, 0.15); color: #ff8787; opacity: 1; }
 .stop-btn svg { width: 14px; height: 14px; fill: currentColor; }
 
+/* Tap feedback for message-control buttons — kills the default mobile blue
+ * highlight rectangle and replaces it with a quick press animation. */
+.msg-switcher-btn,
+.msg-regenerate,
+.msg-guided-swipe-btn,
+.msg-actions-btn,
+.stop-btn,
+.msg-lb-trigger-menu {
+  -webkit-tap-highlight-color: transparent;
+  tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  transition: transform 0.12s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+.msg-switcher-btn:active,
+.msg-regenerate:active,
+.msg-guided-swipe-btn:active,
+.msg-actions-btn:active,
+.stop-btn:active,
+.msg-lb-trigger-menu:active {
+  transform: scale(0.88);
+  background-color: rgba(var(--primary-rgb, 121, 150, 206), 0.22);
+}
+
 /* ============================================================
  * Edit mode
  * ============================================================ */
