@@ -217,14 +217,12 @@ class StreamGenerationService {
               errorText: error.toString(),
               saveSession: saveSession,
               regenTargetId: regenTargetId,
-              pendingSessionVars: pendingSessionVars,
               visibleStartIndex: vsi,
             );
           } else {
             finalState = _writer.writeError(
               errorText: error.toString(),
               currentSession: session,
-              pendingSessionVars: pendingSessionVars,
               visibleStartIndex: vsi,
             );
           }

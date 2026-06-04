@@ -33,11 +33,22 @@ as a completed message — not discarded. `ChatNotifier.abortGeneration()` reads
 `ChatState.isGenerating == true` iff an SSE stream is currently active for this `charId`.
 On app restart, `build()` creates a fresh `ChatState` where `isGenerating` defaults to `false`.
 
-### INV-C5: Session variables are restored on abort/error ⚠️ NOT IMPLEMENTED
+### INV-C5: Session variables are restored on abort/error ✅
 
-If macro expansion mutates `sessionVars` during prompt build, those mutations should be
-rolled back on every non-happy exit path. **Currently not implemented** — aborted generations
-may leave behind mutated `sessionVars`.
+If macro expansion mutates `sessionVars` during prompt build, those mutations must
+**not** be persisted on any non-happy exit path. Only the success path (`_saveAssistantMessage`)
+writes the `pendingSessionVars` snapshot returned by the isolate.
+
+`SavedMessageWriter.writeError` and `SavedMessageWriter.writeRegenError` keep the
+original `currentSession.sessionVars` unchanged. The pre-generation vars from the
+isolate only reach the database on the success branch (line 190 of
+`stream_generation_service.dart`).
+
+`currentSessionVars` lives only inside the isolate's local scope during
+`buildPrompt()` (`lib/core/llm/prompt_builder.dart:195`) — nothing is persisted
+before the success branch, so there is no rollback to perform. The fix in PR-B
+(C11) was simply to stop **adding** `pendingSessionVars` to the error write paths
+where they were being leaked into the database despite the abort.
 
 ### INV-C6: Background generation continues independently
 
@@ -229,7 +240,7 @@ On abort, `ChatNotifier.abortGeneration()` restores:
 - The placeholder message (converted to partial or removed)
 - `ChatState.isGenerating → false`
 - `ChatState.isGeneratingImage → false`
-- Session variables mutated during prompt build — ⚠️ NOT IMPLEMENTED (see INV-C5)
+- Session variables mutated during prompt build — ✅ on success only (see INV-C5)
 
 ### INV-A3: Regen during active generation aborts first
 
