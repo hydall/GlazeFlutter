@@ -761,7 +761,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       if (_fetchedModels.isEmpty) return;
     }
     if (!mounted) return;
-    final models = _fetchedModels.map((m) => m['id'] as String).toList();
+    final models = _fetchedModels.map((m) => m['id'] as String).toList()..sort();
     final current = _modelCtrl.text;
     if (current.isNotEmpty && !models.contains(current)) {
       models.insert(0, current);
