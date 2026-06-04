@@ -334,18 +334,27 @@ GoRouter lives in `router.dart`, not `app.dart`. Shell tabs and overlay routes:
 
 ### Phase B — Post-SSE (`generation_pipeline.dart`)
 
-After `StreamGenerationService` returns, `ChatNotifier` runs `GenerationPipeline.run()`:
+After `StreamGenerationService` returns, `ChatNotifier._runGeneration()` runs
+`GenerationPipeline.run()` for **send** and **regenerate** only:
 
 1. Persist assistant message (or regen/error rollback paths)
 2. `ChatGenerationService.processImageTags()` — inline `[IMG:GEN]` tags
 3. `ChatGenerationService.processExtensions()` → `extension_post_gen_service.dart`
 4. Cloud sync notification + generation notification preview
 
+**Continue exception:** `ChatNotifier.continueMessage()` calls
+`ChatGenerationService.generate()` directly and merges text onto the last assistant
+message. It does **not** use `GenerationPipeline` — no image-tag processing, extensions
+post-gen, or pipeline sync notification. See `docs/INVARIANTS.md` INV-CM2.
+
+**Talkativeness:** `sendMessage()` may skip generation when
+`character.extensions['talkativeness']` rolls above the configured threshold.
+
 ### Request Types
 
 | Type | State owner | Streaming | Abort |
 |------|-------------|-----------|-------|
-| Chat | `ChatState.isGenerating` per `charId` | Yes (SSE) | `CancelToken` + `_activeGenId` in `ChatNotifier` |
+| Chat | `ChatState.isGenerating` per `charId` | Yes (SSE) | `AbortHandler`: `CancelToken` + `_activeGenId` |
 | Image gen | `ChatState.isGeneratingImage` + `_imgGenCancelToken` | No (one-shot) | `_imgGenCancelToken` in `ChatNotifier` |
 | Summary | Widget-local in `summary_sheet.dart` | No | Widget-scoped `CancelToken` |
 | Memory draft | `MemoryBookController` (`_generatingDrafts`, `_cancelTokens`) | No | Per-draft `CancelToken`; mutex via `memory_active_drafts_provider` |
@@ -577,7 +586,9 @@ Characters, sessions, presets, API configs, personas, lorebooks, theme presets, 
 
 ## 9. Extensions (Info Blocks)
 
-Post-generation extension pipeline runs after the assistant message is saved.
+Post-generation extension pipeline runs after the assistant message is saved on the
+**normal/regen path only** (via `GenerationPipeline`, not `continueMessage`).
+Formal rules: `docs/INVARIANTS.md` INV-EG1–INV-EG3.
 
 ### Files
 - `extension_post_gen_service.dart` — orchestrator called from `ChatGenerationService.processExtensions`
