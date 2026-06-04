@@ -173,6 +173,10 @@ lib/
 │   │   │   ├── chat_bridge_controller.dart  # Dart-side bridge methods
 │   │   │   ├── chat_message_mapper.dart     # ChatMessage → JS map conversion
 │   │   │   └── chat_webview_keep_alive.dart # Keep-alive key provider
+│   │   ├── state/
+│   │   │   ├── chat_body_selectors.dart # batteryAware dual-read helper
+│   │   │   ├── cached_token_breakdown.dart
+│   │   │   └── token_breakdown_cache.dart
 │   │   └── widgets/                      # Chat UI widgets
 │   ├── chat_history/
 │   │   ├── chat_history_provider.dart    # All sessions across all characters
