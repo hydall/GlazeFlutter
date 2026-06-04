@@ -49,12 +49,17 @@ int tokensForKey(TokenBreakdown bd, String key) {
 }
 
 int _summaryTokens(TokenBreakdown bd) {
-  // macroTokens['summary'] already includes summaryMemoryContent (injected via
-  // summary_macro). No overlap deduction needed — memory is shown separately
-  // via the 'memory' key and is skipped in presetNetTokens.
-  return (bd.sourceTokens['summary'] ?? 0) > 0
-      ? bd.sourceTokens['summary']!
-      : (bd.macroTokens['summary'] ?? 0);
+  // summaryContentTokens counts only the user-authored summary, NOT
+  // the memory that piggybacks on {{summary}} in summary_macro mode.
+  // Memory is shown as its own row, so the "Summary" row would
+  // otherwise double-count those tokens (e.g. user has no summary
+  // but a memory entry triggers — both rows would show the same N).
+  // Falls back to macroTokens['summary'] for breakdowns computed
+  // before this field existed (defensive — e.g. cached JSON).
+  if (bd.summaryContentTokens > 0) return bd.summaryContentTokens;
+  final fromSource = bd.sourceTokens['summary'] ?? 0;
+  if (fromSource > 0) return fromSource;
+  return bd.macroTokens['summary'] ?? 0;
 }
 
 int _unusedLorebookReserve(TokenBreakdown bd) {

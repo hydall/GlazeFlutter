@@ -633,6 +633,32 @@ PromptResult _assembleMessages({
     vectorLoreTokens: vectorLoreTokens,
   );
 
+  // summaryContentTokens: visual row "Summary" must reflect ONLY the
+  // user-authored summary, not the memory injection that piggybacks on
+  // {{summary}} in summary_macro mode. macroTokens['summary'] is kept
+  // as the full expansion (summary + memory) for presetNetTokens
+  // deduction semantics — see TokenBreakdown.summaryContentTokens doc.
+  final summaryOnly = payload.summaryContent;
+  final summaryOnlyTokens = summaryOnly != null && summaryOnly.isNotEmpty
+      ? estimateTokens(summaryOnly)
+      : 0;
+  final breakdownWithSummaryOnly = TokenBreakdown(
+    sourceTokens: breakdown.sourceTokens,
+    macroTokens: breakdown.macroTokens,
+    staticTotal: breakdown.staticTotal,
+    historyBudget: breakdown.historyBudget,
+    historyTokens: breakdown.historyTokens,
+    totalTokens: breakdown.totalTokens,
+    cutoffIndex: breakdown.cutoffIndex,
+    trimmedHistory: breakdown.trimmedHistory,
+    lorebookReserveTokens: breakdown.lorebookReserveTokens,
+    memoryTokens: breakdown.memoryTokens,
+    vectorLoreTokens: breakdown.vectorLoreTokens,
+    fixedTotal: breakdown.fixedTotal,
+    remaining: breakdown.remaining,
+    summaryContentTokens: summaryOnlyTokens,
+  );
+
   final finalMessages = <PromptMessage>[];
   var historyInserted = false;
   for (final msg in messages) {
@@ -702,7 +728,7 @@ PromptResult _assembleMessages({
     }
   }
 
-  return PromptResult(messages: finalMessages, breakdown: breakdown, sessionVars: currentSessionVars, globalVars: currentGlobalVars, triggeredLorebooks: triggeredLorebooks, triggeredMemories: triggeredMemories);
+  return PromptResult(messages: finalMessages, breakdown: breakdownWithSummaryOnly, sessionVars: currentSessionVars, globalVars: currentGlobalVars, triggeredLorebooks: triggeredLorebooks, triggeredMemories: triggeredMemories);
 }
 
 void _injectMemoryBlock(List<PromptMessage> messages, List<StaticBlock> attributionBlocks, String content) {

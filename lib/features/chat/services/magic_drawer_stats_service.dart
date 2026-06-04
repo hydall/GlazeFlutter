@@ -133,7 +133,7 @@ class MagicDrawerStatsService {
       characterTokens: (cached?.sourceTokens['description'] ?? 0) > 0 ? cached!.sourceTokens['description']! : (cached?.macroTokens['description'] ?? 0),
       presetTokens: cached?.presetNetTokens ?? 0,
       personaTokens: (cached?.sourceTokens['persona'] ?? 0) > 0 ? cached!.sourceTokens['persona']! : (cached?.macroTokens['persona'] ?? 0),
-      summaryTokens: (cached?.sourceTokens['summary'] ?? 0) > 0 ? cached!.sourceTokens['summary']! : (cached?.macroTokens['summary'] ?? 0),
+      summaryTokens: _summaryTokensForStats(cached),
       vectorLoreTokens: cached?.vectorLoreTokens ?? 0,
       keywordLoreTokens: ((cached?.sourceTokens['lorebook'] ?? 0) + (cached?.macroTokens['lorebooks'] ?? 0)),
       imageGenEnabled: imageGenEnabled,
@@ -183,9 +183,7 @@ class MagicDrawerStatsService {
           personaTokens: (cached.sourceTokens['persona'] ?? 0) > 0
               ? cached.sourceTokens['persona']!
               : (cached.macroTokens['persona'] ?? 0),
-          summaryTokens: (cached.sourceTokens['summary'] ?? 0) > 0
-              ? cached.sourceTokens['summary']!
-              : (cached.macroTokens['summary'] ?? 0),
+          summaryTokens: _summaryTokensForStats(cached),
           vectorLoreTokens: cached.vectorLoreTokens,
           keywordLoreTokens: (cached.sourceTokens['lorebook'] ?? 0) +
               (cached.macroTokens['lorebooks'] ?? 0),
@@ -235,9 +233,7 @@ class MagicDrawerStatsService {
         personaTokens: (sourceTokens['persona'] ?? 0) > 0
             ? sourceTokens['persona']!
             : (breakdown.macroTokens['persona'] ?? 0),
-        summaryTokens: (sourceTokens['summary'] ?? 0) > 0
-            ? sourceTokens['summary']!
-            : (breakdown.macroTokens['summary'] ?? 0),
+        summaryTokens: _summaryTokensForStats(breakdown),
         vectorLoreTokens: breakdown.vectorLoreTokens,
         keywordLoreTokens: (sourceTokens['lorebook'] ?? 0) +
             (breakdown.macroTokens['lorebooks'] ?? 0),
@@ -259,4 +255,18 @@ class MagicDrawerStatsService {
       }
     }
   }
+}
+
+/// Returns the user-authored summary token count, excluding the memory
+/// that piggybacks on {{summary}} in summary_macro mode. Memory is
+/// shown as its own row, so adding it to the "Summary" row would
+/// double-count those tokens (see TokenBreakdown.summaryContentTokens).
+/// Falls back to legacy macroTokens['summary'] for breakdowns
+/// computed before the field existed.
+int _summaryTokensForStats(TokenBreakdown? bd) {
+  if (bd == null) return 0;
+  if (bd.summaryContentTokens > 0) return bd.summaryContentTokens;
+  final fromSource = bd.sourceTokens['summary'] ?? 0;
+  if (fromSource > 0) return fromSource;
+  return bd.macroTokens['summary'] ?? 0;
 }
