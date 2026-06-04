@@ -503,7 +503,7 @@ Issues tracked for refactor:
 
 5. ~~**`lorebook_vector_search.dart`** — contained Riverpod provider declarations mixed with service logic.~~ **Fixed** — providers extracted to `lorebook_providers.dart`.
 
-6. **Mutual exclusion between chat generation and memory draft is not enforced.** Neither `ChatNotifier.sendMessage()` nor `memory_books_sheet.dart._generateDraft()` checks for the other's active state. See `docs/INVARIANTS.md` INV-M3/INV-M4.
+6. ~~**Mutual exclusion between chat generation and memory draft is not enforced.** Neither `ChatNotifier.sendMessage()` nor `memory_books_sheet.dart._generateDraft()` checks for the other's active state.~~ **Resolved 2026-06** (PR-B C12) — introduced `lib/features/memory/state/memory_active_drafts_provider.dart` (`StateNotifierProvider<MemoryActiveDraftsNotifier, Set<String>>` of sessionIds). `MemoryBookController.generateDraft()` early-returns if `chatProvider(_charId).value?.isGenerating` and adds sessionId to the set; `ChatNotifier.sendMessage`/`regenerateLastAssistant`/`continueMessage` early-return if sessionId is in the set. Both directions of the mutex are now observed. See `docs/INVARIANTS.md` INV-M3/INV-M4.
 
 7. **Session variable rollback on abort is not implemented.** `ChatNotifier.abortGeneration()` does not restore pre-generation `sessionVars`. See `docs/INVARIANTS.md` INV-C5.
 

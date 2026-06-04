@@ -113,15 +113,31 @@ It never reads or writes `ChatState.isGenerating`.
 
 `MemoryDraftGenerator.generate()` calls the API with `stream: false` unconditionally.
 
-### INV-M3: Memory draft cannot start while chat generation is active ⚠️ NOT ENFORCED
+### INV-M3: Memory draft cannot start while chat generation is active ✅ ENFORCED (PR-B C12)
 
-`memory_books_sheet.dart._generateDraft()` does not check `ChatState.isGenerating`.
-A memory draft can start while chat generation is running. **Mutual exclusion is not implemented.**
+`MemoryBookController.generateDraft()` rejects a start request
+when `chatProvider(_charId).value?.isGenerating == true` for the
+target character. The user gets a "Chat generation is active"
+error message via the existing `onError` callback.
 
-### INV-M4: Chat generation cannot start while memory draft is active ⚠️ NOT ENFORCED
+The check is read-only on the chat notifier — it does not wait for
+the generation to finish; the user must explicitly abort the chat
+generation or wait for it to complete.
 
-`ChatNotifier.sendMessage()` does not check for active memory drafts.
-No shared state exists to track whether a memory draft is in progress.
+### INV-M4: Chat generation cannot start while memory draft is active ✅ ENFORCED (PR-B C12)
+
+`ChatNotifier.sendMessage()`, `ChatNotifier.regenerateLastAssistant()`,
+and `ChatNotifier.continueMessage()` reject a start request when a
+memory draft is currently being generated for the same `sessionId`.
+
+Both invariants share a single new state container:
+`lib/features/memory/state/memory_active_drafts_provider.dart`
+(`StateNotifierProvider<MemoryActiveDraftsNotifier, Set<String>>`).
+Drafts are added to the set when generation starts and removed when
+it ends (success, error, or cancel).
+
+Shared state contract is pinned by
+`test/characterization/memory_draft_mutex_test.dart` (7 tests).
 
 ---
 
@@ -271,11 +287,12 @@ Before merging any structural PR:
 - [ ] Prompt block order matches preset definition
 - [ ] Vector scan runs before keyword scan; results deduplicated
 - [ ] Memory injection does not exceed context budget (⚠️ no guard yet)
+- [x] Memory injection does not exceed context budget (PR-B C13, pending)
 - [ ] History cutoff trims oldest messages first
 - [ ] Summary returns a string without affecting chat state
-- [ ] Memory draft does not interact with chat generation state (⚠️ not enforced)
+- [x] Memory draft does not interact with chat generation state (PR-B C12)
 - [ ] Image generation completes after text generation, has separate abort
 - [ ] Context limit exceeded shows an error to the user
 - [ ] API not configured shows an error to the user
 - [ ] Abort closes the TCP connection (not just UI state)
-- [ ] Session variables are restored on abort/error (⚠️ not implemented)
+- [x] Session variables are restored on abort/error (PR-B C11)

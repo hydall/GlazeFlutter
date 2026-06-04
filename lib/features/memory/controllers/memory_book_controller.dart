@@ -12,6 +12,7 @@ import '../../../core/state/memory_settings_provider.dart';
 import '../../chat/chat_provider.dart';
 import '../../chat/memory_draft_generator.dart';
 import '../../settings/api_list_provider.dart';
+import '../state/memory_active_drafts_provider.dart';
 
 /// Controller for memory book operations, separating business logic from UI.
 class MemoryBookController {
@@ -205,11 +206,15 @@ class MemoryBookController {
     required void Function(String error) onError,
   }) async {
     if (_book == null || _generatingDrafts[draftId] == true) return;
+    final chatState = _ref.read(chatProvider(_charId));
+    if (chatState.value?.isGenerating == true) {
+      onError('Chat generation is active — wait for it to finish before generating a memory draft');
+      return;
+    }
     final draftIndex =
         _book!.pendingDrafts.indexWhere((d) => d.id == draftId);
     if (draftIndex < 0) return;
 
-    final chatState = _ref.read(chatProvider(_charId));
     final session = chatState.value?.session;
     if (session == null) return;
 
@@ -230,6 +235,7 @@ class MemoryBookController {
     _generatingDrafts[draftId] = true;
     _genStartTimes[draftId] = DateTime.now();
     _startGenElapsedTimer();
+    _ref.read(memoryActiveDraftsProvider.notifier).markActive(_sessionId);
     onStart();
 
     try {
@@ -247,6 +253,7 @@ class MemoryBookController {
       _generatingDrafts.remove(draftId);
       _genStartTimes.remove(draftId);
       _stopGenElapsedTimer();
+      _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
       await save();
       onComplete();
     } catch (e) {
@@ -260,6 +267,7 @@ class MemoryBookController {
       _generatingDrafts.remove(draftId);
       _genStartTimes.remove(draftId);
       _stopGenElapsedTimer();
+      _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
       await save();
       onError(e.toString());
     } finally {
@@ -270,6 +278,9 @@ class MemoryBookController {
   void cancelDraftGeneration(String draftId) {
     _cancelTokens[draftId]?.cancel();
     _generatingDrafts.remove(draftId);
+    if (_generatingDrafts.isEmpty) {
+      _ref.read(memoryActiveDraftsProvider.notifier).markInactive(_sessionId);
+    }
   }
 
   Future<void> batchGenerate({
