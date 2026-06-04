@@ -251,29 +251,24 @@ class EditController {
     body.innerHTML = '';
     const textarea = document.createElement('textarea');
     textarea.className = 'edit-textarea';
+    textarea.rows = 1;
     textarea.value = editText;
     textarea.dataset.originalText = editText;
     body.appendChild(textarea);
 
-    textarea.addEventListener('input', () => {
-      textarea.style.height = 'auto';
-      textarea.style.height = Math.max(80, textarea.scrollHeight) + 'px';
-    });
-    textarea.addEventListener('wheel', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      if (e.deltaMode === 0) {
-        textarea.scrollTop += e.deltaY * 0.3;
-      } else if (e.deltaMode === 1) {
-        textarea.scrollTop += e.deltaY * 16;
-      } else {
-        textarea.scrollTop += e.deltaY * 100;
-      }
-    }, { passive: false });
-    textarea.addEventListener('touchmove', (e) => {
-      e.stopPropagation();
-    }, { passive: true });
-    textarea.style.height = Math.max(80, textarea.scrollHeight + 20) + 'px';
+    // Modern Chromium (123+) sizes textareas to content via `field-sizing: content`.
+    // Old WebViews don't — fall back to JS-driven auto-grow on input.
+    const supportsFieldSizing = typeof CSS !== 'undefined'
+      && CSS.supports && CSS.supports('field-sizing', 'content');
+    if (!supportsFieldSizing) {
+      const autoGrow = () => {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+      };
+      textarea.addEventListener('input', autoGrow);
+      autoGrow();
+    }
+
     textarea.focus();
 
     const footer = section.querySelector('.msg-footer');
@@ -1326,6 +1321,29 @@ class Bridge {
   setTopPadding(px) {
     const container = document.getElementById('chat-container') || document.body;
     container.style.paddingTop = px + 'px';
+  }
+
+  setHeaderOverlay(topPx, heightPx) {
+    const el = document.getElementById('header-blur-overlay');
+    if (!el) return;
+    if (heightPx > 0) {
+      document.documentElement.style.setProperty('--header-overlay-top', topPx + 'px');
+      document.documentElement.style.setProperty('--header-overlay-height', heightPx + 'px');
+      el.style.display = 'block';
+    } else {
+      el.style.display = 'none';
+    }
+  }
+
+  setInputOverlay(heightPx) {
+    const el = document.getElementById('input-blur-overlay');
+    if (!el) return;
+    if (heightPx > 0) {
+      document.documentElement.style.setProperty('--input-overlay-height', heightPx + 'px');
+      el.style.display = 'block';
+    } else {
+      el.style.display = 'none';
+    }
   }
 
   applyLayout(layout) {

@@ -12,57 +12,46 @@ import 'lorebook_provider.dart';
 
 const int kCharactersPageSize = 25;
 
-class PagedCharactersKey {
-  final int page;
+class InfiniteCharactersKey {
   final CharacterSortField sort;
   final CharacterSortDir dir;
 
-  const PagedCharactersKey({
-    required this.page,
-    required this.sort,
-    required this.dir,
-  });
+  const InfiniteCharactersKey({required this.sort, required this.dir});
 
   @override
   bool operator ==(Object other) =>
-      other is PagedCharactersKey &&
-      other.page == page &&
-      other.sort == sort &&
-      other.dir == dir;
+      other is InfiniteCharactersKey && other.sort == sort && other.dir == dir;
 
   @override
-  int get hashCode => Object.hash(page, sort, dir);
+  int get hashCode => Object.hash(sort, dir);
 }
 
-class PagedCharactersState {
+class InfiniteCharactersState {
   final List<Character> items;
   final int totalCount;
-  final int page;
-  final int pageSize;
+  final int loadedLimit;
+  final bool isLoadingMore;
 
-  const PagedCharactersState({
+  const InfiniteCharactersState({
     required this.items,
     required this.totalCount,
-    required this.page,
-    required this.pageSize,
+    required this.loadedLimit,
+    this.isLoadingMore = false,
   });
 
-  int get pageCount {
-    if (totalCount == 0) return 0;
-    return (totalCount + pageSize - 1) ~/ pageSize;
-  }
+  bool get hasMore => items.length < totalCount;
 
-  PagedCharactersState copyWith({
+  InfiniteCharactersState copyWith({
     List<Character>? items,
     int? totalCount,
-    int? page,
-    int? pageSize,
+    int? loadedLimit,
+    bool? isLoadingMore,
   }) =>
-      PagedCharactersState(
+      InfiniteCharactersState(
         items: items ?? this.items,
         totalCount: totalCount ?? this.totalCount,
-        page: page ?? this.page,
-        pageSize: pageSize ?? this.pageSize,
+        loadedLimit: loadedLimit ?? this.loadedLimit,
+        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       );
 }
 
@@ -76,9 +65,9 @@ final characterByIdProvider = Provider.family<Character?, String>((ref, id) {
   return chars.where((c) => c.id == id).firstOrNull;
 });
 
-final pagedCharactersProvider = AsyncNotifierProvider.family<
-    PagedCharactersNotifier, PagedCharactersState, PagedCharactersKey>(
-  PagedCharactersNotifier.new,
+final infiniteCharactersProvider = AsyncNotifierProvider.family<
+    InfiniteCharactersNotifier, InfiniteCharactersState, InfiniteCharactersKey>(
+  InfiniteCharactersNotifier.new,
 );
 
 final avatarVersionProvider = StateProvider<int>((ref) => 0);
@@ -87,102 +76,93 @@ void bumpAvatarVersion(dynamic ref) {
   ref.read(avatarVersionProvider.notifier).state++;
 }
 
-class PagedCharactersNotifier
-    extends FamilyAsyncNotifier<PagedCharactersState, PagedCharactersKey> {
-  StreamSubscription<List<Character>>? _pageSub;
+class InfiniteCharactersNotifier
+    extends FamilyAsyncNotifier<InfiniteCharactersState, InfiniteCharactersKey> {
+  StreamSubscription<List<Character>>? _itemsSub;
   StreamSubscription<int>? _countSub;
+  int _loadedLimit = kCharactersPageSize;
 
   @override
-  Future<PagedCharactersState> build(PagedCharactersKey arg) async {
+  Future<InfiniteCharactersState> build(InfiniteCharactersKey arg) async {
     final repo = ref.read(characterRepoProvider);
-    final page = arg.page < 1 ? 1 : arg.page;
-    final offset = (page - 1) * kCharactersPageSize;
+    _loadedLimit = kCharactersPageSize;
 
-    await _pageSub?.cancel();
+    await _itemsSub?.cancel();
     await _countSub?.cancel();
 
     final initialCount = await repo.watchTotalCount().first;
     final initialItems = await repo.getPage(
-      limit: kCharactersPageSize,
-      offset: offset,
+      limit: _loadedLimit,
+      offset: 0,
       sort: arg.sort,
       dir: arg.dir,
     );
 
-    final resolvedPage = _resolvePage(page, initialCount);
-
-    if (resolvedPage != page) {
-      ref.invalidateSelf();
-      return PagedCharactersState(
-        items: const [],
-        totalCount: initialCount,
-        page: resolvedPage,
-        pageSize: kCharactersPageSize,
-      );
-    }
-
-    state = AsyncData(PagedCharactersState(
+    state = AsyncData(InfiniteCharactersState(
       items: initialItems,
       totalCount: initialCount,
-      page: page,
-      pageSize: kCharactersPageSize,
+      loadedLimit: _loadedLimit,
     ));
 
-    _pageSub = repo
-        .watchPage(
-          limit: kCharactersPageSize,
-          offset: (resolvedPage - 1) * kCharactersPageSize,
-          sort: arg.sort,
-          dir: arg.dir,
-        )
-        .listen(
-      (data) {
-        final current = state.valueOrNull;
-        state = AsyncData((current ?? _empty(resolvedPage)).copyWith(items: data));
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        state = AsyncError(error, stackTrace);
-      },
-    );
-
-    _countSub = repo.watchTotalCount().listen(
-      (count) {
-        final current = state.valueOrNull;
-        if (current == null) return;
-        final clampedPage = _resolvePage(current.page, count);
-        if (clampedPage != current.page) {
-          ref.invalidateSelf();
-          return;
-        }
-        state = AsyncData(current.copyWith(totalCount: count));
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        state = AsyncError(error, stackTrace);
-      },
-    );
+    _subscribeItems();
+    _subscribeCount();
 
     ref.onDispose(() {
-      _pageSub?.cancel();
+      _itemsSub?.cancel();
       _countSub?.cancel();
     });
 
     return state.value!;
   }
 
-  int _resolvePage(int requested, int totalCount) {
-    if (totalCount == 0) return 1;
-    final maxPage = (totalCount + kCharactersPageSize - 1) ~/ kCharactersPageSize;
-    if (requested < 1) return 1;
-    if (requested > maxPage) return maxPage;
-    return requested;
+  void _subscribeItems() {
+    final repo = ref.read(characterRepoProvider);
+    _itemsSub?.cancel();
+    _itemsSub = repo
+        .watchPage(
+          limit: _loadedLimit,
+          offset: 0,
+          sort: arg.sort,
+          dir: arg.dir,
+        )
+        .listen(
+      (data) {
+        final current = state.valueOrNull;
+        if (current == null) return;
+        state = AsyncData(current.copyWith(
+          items: data,
+          loadedLimit: _loadedLimit,
+          isLoadingMore: false,
+        ));
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        state = AsyncError(error, stackTrace);
+      },
+    );
   }
 
-  PagedCharactersState _empty(int page) => PagedCharactersState(
-        items: const [],
-        totalCount: 0,
-        page: page,
-        pageSize: kCharactersPageSize,
-      );
+  void _subscribeCount() {
+    final repo = ref.read(characterRepoProvider);
+    _countSub?.cancel();
+    _countSub = repo.watchTotalCount().listen(
+      (count) {
+        final current = state.valueOrNull;
+        if (current == null) return;
+        state = AsyncData(current.copyWith(totalCount: count));
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        state = AsyncError(error, stackTrace);
+      },
+    );
+  }
+
+  Future<void> loadMore() async {
+    final current = state.valueOrNull;
+    if (current == null || current.isLoadingMore || !current.hasMore) return;
+    _loadedLimit += kCharactersPageSize;
+    state = AsyncData(current.copyWith(isLoadingMore: true));
+    _subscribeItems();
+  }
 }
 
 class CharactersNotifier extends AsyncNotifier<List<Character>> {

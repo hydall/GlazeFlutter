@@ -235,22 +235,23 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
     final sessions = await ref.read(chatSessionOpsProvider.notifier).getSessionsByCharacter(cId);
     if (!context.mounted) return;
 
-    await GlazeBottomSheet.show<void>(
+    // Inner sheet pops with a value; the outer CharacterDetailScreen modal
+    // is popped exactly once afterwards. Two chained Navigator.pop() calls
+    // (one immediate + one via addPostFrameCallback) race against the inner
+    // sheet's exit animation and can drop the route on the floor.
+    final result = await GlazeBottomSheet.show<String>(
       context,
       title: 'btn_open_chat'.tr(),
       items: [
         BottomSheetItem(
           icon: Icons.add,
           label: 'btn_new_chat'.tr(),
-          onTap: () => _closeSheetAndNavigate('/chat/$cId?new=1'),
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('new'),
         ),
         BottomSheetItem(
           icon: Icons.file_download,
           label: 'action_import'.tr(),
-          onTap: () {
-            Navigator.of(context).pop();
-            _importChat(cId);
-          },
+          onTap: () => Navigator.of(context, rootNavigator: true).pop('import'),
         ),
         ...sessions.map(
           (s) => BottomSheetItem(
@@ -260,13 +261,25 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
             ),
             hint:
                 '${s.messages.length} ${'count_messages'.plural(s.messages.length)}',
-            onTap: () => _closeSheetAndNavigate(
-              '/chat/$cId?session=${s.sessionIndex}',
-            ),
+            onTap: () => Navigator.of(context, rootNavigator: true)
+                .pop('session:${s.sessionIndex}'),
           ),
         ),
       ],
     );
+
+    if (result == null) return;
+    if (!context.mounted) return;
+
+    if (result == 'import') {
+      unawaited(_importChat(cId));
+      return;
+    }
+
+    final route = result == 'new'
+        ? '/chat/$cId?new=1'
+        : '/chat/$cId?session=${result.substring('session:'.length)}';
+    Navigator.of(context, rootNavigator: true).pop<String>(route);
   }
 
   Future<void> _importChat(String charId) async {

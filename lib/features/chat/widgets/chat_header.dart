@@ -6,6 +6,8 @@ import '../../../core/models/character.dart';
 
 import '../../../core/state/character_provider.dart' show avatarVersionProvider;
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/theme_preset.dart';
+import '../../../shared/theme/theme_provider.dart';
 
 class ChatHeader extends ConsumerWidget {
   final Character character;
@@ -22,6 +24,14 @@ class ChatHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(avatarVersionProvider);
+    final preset = ref.watch(themeProvider.select((s) => s.activePreset));
+    final scale =
+        preset.uiFontSize is num ? preset.uiFontSizeValue / 15.0 : 1.0;
+    final letterSpacing = preset.uiLetterSpacing;
+    final textColor = preset.uiTextParsed ?? context.cs.onSurface;
+    final secondaryColor =
+        preset.uiTextGrayParsed ?? context.cs.onSurfaceVariant;
+
     Color avatarColor = context.cs.primary;
     if (character.color != null && character.color!.isNotEmpty) {
       try {
@@ -78,10 +88,11 @@ class ChatHeader extends ConsumerWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: context.cs.onSurface,
-                  fontSize: 16,
+                  color: textColor,
+                  fontSize: 16 * scale,
                   fontWeight: FontWeight.w600,
                   height: 1.1,
+                  letterSpacing: letterSpacing,
                 ),
               ),
               const SizedBox(height: 2),
@@ -90,10 +101,11 @@ class ChatHeader extends ConsumerWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: context.cs.onSurfaceVariant,
-                  fontSize: 12,
+                  color: secondaryColor,
+                  fontSize: 12 * scale,
                   fontWeight: FontWeight.w400,
                   height: 1.1,
+                  letterSpacing: letterSpacing,
                 ),
               ),
             ],

@@ -42,6 +42,12 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final bool isGeneratingImage;
   final double bottomInset;
   final double topInset;
+  /// Geometry for the WebView's in-content blur strips that sit behind the
+  /// Flutter chat header / input pills. Needed because Flutter's
+  /// BackdropFilter cannot blur platform-view (WebView) content.
+  final double headerOverlayTop;
+  final double headerOverlayHeight;
+  final double inputOverlayHeight;
   final String? searchQuery;
   final int searchCurrentIndex;
   final String? chatLayout;
@@ -93,6 +99,9 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.isGeneratingImage = false,
     this.bottomInset = 0,
     this.topInset = 0,
+    this.headerOverlayTop = 0,
+    this.headerOverlayHeight = 0,
+    this.inputOverlayHeight = 0,
     this.searchQuery,
     this.searchCurrentIndex = 0,
     this.chatLayout,
@@ -207,6 +216,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     if (widget.topInset > 0) {
       await _bridge!.setTopPadding(widget.topInset);
     }
+    await _bridge!.setHeaderOverlay(
+      widget.headerOverlayTop,
+      widget.headerOverlayHeight,
+    );
+    await _bridge!.setInputOverlay(widget.inputOverlayHeight);
     if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
       await _bridge!.setSearch(query: widget.searchQuery!, activeIndex: widget.searchCurrentIndex);
     }
@@ -396,6 +410,18 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
 
     if (widget.topInset != oldWidget.topInset) {
       _bridge!.setTopPadding(widget.topInset);
+    }
+
+    if (widget.headerOverlayTop != oldWidget.headerOverlayTop ||
+        widget.headerOverlayHeight != oldWidget.headerOverlayHeight) {
+      _bridge!.setHeaderOverlay(
+        widget.headerOverlayTop,
+        widget.headerOverlayHeight,
+      );
+    }
+
+    if (widget.inputOverlayHeight != oldWidget.inputOverlayHeight) {
+      _bridge!.setInputOverlay(widget.inputOverlayHeight);
     }
 
     final anyGenerating = widget.isGenerating || widget.isGeneratingImage;

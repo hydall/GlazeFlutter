@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
-import '../../../shared/widgets/glaze_toast.dart';
 import 'character_card.dart';
 
 enum SortType { name, date, lastChat }
@@ -13,39 +12,35 @@ enum SortDir { asc, desc }
 class CharacterGrid extends StatelessWidget {
   final List<Character> characters;
   final int totalCount;
-  final int page;
-  final int pageSize;
   final SortType sortBy;
   final SortDir sortDir;
   final VoidCallback onSortDirToggle;
   final ValueChanged<SortType> onSortTypeChanged;
-  final ValueChanged<int> onPageChanged;
   final double topPadding;
   final double bottomPadding;
   final Widget? tabBar;
   final bool showOurPicksCard;
   final VoidCallback? onOurPicksTap;
   final VoidCallback? onOurPicksHide;
-  final bool showPaginator;
+  final bool isLoadingMore;
+  final bool hasMore;
 
   const CharacterGrid({
     super.key,
     required this.characters,
     required this.totalCount,
-    required this.page,
-    required this.pageSize,
     required this.sortBy,
     required this.sortDir,
     required this.onSortDirToggle,
     required this.onSortTypeChanged,
-    required this.onPageChanged,
     this.topPadding = 0,
     this.bottomPadding = 16,
     this.tabBar,
     this.showOurPicksCard = false,
     this.onOurPicksTap,
     this.onOurPicksHide,
-    this.showPaginator = true,
+    this.isLoadingMore = false,
+    this.hasMore = false,
   });
 
   @override
@@ -84,7 +79,7 @@ class CharacterGrid extends StatelessWidget {
           ),
         ),
         SliverPadding(
-          padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 0),
           sliver: SliverGrid(
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
@@ -111,16 +106,24 @@ class CharacterGrid extends StatelessWidget {
             ),
           ),
         ),
-        if (showPaginator)
-          SliverToBoxAdapter(
-            child: CharacterPaginator(
-              page: page,
-              pageSize: pageSize,
-              totalCount: totalCount,
-              onPageChanged: onPageChanged,
-              bottomPadding: 8,
-            ),
+        SliverToBoxAdapter(
+          child: SizedBox(
+            height: hasMore || isLoadingMore ? 56 : 0,
+            child: isLoadingMore
+                ? Center(
+                    child: SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: context.cs.primary,
+                      ),
+                    ),
+                  )
+                : null,
           ),
+        ),
+        SliverToBoxAdapter(child: SizedBox(height: bottomPadding)),
       ],
     );
   }
@@ -154,271 +157,6 @@ class _SortDirButton extends StatelessWidget {
               size: 18,
               color: context.cs.primary,
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class CharacterPaginator extends StatelessWidget {
-  final int page;
-  final int pageSize;
-  final int totalCount;
-  final ValueChanged<int> onPageChanged;
-  final double bottomPadding;
-
-  const CharacterPaginator({
-    super.key,
-    required this.page,
-    required this.pageSize,
-    required this.totalCount,
-    required this.onPageChanged,
-    this.bottomPadding = 8,
-  });
-
-  int get _pageCount {
-    if (totalCount == 0) return 0;
-    return (totalCount + pageSize - 1) ~/ pageSize;
-  }
-
-  List<int> get _visiblePages {
-    final count = _pageCount;
-    if (count <= 5) {
-      return [for (var i = 1; i <= count; i++) i];
-    }
-    final set = <int>{1, 2, count - 1, count};
-    if (page - 1 >= 1) set.add(page - 1);
-    if (page + 1 <= count) set.add(page + 1);
-    set.add(page);
-    final sorted = set.where((p) => p >= 1 && p <= count).toList()..sort();
-    return sorted;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final count = _pageCount;
-    if (count <= 1) return const SizedBox.shrink();
-
-    final visible = _visiblePages;
-    final canGoBack = page > 1;
-    final canGoForward = page < count;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(12, 4, 12, bottomPadding),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          _PaginatorButton(
-            icon: Icons.first_page_rounded,
-            enabled: canGoBack,
-            onTap: () => onPageChanged(1),
-            semanticsLabel: 'First page',
-          ),
-          const SizedBox(width: 4),
-          _PaginatorButton(
-            icon: Icons.chevron_left_rounded,
-            enabled: canGoBack,
-            onTap: () => onPageChanged(page - 1),
-            semanticsLabel: 'Previous page',
-          ),
-          const SizedBox(width: 8),
-          for (int i = 0; i < visible.length; i++) ...[
-            if (i > 0 && visible[i] - visible[i - 1] > 1)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  '…',
-                  style: TextStyle(
-                    color: context.cs.onSurfaceVariant,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            _PageNumberButton(
-              page: visible[i],
-              isActive: visible[i] == page,
-              onTap: () => onPageChanged(visible[i]),
-            ),
-            const SizedBox(width: 4),
-          ],
-          const SizedBox(width: 4),
-          _PaginatorButton(
-            icon: Icons.chevron_right_rounded,
-            enabled: canGoForward,
-            onTap: () => onPageChanged(page + 1),
-            semanticsLabel: 'Next page',
-          ),
-          const SizedBox(width: 4),
-          _PaginatorButton(
-            icon: Icons.last_page_rounded,
-            enabled: canGoForward,
-            onTap: () => onPageChanged(count),
-            semanticsLabel: 'Last page',
-          ),
-          const SizedBox(width: 8),
-          _JumpToPageButton(
-            page: page,
-            pageCount: count,
-            onSubmit: onPageChanged,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'Page $page of $count',
-            style: TextStyle(
-              fontSize: 11,
-              color: context.cs.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PaginatorButton extends StatelessWidget {
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onTap;
-  final String semanticsLabel;
-
-  const _PaginatorButton({
-    required this.icon,
-    required this.enabled,
-    required this.onTap,
-    required this.semanticsLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = enabled
-        ? context.cs.primary
-        : context.cs.onSurfaceVariant.withValues(alpha: 0.3);
-    return Semantics(
-      label: semanticsLabel,
-      button: true,
-      enabled: enabled,
-      child: GestureDetector(
-        onTap: enabled ? onTap : null,
-        child: Container(
-          width: 32,
-          height: 32,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: context.cs.primary.withValues(alpha: enabled ? 0.15 : 0.05),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: context.cs.primary.withValues(alpha: enabled ? 0.2 : 0.05),
-            ),
-          ),
-          child: Icon(icon, size: 18, color: color),
-        ),
-      ),
-    );
-  }
-}
-
-class _PageNumberButton extends StatelessWidget {
-  final int page;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _PageNumberButton({
-    required this.page,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = isActive
-        ? context.cs.primary
-        : context.cs.primary.withValues(alpha: 0.12);
-    final fg = isActive ? Colors.white : context.cs.primary;
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 30,
-        height: 30,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Text(
-          '$page',
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: fg,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _JumpToPageButton extends StatelessWidget {
-  final int page;
-  final int pageCount;
-  final ValueChanged<int> onSubmit;
-
-  const _JumpToPageButton({
-    required this.page,
-    required this.pageCount,
-    required this.onSubmit,
-  });
-
-  Future<void> _open(BuildContext context) async {
-    int? target;
-    await GlazeBottomSheet.show<void>(
-      context,
-      title: 'Go to page',
-      input: BottomSheetInput(
-        placeholder: 'Page (1–$pageCount)',
-        confirmLabel: 'Go',
-        onConfirm: (v) {
-          final n = int.tryParse(v.trim());
-          if (n == null) {
-            Navigator.of(context, rootNavigator: true).pop();
-            return;
-          }
-          target = n;
-          Navigator.of(context, rootNavigator: true).pop();
-        },
-      ),
-    );
-    if (target == null) return;
-    final clamped = target!.clamp(1, pageCount);
-    if (clamped == page) return;
-    if (clamped != target) {
-      GlazeToast.showWithoutContext('Page $clamped of $pageCount');
-    }
-    onSubmit(clamped);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Jump to page',
-      child: GestureDetector(
-        onTap: () => _open(context),
-        child: Container(
-          width: 30,
-          height: 30,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: context.cs.primary.withValues(alpha: 0.12),
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: context.cs.primary.withValues(alpha: 0.2),
-            ),
-          ),
-          child: Icon(
-            Icons.tag_rounded,
-            size: 16,
-            color: context.cs.primary,
           ),
         ),
       ),

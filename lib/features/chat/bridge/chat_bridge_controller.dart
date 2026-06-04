@@ -446,6 +446,10 @@ class ChatBridgeController {
       layout.setSelectionMode(enabled);
   Future<void> toggleMessageSelection(String id) =>
       layout.toggleMessageSelection(id);
+  Future<void> setHeaderOverlay(double topPx, double heightPx) =>
+      layout.setHeaderOverlay(topPx, heightPx);
+  Future<void> setInputOverlay(double heightPx) =>
+      layout.setInputOverlay(heightPx);
 
   // Memory
   void updateMemoryBookData({

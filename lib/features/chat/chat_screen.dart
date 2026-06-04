@@ -113,6 +113,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
   Future<void> _applySessionPreference() async {
     if (_sessionApplied) return;
     _sessionApplied = true;
+    // Wait for chatProvider's initial build to complete before switching,
+    // otherwise the build's final state may overwrite our switchSession.
+    await ref.read(chatProvider(widget.charId).future);
+    if (!mounted) return;
     final notifier = ref.read(chatProvider(widget.charId).notifier);
     if (widget.forceNewSession) {
       unawaited(notifier.createNewSession());
@@ -595,6 +599,10 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     regenTargetId: widget.state.regenTargetId,
                     bottomInset: messageListBottom,
                     topInset: messageListTop,
+                    headerOverlayTop:
+                        MediaQuery.paddingOf(context).top + 10,
+                    headerOverlayHeight: 56,
+                    inputOverlayHeight: messageListBottom,
                     charName: character?.name,
                     charColor: character?.color,
                     personaName: effectivePersona?.name,

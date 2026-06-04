@@ -41,7 +41,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   SortDir _sortDir = SortDir.desc;
   int _tabIndex = 0;
   String _searchQuery = '';
-  int _page = 1;
   String _picksTitle = 'Our Picks';
   bool _picksCanGoBack = false;
   VoidCallback? _picksGoBackFn;
@@ -180,13 +179,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
       return _buildSearchResults(context, topPad, navHeight);
     }
 
-    final paged = ref.watch(pagedCharactersProvider(PagedCharactersKey(
-      page: _page,
-      sort: _sortField,
-      dir: _sortDirEnum,
-    )));
+    final key = InfiniteCharactersKey(sort: _sortField, dir: _sortDirEnum);
+    final infinite = ref.watch(infiniteCharactersProvider(key));
 
-    return paged.when(
+    return infinite.when(
       loading: () => Center(
         child: CircularProgressIndicator(color: context.cs.primary),
       ),
@@ -210,35 +206,44 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
             ],
           );
         }
-        return CharacterGrid(
-          characters: state.items,
-          totalCount: state.totalCount,
-          page: state.page,
-          pageSize: state.pageSize,
-          sortBy: _sortBy,
-          sortDir: _sortDir,
-          topPadding: topPad,
-          bottomPadding: navHeight + 20,
-          tabBar: _buildTabBar(),
-          showOurPicksCard: showOurPicks,
-          onOurPicksTap: () => setState(() => _tabIndex = 2),
-          onOurPicksHide: () {
-            final s = ref.read(appSettingsProvider).valueOrNull;
-            if (s != null) {
-              ref.read(appSettingsProvider.notifier).save(
-                s.copyWith(showOurPicks: false),
-              );
-              GlazeToast.show(context, 'our_picks_hidden_toast'.tr());
+        return NotificationListener<ScrollNotification>(
+          onNotification: (n) {
+            if (n.metrics.axis != Axis.vertical) return false;
+            if (state.hasMore &&
+                !state.isLoadingMore &&
+                n.metrics.extentAfter < 600) {
+              ref
+                  .read(infiniteCharactersProvider(key).notifier)
+                  .loadMore();
             }
+            return false;
           },
-          onSortDirToggle: () => setState(() {
-            _sortDir = _sortDir == SortDir.asc ? SortDir.desc : SortDir.asc;
-          }),
-          onSortTypeChanged: (t) => setState(() {
-            _sortBy = t;
-            _page = 1;
-          }),
-          onPageChanged: (p) => _goToPage(p, state.pageCount),
+          child: CharacterGrid(
+            characters: state.items,
+            totalCount: state.totalCount,
+            sortBy: _sortBy,
+            sortDir: _sortDir,
+            topPadding: topPad,
+            bottomPadding: navHeight + 20,
+            tabBar: _buildTabBar(),
+            showOurPicksCard: showOurPicks,
+            onOurPicksTap: () => setState(() => _tabIndex = 2),
+            onOurPicksHide: () {
+              final s = ref.read(appSettingsProvider).valueOrNull;
+              if (s != null) {
+                ref.read(appSettingsProvider.notifier).save(
+                  s.copyWith(showOurPicks: false),
+                );
+                GlazeToast.show(context, 'our_picks_hidden_toast'.tr());
+              }
+            },
+            onSortDirToggle: () => setState(() {
+              _sortDir = _sortDir == SortDir.asc ? SortDir.desc : SortDir.asc;
+            }),
+            onSortTypeChanged: (t) => setState(() => _sortBy = t),
+            isLoadingMore: state.isLoadingMore,
+            hasMore: state.hasMore,
+          ),
         );
       },
     );
@@ -282,32 +287,18 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
         return CharacterGrid(
           characters: sorted,
           totalCount: sorted.length,
-          page: 1,
-          pageSize: sorted.length,
           sortBy: _sortBy,
           sortDir: _sortDir,
           topPadding: topPad,
           bottomPadding: navHeight + 20,
           tabBar: _buildTabBar(),
-          showPaginator: false,
           onSortDirToggle: () => setState(() {
             _sortDir = _sortDir == SortDir.asc ? SortDir.desc : SortDir.asc;
           }),
           onSortTypeChanged: (t) => setState(() => _sortBy = t),
-          onPageChanged: (_) {},
         );
       },
     );
-  }
-
-  void _goToPage(int requested, int pageCount) {
-    if (pageCount == 0) {
-      if (_page != 1) setState(() => _page = 1);
-      return;
-    }
-    final clamped = requested.clamp(1, pageCount);
-    if (clamped == _page) return;
-    setState(() => _page = clamped);
   }
 
   Widget _buildTabBar() {

@@ -5,11 +5,22 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/theme/theme_preset.dart';
+import '../../../shared/theme/theme_provider.dart';
 import '../../../shared/widgets/glass_surface.dart';
 
-class ChatInputBar extends StatefulWidget {
+Border _uiBorder(BuildContext context, ThemePreset preset) {
+  final base = preset.borderParsed ?? context.cs.onSurface;
+  return Border.all(
+    color: base.withValues(alpha: preset.borderOpacity.clamp(0.0, 1.0)),
+    width: preset.borderWidth,
+  );
+}
+
+class ChatInputBar extends ConsumerStatefulWidget {
   final ValueChanged<String> onSend;
   final void Function(String text, String? guidance)? onSendWithGuidance;
   final bool isGenerating;
@@ -89,10 +100,10 @@ class ChatInputBar extends StatefulWidget {
   });
 
   @override
-  State<ChatInputBar> createState() => _ChatInputBarState();
+  ConsumerState<ChatInputBar> createState() => _ChatInputBarState();
 }
 
-class _ChatInputBarState extends State<ChatInputBar> {
+class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   late final TextEditingController _controller;
   final _guidanceController = TextEditingController();
   bool _guidanceMode = false;
@@ -217,11 +228,20 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   @override
   Widget build(BuildContext context) {
+    final preset = ref.watch(themeProvider.select((s) => s.activePreset));
+    final scale =
+        preset.uiFontSize is num ? preset.uiFontSizeValue / 15.0 : 1.0;
+    final letterSpacing = preset.uiLetterSpacing;
+    final textColor = preset.uiTextParsed ?? context.cs.onSurface;
+    final secondaryColor =
+        preset.uiTextGrayParsed ?? context.cs.onSurfaceVariant;
+    final uiBorder = _uiBorder(context, preset);
+
     if (widget.showSearchControls) {
       final searchContent = GlassSurface(
         borderRadius: BorderRadius.circular(28),
         tint: context.cs.surface,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: uiBorder,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 56),
           child: Row(
@@ -235,8 +255,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     ? '${widget.searchCurrentIndex + 1} of ${widget.searchMatchCount} matches'
                     : 'No matches found',
                 style: TextStyle(
-                  color: context.cs.onSurface,
-                  fontSize: 16,
+                  color: textColor,
+                  fontSize: 16 * scale,
+                  letterSpacing: letterSpacing,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -246,7 +267,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
               icon: Icon(
                 Icons.keyboard_arrow_up,
                 size: 24,
-                color: context.cs.onSurface,
+                color: textColor,
               ),
               onPressed: widget.onSearchPrev,
             ),
@@ -254,7 +275,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
               icon: Icon(
                 Icons.keyboard_arrow_down,
                 size: 24,
-                color: context.cs.onSurface,
+                color: textColor,
               ),
               onPressed: widget.onSearchNext,
             ),
@@ -281,7 +302,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
       final selectionContent = GlassSurface(
         borderRadius: BorderRadius.circular(28),
         tint: context.cs.surface,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: uiBorder,
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 56),
           child: Row(
@@ -297,9 +318,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
               child: Text(
                 '${widget.selectedCount} Selected',
                 style: TextStyle(
-                  color: context.cs.onSurface,
-                  fontSize: 16,
+                  color: textColor,
+                  fontSize: 16 * scale,
                   fontWeight: FontWeight.w600,
+                  letterSpacing: letterSpacing,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -308,14 +330,14 @@ class _ChatInputBarState extends State<ChatInputBar> {
             _CircleBtn(
               icon: widget.allSelectedHidden ? Icons.visibility : Icons.visibility_off,
               onTap: widget.selectedCount > 0 ? widget.onHideSelected : null,
-              color: widget.selectedCount > 0 ? context.cs.primary : context.cs.onSurface.withValues(alpha: 0.3),
+              color: widget.selectedCount > 0 ? context.cs.primary : secondaryColor.withValues(alpha: 0.5),
               batterySaver: widget.batterySaver,
             ),
             const SizedBox(width: 8),
             _CircleBtn(
               icon: Icons.delete,
               onTap: widget.selectedCount > 0 ? widget.onDeleteSelected : null,
-              color: widget.selectedCount > 0 ? Colors.redAccent : context.cs.onSurface.withValues(alpha: 0.3),
+              color: widget.selectedCount > 0 ? Colors.redAccent : secondaryColor.withValues(alpha: 0.5),
               batterySaver: widget.batterySaver,
             ),
             const SizedBox(width: 8),
@@ -352,6 +374,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
             _AttachedImagePreview(
               imageBytes: _attachedImageBytes!,
               onClear: _clearImage,
+              border: uiBorder,
             ),
             const SizedBox(height: 8),
           ],
@@ -362,6 +385,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 color: Colors.orange.withValues(alpha: 0.08),
                 border: Border.all(
                   color: Colors.orange.withValues(alpha: 0.3),
+                  width: preset.borderWidth.clamp(1.0, double.infinity),
                 ),
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -376,12 +400,17 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 textCapitalization: TextCapitalization.sentences,
                 keyboardType: TextInputType.multiline,
                 textInputAction: TextInputAction.newline,
-                style: const TextStyle(fontSize: 14, color: Colors.orange),
+                style: TextStyle(
+                  fontSize: 14 * scale,
+                  color: Colors.orange,
+                  letterSpacing: letterSpacing,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Guidance instructions...',
                   hintStyle: TextStyle(
                     color: Colors.orange.withValues(alpha: 0.5),
-                    fontSize: 14,
+                    fontSize: 14 * scale,
+                    letterSpacing: letterSpacing,
                   ),
                   prefixIcon: Icon(
                     Icons.tips_and_updates_outlined,
@@ -408,11 +437,12 @@ class _ChatInputBarState extends State<ChatInputBar> {
             child: GlassSurface(
               borderRadius: BorderRadius.circular(28),
               tint: context.cs.surface,
-              border: Border.all(
-                color: _guidanceMode
-                    ? Colors.orange.withValues(alpha: 0.3)
-                    : Colors.white.withValues(alpha: 0.05),
-              ),
+              border: _guidanceMode
+                  ? Border.all(
+                      color: Colors.orange.withValues(alpha: 0.3),
+                      width: preset.borderWidth.clamp(1.0, double.infinity),
+                    )
+                  : uiBorder,
               child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 56),
               child: TextField(
@@ -431,11 +461,20 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 onSubmitted: widget.virtualKeyboardSend
                     ? (_) => _handleSend()
                     : null,
-                style: const TextStyle(fontSize: 16),
+                style: TextStyle(
+                  fontSize: 16 * scale,
+                  color: textColor,
+                  letterSpacing: letterSpacing,
+                ),
                 decoration: InputDecoration(
                   hintText: _guidanceMode
                       ? 'Message with guidance...'
                       : 'Type a message...',
+                  hintStyle: TextStyle(
+                    color: secondaryColor,
+                    fontSize: 16 * scale,
+                    letterSpacing: letterSpacing,
+                  ),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
@@ -523,8 +562,13 @@ class _ChatInputBarState extends State<ChatInputBar> {
 class _AttachedImagePreview extends StatelessWidget {
   final Uint8List imageBytes;
   final VoidCallback onClear;
+  final BoxBorder? border;
 
-  const _AttachedImagePreview({required this.imageBytes, required this.onClear});
+  const _AttachedImagePreview({
+    required this.imageBytes,
+    required this.onClear,
+    this.border,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -534,7 +578,8 @@ class _AttachedImagePreview extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 150, maxHeight: 150),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border: border ??
+              Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
         child: Stack(
           children: [
@@ -568,7 +613,7 @@ class _AttachedImagePreview extends StatelessWidget {
   }
 }
 
-class _CircleBtn extends StatefulWidget {
+class _CircleBtn extends ConsumerStatefulWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final Color? color;
@@ -577,10 +622,10 @@ class _CircleBtn extends StatefulWidget {
   const _CircleBtn({required this.icon, this.onTap, this.color, this.batterySaver = false});
 
   @override
-  State<_CircleBtn> createState() => _CircleBtnState();
+  ConsumerState<_CircleBtn> createState() => _CircleBtnState();
 }
 
-class _CircleBtnState extends State<_CircleBtn> with SingleTickerProviderStateMixin {
+class _CircleBtnState extends ConsumerState<_CircleBtn> with SingleTickerProviderStateMixin {
   late final AnimationController _press;
   late final Animation<double> _scale;
 
@@ -605,6 +650,7 @@ class _CircleBtnState extends State<_CircleBtn> with SingleTickerProviderStateMi
 
   @override
   Widget build(BuildContext context) {
+    final preset = ref.watch(themeProvider.select((s) => s.activePreset));
     return GestureDetector(
       onTap: widget.onTap,
       onTapDown: (widget.onTap != null && !widget.batterySaver) ? (_) => _press.forward() : null,
@@ -618,7 +664,7 @@ class _CircleBtnState extends State<_CircleBtn> with SingleTickerProviderStateMi
           child: GlassSurface(
             borderRadius: BorderRadius.circular(20),
             tint: context.cs.surface,
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            border: _uiBorder(context, preset),
             child: Center(
               child: Icon(widget.icon, color: widget.color ?? context.cs.primary, size: 20),
             ),

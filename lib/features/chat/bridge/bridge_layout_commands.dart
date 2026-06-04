@@ -31,6 +31,18 @@ class LayoutBridgeCommands {
     );
   }
 
+  Future<void> setHeaderOverlay(double topPx, double heightPx) {
+    return _host.evalJs(
+      'window.bridge?.setHeaderOverlay(${topPx.toStringAsFixed(1)}, ${heightPx.toStringAsFixed(1)})',
+    );
+  }
+
+  Future<void> setInputOverlay(double heightPx) {
+    return _host.evalJs(
+      'window.bridge?.setInputOverlay(${heightPx.toStringAsFixed(1)})',
+    );
+  }
+
   Future<void> startEdit(String messageId) {
     return _host.evalJs(
       'window.bridge?.startEdit("${_host.escape(messageId)}")',

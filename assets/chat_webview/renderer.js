@@ -160,9 +160,6 @@ const SHADOW_STYLE = `
   .edit-textarea {
     display: block;
     width: 100%;
-    min-height: 80px;
-    max-height: 60vh;
-    overflow-y: auto;
     padding: 8px;
     border: 1px solid rgba(255,255,255,0.12);
     border-radius: 8px;
@@ -173,6 +170,7 @@ const SHADOW_STYLE = `
     resize: none;
     outline: none;
     line-height: 1.6;
+    field-sizing: content;
   }
   .edit-textarea:focus { border-color: var(--primary-color, #7996CE); }
   .message-section.editing .msg-reasoning { display: none; }
