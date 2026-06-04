@@ -161,12 +161,31 @@ When context overflows, history is trimmed from the **oldest** end.
 `ContextCalculator._trimHistory()` walks backwards from the newest end, accumulating
 messages until the budget is full. The oldest messages are dropped because they are never accumulated.
 
-### INV-PS4: Memory injection is guarded by a token budget ⚠️ NOT IMPLEMENTED
+### INV-PS4: Memory injection is guarded by a token budget ✅ ENFORCED (PR-B C13)
 
-`MemoryInjectionService.buildInjection()` has no 35% token budget threshold check.
-Memory injection proceeds unconditionally as long as there are active entries with content.
-`ContextCalculator.calculate()` subtracts memory tokens from the history budget, but there
-is no guard that skips injection when it would consume too much budget.
+`MemoryInjectionService.buildInjection()` enforces a hard upper bound
+on the tokens spent on memory injection. The cap is configured per
+`MemoryBookSettings.maxInjectionBudgetPercent` (default `0.35`, i.e.
+35% of the active context budget).
+
+**Formula:**
+
+```
+maxInjectionTokens = max(0, contextBudgetTokens) * maxInjectionBudgetPercent
+```
+
+where `contextBudgetTokens` is supplied by the caller (typically
+`apiConfig.contextSize`). Entries are kept in score-descending
+order; once the running total of `estimateTokens(entry.content)`
+exceeds `maxInjectionTokens`, the tail of the list is dropped.
+
+If `contextBudgetTokens` is not supplied (null/0) or
+`maxInjectionBudgetPercent <= 0`, the guard is a no-op — legacy
+behaviour is preserved for callers that don't yet pass the budget.
+
+The percentage default lives in `MemoryBookSettings` (see
+`lib/core/models/memory_book.dart`) so per-book overrides can be
+added in the future without changing the service signature.
 
 ### INV-PS5: Memory injection position is deterministic
 

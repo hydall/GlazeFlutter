@@ -61,6 +61,7 @@ class MemoryBookSettings with _$MemoryBookSettings {
     @Default(true) bool autoCreateEnabled,
     @Default(false) bool autoGenerateEnabled,
     @Default(7) int maxInjectedEntries,
+    @Default(0.35) double maxInjectionBudgetPercent,
     @Default(15) int autoCreateInterval,
     @Default(true) bool useDelayedAutomation,
     @Default('summary_block') String injectionTarget,

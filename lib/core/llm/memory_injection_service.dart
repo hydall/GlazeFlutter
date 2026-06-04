@@ -8,12 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../db/app_db.dart';
 import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
+import 'tokenizer.dart';
 import '../models/memory_book.dart';
 import '../state/db_provider.dart';
 import '../state/memory_settings_provider.dart';
 import 'embedding_service.dart';
 import 'glaze_matcher.dart';
 import 'embedding_types.dart';
+import 'memory_budget.dart';
 import 'memory_embedding_service.dart';
 import 'vector_math.dart';
 
@@ -22,12 +24,18 @@ class MemoryInjectionResult {
   final String content;
   final String injectionTarget;
   final String macroContent;
+  final int totalTokens;
+  final int? maxInjectionTokens;
+  final bool budgetTrimmed;
 
   const MemoryInjectionResult({
     this.entries = const [],
     this.content = '',
     this.injectionTarget = 'summary_block',
     this.macroContent = '',
+    this.totalTokens = 0,
+    this.maxInjectionTokens,
+    this.budgetTrimmed = false,
   });
 }
 
@@ -49,6 +57,7 @@ class MemoryInjectionService {
     EmbeddingConfig? embeddingConfig,
     bool Function()? shouldAbort,
     CancelToken? cancelToken,
+    int? contextBudgetTokens,
   }) async {
     if (shouldAbort?.call() == true) return const MemoryInjectionResult();
     debugPrint('[mem] buildInjection: reading memory book...');
@@ -121,7 +130,23 @@ class MemoryInjectionService {
 
     if (topEntries.isEmpty) return const MemoryInjectionResult();
 
-    final macroContent = topEntries
+    final maxInjectionTokens = MemoryInjectionBudget.maxInjectionTokens(
+      contextBudgetTokens: contextBudgetTokens,
+      percent: book.settings.maxInjectionBudgetPercent,
+    );
+
+    final trimmedEntries = maxInjectionTokens == null
+        ? topEntries
+        : MemoryInjectionBudget.trimByTokenBudget(topEntries, maxInjectionTokens);
+
+    if (trimmedEntries.isEmpty) return const MemoryInjectionResult();
+
+    final totalTokens = trimmedEntries.fold<int>(
+      0,
+      (sum, e) => sum + estimateTokens(e.content),
+    );
+
+    final macroContent = trimmedEntries
         .map((e) => e.content.trim())
         .join('\n\n');
 
@@ -130,7 +155,7 @@ class MemoryInjectionService {
       contentParts.add('Summary excerpt:\n$summaryExcerpt');
     }
     contentParts.add('Memory context:');
-    for (final entry in topEntries) {
+    for (final entry in trimmedEntries) {
       final title = entry.title.isNotEmpty ? entry.title : 'Memory';
       contentParts.add('- $title: ${entry.content.trim()}');
     }
@@ -139,10 +164,13 @@ class MemoryInjectionService {
         gs.injectionTarget == 'summary_macro' ? 'summary_macro' : 'summary_block';
 
     return MemoryInjectionResult(
-      entries: topEntries,
+      entries: trimmedEntries,
       content: contentParts.join('\n\n'),
       injectionTarget: injectionTarget,
       macroContent: macroContent,
+      totalTokens: totalTokens,
+      maxInjectionTokens: maxInjectionTokens,
+      budgetTrimmed: trimmedEntries.length < topEntries.length,
     );
   }
 

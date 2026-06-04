@@ -150,6 +150,7 @@ class PromptPayloadBuilder {
         embeddingConfig: embeddingConfig,
         shouldAbort: shouldAbort,
         cancelToken: cancelToken,
+        contextBudgetTokens: chatApi.contextSize,
       );
 
       throwIfAborted();
