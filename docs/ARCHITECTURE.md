@@ -495,7 +495,7 @@ Issues tracked for refactor:
 
 1. **`onboarding_service.dart`** — partially fixed: UI extracted to `features/onboarding/onboarding_screen.dart`. Remaining issue: service still imports `package:flutter/material.dart` for `BuildContext` and calls `rootNavigatorKey.currentState.push()`.
 
-2. **`magic_drawer_stats_service.dart`** (~236 lines) — named "service" but lives in `features/chat/widgets/`. Move to `features/chat/` (provider or service level).
+2. **`magic_drawer_stats_service.dart`** (~236 lines) — named "service" but lives in `features/chat/widgets/`. Move to `features/chat/` (provider or service level). **Resolved 2026-06** — moved to `lib/features/chat/services/magic_drawer_stats_service.dart` (sibling of `magic_drawer_layout_service.dart`).
 
 3. **`prompt_payload_builder.dart`** (~240 lines) — reads 7+ Riverpod providers directly. Becoming a God object. Split: pure `PromptInputsCollector` (reads providers) + pure `PromptPayloadAssembler` (builds payload from collected inputs, no Riverpod dep). **Resolved 2026-06** — split into `prompt_inputs_collector.dart` + `prompt_payload_assembler.dart`; `prompt_payload_builder.dart` kept as thin orchestrator owning async vector/memory work.
 
