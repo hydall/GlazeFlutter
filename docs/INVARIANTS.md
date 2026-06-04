@@ -306,7 +306,7 @@ Before merging any structural PR:
 - [ ] Prompt block order matches preset definition
 - [ ] Vector scan runs before keyword scan; results deduplicated
 - [ ] Memory injection does not exceed context budget (⚠️ no guard yet)
-- [x] Memory injection does not exceed context budget (PR-B C13, pending)
+- [x] Memory injection does not exceed context budget (PR-B C13)
 - [ ] History cutoff trims oldest messages first
 - [ ] Summary returns a string without affecting chat state
 - [x] Memory draft does not interact with chat generation state (PR-B C12)
