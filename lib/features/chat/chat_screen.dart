@@ -29,6 +29,7 @@ import 'chat_provider.dart';
 import 'controllers/chat_message_selection_controller.dart';
 import 'chat_search_delegate.dart';
 import 'chat_state.dart';
+import 'state/chat_body_selectors.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/magic_drawer.dart';
@@ -501,9 +502,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     );
     final appSettings = ref.watch(appSettingsProvider).valueOrNull;
     final batterySaverMode = appSettings?.batterySaver ?? false;
-    final preset = batterySaverMode
-        ? ref.read(themeProvider).activePreset
-        : ref.watch(themeProvider).activePreset;
+    final preset = batteryAware(ref, batterySaverMode,
+        themeProvider.select((p) => p.activePreset));
     final batterySaver = appSettings?.batterySaver ?? false;
     final safeBottom = MediaQuery.paddingOf(context).bottom;
     final messageListTop = MediaQuery.paddingOf(context).top + 10 + 56;
@@ -511,22 +511,18 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final bgBlur = preset.bgBlur > 0 ? preset.bgBlur : 0.0;
     final bgOpacity = preset.bgOpacity.clamp(0.0, 1.0);
     final bgPath = preset.bgImage;
-    final fontStyle = batterySaverMode
-        ? ref.read(chatFontStyleProvider)
-        : ref.watch(chatFontStyleProvider);
-    final fontDataUrl = batterySaverMode
-        ? ref.read(chatFontDataProvider).valueOrNull
-        : ref.watch(chatFontDataProvider).valueOrNull;
-    final character = batterySaverMode
-        ? ref.read(characterByIdProvider(widget.charId))
-        : ref.watch(characterByIdProvider(widget.charId));
+    final fontStyle = batteryAware(
+        ref, batterySaverMode, chatFontStyleProvider);
+    final fontDataUrl = batteryAware(ref, batterySaverMode,
+        chatFontDataProvider.select((p) => p.valueOrNull));
+    final character = batteryAware(
+        ref, batterySaverMode, characterByIdProvider(widget.charId));
     final personaKey = (
       charId: widget.charId,
       sessionId: widget.state.session?.id,
     );
-    final effectivePersona = batterySaverMode
-        ? ref.read(effectivePersonaForChatProvider(personaKey))
-        : ref.watch(effectivePersonaForChatProvider(personaKey));
+    final effectivePersona = batteryAware(
+        ref, batterySaverMode, effectivePersonaForChatProvider(personaKey));
     ref.listen(effectivePersonaForChatProvider(personaKey), (prev, next) {
       if (prev?.id == next?.id &&
           prev?.name == next?.name &&
@@ -547,9 +543,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     .length),
       );
     });
-    final memBook = batterySaverMode
-        ? ref.read(memoryBookProvider(widget.state.session?.id ?? ''))
-        : ref.watch(memoryBookProvider(widget.state.session?.id ?? ''));
+    final memBook = batteryAware(ref, batterySaverMode,
+        memoryBookProvider(widget.state.session?.id ?? ''));
     final greetingTotal = character == null
         ? 0
         : ((character.firstMes?.isNotEmpty == true ? 1 : 0) +
