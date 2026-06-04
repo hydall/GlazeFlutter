@@ -162,11 +162,11 @@ class SavedMessageWriter {
 
   /// Error path (non-regen): append an error message. Does NOT write
   /// [pendingSessionVars] — those must only persist on the success path
-  /// (see INV-C5). Called from SSE onError and from the top-level catch.
+  /// (see INV-C5). The current session's sessionVars are kept as-is.
+  /// Called from SSE onError and from the top-level catch.
   ChatState writeError({
     required String errorText,
     required ChatSession currentSession,
-    Map<String, String>? pendingSessionVars,
     int visibleStartIndex = 0,
   }) {
     final errorMsg = ChatMessage(
@@ -180,12 +180,9 @@ class SavedMessageWriter {
       swipesMeta: [{}],
     );
     final finalMessages = [...currentSession.messages, errorMsg];
-    final now = currentTimestampSeconds();
-    final sessionVars = pendingSessionVars ?? currentSession.sessionVars;
     final finalSession = currentSession.copyWith(
       messages: finalMessages,
-      updatedAt: now,
-      sessionVars: sessionVars,
+      updatedAt: currentTimestampSeconds(),
     );
     return ChatState(session: finalSession, visibleStartIndex: visibleStartIndex);
   }
@@ -196,7 +193,6 @@ class SavedMessageWriter {
     required String errorText,
     required ChatSession saveSession,
     required String regenTargetId,
-    Map<String, String>? pendingSessionVars,
     int visibleStartIndex = 0,
   }) {
     final idx = saveSession.messages.indexWhere((m) => m.id == regenTargetId);
@@ -204,7 +200,6 @@ class SavedMessageWriter {
       return writeError(
         errorText: errorText,
         currentSession: saveSession,
-        pendingSessionVars: pendingSessionVars,
         visibleStartIndex: visibleStartIndex,
       );
     }
@@ -235,12 +230,9 @@ class SavedMessageWriter {
     );
     final finalMessages = [...saveSession.messages];
     finalMessages[idx] = updated;
-    final now = currentTimestampSeconds();
-    final sessionVars = pendingSessionVars ?? saveSession.sessionVars;
     final finalSession = saveSession.copyWith(
       messages: finalMessages,
-      updatedAt: now,
-      sessionVars: sessionVars,
+      updatedAt: currentTimestampSeconds(),
     );
     return ChatState(
       session: finalSession,

@@ -132,9 +132,11 @@ class JsMemoryImporter with TypeConverters {
           toInt(rawSettings['autoCreateInterval']) ?? 15,
       'useDelayedAutomation':
           rawSettings['useDelayedAutomation'] == true,
-      'injectionTarget': rawSettings['injectionTarget'] is String
-          ? rawSettings['injectionTarget'] as String
-          : 'summary_block',
+      'injectionTarget': _migrateInjectionTarget(
+        rawSettings['injectionTarget'] is String
+            ? rawSettings['injectionTarget'] as String
+            : null,
+      ),
       'batchSize': toInt(rawSettings['batchSize']) ?? 3,
       'vectorSearchEnabled':
           rawSettings['vectorSearchEnabled'] == true,
@@ -216,4 +218,14 @@ class JsMemoryImporter with TypeConverters {
     }
     return null;
   }
+}
+
+/// Translates the legacy `summary_block` / `summary_macro` enum values
+/// (pre-{{memory}}-split) to `hard_block` / `macro`. The old values
+/// were misleadingly named because the "summary" prefix was about
+/// *where* memory goes, not about the summary feature itself.
+String _migrateInjectionTarget(String? raw) {
+  if (raw == 'summary_block') return 'hard_block';
+  if (raw == 'summary_macro') return 'macro';
+  return raw ?? 'hard_block';
 }

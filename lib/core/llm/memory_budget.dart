@@ -1,0 +1,49 @@
+import '../models/memory_book.dart';
+import 'tokenizer.dart';
+
+/// Token-budget guard for memory injection (INV-PS4).
+///
+/// `MemoryInjectionService.buildInjection()` uses [maxInjectionTokens]
+/// to cap the per-call cost of injected memory entries: once the
+/// running total of `estimateTokens(entry.content)` exceeds the cap,
+/// the tail of the (already score-sorted) entry list is dropped.
+///
+/// See `docs/INVARIANTS.md` §5.4 for the formula and rationale.
+class MemoryInjectionBudget {
+  const MemoryInjectionBudget._();
+
+  /// Returns the per-call memory-injection budget in tokens, or null
+  /// when the guard should be skipped (no caller-supplied budget or a
+  /// non-positive percentage).
+  static int? maxInjectionTokens({
+    required int? contextBudgetTokens,
+    required double percent,
+  }) {
+    if (contextBudgetTokens == null || contextBudgetTokens <= 0) return null;
+    if (percent <= 0) return null;
+    return (contextBudgetTokens * percent).floor();
+  }
+
+  /// Trims [entries] (already sorted by score, descending) so that the
+  /// running total of `estimateTokens(entry.content)` does not exceed
+  /// [budget]. Entries are removed from the tail (lowest score) first.
+  /// If even the first entry exceeds the budget, an empty list is
+  /// returned — the caller is expected to short-circuit on empty
+  /// (INV-PS4: "do not skip entirely" means the first entry is always
+  /// admitted; if it alone overflows, dropping it would leave the
+  /// prompt with no memory at all, which is the worse failure mode).
+  static List<MemoryEntry> trimByTokenBudget(
+    List<MemoryEntry> entries,
+    int budget,
+  ) {
+    var running = 0;
+    final kept = <MemoryEntry>[];
+    for (final entry in entries) {
+      final cost = estimateTokens(entry.content);
+      if (running + cost > budget && kept.isNotEmpty) break;
+      kept.add(entry);
+      running += cost;
+    }
+    return kept;
+  }
+}

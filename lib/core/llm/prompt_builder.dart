@@ -136,7 +136,14 @@ class _ResolvedRelativeBlock {
   final String id;
   final String name;
   final String role;
+  /// Fully expanded content — what the LLM sees. Used for `messages` and
+  /// `appendedEntries` (which merge into the last user message).
   final String content;
+  /// Accounting-only content with dynamic macro injections blanked out.
+  /// Used for `attributionBlocks` and `mergeBuffer` so that the preset's
+  /// "static chrome" tokens are not double-counted alongside the dedicated
+  /// `sourceTokens['memory']` / `sourceTokens['summary']` etc. buckets.
+  final String contentForAccounting;
   final bool isSummary;
   final bool appendToLastMessage;
   const _ResolvedRelativeBlock({
@@ -144,6 +151,7 @@ class _ResolvedRelativeBlock {
     required this.name,
     required this.role,
     required this.content,
+    required this.contentForAccounting,
     this.isSummary = false,
     this.appendToLastMessage = false,
   });
@@ -187,9 +195,7 @@ PromptResult buildPrompt(PromptPayload payload) {
     summaryContent: payload.summaryContent,
     guidanceText: payload.guidanceText,
     macroName: char.macroName,
-    summaryMemoryContent: payload.memoryInjectionTarget == 'summary_macro'
-        ? payload.memoryMacroContent
-        : null,
+    memoryContent: payload.memoryMacroContent,
   );
 
   var currentSessionVars = Map<String, String>.from(payload.sessionVars);
@@ -333,12 +339,12 @@ PromptResult buildPrompt(PromptPayload payload) {
       if (anMode == 'depth') {
         depthBlocks.add(_ResolvedDepthBlock(id: id, role: resolved.role, content: resolved.content, depth: anDepth, isSummary: blockIsSummary));
       } else {
-        relativeBlocks.add(_ResolvedRelativeBlock(id: id, name: rawBlock.name, role: resolved.role, content: resolved.content, isSummary: blockIsSummary, appendToLastMessage: rawBlock.appendToLastMessage));
+        relativeBlocks.add(_ResolvedRelativeBlock(id: id, name: rawBlock.name, role: resolved.role, content: resolved.content, contentForAccounting: resolved.contentForAccounting, isSummary: blockIsSummary, appendToLastMessage: rawBlock.appendToLastMessage));
       }
     } else if (rawBlock.insertionMode == 'depth' && id != 'chat_history') {
       depthBlocks.add(_ResolvedDepthBlock(id: id, role: resolved.role, content: resolved.content, depth: rawBlock.depth ?? 0, isSummary: blockIsSummary));
     } else {
-      relativeBlocks.add(_ResolvedRelativeBlock(id: id, name: rawBlock.name, role: resolved.role, content: resolved.content, isSummary: blockIsSummary, appendToLastMessage: rawBlock.appendToLastMessage));
+      relativeBlocks.add(_ResolvedRelativeBlock(id: id, name: rawBlock.name, role: resolved.role, content: resolved.content, contentForAccounting: resolved.contentForAccounting, isSummary: blockIsSummary, appendToLastMessage: rawBlock.appendToLastMessage));
     }
   }
 
@@ -358,20 +364,11 @@ PromptResult buildPrompt(PromptPayload payload) {
   if (currentMacroCtx.lorebooksContent != null && currentMacroCtx.lorebooksContent!.isNotEmpty) {
     macroTokens['lorebooks'] = estimateTokens(currentMacroCtx.lorebooksContent!);
   }
-  // Count summary tokens as the full {{summary}} expansion (summary + memory),
-  // mirroring exactly what macro_engine produces at line 247-253.
-  final summaryParts = [
-    if (currentMacroCtx.summaryContent?.isNotEmpty == true) currentMacroCtx.summaryContent!,
-    if (currentMacroCtx.summaryMemoryContent?.isNotEmpty == true) currentMacroCtx.summaryMemoryContent!,
-  ];
-  if (summaryParts.isNotEmpty) {
-    macroTokens['summary'] = estimateTokens(summaryParts.join('\n\n'));
+  if (currentMacroCtx.summaryContent != null && currentMacroCtx.summaryContent!.isNotEmpty) {
+    macroTokens['summary'] = estimateTokens(currentMacroCtx.summaryContent!);
   }
-  // Track memory separately so the tokenizer can show it as its own row.
-  // In presetNetTokens we skip 'memory' to avoid double-deducting it
-  // (it's already included in macroTokens['summary'] above).
-  if (currentMacroCtx.summaryMemoryContent?.isNotEmpty == true) {
-    macroTokens['memory'] = estimateTokens(currentMacroCtx.summaryMemoryContent!);
+  if (currentMacroCtx.memoryContent != null && currentMacroCtx.memoryContent!.isNotEmpty) {
+    macroTokens['memory'] = estimateTokens(currentMacroCtx.memoryContent!);
   }
   if (currentMacroCtx.charDescription != null && currentMacroCtx.charDescription!.isNotEmpty) {
     macroTokens['description'] = estimateTokens(currentMacroCtx.charDescription!);
@@ -551,13 +548,25 @@ PromptResult _assembleMessages({
       }
     } else {
       final content = block.content.trim();
+      final accountingContent = block.contentForAccounting.trim();
+
+      // setvar-only blocks: no LLM-visible text, but definitions count toward preset.
       if (content.isEmpty) {
-        // worldInfoAfter also fires after char_card even when char_card resolves empty (mirrors JS:743)
+        if (accountingContent.isNotEmpty) {
+          attributionBlocks.add(StaticBlock(id: block.id, content: accountingContent));
+        }
         if (block.id == 'char_card') injectLoreAfter();
         continue;
       }
 
-      attributionBlocks.add(StaticBlock(id: block.id, content: content));
+      // attributionBlocks feed the token breakdown. We pass the
+      // "accounting" content (dynamic macros blanked out) so that the
+      // preset's static chrome is attributed to sourceTokens['preset']
+      // and NOT double-counted under sourceTokens['memory'] /
+      // sourceTokens['summary'] / sourceTokens['lorebooks']. The
+      // dynamic injections are counted separately via dedicated
+      // StaticBlocks (hard-block injection) and macroTokens.
+      attributionBlocks.add(StaticBlock(id: block.id, content: accountingContent));
 
       // appendToLastMessage blocks are merged into the last user message in
       // applyAppendToLastMessage (see appendedEntries above). They must NOT
@@ -583,26 +592,17 @@ PromptResult _assembleMessages({
   if (mergeBuffer != null) messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer));
 
   if (payload.memoryContent != null && payload.memoryContent!.isNotEmpty) {
-    final macroText = payload.memoryMacroContent ?? payload.memoryContent!;
-    if (payload.memoryInjectionTarget == 'summary_macro' && macroText.isNotEmpty) {
-      // Check both the message list AND appendToLastMessage blocks: the latter
-      // are merged into the last user message and never added to [messages]
-      // (see docs/INVARIANTS.md INV-PS9), so their isSummary flag is otherwise
-      // invisible to the lookup here. Without this check, memory gets injected
-      // both inline via {{summary}} AND as a separate "Memory Book" system msg.
-      final hasSummaryBlock = messages.any((m) => m.isSummary) ||
-          appendedEntries.any((b) => b.isSummary);
-      if (hasSummaryBlock) {
-        // Memory injection for summary_macro is now performed at macro-expansion time
-        // inside replaceMacros() (see macro_engine.dart). This preserves the user's
-        // custom wrapper tags around {{summary}}, e.g. <summary>{{summary}}</summary>.
-        // We intentionally do NOT append here anymore.
-      } else {
+    if (payload.memoryInjectionTarget == 'hard_block') {
+      // Skip the hard block if the preset already handles memory via
+      // {{memory}} macro or via an explicit `id: 'memory'` block.
+      // (See docs/INVARIANTS.md INV-PS5.)
+      final hasMemoryBlock = messages.any((m) => m.blockId == 'memory') ||
+          appendedEntries.any((b) => b.id == 'memory');
+      if (!hasMemoryBlock) {
         _injectMemoryBlock(messages, attributionBlocks, payload.memoryContent!);
       }
-    } else {
-      _injectMemoryBlock(messages, attributionBlocks, payload.memoryContent!);
     }
+    // 'macro' target: skip hard block, user must place {{memory}} in preset
   }
 
   final lorebookReserve = _calculateLorebookReserve(payload);

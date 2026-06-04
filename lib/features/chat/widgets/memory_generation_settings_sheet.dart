@@ -54,7 +54,7 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
     _autoCreateInterval = s.autoCreateInterval;
     _batchSize = s.batchSize;
     _useDelayedAutomation = s.useDelayedAutomation;
-    _injectionTarget = s.injectionTarget;
+    _injectionTarget = _migrateInjectionTarget(s.injectionTarget);
     _generationSource = s.generationSource;
     _promptPreset = s.promptPreset;
     _keyMatchMode = s.keyMatchMode;
@@ -135,8 +135,8 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
           _sectionLabel('label_embedding_target'.tr()),
           SegmentedButton<String>(
             segments: const [
-              ButtonSegment(value: 'summary_block', label: Text('worldinfo')),
-              ButtonSegment(value: 'summary_macro', label: Text('{{summary}}')),
+              ButtonSegment(value: 'hard_block', label: Text('Hard Block')),
+              ButtonSegment(value: 'macro', label: Text('{{memory}}')),
             ],
             selected: {_injectionTarget},
             onSelectionChanged: (s) => setState(() => _injectionTarget = s.first),
@@ -487,4 +487,15 @@ class MemorySettingsSheetResult {
     required this.settings,
     required this.vectorThreshold,
   });
+}
+
+/// Translates the legacy `summary_block` / `summary_macro` enum values
+/// (pre-{{memory}}-split) to `hard_block` / `macro`. Used both for
+/// freshly loaded settings (defence in depth — the underlying model
+/// also migrates in its `fromJson`) and for the segmented-button
+/// `selected` value (which is keyed by the segment's `value`).
+String _migrateInjectionTarget(String raw) {
+  if (raw == 'summary_block') return 'hard_block';
+  if (raw == 'summary_macro') return 'macro';
+  return raw;
 }

@@ -198,15 +198,7 @@ class TokenBreakdown {
       ? (historyTokens / historyBudget * 100).clamp(0, 100)
       : 0;
 
-  int get presetNetTokens {
-    final presetGross = sourceTokens['preset'] ?? 0;
-    var subtract = 0;
-    for (final entry in macroTokens.entries) {
-      if (entry.key == 'memory') continue;
-      if ((sourceTokens[entry.key] ?? 0) == 0) {
-        subtract += entry.value;
-      }
-    }
-    return (presetGross - subtract).clamp(0, presetGross);
-  }
+  /// Preset row in the tokenizer. Same as [sourceTokens]['preset']: external
+  /// injections are already blanked in `contentForAccounting` (see INV-PS5).
+  int get presetNetTokens => sourceTokens['preset'] ?? 0;
 }

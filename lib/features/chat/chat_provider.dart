@@ -11,6 +11,7 @@ import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
 import '../chat_history/chat_history_provider.dart';
+import '../memory/state/memory_active_drafts_provider.dart';
 import 'abort_handler.dart';
 import 'chat_generation_service.dart';
 import 'chat_session_service.dart';
@@ -201,6 +202,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   Future<void> sendMessage(String text, {String? guidanceText, String? imageDataUrl}) async {
     final current = state.value;
     if (current == null || current.isGenerating) return;
+    if (_isMemoryDraftActive(current)) return;
 
     final userMsg = ChatMessage(
       id: generateId(),
@@ -246,6 +248,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     }
     final current = state.value;
     if (current == null || current.session == null || current.isGenerating) return;
+    if (_isMemoryDraftActive(current)) return;
 
     final lastIdx = current.messages.length - 1;
     if (lastIdx < 0) return;
@@ -317,6 +320,7 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
   Future<void> continueMessage() async {
     final current = state.value;
     if (current == null || current.session == null || current.isGenerating) return;
+    if (_isMemoryDraftActive(current)) return;
 
     final lastIdx = current.messages.length - 1;
     if (lastIdx < 0) return;
@@ -368,6 +372,12 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
       msgId: result.messages.isNotEmpty ? result.messages.last.id : null,
       avatarPath: character?.avatarPath,
     );
+  }
+
+  bool _isMemoryDraftActive(ChatState current) {
+    final sessionId = current.session?.id;
+    if (sessionId == null) return false;
+    return ref.read(memoryActiveDraftsProvider).contains(sessionId);
   }
 
   Future<void> _runGeneration(

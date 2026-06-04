@@ -60,7 +60,7 @@ class PromptInputs {
     this.memoryEnabled = true,
     this.memoryMaxInjected = 7,
     this.memoryKeyMatchMode = 'glaze',
-    this.memoryInjectionTarget = 'summary_block',
+    this.memoryInjectionTarget = 'hard_block',
   });
 
   Map<String, dynamic> toJson() => {
@@ -141,6 +141,12 @@ class PromptInputs {
         memoryKeyMatchMode:
             json['memoryKeyMatchMode'] as String? ?? 'glaze',
         memoryInjectionTarget:
-            json['memoryInjectionTarget'] as String? ?? 'summary_block',
+            _migrateInjectionTarget(json['memoryInjectionTarget'] as String?),
       );
+}
+
+String _migrateInjectionTarget(String? raw) {
+  if (raw == 'summary_block') return 'hard_block';
+  if (raw == 'summary_macro') return 'macro';
+  return raw ?? 'hard_block';
 }

@@ -43,18 +43,8 @@ int tokensForKey(TokenBreakdown bd, String key) {
     'lorebookReserve' => _unusedLorebookReserve(bd),
     'vectorLore'      => bd.vectorLoreTokens,
     'preset'          => bd.presetNetTokens,
-    'summary'         => _summaryTokens(bd),
     _                 => (bd.sourceTokens[key] ?? 0) > 0 ? bd.sourceTokens[key]! : (bd.macroTokens[key] ?? 0),
   };
-}
-
-int _summaryTokens(TokenBreakdown bd) {
-  // macroTokens['summary'] already includes summaryMemoryContent (injected via
-  // summary_macro). No overlap deduction needed — memory is shown separately
-  // via the 'memory' key and is skipped in presetNetTokens.
-  return (bd.sourceTokens['summary'] ?? 0) > 0
-      ? bd.sourceTokens['summary']!
-      : (bd.macroTokens['summary'] ?? 0);
 }
 
 int _unusedLorebookReserve(TokenBreakdown bd) {

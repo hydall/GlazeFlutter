@@ -15,12 +15,10 @@ class MacroContext {
   final String charId;
   final String sessionId;
   final String? summaryContent;
+  final String? memoryContent;
   final String? lorebooksContent;
   final String? guidanceText;
   final String? macroName;
-  /// Memory content to be appended when expanding `{{summary}}` in summary_macro mode.
-  /// This allows `<wrapper>{{summary}}</wrapper>` to enclose both the summary and the injected memories.
-  final String? summaryMemoryContent;
 
   const MacroContext({
     required this.charName,
@@ -37,11 +35,37 @@ class MacroContext {
     required this.charId,
     required this.sessionId,
     this.summaryContent,
+    this.memoryContent,
     this.lorebooksContent,
     this.guidanceText,
     this.macroName,
-    this.summaryMemoryContent,
   });
+
+  /// Context for preset-only token accounting: external injections (character,
+  /// persona, memory, lorebooks, summary, guidance) are blanked; in-preset
+  /// session/global vars and setvar/getvar still resolve.
+  MacroContext forPresetAccounting() {
+    return MacroContext(
+      charName: '',
+      charDescription: null,
+      charScenario: null,
+      charPersonality: null,
+      charMesExample: null,
+      userName: '',
+      personaPrompt: null,
+      reasoningStart: reasoningStart,
+      reasoningEnd: reasoningEnd,
+      sessionVars: sessionVars,
+      globalVars: globalVars,
+      charId: charId,
+      sessionId: sessionId,
+      summaryContent: null,
+      memoryContent: null,
+      lorebooksContent: null,
+      guidanceText: null,
+      macroName: null,
+    );
+  }
 
   MacroContext copyWith({
     Map<String, String>? sessionVars,
@@ -49,10 +73,10 @@ class MacroContext {
     String? charScenario,
     String? charPersonality,
     String? charDescription,
-    String? summaryContent,
-    String? lorebooksContent,
-    String? guidanceText,
-    String? summaryMemoryContent,
+    Object? summaryContent = _sentinel,
+    Object? memoryContent = _sentinel,
+    Object? lorebooksContent = _sentinel,
+    Object? guidanceText = _sentinel,
   }) {
     return MacroContext(
       charName: charName,
@@ -68,13 +92,15 @@ class MacroContext {
       globalVars: globalVars ?? this.globalVars,
       charId: charId,
       sessionId: sessionId,
-      summaryContent: summaryContent ?? this.summaryContent,
-      lorebooksContent: lorebooksContent ?? this.lorebooksContent,
-      guidanceText: guidanceText ?? this.guidanceText,
+      summaryContent: identical(summaryContent, _sentinel) ? this.summaryContent : summaryContent as String?,
+      memoryContent: identical(memoryContent, _sentinel) ? this.memoryContent : memoryContent as String?,
+      lorebooksContent: identical(lorebooksContent, _sentinel) ? this.lorebooksContent : lorebooksContent as String?,
+      guidanceText: identical(guidanceText, _sentinel) ? this.guidanceText : guidanceText as String?,
       macroName: macroName,
-      summaryMemoryContent: summaryMemoryContent ?? this.summaryMemoryContent,
     );
   }
+
+  static const Object _sentinel = Object();
 
   Map<String, dynamic> toJson() => {
     'charName': charName,
@@ -91,10 +117,10 @@ class MacroContext {
     'charId': charId,
     'sessionId': sessionId,
     'summaryContent': summaryContent,
+    'memoryContent': memoryContent,
     'lorebooksContent': lorebooksContent,
     'guidanceText': guidanceText,
     'macroName': macroName,
-    'summaryMemoryContent': summaryMemoryContent,
   };
 
   factory MacroContext.fromJson(Map<String, dynamic> json) => MacroContext(
@@ -112,10 +138,10 @@ class MacroContext {
     charId: json['charId'] as String,
     sessionId: json['sessionId'] as String,
     summaryContent: json['summaryContent'] as String?,
+    memoryContent: json['memoryContent'] as String?,
     lorebooksContent: json['lorebooksContent'] as String?,
     guidanceText: json['guidanceText'] as String?,
     macroName: json['macroName'] as String?,
-    summaryMemoryContent: json['summaryMemoryContent'] as String?,
   );
 }
 
@@ -243,14 +269,12 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
 
   result = result.replaceAllMapped(
     RegExp(r'\{\{summary\}\}', caseSensitive: false),
-    (_) {
-      final base = ctx.summaryContent ?? '';
-      if (ctx.summaryMemoryContent != null && ctx.summaryMemoryContent!.isNotEmpty) {
-        if (base.isEmpty) return ctx.summaryMemoryContent!;
-        return '$base\n\n${ctx.summaryMemoryContent!}';
-      }
-      return base;
-    },
+    (_) => ctx.summaryContent ?? '',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{memory\}\}', caseSensitive: false),
+    (_) => ctx.memoryContent ?? '',
   );
 
   result = result.replaceAllMapped(
@@ -368,6 +392,41 @@ int? _rollDice(String spec) {
     total += random.nextInt(sides) + 1;
   }
   return total;
+}
+
+/// Extracts payload values from `{{setvar::name::value}}` / `{{setglobalvar::…}}`
+/// without mutating [vars]. Used for preset token accounting.
+List<String> extractSetvarPayloads(String text, String keyword) {
+  final tag = '{{$keyword::';
+  final values = <String>[];
+  var i = 0;
+  while (i < text.length) {
+    final idx = text.indexOf(tag, i);
+    if (idx < 0) break;
+    final afterTag = idx + tag.length;
+    final secondDblColon = text.indexOf('::', afterTag);
+    if (secondDblColon < 0) break;
+    final valueStart = secondDblColon + 2;
+    var depth = 1;
+    var pos = valueStart;
+    while (pos < text.length && depth > 0) {
+      if (pos + 1 < text.length && text[pos] == '{' && text[pos + 1] == '{') {
+        depth++;
+        pos += 2;
+      } else if (pos + 1 < text.length && text[pos] == '}' && text[pos + 1] == '}') {
+        depth--;
+        if (depth == 0) break;
+        pos += 2;
+      } else {
+        pos++;
+      }
+    }
+    if (depth != 0) break;
+    final value = text.substring(valueStart, pos).trim();
+    if (value.isNotEmpty) values.add(value);
+    i = pos + 2;
+  }
+  return values;
 }
 
 String _replaceSetVar(String text, String keyword, Map<String, String> vars, void Function() markChanged) {
