@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -8,7 +9,26 @@ import '../../../core/models/chat_message.dart';
 import '../../../core/models/persona.dart';
 import '../../../core/models/preset.dart';
 import 'chat_message_mapper.dart';
+import 'bridge_handlers.dart';
+import 'bridge_message_commands.dart';
+import 'bridge_theme_commands.dart';
+import 'bridge_identity_commands.dart';
+import 'bridge_layout_commands.dart';
+import 'bridge_memory_commands.dart';
 
+/// Bridge between the chat WebView (JS) and Flutter. Owns the shared
+/// state (current character, persona, layout, memory coverage, regex
+/// display config) and the JS handler registration. Splits outgoing
+/// commands into focused groups:
+///
+///   - [messages]: set/append/update/remove messages, scroll helpers
+///   - [theme]:    applyTheme, fonts, background image/noise, perf mode
+///   - [identity]: setIdentity, applyLayout, regex context
+///   - [layout]:   padding, search, edit, selection, message settings
+///   - [memory]:   memory book data updates + covered/pending/draft sets
+///
+/// Inbound callbacks (JS -> Dart) are exposed as nullable function
+/// properties on the host and registered via [setupHandlers].
 class ChatBridgeController {
   final InAppWebViewController _controller;
   final Map<String, Completer<dynamic>> _pendingRequests = {};
@@ -25,27 +45,45 @@ class ChatBridgeController {
   final Set<String> _coveredMemoryIds = {};
   final Set<String> _pendingMemoryIds = {};
   final Set<String> _draftMemoryIds = {};
-  
+
   List<PresetRegex> _displayRegexes = [];
   Character? _regexCharacter;
   Persona? _regexPersona;
 
+  late final MessageBridgeCommands messages = MessageBridgeCommands(this);
+  late final ThemeBridgeCommands theme = ThemeBridgeCommands(this);
+  late final IdentityBridgeCommands identity = IdentityBridgeCommands(this);
+  late final LayoutBridgeCommands layout = LayoutBridgeCommands(this);
+  late final MemoryBridgeCommands memory = MemoryBridgeCommands(this);
+
   ChatBridgeController(this._controller) {
-    _setupHandlers();
+    setupHandlers();
   }
 
-  ChatMessageMapperContext get _ctx => ChatMessageMapperContext(
-    currentCharName: currentCharName,
-    currentCharColor: currentCharColor,
-    currentPersonaName: currentPersonaName,
-    charAvatarDataUrl: _charAvatarUrl,
-    personaAvatarDataUrl: _personaAvatarUrl,
-    isGenerating: isGenerating,
-    coveredMemoryIds: _coveredMemoryIds,
-    pendingMemoryIds: _pendingMemoryIds,
-    draftMemoryIds: _draftMemoryIds,
-    greetingTotal: currentGreetingTotal,
-  );
+  // Getters used by command groups. They intentionally expose mutable
+  // internals so groups can read and update shared state without
+  // bouncing every access through a getter method.
+  String? get charAvatarUrl => _charAvatarUrl;
+  String? get personaAvatarUrl => _personaAvatarUrl;
+  Set<String> get coveredMemoryIds => _coveredMemoryIds;
+  Set<String> get pendingMemoryIds => _pendingMemoryIds;
+  Set<String> get draftMemoryIds => _draftMemoryIds;
+  List<PresetRegex> get displayRegexes => _displayRegexes;
+  Character? get regexCharacter => _regexCharacter;
+  Persona? get regexPersona => _regexPersona;
+
+  ChatMessageMapperContext get mapperContext => ChatMessageMapperContext(
+        currentCharName: currentCharName,
+        currentCharColor: currentCharColor,
+        currentPersonaName: currentPersonaName,
+        charAvatarDataUrl: _charAvatarUrl,
+        personaAvatarDataUrl: _personaAvatarUrl,
+        isGenerating: isGenerating,
+        coveredMemoryIds: _coveredMemoryIds,
+        pendingMemoryIds: _pendingMemoryIds,
+        draftMemoryIds: _draftMemoryIds,
+        greetingTotal: currentGreetingTotal,
+      );
 
   void setRegexContext(List<PresetRegex> regexes, Character? char, Persona? persona) {
     _displayRegexes = regexes;
@@ -74,34 +112,24 @@ class ChatBridgeController {
     return completer.future;
   }
 
-  Future<void> setIdentity({
-    String? charName,
-    String? charColor,
-    String? personaName,
-    String? layout,
-    String? charAvatarPath,
-    String? personaAvatarPath,
-    int? greetingTotal,
-  }) async {
-    currentCharName = charName;
-    currentCharColor = charColor;
-    currentPersonaName = personaName;
-    currentChatLayout = layout;
-    if (greetingTotal != null) currentGreetingTotal = greetingTotal;
-    _setAvatarUrl(charAvatarPath, isChar: true);
-    _setAvatarUrl(personaAvatarPath, isChar: false);
-    // Push identity to the WebView so already-rendered messages refresh their
-    // user name / persona avatar when the active persona resolves late.
-    final payload = jsonEncode({
-      'charName': currentCharName,
-      'personaName': currentPersonaName,
-      'charAvatarUrl': _charAvatarUrl,
-      'personaAvatarUrl': _personaAvatarUrl,
-    });
-    await _eval('window.bridge?.setIdentity($payload)');
+  // ── Helpers used by command groups. Exposed as instance methods so
+  // groups don't need to know about the InAppWebViewController or
+  // private state of the host.
+
+  Future<String> resolveImgResults(String text) async {
+    // Keep image paths in the bridge payload. The WebView formatter
+    // resolves local paths to file:// URLs, avoiding huge base64
+    // strings on Android.
+    return text;
   }
 
-  void _setAvatarUrl(String? path, {required bool isChar}) {
+  String normalizeLayout(String? layout) {
+    final raw = (layout ?? '').trim().toLowerCase();
+    if (raw == 'bubble' || raw == 'bubbles') return 'bubble';
+    return 'default';
+  }
+
+  void setAvatarUrl(String? path, {required bool isChar}) {
     String? url;
     if (path != null && path.isNotEmpty) {
       if (path.startsWith('data:') ||
@@ -120,23 +148,25 @@ class ChatBridgeController {
     }
   }
 
-  Future<String> _resolveImgResults(String text) async {
-    // Keep image paths in the bridge payload. The WebView formatter resolves
-    // local paths to file:// URLs, avoiding huge base64 strings on Android.
-    return text;
+  Future<void> callJs(String method, String arg) {
+    return evalJs('window.bridge?.$method(${escapeJsonStr(arg)})');
   }
 
-  String _normalizeLayout(String? layout) {
-    final raw = (layout ?? '').trim().toLowerCase();
-    if (raw == 'bubble' || raw == 'bubbles') return 'bubble';
-    return 'default';
+  Future<void> evalJs(String source) async {
+    await _controller.evaluateJavascript(source: source);
   }
 
-  Future<void> applyLayout(String layout) {
-    final normalizedLayout = _normalizeLayout(layout);
-    currentChatLayout = normalizedLayout;
-    return _eval('window.bridge?.applyLayout?.("${_escape(normalizedLayout)}")');
+  String escape(String s) {
+    return s.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n');
   }
+
+  String escapeJsonStr(String s) {
+    return '"${jsonEncode(s).substring(1, jsonEncode(s).length - 1)}"';
+  }
+
+  // ── Inbound callbacks (JS -> Dart). Set by the host (chat_webview_widget)
+  // and forwarded to a typed bridge command when the user interacts with
+  // the WebView.
 
   void Function()? onReady;
   void Function()? onLoadMore;
@@ -163,461 +193,267 @@ class ChatBridgeController {
   void Function()? onImgCancel;
   void Function()? onStop;
 
-  void _setupHandlers() {
-    _controller.addJavaScriptHandler(
-      handlerName: 'onWebViewReady',
-      callback: (args) => onReady?.call(),
-    );
+  /// Register JS handlers for every callback declared on this host. The
+  /// declarations live in [bridgeHandlers] (data-driven) so the actual
+  /// dispatch table is short and auditable.
+  void setupHandlers() {
+    for (final entry in bridgeHandlers.entries) {
+      final name = entry.key;
+      final spec = entry.value;
+      _controller.addJavaScriptHandler(
+        handlerName: name,
+        callback: (args) => _dispatch(name, spec, args),
+      );
+    }
+  }
 
-    _controller.addJavaScriptHandler(
-      handlerName: 'onLoadMore',
-      callback: (args) => onLoadMore?.call(),
-    );
+  dynamic _dispatch(String name, HandlerSpec spec, List<dynamic> args) {
+    switch (spec.kind) {
+      case HandlerKind.noArgs:
+        return _dispatchNoArgs(name);
+      case HandlerKind.boolArg:
+        return _dispatchBoolArg(name, args);
+      case HandlerKind.stringArg:
+        return _dispatchStringArg(name, args);
+      case HandlerKind.jsonObject:
+        return _dispatchJsonObject(name, spec, args);
+      case HandlerKind.idStringPair:
+        return _dispatchIdStringPair(name, args);
+      case HandlerKind.idIntPair:
+        return _dispatchIdIntPair(name, args);
+      case HandlerKind.idBoolPair:
+        return _dispatchIdBoolPair(name, args);
+      case HandlerKind.idStringStringPair:
+        return _dispatchIdStringStringPair(name, args);
+      case HandlerKind.imageAction:
+        return _dispatchImageAction(name, spec, args);
+      case HandlerKind.idList:
+        return _dispatchIdList(name, args);
+    }
+  }
 
-    _controller.addJavaScriptHandler(
-      handlerName: 'onHeaderScroll',
-      callback: (args) {
-        if (args.isEmpty) return;
-        onHeaderScroll?.call(args[0] == true);
-      },
-    );
+  void _dispatchNoArgs(String name) {
+    switch (name) {
+      case 'onWebViewReady': onReady?.call();
+      case 'onLoadMore': onLoadMore?.call();
+      case 'onStop': onStop?.call();
+      case 'onImgCancel': onImgCancel?.call();
+    }
+  }
 
-    _controller.addJavaScriptHandler(
-      handlerName: 'onScrollToBottomVisibility',
-      callback: (args) {
-        if (args.isEmpty) return;
-        onScrollToBottomVisibility?.call(args[0] == true);
-      },
-    );
+  void _dispatchBoolArg(String name, List<dynamic> args) {
+    if (args.isEmpty) return;
+    final v = args[0] == true;
+    switch (name) {
+      case 'onHeaderScroll': onHeaderScroll?.call(v);
+      case 'onScrollToBottomVisibility': onScrollToBottomVisibility?.call(v);
+    }
+  }
 
-    _controller.addJavaScriptHandler(
-      handlerName: 'onLinkClick',
-      callback: (args) {
-        if (args.isNotEmpty) onLinkClick?.call(args[0] as String);
-      },
-    );
+  void _dispatchStringArg(String name, List<dynamic> args) {
+    if (args.isEmpty) return;
+    final s = args[0] as String;
+    switch (name) {
+      case 'onLinkClick': onLinkClick?.call(s);
+      case 'onImageClick': onImageClick?.call(s);
+      case 'onRegenerate': onRegenerate?.call(s);
+      case 'onEditCancel': onEditCancel?.call(s);
+      case 'onMemoryClick': onMemoryClick?.call(s);
+      case 'onToggleHidden': onToggleHidden?.call(s);
+      case 'onInjectClick': onInjectClick?.call(s);
+    }
+  }
 
-    _controller.addJavaScriptHandler(
-      handlerName: 'onImageClick',
-      callback: (args) {
-        if (args.isNotEmpty) onImageClick?.call(args[0] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onMessageContext',
-      callback: (args) {
-        if (args.isEmpty) return;
-        try {
-          final data = jsonDecode(args[0] as String);
+  void _dispatchJsonObject(String name, HandlerSpec spec, List<dynamic> args) {
+    if (args.isEmpty) return;
+    try {
+      final data = jsonDecode(args[0] as String) as Map<String, dynamic>;
+      switch (name) {
+        case 'onMessageContext':
           onMessageContext?.call(
             data['id'] as String? ?? '',
             data['isUser'] as bool? ?? false,
             data['isSystem'] as bool? ?? false,
             data['content'] as String? ?? '',
           );
-        } catch (_) {}
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onSwipe',
-      callback: (args) {
-        if (args.isEmpty) return;
-        try {
-          final data = jsonDecode(args[0] as String);
+        case 'onSwipe':
           onSwipe?.call(
             data['id'] as String? ?? '',
             data['direction'] as String? ?? 'left',
           );
-        } catch (_) {}
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onRegenerate',
-      callback: (args) {
-        if (args.isNotEmpty) onRegenerate?.call(args[0] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onChangeGreeting',
-      callback: (args) {
-        if (args.length < 2) return;
-        final id = args[0] as String? ?? '';
-        final dir = args[1] is int
-            ? args[1] as int
-            : int.tryParse('${args[1]}') ?? 0;
-        if (id.isEmpty || dir == 0) return;
-        onChangeGreeting?.call(id, dir);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onSelectionAction',
-      callback: (args) {
-        if (args.isEmpty) return;
-        try {
-          final data = jsonDecode(args[0] as String);
+        case 'onSelectionAction':
           onSelectionAction?.call(
             data['action'] as String? ?? 'copy',
             data['text'] as String? ?? '',
           );
-        } catch (_) {}
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onEditSave',
-      callback: (args) {
-        if (args.length < 2) return;
-        onEditSave?.call(args[0] as String, args[1] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onEditCancel',
-      callback: (args) {
-        if (args.isEmpty) return;
-        onEditCancel?.call(args[0] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onEditFocusChange',
-      callback: (args) {
-        if (args.length < 2) return;
-        onEditFocusChange?.call(args[0] as String, args[1] == true);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onGuidedSwipe',
-      callback: (args) {
-        if (args.length < 2) return;
-        onGuidedSwipe?.call(args[0] as String, args[1] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onMemoryClick',
-      callback: (args) {
-        if (args.isEmpty) return;
-        onMemoryClick?.call(args[0] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onToggleHidden',
-      callback: (args) {
-        if (args.isEmpty) return;
-        onToggleHidden?.call(args[0] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onSelectionChange',
-      callback: (args) {
-        if (args.isEmpty) return;
-        try {
-          final list = jsonDecode(args[0] as String) as List;
-          onSelectionChange?.call(list.cast<String>());
-        } catch (_) {}
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onInjectClick',
-      callback: (args) {
-        if (args.isEmpty) return;
-        onInjectClick?.call(args[0] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onImgRetry',
-      callback: (args) {
-        if (args.length < 2) return;
-        onImgRetry?.call(args[0] as String, args[1] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onImgFind',
-      callback: (args) {
-        if (args.length < 2) return;
-        onImgFind?.call(args[0] as String, args[1] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onImgRegen',
-      callback: (args) {
-        debugPrint('[BRIDGE] onImgRegen called, args=$args');
-        if (args.length < 2) return;
-        onImgRegen?.call(args[0] as String, args[1] as String);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onImgCancel',
-      callback: (args) {
-        debugPrint('[BRIDGE] onImgCancel called');
-        onImgCancel?.call();
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onStop',
-      callback: (args) => onStop?.call(),
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onBridgeResolve',
-      callback: (args) {
-        if (args.length < 2) return;
-        resolveRequest(args[0] as String, args[1]);
-      },
-    );
-
-    _controller.addJavaScriptHandler(
-      handlerName: 'onBridgeReject',
-      callback: (args) {
-        if (args.length < 2) return;
-        rejectRequest(args[0] as String, args[1].toString());
-      },
-    );
+      }
+    } catch (_) {}
   }
 
-  Future<void> setMessages(List<ChatMessage> messages, {int visibleStartIndex = 0}) async {
-    final List<Map<String, dynamic>> mapped = [];
-    for (int i = 0; i < messages.length; i++) {
-      final map = ChatMessageMapper.toMap(messages[i], _ctx, isLast: i == messages.length - 1, messageIndex: visibleStartIndex + i, displayRegexes: _displayRegexes, character: _regexCharacter, persona: _regexPersona);
-      mapped.add(map);
-    }
-    final resolved = await Future.wait(mapped.map((m) => _resolveImgResults(m['text'] as String)));
-    for (int i = 0; i < mapped.length; i++) {
-      mapped[i]['text'] = resolved[i];
-    }
-    final json = jsonEncode(mapped);
-    return _callJs('setMessages', json);
-  }
-
-  Future<void> appendMessage(ChatMessage message) async {
-    final map = ChatMessageMapper.toMap(message, _ctx, displayRegexes: _displayRegexes, character: _regexCharacter, persona: _regexPersona);
-    map['text'] = await _resolveImgResults(map['text'] as String);
-    final json = jsonEncode(map);
-    return _callJs('appendMessage', json);
-  }
-
-  Future<void> appendMessages(List<ChatMessage> messages, {int startIndex = 0}) async {
-    final List<Map<String, dynamic>> mapped = [];
-    for (int i = 0; i < messages.length; i++) {
-      final map = ChatMessageMapper.toMap(messages[i], _ctx, isLast: i == messages.length - 1, messageIndex: startIndex + i, displayRegexes: _displayRegexes, character: _regexCharacter, persona: _regexPersona);
-      mapped.add(map);
-    }
-    final resolved = await Future.wait(mapped.map((m) => _resolveImgResults(m['text'] as String)));
-    for (int i = 0; i < mapped.length; i++) {
-      mapped[i]['text'] = resolved[i];
-    }
-    final json = jsonEncode(mapped);
-    return _callJs('appendMessages', json);
-  }
-
-  Future<void> prependMessages(List<ChatMessage> messages, {int visibleStartIndex = 0}) async {
-    final List<Map<String, dynamic>> mapped = [];
-    for (int i = 0; i < messages.length; i++) {
-      final map = ChatMessageMapper.toMap(messages[i], _ctx, messageIndex: visibleStartIndex + i, displayRegexes: _displayRegexes, character: _regexCharacter, persona: _regexPersona);
-      mapped.add(map);
-    }
-    final resolved = await Future.wait(mapped.map((m) => _resolveImgResults(m['text'] as String)));
-    for (int i = 0; i < mapped.length; i++) {
-      mapped[i]['text'] = resolved[i];
-    }
-    final json = jsonEncode(mapped);
-    return _callJs('prependMessages', json);
-  }
-
-  Future<void> updateMessage(ChatMessage message) async {
-    final map = ChatMessageMapper.toMap(message, _ctx, isStreamingUpdate: true, displayRegexes: _displayRegexes, character: _regexCharacter, persona: _regexPersona);
-    map['text'] = await _resolveImgResults(map['text'] as String);
-    final json = jsonEncode(map);
-    return _callJs('updateMessage', json);
-  }
-
-  Future<void> removeMessage(String messageId) {
-    return _callJs('removeMessage', messageId);
-  }
-
-  Future<void> setLastMessage(String? messageId) {
-    if (messageId != null) {
-      return _eval('window.bridge?.setLastMessage("${_escape(messageId)}")');
-    } else {
-      return _eval('window.bridge?.setLastMessage(null)');
+  void _dispatchIdStringPair(String name, List<dynamic> args) {
+    if (args.length < 2) return;
+    final id = args[0] as String? ?? '';
+    final s = args[1] as String? ?? '';
+    switch (name) {
+      case 'onEditSave': onEditSave?.call(id, s);
     }
   }
 
-  Future<void> clearAll() {
-    return _eval('window.bridge?.clearAll()');
-  }
-
-  Future<void> scrollToBottom() {
-    return _eval('window.bridge?.scrollToBottom()');
-  }
-
-  Future<void> scrollToMessage(String messageId) {
-    return _eval('window.bridge?.scrollToMessage("$messageId")');
-  }
-
-  Future<void> setSearch({
-    required String query,
-    int activeIndex = -1,
-  }) {
-    return _eval('window.bridge?.setSearch("${_escape(query)}", $activeIndex)');
-  }
-
-  Future<void> setBottomPadding(double px) {
-    return _eval('window.bridge?.setBottomPadding(${px.toStringAsFixed(1)})');
-  }
-
-  Future<void> setTopPadding(double px) {
-    return _eval('window.bridge?.setTopPadding(${px.toStringAsFixed(1)})');
-  }
-
-  Future<void> startEdit(String messageId) {
-    return _eval('window.bridge?.startEdit("${_escape(messageId)}")');
-  }
-
-  Future<void> stopEdit(String messageId) {
-    return _eval('window.bridge?.stopEdit("${_escape(messageId)}")');
-  }
-
-  Future<void> setBackgroundNoise(double opacity, double intensity) {
-    return _eval(
-      'window.bridge?.setBackgroundNoise(${opacity.toStringAsFixed(3)}, ${intensity.toStringAsFixed(3)})',
-    );
-  }
-
-  Future<void> setBackgroundImage(String? src, int blur, double opacity) {
-    if (src == null || src.isEmpty) {
-      return _eval('window.bridge?.setBackgroundImage(null, 0, 1)');
+  void _dispatchIdIntPair(String name, List<dynamic> args) {
+    if (args.length < 2) return;
+    final id = args[0] as String? ?? '';
+    final dir = args[1] is int
+        ? args[1] as int
+        : int.tryParse('${args[1]}') ?? 0;
+    if (id.isEmpty || dir == 0) return;
+    switch (name) {
+      case 'onChangeGreeting': onChangeGreeting?.call(id, dir);
     }
-    String url;
-    if (src.startsWith('data:') ||
-        src.startsWith('http://') ||
-        src.startsWith('https://') ||
-        src.startsWith('file://')) {
-      url = src;
-    } else {
-      url = 'file:///${src.replaceAll('\\', '/')}';
+  }
+
+  void _dispatchIdBoolPair(String name, List<dynamic> args) {
+    if (args.length < 2) return;
+    final id = args[0] as String? ?? '';
+    final v = args[1] == true;
+    switch (name) {
+      case 'onEditFocusChange': onEditFocusChange?.call(id, v);
     }
-    // Pass through JSON encoder — data URIs can be megabytes long and may
-    // contain characters that the lightweight _escape helper doesn't handle.
-    final encoded = jsonEncode(url);
-    return _eval('window.bridge?.setBackgroundImage($encoded, $blur, $opacity)');
   }
 
-  Future<void> setChatFont({String? fontName, String? fontDataUrl, required double fontSize, required double letterSpacing}) {
-    final name = fontName != null ? '"${_escape(fontName)}"' : 'null';
-    final url = fontDataUrl != null ? '"${_escape(fontDataUrl)}"' : 'null';
-    return _eval('window.bridge?.setChatFont($name, $url, ${fontSize.toStringAsFixed(1)}, ${letterSpacing.toStringAsFixed(2)})');
-  }
-
-  Future<void> updateMessageContent(String messageId, String text, bool isUser) async {
-    final resolved = await _resolveImgResults(text);
-    final json = jsonEncode({'id': messageId, 'text': resolved, 'isUser': isUser});
-    return _callJs('updateMessage', json);
-  }
-
-  Future<void> applyTheme(Map<String, String> theme) {
-    final normalizedTheme = Map<String, String>.from(theme);
-    if (normalizedTheme.containsKey('chat-layout')) {
-      normalizedTheme['chat-layout'] =
-          _normalizeLayout(normalizedTheme['chat-layout']);
+  void _dispatchIdStringStringPair(String name, List<dynamic> args) {
+    if (args.length < 2) return;
+    final id = args[0] as String? ?? '';
+    final s = args[1] as String? ?? '';
+    switch (name) {
+      case 'onGuidedSwipe': onGuidedSwipe?.call(id, s);
     }
-    final json = jsonEncode(normalizedTheme);
-    return _callJs('applyTheme', json);
   }
 
-  Future<void> setPerformanceMode(bool enabled) {
-    return _eval('window.bridge?.setPerformanceMode($enabled)');
+  void _dispatchImageAction(String name, HandlerSpec spec, List<dynamic> args) {
+    if (args.length < 2) return;
+    final instr = args[0] as String? ?? '';
+    final msgId = args[1] as String? ?? '';
+    if (spec.debugPrint != null) {
+      debugPrint(spec.debugPrint!.replaceAll('\$args', args.toString()));
+    }
+    switch (name) {
+      case 'onImgRetry': onImgRetry?.call(instr, msgId);
+      case 'onImgFind': onImgFind?.call(instr, msgId);
+      case 'onImgRegen': onImgRegen?.call(instr, msgId);
+    }
   }
 
+  void _dispatchIdList(String name, List<dynamic> args) {
+    if (args.isEmpty) return;
+    try {
+      final list = jsonDecode(args[0] as String) as List;
+      switch (name) {
+        case 'onSelectionChange': onSelectionChange?.call(list.cast<String>());
+      }
+    } catch (_) {}
+  }
+
+  // ── Outgoing-command facade. These methods exist so existing callers
+  // in chat_webview_widget.dart (and elsewhere) can keep using
+  // _bridge!.setMessages(...), _bridge!.applyTheme(...) without knowing
+  // about the new group structure. Each call delegates to the
+  // corresponding group instance. They are intentionally one-liners
+  // so the host stays a thin facade; new code should prefer the
+  // group property directly: _bridge.messages.setMessages(...).
+
+  // Messages
+  Future<void> setMessages(List<ChatMessage> m, {int visibleStartIndex = 0}) =>
+      messages.setMessages(m, visibleStartIndex: visibleStartIndex);
+  Future<void> appendMessage(ChatMessage m) => messages.appendMessage(m);
+  Future<void> appendMessages(List<ChatMessage> m, {int startIndex = 0}) =>
+      messages.appendMessages(m, startIndex: startIndex);
+  Future<void> prependMessages(List<ChatMessage> m, {int visibleStartIndex = 0}) =>
+      messages.prependMessages(m, visibleStartIndex: visibleStartIndex);
+  Future<void> updateMessage(ChatMessage m, {bool isStreamingUpdate = false}) =>
+      messages.updateMessage(m, isStreamingUpdate: isStreamingUpdate);
+  Future<void> updateMessageContent(String id, String text, bool isUser) =>
+      messages.updateMessageContent(id, text, isUser);
+  Future<void> removeMessage(String id) => messages.removeMessage(id);
+  Future<void> setLastMessage(String? id) => messages.setLastMessage(id);
+  Future<void> clearAll() => messages.clearAll();
+  Future<void> scrollToBottom() => messages.scrollToBottom();
+  Future<void> scrollToMessage(String id) => messages.scrollToMessage(id);
+
+  // Theme
+  Future<void> setBackgroundNoise(double opacity, double intensity) =>
+      theme.setBackgroundNoise(opacity, intensity);
+  Future<void> setBackgroundImage(String? src, int blur, double opacity) =>
+      theme.setBackgroundImage(src, blur, opacity);
+  Future<void> setChatFont({
+    String? fontName,
+    String? fontDataUrl,
+    required double fontSize,
+    required double letterSpacing,
+  }) =>
+      theme.setChatFont(
+        fontName: fontName,
+        fontDataUrl: fontDataUrl,
+        fontSize: fontSize,
+        letterSpacing: letterSpacing,
+      );
+  Future<void> applyTheme(Map<String, String> t) => theme.applyTheme(t);
+  Future<void> setPerformanceMode(bool enabled) =>
+      theme.setPerformanceMode(enabled);
+
+  // Identity
+  Future<void> setIdentity({
+    String? charName,
+    String? charColor,
+    String? personaName,
+    String? layout,
+    String? charAvatarPath,
+    String? personaAvatarPath,
+    int? greetingTotal,
+  }) =>
+      identity.setIdentity(
+        charName: charName,
+        charColor: charColor,
+        personaName: personaName,
+        layout: layout,
+        charAvatarPath: charAvatarPath,
+        personaAvatarPath: personaAvatarPath,
+        greetingTotal: greetingTotal,
+      );
+  Future<void> applyLayout(String l) => identity.applyLayout(l);
+
+  // Layout
+  Future<void> setSearch({required String query, int activeIndex = -1}) =>
+      layout.setSearch(query: query, activeIndex: activeIndex);
+  Future<void> setBottomPadding(double px) => layout.setBottomPadding(px);
+  Future<void> setTopPadding(double px) => layout.setTopPadding(px);
+  Future<void> startEdit(String id) => layout.startEdit(id);
+  Future<void> stopEdit(String id) => layout.stopEdit(id);
   Future<void> setMessageSettings({
     required bool batterySaver,
     required bool hideMessageId,
     required bool hideGenerationTime,
     required bool hideTokenCount,
     required bool disableSwipeRegeneration,
-  }) {
-    final json = jsonEncode({
-      'batterySaver': batterySaver,
-      'hideMessageId': hideMessageId,
-      'hideGenerationTime': hideGenerationTime,
-      'hideTokenCount': hideTokenCount,
-      'disableSwipeRegeneration': disableSwipeRegeneration,
-    });
-    return _callJs('setMessageSettings', json);
-  }
+  }) =>
+      layout.setMessageSettings(
+        batterySaver: batterySaver,
+        hideMessageId: hideMessageId,
+        hideGenerationTime: hideGenerationTime,
+        hideTokenCount: hideTokenCount,
+        disableSwipeRegeneration: disableSwipeRegeneration,
+      );
+  Future<void> setSelectionMode(bool enabled) =>
+      layout.setSelectionMode(enabled);
+  Future<void> toggleMessageSelection(String id) =>
+      layout.toggleMessageSelection(id);
 
-  Future<void> setSelectionMode(bool enabled) {
-    return _eval('window.bridge?.setSelectionMode($enabled)');
-  }
-
-  Future<void> toggleMessageSelection(String id) {
-    return _eval('window.bridge?.renderer?.toggleMessageSelection("${_escape(id)}")');
-  }
-
-  Future<void> _callJs(String method, String arg) {
-    return _eval('window.bridge?.$method(${_escapeJsonStr(arg)})');
-  }
-
-  Future<void> _eval(String source) async {
-    await _controller.evaluateJavascript(source: source);
-  }
-
-  Future<void> evalJs(String source) async {
-    await _controller.evaluateJavascript(source: source);
-  }
-
-  String _escape(String s) {
-    return s.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n');
-  }
-
-  String _escapeJsonStr(String s) {
-    return '"${jsonEncode(s).substring(1, jsonEncode(s).length - 1)}"';
-  }
-
+  // Memory
   void updateMemoryBookData({
     required List<Map<String, dynamic>> entries,
     required List<Map<String, dynamic>> pendingDrafts,
-  }) {
-    _coveredMemoryIds.clear();
-    _pendingMemoryIds.clear();
-    _draftMemoryIds.clear();
-    for (final entry in entries) {
-      final status = entry['status'] as String?;
-      final ids = entry['messageIds'];
-      if (ids is List) {
-        if (status == 'active') {
-          for (final id in ids) {
-            _coveredMemoryIds.add(id.toString());
-          }
-        } else if (status == 'pending_generation') {
-          for (final id in ids) {
-            _pendingMemoryIds.add(id.toString());
-          }
-        }
-      }
-    }
-    for (final draft in pendingDrafts) {
-      final ids = draft['messageIds'];
-      if (ids is List) {
-        for (final id in ids) {
-          _draftMemoryIds.add(id.toString());
-        }
-      }
-    }
-  }
+  }) =>
+      memory.updateMemoryBookData(
+        entries: entries,
+        pendingDrafts: pendingDrafts,
+      );
 }

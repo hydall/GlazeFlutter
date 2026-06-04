@@ -10,17 +10,17 @@ import '../../../core/llm/stream_accumulator.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/active_selection_provider.dart';
-import '../../../core/utils/id_generator.dart';
-import '../../../core/utils/time_helpers.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
 import '../state/cached_token_breakdown.dart';
+import 'saved_message_writer.dart';
 
 class StreamGenerationService {
   final Ref _ref;
   final String _charId;
   final int _genId;
   final bool Function() _isAborted;
+  final SavedMessageWriter _writer = const SavedMessageWriter();
 
   StreamGenerationService({
     required this._ref,
@@ -173,20 +173,23 @@ class StreamGenerationService {
           var finalText = accumulator.text.trimLeft();
           var finalReasoning = accumulator.reasoning.isNotEmpty ? accumulator.reasoning : reasoning;
 
-          finalText = _sanitizeReasoningMarkers(finalText, reasoningTagStart, reasoningTagEnd);
+          finalText = _writer.sanitizeReasoningMarkers(finalText, reasoningTagStart, reasoningTagEnd);
           if (finalReasoning != null && finalReasoning.isNotEmpty) {
-            finalReasoning = _sanitizeReasoningMarkers(finalReasoning, reasoningTagStart, reasoningTagEnd);
+            finalReasoning = _writer.sanitizeReasoningMarkers(finalReasoning, reasoningTagStart, reasoningTagEnd);
           }
 
           final isAllReasoning = finalText.isEmpty && finalReasoning != null && finalReasoning.isNotEmpty;
           final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;
           final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
           final tokenCount = estimateTokens(finalText);
-          finalState = _saveAssistantMessage(
-            finalText, finalReasoning, saveSession ?? session,
+          finalState = _writer.writeAssistant(
+            text: finalText,
+            reasoning: finalReasoning,
+            currentSession: saveSession ?? session,
             isAborted: _isAborted,
             pendingSessionVars: pendingSessionVars,
-            genTime: timeStr, tokens: tokenCount,
+            genTime: timeStr,
+            tokens: tokenCount,
             rawResponse: rawResponseJson ?? text,
             previousSwipes: previousSwipes,
             previousSwipeId: previousSwipeId,
@@ -210,9 +213,20 @@ class StreamGenerationService {
           if (isCancelled) {
             finalState = ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
           } else if (regenTargetId != null && saveSession != null) {
-            finalState = _saveRegenError(error.toString(), saveSession, regenTargetId, pendingSessionVars: pendingSessionVars, visibleStartIndex: vsi);
+            finalState = _writer.writeRegenError(
+              errorText: error.toString(),
+              saveSession: saveSession,
+              regenTargetId: regenTargetId,
+              pendingSessionVars: pendingSessionVars,
+              visibleStartIndex: vsi,
+            );
           } else {
-            finalState = _saveErrorMessage(error.toString(), session, pendingSessionVars: pendingSessionVars, visibleStartIndex: vsi);
+            finalState = _writer.writeError(
+              errorText: error.toString(),
+              currentSession: session,
+              pendingSessionVars: pendingSessionVars,
+              visibleStartIndex: vsi,
+            );
           }
         },
       );
@@ -221,223 +235,18 @@ class StreamGenerationService {
     } catch (e) {
       if (_isAborted()) return ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
       if (regenTargetId != null && saveSession != null) {
-        return _saveRegenError(e.toString(), saveSession, regenTargetId, visibleStartIndex: vsi);
+        return _writer.writeRegenError(
+          errorText: e.toString(),
+          saveSession: saveSession,
+          regenTargetId: regenTargetId,
+          visibleStartIndex: vsi,
+        );
       }
-      return _saveErrorMessage(e.toString(), session, visibleStartIndex: vsi);
-    }
-  }
-
-  ChatState _saveAssistantMessage(
-    String text,
-    String? reasoning,
-    ChatSession currentSession, {
-    required bool Function() isAborted,
-    Map<String, String>? pendingSessionVars,
-    String? genTime,
-    int? tokens,
-    String? rawResponse,
-    List<String>? previousSwipes,
-    int previousSwipeId = 0,
-    String? previousReasoning,
-    String? previousGenTime,
-    int? previousTokens,
-    List<Map<String, dynamic>>? previousSwipesMeta,
-    String? guidanceText,
-    Map<String, dynamic> memoryCoverage = const {},
-    bool isAllReasoning = false,
-    List<TriggeredEntry> triggeredLorebooks = const [],
-    List<TriggeredEntry> triggeredMemories = const [],
-    String? regenTargetId,
-    int visibleStartIndex = 0,
-  }) {
-    List<String> swipes;
-    int swipeId;
-
-    if (previousSwipes != null && previousSwipes.isNotEmpty) {
-      swipes = [...previousSwipes, text];
-      swipeId = swipes.length - 1;
-    } else {
-      swipes = [text];
-      swipeId = 0;
-    }
-
-    final currentSwipeMeta = <String, dynamic>{
-      'genTime': genTime,
-      'reasoning': reasoning,
-      'tokens': tokens,
-    };
-    if (guidanceText != null && guidanceText.isNotEmpty) {
-      currentSwipeMeta['guidanceText'] = guidanceText;
-      currentSwipeMeta['guidanceType'] = 'GENERATION';
-    }
-
-    List<Map<String, dynamic>> swipesMeta;
-    if (previousSwipesMeta != null && previousSwipesMeta.isNotEmpty) {
-      swipesMeta = [...previousSwipesMeta, currentSwipeMeta];
-    } else if (previousSwipes != null && previousSwipes.isNotEmpty) {
-      final prevMeta = <String, dynamic>{
-        'genTime': previousGenTime,
-        'reasoning': previousReasoning,
-        'tokens': previousTokens,
-      };
-      swipesMeta = List<Map<String, dynamic>>.generate(
-        previousSwipes.length,
-        (i) => i == previousSwipeId ? prevMeta : {},
+      return _writer.writeError(
+        errorText: e.toString(),
+        currentSession: session,
+        visibleStartIndex: vsi,
       );
-      swipesMeta.add(currentSwipeMeta);
-    } else {
-      swipesMeta = [currentSwipeMeta];
     }
-
-    if (regenTargetId != null) {
-      if (isAborted()) {
-        return ChatState(session: currentSession, isGenerating: false, visibleStartIndex: visibleStartIndex);
-      }
-      final idx = currentSession.messages.indexWhere((m) => m.id == regenTargetId);
-      if (idx >= 0) {
-        final updated = currentSession.messages[idx].copyWith(
-          content: text,
-          reasoning: reasoning,
-          isAllReasoning: isAllReasoning,
-          isError: false,
-          isTyping: false,
-          genTime: genTime,
-          tokens: tokens,
-          swipes: swipes,
-          swipeId: swipeId,
-          swipesMeta: swipesMeta,
-          swipeDirection: 'right',
-          memoryCoverage: memoryCoverage,
-          triggeredLorebooks: triggeredLorebooks,
-          triggeredMemories: triggeredMemories,
-        );
-        final updatedMessages = [...currentSession.messages];
-        updatedMessages[idx] = updated;
-        final finalSession = currentSession.copyWith(
-          messages: updatedMessages,
-          updatedAt: currentTimestampSeconds(),
-          sessionVars: pendingSessionVars ?? currentSession.sessionVars,
-        );
-        return ChatState(session: finalSession, lastRawResponse: rawResponse, regenTargetId: regenTargetId, visibleStartIndex: visibleStartIndex);
-      }
-    }
-
-    if (isAborted()) {
-      return ChatState(session: currentSession, isGenerating: false, visibleStartIndex: visibleStartIndex);
-    }
-
-    final assistantMsg = ChatMessage(
-      id: generateId(),
-      role: 'assistant',
-      content: text,
-      reasoning: reasoning,
-      isAllReasoning: isAllReasoning,
-      genTime: genTime,
-      tokens: tokens,
-      timestamp: DateTime.now().millisecondsSinceEpoch,
-      swipes: swipes,
-      swipeId: swipeId,
-      swipesMeta: swipesMeta,
-      memoryCoverage: memoryCoverage,
-      triggeredLorebooks: triggeredLorebooks,
-      triggeredMemories: triggeredMemories,
-    );
-    final finalMessages = [...currentSession.messages, assistantMsg];
-    final now = currentTimestampSeconds();
-    final sessionVars = pendingSessionVars ?? currentSession.sessionVars;
-    final finalSession = currentSession.copyWith(
-      messages: finalMessages,
-      updatedAt: now,
-      sessionVars: sessionVars,
-    );
-    return ChatState(session: finalSession, lastRawResponse: rawResponse, visibleStartIndex: visibleStartIndex);
-  }
-
-  String _sanitizeReasoningMarkers(String input, String tagStart, String tagEnd) {
-    var s = input;
-    if (tagStart.isNotEmpty) {
-      s = s.replaceAll(tagStart, '');
-    }
-    if (tagEnd.isNotEmpty) {
-      s = s.replaceAll(tagEnd, '');
-    }
-    s = s.replaceAll('<think>', '');
-    s = s.replaceAll('</think>', '');
-    s = s.replaceAll('<think>\n', '');
-    s = s.replaceAll('\n</think>', '');
-    s = s.replaceAll('<think> ', '');
-    s = s.replaceAll(' </think>', '');
-    s = s.replaceAll('<think', '');
-    s = s.replaceAll('</think', '');
-    s = s.replaceAll('think>', '');
-    s = s.replaceAll('think\n', '');
-    return s;
-  }
-
-  ChatState _saveErrorMessage(
-    String errorText,
-    ChatSession currentSession, {
-    Map<String, String>? pendingSessionVars,
-    int visibleStartIndex = 0,
-  }) {
-    final errorMsg = ChatMessage(
-      id: generateId(),
-      role: 'assistant',
-      content: errorText,
-      isError: true,
-      timestamp: DateTime.now().millisecondsSinceEpoch,
-      swipes: [errorText],
-      swipeId: 0,
-      swipesMeta: [{}],
-    );
-    final finalMessages = [...currentSession.messages, errorMsg];
-    final now = currentTimestampSeconds();
-    final sessionVars = pendingSessionVars ?? currentSession.sessionVars;
-    final finalSession = currentSession.copyWith(
-      messages: finalMessages,
-      updatedAt: now,
-      sessionVars: sessionVars,
-    );
-    return ChatState(session: finalSession, visibleStartIndex: visibleStartIndex);
-  }
-
-  ChatState _saveRegenError(
-    String errorText,
-    ChatSession saveSession,
-    String regenTargetId, {
-    Map<String, String>? pendingSessionVars,
-    int visibleStartIndex = 0,
-  }) {
-    final idx = saveSession.messages.indexWhere((m) => m.id == regenTargetId);
-    if (idx < 0) {
-      return _saveErrorMessage(errorText, saveSession, pendingSessionVars: pendingSessionVars, visibleStartIndex: visibleStartIndex);
-    }
-    final original = saveSession.messages[idx];
-    final errorSwipes = original.swipes.isNotEmpty ? [...original.swipes] : [original.content];
-    errorSwipes.add(errorText);
-    final errorSwipesMeta = original.swipesMeta.isNotEmpty
-        ? [...original.swipesMeta, <String, dynamic>{}]
-        : [<String, dynamic>{'genTime': original.genTime, 'reasoning': original.reasoning, 'tokens': original.tokens}, <String, dynamic>{}];
-    final updated = original.copyWith(
-      content: errorText,
-      isError: true,
-      isTyping: false,
-      swipes: errorSwipes,
-      swipesMeta: errorSwipesMeta,
-      swipeId: errorSwipes.length - 1,
-      reasoning: null,
-      genTime: null,
-      tokens: null,
-    );
-    final finalMessages = [...saveSession.messages];
-    finalMessages[idx] = updated;
-    final now = currentTimestampSeconds();
-    final sessionVars = pendingSessionVars ?? saveSession.sessionVars;
-    final finalSession = saveSession.copyWith(
-      messages: finalMessages,
-      updatedAt: now,
-      sessionVars: sessionVars,
-    );
-    return ChatState(session: finalSession, regenTargetId: regenTargetId, visibleStartIndex: visibleStartIndex);
   }
 }
