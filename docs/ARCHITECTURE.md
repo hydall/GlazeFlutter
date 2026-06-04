@@ -320,7 +320,8 @@ lib/
 - `{{reasoningPrefix}}`, `{{reasoningSuffix}}` — inline reasoning tag config
 
 **Dynamic content:**
-- `{{summary}}` — current chat summary
+- `{{summary}}` — current chat summary (user-authored only)
+- `{{memory}}` — triggered memory book entries. With `injectionTarget='macro'` this is the only way memory enters the prompt; with `injectionTarget='hard_block'` (default) the system already injects a "Memory Book" system message and `{{memory}}` lets the user place additional copies with custom wrapper tags.
 - `{{lorebooks}}` — triggered lorebook content
 - `{{guidance}}` — guided swipe instruction
 
@@ -335,7 +336,7 @@ lib/
 1. Comment stripping
 2. Static character macros
 3. `{{reasoningPrefix}}` / `{{reasoningSuffix}}`
-4. `{{summary}}` / `{{lorebooks}}` / `{{guidance}}`
+4. `{{summary}}` / `{{memory}}` / `{{lorebooks}}` / `{{guidance}}`
 5. Trim
 6. Session variable macros (`setvar`/`getvar`)
 7. Global variable macros (`setglobalvar`/`getglobalvar`)

@@ -81,9 +81,9 @@ class MemoryBookController {
     final autoCreate = s.autoCreateEnabled ? 'Auto ON' : 'Auto OFF';
     final autoGen = s.autoGenerateEnabled ? 'Auto-gen' : 'Manual';
     final delayed = s.useDelayedAutomation ? 'Delayed' : 'Immediate';
-    final target = s.injectionTarget == 'summary_macro'
-        ? '{{summary}}'
-        : 'Summary Block';
+    final target = s.injectionTarget == 'macro'
+        ? '{{memory}}'
+        : 'Hard Block';
     final vectorThreshold = s.vectorThreshold.toStringAsFixed(2);
     final maxEntries = s.maxInjectedEntries;
     final batchSize = s.batchSize;

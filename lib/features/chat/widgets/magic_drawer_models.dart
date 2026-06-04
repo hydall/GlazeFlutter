@@ -89,7 +89,7 @@ class MagicDrawerStats {
     this.summaryContent,
     this.memoryContent,
     this.memoryMacroContent,
-    this.memoryInjectionTarget = 'summary_block',
+    this.memoryInjectionTarget = 'hard_block',
     this.memoryCoverage = const {},
     this.triggeredMemories = const [],
     this.extBlocksEnabled = false,

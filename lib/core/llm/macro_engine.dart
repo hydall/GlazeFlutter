@@ -15,12 +15,10 @@ class MacroContext {
   final String charId;
   final String sessionId;
   final String? summaryContent;
+  final String? memoryContent;
   final String? lorebooksContent;
   final String? guidanceText;
   final String? macroName;
-  /// Memory content to be appended when expanding `{{summary}}` in summary_macro mode.
-  /// This allows `<wrapper>{{summary}}</wrapper>` to enclose both the summary and the injected memories.
-  final String? summaryMemoryContent;
 
   const MacroContext({
     required this.charName,
@@ -37,10 +35,10 @@ class MacroContext {
     required this.charId,
     required this.sessionId,
     this.summaryContent,
+    this.memoryContent,
     this.lorebooksContent,
     this.guidanceText,
     this.macroName,
-    this.summaryMemoryContent,
   });
 
   MacroContext copyWith({
@@ -50,9 +48,9 @@ class MacroContext {
     String? charPersonality,
     String? charDescription,
     String? summaryContent,
+    String? memoryContent,
     String? lorebooksContent,
     String? guidanceText,
-    String? summaryMemoryContent,
   }) {
     return MacroContext(
       charName: charName,
@@ -62,17 +60,17 @@ class MacroContext {
       charMesExample: charMesExample,
       userName: userName,
       personaPrompt: personaPrompt,
-      reasoningStart: reasoningStart,
+      reasoningStart: reasoningEnd,
       reasoningEnd: reasoningEnd,
       sessionVars: sessionVars ?? this.sessionVars,
       globalVars: globalVars ?? this.globalVars,
       charId: charId,
       sessionId: sessionId,
       summaryContent: summaryContent ?? this.summaryContent,
+      memoryContent: memoryContent ?? this.memoryContent,
       lorebooksContent: lorebooksContent ?? this.lorebooksContent,
       guidanceText: guidanceText ?? this.guidanceText,
       macroName: macroName,
-      summaryMemoryContent: summaryMemoryContent ?? this.summaryMemoryContent,
     );
   }
 
@@ -91,10 +89,10 @@ class MacroContext {
     'charId': charId,
     'sessionId': sessionId,
     'summaryContent': summaryContent,
+    'memoryContent': memoryContent,
     'lorebooksContent': lorebooksContent,
     'guidanceText': guidanceText,
     'macroName': macroName,
-    'summaryMemoryContent': summaryMemoryContent,
   };
 
   factory MacroContext.fromJson(Map<String, dynamic> json) => MacroContext(
@@ -112,10 +110,10 @@ class MacroContext {
     charId: json['charId'] as String,
     sessionId: json['sessionId'] as String,
     summaryContent: json['summaryContent'] as String?,
+    memoryContent: json['memoryContent'] as String?,
     lorebooksContent: json['lorebooksContent'] as String?,
     guidanceText: json['guidanceText'] as String?,
     macroName: json['macroName'] as String?,
-    summaryMemoryContent: json['summaryMemoryContent'] as String?,
   );
 }
 
@@ -243,14 +241,12 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
 
   result = result.replaceAllMapped(
     RegExp(r'\{\{summary\}\}', caseSensitive: false),
-    (_) {
-      final base = ctx.summaryContent ?? '';
-      if (ctx.summaryMemoryContent != null && ctx.summaryMemoryContent!.isNotEmpty) {
-        if (base.isEmpty) return ctx.summaryMemoryContent!;
-        return '$base\n\n${ctx.summaryMemoryContent!}';
-      }
-      return base;
-    },
+    (_) => ctx.summaryContent ?? '',
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{memory\}\}', caseSensitive: false),
+    (_) => ctx.memoryContent ?? '',
   );
 
   result = result.replaceAllMapped(

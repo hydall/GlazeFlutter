@@ -189,14 +189,26 @@ added in the future without changing the service signature.
 
 ### INV-PS5: Memory injection position is deterministic
 
-Given the same inputs, the injection point is always the same:
-- `summary_block` target (default): memory inserted before the first history message
-- `summary_macro` target: memory appended to the summary block content
+Memory can be injected into the prompt via one of two mechanisms,
+both keyed off `MemoryGlobalSettings.injectionTarget` and
+`MemoryBookSettings.injectionTarget` (per-book override):
 
-### INV-PS6: Regex application order is deterministic
+* **`hard_block`** (default): a hard system message with
+  `blockId='memory'` and `blockName='Memory Book'` is added before
+  the first history message. The check is skipped when the preset
+  already has a block with `id='memory'` or contains the `{{memory}}`
+  macro (so the user can disable the hard block by adding an
+  explicit `enabled: false` block in the preset, or by placing
+  `{{memory}}` in a custom wrapper).
 
-The caller in `prompt_builder.dart` assembles the list: preset regex scripts first,
-then global regex scripts. `RegexService.applyRegexes()` applies scripts in list order.
+* **`macro`**: no hard block is added automatically. Memory is
+  reachable only through the `{{memory}}` macro inside the preset,
+  which gives the user full control over placement and wrapper tags.
+
+Summary injection is independent and unchanged: the `{{summary}}`
+macro resolves to `MacroContext.summaryContent` (user-authored
+summary only — no memory piggyback). It is the user's responsibility
+to place `{{summary}}` in a preset block if they want it injected.
 
 ### INV-PS7: Macro resolution order is fixed
 
@@ -204,7 +216,7 @@ Within a single `MacroEngine.replaceMacros()` call, macros resolve in this order
 1. Comment stripping
 2. Static character macros
 3. `{{reasoningPrefix}}` / `{{reasoningSuffix}}`
-4. `{{summary}}` / `{{lorebooks}}` / `{{guidance}}`
+4. `{{summary}}` / `{{memory}}` / `{{lorebooks}}` / `{{guidance}}`
 5. Trim
 6. Session variable macros (`setvar`/`getvar`)
 7. Global variable macros (`setglobalvar`/`getglobalvar`)

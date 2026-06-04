@@ -187,9 +187,7 @@ PromptResult buildPrompt(PromptPayload payload) {
     summaryContent: payload.summaryContent,
     guidanceText: payload.guidanceText,
     macroName: char.macroName,
-    summaryMemoryContent: payload.memoryInjectionTarget == 'summary_macro'
-        ? payload.memoryMacroContent
-        : null,
+    memoryContent: payload.memoryMacroContent,
   );
 
   var currentSessionVars = Map<String, String>.from(payload.sessionVars);
@@ -358,20 +356,11 @@ PromptResult buildPrompt(PromptPayload payload) {
   if (currentMacroCtx.lorebooksContent != null && currentMacroCtx.lorebooksContent!.isNotEmpty) {
     macroTokens['lorebooks'] = estimateTokens(currentMacroCtx.lorebooksContent!);
   }
-  // Count summary tokens as the full {{summary}} expansion (summary + memory),
-  // mirroring exactly what macro_engine produces at line 247-253.
-  final summaryParts = [
-    if (currentMacroCtx.summaryContent?.isNotEmpty == true) currentMacroCtx.summaryContent!,
-    if (currentMacroCtx.summaryMemoryContent?.isNotEmpty == true) currentMacroCtx.summaryMemoryContent!,
-  ];
-  if (summaryParts.isNotEmpty) {
-    macroTokens['summary'] = estimateTokens(summaryParts.join('\n\n'));
+  if (currentMacroCtx.summaryContent != null && currentMacroCtx.summaryContent!.isNotEmpty) {
+    macroTokens['summary'] = estimateTokens(currentMacroCtx.summaryContent!);
   }
-  // Track memory separately so the tokenizer can show it as its own row.
-  // In presetNetTokens we skip 'memory' to avoid double-deducting it
-  // (it's already included in macroTokens['summary'] above).
-  if (currentMacroCtx.summaryMemoryContent?.isNotEmpty == true) {
-    macroTokens['memory'] = estimateTokens(currentMacroCtx.summaryMemoryContent!);
+  if (currentMacroCtx.memoryContent != null && currentMacroCtx.memoryContent!.isNotEmpty) {
+    macroTokens['memory'] = estimateTokens(currentMacroCtx.memoryContent!);
   }
   if (currentMacroCtx.charDescription != null && currentMacroCtx.charDescription!.isNotEmpty) {
     macroTokens['description'] = estimateTokens(currentMacroCtx.charDescription!);
@@ -583,26 +572,17 @@ PromptResult _assembleMessages({
   if (mergeBuffer != null) messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer));
 
   if (payload.memoryContent != null && payload.memoryContent!.isNotEmpty) {
-    final macroText = payload.memoryMacroContent ?? payload.memoryContent!;
-    if (payload.memoryInjectionTarget == 'summary_macro' && macroText.isNotEmpty) {
-      // Check both the message list AND appendToLastMessage blocks: the latter
-      // are merged into the last user message and never added to [messages]
-      // (see docs/INVARIANTS.md INV-PS9), so their isSummary flag is otherwise
-      // invisible to the lookup here. Without this check, memory gets injected
-      // both inline via {{summary}} AND as a separate "Memory Book" system msg.
-      final hasSummaryBlock = messages.any((m) => m.isSummary) ||
-          appendedEntries.any((b) => b.isSummary);
-      if (hasSummaryBlock) {
-        // Memory injection for summary_macro is now performed at macro-expansion time
-        // inside replaceMacros() (see macro_engine.dart). This preserves the user's
-        // custom wrapper tags around {{summary}}, e.g. <summary>{{summary}}</summary>.
-        // We intentionally do NOT append here anymore.
-      } else {
+    if (payload.memoryInjectionTarget == 'hard_block') {
+      // Skip the hard block if the preset already handles memory via
+      // {{memory}} macro or via an explicit `id: 'memory'` block.
+      // (See docs/INVARIANTS.md INV-PS5.)
+      final hasMemoryBlock = messages.any((m) => m.blockId == 'memory') ||
+          appendedEntries.any((b) => b.id == 'memory');
+      if (!hasMemoryBlock) {
         _injectMemoryBlock(messages, attributionBlocks, payload.memoryContent!);
       }
-    } else {
-      _injectMemoryBlock(messages, attributionBlocks, payload.memoryContent!);
     }
+    // 'macro' target: skip hard block, user must place {{memory}} in preset
   }
 
   final lorebookReserve = _calculateLorebookReserve(payload);
@@ -631,32 +611,6 @@ PromptResult _assembleMessages({
     lorebookReserveTokens: lorebookReserve,
     macroTokens: macroTokens,
     vectorLoreTokens: vectorLoreTokens,
-  );
-
-  // summaryContentTokens: visual row "Summary" must reflect ONLY the
-  // user-authored summary, not the memory injection that piggybacks on
-  // {{summary}} in summary_macro mode. macroTokens['summary'] is kept
-  // as the full expansion (summary + memory) for presetNetTokens
-  // deduction semantics — see TokenBreakdown.summaryContentTokens doc.
-  final summaryOnly = payload.summaryContent;
-  final summaryOnlyTokens = summaryOnly != null && summaryOnly.isNotEmpty
-      ? estimateTokens(summaryOnly)
-      : 0;
-  final breakdownWithSummaryOnly = TokenBreakdown(
-    sourceTokens: breakdown.sourceTokens,
-    macroTokens: breakdown.macroTokens,
-    staticTotal: breakdown.staticTotal,
-    historyBudget: breakdown.historyBudget,
-    historyTokens: breakdown.historyTokens,
-    totalTokens: breakdown.totalTokens,
-    cutoffIndex: breakdown.cutoffIndex,
-    trimmedHistory: breakdown.trimmedHistory,
-    lorebookReserveTokens: breakdown.lorebookReserveTokens,
-    memoryTokens: breakdown.memoryTokens,
-    vectorLoreTokens: breakdown.vectorLoreTokens,
-    fixedTotal: breakdown.fixedTotal,
-    remaining: breakdown.remaining,
-    summaryContentTokens: summaryOnlyTokens,
   );
 
   final finalMessages = <PromptMessage>[];
@@ -728,7 +682,7 @@ PromptResult _assembleMessages({
     }
   }
 
-  return PromptResult(messages: finalMessages, breakdown: breakdownWithSummaryOnly, sessionVars: currentSessionVars, globalVars: currentGlobalVars, triggeredLorebooks: triggeredLorebooks, triggeredMemories: triggeredMemories);
+  return PromptResult(messages: finalMessages, breakdown: breakdown, sessionVars: currentSessionVars, globalVars: currentGlobalVars, triggeredLorebooks: triggeredLorebooks, triggeredMemories: triggeredMemories);
 }
 
 void _injectMemoryBlock(List<PromptMessage> messages, List<StaticBlock> attributionBlocks, String content) {

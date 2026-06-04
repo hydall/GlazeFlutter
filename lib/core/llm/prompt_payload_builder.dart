@@ -102,7 +102,7 @@ class PromptPayloadBuilder {
     String? summaryContent;
     String? memoryContent;
     String? memoryMacroContent;
-    String memoryInjectionTarget = 'summary_block';
+    String memoryInjectionTarget = 'hard_block';
     Map<String, dynamic> memoryCoverage = {};
     List<TriggeredEntry> triggeredMemories = [];
     List<ChatMessage> history = session?.messages ?? [];
@@ -224,7 +224,7 @@ class PromptPayloadBuilder {
     String? summaryContent,
     String? memoryContent,
     String? memoryMacroContent,
-    String memoryInjectionTarget = 'summary_block',
+    String memoryInjectionTarget = 'hard_block',
     Map<String, dynamic> memoryCoverage = const {},
     List<TriggeredEntry> triggeredMemories = const [],
     String? guidanceText,

@@ -43,23 +43,8 @@ int tokensForKey(TokenBreakdown bd, String key) {
     'lorebookReserve' => _unusedLorebookReserve(bd),
     'vectorLore'      => bd.vectorLoreTokens,
     'preset'          => bd.presetNetTokens,
-    'summary'         => _summaryTokens(bd),
     _                 => (bd.sourceTokens[key] ?? 0) > 0 ? bd.sourceTokens[key]! : (bd.macroTokens[key] ?? 0),
   };
-}
-
-int _summaryTokens(TokenBreakdown bd) {
-  // summaryContentTokens counts only the user-authored summary, NOT
-  // the memory that piggybacks on {{summary}} in summary_macro mode.
-  // Memory is shown as its own row, so the "Summary" row would
-  // otherwise double-count those tokens (e.g. user has no summary
-  // but a memory entry triggers — both rows would show the same N).
-  // Falls back to macroTokens['summary'] for breakdowns computed
-  // before this field existed (defensive — e.g. cached JSON).
-  if (bd.summaryContentTokens > 0) return bd.summaryContentTokens;
-  final fromSource = bd.sourceTokens['summary'] ?? 0;
-  if (fromSource > 0) return fromSource;
-  return bd.macroTokens['summary'] ?? 0;
 }
 
 int _unusedLorebookReserve(TokenBreakdown bd) {

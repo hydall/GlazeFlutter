@@ -143,7 +143,6 @@ class TokenBreakdown {
   final int vectorLoreTokens;
   final int fixedTotal;
   final int remaining;
-  final int summaryContentTokens;
 
   const TokenBreakdown({
     required this.sourceTokens,
@@ -159,7 +158,6 @@ class TokenBreakdown {
     this.vectorLoreTokens = 0,
     this.fixedTotal = 0,
     this.remaining = 0,
-    this.summaryContentTokens = 0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -176,7 +174,6 @@ class TokenBreakdown {
     'vectorLoreTokens': vectorLoreTokens,
     'fixedTotal': fixedTotal,
     'remaining': remaining,
-    'summaryContentTokens': summaryContentTokens,
   };
 
   factory TokenBreakdown.fromJson(Map<String, dynamic> json) => TokenBreakdown(
@@ -193,7 +190,6 @@ class TokenBreakdown {
     vectorLoreTokens: json['vectorLoreTokens'] as int? ?? 0,
     fixedTotal: json['fixedTotal'] as int? ?? 0,
     remaining: json['remaining'] as int? ?? 0,
-    summaryContentTokens: json['summaryContentTokens'] as int? ?? 0,
   );
 
   int get lorebookTotal => (sourceTokens['lorebook'] ?? 0) + (macroTokens['lorebooks'] ?? 0) + vectorLoreTokens;

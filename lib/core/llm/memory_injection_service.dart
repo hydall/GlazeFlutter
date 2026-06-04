@@ -31,7 +31,7 @@ class MemoryInjectionResult {
   const MemoryInjectionResult({
     this.entries = const [],
     this.content = '',
-    this.injectionTarget = 'summary_block',
+    this.injectionTarget = 'hard_block',
     this.macroContent = '',
     this.totalTokens = 0,
     this.maxInjectionTokens,
@@ -161,7 +161,7 @@ class MemoryInjectionService {
     }
 
     final injectionTarget =
-        gs.injectionTarget == 'summary_macro' ? 'summary_macro' : 'summary_block';
+        gs.injectionTarget == 'macro' ? 'macro' : 'hard_block';
 
     return MemoryInjectionResult(
       entries: trimmedEntries,

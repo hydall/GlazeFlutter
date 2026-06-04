@@ -168,7 +168,7 @@ PromptPayload _deserializePayload(Map<String, dynamic> json) {
     summaryPrefix: json['summaryPrefix'] as String?,
     memoryContent: json['memoryContent'] as String?,
     memoryMacroContent: json['memoryMacroContent'] as String?,
-    memoryInjectionTarget: json['memoryInjectionTarget'] as String? ?? 'summary_block',
+    memoryInjectionTarget: _migrateInjectionTarget(json['memoryInjectionTarget'] as String?),
     guidanceText: json['guidanceText'] as String?,
     lorebooks: (json['lorebooks'] as List).map((l) => Lorebook.fromJson(l as Map<String, dynamic>)).toList(),
     lorebookSettings: LorebookGlobalSettings.fromJson(json['lorebookSettings'] as Map<String, dynamic>),
@@ -346,4 +346,12 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
 
 bool _glazeMatch(String key, String text) {
   return glazeCheckMatch(key, text, false, WholeWordMode.glaze);
+}
+
+/// Translates the legacy `summary_block` / `summary_macro` enum values
+/// (pre-{{memory}}-split) to `hard_block` / `macro`.
+String _migrateInjectionTarget(String? raw) {
+  if (raw == 'summary_block') return 'hard_block';
+  if (raw == 'summary_macro') return 'macro';
+  return raw ?? 'hard_block';
 }

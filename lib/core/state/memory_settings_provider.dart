@@ -17,7 +17,7 @@ class MemoryGlobalSettings with _$MemoryGlobalSettings {
     @Default(7) int maxInjectedEntries,
     @Default(15) int autoCreateInterval,
     @Default(true) bool useDelayedAutomation,
-    @Default('summary_block') String injectionTarget,
+    @Default('hard_block') String injectionTarget,
     @Default(3) int batchSize,
     @Default(1) int parallelJobs,
     @Default(false) bool vectorSearchEnabled,
@@ -35,7 +35,22 @@ class MemoryGlobalSettings with _$MemoryGlobalSettings {
   }) = _MemoryGlobalSettings;
 
   factory MemoryGlobalSettings.fromJson(Map<String, dynamic> json) =>
-      _$MemoryGlobalSettingsFromJson(json);
+      _$MemoryGlobalSettingsFromJson(_migrateInjectionTargetInPlace(json));
+}
+
+/// Translates the legacy `summary_block` / `summary_macro` enum values
+/// (pre-{{memory}}-split) to `hard_block` / `macro` in-place. The old
+/// values were misleadingly named because the "summary" prefix was
+/// about *where* memory goes, not about the summary feature itself.
+Map<String, dynamic> _migrateInjectionTargetInPlace(Map<String, dynamic> json) {
+  final raw = json['injectionTarget'];
+  if (raw == 'summary_block') {
+    return {...json, 'injectionTarget': 'hard_block'};
+  }
+  if (raw == 'summary_macro') {
+    return {...json, 'injectionTarget': 'macro'};
+  }
+  return json;
 }
 
 final memoryGlobalSettingsProvider =
