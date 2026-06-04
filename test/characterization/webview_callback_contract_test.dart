@@ -5,6 +5,7 @@ void main() {
   group('ChatWebViewWidget callback contract (Phase 4.4 characterization)', () {
     late String webviewWidgetSource;
     late String bridgeControllerSource;
+    late String bridgeHandlersSource;
 
     setUpAll(() {
       webviewWidgetSource = File(
@@ -12,6 +13,9 @@ void main() {
       ).readAsStringSync();
       bridgeControllerSource = File(
         'lib/features/chat/bridge/chat_bridge_controller.dart',
+      ).readAsStringSync();
+      bridgeHandlersSource = File(
+        'lib/features/chat/bridge/bridge_handlers.dart',
       ).readAsStringSync();
     });
 
@@ -125,6 +129,11 @@ void main() {
     });
 
     test('bridge _setupHandlers registers addJavaScriptHandler for each callback', () {
+      // After C6 split, the registry of handler names lives in
+      // bridge_handlers.dart (a data-driven table) and the host
+      // iterates that map to register each addJavaScriptHandler. We
+      // verify the registry covers every callback name and that the
+      // host actually wires it up.
       final expectedHandlers = [
         'onWebViewReady',
         'onLoadMore',
@@ -151,11 +160,24 @@ void main() {
       ];
       for (final name in expectedHandlers) {
         expect(
+          bridgeHandlersSource,
+          contains("'$name':"),
+          reason: 'bridge_handlers.dart must declare handler "$name"',
+        );
+        expect(
           bridgeControllerSource,
-          contains("handlerName: '$name'"),
-          reason: '_setupHandlers must register "$name" handler',
+          contains('addJavaScriptHandler'),
+          reason: 'host must register handlers via addJavaScriptHandler',
         );
       }
+      // The host must actually wire up the registry — verify the
+      // setupHandlers method iterates the bridgeHandlers map.
+      expect(
+        bridgeControllerSource,
+        contains('for (final entry in bridgeHandlers.entries)'),
+        reason:
+            'host setupHandlers must iterate the bridgeHandlers registry',
+      );
     });
 
     test('image callbacks (retry/find/regen) have (String, String) signature', () {
