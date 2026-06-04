@@ -517,10 +517,10 @@
         "binding",
         "bindings"
     ],
-    "count_messages": [
-        "message",
-        "messages"
-    ],
+    "count_messages": {
+        "one": "message",
+        "other": "messages"
+    },
     "label_preview": "preview",
     "placeholder_search_lore": "Search keys or content...",
     "no_entries_found": "No entries found",

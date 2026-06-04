@@ -181,9 +181,6 @@ fix_apply.txt
 fix_dry.txt
 pubget.txt
 
-# Temporary refactor tracking (removed after refactor PR merge)
-REFACTOR_LOG.md
-
 # OpenCode local config
 opencode.json
 opencode.jsonc
