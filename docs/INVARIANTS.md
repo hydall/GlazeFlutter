@@ -25,8 +25,9 @@ Note: `ChatNotifier` uses `ref.keepAlive()`, so provider disposal is not a clean
 ### INV-C3: Partial text is preserved on abort
 
 When the user aborts mid-stream and partial text exists, the partial response is saved
-as a completed message — not discarded. `ChatNotifier.abortGeneration()` reads
-`streamingStateProvider` and persists partial text before clearing state.
+as a completed message — not discarded. `AbortHandler.abortGeneration()` (called from
+`ChatNotifier.abortGeneration()`) reads `streamingStateProvider` and persists partial
+text before clearing state.
 
 ### INV-C4: `isGenerating` is consistent with actual generation activity
 
@@ -36,13 +37,14 @@ On app restart, `build()` creates a fresh `ChatState` where `isGenerating` defau
 ### INV-C5: Session variables are restored on abort/error ✅
 
 If macro expansion mutates `sessionVars` during prompt build, those mutations must
-**not** be persisted on any non-happy exit path. Only the success path (`_saveAssistantMessage`)
-writes the `pendingSessionVars` snapshot returned by the isolate.
+**not** be persisted on any non-happy exit path. Only the success path
+(`SavedMessageWriter.writeAssistant`) writes the `pendingSessionVars` snapshot returned
+by the isolate.
 
 `SavedMessageWriter.writeError` and `SavedMessageWriter.writeRegenError` keep the
 original `currentSession.sessionVars` unchanged. The pre-generation vars from the
-isolate only reach the database on the success branch (line 190 of
-`stream_generation_service.dart`).
+isolate only reach the database on the success branch (`stream_generation_service.dart`,
+`writeAssistant` call with `pendingSessionVars`).
 
 `currentSessionVars` lives only inside the isolate's local scope during
 `buildPrompt()` (`lib/core/llm/prompt_builder.dart:195`) — nothing is persisted
@@ -60,8 +62,10 @@ has its own independent state. Switching screens does not abort other characters
 
 If an SSE stream completes after a new generation has started (e.g. very fast regen),
 the stale callback must detect the mismatch and discard the result.
-Guard: compare `_activeGenId` before writing to state. `ChatGenerationService`
-receives `isAborted: () => _activeGenId != genId`.
+Guard: `AbortHandler.isCurrentGen(genId)` — exposed to the stream as
+`isAborted: () => !abortHandler.isCurrentGen(genId)` via `ChatGenerationService.generate()`
+→ `StreamGenerationService.run()`. `AbortHandler.nextGenId()` increments `_activeGenId`
+on abort and on each new generation start.
 
 ---
 
@@ -70,7 +74,9 @@ receives `isAborted: () => _activeGenId != genId`.
 ### INV-IG1: Image generation runs after text generation completes
 
 `ChatGenerationService.processImageTags()` is called only after the SSE stream completes
-and the assistant message is saved. It never runs concurrently with text generation.
+and the assistant message is saved, via `GenerationPipeline._runPostTextSide()`.
+It never runs concurrently with text generation. **Exception:** `continueMessage()`
+bypasses `GenerationPipeline` — see INV-CM2.
 
 ### INV-IG2: Image generation has independent abort infrastructure
 
@@ -339,13 +345,53 @@ If abort fails to clear `isGenerating`, the subsequent check rejects.
 
 ---
 
-## 8. Continue Message Invariant
+## 8. Continue Message Invariants
 
 ### INV-CM1: Continue message appends to the last assistant message
 
-`ChatNotifier.continueMessage()` reuses `ChatGenerationService.generate()` but
-post-processes the result by concatenating `lastMsg.content + generatedMsg.content`.
-It does not create a new message or swipe.
+`ChatNotifier.continueMessage()` calls `ChatGenerationService.generate()` directly
+(not `GenerationPipeline.run()`). After the stream completes, it concatenates
+`lastMsg.content + generatedMsg.content` onto the existing last assistant message
+and persists via `chatRepo.put`. It does not create a new swipe.
+
+Mutex: `continueMessage()` rejects when `_isMemoryDraftActive` (same as
+`sendMessage` / `regenerateLastAssistant`) — see INV-M4.
+
+### INV-CM2: Continue skips post-SSE pipeline side effects
+
+Because `continueMessage()` does not use `GenerationPipeline`, the following do
+**not** run on the continue path (by design today — document before changing):
+
+- `processImageTags()` — inline `[IMG:GEN]` tags in the continued chunk
+- `processExtensions()` — info-block / extension image post-gen
+- `notifySyncMessageGenerated()` from the pipeline
+- Regen rollback / `restorationMessage` handling from the pipeline
+
+Notification start/complete in `continueMessage()` itself still runs.
+If continue should match send/regen post-processing, route it through
+`GenerationPipeline` with a dedicated continue mode.
+
+---
+
+## 9. Extension Post-Generation Invariants
+
+### INV-EG1: Extensions run only after a successful normal/regen chat completion
+
+`ExtensionPostGenService.processAfterGeneration()` is invoked from
+`ChatGenerationService.processExtensions()`, which is called only from
+`GenerationPipeline._runPostTextSide()` after text is saved. It does not run during
+SSE streaming and does not run for `continueMessage()` (INV-CM2).
+
+### INV-EG2: Extension failures do not fail chat generation
+
+`ChatGenerationService.processExtensions()` catches errors and logs them; the
+assistant message and chat state remain committed.
+
+### INV-EG3: Extensions are gated by settings
+
+Processing is a no-op when `extensionsSettings.enabled` is false or
+`activePresetId` is null/empty. Info blocks are stored per `sessionId` via
+`infoBlocksProvider`.
 
 ---
 
@@ -359,13 +405,13 @@ Before merging any structural PR:
 - [ ] Switching characters during generation continues background generation
 - [ ] Prompt block order matches preset definition
 - [ ] Vector scan runs before keyword scan; results deduplicated
-- [ ] Memory injection does not exceed context budget (⚠️ no guard yet)
-- [x] Memory injection does not exceed context budget (PR-B C13)
+- [x] Memory injection respects token budget (PR-B C13 / INV-PS4)
 - [ ] History cutoff trims oldest messages first
 - [ ] Summary returns a string without affecting chat state
-- [x] Memory draft does not interact with chat generation state (PR-B C12)
-- [ ] Image generation completes after text generation, has separate abort
+- [x] Memory draft mutex with chat generation (PR-B C12 / INV-M3, INV-M4)
+- [ ] Image generation completes after text generation (not on continue path — INV-CM2)
+- [ ] Extensions post-gen runs after normal/regen only (INV-EG1; not on continue)
 - [ ] Context limit exceeded shows an error to the user
 - [ ] API not configured shows an error to the user
 - [ ] Abort closes the TCP connection (not just UI state)
-- [x] Session variables are restored on abort/error (PR-B C11)
+- [x] Session variables not persisted on abort/error (PR-B C11 / INV-C5)

@@ -41,18 +41,23 @@ lib/
 │   ├── constants/
 │   │   └── image_gen_patterns.dart     # IMG-tag regex constants
 │   ├── db/
-│   │   ├── app_db.dart                 # AppDatabase singleton (9 tables, migrations v1–19)
+│   │   ├── app_db.dart                 # AppDatabase singleton (11 tables, schema v21)
 │   │   ├── tables.dart                 # Drift table class definitions
 │   │   └── repositories/              # One repo per table (CRUD only)
 │   │       ├── api_config_repo.dart
 │   │       ├── character_repo.dart
 │   │       ├── chat_repo.dart
 │   │       ├── embedding_repo.dart
+│   │       ├── extension_presets_repository.dart
+│   │       ├── info_blocks_repository.dart
 │   │       ├── lorebook_repo.dart
 │   │       ├── memory_book_repo.dart
 │   │       ├── persona_repo.dart
 │   │       ├── preset_repo.dart
 │   │       └── summary_repo.dart
+│   ├── glossary/
+│   │   ├── glossary_models.dart
+│   │   └── glossary_provider.dart
 │   ├── models/                       # Freezed data classes (pure data, no logic)
 │   │   ├── api_config.dart
 │   │   ├── character.dart
@@ -68,8 +73,9 @@ lib/
 │   │   ├── prompt_inputs.dart         # Freezed value object: inputs for isolate build
 │   │   ├── prompt_inputs_collector.dart # Reads Riverpod state, assembles PromptInputs (no async work)
 │   │   ├── prompt_payload_assembler.dart # Pure: PromptInputs → PromptPayload (no Riverpod)
-│   │   ├── prompt_payload_builder.dart # Riverpod-aware: assembles PromptPayload from state (with vector/memory work)
-│   │   ├── prompt_isolate.dart        # Runs buildPrompt() in a Dart isolate
+│   │   ├── prompt_payload_builder.dart # Riverpod-aware: assembles PromptPayload (vector/memory async)
+│   │   ├── prompt_isolate.dart        # Spawns isolate; delegates to prompt_worker
+│   │   ├── prompt_worker.dart         # Top-level entry: buildPrompt() inside isolate
 │   │   ├── history_assembler.dart     # ChatMessage[] → PromptMessage[], macro application
 │   │   ├── context_calculator.dart    # Token budget: trims history from oldest end
 │   │   ├── fallback_prompt_builder.dart # Minimal prompt when no preset configured
@@ -85,8 +91,10 @@ lib/
 │   │   ├── embedding_error_labels.dart # Error classification for embedding status
 │   │   ├── memory_embedding_service.dart   # Indexes memory entries into embedding store
 │   │   ├── memory_injection_service.dart   # Scores + selects memory entries for injection
+│   │   ├── memory_budget.dart         # INV-PS4 token cap for memory injection
 │   │   ├── glaze_matcher.dart         # Pure regex keyword matching (3 whole-word modes)
 │   │   ├── regex_service.dart         # Applies PresetRegex scripts to a string
+│   │   ├── preset_macro_attribution.dart # Preset macro source attribution (debug)
 │   │   ├── sse_client.dart           # SSE + non-streaming completions via Dio
 │   │   ├── stream_accumulator.dart   # Parses inline <think…> tags from stream
 │   │   ├── response_normalizer.dart  # Extracts content from non-streaming response body
@@ -94,18 +102,26 @@ lib/
 │   │   ├── tokenizer.dart            # estimateTokens() with LRU cache, base64 stripping
 │   │   ├── macro_engine.dart         # SillyTavern-compatible macro replacement engine
 │   │   └── vector_math.dart          # cosineSimilarity, findTopK, findTopKMulti, BLOB helpers
+│   ├── navigation/
+│   │   └── router.dart               # GoRouter routes + shell (used by app.dart)
 │   ├── services/                     # Business logic services (no UI, no Riverpod ref)
 │   │   ├── character_importer.dart   # Parses PNG/JSON/YAML V1/V2 character cards
 │   │   ├── character_exporter.dart   # Exports character to PNG (tEXt chunk) or JSON
 │   │   ├── character_book_converter.dart # character_book JSON ↔ Lorebook model
 │   │   ├── image_storage_service.dart    # Avatars + thumbnails on disk
 │   │   ├── gallery_service.dart          # Per-character image gallery CRUD
+│   │   ├── api_connection_tester.dart    # API endpoint connectivity check
 │   │   ├── backup_service.dart           # Top-level backup orchestrator (thin)
 │   │   ├── backup/
 │   │   │   ├── backup_exporter.dart      # Serializes to Glaze-native ZIP
 │   │   │   ├── backup_helpers.dart       # ZIP read/write, JSON helpers
+│   │   │   ├── backup_cancel.dart        # Cooperative cancel for long imports
+│   │   │   ├── archive_stream.dart       # Streaming ZIP entry reader
 │   │   │   ├── flutter_backup_importer.dart  # Imports Glaze-native backup
-│   │   │   ├── js_backup_importer.dart       # Imports SillyTavern ZIP (orchestrator)
+│   │   │   ├── js_backup_importer.dart       # Legacy ST ZIP import (orchestrator)
+│   │   │   ├── st_backup_importer.dart       # SillyTavern ZIP import (orchestrator)
+│   │   │   ├── tavo_backup_importer.dart     # Tavo/LMDB backup import
+│   │   │   ├── tavo_lmdb_reader.dart         # LMDB reader for Tavo archives
 │   │   │   ├── js_character_importer.dart    # Imports ST character PNG/JSON files
 │   │   │   ├── js_chat_importer.dart         # Imports ST JSONL chat files
 │   │   │   ├── js_api_config_importer.dart   # Parses ST settings → ApiConfig
@@ -129,7 +145,7 @@ lib/
 │   │   ├── deep_link_service.dart    # Listens for OAuth deep-link URIs
 │   │   ├── generation_notification_service.dart # Android foreground/background notifications
 │   │   ├── memory_prompt_presets.dart           # Built-in memory prompt templates
-│   │   └── onboarding_service.dart   # Completion check logic only (UI in features/onboarding/)
+│   │   └── onboarding_service.dart   # Completion check + showOnboarding (UI in features/onboarding/)
 │   ├── import/
 │   │   ├── silly_tavern_preset_parser.dart  # ST preset JSON → Glaze Preset (pure)
 │   │   └── st_lorebook_importer.dart        # ST lorebook JSON → Glaze Lorebook (pure)
@@ -139,6 +155,7 @@ lib/
 │   │   ├── platform_paths.dart       # getAppDataDir() per platform
 │   │   ├── sync_deletion_tracker.dart # Appends deletion tombstones for cloud sync
 │   │   ├── time_helpers.dart         # currentTimestampSeconds()
+│   │   ├── think_tags.dart           # Reasoning tag parsing helpers
 │   │   └── html_to_markdown.dart     # HTML → Markdown converter (ST card fields)
 │   ├── events/
 │   │   └── event_hub.dart            # Lightweight pub/sub bus (broadcast StreamControllers)
@@ -146,57 +163,87 @@ lib/
 │       ├── db_provider.dart          # AppDatabase + all repo providers
 │       ├── shared_prefs_provider.dart # SharedPreferences FutureProvider
 │       ├── active_selection_provider.dart # Active preset/persona/globalVars/regexes
+│       ├── active_regex_provider.dart     # Active regex scripts for prompt build
 │       ├── character_provider.dart   # CharactersNotifier (watchAll reactive stream)
 │       ├── lorebook_provider.dart    # LorebooksNotifier + settings/activations
 │       ├── global_regex_provider.dart # GlobalRegexNotifier
-│       └── memory_settings_provider.dart # MemoryGlobalSettings + notifier
+│       ├── memory_settings_provider.dart # MemoryGlobalSettings + notifier
+│       ├── memory_book_ops_provider.dart # Memory book CRUD helpers
+│       ├── chat_session_ops_provider.dart # Cross-session ops (branch, delete, etc.)
+│       ├── persona_resolution.dart   # Resolves active persona for a character
+│       ├── preset_resolution.dart    # Resolves active preset for a character
+│       └── dev_mode_provider.dart    # Developer mode flag
 ├── features/
 │   ├── chat/
-│   │   ├── chat_provider.dart        # ChatNotifier: state owner, delegates to controllers + scenarios
+│   │   ├── chat_provider.dart        # ChatNotifier: state owner; delegates to controllers + pipeline
 │   │   ├── chat_state.dart           # ChatState + StreamingState value objects
 │   │   ├── editing_message_provider.dart # Tracks which message is being edited
 │   │   ├── chat_screen.dart          # UI: WebView + ChatInputBar + header
+│   │   ├── chat_drawer_controller.dart # Magic drawer open/close + layout state
 │   │   ├── chat_generation_service.dart  # Thin facade: generate / processImageTags / processExtensions
 │   │   ├── chat_session_service.dart     # Creates/finds sessions, alternate greetings
 │   │   ├── chat_message_service.dart     # Message-level mutations (edit/delete/hide/reorder)
 │   │   ├── chat_actions_service.dart     # Branch/clear/rename/delete session
 │   │   ├── initial_message_builder.dart  # Selects greeting, runs macros, returns first msg
-│   │   ├── memory_draft_generator.dart   # LLM-based memory auto-generation
+│   │   ├── memory_draft_generator.dart   # LLM-based memory auto-generation (called by controller)
+│   │   ├── image_recovery_service.dart   # Recovers failed inline image gen results
 │   │   ├── abort_handler.dart        # genId + cancel tokens + restoration snapshot
+│   │   ├── controllers/              # Extracted ChatNotifier responsibilities
+│   │   │   ├── chat_session_controller.dart
+│   │   │   ├── chat_swipe_controller.dart
+│   │   │   ├── chat_message_ops_controller.dart
+│   │   │   ├── chat_message_selection_controller.dart
+│   │   │   ├── chat_draft_controller.dart
+│   │   │   └── chat_image_recovery_controller.dart
 │   │   ├── services/
-│   │   │   ├── generation_pipeline.dart  # Post-SSE orchestrator: regen/normal dispatch + image tags + extensions + sync + notification
-│   │   │   ├── saved_message_writer.dart # Pure builders: writeAssistant/writeError/writeRegenError/sanitizeReasoningMarkers
-│   │   │   ├── stream_generation_service.dart # SSE pipeline runner
+│   │   │   ├── generation_pipeline.dart  # Post-SSE: persist, rollback, image tags, extensions, sync
+│   │   │   ├── saved_message_writer.dart # Pure builders for assistant/error/regen messages
+│   │   │   ├── stream_generation_service.dart # SSE + prompt build + stream accumulate + save
 │   │   │   ├── image_gen_processor.dart
-│   │   │   └── magic_drawer_layout_service.dart
+│   │   │   ├── magic_drawer_layout_service.dart
+│   │   │   └── magic_drawer_stats_service.dart
 │   │   ├── bridge/                       # WebView ↔ Flutter bridge
-│   │   │   ├── chat_bridge_controller.dart  # Host: shared state + 22 callbacks + facade delegations
-│   │   │   ├── bridge_handlers.dart         # Declarative registry of JS handler names + argument kinds
+│   │   │   ├── chat_bridge_controller.dart  # Host: shared state + iterates bridgeHandlers
+│   │   │   ├── bridge_handlers.dart         # Single source of truth: 24 JS handler names
 │   │   │   ├── bridge_message_commands.dart # set/append/update/remove messages, scroll
 │   │   │   ├── bridge_theme_commands.dart   # applyTheme, fonts, background, performance
 │   │   │   ├── bridge_identity_commands.dart # setIdentity, applyLayout, regex context
 │   │   │   ├── bridge_layout_commands.dart  # padding, search, edit, selection, settings
 │   │   │   ├── bridge_memory_commands.dart  # memory book data updates + state sets
 │   │   │   ├── chat_message_mapper.dart     # ChatMessage → JS map conversion
-│   │   │   └── chat_webview_keep_alive.dart # Keep-alive key provider
+│   │   │   ├── chat_webview_keep_alive.dart # Keep-alive key provider
+│   │   │   └── chat_webview_settings.dart   # WebView performance/config flags
+│   │   ├── models/
+│   │   │   └── message_dto.dart
 │   │   ├── state/
 │   │   │   ├── chat_body_selectors.dart # batteryAware dual-read helper
 │   │   │   ├── cached_token_breakdown.dart
 │   │   │   └── token_breakdown_cache.dart
-│   │   └── widgets/                      # Chat UI widgets
+│   │   ├── utils/
+│   │   │   └── message_preview.dart   # Notification preview text helper
+│   │   └── widgets/                      # Chat UI widgets (sheets, header, webview, etc.)
+│   ├── memory/
+│   │   ├── controllers/
+│   │   │   └── memory_book_controller.dart # Draft gen, cancel tokens, mutex with chat gen
+│   │   └── state/
+│   │       └── memory_active_drafts_provider.dart # SessionIds with active memory drafts
+│   ├── extensions/                   # Info blocks + post-generation extension pipeline
+│   │   ├── models/                     # extension_preset, info_block, block_config, settings
+│   │   ├── providers/                  # extension_presets, info_blocks, extensions_settings
+│   │   ├── screens/                    # extensions_screen, preset_editor_screen
+│   │   ├── services/
+│   │   │   ├── extension_post_gen_service.dart # Runs after assistant message saved
+│   │   │   ├── info_block_service.dart
+│   │   │   ├── info_block_injector.dart
+│   │   │   └── image_block_service.dart
+│   │   └── widgets/
 │   ├── chat_history/
 │   │   ├── chat_history_provider.dart    # All sessions across all characters
-│   │   └── chat_history_screen.dart      # Root/home screen
+│   │   └── chat_history_screen.dart      # Root/home screen (shell tab `/`)
 │   ├── settings/
 │   │   ├── api_list_provider.dart        # ApiListNotifier + activeApiConfigProvider
 │   │   ├── app_settings_provider.dart    # App-level preferences
-│   │   ├── api_settings_screen.dart
-│   │   ├── api_editor_screen.dart
-│   │   ├── app_settings_screen.dart
-│   │   ├── theme_editor_screen.dart
-│   │   ├── theme_preset_screen.dart
-│   │   ├── theme_preview.dart
-│   │   └── widgets/
+│   │   └── ...                           # api/app/theme screens + widgets
 │   ├── lorebooks/                    # Lorebook UI screens + widgets
 │   ├── presets/                      # Preset UI screens + widgets
 │   ├── personas/                     # Persona UI screens + provider
@@ -205,88 +252,119 @@ lib/
 │   ├── character_list/               # Character list/detail/editor screens + widgets
 │   ├── character_gallery/            # Gallery screen + provider
 │   ├── regex/                        # Global regex list screen
-│   ├── cloud_sync/                   # Cloud sync UI, provider, services (Dropbox/GDrive)
-│   ├── image_gen/                    # Image generation UI, provider, services (split api-type branches in widgets/)
-│   │   ├── image_gen_provider.dart       # Settings + active model
-│   │   ├── image_gen_models.dart        # Freezed data classes
-│   │   ├── services/                    # Provider adapters: routmy/openai/gemini/naistera
-│   │   │   ├── image_gen_service.dart   # Orchestrator
-│   │   │   ├── image_gen_http.dart      # HTTP client
-│   │   │   ├── routmy_image_provider.dart
-│   │   │   ├── openai_image_provider.dart
-│   │   │   ├── gemini_image_provider.dart
-│   │   │   └── naistera_image_provider.dart
-│   │   └── widgets/
-│   │       ├── image_gen_sheet.dart        # Thin orchestrator: switch on apiType
-│   │       ├── image_content_renderer.dart # Inline [IMG:GEN] tags
-│   │       ├── rows.dart                  # 5 reusable form-row widgets
-│   │       ├── connection_fields.dart      # buildNaistera/Routmy/OpenaiConnectionFields
-│   │       └── model_fields.dart          # buildNaistera/Routmy/Openai/GeminiModelFields
+│   ├── cloud_sync/                   # Cloud sync UI + provider
+│   │   ├── sync_provider.dart
+│   │   ├── sync_config.dart / sync_models.dart / sync_repo_interfaces.dart
+│   │   ├── cloud_adapter.dart
+│   │   ├── services/
+│   │   │   ├── sync_service.dart       # High-level orchestrator, lock management
+│   │   │   ├── sync_engine.dart        # Manifest diff, upload/download, conflicts
+│   │   │   ├── sync_controller.dart    # UI-facing sync actions
+│   │   │   ├── sync_manifest.dart / sync_serialization.dart / sync_conflict.dart
+│   │   │   ├── sync_queue.dart
+│   │   │   ├── oauth_local_server.dart # Desktop OAuth loopback
+│   │   │   ├── dropbox/                # dropbox_adapter, dropbox_auth
+│   │   │   └── gdrive/                 # gdrive_adapter, gdrive_auth, gdrive_files, gdrive_folders
+│   │   └── widgets/                    # sync_sheet, sync_sheet_widgets, sync_icons
+│   ├── image_gen/                    # Image generation UI, provider, services
+│   │   ├── image_gen_provider.dart
+│   │   ├── image_gen_models.dart
+│   │   ├── services/                    # image_gen_service, http, provider adapters
+│   │   └── widgets/                     # sheet, rows, connection_fields, model_fields, renderer
+│   ├── glossary/
+│   │   └── glossary_sheet.dart         # Glossary UI (route `/menu/glossary`)
 │   ├── onboarding/                   # First-run onboarding screen
 │   ├── picks/                        # Featured picks grid + detail launcher
 │   ├── tools/                        # Developer tools screen (tokenizer, coverage, etc.)
-│   └── menu/                         # Sidebar menu + About overlay
+│   ├── dev/                          # Internal UI demos (menu group demo)
+│   └── menu/                         # Sidebar menu + About overlay/screen
 ├── shared/
 │   ├── shell/
 │   │   ├── shell_screen.dart         # Bottom nav shell (GoRouter StatefulNavigationShell)
 │   │   └── nav_height_provider.dart  # navHeightProvider: nav bar height for layout
-│   ├── theme/
-│   │   ├── theme_preset.dart         # Freezed ThemePreset model
-│   │   ├── theme_preset_storage.dart # ThemePresetStorage: load/save/import presets
-│   │   ├── theme_provider.dart       # ThemeNotifier: loads + applies ThemeData
-│   │   ├── theme_font_provider.dart  # ThemeFontNotifier: loads Google Fonts dynamically
-│   │   ├── app_colors.dart           # Color palette + fromPreset() factory
-│   │   └── app_theme.dart            # AppTheme builder: ColorScheme from preset
-│   └── widgets/                      # Reusable UI primitives
-│       ├── glaze_bottom_sheet.dart   # Primary bottom sheet (snap points, glassmorphic)
-│       ├── sheet_view.dart           # SheetView: sheet-aware scaffold with header
-│       ├── colored_markdown.dart     # Custom InlineMd/BlockMd classes for markers
-│       └── ...
-├── app.dart                          # GlazeApp: GoRouter config + boot-time init
-└── main.dart                         # Entry point: orientation lock, services init
+│   ├── theme/                        # ThemePreset, storage, provider, fonts, app_colors, app_theme
+│   ├── utils/
+│   │   └── color_utils.dart
+│   └── widgets/                      # Reusable UI primitives (glaze_bottom_sheet, sheet_view, …)
+├── app.dart                          # GlazeApp: wires routerProvider + boot-time init
+└── main.dart                         # Entry point: orientation lock, prompt_worker init
 ```
+
+### Navigation (`lib/core/navigation/router.dart`)
+
+GoRouter lives in `router.dart`, not `app.dart`. Shell tabs and overlay routes:
+
+| Route | Screen |
+|-------|--------|
+| `/` | `ChatHistoryScreen` |
+| `/characters` | `CharacterListScreen` |
+| `/tools` (+ nested `api`, `personas`, `presets`, `regex`, `lorebooks`, `embeddings`) | `ToolsScreen` |
+| `/menu` (+ `settings`, `themes`, `about`, `glossary`) | `MenuScreen` |
+| `/chat/:charId` | `ChatScreen` |
+| `/character/create`, `/character/:charId`, `…/edit`, `…/gallery` | Character CRUD overlays |
+| `/sync` | `SyncSheet` |
+| `/extensions`, `/extensions/preset-editor/:presetId` | Extensions screens |
 
 ---
 
 ## 1. Generation Pipeline
 
-### Files (in call order)
+### Phase A — SSE stream (in call order)
 
 | Step | File | Role |
 |------|------|------|
-| 1 | `chat_provider.dart` | Owns `ChatState`, calls `ChatGenerationService.generate()` |
-| 2 | `chat_generation_service.dart` | Orchestrates: builds payload → isolate → SSE stream |
-| 3 | `prompt_payload_builder.dart` | Reads all Riverpod state, assembles `PromptPayload` |
-| 4 | `prompt_builder.dart` | Builds ordered prompt blocks from payload |
-| 5 | `prompt_block_resolver.dart` | Resolves each block ID → text via character fields |
-| 6 | `lorebook_scanner.dart` | Keyword scan of lorebook entries against chat history |
-| 7 | `lorebook_vector_search.dart` | Vector semantic search (runs in PromptPayloadBuilder before isolate) |
-| 8 | `lorebook_merger.dart` | Merges keyword + vector results, deduplicates |
-| 9 | `memory_injection_service.dart` | Scores memory entries, injects top-N |
-| 10 | `history_assembler.dart` | Assembles chat history blocks with depth inserts |
-| 11 | `context_calculator.dart` | Trims history from oldest end to fit token budget |
-| 12 | `regex_service.dart` | Applies regex scripts to each prompt block |
-| 13 | `macro_engine.dart` | Expands all `{{macro}}` tokens |
-| 14 | `prompt_isolate.dart` | Runs prompt build off the UI thread |
-| 15 | `sse_client.dart` | Sends request, streams SSE deltas back |
-| 16 | `stream_accumulator.dart` | Splits text from inline `<think…>` reasoning |
-| 17 | `response_normalizer.dart` | Extracts final content (non-streaming path) |
+| 1 | `chat_provider.dart` | Owns `ChatState`; starts gen, delegates to `ChatGenerationService` |
+| 2 | `chat_generation_service.dart` | Thin facade → `StreamGenerationService.run()` |
+| 3 | `stream_generation_service.dart` | Payload build, isolate, SSE, `SavedMessageWriter` on success/error |
+| 4 | `prompt_payload_builder.dart` | Reads Riverpod state; async vector lore + memory scoring |
+| 5 | `prompt_isolate.dart` + `prompt_worker.dart` | Runs `buildPrompt()` off UI thread |
+| 6 | `prompt_builder.dart` | Block ordering inside isolate |
+| 7 | `prompt_block_resolver.dart` | Resolves each block ID → text |
+| 8 | `lorebook_vector_search.dart` | Vector scan (async, before isolate, in payload builder) |
+| 9 | `lorebook_scanner.dart` | Keyword scan (sync, inside isolate) |
+| 10 | `lorebook_merger.dart` | Merges keyword + vector, deduplicates |
+| 11 | `memory_injection_service.dart` + `memory_budget.dart` | Scores entries, applies INV-PS4 token cap |
+| 12 | `history_assembler.dart` | Assembles history blocks with depth inserts |
+| 13 | `context_calculator.dart` | Trims history from oldest end |
+| 14 | `regex_service.dart` | Applies regex scripts per block |
+| 15 | `macro_engine.dart` | Expands `{{macro}}` tokens |
+| 16 | `sse_client.dart` | Sends request, streams SSE deltas |
+| 17 | `stream_accumulator.dart` | Splits text from inline `<think…>` reasoning |
+| 18 | `response_normalizer.dart` | Non-streaming response extraction |
+
+### Phase B — Post-SSE (`generation_pipeline.dart`)
+
+After `StreamGenerationService` returns, `ChatNotifier._runGeneration()` runs
+`GenerationPipeline.run()` for **send** and **regenerate** only:
+
+1. Persist assistant message (or regen/error rollback paths)
+2. `ChatGenerationService.processImageTags()` — inline `[IMG:GEN]` tags
+3. `ChatGenerationService.processExtensions()` → `extension_post_gen_service.dart`
+4. Cloud sync notification + generation notification preview
+
+**Continue exception:** `ChatNotifier.continueMessage()` calls
+`ChatGenerationService.generate()` directly and merges text onto the last assistant
+message. It does **not** use `GenerationPipeline` — no image-tag processing, extensions
+post-gen, or pipeline sync notification. See `docs/INVARIANTS.md` INV-CM2.
+
+**Talkativeness:** `sendMessage()` may skip generation when
+`character.extensions['talkativeness']` rolls above the configured threshold.
 
 ### Request Types
 
 | Type | State owner | Streaming | Abort |
 |------|-------------|-----------|-------|
-| Chat | `ChatState.isGenerating` per `charId` | Yes (SSE) | `CancelToken` + `_activeGenId` in `ChatNotifier` |
-| Image gen | `ChatState.isGeneratingImage` + `_imgGenCancelToken` | No (one-shot LLM) | `_imgGenCancelToken` in `ChatNotifier` |
-| Summary | Widget-local `_isGenerating` in `summary_sheet.dart` | No | Widget-scoped `CancelToken` |
-| Memory draft | Widget-local `_generatingDrafts` in `memory_books_sheet.dart` | No | Per-draft `CancelToken` in `_cancelTokens` map |
+| Chat | `ChatState.isGenerating` per `charId` | Yes (SSE) | `AbortHandler`: `CancelToken` + `_activeGenId` |
+| Image gen | `ChatState.isGeneratingImage` + `_imgGenCancelToken` | No (one-shot) | `_imgGenCancelToken` in `ChatNotifier` |
+| Summary | Widget-local in `summary_sheet.dart` | No | Widget-scoped `CancelToken` |
+| Memory draft | `MemoryBookController` (`_generatingDrafts`, `_cancelTokens`) | No | Per-draft `CancelToken`; mutex via `memory_active_drafts_provider` |
 
 ### Prompt Ordering (invariant — do not reorder)
 
 1. Vector lorebook scan (async, in `PromptPayloadBuilder`, before isolate)
 2. Keyword lorebook scan (synchronous in `PromptBuilder`, inside isolate)
 3. Merge: keyword + vector, deduplicate vector against keyword
-4. Memory injection
+4. Memory injection (with optional token budget — see INV-PS4)
 5. Context cutoff — trims oldest messages first
 
 ---
@@ -346,6 +424,10 @@ lib/
 11. Date/Time
 12. Escape handling
 
+### Session variables on abort/error
+
+`pendingSessionVars` from the isolate are written to the DB **only** on the success path (`SavedMessageWriter.writeAssistant`). Error/regen-error paths keep the pre-generation `sessionVars`. See `docs/INVARIANTS.md` INV-C5.
+
 ---
 
 ## 3. Lorebook System
@@ -379,8 +461,10 @@ lib/
 ## 4. Memory Books
 
 ### Files
+- `features/memory/controllers/memory_book_controller.dart` — UI-facing draft gen, cancel, mutex
+- `features/memory/state/memory_active_drafts_provider.dart` — cross-feature mutex with chat gen
 - `memory_draft_generator.dart` — LLM-based draft generation, batching, progress
-- `memory_injection_service.dart` — scoring (keyword + vector), top-N selection, injection
+- `memory_injection_service.dart` + `memory_budget.dart` — scoring, top-N, INV-PS4 token cap
 - `memory_embedding_service.dart` — indexes/reindexes memory entries
 - `memory_book_repo.dart` — DB persistence for `MemoryBook` rows
 - `core/state/memory_settings_provider.dart` — global settings (SharedPreferences)
@@ -390,7 +474,7 @@ lib/
 MemoryBook {
   entries: List<MemoryEntry>
   pendingDrafts: List<MemoryDraft>
-  settings: MemoryBookSettings
+  settings: MemoryBookSettings  // includes maxInjectionBudgetPercent (default 0.35)
 }
 
 MemoryEntry {
@@ -411,24 +495,32 @@ MemoryDraft {
 ### Injection Rule
 Memory entries are injected only when all linked `messageIds` are already **outside** the active context window. This prevents double-coverage.
 
+### Token budget (INV-PS4)
+`MemoryInjectionBudget.maxInjectionTokens()` caps injected memory at
+`contextBudgetTokens * maxInjectionBudgetPercent` (default 35%).
+See `docs/INVARIANTS.md` INV-PS4.
+
 ---
 
 ## 5. Database Layer
 
 **File:** `lib/core/db/app_db.dart` + `lib/core/db/repositories/`
 
-### Tables (9 total, schema v19)
+### Tables (11 total, schema v21)
+
 | Table | Repo | Notes |
 |-------|------|-------|
-| `Characters` | `character_repo.dart` | watchAll() reactive stream; v18: `picksHash`, v19: `createdAt` |
-| `ChatSessions` | `chat_repo.dart` | Largest repo (~210 lines) |
+| `Characters` | `character_repo.dart` | watchAll(); v18 `picksHash`, v19 `createdAt`, v13 `extensionsJson` |
+| `ChatSessions` | `chat_repo.dart` | Largest repo (~250 lines); patch via `patchChatData` |
 | `Presets` | `preset_repo.dart` | JSON blob per preset |
-| `ApiConfigs` | `api_config_repo.dart` | |
+| `ApiConfigs` | `api_config_repo.dart` | v21: `cacheControlTtl` |
 | `Personas` | `persona_repo.dart` | |
 | `Lorebooks` | `lorebook_repo.dart` | entries + settings as JSON |
 | `Embeddings` | `embedding_repo.dart` | `entryId`, `vectorsBlob`, `retrievalHintsJson`, `errorJson` |
 | `ChatSummaries` | `summary_repo.dart` | one per session |
-| `MemoryBookRows` | `memory_book_repo.dart` | DriftAccessor |
+| `MemoryBookRows` | `memory_book_repo.dart` | |
+| `ExtensionPresets` | `extension_presets_repository.dart` | v20 |
+| `InfoBlocks` | `info_blocks_repository.dart` | v20 |
 
 ### Write Rule
 **Never** do `getChat → mutate → saveChat`. Use `patchChatData` to serialize reads.
@@ -438,26 +530,28 @@ See `docs/rules/database.md`.
 
 ## 6. Cloud Sync
 
+All service implementations live under `lib/features/cloud_sync/services/`.
+
 ### Files
 - `sync_service.dart` — high-level orchestrator, lock management
 - `sync_engine.dart` — manifest diff, upload/download, conflict detection
+- `sync_controller.dart` — UI-facing sync actions
 - `sync_manifest.dart` — reads/writes cloud JSON manifest (ETags + timestamps)
 - `sync_serialization.dart` — entity → JSON envelope
 - `sync_conflict.dart` — winner = newer `updatedAt`
 - `sync_queue.dart` — serial queue preventing duplicate uploads
-- `sync_config.dart` — sync configuration model
-- `sync_models.dart` — sync data models
+- `sync_config.dart` / `sync_models.dart` — configuration and data models
 - `sync_provider.dart` — Riverpod provider for sync state
-- `sync_repo_interfaces.dart` — Abstract repo interfaces for sync
-- `cloud_adapter.dart` — Abstract adapter interface for cloud providers
+- `sync_repo_interfaces.dart` — abstract repo interfaces for sync
+- `cloud_adapter.dart` — abstract adapter interface for cloud providers
 - `dropbox/dropbox_adapter.dart` + `dropbox_auth.dart` — OAuth2 PKCE + API v2
 - `gdrive/gdrive_adapter.dart` + `gdrive_auth.dart` + `gdrive_files.dart` + `gdrive_folders.dart`
 - `oauth_local_server.dart` — desktop OAuth loopback (local HTTP server)
-- `deep_link_service.dart` — mobile OAuth deep-link receiver
+- `core/services/deep_link_service.dart` — mobile OAuth deep-link receiver
 - `widgets/sync_sheet.dart` — Sync UI sheet
 
 ### What Is Synced
-Characters, sessions, presets, API configs, personas, lorebooks, theme presets, active preset, selected app settings. **Not synced:** generation state, UI state, embedding vectors, debug traces.
+Characters, sessions, presets, API configs, personas, lorebooks, theme presets, active preset, selected app settings. **Not synced:** generation state, UI state, embedding vectors, extension/info-block rows, debug traces.
 
 ---
 
@@ -490,22 +584,33 @@ Characters, sessions, presets, API configs, personas, lorebooks, theme presets, 
 
 ---
 
-## 9. Known Design Issues
+## 9. Extensions (Info Blocks)
 
-Issues tracked for refactor:
+Post-generation extension pipeline runs after the assistant message is saved on the
+**normal/regen path only** (via `GenerationPipeline`, not `continueMessage`).
+Formal rules: `docs/INVARIANTS.md` INV-EG1–INV-EG3.
 
-1. **`onboarding_service.dart`** — partially fixed: UI extracted to `features/onboarding/onboarding_screen.dart`. Remaining issue: service still imports `package:flutter/material.dart` for `BuildContext` and calls `rootNavigatorKey.currentState.push()`.
+### Files
+- `extension_post_gen_service.dart` — orchestrator called from `ChatGenerationService.processExtensions`
+- `info_block_service.dart` / `info_block_injector.dart` — block CRUD + prompt injection
+- `image_block_service.dart` — image-type blocks
+- `extension_presets_provider.dart` / `info_blocks_provider.dart` — Riverpod state
+- DB: `ExtensionPresets`, `InfoBlocks` tables (schema v20)
 
-2. **`magic_drawer_stats_service.dart`** (~236 lines) — named "service" but lives in `features/chat/widgets/`. Move to `features/chat/` (provider or service level). **Resolved 2026-06** — moved to `lib/features/chat/services/magic_drawer_stats_service.dart` (sibling of `magic_drawer_layout_service.dart`).
+---
 
-3. **`prompt_payload_builder.dart`** (~240 lines) — reads 7+ Riverpod providers directly. Becoming a God object. Split: pure `PromptInputsCollector` (reads providers) + pure `PromptPayloadAssembler` (builds payload from collected inputs, no Riverpod dep). **Resolved 2026-06** — split into `prompt_inputs_collector.dart` + `prompt_payload_assembler.dart`; `prompt_payload_builder.dart` kept as thin orchestrator owning async vector/memory work.
+## 10. Known Design Issues
 
-4. **`chat_provider.dart`** (~1000 lines) — `ChatNotifier` does generate + swipe + edit + delete + branch + clear + image gen + continue. Split responsibilities across dedicated notifiers or move action logic to services, leaving notifier as thin state owner. **Resolved 2026-06** — `chat_provider.dart` slimmed to ~350 lines; generation pipeline moved to `services/generation_pipeline.dart` and message-save helpers to `services/saved_message_writer.dart`. `_messagePreview` extracted to `utils/message_preview.dart`.
+Open issues:
 
-5. ~~**`lorebook_vector_search.dart`** — contained Riverpod provider declarations mixed with service logic.~~ **Fixed** — providers extracted to `lorebook_providers.dart`.
+1. **`onboarding_service.dart`** — UI lives in `features/onboarding/onboarding_screen.dart`, but the service still imports `package:flutter/material.dart` for `BuildContext` and pushes via `rootNavigatorKey.currentState.push()`.
 
-6. ~~**Mutual exclusion between chat generation and memory draft is not enforced.** Neither `ChatNotifier.sendMessage()` nor `memory_books_sheet.dart._generateDraft()` checks for the other's active state.~~ **Resolved 2026-06** (PR-B C12) — introduced `lib/features/memory/state/memory_active_drafts_provider.dart` (`StateNotifierProvider<MemoryActiveDraftsNotifier, Set<String>>` of sessionIds). `MemoryBookController.generateDraft()` early-returns if `chatProvider(_charId).value?.isGenerating` and adds sessionId to the set; `ChatNotifier.sendMessage`/`regenerateLastAssistant`/`continueMessage` early-return if sessionId is in the set. Both directions of the mutex are now observed. See `docs/INVARIANTS.md` INV-M3/INV-M4.
+Resolved (kept for history; details in git / PR notes):
 
-7. **Session variable rollback on abort is not implemented.** `ChatNotifier.abortGeneration()` does not restore pre-generation `sessionVars`. See `docs/INVARIANTS.md` INV-C5.
-
-8. **35% memory token budget guard is not implemented.** `MemoryInjectionService.buildInjection()` has no threshold check. Memory injection proceeds unconditionally. See `docs/INVARIANTS.md` INV-PS4.
+- **magic_drawer_stats_service** — moved to `features/chat/services/`.
+- **prompt_payload_builder split** — `prompt_inputs_collector` + `prompt_payload_assembler`.
+- **chat_provider decomposition** — controllers + `generation_pipeline` + `saved_message_writer` (~420 lines; further splits possible).
+- **lorebook_vector_search providers** — extracted to `lorebook_providers.dart`.
+- **Chat ↔ memory draft mutex** — `memory_active_drafts_provider` + `MemoryBookController` (INV-M3/INV-M4).
+- **Session vars on abort/error** — only success path persists isolate vars (INV-C5).
+- **Memory injection token budget** — `memory_budget.dart` + INV-PS4.

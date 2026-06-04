@@ -10,42 +10,54 @@ Full formal invariants with code references: `docs/INVARIANTS.md`
 
 | Type | State owner | Streaming | Abort |
 |------|-------------|-----------|-------|
-| Chat | `ChatState.isGenerating` (per `charId`) | Yes (SSE) | `_cancelToken` + `_activeGenId` in `ChatNotifier` |
-| Image gen | `ChatState.isGeneratingImage` + `_imgGenCancelToken` | No (one-shot LLM) | `_imgGenCancelToken` in `ChatNotifier` |
-| Summary | Widget-local `_isGenerating` in `summary_sheet.dart` | No | No CancelToken (cannot be aborted) |
-| Memory draft | Widget-local `_generatingDrafts` in `memory_books_sheet.dart` | No | Per-draft `CancelToken` in widget's `_cancelTokens` map |
+| Chat | `ChatState.isGenerating` per `charId` | Yes (SSE) | `AbortHandler`: `CancelToken` + `_activeGenId` |
+| Image gen | `AbortHandler._imgGenCancelToken` + `isGeneratingImage` | No (one-shot) | Separate cancel token from text SSE |
+| Summary | Widget-local in `summary_sheet.dart` | No | Widget-scoped `CancelToken` |
+| Memory draft | `MemoryBookController` | No | Per-draft `CancelToken`; mutex via `memory_active_drafts_provider` |
+
+`ChatNotifier` owns `AbortHandler` per `charId` and delegates `abortGeneration()` to it.
 
 ---
 
-## Mutual exclusion
+## Entry paths (chat)
 
-⚠️ **Not currently enforced.** The following are intended rules but not implemented:
+| User action | Orchestrator | Post-SSE (`GenerationPipeline`) |
+|-------------|--------------|----------------------------------|
+| Send message | `_runGeneration` → `GenerationPipeline.run()` | Yes — image tags, extensions, sync |
+| Regenerate | `_runGeneration` → `GenerationPipeline.run()` | Yes |
+| Continue | `ChatGenerationService.generate()` directly | **No** — see INV-CM2 |
 
-- Chat generation and memory draft **should not** run simultaneously for the same `charId`.
-  - Chat start → should check no memory draft active → reject if so. (NOT IMPLEMENTED)
-  - Memory draft start → should check `ChatState.isGenerating` → reject if so. (NOT IMPLEMENTED)
-- Image generation runs only after text generation completes (this IS enforced — `processImageTags()` is called after stream ends).
-- Summary is stateless — can run alongside anything.
+---
+
+## Mutual exclusion ✅ ENFORCED (PR-B C12)
+
+Chat generation and memory draft **cannot** overlap for the same session/character:
+
+- `MemoryBookController.generateDraft()` rejects when `chatProvider(charId).isGenerating`.
+- `sendMessage` / `regenerateLastAssistant` / `continueMessage` reject when
+  `memoryActiveDraftsProvider` contains the session id.
+
+See `docs/INVARIANTS.md` INV-M3, INV-M4 and
+`test/characterization/memory_draft_mutex_test.dart`.
+
+Image generation runs after text generation completes on the normal/regen path
+(`GenerationPipeline` → `processImageTags()`). Summary is independent.
 
 ---
 
 ## genId / CancelToken ownership
 
-Every chat generation gets a unique generation identifier (`_activeGenId`, monotonic counter).
-All SSE callbacks (`onDelta`, `onComplete`, `onError`) **must** verify the generation ID still
-matches the current active generation before mutating `ChatState`.
-
-If the IDs do not match → **discard** the result silently.
+Every chat generation gets a unique id from `AbortHandler.nextGenId()` (monotonic
+`_activeGenId`). All SSE callbacks **must** treat the generation as stale when
+`!abortHandler.isCurrentGen(expectedGenId)` before mutating `ChatState`.
 
 ```dart
-// Pattern: check before any state mutation after an await
-final delta = await sseClient.nextDelta();
-if (_activeGenId != expectedGenId) return; // stale — discard
-state = state.copyWith(messages: ...);
+// Pattern passed into StreamGenerationService
+isAborted: () => !abortHandler.isCurrentGen(genId),
 ```
 
-Image generation uses a separate `_imgGenCancelToken` but shares the same `_activeGenId`
-for text generation invalidation. Image retries currently do NOT have a `genId` guard.
+`AbortHandler.setCancelToken()` attaches the Dio `CancelToken` for the active gen.
+Image generation uses a separate `_imgGenCancelToken`.
 
 ---
 
@@ -53,116 +65,101 @@ for text generation invalidation. Image retries currently do NOT have a `genId` 
 
 ```
 ChatNotifier.abortGeneration()
-  → _activeGenId++                    ← invalidates all pending callbacks
-  → _cancelToken?.cancel()            ← propagates to Dio
-  → _imgGenCancelToken?.cancel()      ← cancels any in-flight image gen
-  → _clearStreaming()
-  → Manual state restoration:
-      - Read streamingStateProvider for partial text
-      - Persist partial text as completed message
-      - isGenerating = false
-      - isGeneratingImage = false
-      - Cancelled [IMG:GEN] tags → [IMG:ERROR:...]
+  → AbortHandler.abortGeneration()
+      → _activeGenId++              ← invalidates pending callbacks
+      → _cancelToken?.cancel()      ← propagates to Dio / SSE
+      → _imgGenCancelToken?.cancel()
+      → read streamingStateProvider → persist partial text if any
+      → isGenerating / isGeneratingImage → false
+      → restoration snapshot handling
 
-Separately (asynchronously):
-  → SseClient detects cancel → DioException(type: cancel)
-  → ChatGenerationService.onError() → isAborted() returns true
-    → returns ChatState(isGenerating: false) — effectively a no-op
+Separately:
+  → SseClient: DioException(cancel)
+  → StreamGenerationService: isAborted() → early return, isGenerating false
 ```
 
-**Never break this chain.** If `CancelToken` doesn't reach `Dio`, the stop button
-only clears UI while the TCP connection stays open and the stream continues.
+**Never break this chain.** If `CancelToken` doesn't reach `Dio`, stop only clears UI
+while the TCP stream continues.
+
+Partial text persistence lives in `AbortHandler`, not in `ChatNotifier` directly.
+See INV-C3 in `docs/INVARIANTS.md`.
 
 ---
 
 ## State cleanup on every exit path
 
-For every generation start, `ChatState.isGenerating` must be reset to `false` on:
-- Completion
-- Error
-- Abort (`abortGeneration()`)
-- App restart (fresh `ChatState` in `build()`)
-
-Similarly, `isGeneratingImage` must be reset on:
-- Image generation completion
-- Image generation error
-- Abort (`abortGeneration()` also cancels image gen)
-
-A generation that sets `isGenerating = true` and then crashes without clearing it will
-permanently block future generations for that character.
-
----
-
-## Partial text on abort
-
-- Streaming: persist partial text as a completed message before clearing state.
-  Done in `ChatNotifier.abortGeneration()` by reading `streamingStateProvider`.
-- Non-streaming: no partial text available (by design — nothing was accumulated).
-
-This asymmetry is intentional.
-
----
-
-## Image tag cleanup on abort
-
-When generation is aborted, any `[IMG:GEN]` tags in the partial text are replaced
-with `[IMG:ERROR:cancelled]` by `ChatGenerationService`. This prevents the UI from
-showing "generating" spinners for images that will never complete.
+`ChatState.isGenerating` must return to `false` on: completion, error, abort, app
+restart (`ChatNotifier.build()` fresh state). `ChatNotifier` uses `ref.keepAlive()` —
+provider disposal is not a cleanup path.
 
 ---
 
 ## Prompt ordering (do not reorder)
 
-1. Vector lorebook scan (async, runs in `PromptPayloadBuilder` — before isolate)
-2. Keyword lorebook scan (synchronous, runs in `PromptBuilder` inside the Dart isolate)
-3. Merge keyword + vector results (keyword wins on collision, vector deduplicated)
-4. Memory injection
-5. Context cutoff — trims oldest history messages first
+1. Vector lorebook scan (async, `PromptPayloadBuilder`, before isolate)
+2. Keyword lorebook scan (sync, `PromptBuilder`, inside isolate)
+3. Merge keyword + vector (keyword wins; dedupe vector by id)
+4. Memory injection (token budget — INV-PS4)
+5. Context cutoff — oldest messages trimmed first
 
 ---
 
-## Session variable restore on abort ⚠️ NOT IMPLEMENTED
+## Session variables on abort/error ✅ ENFORCED (PR-B C11)
 
-If macro expansion during prompt build writes to `sessionVars`, the pre-generation
-snapshot should be restored on every non-happy exit (abort, error). Currently
-aborted generations leave behind mutated variables.
+`pendingSessionVars` from the isolate are written only on the success path
+(`SavedMessageWriter.writeAssistant`). Error and regen-error paths keep the
+pre-generation `sessionVars`. See INV-C5.
 
 ---
 
 ## Continue message
 
-`ChatNotifier.continueMessage()` is a distinct generation path that reuses
-`ChatGenerationService.generate()` but appends the result to the last assistant
-message instead of creating a new message or swipe.
+`ChatNotifier.continueMessage()`:
+
+1. Calls `ChatGenerationService.generate()` (SSE + prompt build) directly.
+2. Appends streamed content to the **existing** last assistant message.
+3. Does **not** run `GenerationPipeline` post-steps (image tags, extensions, sync).
+
+See INV-CM1, INV-CM2 before changing this path.
+
+---
+
+## Extension post-generation
+
+After normal/regen completion, `GenerationPipeline` calls
+`ChatGenerationService.processExtensions()` → `ExtensionPostGenService`.
+Failures are logged only (INV-EG2). Gated by `extensionsSettings.enabled` and
+active preset id (INV-EG3).
 
 ---
 
 ## Adding a new generation path
 
-If you add a new request type (impersonation, image alt-text, etc.) that runs alongside
-chat generation, you must:
-1. Define a separate abort mechanism (do not reuse the chat `CancelToken`).
-2. Add mutual exclusion checks in **both** directions (your type ↔ chat generation).
-3. Verify `genId` matches before mutating any shared state.
-4. Ensure `isGenerating*` flags are cleared on every exit path.
+1. Define abort mechanism (`AbortHandler` or separate `CancelToken`).
+2. Add mutual exclusion in **both** directions if it shares a `charId` / session.
+3. Verify `isCurrentGen(genId)` before mutating shared state after every `await`.
+4. Clear `isGenerating*` on every exit path.
+5. Decide whether post-SSE steps (image tags, extensions) must run — use
+   `GenerationPipeline` or document an explicit exception like continue.
 
 ---
 
 ## PR verification checklist
 
 Before merging any generation-related PR:
+
 - [ ] Chat produces correct responses end-to-end
-- [ ] Stop preserves partial text when available
-- [ ] Regen while generating aborts the current generation first
-- [ ] Character switch continues background generation for the original character
+- [ ] Stop preserves partial text when available (AbortHandler / INV-C3)
+- [ ] Regen while generating calls `abortGeneration()` first
+- [ ] Character switch does not abort other characters' generations
 - [ ] Prompt block order matches preset definition
-- [ ] Vector scan runs before keyword scan; results correctly merged and deduplicated
-- [ ] Memory injection respects context budget (⚠️ no guard yet)
+- [ ] Vector scan before keyword; merge deduplicates correctly
+- [x] Memory injection respects token budget (INV-PS4)
 - [ ] History cutoff trims oldest first
-- [ ] Summary returns string without touching chat state
-- [ ] Memory draft doesn't affect chat generation state (⚠️ not enforced)
-- [ ] Image generation completes after text generation
-- [ ] Context limit exceeded is shown to the user
-- [ ] API not configured is shown to the user
-- [ ] Abort closes the TCP connection (not just UI state)
-- [ ] Session variables are restored on abort/error (⚠️ not implemented)
+- [ ] Summary does not touch `ChatState.isGenerating` or messages
+- [x] Memory draft mutex enforced (INV-M3, INV-M4)
+- [ ] Image tags run after text on send/regen (not on continue unless changed)
+- [ ] Extensions post-gen on send/regen only (INV-EG1)
+- [ ] Context limit / API-not-configured errors shown to user
+- [ ] Abort closes TCP (CancelToken reaches Dio)
+- [x] Session vars not leaked on abort/error (INV-C5)
