@@ -91,11 +91,17 @@ class SyncManifestEntry {
 }
 
 class SyncManifest {
+  /// Bump when hash/canonicalization changes so push can skip re-uploading
+  /// existing cloud files and refresh manifest only.
+  static const int currentVersion = 3;
+
   final int version;
   final String deviceId;
   final int? lastSync;
   final int createdAt;
   final Map<String, SyncManifestEntry> entries;
+  /// Whether the last cloud push included API/embedding keys in api_presets.
+  final bool apiKeysIncluded;
 
   const SyncManifest({
     this.version = 2,
@@ -103,6 +109,7 @@ class SyncManifest {
     this.lastSync,
     required this.createdAt,
     this.entries = const {},
+    this.apiKeysIncluded = false,
   });
 
   SyncManifest copyWith({
@@ -111,6 +118,7 @@ class SyncManifest {
     int? lastSync,
     int? createdAt,
     Map<String, SyncManifestEntry>? entries,
+    bool? apiKeysIncluded,
   }) =>
       SyncManifest(
         version: version ?? this.version,
@@ -118,6 +126,7 @@ class SyncManifest {
         lastSync: lastSync ?? this.lastSync,
         createdAt: createdAt ?? this.createdAt,
         entries: entries ?? this.entries,
+        apiKeysIncluded: apiKeysIncluded ?? this.apiKeysIncluded,
       );
 
   Map<String, dynamic> toJson() => {
@@ -125,6 +134,7 @@ class SyncManifest {
         'deviceId': deviceId,
         'lastSync': lastSync,
         'createdAt': createdAt,
+        'apiKeysIncluded': apiKeysIncluded,
         'entries': entries.map((k, v) => MapEntry(k, v.toJson())),
       };
 
@@ -133,6 +143,7 @@ class SyncManifest {
         deviceId: m['deviceId'] as String? ?? '',
         lastSync: m['lastSync'] as int?,
         createdAt: m['createdAt'] as int? ?? DateTime.now().millisecondsSinceEpoch,
+        apiKeysIncluded: m['apiKeysIncluded'] as bool? ?? false,
         entries: _parseEntries(m['entries'] as Map<String, dynamic>?),
       );
 
@@ -176,6 +187,24 @@ String cloudPath(String type, String id) {
     default:
       return '$cloudBase/misc/$id.json';
   }
+}
+
+/// Canonical path for comparing manifest entry paths with cloud list_folder results.
+/// Dropbox app-folder listings omit the `/Glaze` prefix; GDrive uses full paths.
+String normalizeCloudSyncPath(String path) {
+  var p = path.trim();
+  if (p.isEmpty) return p;
+  if (p.startsWith('$cloudBase/')) {
+    p = p.substring(cloudBase.length);
+  } else if (p == cloudBase) {
+    p = '/';
+  }
+  if (!p.startsWith('/')) p = '/$p';
+  return p;
+}
+
+bool cloudSyncPathExists(Set<String> normalizedPaths, String entryPath) {
+  return normalizedPaths.contains(normalizeCloudSyncPath(entryPath));
 }
 
 String galleryCloudPath(String charId, String imgId, String ext) =>

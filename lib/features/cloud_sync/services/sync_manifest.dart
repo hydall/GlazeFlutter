@@ -133,7 +133,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     final memoryBooks = await _memoryBookRepo.getAll();
     for (final mb in memoryBooks) {
       final json = mb.toJson();
-      final hash = SyncSerialization.computeSyncHash(json);
+      final hash = SyncSerialization.computeMemoryBookHash(json);
       final key = entryKey('memory_book', mb.sessionId);
       final prevEntry = previous.entries[key];
       final cloudEntry = cloudManifest?.entries[key];

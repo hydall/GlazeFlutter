@@ -10,6 +10,7 @@ import '../../../core/state/shared_prefs_provider.dart';
 import '../../../shared/theme/theme_provider.dart';
 import '../../personas/persona_list_provider.dart';
 import '../../settings/api_list_provider.dart';
+import '../../chat_history/chat_history_provider.dart';
 import '../sync_provider.dart';
 import '../sync_models.dart';
 import 'sync_engine.dart';
@@ -304,6 +305,7 @@ class SyncController {
     _ref.invalidate(apiListProvider);
     _ref.invalidate(lorebooksProvider);
     _ref.invalidate(chatSessionOpsProvider);
+    _ref.invalidate(chatHistoryProvider);
     _ref.read(themeProvider.notifier).reload();
 
     // Bump the version counter so widgets that watch avatarVersionProvider

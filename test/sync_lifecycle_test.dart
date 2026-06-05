@@ -212,6 +212,8 @@ class FakeImageStore implements SyncImageStore {
 
 class FakeCloudAdapter implements CloudAdapter {
   final Map<String, String> files = {};
+  /// When true, [listFolder] returns paths without the `/Glaze` prefix (Dropbox-style).
+  bool stripGlazePrefixInList = false;
 
   @override
   Future<bool> isConnected() async => true;
@@ -256,9 +258,17 @@ class FakeCloudAdapter implements CloudAdapter {
   @override
   Future<List<CloudFileInfo>> listFolder(String path) async {
     return files.keys
-        .where((k) => k.startsWith(path))
-        .map((k) =>
-            CloudFileInfo(path: k, name: k.split('/').last, isFolder: false))
+        .where((k) => k.startsWith(path) && !k.endsWith('/'))
+        .map((k) {
+          final listedPath = stripGlazePrefixInList && k.startsWith('$cloudBase/')
+              ? k.substring(cloudBase.length)
+              : k;
+          return CloudFileInfo(
+            path: listedPath,
+            name: k.split('/').last,
+            isFolder: false,
+          );
+        })
         .toList();
   }
 
@@ -884,6 +894,26 @@ void main() {
     expect(progressList.isNotEmpty, isTrue);
     expect(progressList.first.total, equals(0),
         reason: 'Nothing changed, so total tasks should be 0');
+    expect(progressList.first.message, contains('Nothing to push'));
+  });
+
+  test('Push skips upload when cloud listing omits /Glaze prefix', () async {
+    final world = SyncWorld();
+
+    await world.characters.put(makeChar('c1', name: 'Alpha'));
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    world.cloud.stripGlazePrefixInList = true;
+
+    final progressList = <SyncProgress>[];
+    await world.engine.pushEntities(
+      onProgress: (p) => progressList.add(p),
+    );
+
+    expect(progressList.first.total, equals(0),
+        reason: 'Hash match + file exists (Dropbox-style paths) → no uploads');
     expect(progressList.first.message, contains('Nothing to push'));
   });
 
@@ -1609,5 +1639,162 @@ void main() {
       ),
       isTrue,
     );
+  });
+
+  test(
+    'Push skips singleton upload when cloud manifest hash matches but file was wiped',
+    () async {
+      final world = SyncWorld();
+      await world.apiConfigs.put(makeApiConfig('api1', name: 'Test API'));
+
+      final localManifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(localManifest);
+      await world.engine.pushEntities(onProgress: (_) {});
+
+      expect(
+        world.cloud.files.containsKey(cloudPath('api_presets', 'api_presets')),
+        isTrue,
+      );
+
+      // Simulate partial wipe: manifest survives, entity JSON deleted.
+      world.cloud.files.remove(cloudPath('api_presets', 'api_presets'));
+      expect(
+        world.cloud.files.containsKey(cloudPath('manifest', 'manifest')),
+        isTrue,
+        reason: 'Stale manifest remains after partial wipe',
+      );
+
+      await world.engine.pushEntities(onProgress: (_) {});
+
+      expect(
+        world.cloud.files.containsKey(cloudPath('api_presets', 'api_presets')),
+        isTrue,
+        reason:
+            'Push must re-upload api_presets when manifest hash matches '
+            'but the JSON file was deleted during wipe',
+      );
+    },
+  );
+
+  test(
+    'Pull character does not keep foreign avatarPath when cloud avatar missing',
+    () async {
+      final deviceA = SyncWorld();
+      const androidAvatarPath = '/data/user/0/com.glaze/files/avatars/tokyo.png';
+      await deviceA.characters.put(
+        makeChar('tokyo', name: 'Project Tokyo', avatarPath: androidAvatarPath),
+      );
+
+      final manifest = await deviceA.manifestProvider.buildLocalManifest();
+      await deviceA.manifestProvider.writeLocalManifest(manifest);
+      await deviceA.engine.pushEntities(onProgress: (_) {});
+
+      deviceA.cloud.files.remove(galleryCloudPath('tokyo', 'avatar', 'png'));
+
+      final deviceB = SyncWorld();
+      deviceB.cloud.files.addAll(deviceA.cloud.files);
+
+      await deviceB.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (_) {},
+      );
+
+      final pulled = deviceB.characters.data['tokyo'];
+      expect(pulled, isNotNull);
+      expect(
+        pulled!.avatarPath,
+        isNot(anyOf(contains('/data/user/'), contains('com.glaze'))),
+        reason:
+            'Foreign device avatarPath must not be stored when cloud avatar '
+            'binary is missing',
+      );
+    },
+  );
+
+  test('Pull chat re-fetches character avatar when cloud binary exists', () async {
+    final deviceA = SyncWorld();
+    const androidAvatarPath = '/data/user/0/com.glaze/files/avatars/tokyo.png';
+    await deviceA.characters.put(
+      makeChar('tokyo', name: 'Project Tokyo', avatarPath: androidAvatarPath),
+    );
+    await deviceA.chats.put(makeChat('s1', charId: 'tokyo'));
+
+    final avatarBytes = Uint8List.fromList([10, 20, 30, 40]);
+    deviceA.cloud.files[galleryCloudPath('tokyo', 'avatar', 'png')] =
+        String.fromCharCodes(avatarBytes);
+
+    final manifest = await deviceA.manifestProvider.buildLocalManifest();
+    await deviceA.manifestProvider.writeLocalManifest(manifest);
+    await deviceA.engine.pushEntities(onProgress: (_) {});
+
+    final deviceB = SyncWorld();
+    deviceB.cloud.files.addAll(deviceA.cloud.files);
+    await deviceB.characters.put(makeChar('tokyo', name: 'Project Tokyo'));
+
+    await deviceB.engine.pullEntities(
+      onProgress: (_) {},
+      onConflict: (_) {},
+    );
+
+    final pulled = deviceB.characters.data['tokyo'];
+    expect(pulled?.avatarPath, isNotNull);
+    expect(deviceB.images.saved.containsKey('avatars/tokyo.png'), isTrue);
+  });
+
+  test(
+    'memory_book with local generationApiKey does not false-conflict on pull',
+    () async {
+      final deviceA = SyncWorld();
+      final cloudMb = makeMemoryBook('s1', updatedAt: 1000);
+      await deviceA.memoryBooks.put(cloudMb);
+      await deviceA.chats.put(makeChat('s1', charId: 'char1'));
+
+      final manifest = await deviceA.manifestProvider.buildLocalManifest();
+      await deviceA.manifestProvider.writeLocalManifest(manifest);
+      await deviceA.engine.pushEntities(onProgress: (_) {});
+
+      final deviceB = SyncWorld();
+      deviceB.cloud.files.addAll(deviceA.cloud.files);
+      await deviceB.memoryBooks.put(
+        cloudMb.copyWith(
+          updatedAt: 999999,
+          settings: const MemoryBookSettings(generationApiKey: 'sk-local-secret'),
+        ),
+      );
+      await deviceB.chats.put(makeChat('s1', charId: 'char1'));
+
+      final cloudManifest = SyncManifest.fromJson(
+        jsonDecode(deviceB.cloud.files[cloudPath('manifest', 'manifest')]!)
+            as Map<String, dynamic>,
+      );
+      final localManifest = await deviceB.manifestProvider.buildLocalManifest(
+        cloudManifest: cloudManifest,
+      );
+      await deviceB.manifestProvider.writeLocalManifest(
+        localManifest.copyWith(lastSync: 5000),
+      );
+
+      final conflicts = <SyncConflict>[];
+      await deviceB.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts.add(c),
+      );
+
+      expect(conflicts.where((c) => c.type == 'memory_book'), isEmpty,
+          reason:
+              'Semantic memory_book hash ignores generation settings and '
+              'lastProcessedMessageCount');
+    },
+  );
+
+  test('push records apiKeysIncluded=false in cloud manifest by default', () async {
+    final world = SyncWorld();
+    await world.apiConfigs.put(makeApiConfig('api1', name: 'Test'));
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    final raw = world.cloud.files[cloudPath('manifest', 'manifest')];
+    expect(raw, isNotNull);
+    final manifest = SyncManifest.fromJson(jsonDecode(raw!) as Map<String, dynamic>);
+    expect(manifest.apiKeysIncluded, isFalse);
   });
 }

@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/services/generation_notification_service.dart';
 import '../sync_repo_interfaces.dart';
 import 'dropbox/dropbox_adapter.dart';
 import 'dropbox/dropbox_auth.dart';
@@ -146,53 +147,57 @@ class SyncService {
     void Function(SyncProgress)? onProgress,
     bool includeApiKeys = false,
   }) async {
-    _status = SyncStatus.syncing;
-    _lastError = null;
+    await _withSyncForeground(() async {
+      _status = SyncStatus.syncing;
+      _lastError = null;
 
-    try {
-      final engine = _engine;
-      await engine.pushEntities(
-        onProgress: onProgress ?? (_) {},
-        includeApiKeys: includeApiKeys,
-      );
-      _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('gz_sync_last', _lastSyncTime!);
-      _status = SyncStatus.idle;
-    } catch (e) {
-      _lastError = e.toString();
-      _status = SyncStatus.error;
-      rethrow;
-    }
+      try {
+        final engine = _engine;
+        await engine.pushEntities(
+          onProgress: onProgress ?? (_) {},
+          includeApiKeys: includeApiKeys,
+        );
+        _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('gz_sync_last', _lastSyncTime!);
+        _status = SyncStatus.idle;
+      } catch (e) {
+        _lastError = e.toString();
+        _status = SyncStatus.error;
+        rethrow;
+      }
+    });
   }
 
   Future<void> fullPull({
     void Function(SyncProgress)? onProgress,
   }) async {
-    _status = SyncStatus.syncing;
-    _lastError = null;
-    _conflicts.clear();
-    _resolvedAsCloud.clear();
+    await _withSyncForeground(() async {
+      _status = SyncStatus.syncing;
+      _lastError = null;
+      _conflicts.clear();
+      _resolvedAsCloud.clear();
 
-    try {
-      final engine = _engine;
-      await engine.pullEntities(
-        onProgress: onProgress ?? (_) {},
-        onConflict: (c) => _conflicts.add(c),
-      );
-      if (_conflicts.isNotEmpty) {
-        _status = SyncStatus.conflict;
-      } else {
-        _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setInt('gz_sync_last', _lastSyncTime!);
-        _status = SyncStatus.idle;
+      try {
+        final engine = _engine;
+        await engine.pullEntities(
+          onProgress: onProgress ?? (_) {},
+          onConflict: (c) => _conflicts.add(c),
+        );
+        if (_conflicts.isNotEmpty) {
+          _status = SyncStatus.conflict;
+        } else {
+          _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setInt('gz_sync_last', _lastSyncTime!);
+          _status = SyncStatus.idle;
+        }
+      } catch (e) {
+        _lastError = e.toString();
+        _status = SyncStatus.error;
+        rethrow;
       }
-    } catch (e) {
-      _lastError = e.toString();
-      _status = SyncStatus.error;
-      rethrow;
-    }
+    });
   }
 
   Future<void> fullSync({
@@ -209,23 +214,25 @@ class SyncService {
     void Function(SyncProgress)? onProgress,
   }) async {
     if (_status == SyncStatus.syncing) return;
-    _status = SyncStatus.syncing;
-    _lastError = null;
+    await _withSyncForeground(() async {
+      _status = SyncStatus.syncing;
+      _lastError = null;
 
-    try {
-      final engine = _engine;
-      await engine.wipeCloudData(
-        onProgress: onProgress ?? (_) {},
-      );
-      await _manifestBuilder.clearLocalManifest();
-      _conflicts.clear();
-      _resolvedAsCloud.clear();
-      _status = SyncStatus.idle;
-    } catch (e) {
-      _lastError = e.toString();
-      _status = SyncStatus.error;
-      rethrow;
-    }
+      try {
+        final engine = _engine;
+        await engine.wipeCloudData(
+          onProgress: onProgress ?? (_) {},
+        );
+        await _manifestBuilder.clearLocalManifest();
+        _conflicts.clear();
+        _resolvedAsCloud.clear();
+        _status = SyncStatus.idle;
+      } catch (e) {
+        _lastError = e.toString();
+        _status = SyncStatus.error;
+        rethrow;
+      }
+    });
   }
 
   Future<void> resolveAllConflicts(String choice) async {
@@ -268,21 +275,33 @@ class SyncService {
   Future<void> applyPendingPullAfterResolve({
     required void Function(SyncProgress) onProgress,
   }) async {
+    await _withSyncForeground(() async {
+      try {
+        _status = SyncStatus.syncing;
+        await _engine.applyPendingPull(
+          onProgress: onProgress,
+          resolvedAsCloud:
+              _resolvedAsCloud.isNotEmpty ? List.from(_resolvedAsCloud) : null,
+        );
+        _resolvedAsCloud.clear();
+        _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setInt('gz_sync_last', _lastSyncTime!);
+        _status = SyncStatus.idle;
+      } catch (e) {
+        _lastError = e.toString();
+        _status = SyncStatus.error;
+        rethrow;
+      }
+    });
+  }
+
+  Future<void> _withSyncForeground(Future<void> Function() action) async {
+    await GenerationNotificationService.instance.onSyncStarted();
     try {
-      _status = SyncStatus.syncing;
-      await _engine.applyPendingPull(
-        onProgress: onProgress,
-        resolvedAsCloud: _resolvedAsCloud.isNotEmpty ? List.from(_resolvedAsCloud) : null,
-      );
-      _resolvedAsCloud.clear();
-      _lastSyncTime = DateTime.now().millisecondsSinceEpoch;
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('gz_sync_last', _lastSyncTime!);
-      _status = SyncStatus.idle;
-    } catch (e) {
-      _lastError = e.toString();
-      _status = SyncStatus.error;
-      rethrow;
+      await action();
+    } finally {
+      await GenerationNotificationService.instance.onSyncFinished();
     }
   }
 

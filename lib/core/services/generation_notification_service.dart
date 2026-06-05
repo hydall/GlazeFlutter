@@ -38,6 +38,7 @@ class GenerationNotificationService {
 
   bool _isGenerating = false;
   bool _initialized = false;
+  int _foregroundHoldCount = 0;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   NotificationNavigationData? _pendingNotificationData;
   String? _activeCharId;
@@ -152,23 +153,10 @@ class GenerationNotificationService {
 
   Future<void> onGenerationStarted(String charName) async {
     _isGenerating = true;
-    if (_isMobile) {
-      try {
-        if (!await FlutterForegroundTask.isRunningService) {
-          await FlutterForegroundTask.startService(
-            notificationTitle: charName,
-            notificationText: 'Generating response...',
-            notificationIcon: const NotificationIcon(
-              metaDataName: 'com.hydall.glaze.ic_generation',
-            ),
-            callback: _foregroundTaskCallback,
-          );
-        }
-      } catch (e) {
-        debugPrint('NOTIF: foreground task start failed: $e');
-      }
-      await _startSilentAudio();
-    }
+    await _acquireForeground(
+      notificationTitle: charName,
+      notificationText: 'Generating response...',
+    );
   }
 
   Future<void> onGenerationCompleted(
@@ -180,7 +168,7 @@ class GenerationNotificationService {
     String? avatarPath,
   }) async {
     _isGenerating = false;
-    await _stopForegroundTask();
+    await _releaseForeground();
 
     if (_isMobile && _lifecycleState != AppLifecycleState.resumed) {
       await sendMessageNotification(
@@ -196,7 +184,18 @@ class GenerationNotificationService {
 
   Future<void> onGenerationAborted() async {
     _isGenerating = false;
-    await _stopForegroundTask();
+    await _releaseForeground();
+  }
+
+  Future<void> onSyncStarted() async {
+    await _acquireForeground(
+      notificationTitle: 'Glaze',
+      notificationText: 'Syncing with cloud...',
+    );
+  }
+
+  Future<void> onSyncFinished() async {
+    await _releaseForeground();
   }
 
   bool get isGenerating => _isGenerating;
@@ -292,6 +291,38 @@ class GenerationNotificationService {
     final data = _pendingNotificationData;
     _pendingNotificationData = null;
     return data;
+  }
+
+  Future<void> _acquireForeground({
+    required String notificationTitle,
+    required String notificationText,
+  }) async {
+    if (!_isMobile) return;
+    _foregroundHoldCount++;
+    if (_foregroundHoldCount > 1) return;
+    try {
+      if (!await FlutterForegroundTask.isRunningService) {
+        await FlutterForegroundTask.startService(
+          notificationTitle: notificationTitle,
+          notificationText: notificationText,
+          notificationIcon: const NotificationIcon(
+            metaDataName: 'com.hydall.glaze.ic_generation',
+          ),
+          callback: _foregroundTaskCallback,
+        );
+      }
+    } catch (e) {
+      debugPrint('NOTIF: foreground task start failed: $e');
+    }
+    await _startSilentAudio();
+  }
+
+  Future<void> _releaseForeground() async {
+    if (!_isMobile) return;
+    if (_foregroundHoldCount <= 0) return;
+    _foregroundHoldCount--;
+    if (_foregroundHoldCount > 0) return;
+    await _stopForegroundTask();
   }
 
   Future<void> _stopForegroundTask() async {

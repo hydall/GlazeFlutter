@@ -73,10 +73,15 @@ class SyncEngine {
 
     final localManifest = await _manifestBuilder.buildLocalManifest();
     SyncManifest? cloudManifest;
+    var cloudManifestDownloadFailed = false;
     try {
       final raw = await _adapter.download(cloudPath('manifest', 'manifest'));
       cloudManifest = SyncManifest.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-    } catch (_) {}
+    } catch (_) {
+      cloudManifestDownloadFailed = true;
+    }
+
+    final cloudFilePaths = await _loadCloudFilePaths();
 
     final entries = localManifest.entries.values.toList();
 
@@ -92,6 +97,7 @@ class SyncEngine {
 
     final tasks = <Future<void> Function()>[];
     var processed = 0;
+    final hashSkippedKeys = <String>[];
 
     for (final entry in entries) {
       final cloudEntry = cloudManifest?.entries[entry.key];
@@ -111,8 +117,15 @@ class SyncEngine {
         continue;
       }
 
-      if (cloudEntry != null && cloudEntry.hash == entry.hash && !cloudEntry.deleted) {
-        continue;
+      final cloudFileExists = cloudSyncPathExists(cloudFilePaths, entry.path);
+
+      if (cloudEntry != null && !cloudEntry.deleted) {
+        if (cloudEntry.hash == entry.hash && cloudFileExists) {
+          hashSkippedKeys.add(entry.key);
+          continue;
+        }
+        if (cloudEntry.hash == entry.hash && !cloudFileExists) {
+        }
       }
 
       tasks.add(() async {
@@ -142,12 +155,15 @@ class SyncEngine {
       ..removeWhere((_, e) => e.deleted);
 
     final updatedManifest = localManifest.copyWith(
+      version: SyncManifest.currentVersion,
       lastSync: DateTime.now().millisecondsSinceEpoch,
       entries: cleanedEntries,
+      apiKeysIncluded: _includeApiKeys,
     );
+    final manifestJson = jsonEncode(updatedManifest.toJson());
     await _adapter.upload(
       cloudPath('manifest', 'manifest'),
-      jsonEncode(updatedManifest.toJson()),
+      manifestJson,
     );
     await _manifestBuilder.writeLocalManifest(updatedManifest);
     await _manifestBuilder.clearDeleted();
@@ -155,6 +171,30 @@ class SyncEngine {
     if (taskErrors != null && taskErrors.isNotEmpty) {
       throw SyncQueueAggregateError(taskErrors);
     }
+  }
+
+  Future<Set<String>> _loadCloudFilePaths() async {
+    try {
+      return await _collectCloudFilePaths(cloudBase);
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<Set<String>> _collectCloudFilePaths(String path) async {
+    final files = await _adapter.listFolder(path);
+    final paths = files
+        .where((f) => !f.isFolder)
+        .map((f) => normalizeCloudSyncPath(f.path))
+        .toSet();
+
+    final hasNestedFiles = paths.any((p) => p.split('/').where((s) => s.isNotEmpty).length > 1);
+    if (hasNestedFiles) return paths;
+
+    for (final folder in files.where((f) => f.isFolder)) {
+      paths.addAll(await _collectCloudFilePaths(folder.path));
+    }
+    return paths;
   }
 
   Future<void> pullEntities({
@@ -185,6 +225,10 @@ class SyncEngine {
       // Auto-prefer cloud for everything on first sync.
       if (isFirstSync && localEntry != null) {
         pullEntries.add(cloudEntry);
+        continue;
+      }
+
+      if (await _entriesSemanticallyEqual(cloudEntry, localEntry, cloudManifest)) {
         continue;
       }
 
@@ -247,6 +291,9 @@ class SyncEngine {
     for (final cloudEntry in cloudManifest.entries.values) {
       final localEntry = localManifest.entries[cloudEntry.key];
       if (cloudEntry.hash == localEntry?.hash && cloudEntry.deleted == localEntry?.deleted) {
+        continue;
+      }
+      if (await _entriesSemanticallyEqual(cloudEntry, localEntry, cloudManifest)) {
         continue;
       }
       if (SyncConflictDetector.needsConflict(localEntry, cloudEntry)) {
@@ -469,6 +516,58 @@ class SyncEngine {
     if (entry.type == 'persona') {
       await _pullPersonaAvatar(entry.id);
     }
+    if (entry.type == 'chat') {
+      final charId = cloudData['characterId'] as String?;
+      if (charId != null) {
+        await _sanitizeInvalidAvatarPath(charId);
+        await _pullCharacterAvatar(charId);
+      }
+    }
+  }
+
+  Future<bool> _entriesSemanticallyEqual(
+    SyncManifestEntry cloudEntry,
+    SyncManifestEntry? localEntry,
+    SyncManifest cloudManifest,
+  ) async {
+    if (localEntry == null) return false;
+    if (cloudEntry.hash == localEntry.hash) return true;
+
+    switch (cloudEntry.type) {
+      case 'memory_book':
+        final localMb = await _memoryBookRepo.getBySessionId(cloudEntry.id);
+        if (localMb == null) return false;
+        final cloudData =
+            await SyncSerialization.readCloudEntity(_adapter, cloudEntry);
+        if (cloudData == null) return false;
+        final localHash =
+            SyncSerialization.computeMemoryBookHash(localMb.toJson());
+        final cloudHash =
+            SyncSerialization.computeMemoryBookHash(cloudData);
+        final equal = localHash == cloudHash;
+        return equal;
+      case 'api_presets':
+        if (cloudManifest.apiKeysIncluded) return false;
+        final localAll = await _apiRepo.getAll();
+        final cloudData =
+            await SyncSerialization.readCloudEntity(_adapter, cloudEntry);
+        if (cloudData == null) return false;
+        final List<Map<String, dynamic>> cloudItems;
+        if (cloudData['__singleton'] == true) {
+          cloudItems = (cloudData['items'] as List).cast<Map<String, dynamic>>();
+        } else if (cloudData.containsKey('items')) {
+          cloudItems = (cloudData['items'] as List).cast<Map<String, dynamic>>();
+        } else {
+          cloudItems = [cloudData];
+        }
+        final localHash = SyncSerialization.computeApiPresetsHash(
+          localAll.map((a) => a.toJson()),
+        );
+        final cloudHash = SyncSerialization.computeApiPresetsHash(cloudItems);
+        return localHash == cloudHash;
+      default:
+        return false;
+    }
   }
 
   Future<Map<String, dynamic>?> _readLocalEntity(String type, String id) async {
@@ -520,10 +619,10 @@ class SyncEngine {
     try {
       switch (type) {
         case 'character':
-          await _characterRepo.put(Character.fromJson(data));
+          await _applyCloudCharacter(id, data);
           break;
         case 'persona':
-          await _personaRepo.put(Persona.fromJson(data));
+          await _applyCloudPersona(id, data);
           break;
         case 'chat':
           await _chatRepo.put(ChatSession.fromJson(data));
@@ -550,6 +649,49 @@ class SyncEngine {
           break;
       }
     } catch (_) {}
+  }
+
+  /// avatarPath and gallery hold device-local paths; never apply cloud values
+  /// directly — binary assets are synced in [_pullCharacterAvatar] /
+  /// [_pullCharacterGallery].
+  Future<void> _applyCloudCharacter(String id, Map<String, dynamic> data) async {
+    final local = await _characterRepo.getById(id);
+    final json = Map<String, dynamic>.from(data);
+    final cloudAvatarPath = json.remove('avatarPath') as String?;
+    json.remove('gallery');
+    var character = Character.fromJson(json);
+    if (local != null) {
+      character = character.copyWith(
+        avatarPath: local.avatarPath,
+        gallery: local.gallery,
+      );
+    }
+    await _characterRepo.put(character);
+  }
+
+  Future<void> _applyCloudPersona(String id, Map<String, dynamic> data) async {
+    final local = await _personaRepo.getById(id);
+    final json = Map<String, dynamic>.from(data);
+    final cloudAvatarPath = json.remove('avatarPath') as String?;
+    var persona = Persona.fromJson(json);
+    if (local != null) {
+      persona = persona.copyWith(avatarPath: local.avatarPath);
+    }
+    await _personaRepo.put(persona);
+  }
+
+  bool _localAvatarFileExists(String? avatarPath) {
+    if (avatarPath == null || avatarPath.isEmpty) return false;
+    final abs = _imageStorage.absolutePath(avatarPath);
+    if (abs == null) return false;
+    return File(abs).existsSync();
+  }
+
+  Future<void> _sanitizeInvalidAvatarPath(String charId) async {
+    final c = await _characterRepo.getById(charId);
+    if (c == null || c.avatarPath == null || c.avatarPath!.isEmpty) return;
+    if (_localAvatarFileExists(c.avatarPath)) return;
+    await _characterRepo.put(c.copyWith(avatarPath: null));
   }
 
   Future<void> _applySingleton<T>(
@@ -770,15 +912,19 @@ class SyncEngine {
       final c = await _characterRepo.getById(charId);
       if (c == null) return;
 
+      await _sanitizeInvalidAvatarPath(charId);
+      final current = await _characterRepo.getById(charId);
+      if (current == null) return;
+
       for (final ext in ['png', 'jpg', 'webp', 'gif']) {
         try {
           final imgCloudPath = galleryCloudPath(charId, 'avatar', ext);
           final bytes = await _adapter.downloadBinary(imgCloudPath);
           if (bytes.isNotEmpty) {
-            final relativePath = await _imageStorage.saveBytes(
+            final localPath = await _imageStorage.saveBytes(
               bytes, 'avatars', charId, ext,
             );
-            await _characterRepo.put(c.copyWith(avatarPath: relativePath));
+            await _characterRepo.put(current.copyWith(avatarPath: localPath));
             return;
           }
         } catch (_) {}

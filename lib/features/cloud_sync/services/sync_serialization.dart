@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:crypto/crypto.dart';
 
 import '../../../core/models/chat_message.dart';
+import '../../../core/models/memory_book.dart';
 import '../cloud_adapter.dart';
 import '../sync_models.dart';
 
@@ -24,6 +25,71 @@ class SyncSerialization {
   static String computeSyncHash(dynamic data) {
     final json = jsonEncode(data);
     return sha256.convert(utf8.encode(json)).toString();
+  }
+
+  /// Device-local / derived fields excluded so parity does not false-conflict.
+  static const _memoryBookSettingsHashKeys = {
+    'enabled',
+    'autoCreateEnabled',
+    'autoGenerateEnabled',
+    'maxInjectedEntries',
+    'maxInjectionBudgetPercent',
+    'autoCreateInterval',
+    'useDelayedAutomation',
+    'injectionTarget',
+    'batchSize',
+    'vectorSearchEnabled',
+    'keyMatchMode',
+    'promptPreset',
+  };
+
+  static Map<String, dynamic> normalizeMemoryBookForHash(
+    Map<String, dynamic> json,
+  ) {
+    final settings = json['settings'];
+    return {
+      'sessionId': json['sessionId'],
+      'entries': json['entries'] ?? [],
+      'pendingDrafts': json['pendingDrafts'] ?? [],
+      'settings': _memoryBookSettingsForHash(settings),
+    };
+  }
+
+  static Map<String, dynamic> _memoryBookSettingsForHash(dynamic settings) {
+    if (settings is! Map) return {};
+    try {
+      final canonical = MemoryBookSettings.fromJson(
+        Map<String, dynamic>.from(settings),
+      ).toJson();
+      return {
+        for (final key in _memoryBookSettingsHashKeys)
+          if (canonical.containsKey(key)) key: canonical[key],
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static String computeMemoryBookHash(Map<String, dynamic> json) {
+    try {
+      final canonical = MemoryBook.fromJson(json).toJson();
+      return computeSyncHash(normalizeMemoryBookForHash(canonical));
+    } catch (_) {
+      return computeSyncHash(normalizeMemoryBookForHash(json));
+    }
+  }
+
+  static String computeApiPresetsHash(Iterable<Map<String, dynamic>> items) {
+    return computeSyncHash(
+      items
+          .map((item) {
+            final copy = Map<String, dynamic>.from(item);
+            copy['apiKey'] = '';
+            copy['embeddingApiKey'] = '';
+            return copy;
+          })
+          .toList(),
+    );
   }
 
   static String computeBinaryHash(List<int> bytes) {

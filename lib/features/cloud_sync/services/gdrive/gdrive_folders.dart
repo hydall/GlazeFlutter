@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
+
 class GDriveFolders {
   static const _folderName = 'Glaze';
 
@@ -96,8 +97,13 @@ class GDriveFolders {
 
   Future<void> deleteFolder(String path) async {
     final token = await _getAccessToken();
-    final folderId = _folderIdCache[path];
-    if (folderId == null) return;
+    var folderId = _folderIdCache[path];
+    if (folderId == null && path == '/$_folderName') {
+      folderId = await _findFolderByName(_folderName, 'root', token);
+    }
+    if (folderId == null) {
+      return;
+    }
     await _dio.delete<void>(
       'https://www.googleapis.com/drive/v3/files/$folderId',
       options: Options(headers: {'Authorization': 'Bearer $token'}),
