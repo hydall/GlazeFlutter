@@ -220,6 +220,9 @@ class InfoBlocks extends Table {
   TextColumn get blockType => text()();
   TextColumn get content => text()();
   IntColumn get createdAt => integer().withDefault(const Constant(0))();
+  IntColumn get order_ =>
+      integer().named('order').withDefault(const Constant(0))();
+  TextColumn get status => text().withDefault(const Constant('done'))();
 
   @override
   Set<Column> get primaryKey => {id};

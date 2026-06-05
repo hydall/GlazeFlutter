@@ -360,6 +360,18 @@ if (messageData.isEditing) classes.push('editing');
       nameEl.appendChild(badge);
     }
 
+    if (m.blockStatus) {
+      const badge = document.createElement('button');
+      badge.type = 'button';
+      badge.className = `msg-ext-badge ${m.blockStatus}`;
+      badge.dataset.action = 'ext-blocks-click';
+      badge.dataset.messageId = m.id;
+      badge.title = m.blockStatus === 'running' ? 'Блоки генерируются...' :
+                    m.blockStatus === 'error'   ? 'Ошибка блоков' : 'Ext блоки';
+      badge.textContent = '⬡';
+      nameEl.appendChild(badge);
+    }
+
     const hasTriggers =
       (m.triggeredLorebooks && m.triggeredLorebooks.length) ||
       (m.triggeredMemories && m.triggeredMemories.length);
@@ -1045,6 +1057,28 @@ if (messageData.isEditing) classes.push('editing');
         const cls = this._memoryStatusClass(msg.memoryStatus);
         badge.className = `msg-memory-badge ${cls}`;
         badge.textContent = msg.memoryStatus;
+      }
+    }
+
+    if (msg.blockStatus !== undefined) {
+      const nameEl = sectionEl.querySelector('.msg-name');
+      if (nameEl) {
+        let badge = nameEl.querySelector('.msg-ext-badge');
+        if (msg.blockStatus) {
+          if (!badge) {
+            badge = document.createElement('button');
+            badge.type = 'button';
+            badge.dataset.action = 'ext-blocks-click';
+            badge.dataset.messageId = msg.id;
+            badge.textContent = '⬡';
+            nameEl.appendChild(badge);
+          }
+          badge.className = `msg-ext-badge ${msg.blockStatus}`;
+          badge.title = msg.blockStatus === 'running' ? 'Блоки генерируются...' :
+                        msg.blockStatus === 'error'   ? 'Ошибка блоков' : 'Ext блоки';
+        } else if (badge) {
+          badge.remove();
+        }
       }
     }
 

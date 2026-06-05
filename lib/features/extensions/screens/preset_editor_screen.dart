@@ -55,15 +55,15 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen> {
                     ),
                   ),
                 ),
-              ...preset.blocks.map(
-                (block) => MenuScriptItem(
-                  name: block.name.isEmpty ? 'Без имени' : block.name,
-                  subtitle: _blockSubtitle(block),
-                  enabled: block.enabled,
-                  onToggle: (v) => _toggleBlock(preset, block, v),
-                  onTap: () => _editBlock(preset, block),
-                  onMore: () => _showBlockActions(preset, block),
-                ),
+              ReorderableListView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                buildDefaultDragHandles: false,
+                onReorderItem: (oldIdx, newIdx) => _reorderBlock(preset, oldIdx, newIdx),
+                children: [
+                  for (int i = 0; i < preset.blocks.length; i++)
+                    _buildBlockTile(preset, preset.blocks[i], i),
+                ],
               ),
             ],
           ),
@@ -82,7 +82,11 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen> {
   }
 
   String _blockSubtitle(BlockConfig block) {
-    final type = block.type == BlockType.imageGen ? 'Генерация картинок' : 'Инфоблок';
+    final type = switch (block.type) {
+      BlockType.infoblock => 'Инфоблок',
+      BlockType.imageGen => 'Картинка',
+      BlockType.jsRunner => 'JS',
+    };
     final trigger = switch (block.trigger) {
       BlockTrigger.afterUser => 'После user',
       BlockTrigger.afterAssistant => 'После assistant',
@@ -99,6 +103,50 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen> {
       ],
     );
     ref.read(extensionPresetsProvider.notifier).update(updated);
+  }
+
+  Widget _buildBlockTile(ExtensionPreset preset, BlockConfig block, int index) {
+    return Stack(
+      key: ValueKey(block.id),
+      children: [
+        MenuScriptItem(
+          name: block.name.isEmpty ? 'Без имени' : block.name,
+          subtitle: _blockSubtitle(block),
+          enabled: block.enabled,
+          onToggle: (v) => _toggleBlock(preset, block, v),
+          onTap: () => _editBlock(preset, block),
+          onMore: () => _showBlockActions(preset, block),
+        ),
+        // Drag handle overlay — positioned to the left side so it doesn't
+        // conflict with the switch / more-vert on the right.
+        Positioned(
+          right: 110,
+          top: 0,
+          bottom: 0,
+          child: ReorderableDragStartListener(
+            index: index,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8),
+              child: Icon(Icons.drag_handle, size: 20, color: Colors.white24),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _reorderBlock(ExtensionPreset preset, int oldIdx, int newIdx) {
+    final blocks = List<BlockConfig>.from(preset.blocks);
+    final item = blocks.removeAt(oldIdx);
+    blocks.insert(newIdx, item);
+    // Update the `order` field to match position.
+    final reordered = [
+      for (int i = 0; i < blocks.length; i++)
+        blocks[i].copyWith(order: i),
+    ];
+    ref.read(extensionPresetsProvider.notifier).update(
+      preset.copyWith(blocks: reordered),
+    );
   }
 
   Future<void> _addBlock(ExtensionPreset preset) async {
@@ -182,10 +230,9 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
   late TextEditingController _modelController;
   late BlockType _type;
   late BlockTrigger _trigger;
-  late int _contextMessageCount;
-  late int _contextBlockCount;
   late bool _inject;
-  late int _injectDepth;
+  late int _injectLastN;
+  late bool _dependsOnPrevious;
   late bool _imageGenEnabled;
   bool _fetchingModels = false;
 
@@ -200,10 +247,9 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
     _modelController = TextEditingController(text: b.model);
     _type = b.type;
     _trigger = b.trigger;
-    _contextMessageCount = b.contextMessageCount;
-    _contextBlockCount = b.contextBlockCount;
     _inject = b.inject;
-    _injectDepth = b.injectDepth;
+    _injectLastN = b.injectLastN;
+    _dependsOnPrevious = b.dependsOnPrevious;
     _imageGenEnabled = b.imageGenEnabled;
   }
 
@@ -213,10 +259,9 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
       type: _type,
       trigger: _trigger,
       prompt: _promptController.text,
-      contextMessageCount: _contextMessageCount,
-      contextBlockCount: _contextBlockCount,
       inject: _inject,
-      injectDepth: _injectDepth,
+      injectLastN: _injectLastN,
+      dependsOnPrevious: _dependsOnPrevious,
       apiConfigId: _apiConfigController.text.trim(),
       model: _modelController.text.trim(),
       imagePromptInstruction: _imagePromptController.text,
@@ -263,6 +308,11 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
                     label: Text('Картинка'),
                     icon: Icon(Icons.image_outlined),
                   ),
+                  ButtonSegment(
+                    value: BlockType.jsRunner,
+                    label: Text('JS'),
+                    icon: Icon(Icons.code),
+                  ),
                 ],
                 selected: {_type},
                 onSelectionChanged: (s) =>
@@ -293,10 +343,31 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
               ),
               const SizedBox(height: 16),
               SwitchListTile(
-                title: const Text('Инжектировать в чат'),
-                subtitle: const Text('Добавлять сгенерированный контент в историю'),
+                title: const Text('Инжектировать в промпт'),
+                subtitle: const Text('Вставлять вывод блока в историю перед отправкой'),
                 value: _inject,
                 onChanged: (v) => setState(() => _inject = v),
+                contentPadding: EdgeInsets.zero,
+              ),
+              if (_inject) ...[
+                const SizedBox(height: 8),
+                TextField(
+                  controller: TextEditingController(text: _injectLastN.toString()),
+                  decoration: const InputDecoration(
+                    labelText: 'К скольким посл. сообщениям ассистента',
+                    helperText: '0 = не инжектировать, 1 = только последнее, …',
+                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) =>
+                      _injectLastN = int.tryParse(v) ?? _injectLastN,
+                ),
+              ],
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: const Text('Ждать завершения предыдущего блока'),
+                subtitle: const Text('Получает вывод предыдущего блока как контекст'),
+                value: _dependsOnPrevious,
+                onChanged: (v) => setState(() => _dependsOnPrevious = v),
                 contentPadding: EdgeInsets.zero,
               ),
               const SizedBox(height: 8),
@@ -308,42 +379,6 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
                 ),
                 maxLines: 4,
                 minLines: 2,
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: TextEditingController(
-                          text: _contextMessageCount.toString()),
-                      decoration: const InputDecoration(labelText: 'Кол-во сообщений контекста'),
-                      keyboardType: TextInputType.number,
-                      onChanged: (v) =>
-                          _contextMessageCount = int.tryParse(v) ?? _contextMessageCount,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: TextEditingController(
-                          text: _contextBlockCount.toString()),
-                      decoration: const InputDecoration(labelText: 'Кол-во блоков контекста'),
-                      keyboardType: TextInputType.number,
-                      onChanged: (v) =>
-                          _contextBlockCount = int.tryParse(v) ?? _contextBlockCount,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: TextEditingController(text: _injectDepth.toString()),
-                decoration: const InputDecoration(
-                  labelText: 'Глубина инжекта',
-                  helperText: '-1 = перед последним user, 1 = после 1-го assistant',
-                ),
-                keyboardType: TextInputType.number,
-                onChanged: (v) => _injectDepth = int.tryParse(v) ?? _injectDepth,
               ),
               const SizedBox(height: 12),
               _SectionLabel('API'),

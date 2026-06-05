@@ -6,6 +6,7 @@ part 'block_config.g.dart';
 enum BlockType {
   infoblock,
   imageGen,
+  jsRunner,
 }
 
 enum BlockTrigger {
@@ -23,10 +24,10 @@ class BlockConfig with _$BlockConfig {
     @Default(true) bool enabled,
     @Default(BlockTrigger.afterAssistant) BlockTrigger trigger,
     @Default('') String prompt,
-    @Default(5) int contextMessageCount,
-    @Default(3) int contextBlockCount,
+    @Default(0) int order,
+    @Default(false) bool dependsOnPrevious,
     @Default(true) bool inject,
-    @Default(-1) int injectDepth,
+    @Default(1) int injectLastN,
     @Default('') String apiConfigId,
     @Default('') String model,
     // Image-specific

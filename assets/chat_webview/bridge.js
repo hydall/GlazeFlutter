@@ -668,6 +668,9 @@ class InteractionDispatch {
     return {
       'memory-click': (e, el) => bridge._sendToFlutter('onMemoryClick', [el.dataset.messageId]),
       'inject-click': (e, el) => bridge._sendToFlutter('onInjectClick', [el.dataset.messageId]),
+      'ext-blocks-click': (e, el) => bridge._sendToFlutter('onExtBlocksClick', [el.dataset.messageId]),
+      'ext-block-stop': (e, el) => bridge._sendToFlutter('onExtBlockStop', [el.dataset.blockId, el.dataset.messageId]),
+      'ext-block-regen': (e, el) => bridge._sendToFlutter('onExtBlockRegen', [el.dataset.blockId, el.dataset.messageId]),
       'toggle-hidden': (e, el) => bridge._sendToFlutter('onToggleHidden', [el.dataset.messageId]),
       'toggle-image-hidden': (e, el) => {
         const section = el.closest('.message-section');
@@ -1382,5 +1385,126 @@ class Bridge {
   debugFormatter(text) {
     const formatted = this.renderer.formatter.format(text, false);
     document.title = 'DBG:' + formatted.substring(0, 200);
+  }
+
+  // ── Ext Blocks panel ──────────────────────────────────────────────────────
+
+  /**
+   * Called from Flutter to show/update the inline ext-blocks panel under a
+   * message. If `blocks` is empty the panel is removed.
+   * @param {string} json  - JSON string: { messageId: string, blocks: Array }
+   */
+  showExtBlocksPanel(json) {
+    let data;
+    try { data = JSON.parse(json); } catch (_) { return; }
+    const { messageId, blocks } = data;
+    if (!messageId) return;
+
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!section) return;
+
+    let panel = section.querySelector('.ext-blocks-panel');
+
+    if (!blocks || blocks.length === 0) {
+      panel?.remove();
+      return;
+    }
+
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.className = 'ext-blocks-panel';
+      const content = section.querySelector('.msg-content') || section;
+      content.appendChild(panel);
+    }
+
+    panel.innerHTML = '';
+
+    for (const block of blocks) {
+      const item = document.createElement('div');
+      item.className = `ext-block-item ${block.status || 'done'}`;
+
+      // Header row
+      const header = document.createElement('div');
+      header.className = 'ext-block-header';
+
+      const name = document.createElement('span');
+      name.className = 'ext-block-name';
+      name.textContent = block.blockName || block.blockId || '—';
+      header.appendChild(name);
+
+      const statusEl = document.createElement('span');
+      statusEl.className = 'ext-block-status';
+      statusEl.textContent = block.status || 'done';
+      header.appendChild(statusEl);
+
+      // Buttons
+      const btnGroup = document.createElement('span');
+      btnGroup.className = 'ext-block-actions';
+
+      if (block.status === 'running') {
+        const stopBtn = document.createElement('button');
+        stopBtn.type = 'button';
+        stopBtn.className = 'ext-block-btn';
+        stopBtn.dataset.action = 'ext-block-stop';
+        stopBtn.dataset.blockId = block.blockId;
+        stopBtn.dataset.messageId = messageId;
+        stopBtn.textContent = '■ Стоп';
+        btnGroup.appendChild(stopBtn);
+      } else {
+        const regenBtn = document.createElement('button');
+        regenBtn.type = 'button';
+        regenBtn.className = 'ext-block-btn';
+        regenBtn.dataset.action = 'ext-block-regen';
+        regenBtn.dataset.blockId = block.blockId;
+        regenBtn.dataset.messageId = messageId;
+        regenBtn.textContent = '↺ Перегенерировать';
+        btnGroup.appendChild(regenBtn);
+      }
+
+      header.appendChild(btnGroup);
+      item.appendChild(header);
+
+      // Content
+      if (block.content) {
+        const imgMatch = block.content.match(/\[IMG:RESULT:([^\]]+)\]/);
+        if (imgMatch) {
+          const img = document.createElement('img');
+          let path = imgMatch[1];
+          const pipeIdx = path.indexOf('|');
+          if (pipeIdx !== -1) path = path.substring(0, pipeIdx);
+          img.src = path.startsWith('file://') ? path : `file:///${path.replace(/\\/g, '/')}`;
+          img.className = 'ext-block-image';
+          item.appendChild(img);
+        } else if (block.content.trim()) {
+          const pre = document.createElement('div');
+          pre.className = 'ext-block-content';
+          pre.textContent = block.content;
+          item.appendChild(pre);
+        }
+      }
+
+      panel.appendChild(item);
+    }
+  }
+
+  /**
+   * Updates the panel if it's currently visible for this message.
+   * Has the same signature as showExtBlocksPanel — just delegates.
+   */
+  updateExtBlocksPanel(json) {
+    this.showExtBlocksPanel(json);
+  }
+
+  /**
+   * Called from Flutter to push a minimal updateMessageMeta call.
+   * `json` is the same shape as a message object (at least { id, blockStatus }).
+   */
+  updateMessageMeta(json) {
+    let msg;
+    try { msg = JSON.parse(json); } catch (_) { return; }
+    if (!msg.id) return;
+    const section = document.querySelector(`[data-message-id="${msg.id}"]`);
+    if (!section) return;
+    this.renderer.updateMessageMeta(section, msg);
   }
 }

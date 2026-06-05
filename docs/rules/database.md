@@ -64,13 +64,35 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **21**
+Current version: **22**
 
 Migration history:
 - v18: added `characters.picksHash`
 - v19: added `characters.createdAt` + data migration (`SET created_at = updated_at WHERE created_at = 0`)
 - v20: added `extension_presets` and `info_blocks` tables (extension system)
 - v21: added `api_configs.cacheControlTtl` (Anthropic prompt cache control: 'off' | '5min' | '1h')
+- v22: added `info_blocks.status` TEXT DEFAULT `'done'` + `info_blocks.order_` INTEGER DEFAULT 0 (block execution order + run status for ext blocks redesign)
+
+---
+
+## Atomic single-column updates
+
+For status fields that change frequently (e.g. block run status during extension
+post-generation), use a dedicated repo method that updates only the target column
+rather than reading and re-writing the entire row:
+
+```dart
+// GOOD — atomic, minimal I/O
+Future<void> updateStatus(String id, BlockRunStatus status) =>
+    (db.update(db.infoBlocks)..where((t) => t.id.equals(id)))
+        .write(InfoBlocksCompanion(status: Value(status.name)));
+
+// BAD — full row read-mutate-write for a single column change
+final block = await getById(id);
+await put(block.copyWith(status: status));
+```
+
+Pattern: `InfoBlocksRepository.updateStatus()` is the canonical example.
 
 ---
 

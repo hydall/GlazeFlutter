@@ -80,6 +80,7 @@ class ChatGenerationService {
         charId: charId,
         session: session,
         character: character,
+        persona: null,
       );
     } catch (e) {
       debugPrint('[ChatGenerationService] Extension processing failed: $e');

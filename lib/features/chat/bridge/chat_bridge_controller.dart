@@ -45,6 +45,7 @@ class ChatBridgeController {
   final Set<String> _coveredMemoryIds = {};
   final Set<String> _pendingMemoryIds = {};
   final Set<String> _draftMemoryIds = {};
+  final Map<String, String> _blockStatusByMessageId = {};
 
   List<PresetRegex> _displayRegexes = [];
   Character? _regexCharacter;
@@ -68,6 +69,7 @@ class ChatBridgeController {
   Set<String> get coveredMemoryIds => _coveredMemoryIds;
   Set<String> get pendingMemoryIds => _pendingMemoryIds;
   Set<String> get draftMemoryIds => _draftMemoryIds;
+  Map<String, String> get blockStatusByMessageId => _blockStatusByMessageId;
   List<PresetRegex> get displayRegexes => _displayRegexes;
   Character? get regexCharacter => _regexCharacter;
   Persona? get regexPersona => _regexPersona;
@@ -83,6 +85,7 @@ class ChatBridgeController {
         pendingMemoryIds: _pendingMemoryIds,
         draftMemoryIds: _draftMemoryIds,
         greetingTotal: currentGreetingTotal,
+        blockStatusByMessageId: Map.unmodifiable(_blockStatusByMessageId),
       );
 
   void setRegexContext(List<PresetRegex> regexes, Character? char, Persona? persona) {
@@ -192,6 +195,9 @@ class ChatBridgeController {
   void Function(String instruction, String messageId)? onImgRegen;
   void Function()? onImgCancel;
   void Function()? onStop;
+  void Function(String messageId)? onExtBlocksClick;
+  void Function(String messageId, String blockId)? onExtBlockStop;
+  void Function(String messageId, String blockId)? onExtBlockRegen;
 
   /// Register JS handlers for every callback declared on this host. The
   /// declarations live in [bridgeHandlers] (data-driven) so the actual
@@ -261,6 +267,7 @@ class ChatBridgeController {
       case 'onMemoryClick': onMemoryClick?.call(s);
       case 'onToggleHidden': onToggleHidden?.call(s);
       case 'onInjectClick': onInjectClick?.call(s);
+      case 'onExtBlocksClick': onExtBlocksClick?.call(s);
     }
   }
 
@@ -340,6 +347,8 @@ class ChatBridgeController {
       case 'onImgRetry': onImgRetry?.call(instr, msgId);
       case 'onImgFind': onImgFind?.call(instr, msgId);
       case 'onImgRegen': onImgRegen?.call(instr, msgId);
+      case 'onExtBlockStop': onExtBlockStop?.call(instr, msgId);
+      case 'onExtBlockRegen': onExtBlockRegen?.call(instr, msgId);
     }
   }
 
@@ -456,4 +465,28 @@ class ChatBridgeController {
         entries: entries,
         pendingDrafts: pendingDrafts,
       );
+
+  // Ext Blocks
+
+  /// Updates the aggregated block status for [messageId] and pushes an
+  /// updateMessage call to the WebView so the badge re-renders.
+  Future<void> updateBlockStatus(String messageId, String? status) async {
+    if (status == null) {
+      _blockStatusByMessageId.remove(messageId);
+    } else {
+      _blockStatusByMessageId[messageId] = status;
+    }
+    // Push minimal updateMessage with just blockStatus so the badge updates.
+    final payload = jsonEncode({'id': messageId, 'blockStatus': status});
+    await callJs('updateMessageMeta', payload);
+  }
+
+  /// Sends block panel data to JS so the inline panel renders/updates.
+  Future<void> showExtBlocksPanel(
+    String messageId,
+    List<Map<String, dynamic>> blocks,
+  ) async {
+    final payload = jsonEncode({'messageId': messageId, 'blocks': blocks});
+    await callJs('showExtBlocksPanel', payload);
+  }
 }

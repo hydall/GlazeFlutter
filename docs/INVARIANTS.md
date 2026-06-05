@@ -393,6 +393,36 @@ Processing is a no-op when `extensionsSettings.enabled` is false or
 `activePresetId` is null/empty. Info blocks are stored per `sessionId` via
 `infoBlocksProvider`.
 
+### INV-EG4: Block chain does not start if text generation was aborted
+
+`ExtensionPostGenService.processAfterGeneration()` is only reached via
+`GenerationPipeline._runPostTextSide()`, which itself only executes when the SSE
+stream completes successfully. An aborted generation never reaches the pipeline's
+post-text side; therefore the block chain never starts.
+
+### INV-EG5: Extension cancel token is independent of the chat generation cancel token
+
+`ExtensionPostGenService` owns `_extensionBlocksCancelToken` (`CancelToken`).
+`cancelBlocks()` cancels this token; it does not touch the chat `_cancelToken` or
+`_imgGenCancelToken`. Conversely, aborting chat generation does not cancel in-flight
+extension blocks (they have already started post-SSE). Stopped blocks are marked
+`BlockRunStatus.stopped` in the DB.
+
+### INV-EG6: `dependsOnPrevious = true` blocks run serially; output chaining is preserved
+
+When a `BlockConfig` has `dependsOnPrevious = true`, `ExtensionPostGenService` awaits
+the preceding block's future before starting the dependent block. The preceding block's
+`InfoBlock.content` is passed as `previousOutput` to the dependent block's prompt
+builder. Blocks with `dependsOnPrevious = false` (default) are launched without
+`await` and run concurrently.
+
+### INV-EG7: Image-gen block results are stored via `ImageStorageService`; content holds the path token
+
+After `ImageGenService.generateImage()` succeeds, the image bytes are saved to disk
+through `ImageStorageService`. `InfoBlock.content` is set to `[IMG:RESULT:<path>]`
+(same format as inline img-gen). The WebView bridge renders this token as an `<img>`
+element inside the ext-blocks panel.
+
 ---
 
 ## Refactor PR Checklist
@@ -410,7 +440,11 @@ Before merging any structural PR:
 - [ ] Summary returns a string without affecting chat state
 - [x] Memory draft mutex with chat generation (PR-B C12 / INV-M3, INV-M4)
 - [ ] Image generation completes after text generation (not on continue path — INV-CM2)
-- [ ] Extensions post-gen runs after normal/regen only (INV-EG1; not on continue)
+  - [ ] Extensions post-gen runs after normal/regen only (INV-EG1; not on continue)
+  - [ ] Block chain does not start on aborted generation (INV-EG4)
+  - [ ] Extension cancel token is separate from chat cancel token (INV-EG5)
+  - [ ] `dependsOnPrevious` blocks await the preceding block; output is chained (INV-EG6)
+  - [ ] Image-gen block results stored via ImageStorageService; content = `[IMG:RESULT:<path>]` (INV-EG7)
 - [ ] Context limit exceeded shows an error to the user
 - [ ] API not configured shows an error to the user
 - [ ] Abort closes the TCP connection (not just UI state)
