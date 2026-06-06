@@ -243,7 +243,7 @@ class GenerationNotificationService {
             importance: Importance.high,
             priority: Priority.high,
             styleInformation: messagingStyle,
-            icon: '@mipmap/ic_launcher',
+            icon: '@drawable/new_message',
             autoCancel: true,
             groupKey: charId,
           ),

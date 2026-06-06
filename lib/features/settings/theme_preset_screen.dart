@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -9,7 +10,7 @@ import '../../../shared/theme/theme_preset.dart';
 import '../../../shared/theme/theme_preset_storage.dart';
 import '../../../shared/theme/theme_provider.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../shared/utils/color_utils.dart';
+import '../../../shared/widgets/glass_surface.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/glaze_toast.dart';
@@ -24,6 +25,13 @@ class ThemePresetScreen extends ConsumerStatefulWidget {
 
 class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
   ThemePresetStorage? _storage;
+
+  // Decoded bg-image bytes keyed by `preset.id`, paired with the bgImage's
+  // hash so edits invalidate the cache. Reusing the same `Uint8List` instance
+  // across rebuilds keeps `MemoryImage` cached in the global ImageCache and
+  // prevents the flicker that happens when the preset list rebuilds (e.g.
+  // after applying a preset).
+  final Map<String, ({int hash, Uint8List? bytes})> _bgBytesCache = {};
 
   @override
   void initState() {
@@ -62,7 +70,14 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              ...presets.map((p) => _buildPresetTile(context, p, p.id == activeId)),
+              ...presets.map(
+                (p) => _buildPresetTile(
+                  context,
+                  p,
+                  p.id == activeId,
+                  theme.activePreset,
+                ),
+              ),
             ],
           ),
           Positioned(
@@ -124,67 +139,210 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
     );
   }
 
-  static Color _contrastColor(Color accent, Color surface) {
-    if (contrastRatio(accent, surface) >= 4.5) return accent;
-    final hsl = HSLColor.fromColor(accent);
-    double l = hsl.lightness;
-    for (int i = 0; i < 20; i++) {
-      l = surface.computeLuminance() < 0.5 ? l + 0.04 : l - 0.04;
-      final c = HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, l.clamp(0.0, 1.0)).toColor();
-      if (contrastRatio(c, surface) >= 4.5) return c;
+  Uint8List? _decodeBgImage(ThemePreset preset) {
+    if (!preset.hasBgImage) return null;
+    final data = preset.bgImage!;
+    final hash = data.hashCode;
+    final cached = _bgBytesCache[preset.id];
+    if (cached != null && cached.hash == hash) return cached.bytes;
+    Uint8List? bytes;
+    try {
+      final commaIdx = data.indexOf(',');
+      if (commaIdx != -1) {
+        bytes = base64Decode(data.substring(commaIdx + 1));
+      }
+    } catch (_) {
+      bytes = null;
     }
-    return surface.computeLuminance() < 0.5
-        ? HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, 0.6).toColor()
-        : HSLColor.fromAHSL(1.0, hsl.hue, hsl.saturation, 0.4).toColor();
+    _bgBytesCache[preset.id] = (hash: hash, bytes: bytes);
+    return bytes;
   }
 
-  Widget _buildPresetTile(BuildContext context, ThemePreset preset, bool isActive) {
-    return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: preset.accent.withAlpha(30),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: preset.accent, width: isActive ? 2 : 1),
+  Widget _buildPresetTile(
+    BuildContext context,
+    ThemePreset preset,
+    bool isActive,
+    ThemePreset activePreset,
+  ) {
+    final cs = context.cs;
+    final accent = preset.accent;
+    final bgBytes = _decodeBgImage(preset);
+    final hasImage = bgBytes != null;
+
+    final sublabelParts = <String>[];
+    if (preset.author.isNotEmpty) sublabelParts.add('by ${preset.author}');
+    if (isActive) sublabelParts.add('Active');
+    final sublabel = sublabelParts.join(' • ');
+
+    final borderBase = activePreset.borderParsed ?? cs.onSurface;
+    final borderOpacity = activePreset.borderOpacity.clamp(0.0, 1.0);
+    final borderWidth = activePreset.borderWidth;
+    // Base border is always the active preset's UI Element border. The
+    // active-state highlight is painted on top via an `AnimatedContainer`
+    // so the transition between presets fades smoothly.
+    final baseBorder = Border.all(
+      color: borderBase.withValues(alpha: borderOpacity),
+      width: borderWidth,
+    );
+    final highlightWidth = borderWidth < 1 ? 1.0 : borderWidth;
+
+    final tint = activePreset.uiColorParsed ?? cs.surfaceContainerHighest;
+
+    final labelColor = hasImage ? Colors.white : cs.onSurface;
+    final sublabelColor =
+        hasImage ? Colors.white.withAlpha(178) : cs.onSurfaceVariant;
+    final textShadows = hasImage
+        ? const [
+            Shadow(
+              color: Color(0xCC000000),
+              blurRadius: 3,
+              offset: Offset(0, 1),
+            ),
+          ]
+        : null;
+
+    final content = ConstrainedBox(
+      constraints: BoxConstraints(minHeight: hasImage ? 160 : 0),
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: hasImage ? 16 : 12,
+          vertical: hasImage ? 12 : 10,
         ),
-        child: Center(
-          child: Container(
-            width: 18,
-            height: 18,
+        child: Align(
+          alignment:
+              hasImage ? Alignment.bottomLeft : Alignment.centerLeft,
+          child: Row(
+            children: [
+              if (!hasImage) ...[
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    shape: BoxShape.circle,
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x1A000000),
+                        blurRadius: 5,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      preset.name,
+                      style: TextStyle(
+                        fontSize: hasImage ? 16 : 15,
+                        fontWeight: FontWeight.w600,
+                        color: labelColor,
+                        shadows: textShadows,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (sublabel.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        sublabel,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: sublabelColor,
+                          shadows: textShadows,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (preset.id != 'default')
+                IconButton(
+                  icon: Icon(
+                    Icons.more_vert,
+                    size: 20,
+                    color: hasImage ? Colors.white : cs.onSurfaceVariant,
+                  ),
+                  tooltip: 'Menu',
+                  onPressed: () =>
+                      _showPresetActions(context, preset, isActive),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final Widget base;
+    if (hasImage) {
+      base = Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.memory(bgBytes, fit: BoxFit.cover, gaplessPlayback: true),
+          const DecoratedBox(
             decoration: BoxDecoration(
-              color: preset.accent,
-              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [Color(0x4D000000), Color(0xCC000000)],
+              ),
             ),
           ),
-        ),
-      ),
-      title: Text(
-        preset.name,
-        style: TextStyle(
-          color: context.cs.onSurface,
-          fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
-        ),
-      ),
-      subtitle: preset.author.isNotEmpty
-          ? Text(
-              'by ${preset.author}',
-              style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
-            )
-          : null,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (isActive)
-            Icon(Icons.check_circle, color: _contrastColor(context.colors.accent, context.cs.surface), size: 20),
-          IconButton(
-            icon: Icon(Icons.more_vert, color: context.cs.onSurfaceVariant, size: 18),
-            tooltip: 'Menu',
-            onPressed: () => _showPresetActions(context, preset, isActive),
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: baseBorder,
+              borderRadius: BorderRadius.circular(12),
+            ),
           ),
         ],
+      );
+    } else {
+      base = GlassSurface(
+        borderRadius: BorderRadius.circular(12),
+        border: baseBorder,
+        tint: tint,
+        child: const SizedBox.expand(),
+      );
+    }
+
+    final activeHighlight = AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        color: isActive ? accent.withValues(alpha: 0.2) : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isActive ? accent.withValues(alpha: 0.5) : Colors.transparent,
+          width: highlightWidth,
+        ),
       ),
-      onTap: isActive ? null : () => _applyPreset(preset),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          children: [
+            Positioned.fill(child: IgnorePointer(child: base)),
+            Positioned.fill(child: IgnorePointer(child: activeHighlight)),
+            Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: isActive ? null : () => _applyPreset(preset),
+                child: content,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
