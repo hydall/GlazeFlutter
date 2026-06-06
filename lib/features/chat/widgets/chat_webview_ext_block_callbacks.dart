@@ -1,0 +1,168 @@
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/state/character_provider.dart';
+import '../../extensions/providers/info_blocks_provider.dart';
+import '../../extensions/services/extension_post_gen_service.dart';
+import '../chat_provider.dart';
+import 'ext_block_dialogs.dart';
+
+/// Wire-up for the chat WebView's ext-block bridge callbacks
+/// (`onExtBlocksRunAll`, `onExtBlockStop`, `onExtBlockRegen`,
+/// `onExtBlockRegenImage`, `onExtBlockEdit`, `onExtBlockDelete`).
+///
+/// Extracted from `chat_webview_widget.dart` so the widget's
+/// `onWebViewCreated` callback can stay focused on bridge setup
+/// rather than extension block orchestration. The controller is a
+/// plain object: it captures the [WidgetRef], the widget's
+/// identifiers (charId, sessionId), a refresh hook for the inline
+/// ext-block panel, and a [mounted] check. The widget owns the
+/// lifecycle.
+class ChatWebViewExtBlockCallbacks {
+  ChatWebViewExtBlockCallbacks({
+    required this.ref,
+    required this.charId,
+    required this.sessionId,
+    required this.context,
+    required this.isMounted,
+    required this.refreshPanel,
+  });
+
+  final WidgetRef ref;
+  final String charId;
+  final String? sessionId;
+  final BuildContext context;
+  final bool Function() isMounted;
+  final Future<void> Function(String sessionId, String messageId)
+      refreshPanel;
+
+  /// Build the `onExtBlocksRunAll` callback: re-runs every enabled
+  /// block for the given [messageId] (resolves sessionId/character
+  /// from the current widget state).
+  Future<void> Function(String messageId) onRunAll() {
+    return (String messageId) async {
+      final sessionId = this.sessionId;
+      if (sessionId == null || sessionId.isEmpty) return;
+      final chatState = ref.read(chatProvider(charId)).value;
+      if (chatState == null) return;
+      final character = ref.read(characterByIdProvider(charId));
+      if (character == null) return;
+      await ref.read(extensionPostGenServiceProvider).runBlocksForMessage(
+            charId: charId,
+            sessionId: sessionId,
+            messageId: messageId,
+            messages: chatState.messages,
+            character: character,
+            persona: null,
+          );
+    };
+  }
+
+  /// Build the `onExtBlockStop` callback: cancel any in-flight block
+  /// generation for the current session.
+  void Function(String blockId, String messageId) onStop() {
+    return (_, _) {
+      ref.read(extensionPostGenServiceProvider).cancelBlocks();
+    };
+  }
+
+  /// Build the `onExtBlockRegen` callback: re-runs a single block
+  /// for an already-existing message.
+  Future<void> Function(String blockId, String messageId) onRegen() {
+    return (String blockId, String messageId) async {
+      final sessionId = this.sessionId;
+      if (sessionId == null || sessionId.isEmpty) return;
+      final chatState = ref.read(chatProvider(charId)).value;
+      if (chatState == null) return;
+      final character = ref.read(characterByIdProvider(charId));
+      if (character == null) return;
+      await ref.read(extensionPostGenServiceProvider).rerunBlock(
+            blockId: blockId,
+            messageId: messageId,
+            sessionId: sessionId,
+            charId: charId,
+            messages: chatState.messages,
+            character: character,
+            persona: null,
+          );
+      await refreshPanel(sessionId, messageId);
+    };
+  }
+
+  /// Build the `onExtBlockRegenImage` callback: re-runs only the
+  /// image generation step of an existing ext-block (keeps agent HTML).
+  Future<void> Function(String blockId, String messageId) onRegenImage() {
+    return (String blockId, String messageId) async {
+      final sessionId = this.sessionId;
+      if (sessionId == null || sessionId.isEmpty) return;
+      final character = ref.read(characterByIdProvider(charId));
+      if (character == null) return;
+      await ref.read(extensionPostGenServiceProvider).rerunImageOnly(
+            blockId: blockId,
+            messageId: messageId,
+            sessionId: sessionId,
+            charId: charId,
+            character: character,
+            persona: null,
+          );
+      await refreshPanel(sessionId, messageId);
+    };
+  }
+
+  /// Build the `onExtBlockEdit` callback: prompt the user to edit
+  /// the block's content and persist the change.
+  Future<void> Function(String blockId, String messageId) onEdit() {
+    return (String blockId, String messageId) async {
+      final sessionId = this.sessionId;
+      if (sessionId == null || sessionId.isEmpty) return;
+      final blocks = ref
+          .read(infoBlocksProvider(sessionId))
+          .where(
+            (b) => b.messageId == messageId && b.blockId == blockId,
+          )
+          .toList();
+      if (blocks.isEmpty) return;
+      final block = blocks.first;
+      if (!isMounted()) return;
+      // ignore: use_build_context_synchronously
+      final newContent = await ExtBlockDialogs.promptEdit(
+        context: context,
+        blockName: block.blockName,
+        initialContent: block.content,
+      );
+      if (newContent == null) return;
+      await ref
+          .read(infoBlocksProvider(sessionId).notifier)
+          .updateContent(block.id, newContent);
+      await refreshPanel(sessionId, messageId);
+    };
+  }
+
+  /// Build the `onExtBlockDelete` callback: confirm with the user
+  /// and delete the block from the database.
+  Future<void> Function(String blockId, String messageId) onDelete() {
+    return (String blockId, String messageId) async {
+      final sessionId = this.sessionId;
+      if (sessionId == null || sessionId.isEmpty) return;
+      final blocks = ref
+          .read(infoBlocksProvider(sessionId))
+          .where(
+            (b) => b.messageId == messageId && b.blockId == blockId,
+          )
+          .toList();
+      if (blocks.isEmpty) return;
+      final block = blocks.first;
+      if (!isMounted()) return;
+      // ignore: use_build_context_synchronously
+      final confirmed = await ExtBlockDialogs.confirmDelete(
+        context: context,
+        blockName: block.blockName,
+      );
+      if (!confirmed) return;
+      await ref
+          .read(infoBlocksProvider(sessionId).notifier)
+          .delete(block.id);
+      await refreshPanel(sessionId, messageId);
+    };
+  }
+}

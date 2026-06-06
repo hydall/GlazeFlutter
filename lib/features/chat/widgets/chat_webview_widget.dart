@@ -26,13 +26,12 @@ import '../../extensions/providers/extension_presets_provider.dart';
 import '../../extensions/providers/extensions_settings_provider.dart';
 import '../../extensions/providers/info_blocks_provider.dart';
 import '../../extensions/services/ext_blocks_panel_builder.dart';
-import '../../extensions/services/extension_post_gen_service.dart';
 import '../../extensions/services/js_engine_service.dart';
 import '../../extensions/services/panel_host_service.dart';
 import '../bridge/chat_bridge_registry.dart';
 import 'chat_message_sync.dart';
+import 'chat_webview_ext_block_callbacks.dart';
 import 'chat_webview_sync_dispatcher.dart';
-import 'ext_block_dialogs.dart';
 import 'webview_callbacks.dart';
 
 const String _kStreamingId = '__streaming__';
@@ -828,115 +827,21 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
                       .read(chatProvider(widget.charId).notifier)
                       .loadOlderMessages();
                 };
-                _bridge!.onExtBlocksRunAll = (messageId) async {
-                  final sessionId = widget.sessionId;
-                  if (sessionId == null || sessionId.isEmpty) return;
-                  final chatState = ref.read(chatProvider(widget.charId)).value;
-                  if (chatState == null) return;
-                  final character = ref.read(
-                    characterByIdProvider(widget.charId),
-                  );
-                  if (character == null) return;
-                  await ref
-                      .read(extensionPostGenServiceProvider)
-                      .runBlocksForMessage(
-                        charId: widget.charId,
-                        sessionId: sessionId,
-                        messageId: messageId,
-                        messages: chatState.messages,
-                        character: character,
-                        persona: null,
-                      );
-                };
-                _bridge!.onExtBlockStop = (blockId, messageId) {
-                  ref.read(extensionPostGenServiceProvider).cancelBlocks();
-                };
-                _bridge!.onExtBlockRegen = (blockId, messageId) async {
-                  final sessionId = widget.sessionId;
-                  if (sessionId == null || sessionId.isEmpty) return;
-                  final chatState = ref.read(chatProvider(widget.charId)).value;
-                  if (chatState == null) return;
-                  final character = ref.read(
-                    characterByIdProvider(widget.charId),
-                  );
-                  if (character == null) return;
-                  await ref
-                      .read(extensionPostGenServiceProvider)
-                      .rerunBlock(
-                        blockId: blockId,
-                        messageId: messageId,
-                        sessionId: sessionId,
-                        charId: widget.charId,
-                        messages: chatState.messages,
-                        character: character,
-                        persona: null,
-                      );
-                  await _refreshExtBlocksPanel(sessionId, messageId);
-                };
-                _bridge!.onExtBlockRegenImage = (blockId, messageId) async {
-                  final sessionId = widget.sessionId;
-                  if (sessionId == null || sessionId.isEmpty) return;
-                  final character = ref.read(
-                    characterByIdProvider(widget.charId),
-                  );
-                  if (character == null) return;
-                  await ref
-                      .read(extensionPostGenServiceProvider)
-                      .rerunImageOnly(
-                        blockId: blockId,
-                        messageId: messageId,
-                        sessionId: sessionId,
-                        charId: widget.charId,
-                        character: character,
-                        persona: null,
-                      );
-                  await _refreshExtBlocksPanel(sessionId, messageId);
-                };
-                _bridge!.onExtBlockEdit = (blockId, messageId) async {
-                  final sessionId = widget.sessionId;
-                  if (sessionId == null || sessionId.isEmpty) return;
-                  final blocks = ref
-                      .read(infoBlocksProvider(sessionId))
-                      .where(
-                        (b) => b.messageId == messageId && b.blockId == blockId,
-                      )
-                      .toList();
-                  if (blocks.isEmpty) return;
-                  final block = blocks.first;
-                  if (!mounted) return;
-                  final newContent = await ExtBlockDialogs.promptEdit(
-                    context: context,
-                    blockName: block.blockName,
-                    initialContent: block.content,
-                  );
-                  if (newContent == null) return;
-                  await ref
-                      .read(infoBlocksProvider(sessionId).notifier)
-                      .updateContent(block.id, newContent);
-                  await _refreshExtBlocksPanel(sessionId, messageId);
-                };
-                _bridge!.onExtBlockDelete = (blockId, messageId) async {
-                  final sessionId = widget.sessionId;
-                  if (sessionId == null || sessionId.isEmpty) return;
-                  final blocks = ref
-                      .read(infoBlocksProvider(sessionId))
-                      .where(
-                        (b) => b.messageId == messageId && b.blockId == blockId,
-                      )
-                      .toList();
-                  if (blocks.isEmpty) return;
-                  final block = blocks.first;
-                  if (!mounted) return;
-                  final confirmed = await ExtBlockDialogs.confirmDelete(
-                    context: context,
-                    blockName: block.blockName,
-                  );
-                  if (!confirmed) return;
-                  await ref
-                      .read(infoBlocksProvider(sessionId).notifier)
-                      .delete(block.id);
-                  await _refreshExtBlocksPanel(sessionId, messageId);
-                };
+                final extBlocks = ChatWebViewExtBlockCallbacks(
+                  ref: ref,
+                  charId: widget.charId,
+                  sessionId: widget.sessionId,
+                  // ignore: use_build_context_synchronously
+                  context: context,
+                  isMounted: () => mounted,
+                  refreshPanel: _refreshExtBlocksPanel,
+                );
+                _bridge!.onExtBlocksRunAll = extBlocks.onRunAll();
+                _bridge!.onExtBlockStop = extBlocks.onStop();
+                _bridge!.onExtBlockRegen = extBlocks.onRegen();
+                _bridge!.onExtBlockRegenImage = extBlocks.onRegenImage();
+                _bridge!.onExtBlockEdit = extBlocks.onEdit();
+                _bridge!.onExtBlockDelete = extBlocks.onDelete();
 
                 final isAlive = await controller.isLoading() == false;
                 if (isAlive && !_ready) {
