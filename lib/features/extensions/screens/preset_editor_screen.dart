@@ -231,6 +231,8 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
   late TextEditingController _modelController;
   late TextEditingController _contextSystemPromptController;
   late TextEditingController _injectPrefixController;
+  late TextEditingController _staticHtmlController;
+  late TextEditingController _minHeightController;
   late BlockType _type;
   late BlockTrigger _trigger;
   late bool _inject;
@@ -238,6 +240,11 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
   late bool _dependsOnPrevious;
   late int _contextMessageCount;
   late bool _streamToPanel;
+  /// For `BlockType.interactive`: when true, [BlockConfig.script] holds
+  /// static HTML and is rendered without an LLM call. When false, the LLM
+  /// agent generates HTML from [BlockConfig.prompt] at runtime.
+  late bool _useStaticHtml;
+  late int _minHeight;
   bool _fetchingModels = false;
 
   @override
@@ -256,6 +263,10 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
     _modelController = TextEditingController(text: b.model);
     _contextSystemPromptController = TextEditingController(text: b.contextSystemPrompt);
     _injectPrefixController = TextEditingController(text: b.injectPrefix);
+    _staticHtmlController = TextEditingController(text: b.script);
+    // Default minHeight: 120 px (matches the runtime fallback in
+    // _runInteractive). 60..2000 clamp is enforced by the WebView layer.
+    _minHeightController = TextEditingController(text: '120');
     _type = b.type;
     _trigger = b.trigger;
     _inject = b.inject;
@@ -263,6 +274,10 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
     _dependsOnPrevious = b.dependsOnPrevious;
     _contextMessageCount = b.contextMessageCount;
     _streamToPanel = b.streamToPanel;
+    // Heuristic: existing block has script but no prompt → static.
+    _useStaticHtml =
+        b.type == BlockType.interactive && b.script.trim().isNotEmpty;
+    _minHeight = 120;
   }
 
   void _save() {
@@ -274,7 +289,9 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
     final isImage = _type == BlockType.imageGen;
     final isJs = _type == BlockType.jsRunner;
     final isInfoblock = _type == BlockType.infoblock;
-    final usesLlm = isInfoblock || isImage || isJs;
+    final isInteractive = _type == BlockType.interactive;
+    final usesLlm = isInfoblock || isImage || isJs ||
+        (isInteractive && !_useStaticHtml);
     return widget.block.copyWith(
       name: _nameController.text.trim(),
       type: _type,
@@ -292,7 +309,12 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
       contextMessageCount: usesLlm ? _contextMessageCount : 0,
       contextSystemPrompt: usesLlm ? _contextSystemPromptController.text : '',
       streamToPanel: usesLlm ? _streamToPanel : false,
-      script: isJs ? widget.block.script : '',
+      // For interactive panels the `script` field stores static HTML (when
+      // the user chose the static mode). For other types we keep whatever
+      // was there before (jsRunner still uses script as legacy static JS).
+      script: isInteractive
+          ? (_useStaticHtml ? _staticHtmlController.text : '')
+          : (isJs ? widget.block.script : ''),
     );
   }
 
@@ -318,6 +340,8 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
     _modelController.dispose();
     _contextSystemPromptController.dispose();
     _injectPrefixController.dispose();
+    _staticHtmlController.dispose();
+    _minHeightController.dispose();
     super.dispose();
   }
 
@@ -353,6 +377,11 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
                     value: BlockType.jsRunner,
                     label: Text('JS'),
                     icon: Icon(Icons.code),
+                  ),
+                  ButtonSegment(
+                    value: BlockType.interactive,
+                    label: Text('Панель'),
+                    icon: Icon(Icons.dashboard_customize_outlined),
                   ),
                 ],
                 selected: {_type},
@@ -596,6 +625,158 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
                     ),
                   ),
                 ),
+              if (_type == BlockType.interactive) ...[
+                const SizedBox(height: 16),
+                _SectionLabel('Источник HTML'),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                      value: false,
+                      label: Text('LLM'),
+                      icon: Icon(Icons.auto_awesome),
+                    ),
+                    ButtonSegment(
+                      value: true,
+                      label: Text('Статический HTML'),
+                      icon: Icon(Icons.code),
+                    ),
+                  ],
+                  selected: {_useStaticHtml},
+                  onSelectionChanged: (s) =>
+                      setState(() => _useStaticHtml = s.first),
+                  style: ButtonStyle(visualDensity: VisualDensity.compact),
+                ),
+                const SizedBox(height: 8),
+                if (_useStaticHtml)
+                  TextField(
+                    controller: _staticHtmlController,
+                    decoration: const InputDecoration(
+                      labelText: 'HTML-разметка панели',
+                      helperText:
+                          'Голый HTML без <html>/<body>: рендерится в sandboxed iframe. '
+                          'JS внутри имеет доступ к window.glaze.* (setVariables, '
+                          'generateText, triggerGeneration и т.д.).',
+                      alignLabelWithHint: true,
+                    ),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                    minLines: 6,
+                    maxLines: 18,
+                  )
+                else
+                  TextField(
+                    controller: _promptController,
+                    decoration: const InputDecoration(
+                      labelText: 'Промпт для LLM (HTML для панели)',
+                      helperText:
+                          'Модель должна вернуть HTML-разметку (можно в ```html```). '
+                          'Если обрамлять ```html``` — fence будет снят автоматически.',
+                      alignLabelWithHint: true,
+                    ),
+                    minLines: 4,
+                    maxLines: 12,
+                  ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _minHeightController,
+                  decoration: const InputDecoration(
+                    labelText: 'Начальная высота (px)',
+                    helperText: '60..2000. Iframe перерастёт iframe при resize.',
+                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) =>
+                      _minHeight = int.tryParse(v) ?? _minHeight,
+                ),
+                if (!_useStaticHtml) ...[
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    title: const Text('Ждать завершения предыдущего блока'),
+                    subtitle: const Text(
+                      'Получает вывод предыдущего блока как контекст',
+                    ),
+                    value: _dependsOnPrevious,
+                    onChanged: (v) =>
+                        setState(() => _dependsOnPrevious = v),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(height: 16),
+                  _SectionLabel('История чата для блока'),
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Сколько последних сообщений чата передать',
+                      helperText:
+                          'Считается от сообщения, на котором висит блок (не от конца чата).',
+                    ),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(signed: true),
+                    controller: TextEditingController(
+                        text: _contextMessageCount.toString()),
+                    onChanged: (v) => _contextMessageCount =
+                        int.tryParse(v) ?? _contextMessageCount,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _contextSystemPromptController,
+                    decoration: const InputDecoration(
+                      labelText: 'Текст перед историей чата',
+                      helperText:
+                          'Добавляется в user-сообщение перед логом чата. '
+                          'Макросы: {{char}}, {{user}}, {{description}}, {{personality}}',
+                      alignLabelWithHint: true,
+                    ),
+                    maxLines: 5,
+                    minLines: 2,
+                  ),
+                  const SizedBox(height: 16),
+                  _SectionLabel('API'),
+                  _ApiConfigSelector(
+                    selectedId: _apiConfigController.text,
+                    onSelected: (id) {
+                      setState(() {
+                        _apiConfigController.text = id ?? '';
+                        _modelController.clear();
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _ModelField(
+                    controller: _modelController,
+                    apiConfigId: _apiConfigController.text,
+                    fetching: _fetchingModels,
+                    onFetchStart: () =>
+                        setState(() => _fetchingModels = true),
+                    onFetchEnd: () =>
+                        setState(() => _fetchingModels = false),
+                  ),
+                  const SizedBox(height: 4),
+                  SwitchListTile(
+                    title: const Text('Стриминг в панель'),
+                    subtitle: const Text(
+                      'HTML от модели появляется в панели по мере генерации',
+                    ),
+                    value: _streamToPanel,
+                    onChanged: (v) =>
+                        setState(() => _streamToPanel = v),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    'Панель отрисуется под сообщением ассистента как persistent '
+                    'sandboxed iframe island. JS-код внутри неё может вызывать '
+                    'glaze.setVariables, glaze.generateText, glaze.injectPrompt и т.д. '
+                    'Вызовы идут через тот же bridge, что и в других блоках.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.cs.onSurfaceVariant.withValues(alpha: 0.85),
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
