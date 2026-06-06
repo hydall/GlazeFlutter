@@ -181,7 +181,9 @@ for now because periodic `runJsBlock()` shares the same headless/visual fallback
 semantics. Extracted shared panel update/throttling plumbing into
 `BlockPanelUpdater`, placeholder/error/dedupe lifecycle into
 `BlockStatusTracker`, and shared image pixel rendering/persistence into
-`ImagePixelRenderer`.
+`ImagePixelRenderer`. Extracted message-bound `jsRunner` execution/headless
+fallback persistence into `JsBlockExecutor`; periodic `runJsBlock()` still stays
+on `ExtensionPostGenService` because it is the public scheduler entry point.
 
 **Verification so far:** targeted analyze passed for
 `extension_post_gen_service.dart`, `services/blocks`, and

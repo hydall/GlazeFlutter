@@ -7,7 +7,6 @@ import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/persona.dart';
 import '../../../core/state/db_provider.dart';
-import '../../chat/bridge/chat_bridge_controller.dart';
 import '../../chat/bridge/chat_bridge_registry.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../models/block_config.dart';
@@ -17,7 +16,6 @@ import '../models/info_block.dart';
 import '../providers/extension_presets_provider.dart';
 import '../providers/extensions_settings_provider.dart';
 import '../providers/info_blocks_provider.dart';
-import 'block_context_builder.dart';
 import 'info_block_service.dart';
 import 'js_engine_service.dart';
 import 'blocks/block_processor.dart';
@@ -26,6 +24,7 @@ import 'blocks/block_panel_updater.dart';
 import 'blocks/image_gen_block_handler.dart';
 import 'blocks/image_pixel_renderer.dart';
 import 'blocks/interactive_block_handler.dart';
+import 'blocks/js_block_executor.dart';
 import 'blocks/js_runner_block_handler.dart';
 import 'blocks/infoblock_handler.dart';
 import 'blocks/block_status_tracker.dart';
@@ -633,193 +632,16 @@ class ExtensionPostGenService {
     required String script,
     String Function(String result)? panelContentBuilder,
   }) {
-    return _executeJsScript(
-      charId: context.charId,
-      sessionId: context.sessionId,
-      messageId: context.messageId,
-      messages: context.messages,
-      blockConfig: context.blockConfig,
-      character: context.character,
-      previousOutput: context.previousOutput,
-      cancelToken: context.cancelToken,
-      placeholderId: context.placeholderId,
-      placeholder: context.placeholder,
+    return JsBlockExecutor(
+      ref: _ref,
+      repo: _repo,
+      markBlockError: _markContextBlockError,
+      refreshPanelForMessage: _refreshPanelForMessage,
+    ).executeMessageScript(
+      context: context,
       script: script,
       panelContentBuilder: panelContentBuilder,
     );
-  }
-
-  Future<InfoBlock?> _executeJsScript({
-    required String charId,
-    required String sessionId,
-    required String messageId,
-    required List<ChatMessage> messages,
-    required BlockConfig blockConfig,
-    required Character character,
-    required String? previousOutput,
-    required CancelToken cancelToken,
-    required String placeholderId,
-    required InfoBlock placeholder,
-    required String script,
-    String Function(String result)? panelContentBuilder,
-  }) async {
-    final bridge = _ref.read(chatBridgeRegistryProvider(charId));
-    final engine = JsEngineService.instance;
-    if (!engine.isReady && bridge == null) {
-      debugPrint(
-        '[ExtPostGen] jsRunner "${blockConfig.name}" — no JS engine or bridge',
-      );
-      return _markBlockError(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        placeholderId: placeholderId,
-        placeholder: placeholder,
-        errorMessage:
-            'JS engine not ready and WebView bridge not available (jsRunner needs at least one of them)',
-      );
-    }
-
-    try {
-      final contextMessages = buildContextMessages(
-        messages: messages,
-        anchorMessageId: messageId,
-        count: blockConfig.contextMessageCount,
-      );
-      final result = await _runJsWithFallback(
-        engine: engine,
-        bridge: bridge,
-        script: script,
-        contextMessages: contextMessages,
-        character: character,
-        sessionId: sessionId,
-        previousOutput: previousOutput,
-        cancelToken: cancelToken,
-      );
-
-      if (cancelToken.isCancelled) {
-        await _repo.updateStatus(placeholderId, BlockRunStatus.stopped);
-        final stopped = placeholder.copyWith(status: BlockRunStatus.stopped);
-        _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(stopped);
-        _refreshPanelForMessage(charId, sessionId, messageId);
-        return stopped;
-      }
-
-      final content = panelContentBuilder?.call(result) ?? result;
-
-      await _repo.updateContent(placeholderId, content);
-      await _repo.updateStatus(placeholderId, BlockRunStatus.done);
-
-      final done = InfoBlock(
-        id: placeholderId,
-        sessionId: sessionId,
-        messageId: messageId,
-        blockId: blockConfig.id,
-        blockName: blockConfig.name,
-        blockType: blockConfig.type.name,
-        content: content,
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        order: blockConfig.order,
-        status: BlockRunStatus.done,
-      );
-      _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(done);
-      _refreshPanelForMessage(charId, sessionId, messageId);
-      return done;
-    } catch (e) {
-      if (cancelToken.isCancelled) {
-        await _repo.updateStatus(placeholderId, BlockRunStatus.stopped);
-        final stopped = placeholder.copyWith(status: BlockRunStatus.stopped);
-        _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(stopped);
-        _refreshPanelForMessage(charId, sessionId, messageId);
-        return stopped;
-      }
-      debugPrint('[ExtPostGen] jsRunner "${blockConfig.name}" failed: $e');
-      return _markBlockError(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        placeholderId: placeholderId,
-        placeholder: placeholder,
-        errorMessage: e.toString(),
-      );
-    }
-  }
-
-  /// Runs [script] preferring the headless [engine] and falling back to
-  /// the visual chat WebView [bridge] when the engine is not ready or
-  /// raises [HeadlessUnavailableError]. Returns the script's string output.
-  Future<String> _runJsWithFallback({
-    required JsEngineService engine,
-    required ChatBridgeController? bridge,
-    required String script,
-    required List<ChatMessage> contextMessages,
-    required Character character,
-    required String sessionId,
-    required String? previousOutput,
-    required CancelToken cancelToken,
-  }) async {
-    if (engine.isReady) {
-      try {
-        final contextMap = _jsContextMap(
-          messages: contextMessages
-              .map((m) => {'role': m.role, 'text': m.content})
-              .toList(),
-          character: character,
-          sessionId: sessionId,
-          previousOutput: previousOutput,
-        );
-        return await engine.runScript(
-          script: script,
-          context: contextMap,
-          cancelToken: cancelToken,
-        );
-      } on HeadlessUnavailableError catch (e) {
-        debugPrint(
-          '[ExtPostGen] headless engine unavailable, falling back: $e',
-        );
-      } catch (e) {
-        // Non-fatal: fall through to visual bridge. Bridge will record the
-        // error in its own logs.
-        debugPrint('[ExtPostGen] headless engine run failed: $e');
-      }
-    }
-    final visualBridge = bridge;
-    if (visualBridge == null) {
-      throw StateError(
-        'JS engine is not ready and visual WebView bridge is not available',
-      );
-    }
-    return visualBridge.runJsBlock(
-      script: script,
-      messages: contextMessages,
-      character: character,
-      sessionId: sessionId,
-      previousOutput: previousOutput,
-      contextMessageCount: -1,
-      cancelToken: cancelToken,
-    );
-  }
-
-  Map<String, dynamic> _jsContextMap({
-    required List<Map<String, String>> messages,
-    required Character? character,
-    required String sessionId,
-    required String? previousOutput,
-  }) {
-    return {
-      'messages': messages,
-      'sessionId': sessionId,
-      'characterId': character?.id,
-      'character': character == null
-          ? null
-          : {
-              'name': character.name,
-              'description': character.description ?? '',
-              'personality': character.personality ?? '',
-              'scenario': character.scenario ?? '',
-            },
-      'previousOutput': previousOutput,
-    };
   }
 
   /// Public entry point for periodic ticks (no `InfoBlock` is created —
@@ -858,7 +680,7 @@ class ExtensionPostGenService {
     try {
       if (engine.isReady) {
         try {
-          final contextMap = _jsContextMap(
+          final contextMap = JsBlockExecutor.jsContextMap(
             messages: contextMessages
                 .map((m) => {'role': m.role, 'text': m.content})
                 .toList(),
