@@ -23,7 +23,6 @@ import '../../extensions/models/info_block.dart';
 import '../../extensions/providers/extension_presets_provider.dart';
 import '../../extensions/providers/extensions_settings_provider.dart';
 import '../../extensions/providers/info_blocks_provider.dart';
-import '../../extensions/services/ext_blocks_panel_builder.dart';
 import '../../extensions/services/js_engine_service.dart';
 import '../../extensions/services/panel_host_service.dart';
 import '../bridge/chat_bridge_registry.dart';
@@ -31,6 +30,7 @@ import '../chat_state.dart';
 import 'chat_message_sync.dart';
 import 'chat_webview_callbacks.dart';
 import 'chat_webview_ext_block_callbacks.dart';
+import 'chat_webview_panel_refresher.dart';
 import 'chat_webview_sync_dispatcher.dart';
 import 'webview_callbacks.dart';
 
@@ -162,43 +162,22 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   @override
   bool get wantKeepAlive => true;
 
-  String? get _lastAssistantMessageId {
-    for (int i = widget.messages.length - 1; i >= 0; i--) {
-      final m = widget.messages[i];
-      if (m.role == 'assistant' || m.role == 'character') return m.id;
-    }
-    return null;
-  }
+  ChatWebViewPanelRefresher _panelRefresher() => ChatWebViewPanelRefresher(
+        ref: ref,
+        bridge: _bridge,
+        ready: () => _ready,
+        messages: () => widget.messages,
+      );
 
   Future<void> _refreshExtBlocksPanel(
     String sessionId,
     String messageId,
-  ) async {
-    if (_bridge == null || !_ready) return;
-    final isLastAssistant = messageId == _lastAssistantMessageId;
-    final panelKey = (sessionId: sessionId, messageId: messageId);
-    final visibilityKey = (
-      sessionId: sessionId,
-      messageId: messageId,
-      isLastAssistant: isLastAssistant,
-    );
-    if (!ref.read(extBlocksPanelVisibleProvider(visibilityKey))) {
-      await _bridge!.hideExtBlocksPanel(messageId);
-      return;
-    }
-    final blocks = ref.read(extBlocksPanelBlocksProvider(panelKey));
-    final canRunAll = ref.read(extBlocksPanelCanRunAllProvider(panelKey));
-    await _bridge!.showExtBlocksPanel(messageId, blocks, canRunAll: canRunAll);
+  ) {
+    return _panelRefresher().refreshForMessage(sessionId, messageId);
   }
 
-  Future<void> _syncExtBlockPanels() async {
-    final sid = widget.sessionId;
-    if (sid == null || sid.isEmpty || _bridge == null || !_ready) return;
-    await ref.read(infoBlocksProvider(sid).notifier).refresh();
-    for (final msg in widget.messages) {
-      if (msg.role != 'assistant' && msg.role != 'character') continue;
-      await _refreshExtBlocksPanel(sid, msg.id);
-    }
+  Future<void> _syncExtBlockPanels() {
+    return _panelRefresher().syncForSession(widget.sessionId);
   }
 
   /// Owns the chat WebView's bridge-side dependencies: the
