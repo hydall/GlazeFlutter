@@ -1,6 +1,6 @@
 # Refactor Plan — Bridge, God-Widgets, God-Services
 
-**Status:** Phases 1-6 complete. Phase 7 pending.
+**Status:** Phases 1-7 complete. Phase 8 pending.
 **Scope:** Decompose 4 Dart god-objects and 3 JS god-scripts that grew during the
 `js-extension-bridge-sdk` branch (22 feature commits) into focused modules.
 **Goal:** Clean foundation for future feature work; no functional changes.
@@ -29,7 +29,7 @@ MVP. Some files accumulated responsibilities well past the project's
 |---|---:|---|
 | `assets/chat_webview/bridge.js` | **2141 → 3 shim / ES modules** | ChatBridgeController, runSandboxedScript, PanelHost, scrollback, settings, gestures |
 | `assets/chat_webview/renderer.js` | **1234** | Message rendering, markdown, code highlighting, image embeds |
-| `assets/chat_webview/formatter.js` | **443** | ST-macro expansion, text formatting |
+| `assets/chat_webview/formatter.js` | **443 → 2 shim / ES modules** | ST-macro expansion, text formatting |
 
 ### Risk of not refactoring
 
@@ -444,7 +444,7 @@ asset tests passed for `renderer ES module layout`, `bridge ES module layout`,
 `details/summary arrow`, `renderMessage return type`, `updateMessageContent fast
 path`, and `_createGenStat dedup`.
 
-### Phase 7 — `formatter.js` → modules (0.5 day)
+### Phase 7 — `formatter.js` → modules (0.5 day) ✅ Done
 
 **Before:** `assets/chat_webview/formatter.js` (443 lines).
 
@@ -456,6 +456,24 @@ assets/chat_webview/formatter/
   macros.js                         ({{...}} expansion)
   text_format.js                    (italics, bold, code inline)
 ```
+
+**Implemented:** `index.html` now loads the formatter through
+`<script type="module" src="formatter/index.js">`; the legacy
+`assets/chat_webview/formatter.js` path is a small compatibility marker. The
+active formatter class lives in `formatter/formatter.js`, is exported as an ES
+module, and is assigned to `window.Formatter` for compatibility. `bridge/index.js`
+imports `Formatter` explicitly to avoid module-scope global lookup hazards.
+
+| File | Lines | Responsibility |
+|---|---:|---|
+| `formatter/index.js` | 6 | Module entrypoint, public exports, `window.Formatter` compatibility |
+| `formatter/formatter.js` | 389 | Main `Formatter` class: placeholder pipeline, markdown-ish formatting, image tags |
+| `formatter/text_format.js` | 61 | Glaze custom marker rendering and inline style markers |
+| `formatter/macros.js` | 3 | Macro expansion boundary hook |
+
+**Verification:** `node --check` passed for formatter modules and updated bridge
+module. `flutter analyze test/webview_assets_test.dart` passed. Targeted asset
+tests passed for `formatter ES module layout` and `bridge ES module layout`.
 
 ### Phase 8 — Test coverage, docs sync, release gates (1.5 days)
 

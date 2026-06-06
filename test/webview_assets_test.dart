@@ -18,10 +18,15 @@ String _bridgeAsset(String name) =>
 String _rendererAsset(String name) =>
     File('assets/chat_webview/renderer/$name').readAsStringSync();
 
+String _formatterAsset(String name) =>
+    File('assets/chat_webview/formatter/$name').readAsStringSync();
+
 void main() {
   late String rendererJs;
   late String rendererIndexJs;
   late String rendererMessageJs;
+  late String formatterIndexJs;
+  late String formatterFormatterJs;
   late String bridgeIndexJs;
   late String bridgeControllerJs;
   late String editControllerJs;
@@ -37,6 +42,8 @@ void main() {
   setUpAll(() {
     rendererIndexJs = _rendererAsset('index.js');
     rendererMessageJs = _rendererAsset('message_renderer.js');
+    formatterIndexJs = _formatterAsset('index.js');
+    formatterFormatterJs = _formatterAsset('formatter.js');
     rendererJs = [
       _rendererAsset('shadow_style.js'),
       _rendererAsset('markdown.js'),
@@ -107,6 +114,10 @@ void main() {
         bridgeIndexJs,
         contains("import { Renderer } from '../renderer/index.js'"),
       );
+      expect(
+        bridgeIndexJs,
+        contains("import { Formatter } from '../formatter/index.js'"),
+      );
       expect(bridgeIndexJs, contains('window.Bridge = Bridge'));
       expect(
         bridgeIndexJs,
@@ -167,6 +178,35 @@ void main() {
 
     test('legacy renderer shim points at active module entrypoint', () {
       expect(_asset('renderer.js'), contains('renderer/index.js'));
+    });
+  });
+
+  group('formatter ES module layout', () {
+    test('index.html loads formatter module before renderer module', () {
+      final formatterIdx = indexHtml.indexOf('formatter/index.js');
+      final rendererIdx = indexHtml.indexOf('renderer/index.js');
+      expect(formatterIdx, isNonNegative);
+      expect(rendererIdx, isNonNegative);
+      expect(formatterIdx < rendererIdx, isTrue);
+      expect(indexHtml, contains('type="module" src="formatter/index.js"'));
+    });
+
+    test('module entrypoint exports and exposes Formatter', () {
+      expect(
+        formatterIndexJs,
+        contains("import { Formatter } from './formatter.js'"),
+      );
+      expect(formatterIndexJs, contains('window.Formatter = Formatter'));
+    });
+
+    test('formatter imports extracted text formatting modules', () {
+      expect(formatterFormatterJs, contains("'./macros.js'"));
+      expect(formatterFormatterJs, contains("'./text_format.js'"));
+      expect(formatterFormatterJs, contains('renderStyledSegment('));
+    });
+
+    test('legacy formatter shim points at active module entrypoint', () {
+      expect(_asset('formatter.js'), contains('formatter/index.js'));
     });
   });
 
