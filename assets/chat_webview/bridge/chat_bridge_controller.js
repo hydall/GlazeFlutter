@@ -1001,7 +1001,7 @@ export class Bridge {
           let path = payload;
           const pipeIdx = path.indexOf('|');
           if (pipeIdx !== -1) path = path.substring(0, pipeIdx);
-          const src = path.startsWith('file://')
+          const src = path.startsWith('file://') || path.startsWith('http://') || path.startsWith('https://')
             ? path
             : `file:///${path.replace(/\\/g, '/')}`;
           return `<img src="${src}" class="ext-block-image" style="display:block;width:100%;border-radius:15px;">`;
@@ -1017,7 +1017,7 @@ export class Bridge {
       let path = imgMatch[1];
       const pipeIdx = path.indexOf('|');
       if (pipeIdx !== -1) path = path.substring(0, pipeIdx);
-      img.src = path.startsWith('file://') ? path : `file:///${path.replace(/\\/g, '/')}`;
+      img.src = path.startsWith('file://') || path.startsWith('http://') || path.startsWith('https://') ? path : `file:///${path.replace(/\\/g, '/')}`;
       img.className = 'ext-block-image';
       body.appendChild(img);
     } else {

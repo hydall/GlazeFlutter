@@ -25,9 +25,9 @@ class ThemeBridgeCommands {
         src.startsWith('http://') ||
         src.startsWith('https://') ||
         src.startsWith('file://')) {
-      url = src;
+      url = _host.resolveLocalFileUrl(src) ?? src;
     } else {
-      url = 'file:///${src.replaceAll('\\', '/')}';
+      url = _host.resolveLocalFileUrl(src) ?? 'file:///${src.replaceAll('\\', '/')}';
     }
     // Pass through JSON encoder — data URIs can be megabytes long and
     // may contain characters that the lightweight escape helper doesn't

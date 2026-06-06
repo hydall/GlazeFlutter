@@ -9,6 +9,7 @@ import 'package:glaze_flutter/core/llm/tokenizer.dart';
 import 'package:glaze_flutter/core/llm/prompt_worker.dart';
 import 'core/services/generation_notification_service.dart';
 import 'core/services/deep_link_service.dart';
+import 'features/chat/bridge/chat_webview_environment.dart';
 
 final appRestartKey = GlobalKey();
 
@@ -22,6 +23,7 @@ Future<void> main() async {
   await dotenv.load(fileName: '.env');
   await preloadO200kBase();
   await PromptWorker.ensureInitialized();
+  await initChatWebViewEnvironment();
   await GenerationNotificationService.instance.init();
   await DeepLinkService.instance.init();
   runApp(

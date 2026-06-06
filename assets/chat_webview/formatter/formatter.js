@@ -354,8 +354,8 @@ export class Formatter {
     html = html.replace(/\x01IG_BLOCK_(\d+)\x01/g, (_, i) => {
       const block = imgBlocks[parseInt(i)];
       if (block.type === 'result') {
-        const isDataUrl = block.path.startsWith('data:');
-        const src = isDataUrl ? block.path : `file:///${block.path.replace(/\\/g, '/')}`;
+        const isUrl = block.path.startsWith('data:') || block.path.startsWith('http://') || block.path.startsWith('https://') || block.path.startsWith('file://');
+        const src = isUrl ? block.path : `file:///${block.path.replace(/\\/g, '/')}`;
         const instrRaw = block.instruction || '';
         const encInstr = encodeURIComponent(instrRaw);
         console.log('[FORMATTER] IMG:RESULT render, path=', block.path.substring(0, 80), 'instruction=', instrRaw.substring(0, 80));

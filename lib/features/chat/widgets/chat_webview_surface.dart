@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_bridge_registry.dart';
 import '../bridge/chat_webview_bridge_host.dart';
+import '../bridge/chat_webview_environment.dart';
 import '../bridge/chat_webview_keep_alive.dart';
 import '../bridge/chat_webview_settings.dart';
 import '../../extensions/services/js_engine_service.dart';
@@ -18,7 +19,7 @@ import 'webview_callbacks.dart';
 
 /// `InAppWebView` widget with the chat-specific settings, the
 /// `onWebViewCreated` bridge-wiring sequence, the `onLoadStop`
-/// diagnostic + init kick, and the `onConsoleMessage` debug print.
+/// init kick, and bridge callback wiring.
 ///
 /// Extracted from `chat_webview_widget.dart` so the widget's
 /// `build` method does not have to inline the ~120 lines of
@@ -81,6 +82,7 @@ class ChatWebViewSurface extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final webViewEnvironment = chatWebViewEnvironment;
     return Stack(
       children: [
         // Theme surface color — always visible behind the transparent WebView
@@ -126,8 +128,10 @@ class ChatWebViewSurface extends ConsumerWidget {
           child: IgnorePointer(
             ignoring: sessionSwitching,
             child: InAppWebView(
+              webViewEnvironment: webViewEnvironment,
               keepAlive: chatWebViewKeepAliveForPlatform(),
-              initialFile: 'assets/chat_webview/index.html',
+              initialFile: chatWebViewInitialFile(),
+              initialUrlRequest: chatWebViewInitialUrlRequest(),
               initialSettings: InAppWebViewSettings(
                 javaScriptEnabled: true,
                 domStorageEnabled: true,
@@ -139,14 +143,12 @@ class ChatWebViewSurface extends ConsumerWidget {
                 loadWithOverviewMode: true,
                 allowFileAccess: true,
                 allowContentAccess: true,
-                // The chat page is loaded from `file://` assets. We do NOT
-                // need file:// -> http(s) universal access — outbound links
-                // are handled via `launchUrl(..., externalApplication)` in
-                // the bridge, not from the WebView itself. Keeping these
-                // `false` blocks an XSS'd panel / extension JS from doing
-                // `fetch('file:///...')` or `fetch('http://...')` from a
-                // local origin.
-                allowFileAccessFromFileURLs: false,
+                // The chat page is loaded from bundled assets. Windows uses
+                // a loopback origin for ES modules; mobile keeps file assets.
+                // Universal file URL access stays disabled so extension JS
+                // cannot fetch arbitrary local files.
+                allowFileAccessFromFileURLs:
+                    chatWebViewAllowFileAccessFromFileUrls(),
                 allowUniversalAccessFromFileURLs: false,
                 // Mixed content is opt-in. The chat WebView itself does
                 // not load HTTP resources, but the iframe panels do
@@ -240,29 +242,9 @@ class ChatWebViewSurface extends ConsumerWidget {
                 }
               },
               onLoadStop: (controller, url) async {
-                // The init path is also wired through onWebViewCreated
-                // (which fires when the WebView is alive). When
-                // onWebViewCreated runs first, the init runs there.
-                // When onLoadStop runs first, we run the diagnostic
-                // + init here.
-                unawaited(
-                  controller.evaluateJavascript(
-                    source: '''
-              (function() {
-                var els = [document.documentElement, document.body, document.getElementById('chat-container'), document.getElementById('loading-screen')];
-                els.forEach(function(el) {
-                  if (!el) return;
-                  var cs = getComputedStyle(el);
-                  console.log('DIAG ' + (el.id || el.tagName) + ' bg=' + cs.backgroundColor + ' opacity=' + el.style.opacity);
-                });
-              })();
-            ''',
-                  ),
-                );
+                // The init path is also wired through onWebViewCreated. When
+                // load stop wins the race, run init here.
                 await onInitWebView();
-              },
-              onConsoleMessage: (controller, consoleMessage) {
-                debugPrint('[JS] ${consoleMessage.message}');
               },
             ),
           ),
