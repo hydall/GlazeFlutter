@@ -11,7 +11,9 @@ import '../../../shared/widgets/glaze_toast.dart';
 import '../../../shared/widgets/menu_group.dart';
 import '../../settings/api_list_provider.dart';
 import '../models/block_config.dart';
+import '../models/connection_profiles.dart';
 import '../models/extension_preset.dart';
+import '../models/preset_permissions.dart';
 import '../providers/extension_presets_provider.dart';
 
 class PresetEditorScreen extends ConsumerStatefulWidget {
@@ -76,8 +78,161 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen> {
               label: const Text('Добавить блок'),
             ),
           ),
+          const SizedBox(height: 24),
+          MenuGroup(
+            header: 'Разрешения (capabilities)',
+            items: [
+              for (final cap in GlazeCapability.values)
+                _buildCapabilityTile(preset, cap),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Каждое разрешение открывает JS-блокам доступ к соответствующему методу glaze.*. По умолчанию всё запрещено (default-deny).',
+              style: TextStyle(
+                fontSize: 12,
+                color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          MenuGroup(
+            header: 'Профили подключения (generateText)',
+            items: [
+              _buildProfileTile(preset, ConnectionProfile.big),
+              _buildProfileTile(preset, ConnectionProfile.medium),
+              _buildProfileTile(preset, ConnectionProfile.small),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Сопоставление для glaze.generateText({ preset }). Пусто = использовать активный API.',
+              style: TextStyle(
+                fontSize: 12,
+                color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildProfileTile(ExtensionPreset preset, ConnectionProfile profile) {
+    final current = switch (profile) {
+      ConnectionProfile.big => preset.connectionProfiles.big,
+      ConnectionProfile.medium => preset.connectionProfiles.medium,
+      ConnectionProfile.small => preset.connectionProfiles.small,
+    };
+    final label = switch (profile) {
+      ConnectionProfile.big => 'big',
+      ConnectionProfile.medium => 'medium',
+      ConnectionProfile.small => 'small',
+    };
+    final configsAsync = ref.watch(apiListProvider);
+    final configs = configsAsync.valueOrNull ?? const <ApiConfig>[];
+    String displayName;
+    if (current.isEmpty) {
+      displayName = 'Использовать основной';
+    } else {
+      final match = configs.where((c) => c.id == current).firstOrNull;
+      displayName = match == null
+          ? 'Не найдено (id=$current)'
+          : (match.name.isNotEmpty ? match.name : 'Без имени');
+    }
+    return ListTile(
+      title: Text(label),
+      subtitle: Text(
+        displayName,
+        style: TextStyle(
+          fontSize: 12,
+          color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
+        ),
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => _openProfilePicker(preset, profile, configs, current),
+    );
+  }
+
+  Future<void> _openProfilePicker(
+    ExtensionPreset preset,
+    ConnectionProfile profile,
+    List<ApiConfig> configs,
+    String current,
+  ) async {
+    String? pendingSelection = current;
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: 'Профиль "${profile.name}"',
+      items: [
+        BottomSheetItem(
+          label: 'Использовать основной',
+          icon: current.isEmpty
+              ? Icons.radio_button_checked
+              : Icons.radio_button_off,
+          iconColor: current.isEmpty
+              ? context.cs.primary
+              : context.cs.onSurfaceVariant,
+          onTap: () {
+            pendingSelection = '';
+            Navigator.of(context, rootNavigator: true).pop();
+          },
+        ),
+        ...configs.map(
+          (cfg) {
+            final name = cfg.name.isNotEmpty ? cfg.name : 'Без имени';
+            return BottomSheetItem(
+              label: name,
+              icon: cfg.id == current
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_off,
+              iconColor: cfg.id == current
+                  ? context.cs.primary
+                  : context.cs.onSurfaceVariant,
+              onTap: () {
+                pendingSelection = cfg.id;
+                Navigator.of(context, rootNavigator: true).pop();
+              },
+            );
+          },
+        ),
+      ],
+    );
+    final next = pendingSelection;
+    if (next == null || next == current) return;
+    final updated = switch (profile) {
+      ConnectionProfile.big =>
+        preset.copyWith(connectionProfiles: preset.connectionProfiles.copyWith(big: next)),
+      ConnectionProfile.medium => preset.copyWith(
+          connectionProfiles: preset.connectionProfiles.copyWith(medium: next)),
+      ConnectionProfile.small => preset.copyWith(
+          connectionProfiles: preset.connectionProfiles.copyWith(small: next)),
+    };
+    await ref.read(extensionPresetsProvider.notifier).update(updated);
+  }
+
+  Widget _buildCapabilityTile(ExtensionPreset preset, GlazeCapability cap) {
+    final granted = preset.permissions.isGranted(cap);
+    return SwitchListTile(
+      title: Text(cap.label),
+      subtitle: Text(
+        cap.id,
+        style: TextStyle(
+          fontSize: 11,
+          color: context.cs.onSurfaceVariant.withValues(alpha: 0.6),
+        ),
+      ),
+      value: granted,
+      onChanged: (v) {
+        final next = preset.permissions.copyWithField(cap, v);
+        ref.read(extensionPresetsProvider.notifier).update(
+          preset.copyWith(permissions: next),
+        );
+      },
     );
   }
 
@@ -86,6 +241,7 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen> {
       BlockType.infoblock => 'Инфоблок',
       BlockType.imageGen => 'Картинка',
       BlockType.jsRunner => 'JS',
+      BlockType.interactive => 'Интерактивная панель',
     };
     final trigger = switch (block.trigger) {
       BlockTrigger.afterUser => 'После user',
@@ -230,6 +386,8 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
   late TextEditingController _modelController;
   late TextEditingController _contextSystemPromptController;
   late TextEditingController _injectPrefixController;
+  late TextEditingController _staticHtmlController;
+  late TextEditingController _minHeightController;
   late BlockType _type;
   late BlockTrigger _trigger;
   late bool _inject;
@@ -237,6 +395,11 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
   late bool _dependsOnPrevious;
   late int _contextMessageCount;
   late bool _streamToPanel;
+  /// For `BlockType.interactive`: when true, [BlockConfig.script] holds
+  /// static HTML and is rendered without an LLM call. When false, the LLM
+  /// agent generates HTML from [BlockConfig.prompt] at runtime.
+  late bool _useStaticHtml;
+  late int _minHeight;
   bool _fetchingModels = false;
 
   @override
@@ -255,6 +418,10 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
     _modelController = TextEditingController(text: b.model);
     _contextSystemPromptController = TextEditingController(text: b.contextSystemPrompt);
     _injectPrefixController = TextEditingController(text: b.injectPrefix);
+    _staticHtmlController = TextEditingController(text: b.script);
+    // Default minHeight: 120 px (matches the runtime fallback in
+    // _runInteractive). 60..2000 clamp is enforced by the WebView layer.
+    _minHeightController = TextEditingController(text: '120');
     _type = b.type;
     _trigger = b.trigger;
     _inject = b.inject;
@@ -262,6 +429,10 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
     _dependsOnPrevious = b.dependsOnPrevious;
     _contextMessageCount = b.contextMessageCount;
     _streamToPanel = b.streamToPanel;
+    // Heuristic: existing block has script but no prompt → static.
+    _useStaticHtml =
+        b.type == BlockType.interactive && b.script.trim().isNotEmpty;
+    _minHeight = 120;
   }
 
   void _save() {
@@ -273,7 +444,9 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
     final isImage = _type == BlockType.imageGen;
     final isJs = _type == BlockType.jsRunner;
     final isInfoblock = _type == BlockType.infoblock;
-    final usesLlm = isInfoblock || isImage || isJs;
+    final isInteractive = _type == BlockType.interactive;
+    final usesLlm = isInfoblock || isImage || isJs ||
+        (isInteractive && !_useStaticHtml);
     return widget.block.copyWith(
       name: _nameController.text.trim(),
       type: _type,
@@ -291,7 +464,12 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
       contextMessageCount: usesLlm ? _contextMessageCount : 0,
       contextSystemPrompt: usesLlm ? _contextSystemPromptController.text : '',
       streamToPanel: usesLlm ? _streamToPanel : false,
-      script: isJs ? widget.block.script : '',
+      // For interactive panels the `script` field stores static HTML (when
+      // the user chose the static mode). For other types we keep whatever
+      // was there before (jsRunner still uses script as legacy static JS).
+      script: isInteractive
+          ? (_useStaticHtml ? _staticHtmlController.text : '')
+          : (isJs ? widget.block.script : ''),
     );
   }
 
@@ -317,6 +495,8 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
     _modelController.dispose();
     _contextSystemPromptController.dispose();
     _injectPrefixController.dispose();
+    _staticHtmlController.dispose();
+    _minHeightController.dispose();
     super.dispose();
   }
 
@@ -352,6 +532,11 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
                     value: BlockType.jsRunner,
                     label: Text('JS'),
                     icon: Icon(Icons.code),
+                  ),
+                  ButtonSegment(
+                    value: BlockType.interactive,
+                    label: Text('Панель'),
+                    icon: Icon(Icons.dashboard_customize_outlined),
                   ),
                 ],
                 selected: {_type},
@@ -595,6 +780,158 @@ class _BlockEditDialogState extends ConsumerState<_BlockEditDialog> {
                     ),
                   ),
                 ),
+              if (_type == BlockType.interactive) ...[
+                const SizedBox(height: 16),
+                _SectionLabel('Источник HTML'),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                      value: false,
+                      label: Text('LLM'),
+                      icon: Icon(Icons.auto_awesome),
+                    ),
+                    ButtonSegment(
+                      value: true,
+                      label: Text('Статический HTML'),
+                      icon: Icon(Icons.code),
+                    ),
+                  ],
+                  selected: {_useStaticHtml},
+                  onSelectionChanged: (s) =>
+                      setState(() => _useStaticHtml = s.first),
+                  style: ButtonStyle(visualDensity: VisualDensity.compact),
+                ),
+                const SizedBox(height: 8),
+                if (_useStaticHtml)
+                  TextField(
+                    controller: _staticHtmlController,
+                    decoration: const InputDecoration(
+                      labelText: 'HTML-разметка панели',
+                      helperText:
+                          'Голый HTML без <html>/<body>: рендерится в sandboxed iframe. '
+                          'JS внутри имеет доступ к window.glaze.* (setVariables, '
+                          'generateText, triggerGeneration и т.д.).',
+                      alignLabelWithHint: true,
+                    ),
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                    ),
+                    minLines: 6,
+                    maxLines: 18,
+                  )
+                else
+                  TextField(
+                    controller: _promptController,
+                    decoration: const InputDecoration(
+                      labelText: 'Промпт для LLM (HTML для панели)',
+                      helperText:
+                          'Модель должна вернуть HTML-разметку (можно в ```html```). '
+                          'Если обрамлять ```html``` — fence будет снят автоматически.',
+                      alignLabelWithHint: true,
+                    ),
+                    minLines: 4,
+                    maxLines: 12,
+                  ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _minHeightController,
+                  decoration: const InputDecoration(
+                    labelText: 'Начальная высота (px)',
+                    helperText: '60..2000. Iframe перерастёт iframe при resize.',
+                  ),
+                  keyboardType: TextInputType.number,
+                  onChanged: (v) =>
+                      _minHeight = int.tryParse(v) ?? _minHeight,
+                ),
+                if (!_useStaticHtml) ...[
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    title: const Text('Ждать завершения предыдущего блока'),
+                    subtitle: const Text(
+                      'Получает вывод предыдущего блока как контекст',
+                    ),
+                    value: _dependsOnPrevious,
+                    onChanged: (v) =>
+                        setState(() => _dependsOnPrevious = v),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                  const SizedBox(height: 16),
+                  _SectionLabel('История чата для блока'),
+                  TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Сколько последних сообщений чата передать',
+                      helperText:
+                          'Считается от сообщения, на котором висит блок (не от конца чата).',
+                    ),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(signed: true),
+                    controller: TextEditingController(
+                        text: _contextMessageCount.toString()),
+                    onChanged: (v) => _contextMessageCount =
+                        int.tryParse(v) ?? _contextMessageCount,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _contextSystemPromptController,
+                    decoration: const InputDecoration(
+                      labelText: 'Текст перед историей чата',
+                      helperText:
+                          'Добавляется в user-сообщение перед логом чата. '
+                          'Макросы: {{char}}, {{user}}, {{description}}, {{personality}}',
+                      alignLabelWithHint: true,
+                    ),
+                    maxLines: 5,
+                    minLines: 2,
+                  ),
+                  const SizedBox(height: 16),
+                  _SectionLabel('API'),
+                  _ApiConfigSelector(
+                    selectedId: _apiConfigController.text,
+                    onSelected: (id) {
+                      setState(() {
+                        _apiConfigController.text = id ?? '';
+                        _modelController.clear();
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  _ModelField(
+                    controller: _modelController,
+                    apiConfigId: _apiConfigController.text,
+                    fetching: _fetchingModels,
+                    onFetchStart: () =>
+                        setState(() => _fetchingModels = true),
+                    onFetchEnd: () =>
+                        setState(() => _fetchingModels = false),
+                  ),
+                  const SizedBox(height: 4),
+                  SwitchListTile(
+                    title: const Text('Стриминг в панель'),
+                    subtitle: const Text(
+                      'HTML от модели появляется в панели по мере генерации',
+                    ),
+                    value: _streamToPanel,
+                    onChanged: (v) =>
+                        setState(() => _streamToPanel = v),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ],
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    'Панель отрисуется под сообщением ассистента как persistent '
+                    'sandboxed iframe island. JS-код внутри неё может вызывать '
+                    'glaze.setVariables, glaze.generateText, glaze.injectPrompt и т.д. '
+                    'Вызовы идут через тот же bridge, что и в других блоках.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.cs.onSurfaceVariant.withValues(alpha: 0.85),
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

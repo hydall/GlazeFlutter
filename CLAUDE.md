@@ -161,6 +161,8 @@ When editing files matching a pattern below, READ the corresponding rule file FI
 | Custom `==...==` markdown markers, message rendering | `docs/markdown-markers.md` |
 | Windows/build failures, dependency overrides | `docs/BUILD_NOTES.md` |
 | Class/file organization, decomposition | `docs/CODE_STYLE.md` |
+| JS extension bridge (`glaze.*`), panel iframe, headless engine, capability permissions, periodic/afterUser triggers, `executeCommand`, audio, connection profiles | `docs/js_extensions_implementation_plan.md` + `docs/INVARIANTS.md` (INV-EG1–8, INV-JS1–6) |
+| Variable storage (`chat` / `character` / `global` / `message` scopes) | `docs/rules/database.md` (atomic repo methods) |
 
 ## Workflow
 
@@ -179,3 +181,6 @@ When editing files matching a pattern below, READ the corresponding rule file FI
 - Forget `ref.watch` select for streaming UI (causes full rebuild per chunk)
 - Commit directly to `master` — always use a feature branch
 - Use the `gh` CLI — GitHub operations go through GitHub MCP tools
+- Bypass `_requireCapability` in the JS bridge — every `glaze.*` method must enforce the matching capability (default-deny)
+- Run user JS in a same-origin iframe — panel/sandbox scripts go in `sandbox="allow-scripts"` (no `allow-same-origin`)
+- Read-modify-write a `ChatSession` / `Character` from outside the dedicated atomic repo methods (chat/character variable scopes)

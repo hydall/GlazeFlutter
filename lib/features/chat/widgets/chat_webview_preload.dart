@@ -45,10 +45,10 @@ class _ChatWebViewPreloaderState extends State<ChatWebViewPreloader> {
                     cacheEnabled: true,
                     allowFileAccess: true,
                     allowContentAccess: true,
-                    allowFileAccessFromFileURLs: true,
-                    allowUniversalAccessFromFileURLs: true,
+                    allowFileAccessFromFileURLs: false,
+                    allowUniversalAccessFromFileURLs: false,
                     mixedContentMode:
-                        MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+                        MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
                   ),
                   onLoadStop: (_, _) {
                     if (mounted) setState(() => _preloaded = true);

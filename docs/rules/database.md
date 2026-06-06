@@ -96,6 +96,35 @@ Pattern: `InfoBlocksRepository.updateStatus()` is the canonical example.
 
 ---
 
+## Atomic read-mutate-write for JS variable scopes
+
+The JS bridge (`JsBridgeService._updateScope`) writes four variable
+scopes. The `chat` and `character` scopes go through dedicated repo
+methods that wrap the read-modify-write in a Drift transaction so two
+concurrent bridge calls cannot interleave:
+
+```dart
+// ChatRepo.updateSessionVarsJson
+await db.transaction(() async {
+  final session = await repo.getById(sessionId);
+  final next = mutator(_decodeChatVars(session.sessionVars));
+  if (next.isEmpty) session.sessionVars.remove(_chatVarsKey);
+  else session.sessionVars[_chatVarsKey] = jsonEncode(next);
+  await repo.put(session);
+});
+
+// CharacterRepo.updateExtensionsJson — same shape, on the extensions map.
+```
+
+`global` variables go through `GlobalVariablesRepo` (SharedPreferences
+JSON) with a serialized write lock (`_writeLock`) and a 64 KiB payload
+cap. `message` variables are in-memory only (`MessageVariablesNotifier`).
+
+**Never** do `getById → mutate → put` for any of these scopes —
+always go through the dedicated repo method.
+
+---
+
 ## Embedding storage
 
 Table: `Embeddings`

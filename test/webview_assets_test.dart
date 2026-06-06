@@ -15,14 +15,186 @@ String _asset(String name) =>
 void main() {
   late String rendererJs;
   late String bridgeJs;
+  late String glazeSdkJs;
   late String indexHtml;
+  late String headlessHtml;
   late String stylessCss;
 
   setUpAll(() {
     rendererJs = _asset('renderer.js');
     bridgeJs = _asset('bridge.js');
+    glazeSdkJs = _asset('glaze_sdk.js');
     indexHtml = _asset('index.html');
+    headlessHtml = _asset('headless.html');
     stylessCss = _asset('styles.css');
+  });
+
+  group('window.glaze SDK', () {
+    test('index.html loads glaze_sdk before bridge.js', () {
+      final sdkIdx = indexHtml.indexOf('glaze_sdk.js');
+      final bridgeIdx = indexHtml.indexOf('bridge.js');
+      expect(sdkIdx, isNonNegative);
+      expect(bridgeIdx, isNonNegative);
+      expect(sdkIdx < bridgeIdx, isTrue);
+    });
+
+    test('SDK exposes expected window.glaze methods', () {
+      for (final method in [
+        'getVariables',
+        'setVariables',
+        'deleteVariable',
+        'executeCommand',
+        'triggerGeneration',
+        'injectPrompt',
+        'uninjectPrompt',
+        'generateText',
+        'showToast',
+        'playAudio',
+      ]) {
+        expect(glazeSdkJs, contains('$method('));
+      }
+    });
+
+    test('sandboxed runner relays glaze requests and ignores relay messages as final output', () {
+      expect(bridgeJs, contains("data.type !== 'glaze:request'"));
+      expect(bridgeJs, contains("type: 'glaze:response'"));
+      expect(bridgeJs, contains('if (e.data && e.data.type) return;'));
+    });
+  });
+
+  // ─── Headless engine (Phase 6.1) ────────────────────────────────────────────
+  group('headless engine (headless.html)', () {
+    test('loads glaze_sdk.js', () {
+      expect(headlessHtml, contains('glaze_sdk.js'));
+    });
+
+    test('exposes window.headlessBridge.runSandboxedScript', () {
+      expect(headlessHtml, contains('window.headlessBridge'));
+      expect(
+        headlessHtml,
+        contains('runSandboxedScript'),
+      );
+    });
+
+    test('sandbox uses allow-scripts iframe', () {
+      expect(headlessHtml, contains("sandbox"));
+      expect(headlessHtml, contains('allow-scripts'));
+      // Must not opt into same-origin execution.
+      expect(headlessHtml, isNot(contains('allow-same-origin')));
+    });
+  });
+
+  // ─── Interactive panels (Phase 6.2) ─────────────────────────────────────
+  group('interactive panels (PanelHost in bridge.js)', () {
+    test('PanelHost class is defined', () {
+      expect(bridgeJs, contains('class PanelHost'));
+    });
+
+    test('Bridge exposes openPanel/closePanel/postToPanel helpers', () {
+      expect(bridgeJs, contains('openPanel(messageId, html, optionsJson)'));
+      expect(bridgeJs, contains('closePanel(panelId)'));
+      expect(bridgeJs, contains('postToPanel(panelId, method, paramsJson)'));
+    });
+
+    test('panel iframe uses sandbox=allow-scripts without allow-same-origin', () {
+      // The construction site inside PanelHost.open() must set the strict
+      // sandbox so the panel's null-origin cannot reach window.parent or
+      // window.flutter_inappwebview directly.
+      final marker = "iframe.sandbox = 'allow-scripts'";
+      final idx = bridgeJs.indexOf(marker);
+      expect(idx, isNot(-1), reason: 'panel iframe must use sandbox="allow-scripts"');
+      final block = _extractBlockBody(bridgeJs, idx);
+      expect(
+        block,
+        isNot(contains('allow-same-origin')),
+        reason: 'panel iframe must NOT enable allow-same-origin',
+      );
+    });
+
+    test('parent->panel iframe is appended inside the message section', () {
+      expect(
+        bridgeJs,
+        contains("section.querySelector('.msg-content') || section"),
+        reason: 'panel must be attached to the message section, not the body',
+      );
+    });
+
+    test('clearAll() also closes all panels', () {
+      final marker = 'clearAll() {';
+      final idx = bridgeJs.indexOf(marker);
+      expect(idx, isNot(-1));
+      final body = _extractBlockBody(bridgeJs, idx);
+      expect(
+        body,
+        contains('_panelHost?.closeAll()'),
+        reason: 'Bridge.clearAll must close all panels before clearing messages',
+      );
+    });
+
+    test('setMessages() closes panels before rendering a new batch', () {
+      final marker = 'setMessages(messagesJson) {';
+      final idx = bridgeJs.indexOf(marker);
+      expect(idx, isNot(-1));
+      final body = _extractBlockBody(bridgeJs, idx);
+      expect(
+        body,
+        contains('_panelHost?.closeAll()'),
+        reason: 'setMessages must drop all panels before mounting the new list',
+      );
+    });
+
+    test('removeMessage() closes panels attached to that message', () {
+      final marker = 'removeMessage(messageId) {';
+      final idx = bridgeJs.indexOf(marker);
+      expect(idx, isNot(-1));
+      final body = _extractBlockBody(bridgeJs, idx);
+      expect(
+        body,
+        contains('_panelHost.close(panelId)'),
+        reason: 'removeMessage must close panels of the removed message',
+      );
+    });
+
+    test('panel relays glaze:request back through the bridge', () {
+      expect(bridgeJs, contains("_relayGlazeRequest(panel, data)"));
+      // The PanelHost listener branches on `glaze:request` and forwards
+      // to _relayGlazeRequest. We don't extract a sub-block here because
+      // the call site is nested inside a for-of loop, which makes
+      // brace-matching fragile.
+      expect(
+        bridgeJs,
+        contains("data.type === 'glaze:request'"),
+        reason: 'panel listener must branch on glaze:request type',
+      );
+    });
+
+    test('panel iframe receives a glaze SDK copy via __glazeSdkSource', () {
+      expect(bridgeJs, contains("JSON.stringify(window.__glazeSdkSource || '')"));
+    });
+
+    test('panel iframe cannot impersonate the parent (source check)', () {
+      final marker = '_setupListener() {';
+      final idx = bridgeJs.indexOf(marker);
+      expect(idx, isNot(-1));
+      final body = _extractBlockBody(bridgeJs, idx);
+      expect(
+        body,
+        contains('e.source !== panel.iframe.contentWindow'),
+        reason: 'PanelHost message listener must verify e.source to prevent spoofing',
+      );
+    });
+
+    test('panel resize observer pushes glaze:panel-resize events', () {
+      expect(bridgeJs, contains('ResizeObserver'));
+      expect(bridgeJs, contains("'onPanelResize'"));
+      expect(bridgeJs, contains("'glaze:panel-resize'"));
+    });
+
+    test('panel exposes window.glazePanel helpers to user code', () {
+      expect(bridgeJs, contains('window.glazePanel'));
+      expect(bridgeJs, contains('reportHeight'));
+      expect(bridgeJs, contains('sendAction'));
+    });
   });
 
   // ─── details/summary arrow ────────────────────────────────────────────────

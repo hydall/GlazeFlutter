@@ -13,6 +13,7 @@ import '../../../core/models/persona.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/constants/image_gen_patterns.dart';
 import '../../../core/utils/id_generator.dart';
+import '../../chat/bridge/chat_bridge_controller.dart';
 import '../../chat/bridge/chat_bridge_registry.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../models/block_config.dart';
@@ -26,7 +27,9 @@ import '../providers/info_blocks_provider.dart';
 import 'block_context_builder.dart';
 import 'ext_blocks_panel_builder.dart';
 import 'info_block_service.dart';
+import 'js_engine_service.dart';
 import 'js_script_extractor.dart';
+import 'panel_host_service.dart';
 
 final extensionPostGenServiceProvider = Provider<ExtensionPostGenService>(
   (ref) => ExtensionPostGenService(ref),
@@ -186,6 +189,7 @@ class ExtensionPostGenService {
       character: character,
       persona: persona,
       cancelToken: _blocksCancelToken!,
+      trigger: BlockTrigger.afterAssistant,
     );
     _refreshPanelForMessage(charId, sessionId, messageId);
   }
@@ -234,6 +238,40 @@ class ExtensionPostGenService {
       character: character,
       persona: persona,
     );
+  }
+
+  /// Called by [ChatNotifier.sendMessage] right after a user message is
+  /// persisted. Runs every enabled `BlockTrigger.afterUser` block.
+  Future<void> runAfterUserBlocks({
+    required String charId,
+    required ChatSession session,
+    required Character character,
+    required Persona? persona,
+  }) async {
+    final preset = _resolveActivePreset();
+    if (preset == null) return;
+    if (session.id.isEmpty || session.messages.isEmpty) return;
+    final lastMessage = session.messages.last;
+    if (lastMessage.role != 'user') {
+      debugPrint(
+        '[ExtPostGen] runAfterUserBlocks: last message is not user, skipping',
+      );
+      return;
+    }
+    debugPrint('[ExtPostGen] runAfterUserBlocks: msg=${lastMessage.id}');
+    _blocksCancelToken = CancelToken();
+    await _runChain(
+      charId: charId,
+      sessionId: session.id,
+      messageId: lastMessage.id,
+      messages: session.messages,
+      preset: preset,
+      character: character,
+      persona: persona,
+      cancelToken: _blocksCancelToken!,
+      trigger: BlockTrigger.afterUser,
+    );
+    _refreshPanelForMessage(charId, session.id, lastMessage.id);
   }
 
   /// Re-runs a single block for an already-existing message.
@@ -396,9 +434,10 @@ class ExtensionPostGenService {
     required Character character,
     required Persona? persona,
     required CancelToken cancelToken,
+    BlockTrigger trigger = BlockTrigger.afterAssistant,
   }) async {
     final blocks = preset.blocks
-        .where((b) => b.enabled)
+        .where((b) => b.enabled && b.trigger == trigger)
         .toList()
       ..sort((a, b) => a.order.compareTo(b.order));
 
@@ -580,6 +619,20 @@ class ExtensionPostGenService {
           );
         case BlockType.jsRunner:
           result = await _runJsRunner(
+            charId: charId,
+            sessionId: sessionId,
+            messageId: messageId,
+            messages: messages,
+            blockConfig: blockConfig,
+            character: character,
+            persona: persona,
+            previousOutput: previousOutput,
+            cancelToken: cancelToken,
+            placeholderId: placeholderId,
+            placeholder: placeholder,
+          );
+        case BlockType.interactive:
+          result = await _runInteractive(
             charId: charId,
             sessionId: sessionId,
             messageId: messageId,
@@ -954,6 +1007,135 @@ class ExtensionPostGenService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // Interactive panel
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// LLM-generates an HTML document and renders it inside a persistent
+  /// sandboxed iframe island under the assistant message. The HTML is also
+  /// persisted to [InfoBlock.content] for re-render after history reloads.
+  ///
+  /// Pipeline:
+  ///   1. If [BlockConfig.script] is non-empty and [BlockConfig.prompt] is
+  ///      empty, the script is treated as static HTML (no LLM call).
+  ///   2. Otherwise the LLM is asked to produce a complete HTML document.
+  ///   3. The HTML is sanitised lightly (trimming outer code fences only)
+  ///      and pushed to the WebView via [PanelHostService].
+  Future<InfoBlock?> _runInteractive({
+    required String charId,
+    required String sessionId,
+    required String messageId,
+    required List<ChatMessage> messages,
+    required BlockConfig blockConfig,
+    required Character character,
+    required Persona? persona,
+    required String? previousOutput,
+    required CancelToken cancelToken,
+    required String placeholderId,
+    required InfoBlock placeholder,
+  }) async {
+    if (cancelToken.isCancelled) {
+      await _repo.updateStatus(placeholderId, BlockRunStatus.stopped);
+      return placeholder.copyWith(status: BlockRunStatus.stopped);
+    }
+
+    final prompt = blockConfig.prompt.trim();
+    final staticHtml = blockConfig.script.trim();
+
+    String html;
+    if (prompt.isEmpty && staticHtml.isNotEmpty) {
+      html = staticHtml;
+    } else if (prompt.isEmpty) {
+      debugPrint(
+        '[ExtPostGen] interactive "${blockConfig.name}" — prompt is empty',
+      );
+      await _repo.updateStatus(placeholderId, BlockRunStatus.done);
+      _refreshPanelForMessage(charId, sessionId, messageId);
+      return placeholder.copyWith(status: BlockRunStatus.done);
+    } else {
+      final infoBlockService = _ref.read(infoBlockServiceProvider);
+      final generated = await infoBlockService.generateSingleBlockContent(
+        sessionId: sessionId,
+        messageId: messageId,
+        messages: messages,
+        blockConfig: blockConfig,
+        character: character,
+        persona: persona?.name,
+        previousOutput: previousOutput,
+        cancelToken: cancelToken,
+      );
+
+      if (cancelToken.isCancelled) {
+        await _repo.updateStatus(placeholderId, BlockRunStatus.stopped);
+        return placeholder.copyWith(status: BlockRunStatus.stopped);
+      }
+
+      if (generated.error != null || generated.content == null) {
+        return _markBlockError(
+          charId: charId,
+          sessionId: sessionId,
+          messageId: messageId,
+          placeholderId: placeholderId,
+          placeholder: placeholder,
+          errorMessage: generated.error ?? 'Interactive agent returned empty response',
+        );
+      }
+
+      html = _stripHtmlFence(generated.content!);
+      _publishStreamingBlockContent(
+        charId: charId,
+        sessionId: sessionId,
+        messageId: messageId,
+        placeholder: placeholder,
+        content: html,
+        force: true,
+      );
+    }
+
+    final panelService = _ref.read(panelHostServiceProvider);
+    final opened = await panelService.openPanel(
+      charId: charId,
+      messageId: messageId,
+      html: html,
+      options: {
+        'title': blockConfig.name,
+        'minHeight': 120,
+      },
+    );
+    if (opened == null) {
+      return _markBlockError(
+        charId: charId,
+        sessionId: sessionId,
+        messageId: messageId,
+        placeholderId: placeholderId,
+        placeholder: placeholder,
+        errorMessage:
+            'Interactive panel host did not open a panel (no chat bridge?)',
+      );
+    }
+
+    await _repo.updateContent(placeholderId, html);
+    await _repo.updateStatus(placeholderId, BlockRunStatus.done);
+
+    final done = placeholder.copyWith(
+      content: html,
+      status: BlockRunStatus.done,
+    );
+    _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(done);
+    _refreshPanelForMessage(charId, sessionId, messageId);
+    return done;
+  }
+
+  String _stripHtmlFence(String raw) {
+    var s = raw.trim();
+    if (s.startsWith('```')) {
+      final firstNewline = s.indexOf('\n');
+      if (firstNewline != -1) s = s.substring(firstNewline + 1);
+      if (s.endsWith('```')) s = s.substring(0, s.length - 3);
+    }
+    return s.trim();
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // JS Runner
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -1104,9 +1286,10 @@ class ExtensionPostGenService {
     String Function(String result)? panelContentBuilder,
   }) async {
     final bridge = _ref.read(chatBridgeRegistryProvider(charId));
-    if (bridge == null) {
+    final engine = JsEngineService.instance;
+    if (!engine.isReady && bridge == null) {
       debugPrint(
-        '[ExtPostGen] jsRunner "${blockConfig.name}" — bridge not available',
+        '[ExtPostGen] jsRunner "${blockConfig.name}" — no JS engine or bridge',
       );
       return _markBlockError(
         charId: charId,
@@ -1115,7 +1298,7 @@ class ExtensionPostGenService {
         placeholderId: placeholderId,
         placeholder: placeholder,
         errorMessage:
-            'WebView bridge not available (JS runner requires open chat)',
+            'JS engine not ready and WebView bridge not available (jsRunner needs at least one of them)',
       );
     }
 
@@ -1125,12 +1308,14 @@ class ExtensionPostGenService {
         anchorMessageId: messageId,
         count: blockConfig.contextMessageCount,
       );
-      final result = await bridge.runJsBlock(
+      final result = await _runJsWithFallback(
+        engine: engine,
+        bridge: bridge,
         script: script,
-        messages: contextMessages,
+        contextMessages: contextMessages,
         character: character,
+        sessionId: sessionId,
         previousOutput: previousOutput,
-        contextMessageCount: -1,
         cancelToken: cancelToken,
       );
 
@@ -1179,6 +1364,163 @@ class ExtensionPostGenService {
         placeholder: placeholder,
         errorMessage: e.toString(),
       );
+    }
+  }
+
+  /// Runs [script] preferring the headless [engine] and falling back to
+  /// the visual chat WebView [bridge] when the engine is not ready or
+  /// raises [HeadlessUnavailableError]. Returns the script's string output.
+  Future<String> _runJsWithFallback({
+    required JsEngineService engine,
+    required ChatBridgeController? bridge,
+    required String script,
+    required List<ChatMessage> contextMessages,
+    required Character character,
+    required String sessionId,
+    required String? previousOutput,
+    required CancelToken cancelToken,
+  }) async {
+    if (engine.isReady) {
+      try {
+        final contextMap = _jsContextMap(
+          messages: contextMessages
+              .map((m) => {'role': m.role, 'text': m.content})
+              .toList(),
+          character: character,
+          sessionId: sessionId,
+          previousOutput: previousOutput,
+        );
+        return await engine.runScript(
+          script: script,
+          context: contextMap,
+          cancelToken: cancelToken,
+        );
+      } on HeadlessUnavailableError catch (e) {
+        debugPrint(
+          '[ExtPostGen] headless engine unavailable, falling back: $e',
+        );
+      } catch (e) {
+        // Non-fatal: fall through to visual bridge. Bridge will record the
+        // error in its own logs.
+        debugPrint('[ExtPostGen] headless engine run failed: $e');
+      }
+    }
+    final visualBridge = bridge;
+    if (visualBridge == null) {
+      throw StateError(
+        'JS engine is not ready and visual WebView bridge is not available',
+      );
+    }
+    return visualBridge.runJsBlock(
+      script: script,
+      messages: contextMessages,
+      character: character,
+      sessionId: sessionId,
+      previousOutput: previousOutput,
+      contextMessageCount: -1,
+      cancelToken: cancelToken,
+    );
+  }
+
+  Map<String, dynamic> _jsContextMap({
+    required List<Map<String, String>> messages,
+    required Character? character,
+    required String sessionId,
+    required String? previousOutput,
+  }) {
+    return {
+      'messages': messages,
+      'sessionId': sessionId,
+      'characterId': character?.id,
+      'character': character == null
+          ? null
+          : {
+              'name': character.name,
+              'description': character.description ?? '',
+              'personality': character.personality ?? '',
+              'scenario': character.scenario ?? '',
+            },
+      'previousOutput': previousOutput,
+    };
+  }
+
+  /// Public entry point for periodic ticks (no `InfoBlock` is created —
+  /// periodic scripts are side-effect-only: write to `glaze.variables`,
+  /// play audio, call `triggerGeneration`, etc.). Uses the headless
+  /// engine when available; falls back to the visual bridge for the
+  /// currently open chat. Returns the script result string or `null`
+  /// when nothing was run.
+  ///
+  /// `contextMessages` is the message history to pass to the script.
+  /// For periodic ticks this is typically the empty list — the script
+  /// does not need the chat history, it just runs on a timer.
+  Future<String?> runJsBlock({
+    required String charId,
+    required BlockConfig block,
+    required List<ChatMessage> contextMessages,
+  }) async {
+    if (block.type != BlockType.jsRunner) {
+      throw ArgumentError(
+        'runJsBlock only supports BlockType.jsRunner (got ${block.type.name})',
+      );
+    }
+    final script = block.prompt.isNotEmpty
+        ? block.prompt
+        : block.script;
+    if (script.isEmpty) {
+      return null;
+    }
+    final engine = JsEngineService.instance;
+    final bridge = _ref.read(chatBridgeRegistryProvider(charId));
+    if (!engine.isReady && bridge == null) {
+      debugPrint(
+        '[ExtPostGen] runJsBlock: no engine or bridge (block "${block.name}")',
+      );
+      return null;
+    }
+    final cancelToken = CancelToken();
+    try {
+      if (engine.isReady) {
+        try {
+          final contextMap = _jsContextMap(
+            messages: contextMessages
+                .map((m) => {'role': m.role, 'text': m.content})
+                .toList(),
+            character: null, // no character payload for periodic
+            sessionId: '',
+            previousOutput: null,
+          );
+          // Periodic ticks have no character/session payload; the script
+          // can still read `messages` from the context (empty list by
+          // default).
+          final patchedContext = Map<String, dynamic>.from(contextMap)
+            ..['characterId'] = charId
+            ..['sessionId'] = '';
+          return await engine.runScript(
+            script: script,
+            context: patchedContext,
+            cancelToken: cancelToken,
+          );
+        } on HeadlessUnavailableError catch (_) {
+          // Fall through to visual bridge.
+        }
+      }
+      final visualBridge = bridge;
+      if (visualBridge == null) {
+        return null;
+      }
+      return await visualBridge.runJsBlock(
+        script: script,
+        messages: contextMessages,
+        character: null,
+        sessionId: '',
+        previousOutput: null,
+        contextMessageCount: -1,
+        cancelToken: cancelToken,
+      );
+    } catch (e) {
+      debugPrint('[ExtPostGen] runJsBlock failed: $e');
+      return null;
     }
   }
 }

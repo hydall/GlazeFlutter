@@ -2,6 +2,48 @@
 
 Зафиксировано: май 2026. Актуально для Flutter 3.44.0 / Dart 3.12.0.
 
+## Текущие runtime-зависимости (полный список)
+
+Все пакеты, добавленные в `pubspec.yaml` `dependencies` (полный список актуальных
+версий см. в `pubspec.lock`):
+
+| Пакет | Версия | Назначение |
+|---|---|---|
+| `flutter_riverpod` | 2.6.1 | Riverpod 2 — провайдеры, AsyncNotifier, StateNotifier |
+| `drift` | 2.28.2 | SQLite ORM, Drift code generation |
+| `sqlite3_flutter_libs` | 0.5.28 | native sqlite3 binding |
+| `dio` | 5.7.0 | HTTP-клиент + SSE streaming для LLM |
+| `go_router` | 14.6.0 | декларативная навигация |
+| `freezed_annotation` | 2.4.4 | immutable модели с sealed unions (с `freezed` dev) |
+| `json_annotation` | 4.9.0 | JSON сериализация (с `json_serializable` dev) |
+| `collection` | 1.18.0 | `firstWhereOrNull`, `IterableExtension` |
+| `path` | 1.9.0 | кросс-платформенные пути |
+| `shared_preferences` | 2.3.0 | KV-хранилище для глобальных переменных JS bridge и настроек |
+| `gpt_markdown` | 1.1.6 | markdown-рендеринг |
+| `url_launcher` | 6.3.0 | открытие внешних URL из WebView |
+| `archive` | 4.0.0 | ZIP-чтение/запись (импорт бэкапов) |
+| `crypto` | 3.0.0 | SHA-хеши (TOTP, embedding dirty check) |
+| `image` | 4.0.0 | декодирование PNG/JPEG (аватары, галерея) |
+| `file_picker` | 11.0.2 | импорт бэкапов и персонажей |
+| `google_fonts` | 8.1.0 | загрузка UI-шрифтов |
+| `flutter_svg` | 2.0.16 | SVG-иконки |
+| `tiktoken` | 1.0.3 | token-budget для prompt assembly |
+| `cached_network_image` | 3.4.1 | кеш превью из сети |
+| `flutter_dotenv` | 5.2.1 | чтение `.env` |
+| `share_plus` | 10.1.4 | share intent (экспорт) |
+| `flutter_foreground_task` | 8.0.0 | foreground-service для фоновой генерации |
+| `flutter_local_notifications` | 18.0.1 | локальные нотификации о завершении генерации |
+| `app_links` | 6.3.3 | OAuth deep-link receiver |
+| `gradient_blur` | 1.0.2 | blur-эффект для glass-навигации |
+| `image_picker` | 1.2.2 | выбор аватара из галереи |
+| `flex_color_scheme` | 8.4.0 | Material 3 color scheme |
+| `soft_edge_blur` | 0.1.3 | soft edge blur для UI |
+| `flutter_inappwebview` | 6.1.5 | WebView для чата + headless JS engine |
+| `easy_localization` | 3.0.7 | i18n |
+| `audioplayers` | 6.7.1 | воспроизведение реальных аудио-источников в `glaze.playAudio` (file/http/data URIs) |
+
+---
+
 ## Контекст: path_provider_foundation override
 
 В `pubspec.yaml` стоит override `path_provider_foundation: 2.4.2`.

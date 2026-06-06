@@ -76,6 +76,31 @@ class ChatRepo implements SyncChatStore {
         .insertOnConflictUpdate(_toCompanion(session));
   }
 
+  Future<Map<String, dynamic>> updateSessionVarsJson(
+    String sessionId,
+    Map<String, dynamic> Function(Map<String, dynamic> vars) update,
+  ) async {
+    return _db.transaction(() async {
+      final row = await (_db.select(
+        _db.chatSessions,
+      )..where((t) => t.sessionId.equals(sessionId))).getSingleOrNull();
+      if (row == null) {
+        throw StateError('Chat session "$sessionId" was not found');
+      }
+
+      final current = _decodeJsonMap(row.sessionVarsJson);
+      final updated = update(Map<String, dynamic>.from(current));
+      await (_db.update(_db.chatSessions)
+            ..where((t) => t.sessionId.equals(sessionId)))
+          .write(
+        ChatSessionsCompanion(
+          sessionVarsJson: Value(updated.isNotEmpty ? jsonEncode(updated) : null),
+        ),
+      );
+      return updated;
+    });
+  }
+
   @override
   Future<void> delete(String sessionId) async {
     await (_db.delete(
@@ -243,5 +268,14 @@ class ChatRepo implements SyncChatStore {
       }
     } catch (_) {}
     return null;
+  }
+
+  Map<String, dynamic> _decodeJsonMap(String? text) {
+    if (text == null || text.isEmpty) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    return <String, dynamic>{};
   }
 }

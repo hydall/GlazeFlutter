@@ -2,12 +2,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/api_list_provider.dart';
 import '../../features/extensions/services/ext_blocks_prompt_injection.dart';
+import '../../features/extensions/services/runtime_prompt_injection_service.dart';
 import '../models/chat_message.dart';
 import '../state/active_selection_provider.dart';
 import '../state/db_provider.dart';
 import '../state/global_regex_provider.dart';
 import '../state/lorebook_provider.dart';
 import '../state/memory_settings_provider.dart';
+import 'prompt_builder.dart';
 import 'prompt_inputs.dart';
 import 'summary_service.dart';
 
@@ -54,7 +56,11 @@ class PromptInputsCollector {
     final sessionId = session?.id;
 
     final persona = getEffectivePersona(
-      personas, charId, sessionId, activePersonaId, connections,
+      personas,
+      charId,
+      sessionId,
+      activePersonaId,
+      connections,
     );
 
     final lorebooks = await lorebookRepo.getAll();
@@ -75,10 +81,23 @@ class PromptInputsCollector {
     final memorySettings = _ref.read(memoryGlobalSettingsProvider);
 
     var history = session?.messages ?? [];
+    var runtimePromptBlocks = const <RuntimePromptBlock>[];
     if (session != null) {
       history = await _ref
           .read(extBlocksPromptInjectionProvider)
           .injectIntoHistory(sessionId: session.id, messages: history);
+      runtimePromptBlocks = _ref
+          .read(runtimePromptInjectionProvider.notifier)
+          .bySession(session.id)
+          .map(
+            (block) => RuntimePromptBlock(
+              id: block.id,
+              content: block.content,
+              depth: block.depth,
+              role: block.role,
+            ),
+          )
+          .toList(growable: false);
     }
 
     return PromptInputs(
@@ -104,6 +123,7 @@ class PromptInputsCollector {
       memoryMaxInjected: memorySettings.maxInjectedEntries,
       memoryKeyMatchMode: memorySettings.keyMatchMode,
       memoryInjectionTarget: memorySettings.injectionTarget,
+      runtimePromptBlocks: runtimePromptBlocks,
     );
   }
 }

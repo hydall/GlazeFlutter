@@ -102,4 +102,7 @@ const Map<String, HandlerSpec> bridgeHandlers = {
   'onExtBlockDelete': HandlerSpec(
     HandlerKind.imageAction,
   ),
+  // Interactive panels
+  'onPanelResize': HandlerSpec(HandlerKind.jsonObject),
+  'onPanelEvent': HandlerSpec(HandlerKind.jsonObject),
 };

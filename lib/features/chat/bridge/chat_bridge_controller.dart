@@ -3,12 +3,14 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../../core/models/character.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/persona.dart';
 import '../../../core/models/preset.dart';
+import '../../extensions/services/js_bridge_service.dart';
 import 'chat_message_mapper.dart';
 import 'bridge_handlers.dart';
 import 'bridge_message_commands.dart';
@@ -32,6 +34,7 @@ import 'bridge_memory_commands.dart';
 /// properties on the host and registered via [setupHandlers].
 class ChatBridgeController {
   final InAppWebViewController _controller;
+  final JsBridgeService _jsBridgeService;
   final Map<String, Completer<dynamic>> _pendingRequests = {};
 
   String? currentCharName;
@@ -58,7 +61,10 @@ class ChatBridgeController {
   late final LayoutBridgeCommands layout = LayoutBridgeCommands(this);
   late final MemoryBridgeCommands memory = MemoryBridgeCommands(this);
 
-  ChatBridgeController(this._controller) {
+  ChatBridgeController(
+    this._controller, {
+    JsBridgeService? jsBridgeService,
+  }) : _jsBridgeService = jsBridgeService ?? JsBridgeService() {
     setupHandlers();
   }
 
@@ -207,6 +213,16 @@ class ChatBridgeController {
   void Function(String blockId, String messageId)? onExtBlockEdit;
   void Function(String blockId, String messageId)? onExtBlockDelete;
 
+  /// Called when an interactive panel reports its content height changed.
+  /// `panelId` identifies the panel, `messageId` the assistant message it
+  /// belongs to, `heightPx` the new height in CSS pixels.
+  void Function(String panelId, String messageId, double heightPx)? onPanelResize;
+
+  /// Called when an interactive panel emits a custom event (action button,
+  /// form submit, etc.). The `payload` shape is panel-defined.
+  void Function(String panelId, String messageId, String event, Map<String, dynamic> payload)?
+      onPanelEvent;
+
   /// Register JS handlers for every callback declared on this host. The
   /// declarations live in [bridgeHandlers] (data-driven) so the actual
   /// dispatch table is short and auditable.
@@ -219,6 +235,18 @@ class ChatBridgeController {
         callback: (args) => _dispatch(name, spec, args),
       );
     }
+    _controller.addJavaScriptHandler(
+      handlerName: 'glazeBridge',
+      callback: (args) async {
+        final raw = args.isNotEmpty ? args.first : const <String, dynamic>{};
+        final request = raw is Map<String, dynamic>
+            ? raw
+            : raw is Map
+                ? Map<String, dynamic>.from(raw)
+                : const <String, dynamic>{};
+        return _jsBridgeService.dispatch(request);
+      },
+    );
   }
 
   dynamic _dispatch(String name, HandlerSpec spec, List<dynamic> args) {
@@ -301,6 +329,20 @@ class ChatBridgeController {
             data['action'] as String? ?? 'copy',
             data['text'] as String? ?? '',
           );
+        case 'onPanelResize':
+          final panelId = data['panelId'] as String? ?? '';
+          final height = (data['height'] as num?)?.toDouble() ?? 0.0;
+          if (panelId.isEmpty) return;
+          onPanelResize?.call(panelId, '', height);
+        case 'onPanelEvent':
+          final panelId = data['panelId'] as String? ?? '';
+          final event = data['event'] as String? ?? 'action';
+          final payloadRaw = data['payload'];
+          final payload = payloadRaw is Map
+              ? Map<String, dynamic>.from(payloadRaw)
+              : <String, dynamic>{};
+          if (panelId.isEmpty) return;
+          onPanelEvent?.call(panelId, '', event, payload);
       }
     } catch (_) {}
   }
@@ -526,6 +568,65 @@ class ChatBridgeController {
     // Badge UX removed — block status is shown inline in the ext-blocks panel.
   }
 
+  // ── Interactive panels ────────────────────────────────────────────────
+
+  /// Opens a persistent sandboxed iframe island under [messageId] and renders
+  /// [html] inside it. Returns the panelId assigned by JS, or `null` when
+  /// the message isn't currently in the DOM.
+  ///
+  /// [options] is a free-form JSON object. Recognised keys:
+  ///   - `title`: aria-label / accessibility hint for the iframe
+  ///   - `minHeight`: starting height in pixels (default 120, clamped 60..2000)
+  Future<String?> openInteractivePanel({
+    required String messageId,
+    required String html,
+    Map<String, dynamic> options = const {},
+  }) async {
+    await _ensureGlazeSdkLoaded();
+    final raw = await evalJsWithResult(
+      'window.bridge?.openPanel(${escapeJsonStr(messageId)}, ${escapeJsonStr(html)}, ${escapeJsonStr(jsonEncode(options))})',
+    );
+    if (raw is String && raw.isNotEmpty) return raw;
+    return null;
+  }
+
+  /// Closes an open panel. No-op if the panel doesn't exist.
+  Future<void> closeInteractivePanel(String panelId) async {
+    if (panelId.isEmpty) return;
+    await callJs('closePanel', panelId);
+  }
+
+  /// Closes all panels currently open in the WebView. Called on session
+  /// switch and full reset to avoid leaking iframes between sessions.
+  Future<void> closeAllInteractivePanels() async {
+    await evalJs('window.bridge?._panelHost?.closeAll()');
+  }
+
+  /// Pushes a `glaze:panel-push` message to the panel iframe (no response
+  /// expected). Useful for live updates from Dart.
+  Future<bool> postToInteractivePanel({
+    required String panelId,
+    required String method,
+    Map<String, dynamic> params = const {},
+  }) async {
+    if (panelId.isEmpty) return false;
+    final result = await evalJsWithResult(
+      'window.bridge?.postToPanel(${escapeJsonStr(panelId)}, ${escapeJsonStr(method)}, ${escapeJsonStr(jsonEncode(params))})',
+    );
+    return result == true || result == 'true';
+  }
+
+  Future<void> _ensureGlazeSdkLoaded() async {
+    final existing = await evalJsWithResult('typeof window.__glazeSdkSource');
+    if (existing == 'string') return;
+    final sdkSource = await rootBundle.loadString(
+      'assets/chat_webview/glaze_sdk.js',
+    );
+    await _controller.evaluateJavascript(
+      source: 'window.__glazeSdkSource = ${escapeJsonStr(sdkSource)};',
+    );
+  }
+
   /// Runs [script] inside a sandboxed iframe in the Chat WebView and returns
   /// the string result. Throws on timeout (>60 s) or script error.
   ///
@@ -537,6 +638,7 @@ class ChatBridgeController {
     required String script,
     required List<ChatMessage> messages,
     required Character? character,
+    required String? sessionId,
     required String? previousOutput,
     int contextMessageCount = 10,
     CancelToken? cancelToken,
@@ -557,6 +659,8 @@ class ChatBridgeController {
 
     final contextMap = <String, dynamic>{
       'messages': contextMessages,
+      'sessionId': sessionId,
+      'characterId': character?.id,
       'character': character != null
           ? {
               'name': character.name,
@@ -568,6 +672,13 @@ class ChatBridgeController {
       'previousOutput': previousOutput,
     };
     final contextJson = jsonEncode(contextMap);
+
+    final sdkSource = await rootBundle.loadString(
+      'assets/chat_webview/glaze_sdk.js',
+    );
+    await _controller.evaluateJavascript(
+      source: 'window.__glazeSdkSource = ${escapeJsonStr(sdkSource)};',
+    );
 
     // callAsyncJavaScript returns the JS Promise result.
     // bridge.runSandboxedScript returns a Promise<string>.

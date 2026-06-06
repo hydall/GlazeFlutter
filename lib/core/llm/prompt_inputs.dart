@@ -5,6 +5,7 @@ import '../models/chat_message.dart';
 import '../models/api_config.dart';
 import '../models/lorebook.dart';
 import '../models/memory_book.dart';
+import 'prompt_builder.dart';
 
 /// Raw inputs collected from DB/providers on the main thread.
 /// Fully serializable for cross-isolate transfer.
@@ -36,6 +37,7 @@ class PromptInputs {
   final int memoryMaxInjected;
   final String memoryKeyMatchMode;
   final String memoryInjectionTarget;
+  final List<RuntimePromptBlock> runtimePromptBlocks;
 
   const PromptInputs({
     required this.character,
@@ -61,88 +63,91 @@ class PromptInputs {
     this.memoryMaxInjected = 7,
     this.memoryKeyMatchMode = 'glaze',
     this.memoryInjectionTarget = 'hard_block',
+    this.runtimePromptBlocks = const [],
   });
 
   Map<String, dynamic> toJson() => {
-        'character': character.toJson(),
-        'persona': persona?.toJson(),
-        'preset': preset?.toJson(),
-        'history': history.map((m) => m.toJson()).toList(),
-        'apiConfig': apiConfig.toJson(),
-        'sessionVars': sessionVars,
-        'globalVars': globalVars,
-        'summaryContent': summaryContent,
-        'guidanceText': guidanceText,
-        'lorebooks': lorebooks.map((l) => l.toJson()).toList(),
-        'lorebookSettings': lorebookSettings.toJson(),
-        'lorebookActivations': lorebookActivations.toJson(),
-        'authorsNote': authorsNote?.toJson(),
-        'characterDepthPrompt': characterDepthPrompt,
-        'characterDepthPromptDepth': characterDepthPromptDepth,
-        'characterDepthPromptRole': characterDepthPromptRole,
-        'globalRegexes': globalRegexes.map((r) => r.toJson()).toList(),
-        'vectorEntries': vectorEntries.map((e) => e.toJson()).toList(),
-        'memoryEntries': memoryEntries.map((e) => e.toJson()).toList(),
-        'memoryEnabled': memoryEnabled,
-        'memoryMaxInjected': memoryMaxInjected,
-        'memoryKeyMatchMode': memoryKeyMatchMode,
-        'memoryInjectionTarget': memoryInjectionTarget,
-      };
+    'character': character.toJson(),
+    'persona': persona?.toJson(),
+    'preset': preset?.toJson(),
+    'history': history.map((m) => m.toJson()).toList(),
+    'apiConfig': apiConfig.toJson(),
+    'sessionVars': sessionVars,
+    'globalVars': globalVars,
+    'summaryContent': summaryContent,
+    'guidanceText': guidanceText,
+    'lorebooks': lorebooks.map((l) => l.toJson()).toList(),
+    'lorebookSettings': lorebookSettings.toJson(),
+    'lorebookActivations': lorebookActivations.toJson(),
+    'authorsNote': authorsNote?.toJson(),
+    'characterDepthPrompt': characterDepthPrompt,
+    'characterDepthPromptDepth': characterDepthPromptDepth,
+    'characterDepthPromptRole': characterDepthPromptRole,
+    'globalRegexes': globalRegexes.map((r) => r.toJson()).toList(),
+    'vectorEntries': vectorEntries.map((e) => e.toJson()).toList(),
+    'memoryEntries': memoryEntries.map((e) => e.toJson()).toList(),
+    'memoryEnabled': memoryEnabled,
+    'memoryMaxInjected': memoryMaxInjected,
+    'memoryKeyMatchMode': memoryKeyMatchMode,
+    'memoryInjectionTarget': memoryInjectionTarget,
+    'runtimePromptBlocks': runtimePromptBlocks
+        .map((block) => block.toJson())
+        .toList(),
+  };
 
   factory PromptInputs.fromJson(Map<String, dynamic> json) => PromptInputs(
-        character: Character.fromJson(
-            json['character'] as Map<String, dynamic>),
-        persona: json['persona'] != null
-            ? Persona.fromJson(json['persona'] as Map<String, dynamic>)
-            : null,
-        preset: json['preset'] != null
-            ? Preset.fromJson(json['preset'] as Map<String, dynamic>)
-            : null,
-        history: (json['history'] as List)
-            .map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
-            .toList(),
-        apiConfig: ApiConfig.fromJson(
-            json['apiConfig'] as Map<String, dynamic>),
-        sessionVars:
-            Map<String, String>.from(json['sessionVars'] as Map? ?? {}),
-        globalVars:
-            Map<String, String>.from(json['globalVars'] as Map? ?? {}),
-        summaryContent: json['summaryContent'] as String?,
-        guidanceText: json['guidanceText'] as String?,
-        lorebooks: (json['lorebooks'] as List)
-            .map((l) => Lorebook.fromJson(l as Map<String, dynamic>))
-            .toList(),
-        lorebookSettings: LorebookGlobalSettings.fromJson(
-            json['lorebookSettings'] as Map<String, dynamic>),
-        lorebookActivations: LorebookActivations.fromJson(
-            json['lorebookActivations'] as Map<String, dynamic>),
-        authorsNote: json['authorsNote'] != null
-            ? AuthorsNote.fromJson(
-                json['authorsNote'] as Map<String, dynamic>)
-            : null,
-        characterDepthPrompt:
-            json['characterDepthPrompt'] as String? ?? '',
-        characterDepthPromptDepth:
-            json['characterDepthPromptDepth'] as int? ?? 4,
-        characterDepthPromptRole:
-            json['characterDepthPromptRole'] as String? ?? 'system',
-        globalRegexes: (json['globalRegexes'] as List)
-            .map((r) => PresetRegex.fromJson(r as Map<String, dynamic>))
-            .toList(),
-        vectorEntries: (json['vectorEntries'] as List)
-            .map((e) =>
-                LorebookEntry.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        memoryEntries: (json['memoryEntries'] as List)
-            .map((e) => MemoryEntry.fromJson(e as Map<String, dynamic>))
-            .toList(),
-        memoryEnabled: json['memoryEnabled'] as bool? ?? true,
-        memoryMaxInjected: json['memoryMaxInjected'] as int? ?? 7,
-        memoryKeyMatchMode:
-            json['memoryKeyMatchMode'] as String? ?? 'glaze',
-        memoryInjectionTarget:
-            _migrateInjectionTarget(json['memoryInjectionTarget'] as String?),
-      );
+    character: Character.fromJson(json['character'] as Map<String, dynamic>),
+    persona: json['persona'] != null
+        ? Persona.fromJson(json['persona'] as Map<String, dynamic>)
+        : null,
+    preset: json['preset'] != null
+        ? Preset.fromJson(json['preset'] as Map<String, dynamic>)
+        : null,
+    history: (json['history'] as List)
+        .map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
+        .toList(),
+    apiConfig: ApiConfig.fromJson(json['apiConfig'] as Map<String, dynamic>),
+    sessionVars: Map<String, String>.from(json['sessionVars'] as Map? ?? {}),
+    globalVars: Map<String, String>.from(json['globalVars'] as Map? ?? {}),
+    summaryContent: json['summaryContent'] as String?,
+    guidanceText: json['guidanceText'] as String?,
+    lorebooks: (json['lorebooks'] as List)
+        .map((l) => Lorebook.fromJson(l as Map<String, dynamic>))
+        .toList(),
+    lorebookSettings: LorebookGlobalSettings.fromJson(
+      json['lorebookSettings'] as Map<String, dynamic>,
+    ),
+    lorebookActivations: LorebookActivations.fromJson(
+      json['lorebookActivations'] as Map<String, dynamic>,
+    ),
+    authorsNote: json['authorsNote'] != null
+        ? AuthorsNote.fromJson(json['authorsNote'] as Map<String, dynamic>)
+        : null,
+    characterDepthPrompt: json['characterDepthPrompt'] as String? ?? '',
+    characterDepthPromptDepth: json['characterDepthPromptDepth'] as int? ?? 4,
+    characterDepthPromptRole:
+        json['characterDepthPromptRole'] as String? ?? 'system',
+    globalRegexes: (json['globalRegexes'] as List)
+        .map((r) => PresetRegex.fromJson(r as Map<String, dynamic>))
+        .toList(),
+    vectorEntries: (json['vectorEntries'] as List)
+        .map((e) => LorebookEntry.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    memoryEntries: (json['memoryEntries'] as List)
+        .map((e) => MemoryEntry.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    memoryEnabled: json['memoryEnabled'] as bool? ?? true,
+    memoryMaxInjected: json['memoryMaxInjected'] as int? ?? 7,
+    memoryKeyMatchMode: json['memoryKeyMatchMode'] as String? ?? 'glaze',
+    memoryInjectionTarget: _migrateInjectionTarget(
+      json['memoryInjectionTarget'] as String?,
+    ),
+    runtimePromptBlocks: (json['runtimePromptBlocks'] as List? ?? [])
+        .map(
+          (block) => RuntimePromptBlock.fromJson(block as Map<String, dynamic>),
+        )
+        .toList(),
+  );
 }
 
 String _migrateInjectionTarget(String? raw) {

@@ -7,6 +7,7 @@ enum BlockType {
   infoblock,
   imageGen,
   jsRunner,
+  interactive,
 }
 
 enum BlockTrigger {
@@ -57,6 +58,12 @@ class BlockConfig with _$BlockConfig {
     /// When non-empty, the LLM response is also extracted by parsing this
     /// template's tag pair out of the raw reply.
     @Default('<{{name}}>\n\n</{{name}}>') String template,
+    // Periodic trigger (Phase 11)
+    /// Number of seconds between runs when [trigger] is
+    /// [BlockTrigger.periodic]. The block's JS script is executed in the
+    /// headless engine every `periodicIntervalSeconds` seconds while
+    /// extensions are enabled. Ignored for other trigger types.
+    @Default(60) int periodicIntervalSeconds,
   }) = _BlockConfig;
 
   factory BlockConfig.fromJson(Map<String, dynamic> json) =>

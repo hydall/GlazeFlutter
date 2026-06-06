@@ -160,6 +160,9 @@ package-lock.json
 # Custom scripts
 /rebuild.bat
 
+# Local planning docs
+/js_extensions_implementation_plan.md
+
 
 # ===========================
 # Cursor local hooks (per-machine, contain absolute paths)

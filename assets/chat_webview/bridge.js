@@ -817,6 +817,7 @@ class Bridge {
     );
     this._setupScrollListener();
     this._setupInteractionListener();
+    this._setupGlazeRequestRelay();
     this._setupImageClickForward();
     this._swipeHandler.setup();
   }
@@ -891,6 +892,44 @@ class Bridge {
       this._pendingRequests.set(requestId, { resolve, reject, timer });
       this._sendToFlutter(name, [requestId, ...args]);
     });
+  }
+
+  _setupGlazeRequestRelay() {
+    window.addEventListener('message', async (e) => {
+      const data = e.data || {};
+      if (!data || data.type !== 'glaze:request') return;
+      if (!e.source) return;
+      try {
+        const result = await this._callGlazeBridge({
+          id: data.id,
+          method: data.method,
+          params: data.params || {},
+          context: data.context || {},
+        });
+        e.source.postMessage({ type: 'glaze:response', id: data.id, ok: true, result }, '*');
+      } catch (error) {
+        e.source.postMessage({
+          type: 'glaze:response',
+          id: data.id,
+          ok: false,
+          error: { message: String(error && error.message ? error.message : error) },
+        }, '*');
+      }
+    });
+  }
+
+  async _callGlazeBridge(request) {
+    if (!window.flutter_inappwebview || !window.flutter_inappwebview.callHandler) {
+      throw new Error('Flutter bridge is not available');
+    }
+    const response = await window.flutter_inappwebview.callHandler('glazeBridge', request);
+    if (response && response.ok === false) {
+      const error = response.error || {};
+      throw new Error(error.message || 'Glaze bridge error');
+    }
+    return response && Object.prototype.hasOwnProperty.call(response, 'result')
+      ? response.result
+      : response;
   }
 
   _resolveRequest(requestId, result) {
@@ -1021,6 +1060,7 @@ class Bridge {
   setMessages(messagesJson) {
     this.flush();
     this._suppressLoadMore = true;
+    this._panelHost?.closeAll();
     const container = document.getElementById('chat-container') || document.body;
     if (![...container.classList].some(c => c.startsWith('layout-'))) {
       container.classList.add('layout-default');
@@ -1239,6 +1279,11 @@ class Bridge {
 
   removeMessage(messageId) {
     this.flush();
+    if (this._panelHost) {
+      for (const [panelId, panel] of [...this._panelHost._panels.entries()]) {
+        if (panel.messageId === messageId) this._panelHost.close(panelId);
+      }
+    }
     const el = document.querySelector(`[data-message-id="${messageId}"]`);
     if (el && this.renderer) {
       this.renderer.animateRemoveSection(el, () => this.virtualList.remove(messageId));
@@ -1250,6 +1295,7 @@ class Bridge {
   clearAll() {
     this.flush();
     this._showLoadingScreen();
+    this._panelHost?.closeAll();
     this.virtualList.clear();
   }
 
@@ -1485,6 +1531,46 @@ class Bridge {
   debugFormatter(text) {
     const formatted = this.renderer.formatter.format(text, false);
     document.title = 'DBG:' + formatted.substring(0, 200);
+  }
+
+  // ── Interactive panels (sandboxed iframe islands) ──────────────────────
+
+  /**
+   * Persistent, sandboxed iframe islands rendered under assistant messages.
+   * Unlike `runSandboxedScript`, these stay alive for the entire lifetime
+   * of the message so the user can interact with the panel (click, type,
+   * fetch via glaze.* etc.) and call back into Dart through the standard
+   * `glaze:request` postMessage relay.
+   *
+   * Security model:
+   *   - iframe uses `sandbox="allow-scripts"` WITHOUT `allow-same-origin`
+   *     → null origin blocks `window.parent` and `window.flutter_inappwebview`
+   *   - All `glaze.*` calls go through the same parent reлай as
+   *     `runSandboxedScript`, so cross-origin spoofing is impossible:
+   *     parent only answers if `e.source === iframe.contentWindow`
+   *   - Iframe HTML is constructed in two parts: a trusted SDK bootstrap
+   *     (`window.__glazeSdkSource`) + caller-supplied HTML in a sandbox
+   *     container. The user HTML is **not** injected via `innerHTML` on the
+   *     parent side — only the iframe sees it.
+   *   - ResizeObserver reports height back to Dart so the virtual list
+   *     can keep the cached section height in sync.
+   */
+  initPanelHost() {
+    if (this._panelHost) return;
+    this._panelHost = new PanelHost(this);
+  }
+
+  openPanel(messageId, html, optionsJson) {
+    this.initPanelHost();
+    return this._panelHost.open(messageId, html, optionsJson || '{}');
+  }
+
+  closePanel(panelId) {
+    this._panelHost?.close(panelId);
+  }
+
+  postToPanel(panelId, method, paramsJson) {
+    return this._panelHost?.postToPanel(panelId, method, paramsJson || '{}');
   }
 
   // ── Ext Blocks panel ──────────────────────────────────────────────────────
@@ -1800,11 +1886,17 @@ class Bridge {
       // inside the user script are properly escaped.
       const escapedScript = JSON.stringify(script);
       const escapedContext = contextJson;
+      const sdkSource = JSON.stringify(window.__glazeSdkSource || '');
 
       const sandboxHtml = `<!DOCTYPE html><html><body><script>
 (function() {
   var context;
   try { context = ${escapedContext}; } catch(e) { context = {}; }
+  window.__glazeContext = context;
+  var glazeSdkSource = ${sdkSource};
+  if (glazeSdkSource) {
+    (new Function(glazeSdkSource))();
+  }
   var userScript = ${escapedScript};
   (new Function('context', '"use strict"; return (async function() { ' + userScript + ' })();'))(context)
     .then(function(r) {
@@ -1818,6 +1910,7 @@ class Bridge {
 
       const handler = (e) => {
         if (!iframe || e.source !== iframe.contentWindow) return;
+        if (e.data && e.data.type) return;
         clearTimeout(timeoutId);
         window.removeEventListener('message', handler);
         cleanup();
@@ -1836,5 +1929,213 @@ class Bridge {
       iframe.srcdoc = sandboxHtml;
       document.body.appendChild(iframe);
     });
+  }
+}
+
+class PanelHost {
+  constructor(bridge) {
+    this.bridge = bridge;
+    this._panels = new Map();
+    this._nextId = 1;
+    this._setupListener();
+  }
+
+  _setupListener() {
+    this._onMessage = (e) => {
+      if (!e.source) return;
+      for (const [panelId, panel] of this._panels) {
+        if (e.source !== panel.iframe.contentWindow) continue;
+        const data = e.data || {};
+        if (data.type === 'glaze:panel-ready') {
+          panel.ready = true;
+          this.bridge._sendToFlutter('onPanelEvent', [
+            JSON.stringify({ panelId, event: 'ready' }),
+          ]);
+          return;
+        }
+        if (data.type === 'glaze:panel-resize') {
+          const height = Math.max(0, Math.round(Number(data.height) || 0));
+          panel.lastHeight = height;
+          this.bridge._sendToFlutter('onPanelResize', [
+            JSON.stringify({ panelId, height }),
+          ]);
+          return;
+        }
+        if (data.type === 'glaze:panel-action') {
+          this.bridge._sendToFlutter('onPanelEvent', [
+            JSON.stringify({
+              panelId,
+              event: data.event || 'action',
+              payload: data.payload || {},
+            }),
+          ]);
+          return;
+        }
+        if (data.type === 'glaze:panel-close') {
+          this.close(panelId);
+          return;
+        }
+        if (data.type === 'glaze:request') {
+          this._relayGlazeRequest(panel, data);
+          return;
+        }
+      }
+    };
+    window.addEventListener('message', this._onMessage);
+  }
+
+  async _relayGlazeRequest(panel, data) {
+    try {
+      const result = await this.bridge._callGlazeBridge({
+        id: data.id,
+        method: data.method,
+        params: data.params || {},
+        context: data.context || {},
+      });
+      panel.iframe.contentWindow.postMessage(
+        { type: 'glaze:response', id: data.id, ok: true, result },
+        '*',
+      );
+    } catch (error) {
+      panel.iframe.contentWindow.postMessage(
+        {
+          type: 'glaze:response',
+          id: data.id,
+          ok: false,
+          error: {
+            message: String(error && error.message ? error.message : error),
+          },
+        },
+        '*',
+      );
+    }
+  }
+
+  open(messageId, html, optionsJson) {
+    if (!messageId) return null;
+    let options = {};
+    try { options = JSON.parse(optionsJson || '{}'); } catch (_) { options = {}; }
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!section) return null;
+
+    const panelId = `panel_${this._nextId++}_${Date.now()}`;
+    const host = document.createElement('div');
+    host.className = 'interactive-panel';
+    host.dataset.panelId = panelId;
+    host.dataset.messageId = messageId;
+
+    const placeholderHeight = Math.max(
+      60,
+      Math.min(2000, Number(options.minHeight) || 0),
+    );
+    host.style.minHeight = placeholderHeight + 'px';
+
+    const content = section.querySelector('.msg-content') || section;
+    content.appendChild(host);
+
+    const iframe = document.createElement('iframe');
+    iframe.className = 'interactive-panel-frame';
+    iframe.sandbox = 'allow-scripts';
+    iframe.setAttribute('aria-label', options.title || 'Interactive panel');
+    iframe.style.border = '0';
+    iframe.style.width = '100%';
+    iframe.style.height = placeholderHeight + 'px';
+    iframe.style.background = 'transparent';
+    iframe.srcdoc = this._buildSrcdoc(html, options);
+
+    host.appendChild(iframe);
+
+    const panel = {
+      panelId,
+      messageId,
+      host,
+      iframe,
+      ready: false,
+      lastHeight: placeholderHeight,
+      _resizeObserver: null,
+    };
+    this._panels.set(panelId, panel);
+
+    if (typeof ResizeObserver !== 'undefined') {
+      panel._resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const rect = entry.contentRect;
+          const height = Math.round(rect.height);
+          if (height > 0 && Math.abs(height - panel.lastHeight) > 2) {
+            panel.lastHeight = height;
+            this.bridge._sendToFlutter('onPanelResize', [
+              JSON.stringify({ panelId, height }),
+            ]);
+          }
+        }
+      });
+      panel._resizeObserver.observe(host);
+    }
+
+    return panelId;
+  }
+
+  _buildSrcdoc(html, options) {
+    const sdk = JSON.stringify(window.__glazeSdkSource || '');
+    const userHtml = String(html == null ? '' : html);
+    const context = JSON.stringify({
+      messageId: options.messageId || '',
+      panelId: options.panelId || '',
+      title: options.title || '',
+    });
+    const bootstrap = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
+<div id="glaze-panel-root">${userHtml}</div>
+<script>
+(function() {
+  window.__glazeContext = ${context};
+  var sdk = ${sdk};
+  if (sdk) {
+    try { (new Function(sdk))(); } catch (e) { console.error('[glaze-panel] sdk load failed', e); }
+  }
+  function post(type, extra) {
+    parent.postMessage(Object.assign({ type: 'glaze:' + type }, extra || {}), '*');
+  }
+  window.glazePanel = Object.freeze({
+    ready: function() { post('panel-ready'); },
+    close: function() { post('panel-close'); },
+    reportHeight: function(h) { post('panel-resize', { height: Number(h) || 0 }); },
+    sendAction: function(event, payload) { post('panel-action', { event: event || 'action', payload: payload || {} }); },
+  });
+  parent.postMessage({ type: 'glaze:panel-ready' }, '*');
+})();
+<\/script></body></html>`;
+    return bootstrap;
+  }
+
+  close(panelId) {
+    const panel = this._panels.get(panelId);
+    if (!panel) return;
+    if (panel._resizeObserver) {
+      panel._resizeObserver.disconnect();
+      panel._resizeObserver = null;
+    }
+    if (panel.host && panel.host.parentNode) {
+      panel.host.parentNode.removeChild(panel.host);
+    }
+    this._panels.delete(panelId);
+  }
+
+  closeAll() {
+    for (const panelId of [...this._panels.keys()]) {
+      this.close(panelId);
+    }
+  }
+
+  postToPanel(panelId, method, paramsJson) {
+    const panel = this._panels.get(panelId);
+    if (!panel || !panel.iframe || !panel.iframe.contentWindow) return false;
+    let params = {};
+    try { params = JSON.parse(paramsJson || '{}'); } catch (_) { params = {}; }
+    panel.iframe.contentWindow.postMessage({
+      type: 'glaze:panel-push',
+      method,
+      params,
+    }, '*');
+    return true;
   }
 }

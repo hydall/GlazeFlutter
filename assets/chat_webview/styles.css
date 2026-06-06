@@ -262,6 +262,21 @@
   flex-direction: column;
   gap: 8px;
 }
+
+.interactive-panel {
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  contain: layout style;
+}
+.interactive-panel .interactive-panel-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
 .ext-blocks-toolbar {
   display: flex;
   justify-content: flex-end;
