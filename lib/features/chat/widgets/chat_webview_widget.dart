@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/models/preset.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/character_provider.dart';
+import '../../../core/state/db_provider.dart';
 import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_webview_keep_alive.dart';
 import '../bridge/chat_webview_settings.dart';
@@ -25,6 +26,7 @@ import '../../extensions/providers/extension_presets_provider.dart';
 import '../../extensions/providers/extensions_settings_provider.dart';
 import '../../extensions/services/ext_blocks_panel_builder.dart';
 import '../../extensions/services/extension_post_gen_service.dart';
+import '../../extensions/services/js_bridge_service.dart';
 import '../bridge/chat_bridge_registry.dart';
 import 'webview_callbacks.dart';
 
@@ -821,7 +823,15 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
             mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
           ),
           onWebViewCreated: (controller) async {
-            _bridge = ChatBridgeController(controller);
+            _bridge = ChatBridgeController(
+              controller,
+              jsBridgeService: JsBridgeService(
+                chatRepo: ref.read(chatRepoProvider),
+                characterRepo: ref.read(characterRepoProvider),
+                currentSessionId: () => widget.sessionId,
+                currentCharacterId: () => widget.charId,
+              ),
+            );
             // Register bridge in the registry so services can access it.
             ref.read(chatBridgeRegistryProvider(widget.charId).notifier).state = _bridge;
             unawaited(controller.evaluateJavascript(source: 'if(window.bridge) window.bridge.clearAll();'));

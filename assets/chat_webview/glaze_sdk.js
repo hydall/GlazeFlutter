@@ -89,8 +89,11 @@
     getVariables(scope, path) {
       return callBridge('getVariables', { scope: normalizeScope(scope), path });
     },
-    setVariables(scope, values) {
-      return callBridge('setVariables', { scope: normalizeScope(scope), values: values || {} });
+    setVariables(scope, pathOrValues, value) {
+      if (typeof pathOrValues === 'string') {
+        return callBridge('setVariables', { scope: normalizeScope(scope), path: pathOrValues, value });
+      }
+      return callBridge('setVariables', { scope: normalizeScope(scope), values: pathOrValues || {} });
     },
     deleteVariable(scope, path) {
       return callBridge('deleteVariable', { scope: normalizeScope(scope), path });

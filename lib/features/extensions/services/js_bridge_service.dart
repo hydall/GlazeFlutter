@@ -1,8 +1,26 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/db/repositories/character_repo.dart';
+import '../../../core/db/repositories/chat_repo.dart';
+
 class JsBridgeService {
+  static const _chatVarsKey = '__glaze_variables';
+  static const _characterVarsKey = 'glaze_variables';
+  static const _maxJsonBytes = 64 * 1024;
+
+  final ChatRepo? _chatRepo;
+  final CharacterRepo? _characterRepo;
+  final String? Function()? _currentSessionId;
+  final String? Function()? _currentCharacterId;
+
+  JsBridgeService({ChatRepo? chatRepo, CharacterRepo? characterRepo, String? Function()? currentSessionId, String? Function()? currentCharacterId})
+    : this._(chatRepo, characterRepo, currentSessionId, currentCharacterId);
+
+  const JsBridgeService._(this._chatRepo, this._characterRepo, this._currentSessionId, this._currentCharacterId);
+
   Future<Map<String, dynamic>> dispatch(Map<String, dynamic> request) async {
     final method = request['method'] as String? ?? '';
     final params = _asMap(request['params']);
@@ -15,25 +33,28 @@ class JsBridgeService {
       return {
         'ok': false,
         'error': {
-          'code': e is UnsupportedError ? 'unsupported_method' : 'bridge_error',
+          'code': e is UnsupportedError
+              ? 'unsupported_method'
+              : e is ArgumentError
+              ? 'invalid_request'
+              : 'bridge_error',
           'message': e.toString(),
         },
       };
     }
   }
 
-  FutureOr<dynamic> _handle(
-    String method,
-    Map<String, dynamic> params,
-    Map<String, dynamic> context,
-  ) {
+  FutureOr<dynamic> _handle(String method, Map<String, dynamic> params, Map<String, dynamic> context) {
     switch (method) {
       case 'showToast':
         debugPrint('[JsBridge] toast: ${params['message'] ?? ''}');
         return true;
       case 'getVariables':
+        return _getVariables(params, context);
       case 'setVariables':
+        return _setVariables(params, context);
       case 'deleteVariable':
+        return _deleteVariable(params, context);
       case 'executeCommand':
       case 'triggerGeneration':
       case 'injectPrompt':
@@ -50,5 +71,217 @@ class JsBridgeService {
     if (value is Map<String, dynamic>) return value;
     if (value is Map) return Map<String, dynamic>.from(value);
     return <String, dynamic>{};
+  }
+
+  Future<dynamic> _getVariables(Map<String, dynamic> params, Map<String, dynamic> context) async {
+    final root = await _readScope(_scope(params), context);
+    final path = _path(params['path']);
+    return _cloneJson(path.isEmpty ? root : _getAtPath(root, path));
+  }
+
+  Future<Map<String, dynamic>> _setVariables(Map<String, dynamic> params, Map<String, dynamic> context) {
+    final path = _path(params['path']);
+    final hasValue = params.containsKey('value');
+    final value = hasValue ? params['value'] : params['values'];
+    _validateJsonValue(value);
+
+    return _updateScope(_scope(params), context, (root) {
+      if (path.isEmpty) {
+        final values = _asMap(value);
+        if (values.isEmpty && value is! Map) {
+          throw ArgumentError('setVariables without path requires an object');
+        }
+        root.addAll(Map<String, dynamic>.from(values));
+      } else {
+        _setAtPath(root, path, value);
+      }
+      _validateJsonValue(root);
+      return root;
+    });
+  }
+
+  Future<Map<String, dynamic>> _deleteVariable(Map<String, dynamic> params, Map<String, dynamic> context) {
+    final path = _path(params['path']);
+    if (path.isEmpty) throw ArgumentError('deleteVariable path is required');
+
+    return _updateScope(_scope(params), context, (root) {
+      _deleteAtPath(root, path);
+      return root;
+    });
+  }
+
+  Future<Map<String, dynamic>> _readScope(String scope, Map<String, dynamic> context) async {
+    switch (scope) {
+      case 'chat':
+        final sessionId = _sessionId(context);
+        final repo = _chatRepo ?? (throw StateError('Chat repo is not available'));
+        final session = await repo.getById(sessionId);
+        if (session == null) {
+          throw StateError('Chat session "$sessionId" was not found');
+        }
+        return _decodeChatVars(session.sessionVars);
+      case 'character':
+        final charId = _characterId(context);
+        final repo = _characterRepo ?? (throw StateError('Character repo is not available'));
+        final character = await repo.getById(charId);
+        if (character == null) {
+          throw StateError('Character "$charId" was not found');
+        }
+        return _decodeCharacterVars(character.extensions);
+      default:
+        throw ArgumentError('Unsupported variable scope "$scope"');
+    }
+  }
+
+  Future<Map<String, dynamic>> _updateScope(String scope, Map<String, dynamic> context, Map<String, dynamic> Function(Map<String, dynamic> root) update) async {
+    switch (scope) {
+      case 'chat':
+        final sessionId = _sessionId(context);
+        final repo = _chatRepo ?? (throw StateError('Chat repo is not available'));
+        Map<String, dynamic> nextRoot = const {};
+        await repo.updateSessionVarsJson(sessionId, (vars) {
+          nextRoot = update(_decodeChatVars(vars));
+          if (nextRoot.isEmpty) {
+            vars.remove(_chatVarsKey);
+          } else {
+            vars[_chatVarsKey] = jsonEncode(nextRoot);
+          }
+          return vars;
+        });
+        return Map<String, dynamic>.from(nextRoot);
+      case 'character':
+        final charId = _characterId(context);
+        final repo = _characterRepo ?? (throw StateError('Character repo is not available'));
+        Map<String, dynamic> nextRoot = const {};
+        await repo.updateExtensionsJson(charId, (extensions) {
+          nextRoot = update(_decodeCharacterVars(extensions));
+          if (nextRoot.isEmpty) {
+            extensions.remove(_characterVarsKey);
+          } else {
+            extensions[_characterVarsKey] = nextRoot;
+          }
+          return extensions;
+        });
+        return Map<String, dynamic>.from(nextRoot);
+      default:
+        throw ArgumentError('Unsupported variable scope "$scope"');
+    }
+  }
+
+  String _scope(Map<String, dynamic> params) {
+    final scope = (params['scope'] as String? ?? 'chat').trim().toLowerCase();
+    return scope.isEmpty ? 'chat' : scope;
+  }
+
+  String _sessionId(Map<String, dynamic> context) {
+    final value = (context['sessionId'] as String?) ?? _currentSessionId?.call();
+    if (value == null || value.isEmpty) {
+      throw StateError('Chat session context is not available');
+    }
+    return value;
+  }
+
+  String _characterId(Map<String, dynamic> context) {
+    final value = (context['characterId'] as String?) ?? _currentCharacterId?.call();
+    if (value == null || value.isEmpty) {
+      throw StateError('Character context is not available');
+    }
+    return value;
+  }
+
+  List<String> _path(Object? value) {
+    if (value == null) return const [];
+    if (value is! String) throw ArgumentError('Variable path must be a string');
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return const [];
+    final parts = trimmed.split('.');
+    if (parts.any((p) => p.isEmpty)) {
+      throw ArgumentError('Variable path contains an empty segment');
+    }
+    return parts;
+  }
+
+  dynamic _getAtPath(Map<String, dynamic> root, List<String> path) {
+    dynamic current = root;
+    for (final part in path) {
+      if (current is! Map || !current.containsKey(part)) return null;
+      current = current[part];
+    }
+    return current;
+  }
+
+  void _setAtPath(Map<String, dynamic> root, List<String> path, Object? value) {
+    var current = root;
+    for (final part in path.take(path.length - 1)) {
+      final existing = current[part];
+      final child = existing is Map ? Map<String, dynamic>.from(existing) : <String, dynamic>{};
+      current[part] = child;
+      current = child;
+    }
+    current[path.last] = value;
+  }
+
+  void _deleteAtPath(Map<String, dynamic> root, List<String> path) {
+    dynamic current = root;
+    for (final part in path.take(path.length - 1)) {
+      if (current is! Map) return;
+      current = current[part];
+    }
+    if (current is Map) current.remove(path.last);
+  }
+
+  Map<String, dynamic> _decodeChatVars(Map<String, dynamic> vars) {
+    final raw = vars[_chatVarsKey];
+    if (raw is String && raw.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return <String, dynamic>{};
+  }
+
+  Map<String, dynamic> _decodeCharacterVars(Map<String, dynamic> extensions) {
+    final raw = extensions[_characterVarsKey];
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    return <String, dynamic>{};
+  }
+
+  dynamic _cloneJson(Object? value) {
+    if (value == null) return null;
+    return jsonDecode(jsonEncode(value));
+  }
+
+  void _validateJsonValue(Object? value) {
+    void visit(Object? current) {
+      if (current == null || current is bool || current is String) return;
+      if (current is num) {
+        if (!current.isFinite) {
+          throw ArgumentError('JSON numbers must be finite');
+        }
+        return;
+      }
+      if (current is List) {
+        for (final item in current) {
+          visit(item);
+        }
+        return;
+      }
+      if (current is Map) {
+        for (final entry in current.entries) {
+          if (entry.key is! String) {
+            throw ArgumentError('JSON object keys must be strings');
+          }
+          visit(entry.value);
+        }
+        return;
+      }
+      throw ArgumentError('Value is not JSON-compatible');
+    }
+
+    visit(value);
+    if (utf8.encode(jsonEncode(value)).length > _maxJsonBytes) {
+      throw ArgumentError('Variable payload exceeds $_maxJsonBytes bytes');
+    }
   }
 }

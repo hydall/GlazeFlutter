@@ -555,6 +555,7 @@ class ChatBridgeController {
     required String script,
     required List<ChatMessage> messages,
     required Character? character,
+    required String? sessionId,
     required String? previousOutput,
     int contextMessageCount = 10,
     CancelToken? cancelToken,
@@ -575,6 +576,8 @@ class ChatBridgeController {
 
     final contextMap = <String, dynamic>{
       'messages': contextMessages,
+      'sessionId': sessionId,
+      'characterId': character?.id,
       'character': character != null
           ? {
               'name': character.name,

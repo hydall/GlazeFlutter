@@ -1129,6 +1129,7 @@ class ExtensionPostGenService {
         script: script,
         messages: contextMessages,
         character: character,
+        sessionId: sessionId,
         previousOutput: previousOutput,
         contextMessageCount: -1,
         cancelToken: cancelToken,

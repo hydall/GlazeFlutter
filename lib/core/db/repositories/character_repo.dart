@@ -163,6 +163,30 @@ class CharacterRepo implements SyncCharacterStore {
     await _db.into(_db.characters).insertOnConflictUpdate(_toCompanion(character));
   }
 
+  Future<Map<String, dynamic>> updateExtensionsJson(
+    String charId,
+    Map<String, dynamic> Function(Map<String, dynamic> extensions) update,
+  ) async {
+    return _db.transaction(() async {
+      final row = await (_db.select(_db.characters)
+            ..where((t) => t.charId.equals(charId)))
+          .getSingleOrNull();
+      if (row == null) {
+        throw StateError('Character "$charId" was not found');
+      }
+
+      final current = _decodeJsonMap(row.extensionsJson);
+      final updated = update(Map<String, dynamic>.from(current));
+      await (_db.update(_db.characters)..where((t) => t.charId.equals(charId)))
+          .write(
+        CharactersCompanion(
+          extensionsJson: Value(updated.isNotEmpty ? jsonEncode(updated) : null),
+        ),
+      );
+      return updated;
+    });
+  }
+
   @override
   Future<void> delete(String id) async {
     final sessionIds = (await (_db.select(_db.chatSessions)
@@ -284,4 +308,13 @@ class CharacterRepo implements SyncCharacterStore {
         macroName: Value(m.macroName),
         picksHash: Value(m.picksHash),
       );
+
+  Map<String, dynamic> _decodeJsonMap(String? text) {
+    if (text == null || text.isEmpty) return <String, dynamic>{};
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+    } catch (_) {}
+    return <String, dynamic>{};
+  }
 }
