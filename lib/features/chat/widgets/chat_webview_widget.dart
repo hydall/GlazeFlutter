@@ -1,12 +1,10 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
-import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
-import '../../../core/models/preset.dart';
 import '../../../core/state/active_regex_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/state/persona_resolution.dart';
@@ -16,18 +14,12 @@ import '../bridge/chat_webview_bridge_host.dart';
 import '../bridge/chat_webview_keep_alive.dart';
 import '../bridge/chat_webview_settings.dart';
 import '../bridge/chat_webview_theme_builder.dart';
-import '../chat_provider.dart';
-import '../editing_message_provider.dart';
 import '../../../core/models/chat_message.dart';
-import '../../extensions/models/info_block.dart';
-import '../../extensions/providers/extension_presets_provider.dart';
-import '../../extensions/providers/extensions_settings_provider.dart';
-import '../../extensions/providers/info_blocks_provider.dart';
 import '../../extensions/services/js_engine_service.dart';
 import '../../extensions/services/panel_host_service.dart';
 import '../bridge/chat_bridge_registry.dart';
-import '../chat_state.dart';
 import 'chat_message_sync.dart';
+import 'chat_webview_build_listeners.dart';
 import 'chat_webview_callbacks.dart';
 import 'chat_webview_ext_block_callbacks.dart';
 import 'chat_webview_initializer.dart';
@@ -205,15 +197,6 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     // player, etc.). Errors are swallowed; teardown must not throw.
     _bridgeHost.dispose().catchError((Object _) {});
     super.dispose();
-  }
-
-  /// Shallow comparison of two regex lists by id + disabled state.
-  bool _regexListChanged(List<PresetRegex> a, List<PresetRegex> b) {
-    if (a.length != b.length) return true;
-    for (int i = 0; i < a.length; i++) {
-      if (a[i].id != b[i].id || a[i].disabled != b[i].disabled) return true;
-    }
-    return false;
   }
 
   Future<void> _initWebView() async {
@@ -460,99 +443,20 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       _bridge!.setRegexContext(displayRegexes, character, effectivePersona);
     }
 
-    // Re-render all messages when display regex list changes (toggle, add, remove).
-    ref.listen<AsyncValue<List<PresetRegex>>>(displayRegexesProvider, (
-      prev,
-      next,
-    ) {
-      if (!_ready || _bridge == null) return;
-      final oldList = prev?.valueOrNull ?? [];
-      final newList = next.valueOrNull ?? [];
-      if (_regexListChanged(oldList, newList)) {
-        _bridge!.setRegexContext(newList, character, effectivePersona);
-        _bridge!.setMessages(
-          widget.messages,
-          visibleStartIndex: widget.visibleStartIndex,
-        );
-      }
-    });
-
-    ref.listen<String?>(editingMessageIdProvider(widget.charId), (prev, next) {
-      if (!_ready || _bridge == null) return;
-      if (prev != null && prev != next) {
-        _bridge!.stopEdit(prev);
-        final oldMsg = widget.messages.where((m) => m.id == prev).firstOrNull;
-        if (oldMsg != null) {
-          _bridge!.updateMessage(oldMsg);
-        }
-      }
-      if (next != null) {
-        _bridge!.startEdit(next);
-      }
-    });
-
-    ref.listen<StreamingState>(streamingStateProvider(widget.charId), (
-      prev,
-      next,
-    ) {
-      if (!_ready || _bridge == null) return;
-      if (next.text.isEmpty && next.reasoning == null) return;
-
-      final regenId = widget.regenTargetId;
-      if (regenId != null) {
-        final idx = widget.messages.indexWhere((m) => m.id == regenId);
-        if (idx >= 0) {
-          final original = widget.messages[idx];
-          final updated = original.copyWith(
-            content: next.text,
-            reasoning: next.reasoning ?? original.reasoning,
-            isTyping: true,
-          );
-          _bridge?.updateMessage(updated);
-          _syncState.regenStreamingSent = true;
-        }
-        return;
-      }
-
-      final msg = ChatMessage(
-        id: _kStreamingId,
-        role: 'assistant',
-        content: next.text,
-        reasoning: next.reasoning,
-        timestamp: DateTime.now().millisecondsSinceEpoch,
-        isTyping: true,
-      );
-
-      if (!_syncState.streamingSent) {
-        _bridge?.appendMessage(msg);
-        _syncState.streamingSent = true;
-      } else {
-        _bridge?.updateMessage(msg);
-      }
-    });
-
-    // Refresh inline ext-block panels when DB rows or extension settings change.
-    final sessionId = widget.sessionId;
-    if (sessionId != null && sessionId.isNotEmpty) {
-      ref.listen<List<InfoBlock>>(infoBlocksProvider(sessionId), (prev, next) {
-        if (_bridge == null || !_ready) return;
-        final allIds = <String>{
-          for (final b in prev ?? const <InfoBlock>[]) b.messageId,
-          for (final b in next) b.messageId,
-          for (final m in widget.messages)
-            if (m.role == 'assistant' || m.role == 'character') m.id,
-        };
-        for (final msgId in allIds) {
-          unawaited(_refreshExtBlocksPanel(sessionId, msgId));
-        }
-      });
-    }
-    ref.listen(extensionsSettingsProvider, (_, _) {
-      if (_bridge != null && _ready) unawaited(_syncExtBlockPanels());
-    });
-    ref.listen(extensionPresetsProvider, (_, _) {
-      if (_bridge != null && _ready) unawaited(_syncExtBlockPanels());
-    });
+    ChatWebViewBuildListeners(
+      ref: ref,
+      bridge: _bridge,
+      ready: () => _ready,
+      syncState: _syncState,
+      streamingId: _kStreamingId,
+      charId: widget.charId,
+      sessionId: widget.sessionId,
+      messages: widget.messages,
+      regenTargetId: widget.regenTargetId,
+      visibleStartIndex: widget.visibleStartIndex,
+      onRefreshExtBlocksPanel: _refreshExtBlocksPanel,
+      onSyncExtBlockPanels: _syncExtBlockPanels,
+    ).attach();
 
     final bgImageBytes = ref.watch(bgImageBytesProvider);
 
