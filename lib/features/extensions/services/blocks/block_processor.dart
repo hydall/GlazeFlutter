@@ -44,6 +44,7 @@ class BlockProcessor {
 
     String? previousOutput;
     Future<InfoBlock?>? previousFuture;
+    final inFlight = <Future<InfoBlock?>>[];
 
     for (final blockConfig in blocks) {
       if (cancelToken.isCancelled) break;
@@ -75,6 +76,7 @@ class BlockProcessor {
         previousFuture = null;
       } else {
         previousFuture = blockFuture;
+        inFlight.add(blockFuture);
         unawaited(
           blockFuture.then((result) {
             if (result != null) {
@@ -87,6 +89,9 @@ class BlockProcessor {
 
     if (previousFuture != null) {
       await previousFuture;
+    }
+    if (inFlight.isNotEmpty) {
+      await Future.wait(inFlight);
     }
   }
 }

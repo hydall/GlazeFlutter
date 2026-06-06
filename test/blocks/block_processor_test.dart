@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -101,6 +103,66 @@ void main() {
 
       expect(seenPrevious, [null, 'out-first']);
       expect(completed, ['first', 'second']);
+    });
+
+    test('waits for all independent blocks before returning', () async {
+      const processor = BlockProcessor();
+      final firstCompleter = Completer<InfoBlock?>();
+      var returned = false;
+      final completed = <String>[];
+      final preset = ExtensionPreset(
+        id: 'p1',
+        name: 'Preset',
+        blocks: const [
+          BlockConfig(
+            id: 'slow',
+            name: 'Slow',
+            trigger: BlockTrigger.afterAssistant,
+            order: 1,
+          ),
+          BlockConfig(
+            id: 'fast-a',
+            name: 'Fast A',
+            trigger: BlockTrigger.afterAssistant,
+            order: 2,
+          ),
+          BlockConfig(
+            id: 'fast-b',
+            name: 'Fast B',
+            trigger: BlockTrigger.afterAssistant,
+            order: 3,
+          ),
+        ],
+      );
+
+      final runFuture = processor
+          .run(
+            preset: preset,
+            trigger: BlockTrigger.afterAssistant,
+            cancelToken: CancelToken(),
+            runBlock: ({required blockConfig, required previousOutput}) {
+              if (blockConfig.id == 'slow') {
+                return firstCompleter.future;
+              }
+              return Future.value(
+                _result(blockConfig, 'out-${blockConfig.id}'),
+              );
+            },
+            onBlockComplete: (block) => completed.add(block.blockId),
+          )
+          .then((_) => returned = true);
+
+      await pumpEventQueue();
+
+      expect(returned, isFalse);
+      expect(completed, containsAll(['fast-a', 'fast-b']));
+      expect(completed, isNot(contains('slow')));
+
+      firstCompleter.complete(_result(preset.blocks.first, 'out-slow'));
+      await runFuture;
+
+      expect(returned, isTrue);
+      expect(completed, containsAll(['slow', 'fast-a', 'fast-b']));
     });
   });
 }
