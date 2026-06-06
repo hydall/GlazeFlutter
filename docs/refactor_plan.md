@@ -1,6 +1,6 @@
 # Refactor Plan — Bridge, God-Widgets, God-Services
 
-**Status:** Phases 1-3 complete. Phases 4-7 pending.
+**Status:** Phases 1-4 complete. Phases 5-7 pending.
 **Scope:** Decompose 4 Dart god-objects and 3 JS god-scripts that grew during the
 `js-extension-bridge-sdk` branch (22 feature commits) into focused modules.
 **Goal:** Clean foundation for future feature work; no functional changes.
@@ -20,7 +20,7 @@ MVP. Some files accumulated responsibilities well past the project's
 |---|---:|---|
 | `lib/features/chat/widgets/chat_webview_widget.dart` | **1630 → 481** | 6 follow-up commits (sandboxing, audioplayers, periodic lifecycle, command registry, connection profiles, headless engine) |
 | `lib/features/extensions/services/extension_post_gen_service.dart` | **1526 → 525** | periodic, afterUser, swipe, panels, image gen, js runner, status tracking, error handling |
-| `lib/features/extensions/screens/preset_editor_screen.dart` | **1214** | permissions, connection profiles, block editor, model fetching |
+| `lib/features/extensions/screens/preset_editor_screen.dart` | **1214 → 1 export / 37 real screen** | permissions, connection profiles, block editor, model fetching |
 | `lib/features/extensions/services/js_bridge_service.dart` | 707 → 188 (split into `js_bridge/`) | 8 capability additions, growing ~50-100 lines per new method |
 
 ### JS god-scripts
@@ -275,7 +275,7 @@ small bridge proxy methods (`scrollToBottom`, `scrollToMessage`, `setSearch`,
 candidates for the same treatment. None of this changes user-facing
 behavior.
 
-### Phase 4 — `preset_editor_screen.dart` → Sub-screens (1 day)
+### Phase 4 — `preset_editor_screen.dart` → Sub-screens (1 day) ✅ Done
 
 **Before:** one 1214-line screen with 6 menu groups, a 580-line
 `_BlockEditDialog`, API config selector, model fetcher, profile picker,
@@ -306,6 +306,31 @@ it changes behavior.
 
 **Test impact:** widget tests for each section widget (`golden tests`
 optional, smoke tests required).
+
+**Implemented:** the old import path is now a compatibility export and the real
+editor lives under `lib/features/extensions/screens/preset_editor/`. The top
+level screen is a 37-line scaffold/navigation shell. Blocks, permissions, and
+connection profiles are separate `ConsumerWidget` sections. The block edit dialog
+keeps the existing dialog UX but moved out of the screen, with reusable API
+selector, model field, type picker, trigger picker, and profile picker widgets.
+
+| File | Lines | Responsibility |
+|---|---:|---|
+| `preset_editor_screen.dart` | 37 | Top-level scaffold, missing-preset state, section composition |
+| `sections/blocks_section.dart` | 218 | Block list, reorder/add/toggle/edit/delete wiring |
+| `sections/permissions_section.dart` | 65 | Capability `SwitchListTile`s and default-deny help text |
+| `sections/profiles_section.dart` | 106 | big/medium/small generateText profile mapping |
+| `block_edit_dialog.dart` | 710 | Existing block editor dialog UX and save mapping |
+| `widgets/api_config_selector.dart` | 103 | Reusable API picker field |
+| `widgets/model_field.dart` | 138 | Model text field + fetch/pick flow |
+| `widgets/block_type_picker.dart` | 47 | Block type segmented picker |
+| `widgets/block_trigger_picker.dart` | 39 | Trigger segmented picker |
+| `widgets/profile_picker_sheet.dart` | 52 | Bottom sheet for profile → API mapping |
+
+**Verification:** targeted analyze passed for the extracted preset editor files
+and smoke tests. Added `test/extensions/preset_editor_sections_test.dart` with
+4 widget smoke tests covering the three sections and the default block editor
+dialog; all 4 pass.
 
 ### Phase 5 — `bridge.js` → ES modules (3 days)
 
