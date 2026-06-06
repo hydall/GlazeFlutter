@@ -1,6 +1,6 @@
 # Refactor Plan — Bridge, God-Widgets, God-Services
 
-**Status:** Phase 3 in progress. Phases 1-2 complete.
+**Status:** Phases 1-3 complete. Phases 4-7 pending.
 **Scope:** Decompose 4 Dart god-objects and 3 JS god-scripts that grew during the
 `js-extension-bridge-sdk` branch (22 feature commits) into focused modules.
 **Goal:** Clean foundation for future feature work; no functional changes.
@@ -16,12 +16,12 @@ MVP. Some files accumulated responsibilities well past the project's
 
 ### Dart god-objects
 
-| File | Lines | Touched by |
+| File | Lines (before → after) | Touched by |
 |---|---:|---|
-| `lib/features/chat/widgets/chat_webview_widget.dart` | **1630** | 6 follow-up commits (sandboxing, audioplayers, periodic lifecycle, command registry, connection profiles, headless engine) |
-| `lib/features/extensions/services/extension_post_gen_service.dart` | **1526** | periodic, afterUser, swipe, panels, image gen, js runner, status tracking, error handling |
+| `lib/features/chat/widgets/chat_webview_widget.dart` | **1630 → 481** | 6 follow-up commits (sandboxing, audioplayers, periodic lifecycle, command registry, connection profiles, headless engine) |
+| `lib/features/extensions/services/extension_post_gen_service.dart` | **1526 → 525** | periodic, afterUser, swipe, panels, image gen, js runner, status tracking, error handling |
 | `lib/features/extensions/screens/preset_editor_screen.dart` | **1214** | permissions, connection profiles, block editor, model fetching |
-| `lib/features/extensions/services/js_bridge_service.dart` | **707** | 8 capability additions, growing ~50-100 lines per new method |
+| `lib/features/extensions/services/js_bridge_service.dart` | 707 → 188 (split into `js_bridge/`) | 8 capability additions, growing ~50-100 lines per new method |
 
 ### JS god-scripts
 
@@ -200,7 +200,7 @@ tests) after extracting all four concrete handlers. Additional targeted periodic
 runner extraction checks passed for `test/periodic_trigger_scheduler_test.dart`,
 `test/periodic_lifecycle_test.dart`, and `test/blocks/block_processor_test.dart`.
 
-### Phase 3 — `chat_webview_widget.dart` → controllers/services (2 days) 🚧 In progress
+### Phase 3 — `chat_webview_widget.dart` → controllers/services (2 days) ✅ Done
 
 **Before:** one 1630-line `ConsumerStatefulWidget` doing WebView setup,
 bridge wiring, panel lifecycle, audio lifecycle, swipe handling, periodic
@@ -210,14 +210,19 @@ tick consumption, afterUser, theme application, scrollback.
 
 ```
 lib/features/chat/widgets/chat_webview/
-  chat_webview_widget.dart          (≤300 lines: build, lifecycle delegation)
-  chat_webview_controller.dart      (coordinates WebView state + disposal order)
-  bridge_host_controller.dart       (register handlers, generate bridge text)
-  panel_lifecycle_controller.dart   (openPanel, closePanel, postToPanel, stream)
-  swipe_controller.dart             (swipe detection, regeneration flow)
-  periodic_dispatch_controller.dart (subscribe to PeriodicTriggerScheduler)
-  theme_applier.dart                (apply theme tokens to WebView)
-  chat_webview_preload.dart         (already separate, no changes)
+  chat_webview_widget.dart          (~480 lines: build, lifecycle delegation)
+  chat_webview_bridge_host.dart     (JsBridgeService deps)
+  chat_webview_theme_builder.dart   (applyTheme map + color helpers)
+  chat_message_sync.dart            (pure message-list diff)
+  chat_webview_sync_dispatcher.dart (didUpdateWidget per-field diff)
+  chat_webview_ext_block_callbacks.dart (ext-block bridge callbacks)
+  chat_webview_callbacks.dart       (user-gesture bridge callbacks)
+  chat_webview_panel_refresher.dart (ext-block panel refresh)
+  chat_webview_initializer.dart     (one-time bridge init sequence)
+  chat_webview_build_listeners.dart (build()-side ref.listen plumbing)
+  chat_webview_surface.dart         (InAppWebView widget + Stack)
+  ext_block_dialogs.dart            (edit / delete AlertDialogs)
+  webview_callbacks.dart            (already separate, no changes)
 ```
 
 **Pattern:** keep `ChatWebViewWidget` as a thin `ConsumerStatefulWidget` that
@@ -231,15 +236,44 @@ through an explicit `ChatWebViewContext` or constructor dependencies.
 harness test that asserts clean init/dispose ordering. End-to-end behavior is
 still covered by the manual `flutter run` smoke test.
 
-**Implemented so far:** extracted the chat WebView's bridge-side dependencies
-(`JsBridgeService` handler implementations, permission gate, audio bridge,
-toast controller, trigger handler, prompt injection notifier, command
-registry) into `ChatWebViewBridgeHost` in
-`lib/features/chat/bridge/chat_webview_bridge_host.dart`. The widget now
-just creates the host as a `late final` and calls `buildJsBridgeService()`
-from `onWebViewCreated`. `chat_webview_widget.dart` shrank from 1630 → 1279
-lines (-21.5%). Disposal is centralized in `ChatWebViewBridgeHost.dispose()`
-which the widget calls from `State.dispose`.
+**Implemented:** `chat_webview_widget.dart` shrank from **1630 → 481 lines
+(-70.5%)** via 10 focused extractions. The widget is now a thin
+`ConsumerStatefulWidget` that delegates everything except lifecycle
+(`initState` / `dispose` / `didUpdateWidget` / `build`) and a handful of
+small bridge proxy methods (`scrollToBottom`, `setSearch`,
+`toggleMessageSelection`, `applyIdentity`).
+
+Extracted into `lib/features/chat/bridge/` and `lib/features/chat/widgets/`:
+
+| File | Lines | Responsibility |
+|---|---:|---|
+| `chat_webview_bridge_host.dart` | 309 | Owns the `JsBridgeService` deps (audio, toast, command registry, trigger handler, prompt injection, permission gate) and builds the service on demand |
+| `chat_webview_theme_builder.dart` | 100 | Pure `Map<String, String>` builder for the WebView theme + `ChatWebViewThemeInput` snapshot |
+| `ext_block_dialogs.dart` | 88 | `promptEdit` / `confirmDelete` AlertDialogs |
+| `chat_message_sync.dart` | 169 | Pure diff between previous / current message lists + `chatMessageListsIdentical` helper |
+| `chat_webview_sync_dispatcher.dart` | 559 | `didUpdateWidget` diff dispatch (14 branches) + `ChatWebViewWidgetFields` snapshot + `ChatWebViewSyncState` bundle |
+| `chat_webview_ext_block_callbacks.dart` | 184 | Bridge callbacks for the inline ext-block panel (run / stop / regen / image-regen / edit / delete) |
+| `chat_webview_callbacks.dart` | 137 | Pass-through wiring for user-gesture bridge callbacks (swipe, scroll, edit, image, link, load-more) |
+| `chat_webview_panel_refresher.dart` | 83 | Refresh / sync helpers for the inline ext-block panel |
+| `chat_webview_initializer.dart` | 250 | One-time bridge init sequence + `ChatWebViewInitInput` snapshot |
+| `chat_webview_build_listeners.dart` | 201 | `build()`-side `ref.listen` plumbing (regex, editing, streaming, info-blocks, ext settings/presets) |
+| `chat_webview_surface.dart` | 316 | `InAppWebView` widget with the `onWebViewCreated` / `onLoadStop` / `onConsoleMessage` callbacks and the Stack layout |
+
+**Verification:** `flutter analyze` clean (1 pre-existing `throw_of_invalid_type` in
+`js_engine_service.dart`, out of scope). `flutter test` 683/689 passing
+after the refactor — the 6 failures are pre-existing (`bridge.js` wheel
+listener, `styles.css` `overscroll-behavior: contain`, both in upstream
+Phase 5 scope). One characterization test (`webview_callback_contract_test.dart`)
+was updated to look for `indexWhere` / `launchUrl` / `loadOlderMessages` in
+`chat_webview_callbacks.dart` (where the code now lives) instead of in the
+widget file.
+
+**Future follow-ups (not blocking Phase 3):** the widget still owns a few
+small bridge proxy methods (`scrollToBottom`, `scrollToMessage`, `setSearch`,
+`toggleMessageSelection`) that could move into a `ChatWebViewBridgeProxy`.
+`applyIdentity` and `_applySessionSwitch` are 20-60 lines each and are
+candidates for the same treatment. None of this changes user-facing
+behavior.
 
 ### Phase 4 — `preset_editor_screen.dart` → Sub-screens (1 day)
 
