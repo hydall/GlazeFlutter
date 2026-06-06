@@ -178,7 +178,9 @@ now delegates orchestration to `BlockProcessor`. Extracted concrete handlers for
 The shared image pixel render step remains in `ExtensionPostGenService` because
 `rerunImageOnly()` uses it too; JS execution/fallback helpers also remain there
 for now because periodic `runJsBlock()` shares the same headless/visual fallback
-semantics.
+semantics. Extracted shared panel update/throttling plumbing into
+`BlockPanelUpdater` and placeholder/error/dedupe lifecycle into
+`BlockStatusTracker`.
 
 **Verification so far:** targeted analyze passed for
 `extension_post_gen_service.dart`, `services/blocks`, and

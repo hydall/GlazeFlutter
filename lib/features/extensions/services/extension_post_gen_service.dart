@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -12,7 +11,6 @@ import '../../../core/models/character.dart';
 import '../../../core/models/persona.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/constants/image_gen_patterns.dart';
-import '../../../core/utils/id_generator.dart';
 import '../../chat/bridge/chat_bridge_controller.dart';
 import '../../chat/bridge/chat_bridge_registry.dart';
 import '../../image_gen/image_gen_provider.dart';
@@ -25,15 +23,16 @@ import '../providers/extension_presets_provider.dart';
 import '../providers/extensions_settings_provider.dart';
 import '../providers/info_blocks_provider.dart';
 import 'block_context_builder.dart';
-import 'ext_blocks_panel_builder.dart';
 import 'info_block_service.dart';
 import 'js_engine_service.dart';
 import 'blocks/block_processor.dart';
 import 'blocks/block_context.dart';
+import 'blocks/block_panel_updater.dart';
 import 'blocks/image_gen_block_handler.dart';
 import 'blocks/interactive_block_handler.dart';
 import 'blocks/js_runner_block_handler.dart';
 import 'blocks/infoblock_handler.dart';
+import 'blocks/block_status_tracker.dart';
 
 final extensionPostGenServiceProvider = Provider<ExtensionPostGenService>(
   (ref) => ExtensionPostGenService(ref),
@@ -44,83 +43,42 @@ final extensionPostGenServiceProvider = Provider<ExtensionPostGenService>(
 /// wait for the previous block to finish (done or error) before starting.
 /// Independently-configured blocks start in parallel with the previous one.
 class ExtensionPostGenService {
-  ExtensionPostGenService(this._ref);
+  ExtensionPostGenService(this._ref) : _panelUpdater = BlockPanelUpdater(_ref);
 
   final Ref _ref;
+  final BlockPanelUpdater _panelUpdater;
 
   /// Active cancel token for the current block run. Cancelling this stops
   /// all in-flight block LLM/image calls without touching the main gen token.
   CancelToken? _blocksCancelToken;
-
-  /// Serializes WebView panel JS calls so stream patches render in order.
-  Future<void>? _panelJsChain;
 
   final BlockProcessor _blockProcessor = const BlockProcessor();
 
   InfoBlocksRepository get _repo =>
       InfoBlocksRepository(_ref.read(appDbProvider));
 
-  void _enqueuePanelJs(Future<void> Function() work) {
-    _panelJsChain = (_panelJsChain ?? Future.value()).then((_) async {
-      try {
-        await work();
-      } catch (e, st) {
-        debugPrint('[ExtPostGen] panel JS update failed: $e\n$st');
-      }
-    });
-  }
+  BlockStatusTracker get _statusTracker => BlockStatusTracker(
+    ref: _ref,
+    repo: _repo,
+    refreshPanelForMessage: _refreshPanelForMessage,
+  );
 
   void _refreshPanelForMessage(
     String charId,
     String sessionId,
     String messageId,
   ) {
-    _enqueuePanelJs(() async {
-      final bridge = _ref.read(chatBridgeRegistryProvider(charId));
-      if (bridge == null) return;
-      final blocks = ExtBlocksPanelBuilder.build(
-        _ref,
-        sessionId: sessionId,
-        messageId: messageId,
-      );
-      if (blocks.isEmpty) {
-        await bridge.hideExtBlocksPanel(messageId);
-        return;
-      }
-      await bridge.showExtBlocksPanel(
-        messageId,
-        blocks,
-        canRunAll: ExtBlocksPanelBuilder.canRunAll(blocks),
-      );
-    });
+    _panelUpdater.refreshForMessage(charId, sessionId, messageId);
   }
 
-  Future<void> _patchOrRefreshPanel({
-    required String charId,
-    required String sessionId,
-    required String messageId,
-    required String blockId,
-    required String content,
-    required String status,
-  }) async {
-    final bridge = _ref.read(chatBridgeRegistryProvider(charId));
-    if (bridge == null) return;
-    final patched = await bridge.patchExtBlockContent(
-      messageId: messageId,
-      blockId: blockId,
-      content: content,
-      status: status,
+  Future<InfoBlock> _markContextBlockError({
+    required BlockContext context,
+    required String errorMessage,
+  }) {
+    return _statusTracker.markError(
+      context: context,
+      errorMessage: errorMessage,
     );
-    if (patched) return;
-    _refreshPanelForMessage(charId, sessionId, messageId);
-  }
-
-  String _formatBlockErrorContent(String message) {
-    final escaped = message
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
-    return '<p class="ext-block-error"><strong>Ошибка:</strong> $escaped</p>';
   }
 
   Future<InfoBlock> _markBlockError({
@@ -130,49 +88,15 @@ class ExtensionPostGenService {
     required String placeholderId,
     required InfoBlock placeholder,
     required String errorMessage,
-  }) async {
-    final content = _formatBlockErrorContent(errorMessage);
-    await _repo.updateContent(placeholderId, content);
-    await _repo.updateStatus(placeholderId, BlockRunStatus.error);
-    final errored = placeholder.copyWith(
-      content: content,
-      status: BlockRunStatus.error,
-    );
-    _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(errored);
-    _refreshPanelForMessage(charId, sessionId, messageId);
-    return errored;
-  }
-
-  Future<InfoBlock> _markContextBlockError({
-    required BlockContext context,
-    required String errorMessage,
   }) {
-    return _markBlockError(
-      charId: context.charId,
-      sessionId: context.sessionId,
-      messageId: context.messageId,
-      placeholderId: context.placeholderId,
-      placeholder: context.placeholder,
+    return _statusTracker.markErrorForPlaceholder(
+      charId: charId,
+      sessionId: sessionId,
+      messageId: messageId,
+      placeholderId: placeholderId,
+      placeholder: placeholder,
       errorMessage: errorMessage,
     );
-  }
-
-  /// Removes duplicate DB rows for the same preset block on one message.
-  Future<String?> _dedupeBlocksForConfig({
-    required String sessionId,
-    required String messageId,
-    required String blockId,
-  }) async {
-    final existing = await _repo.getByMessageId(sessionId, messageId);
-    final matching = existing.where((b) => b.blockId == blockId).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    if (matching.isEmpty) return null;
-    final keep = matching.first;
-    for (final dup in matching.skip(1)) {
-      await _repo.deleteInfoBlock(dup.id);
-      await _ref.read(infoBlocksProvider(sessionId).notifier).delete(dup.id);
-    }
-    return keep.id;
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -317,7 +241,7 @@ class ExtensionPostGenService {
     final cancelToken = CancelToken();
     _blocksCancelToken = cancelToken;
 
-    final reuseBlockId = await _dedupeBlocksForConfig(
+    final reuseBlockId = await _statusTracker.dedupeForConfig(
       sessionId: sessionId,
       messageId: messageId,
       blockId: blockId,
@@ -349,8 +273,6 @@ class ExtensionPostGenService {
     _blocksCancelToken = null;
   }
 
-  DateTime? _lastStreamPanelAt;
-
   void _publishStreamingBlockContent({
     required String charId,
     required String sessionId,
@@ -359,28 +281,13 @@ class ExtensionPostGenService {
     required String content,
     bool force = false,
   }) {
-    final now = DateTime.now();
-    if (!force &&
-        _lastStreamPanelAt != null &&
-        now.difference(_lastStreamPanelAt!) <
-            const Duration(milliseconds: 80)) {
-      return;
-    }
-    _lastStreamPanelAt = now;
-    final updated = placeholder.copyWith(
+    _panelUpdater.publishStreamingContent(
+      charId: charId,
+      sessionId: sessionId,
+      messageId: messageId,
+      placeholder: placeholder,
       content: content,
-      status: BlockRunStatus.running,
-    );
-    _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(updated);
-    _enqueuePanelJs(
-      () => _patchOrRefreshPanel(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        blockId: placeholder.blockId,
-        content: content,
-        status: BlockRunStatus.running.name,
-      ),
+      force: force,
     );
   }
 
@@ -391,13 +298,12 @@ class ExtensionPostGenService {
     required String messageId,
     required InfoBlock placeholder,
   }) {
-    if (!blockConfig.streamToPanel) return null;
-    return (partial) => _publishStreamingBlockContent(
+    return _panelUpdater.makeStreamHandler(
+      blockConfig: blockConfig,
       charId: charId,
       sessionId: sessionId,
       messageId: messageId,
       placeholder: placeholder,
-      content: partial,
     );
   }
 
@@ -514,59 +420,15 @@ class ExtensionPostGenService {
       '[ExtPostGen] _runSingleBlock START: name="${blockConfig.name}" type=${blockConfig.type.name} order=${blockConfig.order} reuse=${reuseBlockId ?? "new"}',
     );
 
-    final String placeholderId;
-    final InfoBlock placeholder;
-
-    if (reuseBlockId != null) {
-      placeholderId = reuseBlockId;
-      final existing = await _repo.getByMessageId(sessionId, messageId);
-      final row = existing.where((b) => b.id == reuseBlockId).firstOrNull;
-      placeholder =
-          (row ??
-                  InfoBlock(
-                    id: reuseBlockId,
-                    sessionId: sessionId,
-                    messageId: messageId,
-                    blockId: blockConfig.id,
-                    blockName: blockConfig.name,
-                    blockType: blockConfig.type.name,
-                    content: '',
-                    createdAt: DateTime.now().millisecondsSinceEpoch,
-                    order: blockConfig.order,
-                    status: BlockRunStatus.running,
-                  ))
-              .copyWith(content: '', status: BlockRunStatus.running);
-      await _repo.updateContent(placeholderId, '');
-      await _repo.updateStatus(placeholderId, BlockRunStatus.running);
-      _ref
-          .read(infoBlocksProvider(sessionId).notifier)
-          .addOrReplace(placeholder);
-      _refreshPanelForMessage(charId, sessionId, messageId);
-      debugPrint(
-        '[ExtPostGen] reused block id=$placeholderId messageId=$messageId status=running',
-      );
-    } else {
-      placeholderId = generateId();
-      placeholder = InfoBlock(
-        id: placeholderId,
-        sessionId: sessionId,
-        messageId: messageId,
-        blockId: blockConfig.id,
-        blockName: blockConfig.name,
-        blockType: blockConfig.type.name,
-        content: '',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        order: blockConfig.order,
-        status: BlockRunStatus.running,
-      );
-      await _repo.insert(placeholder);
-      _ref
-          .read(infoBlocksProvider(sessionId).notifier)
-          .addOrReplace(placeholder);
-      debugPrint(
-        '[ExtPostGen] placeholder inserted: id=$placeholderId messageId=$messageId status=running',
-      );
-    }
+    final prepared = await _statusTracker.prepare(
+      charId: charId,
+      sessionId: sessionId,
+      messageId: messageId,
+      blockConfig: blockConfig,
+      reuseBlockId: reuseBlockId,
+    );
+    final placeholderId = prepared.placeholderId;
+    final placeholder = prepared.placeholder;
 
     _refreshPanelForMessage(charId, sessionId, messageId);
 
