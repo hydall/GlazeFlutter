@@ -189,6 +189,7 @@ class ExtensionPostGenService {
       character: character,
       persona: persona,
       cancelToken: _blocksCancelToken!,
+      trigger: BlockTrigger.afterAssistant,
     );
     _refreshPanelForMessage(charId, sessionId, messageId);
   }
@@ -237,6 +238,40 @@ class ExtensionPostGenService {
       character: character,
       persona: persona,
     );
+  }
+
+  /// Called by [ChatNotifier.sendMessage] right after a user message is
+  /// persisted. Runs every enabled `BlockTrigger.afterUser` block.
+  Future<void> runAfterUserBlocks({
+    required String charId,
+    required ChatSession session,
+    required Character character,
+    required Persona? persona,
+  }) async {
+    final preset = _resolveActivePreset();
+    if (preset == null) return;
+    if (session.id.isEmpty || session.messages.isEmpty) return;
+    final lastMessage = session.messages.last;
+    if (lastMessage.role != 'user') {
+      debugPrint(
+        '[ExtPostGen] runAfterUserBlocks: last message is not user, skipping',
+      );
+      return;
+    }
+    debugPrint('[ExtPostGen] runAfterUserBlocks: msg=${lastMessage.id}');
+    _blocksCancelToken = CancelToken();
+    await _runChain(
+      charId: charId,
+      sessionId: session.id,
+      messageId: lastMessage.id,
+      messages: session.messages,
+      preset: preset,
+      character: character,
+      persona: persona,
+      cancelToken: _blocksCancelToken!,
+      trigger: BlockTrigger.afterUser,
+    );
+    _refreshPanelForMessage(charId, session.id, lastMessage.id);
   }
 
   /// Re-runs a single block for an already-existing message.
@@ -399,9 +434,10 @@ class ExtensionPostGenService {
     required Character character,
     required Persona? persona,
     required CancelToken cancelToken,
+    BlockTrigger trigger = BlockTrigger.afterAssistant,
   }) async {
     final blocks = preset.blocks
-        .where((b) => b.enabled)
+        .where((b) => b.enabled && b.trigger == trigger)
         .toList()
       ..sort((a, b) => a.order.compareTo(b.order));
 
@@ -1388,21 +1424,103 @@ class ExtensionPostGenService {
 
   Map<String, dynamic> _jsContextMap({
     required List<Map<String, String>> messages,
-    required Character character,
+    required Character? character,
     required String sessionId,
     required String? previousOutput,
   }) {
     return {
       'messages': messages,
       'sessionId': sessionId,
-      'characterId': character.id,
-      'character': {
-        'name': character.name,
-        'description': character.description ?? '',
-        'personality': character.personality ?? '',
-        'scenario': character.scenario ?? '',
-      },
+      'characterId': character?.id,
+      'character': character == null
+          ? null
+          : {
+              'name': character.name,
+              'description': character.description ?? '',
+              'personality': character.personality ?? '',
+              'scenario': character.scenario ?? '',
+            },
       'previousOutput': previousOutput,
     };
+  }
+
+  /// Public entry point for periodic ticks (no `InfoBlock` is created —
+  /// periodic scripts are side-effect-only: write to `glaze.variables`,
+  /// play audio, call `triggerGeneration`, etc.). Uses the headless
+  /// engine when available; falls back to the visual bridge for the
+  /// currently open chat. Returns the script result string or `null`
+  /// when nothing was run.
+  ///
+  /// `contextMessages` is the message history to pass to the script.
+  /// For periodic ticks this is typically the empty list — the script
+  /// does not need the chat history, it just runs on a timer.
+  Future<String?> runJsBlock({
+    required String charId,
+    required BlockConfig block,
+    required List<ChatMessage> contextMessages,
+  }) async {
+    if (block.type != BlockType.jsRunner) {
+      throw ArgumentError(
+        'runJsBlock only supports BlockType.jsRunner (got ${block.type.name})',
+      );
+    }
+    final script = block.prompt.isNotEmpty
+        ? block.prompt
+        : block.script;
+    if (script.isEmpty) {
+      return null;
+    }
+    final engine = JsEngineService.instance;
+    final bridge = _ref.read(chatBridgeRegistryProvider(charId));
+    if (!engine.isReady && bridge == null) {
+      debugPrint(
+        '[ExtPostGen] runJsBlock: no engine or bridge (block "${block.name}")',
+      );
+      return null;
+    }
+    final cancelToken = CancelToken();
+    try {
+      if (engine.isReady) {
+        try {
+          final contextMap = _jsContextMap(
+            messages: contextMessages
+                .map((m) => {'role': m.role, 'text': m.content})
+                .toList(),
+            character: null, // no character payload for periodic
+            sessionId: '',
+            previousOutput: null,
+          );
+          // Periodic ticks have no character/session payload; the script
+          // can still read `messages` from the context (empty list by
+          // default).
+          final patchedContext = Map<String, dynamic>.from(contextMap)
+            ..['characterId'] = charId
+            ..['sessionId'] = '';
+          return await engine.runScript(
+            script: script,
+            context: patchedContext,
+            cancelToken: cancelToken,
+          );
+        } on HeadlessUnavailableError catch (_) {
+          // Fall through to visual bridge.
+        }
+      }
+      final visualBridge = bridge;
+      if (visualBridge == null) {
+        return null;
+      }
+      return await visualBridge.runJsBlock(
+        script: script,
+        messages: contextMessages,
+        character: null,
+        sessionId: '',
+        previousOutput: null,
+        contextMessageCount: -1,
+        cancelToken: cancelToken,
+      );
+    } catch (e) {
+      debugPrint('[ExtPostGen] runJsBlock failed: $e');
+      return null;
+    }
   }
 }

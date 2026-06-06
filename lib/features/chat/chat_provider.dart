@@ -23,6 +23,7 @@ import 'controllers/chat_session_controller.dart';
 import 'controllers/chat_draft_controller.dart';
 import 'services/generation_pipeline.dart';
 import 'utils/message_preview.dart';
+import '../extensions/services/extension_post_gen_service.dart';
 
 final chatProvider =
     AsyncNotifierProvider.family<ChatNotifier, ChatState, String>(
@@ -225,6 +226,13 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     _invalidateHistory();
     state = AsyncData(current.copyWith(session: updatedSession, isGenerating: true, generationStartTime: DateTime.now()));
 
+    // Dispatch `afterUser` extension blocks. This is fire-and-forget — the
+    // generation pipeline starts immediately, the post-gen service runs
+    // the chain in the background and persists its own InfoBlocks.
+    unawaited(
+      _dispatchAfterUserBlocks(updatedSession),
+    );
+
     final charRepo = ref.read(characterRepoProvider);
     final character = await charRepo.getById(arg);
     if (character != null) {
@@ -240,6 +248,23 @@ class ChatNotifier extends FamilyAsyncNotifier<ChatState, String> {
     }
 
     await _runGeneration(updatedSession, current, guidanceText: guidanceText);
+  }
+
+  Future<void> _dispatchAfterUserBlocks(ChatSession session) async {
+    try {
+      final charRepo = ref.read(characterRepoProvider);
+      final character = await charRepo.getById(arg);
+      if (character == null) return;
+      final post = ref.read(extensionPostGenServiceProvider);
+      await post.runAfterUserBlocks(
+        charId: arg,
+        session: session,
+        character: character,
+        persona: null,
+      );
+    } catch (e) {
+      debugPrint('[ChatNotifier] afterUser dispatch failed: $e');
+    }
   }
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
