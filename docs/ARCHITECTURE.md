@@ -509,8 +509,8 @@ See `docs/INVARIANTS.md` INV-PS4.
 
 | Table | Repo | Notes |
 |-------|------|-------|
-| `Characters` | `character_repo.dart` | watchAll(); v18 `picksHash`, v19 `createdAt`, v13 `extensionsJson` |
-| `ChatSessions` | `chat_repo.dart` | Largest repo (~250 lines); patch via `patchChatData` |
+| `Characters` | `character_repo.dart` | watchAll(); v18 `picksHash`, v19 `createdAt`, v13 `extensionsJson`. `updateExtensionsJson` is the atomic read-modify-write helper for the JS `character` variable scope. |
+| `ChatSessions` | `chat_repo.dart` | Largest repo (~250 lines); patch via `patchChatData`. `updateSessionVarsJson` is the atomic helper for the JS `chat` variable scope. |
 | `Presets` | `preset_repo.dart` | JSON blob per preset |
 | `ApiConfigs` | `api_config_repo.dart` | v21: `cacheControlTtl` |
 | `Personas` | `persona_repo.dart` | |
@@ -583,13 +583,23 @@ Characters, sessions, presets, API configs, personas, lorebooks, theme presets, 
 
 ---
 
-## 9. Extensions (Info Blocks)
+## 9. Extensions (Info Blocks + JS Bridge SDK)
 
-Post-generation extension pipeline runs after the assistant message is saved on the
-**normal/regen path only** (via `GenerationPipeline`, not `continueMessage`).
-Formal rules: `docs/INVARIANTS.md` INV-EG1–INV-EG7.
+The extensions feature ships two surfaces that share a single Dart-side
+`JsBridgeService`:
 
-### Execution model
+1. **Post-generation block chain** — preset-driven infoblock / imageGen /
+   jsRunner / interactive blocks that run after the assistant message
+   is saved on the normal/regen path.
+2. **JS Bridge SDK** (`window.glaze`) — extension authors can call
+   `glaze.*` from sandboxed iframes (interactive panels) or from a
+   headless `InAppWebView` that runs in the background even when no
+   chat is open.
+
+Formal invariants: `docs/INVARIANTS.md` INV-EG1–INV-EG8 and
+INV-JS1–INV-JS4. Detailed plan: `docs/js_extensions_implementation_plan.md`.
+
+### Block chain (post-generation)
 
 Blocks within a preset are executed in `order` (ascending). Execution is **parallel by
 default**; a block with `dependsOnPrevious = true` waits for the preceding block to
@@ -610,7 +620,30 @@ per block via `InfoBlocksRepository.updateStatus()`.
 |---|---|---|
 | `infoblock` | `InfoBlockService` | Calls LLM; injects last N results into prompt context |
 | `imageGen` | inline in `ExtensionPostGenService` | Reads `[img gen:…]` tag, calls `ImageGenService`, saves via `ImageStorageService`; result stored as `[IMG:RESULT:<path>]` |
-| `jsRunner` | stub | Registered; execution is a placeholder until JS sandbox is implemented |
+| `jsRunner` | `JsEngineService` (preferred) → `ChatBridgeController.runJsBlock` (fallback) | Runs JS in a sandboxed iframe; result string becomes the block content. Periodic ticks only ever run here. |
+| `interactive` | `PanelHostService` | LLM → strip code-fence → sandboxed iframe island under the assistant message. JS inside the panel has access to `window.glaze.*` |
+
+### Block triggers
+
+| `BlockTrigger` | When it runs | What it can do |
+|---|---|---|
+| `afterAssistant` | `ExtensionPostGenService.processAfterGeneration` (via `GenerationPipeline`) | all block types |
+| `afterUser` | `ChatNotifier.sendMessage` (fire-and-forget `unawaited(_dispatchAfterUserBlocks(...))`) | all block types |
+| `periodic` | `PeriodicTriggerScheduler` (`Timer.periodic(block.periodicIntervalSeconds)`) | `jsRunner` only — headless engine preferred, visual bridge fallback |
+
+The chain filter is enforced by `_runChain(trigger:)` in
+`ExtensionPostGenService`: the same chain is reused for `afterAssistant`
+(via `runBlocksForMessage`) and `afterUser` (via `runAfterUserBlocks`).
+The periodic scheduler calls `runJsBlock()` directly — no chain, no
+`InfoBlock` row, just a side-effect tick.
+
+### Periodic scheduler
+
+`PeriodicTriggerScheduler` is a singleton Riverpod provider. It watches
+`extensionPresetsProvider` + `extensionsSettingsProvider` and registers
+as a `WidgetsBindingObserver` to pause on `paused` / `inactive` /
+`hidden` / `detached` (no catch-up tick on resume). The
+`debugLifecycleState` test seam is used by `periodic_lifecycle_test.dart`.
 
 ### Cancellation
 
@@ -627,21 +660,120 @@ chat text-generation token (INV-EG5).
 | `dependsOnPrevious` | false | Serial/parallel mode |
 | `injectLastN` | 0 | Inject last N block outputs into LLM context; 0 = disabled |
 | `inject` | false | Whether to insert block output as a system message in the prompt |
+| `trigger` | `afterAssistant` | `afterAssistant` / `afterUser` / `periodic` |
+| `periodicIntervalSeconds` | 60 | Tick interval when `trigger == periodic` |
+
+### Capability permissions
+
+Each extension preset carries a `PresetPermissions` freezed model with
+19 capability toggles (default-deny except `showToast`). Every bridge
+method enforces its capability via `JsBridgeService._requireCapability`,
+which delegates to an injected `PermissionCheck` function — production
+wiring in `ChatWebViewWidget` reads `activePresetPermissionsProvider`.
+
+| Capability | Bridge method |
+|---|---|
+| `read_chat_vars` / `write_chat_vars` / `delete_chat_vars` | `glaze.getVariables / setVariables / deleteVariable` (`scope: 'chat'`) |
+| `read_character_vars` / `write_character_vars` / `delete_character_vars` | same (`scope: 'character'`) |
+| `read_global_vars` / `write_global_vars` / `delete_global_vars` | same (`scope: 'global'`) |
+| `read_message_vars` / `write_message_vars` / `delete_message_vars` | same (`scope: 'message'`) |
+| `generate_text` | `glaze.generateText(prompt, { preset })` |
+| `trigger_generation` | `glaze.triggerGeneration({ mode })` |
+| `inject_prompt` / `uninject_prompt` | `glaze.injectPrompt / uninjectPrompt` |
+| `play_audio` | `glaze.playAudio(source, options)` |
+| `execute_command` | `glaze.executeCommand(command, args)` |
+| `show_toast` (default ALLOW) | `glaze.showToast(message, { severity })` |
+
+### Connection profiles
+
+`ExtensionPreset.connectionProfiles` is a freezed record with three
+`apiConfigId` slots: `big` / `medium` / `small`. `glaze.generateText({
+preset })` reads the matching slot and resolves it via
+`ConnectionProfileResolver` (falls through to the active API config
+when the slot is empty or stale). The UI picker in
+`preset_editor_screen.dart` lists every `ApiConfig` plus an
+"Использовать основной" default.
+
+### Variable scopes
+
+JS variables use four scopes, each persisted or in-memory:
+
+| Scope | Storage | Atomic repo |
+|---|---|---|
+| `chat` | `ChatSession.sessionVars['__glaze_variables']` (JSON string) | `ChatRepo.updateSessionVarsJson` |
+| `character` | `Character.extensions['glaze_variables']` (Map) | `CharacterRepo.updateExtensionsJson` |
+| `global` | `SharedPreferences['glaze.global_variables']` (JSON) | `GlobalVariablesRepo` (64 KiB cap, serialized writes) |
+| `message` | in-memory `MessageVariablesNotifier` (per `sessionId` + `messageId`) | n/a |
+
+JSON payload is validated (`_validateJsonValue` in `JsBridgeService`)
+for type compatibility and ≤ 64 KiB total.
+
+### Real audio backend
+
+`AudioBridgeService` routes `glaze.playAudio(source, options)` to:
+
+* `click` / `alert` / `haptic` — `SystemSound` / `HapticFeedback`
+  (built-in cues; no audio player)
+* `file://` / `http(s)://` URLs / absolute paths / `data:audio/…;base64,…` —
+  `audioplayers` with the matching `Source` subclass
+* `volume` (clamped 0..1) and `loop` options map to the player
+
+`routeSource(source)` is a `@visibleForTesting` static helper that
+returns the `Source` subclass (or `null` for built-in cues).
+
+### JS execution
+
+User-authored JS runs in a `<iframe sandbox="allow-scripts">` (without
+`allow-same-origin`) — null origin, no access to `window.parent`,
+`window.flutter_inappwebview`, or any API keys. Two execution paths:
+
+* **Visual WebView** — `ChatBridgeController.runJsBlock()` is used
+  when the chat is open; the script is forwarded into the chat
+  WebView's `bridge.js::runSandboxedScript()`.
+* **Headless engine** — `JsEngineService` is a singleton
+  `HeadlessInAppWebView` that loads `assets/chat_webview/headless.html`
+  (also `sandbox="allow-scripts"`) and shares the same
+  `JsBridgeService` instance as the visual WebView. Preferred for
+  background / periodic ticks. Throws `HeadlessUnavailableError` when
+  not ready; callers fall back to the visual bridge.
+
+Both paths use `Window.headlessBridge.runSandboxedScript(script, contextJson)`
+and the same `JsBridgeService.dispatch` for `glaze.*` calls.
 
 ### Files
-- `extension_post_gen_service.dart` — orchestrator + dispatch; owns cancel token
-- `info_block_service.dart` — LLM call + prompt assembly for `infoblock` type
-- `info_block_injector.dart` — inserts stored `InfoBlock` outputs into the prompt context
-- `extension_presets_provider.dart` / `info_blocks_provider.dart` — Riverpod state
-- `models/block_run_status.dart` — `BlockRunStatus` enum
-- DB: `ExtensionPresets`, `InfoBlocks` tables (v20; v22 adds `status` + `order` columns)
+
+* `extension_post_gen_service.dart` — orchestrator + dispatch; owns cancel token; chain filter via `_runChain(trigger:)`; public `runBlocksForMessage`, `runAfterUserBlocks`, `runJsBlock`
+* `info_block_service.dart` — LLM call + prompt assembly for `infoblock` type
+* `info_block_injector.dart` — inserts stored `InfoBlock` outputs into the prompt context
+* `js_bridge_service.dart` — pure dispatcher: `{ method, params, context } → { ok, result/error }`; no Riverpod
+* `js_engine_service.dart` — singleton headless engine + `JsEngineBridgeHost` (optional `currentCharIdProvider` for `triggerGeneration` in headless mode)
+* `panel_host_service.dart` — singleton panel registry + resize/event broadcast streams
+* `audio_bridge_service.dart` — `SystemSound` + `audioplayers` routing
+* `command_registry.dart` — `/trigger` / `/getvar` / `/setvar` / `/inject` / `/toast` registry; `buildWiredCommandRegistry(WiredCommandDeps)` is the production default
+* `js_bridge_toast_controller.dart` — severity-aware toast surface
+* `periodic_trigger_scheduler.dart` — `WidgetsBindingObserver` + `Timer.periodic` for periodic blocks
+* `connection_profile_resolver.dart` — `big` / `medium` / `small` → `ApiConfig` mapping
+* `runtime_prompt_injection_service.dart` — session-scoped depth blocks separate from `InfoBlock`
+* `state/message_variables_notifier.dart` — in-memory per-message variables
+* `models/block_config.dart` — `BlockType` (`infoblock`/`imageGen`/`jsRunner`/`interactive`), `BlockTrigger` (`afterUser`/`afterAssistant`/`periodic`)
+* `models/extension_preset.dart` — `blocks`, `permissions`, `connectionProfiles`
+* `models/preset_permissions.dart` — `PresetPermissions` + `GlazeCapability` (19 values)
+* `models/connection_profiles.dart` — `big` / `medium` / `small` mapping
+* `models/trigger_mode.dart` — `continueGeneration` / `regenerate` / `auto`
+* `models/trigger_result.dart` — sealed `TriggerResult`
+* `core/db/repositories/global_variables_repo.dart` — SharedPreferences-backed
+* `assets/chat_webview/glaze_sdk.js` — `window.glaze` SDK
+* `assets/chat_webview/headless.html` — headless engine host
+* DB: `ExtensionPresets`, `InfoBlocks` tables (v20; v22 adds `status` + `order` columns)
 
 ### Bridge integration
 
 `ChatBridgeController` exposes:
 - `updateBlockStatus(messageId, status?)` — pushes `⬡` badge update to WebView
 - `showExtBlocksPanel(messageId, blocks)` — renders/removes inline block panel
-- Callbacks: `onExtBlocksClick`, `onExtBlockStop`, `onExtBlockRegen`
+- `runJsBlock(...)` — runs a user script in the sandboxed iframe
+- `openInteractivePanel / closeInteractivePanel / postToInteractivePanel` — `BlockType.interactive` panel lifecycle
+- Callbacks: `onExtBlocksClick`, `onExtBlockStop`, `onExtBlockRegen`, `onExtBlockRegenImage`, `onExtBlockEdit`, `onExtBlockDelete`, `onPanelResize`, `onPanelEvent`
 
 `ChatMessageMapper` adds `blockStatus` (`'running' | 'done' | 'error' | null`) from
 `ChatMessageMapperContext.blockStatusByMessageId`; the WebView renders a `⬡` badge in
@@ -664,3 +796,4 @@ Resolved (kept for history; details in git / PR notes):
 - **Chat ↔ memory draft mutex** — `memory_active_drafts_provider` + `MemoryBookController` (INV-M3/INV-M4).
 - **Session vars on abort/error** — only success path persists isolate vars (INV-C5).
 - **Memory injection token budget** — `memory_budget.dart` + INV-PS4.
+- **JS extensions MVP** — `window.glaze` SDK, headless `JsEngineService`, capability permissions, periodic/afterUser triggers, interactive panels, audioplayers-backed audio, big/medium/small connection profiles, wired `CommandRegistry`, lifecycle-paused periodic scheduler. See `docs/js_extensions_implementation_plan.md` for the final bridge surface.

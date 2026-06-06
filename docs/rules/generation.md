@@ -15,6 +15,9 @@ Full formal invariants with code references: `docs/INVARIANTS.md`
 | Summary | Widget-local in `summary_sheet.dart` | No | Widget-scoped `CancelToken` |
 | Memory draft | `MemoryBookController` | No | Per-draft `CancelToken`; mutex via `memory_active_drafts_provider` |
 | Ext blocks | `ExtensionPostGenService._extensionBlocksCancelToken` | No (per-block LLM call) | `cancelBlocks()` — independent of chat cancel token (INV-EG5) |
+| JS extension (`glaze.generateText`) | `ActiveApiConfigProvider` (active or connection-profile slot) | No (one-shot, 55 s timeout) | Per-call `CancelToken` from the bridge handler |
+| JS extension (`glaze.triggerGeneration`) | `GenerationDispatcher` | Routed through `ChatNotifier.continueMessage` / `regenerateLastAssistant` | Reuses chat + memory-draft mutex (INV-JS3) |
+| JS extension periodic | `PeriodicTriggerScheduler` (`Timer.periodic`) | No (side-effect tick) | Each tick creates a fresh `CancelToken`; cancelled ticks are swallowed |
 
 `ChatNotifier` owns `AbortHandler` per `charId` and delegates `abortGeneration()` to it.
 
@@ -132,10 +135,22 @@ After normal/regen completion, `GenerationPipeline` calls
 Failures are logged only (INV-EG2). Gated by `extensionsSettings.enabled` and
 active preset id (INV-EG3). The block chain does not start on aborted generation (INV-EG4).
 
+### Block triggers
+
+`BlockTrigger` controls when a block runs. The chain filter is enforced by
+`_runChain(trigger:)` in `ExtensionPostGenService` — the same chain is
+reused for all three trigger types:
+
+| `BlockTrigger` | Entry point | Cancel / lifecycle |
+|---|---|---|
+| `afterAssistant` | `processAfterGeneration` → `runBlocksForMessage` | Uses `_extensionBlocksCancelToken` (INV-EG5) |
+| `afterUser` | `ChatNotifier.sendMessage` → `unawaited(_dispatchAfterUserBlocks)` → `runAfterUserBlocks` | Same cancel token, fire-and-forget from the notifier's perspective |
+| `periodic` | `PeriodicTriggerScheduler` → `Timer.periodic(periodicIntervalSeconds)` → `runJsBlock` (no chain) | Each tick creates a fresh `CancelToken`; the scheduler itself pauses on app background (INV-JS6) |
+
 ### Block execution model
 
 ```
-blocks = preset.blocks.where(enabled).sortBy(order)
+blocks = preset.blocks.where(enabled && trigger == requested).sortBy(order)
 prevFuture = null
 for block in blocks:
     blockFuture = _runSingleBlock(block, prevFuture?.content)
@@ -148,6 +163,15 @@ for block in blocks:
 - **Serial** (`dependsOnPrevious = true`): block awaits the previous block; receives its output as `previousOutput`.
 - **Parallel** (`dependsOnPrevious = false`): block is launched without `await`; `unawaited(future.then(...))` writes the result via `infoBlocksProvider.notifier.addOrReplace()`.
 
+### Block types
+
+| `BlockType` | Engine | Notes |
+|---|---|---|
+| `infoblock` | `InfoBlockService` (LLM) | Result stored in `InfoBlock.content` |
+| `imageGen` | `ImageGenService` (LLM agent → image API) | `[IMG:RESULT:<path>]` token in `InfoBlock.content` |
+| `jsRunner` | `JsEngineService` (preferred) → `ChatBridgeController.runJsBlock` (fallback) | Script output becomes the block content; null origin iframe (INV-EG8) |
+| `interactive` | `PanelHostService` (LLM agent → sandboxed iframe panel) | HTML persisted to `InfoBlock.content`; panel is rendered as a live iframe island |
+
 ### Cancel
 
 `ExtensionPostGenService.cancelBlocks()` cancels `_extensionBlocksCancelToken`.
@@ -159,6 +183,17 @@ token or in-progress image generation.
 
 On status change, call `ChatBridgeController.updateBlockStatus(messageId, aggregatedStatus)`.
 On panel open/update, call `ChatBridgeController.showExtBlocksPanel(messageId, blocks)`.
+
+### JS bridge abort chain
+
+`glaze.generateText` (JS bridge → `SseClient.streamChatCompletion`) takes a
+fresh `CancelToken` per call. `_generateBridgeText` in
+`ChatWebViewWidget` enforces a 55-second timeout and cancels the token
+on expiry. The token is independent of the chat text generation
+token — aborting the chat does NOT cancel in-flight JS generate calls.
+
+`glaze.triggerGeneration` reuses the chat path entirely — see
+`GenerationDispatcher.dispatch` for the mutex / abort chain.
 
 ---
 
@@ -192,6 +227,12 @@ Before merging any generation-related PR:
   - [ ] Block chain does not start on aborted generation (INV-EG4)
   - [ ] Extension cancel token independent of chat cancel token (INV-EG5)
   - [ ] `dependsOnPrevious` blocks await preceding block; output chained (INV-EG6)
+  - [ ] JS Runner / interactive panel code runs in null-origin iframe (INV-EG8)
+  - [ ] Bridge `glaze.*` calls gated by preset capabilities (INV-JS1)
+  - [ ] `glaze.triggerGeneration` respects generation mutexes (INV-JS3)
+  - [ ] `glaze.playAudio` does not leak the audio session (INV-JS4)
+  - [ ] `executeCommand` wired registry routes to the same services (INV-JS5)
+  - [ ] Periodic scheduler pauses on app background; no catch-up tick (INV-JS6)
 - [ ] Context limit / API-not-configured errors shown to user
 - [ ] Abort closes TCP (CancelToken reaches Dio)
 - [x] Session vars not leaked on abort/error (INV-C5)

@@ -423,6 +423,125 @@ through `ImageStorageService`. `InfoBlock.content` is set to `[IMG:RESULT:<path>
 (same format as inline img-gen). The WebView bridge renders this token as an `<img>`
 element inside the ext-blocks panel.
 
+### INV-EG8: JS Runner / interactive panel code runs in a sandboxed iframe with null origin ✅ ENFORCED
+
+User-authored JS (`BlockType.jsRunner` and `BlockType.interactive` panel
+content) executes in a `<iframe sandbox="allow-scripts">` **without**
+`allow-same-origin`. The iframe has a null origin and therefore cannot
+reach `window.parent`, `window.flutter_inappwebview`, or any other
+parent-context object. API keys live in native Drift and are never
+serialised into the JS context.
+
+`glaze.*` calls are the only sanctioned way for the script to talk
+back to Dart, and every method is gated by `_requireCapability` (see
+INV-JS3). Two execution paths share the same `JsBridgeService`:
+
+* `ChatBridgeController.runJsBlock()` — visual WebView, used while a
+  chat is open.
+* `JsEngineService.runScript()` — headless `HeadlessInAppWebView`,
+  preferred for periodic ticks / background scripts. Falls back to
+  the visual bridge on `HeadlessUnavailableError`.
+
+`runSandboxedScript` is implemented in `bridge.js` (visual) and
+`headless.html` (headless). Both wire the iframe's
+`postMessage` channel to a Dart `glazeBridge` handler with a
+matching source-check (`e.source !== iframe.contentWindow` /
+`!== contentWindow`).
+
+---
+
+## 10. JS Extension Bridge Invariants
+
+### INV-JS1: `glaze.*` calls are gated by per-preset capability permissions (default-deny) ✅ ENFORCED
+
+Every bridge method is wrapped in `JsBridgeService._requireCapability(capabilityId)`.
+The default policy is **deny** when no `PermissionCheck` is registered (test seam).
+Production wires `_bridgePermissionCheck` in `ChatWebViewWidget`, which reads
+`activePresetPermissionsProvider`. The `PresetPermissions` model has 19
+toggles; only `showToast` defaults to allow.
+
+| Method | Capability |
+|---|---|
+| `glaze.getVariables / setVariables / deleteVariable` (`scope: chat`) | `read_chat_vars` / `write_chat_vars` / `delete_chat_vars` |
+| same (`scope: character`) | `read_character_vars` / `write_character_vars` / `delete_character_vars` |
+| same (`scope: global`) | `read_global_vars` / `write_global_vars` / `delete_global_vars` |
+| same (`scope: message`) | `read_message_vars` / `write_message_vars` / `delete_message_vars` |
+| `glaze.generateText` | `generate_text` |
+| `glaze.triggerGeneration` | `trigger_generation` |
+| `glaze.injectPrompt / uninjectPrompt` | `inject_prompt` / `uninject_prompt` |
+| `glaze.playAudio` | `play_audio` |
+| `glaze.executeCommand` | `execute_command` |
+| `glaze.showToast` (default ALLOW) | `show_toast` |
+
+### INV-JS2: Variable writes are atomic; payload is JSON-validated and ≤ 64 KiB ✅ ENFORCED
+
+JS variable writes go through dedicated repo methods that wrap the
+read-modify-write in a Drift transaction:
+
+* `ChatRepo.updateSessionVarsJson(sessionId, mutator)` — `chat` scope
+* `CharacterRepo.updateExtensionsJson(charId, mutator)` — `character` scope
+* `GlobalVariablesRepo.update(mutator)` — `global` scope; serialized
+  writes (`_writeLock`) and 64 KiB cap
+* `MessageVariablesNotifier.update(sessionId, messageId, mutator)` — in-memory, not persisted
+
+`JsBridgeService._validateJsonValue` enforces JSON compatibility
+(no NaN, finite numbers, string keys, ≤ 64 KiB total per payload) and
+surfaces failures as `ArgumentError` → bridge `invalid_request` code.
+
+### INV-JS3: `glaze.triggerGeneration` respects generation mutexes (INV-C1, INV-M3/M4) ✅ ENFORCED
+
+`GenerationDispatcher.dispatch(charId, rawMode, reason)` is the only
+entry point that touches the chat notifier from a JS call. The
+dispatcher returns `TriggerResult`:
+
+* `TriggerNoSession` — no chat state for `charId`
+* `TriggerBusy(busyKind: 'chat')` — INV-C1 violated
+* `TriggerBusy(busyKind: 'memory_draft')` — INV-M3/M4 violated
+* `TriggerAccepted` / `TriggerError`
+
+`auto` mode resolves to `continue` (last msg = assistant) or
+`regenerate` (last msg = user). The dispatcher never auto-aborts;
+the JS side decides whether to retry. See
+`test/trigger_generation_test.dart` for the full contract.
+
+### INV-JS4: `glaze.playAudio` does not leak the audio session ✅ ENFORCED
+
+`AudioBridgeService` keeps a single `AudioPlayer` per widget and
+`dispose()`s it on widget dispose. `routeSource` is the pure
+`@visibleForTesting` helper that maps the source string to the
+matching `audioplayers` `Source` subclass. Built-in cues
+(`click` / `alert` / `haptic`) bypass the audio player entirely
+(`SystemSound` / `HapticFeedback`).
+
+### INV-JS5: `executeCommand` routes `/trigger`, `/getvar`, `/setvar`, `/inject`, `/toast` to the same services as the dedicated bridge methods ✅ ENFORCED
+
+`buildWiredCommandRegistry(WiredCommandDeps)` is the production
+default. Each handler delegates to the same service that powers the
+dedicated `glaze.*` method:
+
+* `/trigger` → `TriggerGenerationHandler.handle` (mirrors `glaze.triggerGeneration`)
+* `/getvar` / `/setvar` → `JsBridgeService.dispatch` (mirrors `glaze.getVariables` / `setVariables`)
+* `/inject` → `RuntimePromptInjectionNotifier.inject`
+* `/toast` → `JsBridgeToastController.show` (severity-aware)
+
+`buildDefaultCommandRegistry` is retained for tests/CMS — its
+handlers echo arguments. The `CommandRegistry.run` contract catches
+all handler exceptions and returns `CommandResult.error`.
+
+### INV-JS6: Periodic scheduler pauses on app background, never produces catch-up ticks ✅ ENFORCED
+
+`PeriodicTriggerScheduler` is a `WidgetsBindingObserver`. On
+`paused` / `inactive` / `hidden` / `detached` it cancels every timer.
+On `resumed` it rebuilds the timer set from the current active preset;
+the first tick after a long backgrounding period is **not** a catch-up
+firing — the timer is fresh.
+
+`_tick` is `unawaited` (fire-and-forget): the chain itself owns its
+own cancel token and writes via `infoBlocksProvider.notifier.addOrReplace()`
+without blocking the scheduler. The `debugLifecycleState` test seam
+in `periodic_lifecycle_test.dart` exercises the full pause/resume
+contract.
+
 ---
 
 ## Refactor PR Checklist
@@ -445,6 +564,13 @@ Before merging any structural PR:
   - [ ] Extension cancel token is separate from chat cancel token (INV-EG5)
   - [ ] `dependsOnPrevious` blocks await the preceding block; output is chained (INV-EG6)
   - [ ] Image-gen block results stored via ImageStorageService; content = `[IMG:RESULT:<path>]` (INV-EG7)
+  - [ ] JS Runner / interactive panel code runs in null-origin iframe (INV-EG8)
+  - [ ] Bridge `glaze.*` calls gated by preset capabilities (INV-JS1)
+  - [ ] Variable writes are atomic + JSON-validated + ≤ 64 KiB (INV-JS2)
+  - [ ] `glaze.triggerGeneration` respects generation mutexes (INV-JS3)
+  - [ ] `glaze.playAudio` does not leak the audio session (INV-JS4)
+  - [ ] `executeCommand` wired registry routes to the same services (INV-JS5)
+  - [ ] Periodic scheduler pauses on app background; no catch-up tick (INV-JS6)
 - [ ] Context limit exceeded shows an error to the user
 - [ ] API not configured shows an error to the user
 - [ ] Abort closes the TCP connection (not just UI state)

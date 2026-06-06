@@ -63,16 +63,21 @@ Rule of thumb: if there's an `await` before the mutation, there's a potential ra
 
 ---
 
-## Rule 5: Mutual exclusion for concurrent operations ⚠️ PARTIALLY UNENFORCED
+## Rule 5: Mutual exclusion for concurrent operations
 
-- Chat generation and memory draft generation **should** be mutually exclusive, but
-  neither direction is implemented:
-  - `ChatNotifier.sendMessage()` does NOT check for active memory drafts.
-  - `memory_books_sheet.dart._generateDraft()` does NOT check `ChatState.isGenerating`.
-  - No shared state bridges the two systems.
+- Chat generation and memory draft generation **are** mutually exclusive for the same session/character:
+  - `MemoryBookController.generateDraft()` rejects when `chatProvider(charId).isGenerating`.
+  - `sendMessage` / `regenerateLastAssistant` / `continueMessage` reject when
+    `memoryActiveDraftsProvider` contains the session id.
+  - `glaze.triggerGeneration` reuses `GenerationDispatcher`, which enforces the same
+    mutex (INV-JS3). The dispatcher returns `TriggerBusy` instead of auto-aborting.
 - Image generation runs only after text generation completes (enforced by call order).
 - Background operations (auto-sync, embedding indexing) should check `isGenerating`
   for the relevant `charId` before starting.
+- The periodic JS scheduler runs only when the app is `resumed`
+  (`PeriodicTriggerScheduler` is a `WidgetsBindingObserver`); it does NOT
+  contend with chat generation but the `jsRunner` ticks share
+  `SseClient` with chat — keep heavy ticks ≤ 1 per preset at a time.
 
 If adding a new request type alongside chat generation, add mutual exclusion guards
 in **both** directions.
@@ -93,12 +98,14 @@ Verify: after pressing Stop, the network tab shows the request was actually term
 ## Known race classes
 
 | Race | Cause | Fix / Status |
-|------|-------|-----|
+|------|-------|-------------|
 | Stale completion writes to new generation's state | Callback didn't check `_activeGenId` | Guard exists in `ChatGenerationService` callbacks via `isAborted()` |
 | Stop button doesn't close TCP connection | `CancelToken` not passed to `Dio` | Ensure `CancelToken` reaches `SseClient` |
-| Read-mutate-write in DB | `getById` + `put` without transaction | Wrap in `db.transaction()` |
+| Read-mutate-write in DB | `getById` + `put` without transaction | Wrap in `db.transaction()`; JS `chat` / `character` / `global` variable writes go through dedicated repo methods (see `docs/rules/database.md`) |
 | Two memory drafts start for same draft ID | No in-flight ID tracking in generator | Tracked in widget: `memory_books_sheet.dart._generatingDrafts` map |
 | `apiListProvider` null on cold start | Sync provider read before async load | `await ref.read(apiListProvider.future)` first; also used by `MemoryDraftGenerator` |
 | Image retry state corruption | `retryImageGeneration` callbacks have no `genId` guard | ⚠️ Unfixed — potential stale write to `ChatState` |
-| Chat ↔ memory draft mutual exclusion | Neither side checks the other | ⚠️ Not implemented |
-| Character deletion orphan rows | `CharactersNotifier.remove()` previously called `chatRepo.deleteByCharacterId` (only deleted `ChatSessions`) before `CharacterRepo.delete`, missing per-session tables | **Fixed** — `deleteByCharacterId` now deletes `MemoryBookRows` + `ChatSummaries` + `ChatSessions` in correct order. See `docs/rules/database.md`. |
+| Chat ↔ memory draft mutual exclusion | Neither side checks the other | ✅ **Fixed** — `memory_active_drafts_provider` enforces mutex in both directions; `glaze.triggerGeneration` reuses the same mutex via `GenerationDispatcher` (INV-M3, INV-M4, INV-JS3) |
+| Character deletion orphan rows | `CharactersNotifier.remove()` previously called `chatRepo.deleteByCharacterId` (only deleted `ChatSessions`) before `CharacterRepo.delete`, missing per-session tables | ✅ **Fixed** — `deleteByCharacterId` now deletes `MemoryBookRows` + `ChatSummaries` + `ChatSessions` in correct order. See `docs/rules/database.md`. |
+| `glaze.triggerGeneration` racing chat generation | JS call while chat is generating | ✅ **Fixed** — `GenerationDispatcher.dispatch` returns `TriggerBusy` when `isGenerating` or `memoryActiveDrafts` is set (INV-JS3). |
+| Stale periodic ticks after app background | `Timer.periodic` keeps firing while app is paused | ✅ **Fixed** — `PeriodicTriggerScheduler` pauses on `paused`/`inactive`/`hidden`/`detached` (INV-JS6). No catch-up tick on resume. |

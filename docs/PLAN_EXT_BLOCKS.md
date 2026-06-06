@@ -1,6 +1,13 @@
-# Plan: Ext Blocks Redesign
+# Plan: Ext Blocks Redesign — DONE
 
-> Local-only file — gitignored. Do not commit.
+> Local-only file — gitignored. **All phases completed in branch
+> `js-extension-bridge-sdk` (commits `b2718e7` … `9923b95`).**
+>
+> The redesigned ext-blocks feature is described in:
+>
+> * `docs/ARCHITECTURE.md` § 9 (Extensions + JS Bridge SDK)
+> * `docs/INVARIANTS.md` INV-EG1–INV-EG8 and INV-JS1–INV-JS6
+> * `docs/js_extensions_implementation_plan.md` (live plan / final state)
 
 ---
 
@@ -15,9 +22,22 @@
 | 5 | UI: PresetEditorScreen + Magic Drawer | ✓ |
 | 6 | Чистка | ✓ |
 | 7 | Документация | ✓ |
-| 8 | Bridge callbacks (подключить обработчики) | ⏳ |
-| 9 | Context Builder (contextMessageCount + contextSystemPrompt) | ⏳ |
-| 10 | JS Runner (iframe sandbox) | ⏳ |
+| 8 | Bridge callbacks (подключить обработчики) | ✓ |
+| 9 | Context Builder (contextMessageCount + contextSystemPrompt) | ✓ |
+| 10 | JS Runner (iframe sandbox) | ✓ |
+| 11 | Capability permissions (`PresetPermissions`, 19 toggles) | ✓ |
+| 12 | Headless JS engine (`JsEngineService` + `headless.html`) | ✓ |
+| 13 | Interactive HTML panels (`PanelHostService`, `sandbox="allow-scripts"`) | ✓ |
+| 14 | JS Bridge SDK (`window.glaze`) + `JsBridgeService` | ✓ |
+| 15 | `triggerGeneration` через `ChatNotifier` (`GenerationDispatcher`) | ✓ |
+| 16 | Periodic + afterUser триггеры (`PeriodicTriggerScheduler`) | ✓ |
+| 17 | Global / message variable scopes (`GlobalVariablesRepo`, `MessageVariablesNotifier`) | ✓ |
+| 18 | `audioplayers`-backed audio (`AudioBridgeService`) | ✓ |
+| 19 | `executeCommand` wired registry (`/trigger` / `/getvar` / `/setvar` / `/inject` / `/toast`) | ✓ |
+| 20 | Connection profiles (big/medium/small → `ApiConfig`) | ✓ |
+
+См. `docs/js_extensions_implementation_plan.md` для текущего состояния
+bridge surface.
 
 ---
 

@@ -248,44 +248,46 @@
 
 ### Commits (current branch `js-extension-bridge-sdk`, pushed to `origin/js-extension-bridge-sdk`)
 
-- `e692ef3 feat(ext): add executeCommand registry and toast severity`
-- `41a6e73 feat(ext): add playAudio bridge`
-- `f68adf2 feat(ext): add periodic and afterUser block triggers`
-- `fd4743b feat(ext): add global and message variable scopes`
-- `d36ffaa feat(ext): add capability permissions`
-- `be9f58e feat(ext): add js triggerGeneration bridge`
-- `eab4bd4 feat(ext): add interactive block UI`
-- `37a7bf2 feat(ext): add interactive html panels`
-- `d67df37 feat(ext): add js headless engine`
-- `9c0aafe feat(ext): add js prompt injection bridge`
-- `d62b58f feat(ext): add js generateText bridge`
-- `c8952f7 feat(ext): add js variable bridge scopes`
+MVP + follow-up increments:
+
 - `b2718e7 feat(ext): add js extension bridge sdk`
+- `c8952f7 feat(ext): add js variable bridge scopes`
+- `d62b58f feat(ext): add js generateText bridge`
+- `9c0aafe feat(ext): add js prompt injection bridge`
+- `d67df37 feat(ext): add js headless engine`
+- `37a7bf2 feat(ext): add interactive html panels`
+- `eab4bd4 feat(ext): add interactive block UI`
+- `be9f58e feat(ext): add js triggerGeneration bridge`
+- `d36ffaa feat(ext): add capability permissions`
+- `fd4743b feat(ext): add global and message variable scopes`
+- `f68adf2 feat(ext): add periodic and afterUser block triggers`
+- `41a6e73 feat(ext): add playAudio bridge`
+- `e692ef3 feat(ext): add executeCommand registry and toast severity`
+- `9923b95 docs(ext): mark permissions/global-message vars/periodic/audio/command as done`
+- `8925b41 feat(ext): tighten main chat WebView sandboxing`
+- `fa1212e feat(ext): add audioplayers backend to AudioBridgeService`
+- `e3eeacd feat(ext): pause periodic scheduler on app background`
+- `255d323 feat(ext): map generateText big/medium/small to api configs`
+- `fc6559f feat(ext): wire command registry and pin afterUser dispatch`
 - `353d289 Merge pull request #140 from danvitv/feat/ext-blocks-redesign` (upstream merge)
 
 ### Next
 
-All MVP follow-up items are now implemented and tested:
+The MVP bridge surface is complete. Future work (out of scope for
+this branch):
 
-- Main chat WebView sandboxing: `allowFileAccessFromFileURLs=false`,
-  `allowUniversalAccessFromFileURLs=false`,
-  `mixedContentMode=MIXED_CONTENT_NEVER_ALLOW` (chat page + preloader).
-- `afterUser` fire-and-forget characterization test:
-  `test/after_user_dispatch_test.dart`.
-- `audioplayers`-backed audio playback (file/http/data URIs + absolute
-  paths in addition to built-in cues): `audio_bridge_service.dart`.
-- App-lifecycle hooks for the periodic scheduler: `WidgetsBindingObserver`
-  pauses on `paused` / `inactive` / `hidden` / `detached`, resumes on
-  `resumed`. No catch-up tick on resume.
-- Connection profile mapping for `big` / `medium` / `small`:
-  `ConnectionProfiles` (freezed) on `ExtensionPreset` + UI in
-  `preset_editor_screen.dart` + `ConnectionProfileResolver` that the
-  bridge uses instead of always falling through to the active config.
-- `executeCommand` real wiring: `buildWiredCommandRegistry(WiredCommandDeps)`
-  routes `/trigger`, `/getvar`, `/setvar`, `/inject`, `/toast` to the
-  same services the dedicated bridge methods use. The wired registry
-  is the production default; `buildDefaultCommandRegistry()` is kept
-  for unit tests / CMS discovery.
+- Real audio backend polish — gapless / streaming playback for long
+  `playAudio` URLs (currently `audioplayers` `ReleaseMode.stop`
+  cuts off at file end).
+- App-lifecycle hooks for `JsEngineService` — pause the headless
+  WebView's audio/video subsystems on `paused` (currently only
+  periodic ticks pause).
+- A more sophisticated `/command` parser — flag arguments, multi-token
+  paths, env-style variable expansion.
+- `executeCommand` real routing — currently `/trigger`, `/getvar`,
+  `/setvar`, `/inject`, `/toast` route to the underlying services,
+  but additional commands added in the future can be registered via
+  the same `WiredCommandDeps`.
 
 ## Final state — JS Extensions MVP
 
@@ -299,10 +301,10 @@ the active preset.
 | Read/write/delete character vars | `glaze.getVariables / setVariables / deleteVariable` (`scope: 'character'`) | `read_character_vars` / `write_character_vars` / `delete_character_vars` | persistent (`Character.extensions['glaze_variables']`) |
 | Read/write/delete global vars | `glaze.getVariables / setVariables / deleteVariable` (`scope: 'global'`) | `read_global_vars` / `write_global_vars` / `delete_global_vars` | persistent (`SharedPreferences['glaze.global_variables']`) |
 | Read/write/delete message vars | `glaze.getVariables / setVariables / deleteVariable` (`scope: 'message'`) | `read_message_vars` / `write_message_vars` / `delete_message_vars` | in-memory, per-message |
-| LLM call | `glaze.generateText(prompt, { preset })` | `generate_text` | active API config |
+| LLM call | `glaze.generateText(prompt, { preset })` | `generate_text` | `big` / `medium` / `small` → `ApiConfig` (per-preset `ConnectionProfiles`); falls through to the active API config when the slot is empty |
 | Trigger generation | `glaze.triggerGeneration({ mode })` | `trigger_generation` | `ChatNotifier.continueMessage` / `regenerateLastAssistant` |
 | Inject / uninject prompt | `glaze.injectPrompt / uninjectPrompt` | `inject_prompt` / `uninject_prompt` | session-scoped runtime |
-| Play audio | `glaze.playAudio(source, { severity })` | `play_audio` | `SystemSound` / `HapticFeedback` |
+| Play audio | `glaze.playAudio(source, options)` | `play_audio` | `SystemSound` / `HapticFeedback` (built-in cues) or `audioplayers` (file/http/data URIs) |
 | Execute slash command | `glaze.executeCommand(command, args)` | `execute_command` | `CommandRegistry` (`/trigger`, `/getvar`, `/setvar`, `/inject`, `/toast`) |
 | Show toast | `glaze.showToast(message, { severity })` | `show_toast` (default ALLOW) | `GlazeToast` widget |
 
@@ -314,14 +316,51 @@ Triggers:
 | `afterAssistant` | `ExtensionPostGenService.processAfterGeneration` | all block types |
 | `periodic` | `PeriodicTriggerScheduler` (`Timer.periodic(block.periodicIntervalSeconds)`) | `jsRunner` only (headless engine preferred) |
 
-Tests: 11 files, 68 passing assertions. `flutter analyze`: 0 new errors
-(the only remaining error is the pre-existing `js_engine_service.dart:287 throw_of_invalid_type`).
+Tests: 17 files, 132 passing assertions. `flutter analyze`: 0 new errors
+(the only remaining error is the pre-existing
+`js_engine_service.dart:287 throw_of_invalid_type`).
 
-## Current Increment: `triggerGeneration` — COMPLETE
+## Test files (per-increment)
 
-Goal: wire `window.glaze.triggerGeneration(mode)` from the headless/sandboxed iframe through `JsBridgeService` into `ChatNotifier`/`ChatGenerationService`, respecting all generation invariants (INV-C1, INV-C3, INV-M3, INV-M4, INV-C6, INV-A1).
+| File | Cases | What it pins |
+|---|---|---|
+| `test/js_bridge_service_test.dart` | 13 | dispatcher: variables, generateText, prompt injection, triggerGeneration |
+| `test/preset_permissions_test.dart` | 10 | `PresetPermissions` + 19 capabilities + UI mapping |
+| `test/global_message_variables_test.dart` | 11 | `GlobalVariablesRepo` + `MessageVariablesNotifier` |
+| `test/trigger_generation_test.dart` | 11 | `TriggerMode`, `GenerationDispatcher`, `TriggerGenerationHandler` |
+| `test/periodic_trigger_scheduler_test.dart` | 2 | timer creation, settings gating |
+| `test/periodic_lifecycle_test.dart` | 3 | pause/resume via `WidgetsBindingObserver` |
+| `test/audio_bridge_service_test.dart` | 19 | `SystemSound` / `HapticFeedback` cues + `audioplayers` routing + data URI decode |
+| `test/play_audio_bridge_test.dart` | 4 | bridge-level `playAudio` delegation + permission + error codes |
+| `test/command_registry_test.dart` | 5 | `CommandRegistry` core contract |
+| `test/wired_command_registry_test.dart` | 12 | `WiredCommandDeps` routes `/trigger` / `/getvar` / `/setvar` / `/inject` / `/toast` |
+| `test/js_bridge_toast_test.dart` | 7 | `JsBridgeToastController` + bridge `showToast` |
+| `test/js_engine_service_test.dart` | 6 | singleton + ready/run/cancel/dispose |
+| `test/panel_host_service_test.dart` | 9 | `PanelHostService` lifecycle |
+| `test/connection_profile_resolver_test.dart` | 8 | `big` / `medium` / `small` → `ApiConfig` mapping |
+| `test/runtime_prompt_injection_test.dart` | 2 | runtime depth blocks |
+| `test/after_user_dispatch_test.dart` | 5 | `afterUser` chain filter + fire-and-forget contract |
+| `test/webview_assets_test.dart` | many | static-analysis guards on the WebView JS/CSS assets |
 
-### Semantics (implemented)
+## Architectural reference
+
+* `docs/ARCHITECTURE.md` § 9 — block types, triggers, capability permissions, connection profiles, variable scopes, JS execution paths.
+* `docs/INVARIANTS.md` — formal INV-EG1–INV-EG8 (block chain) and INV-JS1–INV-JS6 (JS bridge).
+* `docs/rules/generation.md` — generation types table + extension post-gen + JS bridge abort chain.
+* `docs/rules/database.md` — atomic repo methods for the four variable scopes.
+* `docs/rules/race-conditions.md` — JS-specific races (mutex, periodic, triggerGeneration).
+* `docs/CLAUDE.md` — context-sensitive rule table for the JS extension scope.
+
+## Per-increment details
+
+Detailed semantics + tests for each bridge method are below. Each
+increment has its own commit and its own test file.
+
+### `triggerGeneration` ✅
+
+Goal: wire `window.glaze.triggerGeneration(mode)` from the headless/sandboxed iframe through `JsBridgeService` into `ChatNotifier`/`ChatGenerationService`, respecting all generation invariants (INV-C1, INV-C3, INV-M3, INV-M4, INV-C6, INV-A1, INV-JS3).
+
+#### Semantics (implemented)
 
 `triggerGeneration(options?)` where `options` is a JS object with optional fields:
 
@@ -336,14 +375,14 @@ Goal: wire `window.glaze.triggerGeneration(mode)` from the headless/sandboxed if
 
 `reason` is logged via `debugPrint` and is **not** persisted.
 
-### Failure semantics (implemented)
+#### Failure semantics (implemented)
 
 - If `charId` has no open chat session → reject with `TriggerNoSession` (JS error code `no_session`).
 - If the chat is generating (INV-C1) → reject with `TriggerBusy` (JS error code `chat_busy`); the call must not auto-abort.
 - If a memory draft is active (INV-M3/M4) → reject with `TriggerBusy` (JS error code `memory_draft_busy`); the call must not auto-abort.
 - Validation errors (`mode`/`reason` not strings) → `ArgumentError` → bridge `invalid_request` code.
 
-### Wiring (implemented)
+#### Wiring (implemented)
 
 ```
 JS: window.glaze.triggerGeneration({ mode: 'auto' })
@@ -358,7 +397,7 @@ JS: window.glaze.triggerGeneration({ mode: 'auto' })
   → ChatNotifier.{continueMessage | regenerateLastAssistant}
 ```
 
-### Tests (implemented)
+#### Tests (implemented)
 
 - `test/trigger_generation_test.dart` (11 cases):
   - `TriggerMode.parse` — known / unknown / case-insensitive
@@ -370,8 +409,80 @@ JS: window.glaze.triggerGeneration({ mode: 'auto' })
   - propagates `ArgumentError` as `invalid_request` code
   - returns `unsupported_method` when no handler is registered
 
-### Verified
+### `afterUser` fire-and-forget dispatch ✅
 
-- `flutter analyze` on touched files: 0 new errors (only 3 pre-existing warnings/errors in unrelated files).
-- `flutter test test/trigger_generation_test.dart test/js_bridge_service_test.dart` — 25/25 passed.
-- `flutter test` on the 5-file extension set: 42/42 passed (the 5 pre-existing `webview_assets_test.dart` failures are unchanged).
+`ChatNotifier.sendMessage` dispatches `_dispatchAfterUserBlocks` via
+`unawaited(...)` immediately after the user message is persisted. The
+chain runs in the background; the chat pipeline starts immediately.
+`runAfterUserBlocks` reuses the same `_runChain(trigger: BlockTrigger.afterUser)`
+as the manual post-gen path. The filter is pinned by
+`test/after_user_dispatch_test.dart` (chain filter respects `enabled` /
+`order`; last user message is the anchor; settings gating; the public
+surface accepts the `(charId, session, character, persona)` arguments
+the notifier passes).
+
+### Audioplayers backend ✅
+
+`AudioBridgeService` gained real-source routing. The pure
+`@visibleForTesting` helper `routeSource(source)` returns the
+`audioplayers` `Source` subclass for the requested URI:
+
+* built-in cues (`click` / `alert` / `haptic`) return `null` (no
+  player; `SystemSound` / `HapticFeedback` instead)
+* `file://` / `http(s)://` → `UrlSource`
+* absolute paths → `DeviceFileSource`
+* `data:audio/…;base64,…` → `BytesSource`
+
+`volume` (clamped 0..1) and `loop` options map to the player. The
+service is released in `ChatWebViewWidget.dispose()`. The
+`audio_bridge_service_test.dart` (19 cases) pins every routing path
+plus the data URI decoder (roundtrip, missing padding, missing
+`;base64`).
+
+### Periodic lifecycle hooks ✅
+
+`PeriodicTriggerScheduler` registers as a `WidgetsBindingObserver`
+and pauses on `paused` / `inactive` / `hidden` / `detached`. On
+`resumed` it rebuilds the timer set from the current preset. There
+is no catch-up tick — periodic scripts are side-effect-only, and a
+long backgrounding period (overnight, etc.) must not produce a burst
+of catch-up ticks. `debugLifecycleState` is the test seam used by
+`periodic_lifecycle_test.dart` (3 cases).
+
+### Connection profiles ✅
+
+`ExtensionPreset.connectionProfiles` is a freezed record with three
+`apiConfigId` slots: `big` / `medium` / `small`. `glaze.generateText({
+preset })` reads the matching slot via `ConnectionProfileResolver`
+which falls through to the active API config when the slot is empty
+or the configured id is stale. The UI picker in
+`preset_editor_screen.dart` lists every `ApiConfig` plus an
+"Использовать основной" default. `connection_profile_resolver_test.dart`
+(8 cases) pins parse, fall-through behaviour, and stale-id recovery.
+
+### Wired `executeCommand` registry ✅
+
+`buildWiredCommandRegistry(WiredCommandDeps)` is the production
+default. Each handler delegates to the same service that powers the
+dedicated `glaze.*` method:
+
+* `/trigger` → `TriggerGenerationHandler.handle`
+* `/getvar` / `/setvar` → `JsBridgeService.dispatch`
+* `/inject` → `RuntimePromptInjectionNotifier.inject`
+* `/toast` → `JsBridgeToastController.show`
+
+`buildDefaultCommandRegistry` is retained for tests / CMS — its
+handlers echo arguments. `wired_command_registry_test.dart` (12
+cases) pins validation (`/trigger` rejects non-string mode, `/inject`
+rejects missing id/content/charId, etc.) and routing.
+
+### Main chat WebView sandboxing ✅
+
+`allowFileAccessFromFileURLs=false`,
+`allowUniversalAccessFromFileURLs=false`,
+`mixedContentMode=MIXED_CONTENT_NEVER_ALLOW` on both the chat page
+and the preloader. The chat page is loaded from `file://` assets and
+outbound links go through `launchUrl(..., externalApplication)` —
+the WebView no longer needs universal file access. XSS in a user
+panel / extension JS can no longer `fetch('file:///...')` or
+`fetch('http(s)://...')` from a local origin.
