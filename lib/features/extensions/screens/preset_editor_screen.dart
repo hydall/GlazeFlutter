@@ -11,6 +11,7 @@ import '../../../shared/widgets/glaze_toast.dart';
 import '../../../shared/widgets/menu_group.dart';
 import '../../settings/api_list_provider.dart';
 import '../models/block_config.dart';
+import '../models/connection_profiles.dart';
 import '../models/extension_preset.dart';
 import '../models/preset_permissions.dart';
 import '../providers/extension_presets_provider.dart';
@@ -96,9 +97,122 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 24),
+          MenuGroup(
+            header: 'Профили подключения (generateText)',
+            items: [
+              _buildProfileTile(preset, ConnectionProfile.big),
+              _buildProfileTile(preset, ConnectionProfile.medium),
+              _buildProfileTile(preset, ConnectionProfile.small),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Сопоставление для glaze.generateText({ preset }). Пусто = использовать активный API.',
+              style: TextStyle(
+                fontSize: 12,
+                color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Widget _buildProfileTile(ExtensionPreset preset, ConnectionProfile profile) {
+    final current = switch (profile) {
+      ConnectionProfile.big => preset.connectionProfiles.big,
+      ConnectionProfile.medium => preset.connectionProfiles.medium,
+      ConnectionProfile.small => preset.connectionProfiles.small,
+    };
+    final label = switch (profile) {
+      ConnectionProfile.big => 'big',
+      ConnectionProfile.medium => 'medium',
+      ConnectionProfile.small => 'small',
+    };
+    final configsAsync = ref.watch(apiListProvider);
+    final configs = configsAsync.valueOrNull ?? const <ApiConfig>[];
+    String displayName;
+    if (current.isEmpty) {
+      displayName = 'Использовать основной';
+    } else {
+      final match = configs.where((c) => c.id == current).firstOrNull;
+      displayName = match == null
+          ? 'Не найдено (id=$current)'
+          : (match.name.isNotEmpty ? match.name : 'Без имени');
+    }
+    return ListTile(
+      title: Text(label),
+      subtitle: Text(
+        displayName,
+        style: TextStyle(
+          fontSize: 12,
+          color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
+        ),
+      ),
+      trailing: const Icon(Icons.chevron_right),
+      onTap: () => _openProfilePicker(preset, profile, configs, current),
+    );
+  }
+
+  Future<void> _openProfilePicker(
+    ExtensionPreset preset,
+    ConnectionProfile profile,
+    List<ApiConfig> configs,
+    String current,
+  ) async {
+    String? pendingSelection = current;
+    await GlazeBottomSheet.show<void>(
+      context,
+      title: 'Профиль "${profile.name}"',
+      items: [
+        BottomSheetItem(
+          label: 'Использовать основной',
+          icon: current.isEmpty
+              ? Icons.radio_button_checked
+              : Icons.radio_button_off,
+          iconColor: current.isEmpty
+              ? context.cs.primary
+              : context.cs.onSurfaceVariant,
+          onTap: () {
+            pendingSelection = '';
+            Navigator.of(context, rootNavigator: true).pop();
+          },
+        ),
+        ...configs.map(
+          (cfg) {
+            final name = cfg.name.isNotEmpty ? cfg.name : 'Без имени';
+            return BottomSheetItem(
+              label: name,
+              icon: cfg.id == current
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_off,
+              iconColor: cfg.id == current
+                  ? context.cs.primary
+                  : context.cs.onSurfaceVariant,
+              onTap: () {
+                pendingSelection = cfg.id;
+                Navigator.of(context, rootNavigator: true).pop();
+              },
+            );
+          },
+        ),
+      ],
+    );
+    final next = pendingSelection;
+    if (next == null || next == current) return;
+    final updated = switch (profile) {
+      ConnectionProfile.big =>
+        preset.copyWith(connectionProfiles: preset.connectionProfiles.copyWith(big: next)),
+      ConnectionProfile.medium => preset.copyWith(
+          connectionProfiles: preset.connectionProfiles.copyWith(medium: next)),
+      ConnectionProfile.small => preset.copyWith(
+          connectionProfiles: preset.connectionProfiles.copyWith(small: next)),
+    };
+    await ref.read(extensionPresetsProvider.notifier).update(updated);
   }
 
   Widget _buildCapabilityTile(ExtensionPreset preset, GlazeCapability cap) {
