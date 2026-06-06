@@ -16,11 +16,11 @@ import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_webview_bridge_host.dart';
 import '../bridge/chat_webview_keep_alive.dart';
 import '../bridge/chat_webview_settings.dart';
+import '../bridge/chat_webview_theme_builder.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
 import '../editing_message_provider.dart';
 import '../../../core/models/chat_message.dart';
-import '../../../../shared/theme/app_colors.dart';
 import '../../extensions/models/info_block.dart';
 import '../../extensions/providers/extension_presets_provider.dart';
 import '../../extensions/providers/extensions_settings_provider.dart';
@@ -1210,63 +1210,20 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   }
 
   Map<String, String> _buildThemeMap() {
-    final glaze = context.colors;
-    final cs = context.cs;
-    final primary = cs.primary;
-    return {
-      'bg-color': _colorHex(cs.surface),
-      'text-color': _colorHex(cs.onSurface),
-      'ui-bg-rgb': _colorRgb(cs.surface),
-      'vk-blue-rgb': _colorRgb(primary),
-      'primary-rgb': _colorRgb(primary),
-      'user-bubble-color-rgb': _colorRgb(glaze.userBubble),
-      'char-bubble-color-rgb': _colorRgb(glaze.charBubble),
-      'user-text-color': _colorHex(glaze.userText ?? cs.onSurface),
-      'char-text-color': _colorHex(glaze.charText ?? cs.onSurface),
-      'user-quote-color': _colorHex(glaze.userQuote ?? cs.primary),
-      'char-quote-color': _colorHex(glaze.charQuote ?? cs.primary),
-      'user-italic-color': _colorHex(glaze.userItalic ?? cs.primary),
-      'char-italic-color': _colorHex(glaze.charItalic ?? cs.primary),
-      'primary-color': _colorHex(primary),
-      'error-color': _colorHex(cs.error),
-      'element-opacity': widget.elementOpacity
-          .clamp(0.0, 1.0)
-          .toStringAsFixed(2),
-      'element-blur': '${widget.elementBlur.clamp(0.0, 64.0).round()}px',
-      'font-size': '${widget.chatFontSize}px',
-      'chat-font-size': '${widget.chatFontSize}px',
-      'chat-layout': widget.chatLayout ?? 'default',
-      'bg-dim': widget.bgDim.clamp(0.0, 1.0).toStringAsFixed(2),
-    };
+    return ChatWebViewThemeBuilder.build(
+      context,
+      ChatWebViewThemeInput(
+        elementOpacity: widget.elementOpacity,
+        elementBlur: widget.elementBlur,
+        chatFontSize: widget.chatFontSize,
+        chatLayout: widget.chatLayout,
+        bgDim: widget.bgDim,
+      ),
+    );
   }
 
   Future<void> _applyThemeToBridge() async {
     await _bridge?.applyTheme(_buildThemeMap());
-  }
-
-  String _colorRgb(Color c) {
-    final r = (c.r * 255).round();
-    final g = (c.g * 255).round();
-    final b = (c.b * 255).round();
-    return '$r, $g, $b';
-  }
-
-  String _colorHex(Color c) {
-    final a = c.a;
-    final r = (c.r * 255).round();
-    final g = (c.g * 255).round();
-    final b = (c.b * 255).round();
-    if (a >= 0.99) {
-      return '#${r.toRadixString(16).padLeft(2, '0')}'
-          '${g.toRadixString(16).padLeft(2, '0')}'
-          '${b.toRadixString(16).padLeft(2, '0')}';
-    }
-    final alphaR = (r * a + 255 * (1 - a)).round().clamp(0, 255);
-    final alphaG = (g * a + 255 * (1 - a)).round().clamp(0, 255);
-    final alphaB = (b * a + 0 * (1 - a)).round().clamp(0, 255);
-    return '#${alphaR.toRadixString(16).padLeft(2, '0')}'
-        '${alphaG.toRadixString(16).padLeft(2, '0')}'
-        '${alphaB.toRadixString(16).padLeft(2, '0')}';
   }
 
   Future<void> scrollToBottom() {
