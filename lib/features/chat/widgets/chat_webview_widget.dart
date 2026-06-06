@@ -30,6 +30,7 @@ import '../../extensions/services/extension_post_gen_service.dart';
 import '../../extensions/services/js_engine_service.dart';
 import '../../extensions/services/panel_host_service.dart';
 import '../bridge/chat_bridge_registry.dart';
+import 'chat_message_sync.dart';
 import 'ext_block_dialogs.dart';
 import 'webview_callbacks.dart';
 
@@ -591,7 +592,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     // Sync messages BEFORE injecting the typing placeholder, so the new user
     // message lands at its correct position (placeholder is appended after).
     if (!identical(oldWidget.messages, widget.messages) &&
-        !_listsEqual(oldWidget.messages, widget.messages)) {
+        !chatMessageListsIdentical(oldWidget.messages, widget.messages)) {
       _syncMessages(oldWidget.messages);
       unawaited(_syncExtBlockPanels());
     }
@@ -616,123 +617,18 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     }
   }
 
-  static bool _listsEqual(List<ChatMessage> a, List<ChatMessage> b) {
-    if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
-      if (!identical(a[i], b[i])) return false;
-    }
-    return true;
-  }
+  static const _messageSync = ChatMessageSync();
 
   void _syncMessages(List<ChatMessage> oldMsgs) {
-    if (_sessionSwitching) return;
-    final oldIds = oldMsgs.map((m) => m.id).toList();
-    final newIds = widget.messages.map((m) => m.id).toList();
-    final skipLast = widget.isGenerating && _streamingSent;
-    final newLen = newIds.length - (skipLast ? 1 : 0);
-
-    if (oldIds.isEmpty) {
-      _bridge?.setMessages(
-        widget.messages,
-        visibleStartIndex: widget.visibleStartIndex,
-      );
-      return;
-    }
-
-    if (newIds.isEmpty) {
-      _bridge?.clearAll();
-      return;
-    }
-
-    if (newIds.length > oldIds.length) {
-      final oldFirstId = oldIds.first;
-      final newIdx = newIds.indexOf(oldFirstId);
-      if (newIdx > 0) {
-        _bridge?.prependMessages(
-          widget.messages.sublist(0, newIdx),
-          visibleStartIndex: widget.visibleStartIndex,
-        );
-        return;
-      }
-      if (newLen > oldIds.length) {
-        final appends = widget.messages.sublist(oldIds.length, newLen);
-        _bridge?.appendMessages(
-          appends,
-          startIndex: widget.visibleStartIndex + oldIds.length,
-        );
-        if (appends.isNotEmpty && !widget.isGenerating) {
-          _bridge?.setLastMessage(widget.messages.lastOrNull?.id);
-        }
-        return;
-      }
-    }
-
-    if (newIds.length < oldIds.length) {
-      final newFirstId = newIds.first;
-      final oldIdx = oldIds.indexOf(newFirstId);
-      if (oldIdx > 0) {
-        for (int i = 0; i < oldIdx; i++) {
-          _bridge?.removeMessage(oldIds[i]);
-        }
-        return;
-      }
-      final newLastId = newIds.last;
-      final oldLastIdx = oldIds.indexOf(newLastId);
-      if (oldLastIdx >= 0 && newIds.length == oldLastIdx + 1) {
-        for (int i = oldIds.length - 1; i > oldLastIdx; i--) {
-          _bridge?.removeMessage(oldIds[i]);
-        }
-        if (!widget.isGenerating) {
-          _bridge?.setLastMessage(widget.messages.lastOrNull?.id);
-        }
-        return;
-      }
-      _bridge?.clearAll();
-      _bridge?.setMessages(
-        widget.messages,
-        visibleStartIndex: widget.visibleStartIndex,
-      );
-      return;
-    }
-
-    // Same length - check for updates
-    final minLen = newLen < oldIds.length ? newLen : oldIds.length;
-    for (int i = 0; i < minLen; i++) {
-      if (i >= newIds.length) break;
-      if (newIds[i] != oldIds[i]) {
-        _bridge?.clearAll();
-        _bridge?.setMessages(
-          widget.messages,
-          visibleStartIndex: widget.visibleStartIndex,
-        );
-        return;
-      }
-      final o = oldMsgs[i];
-      final n = widget.messages[i];
-
-      final contentChanged = o.content != n.content;
-      final swipeChanged = o.swipeId != n.swipeId;
-      final swipeTotalChanged = o.swipes.length != n.swipes.length;
-      final hiddenChanged = o.isHidden != n.isHidden;
-      final typingChanged = o.isTyping != n.isTyping;
-      final errorChanged = o.isError != n.isError;
-      final guidanceChanged = o.guidanceText != n.guidanceText;
-      final greetingChanged = o.greetingIndex != n.greetingIndex;
-
-      final needsUpdate =
-          contentChanged ||
-          swipeChanged ||
-          hiddenChanged ||
-          swipeTotalChanged ||
-          typingChanged ||
-          errorChanged ||
-          guidanceChanged ||
-          greetingChanged;
-
-      if (needsUpdate) {
-        _bridge?.updateMessage(n);
-      }
-    }
+    _messageSync.sync(
+      bridge: _bridge,
+      oldMsgs: oldMsgs,
+      newMsgs: widget.messages,
+      visibleStartIndex: widget.visibleStartIndex,
+      streamingSkipLast: widget.isGenerating && _streamingSent,
+      isGenerating: widget.isGenerating,
+      sessionSwitching: _sessionSwitching,
+    );
   }
 
   @override
