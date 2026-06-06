@@ -173,17 +173,20 @@ chain-filter tests stay; add per-handler unit tests
 `dependsOnPrevious` orchestration into
 `lib/features/extensions/services/blocks/block_processor.dart`. Added
 `BlockContext` and `BlockHandler` scaffolding. `ExtensionPostGenService._runChain`
-now delegates orchestration to `BlockProcessor`. Extracted the concrete
-`infoblock` handler into `blocks/infoblock_handler.dart` and the image block's
-LLM-agent step into `blocks/image_gen_block_handler.dart`; the shared pixel render
-step remains in `ExtensionPostGenService` because `rerunImageOnly()` uses it too.
+now delegates orchestration to `BlockProcessor`. Extracted concrete handlers for
+`infoblock`, `imageGen`, `interactive`, and `jsRunner` into `services/blocks/`.
+The shared image pixel render step remains in `ExtensionPostGenService` because
+`rerunImageOnly()` uses it too; JS execution/fallback helpers also remain there
+for now because periodic `runJsBlock()` shares the same headless/visual fallback
+semantics.
 
 **Verification so far:** targeted analyze passed for
 `extension_post_gen_service.dart`, `services/blocks`, and
 `test/blocks/block_processor_test.dart`. Targeted tests passed:
 `test/blocks/block_processor_test.dart`, `test/after_user_dispatch_test.dart`,
-`test/periodic_trigger_scheduler_test.dart`, and
-`test/periodic_lifecycle_test.dart` (12 tests), after both handler extractions.
+`test/periodic_trigger_scheduler_test.dart`, `test/periodic_lifecycle_test.dart`,
+`test/panel_host_service_test.dart`, and `test/js_engine_service_test.dart` (27
+tests) after extracting all four concrete handlers.
 
 ### Phase 3 — `chat_webview_widget.dart` → controllers/services (2 days)
 

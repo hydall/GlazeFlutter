@@ -28,11 +28,11 @@ import 'block_context_builder.dart';
 import 'ext_blocks_panel_builder.dart';
 import 'info_block_service.dart';
 import 'js_engine_service.dart';
-import 'js_script_extractor.dart';
-import 'panel_host_service.dart';
 import 'blocks/block_processor.dart';
 import 'blocks/block_context.dart';
 import 'blocks/image_gen_block_handler.dart';
+import 'blocks/interactive_block_handler.dart';
+import 'blocks/js_runner_block_handler.dart';
 import 'blocks/infoblock_handler.dart';
 
 final extensionPostGenServiceProvider = Provider<ExtensionPostGenService>(
@@ -610,31 +610,37 @@ class ExtensionPostGenService {
           );
         case BlockType.jsRunner:
           result = await _runJsRunner(
-            charId: charId,
-            sessionId: sessionId,
-            messageId: messageId,
-            messages: messages,
-            blockConfig: blockConfig,
-            character: character,
-            persona: persona,
-            previousOutput: previousOutput,
-            cancelToken: cancelToken,
-            placeholderId: placeholderId,
-            placeholder: placeholder,
+            BlockContext(
+              charId: charId,
+              sessionId: sessionId,
+              messageId: messageId,
+              messages: messages,
+              blockConfig: blockConfig,
+              preset: preset,
+              character: character,
+              persona: persona,
+              previousOutput: previousOutput,
+              cancelToken: cancelToken,
+              placeholderId: placeholderId,
+              placeholder: placeholder,
+            ),
           );
         case BlockType.interactive:
           result = await _runInteractive(
-            charId: charId,
-            sessionId: sessionId,
-            messageId: messageId,
-            messages: messages,
-            blockConfig: blockConfig,
-            character: character,
-            persona: persona,
-            previousOutput: previousOutput,
-            cancelToken: cancelToken,
-            placeholderId: placeholderId,
-            placeholder: placeholder,
+            BlockContext(
+              charId: charId,
+              sessionId: sessionId,
+              messageId: messageId,
+              messages: messages,
+              blockConfig: blockConfig,
+              preset: preset,
+              character: character,
+              persona: persona,
+              previousOutput: previousOutput,
+              cancelToken: cancelToken,
+              placeholderId: placeholderId,
+              placeholder: placeholder,
+            ),
           );
       }
 
@@ -877,264 +883,50 @@ class ExtensionPostGenService {
   // Interactive panel
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// LLM-generates an HTML document and renders it inside a persistent
-  /// sandboxed iframe island under the assistant message. The HTML is also
-  /// persisted to [InfoBlock.content] for re-render after history reloads.
-  ///
-  /// Pipeline:
-  ///   1. If [BlockConfig.script] is non-empty and [BlockConfig.prompt] is
-  ///      empty, the script is treated as static HTML (no LLM call).
-  ///   2. Otherwise the LLM is asked to produce a complete HTML document.
-  ///   3. The HTML is sanitised lightly (trimming outer code fences only)
-  ///      and pushed to the WebView via [PanelHostService].
-  Future<InfoBlock?> _runInteractive({
-    required String charId,
-    required String sessionId,
-    required String messageId,
-    required List<ChatMessage> messages,
-    required BlockConfig blockConfig,
-    required Character character,
-    required Persona? persona,
-    required String? previousOutput,
-    required CancelToken cancelToken,
-    required String placeholderId,
-    required InfoBlock placeholder,
-  }) async {
-    if (cancelToken.isCancelled) {
-      await _repo.updateStatus(placeholderId, BlockRunStatus.stopped);
-      return placeholder.copyWith(status: BlockRunStatus.stopped);
-    }
-
-    final prompt = blockConfig.prompt.trim();
-    final staticHtml = blockConfig.script.trim();
-
-    String html;
-    if (prompt.isEmpty && staticHtml.isNotEmpty) {
-      html = staticHtml;
-    } else if (prompt.isEmpty) {
-      debugPrint(
-        '[ExtPostGen] interactive "${blockConfig.name}" — prompt is empty',
-      );
-      await _repo.updateStatus(placeholderId, BlockRunStatus.done);
-      _refreshPanelForMessage(charId, sessionId, messageId);
-      return placeholder.copyWith(status: BlockRunStatus.done);
-    } else {
-      final infoBlockService = _ref.read(infoBlockServiceProvider);
-      final generated = await infoBlockService.generateSingleBlockContent(
-        sessionId: sessionId,
-        messageId: messageId,
-        messages: messages,
-        blockConfig: blockConfig,
-        character: character,
-        persona: persona?.name,
-        previousOutput: previousOutput,
-        cancelToken: cancelToken,
-      );
-
-      if (cancelToken.isCancelled) {
-        await _repo.updateStatus(placeholderId, BlockRunStatus.stopped);
-        return placeholder.copyWith(status: BlockRunStatus.stopped);
-      }
-
-      if (generated.error != null || generated.content == null) {
-        return _markBlockError(
-          charId: charId,
-          sessionId: sessionId,
-          messageId: messageId,
-          placeholderId: placeholderId,
-          placeholder: placeholder,
-          errorMessage:
-              generated.error ?? 'Interactive agent returned empty response',
-        );
-      }
-
-      html = _stripHtmlFence(generated.content!);
-      _publishStreamingBlockContent(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        placeholder: placeholder,
-        content: html,
-        force: true,
-      );
-    }
-
-    final panelService = _ref.read(panelHostServiceProvider);
-    final opened = await panelService.openPanel(
-      charId: charId,
-      messageId: messageId,
-      html: html,
-      options: {'title': blockConfig.name, 'minHeight': 120},
-    );
-    if (opened == null) {
-      return _markBlockError(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        placeholderId: placeholderId,
-        placeholder: placeholder,
-        errorMessage:
-            'Interactive panel host did not open a panel (no chat bridge?)',
-      );
-    }
-
-    await _repo.updateContent(placeholderId, html);
-    await _repo.updateStatus(placeholderId, BlockRunStatus.done);
-
-    final done = placeholder.copyWith(
-      content: html,
-      status: BlockRunStatus.done,
-    );
-    _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(done);
-    _refreshPanelForMessage(charId, sessionId, messageId);
-    return done;
-  }
-
-  String _stripHtmlFence(String raw) {
-    var s = raw.trim();
-    if (s.startsWith('```')) {
-      final firstNewline = s.indexOf('\n');
-      if (firstNewline != -1) s = s.substring(firstNewline + 1);
-      if (s.endsWith('```')) s = s.substring(0, s.length - 3);
-    }
-    return s.trim();
+  Future<InfoBlock?> _runInteractive(BlockContext context) {
+    return InteractiveBlockHandler(
+      ref: _ref,
+      repo: _repo,
+      markBlockError: _markContextBlockError,
+      refreshPanelForMessage: _refreshPanelForMessage,
+      publishStreamingBlockContent: _publishStreamingBlockContent,
+    ).handle(context);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // JS Runner
   // ─────────────────────────────────────────────────────────────────────────
 
-  Future<InfoBlock?> _runJsRunner({
-    required String charId,
-    required String sessionId,
-    required String messageId,
-    required List<ChatMessage> messages,
-    required BlockConfig blockConfig,
-    required Character character,
-    required Persona? persona,
-    required String? previousOutput,
-    required CancelToken cancelToken,
-    required String placeholderId,
-    required InfoBlock placeholder,
-  }) async {
-    if (cancelToken.isCancelled) {
-      await _repo.updateStatus(placeholderId, BlockRunStatus.stopped);
-      return placeholder.copyWith(status: BlockRunStatus.stopped);
-    }
+  Future<InfoBlock?> _runJsRunner(BlockContext context) {
+    return JsRunnerBlockHandler(
+      repo: _repo,
+      infoBlockService: _ref.read(infoBlockServiceProvider),
+      markBlockError: _markContextBlockError,
+      refreshPanelForMessage: _refreshPanelForMessage,
+      makeStreamHandler: _makeStreamHandler,
+      publishStreamingBlockContent: _publishStreamingBlockContent,
+      executeJsScript: _executeContextJsScript,
+    ).handle(context);
+  }
 
-    final prompt = blockConfig.prompt.trim();
-    final staticScript = blockConfig.script.trim();
-
-    // Legacy: hand-written script without LLM prompt.
-    if (prompt.isEmpty && staticScript.isNotEmpty) {
-      return _executeJsScript(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        messages: messages,
-        blockConfig: blockConfig,
-        character: character,
-        previousOutput: previousOutput,
-        cancelToken: cancelToken,
-        placeholderId: placeholderId,
-        placeholder: placeholder,
-        script: staticScript,
-      );
-    }
-
-    if (prompt.isEmpty) {
-      debugPrint(
-        '[ExtPostGen] jsRunner "${blockConfig.name}" — prompt is empty',
-      );
-      await _repo.updateStatus(placeholderId, BlockRunStatus.done);
-      _refreshPanelForMessage(charId, sessionId, messageId);
-      return placeholder.copyWith(status: BlockRunStatus.done);
-    }
-
-    debugPrint('[ExtPostGen] _runJsRunner START: name="${blockConfig.name}"');
-
-    final infoBlockService = _ref.read(infoBlockServiceProvider);
-    final generated = await infoBlockService.generateSingleBlockContent(
-      sessionId: sessionId,
-      messageId: messageId,
-      messages: messages,
-      blockConfig: blockConfig,
-      character: character,
-      persona: persona?.name,
-      previousOutput: previousOutput,
-      cancelToken: cancelToken,
-      onStreamUpdate: _makeStreamHandler(
-        blockConfig: blockConfig,
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        placeholder: placeholder,
-      ),
-    );
-
-    if (cancelToken.isCancelled) {
-      await _repo.updateStatus(placeholderId, BlockRunStatus.stopped);
-      return placeholder.copyWith(status: BlockRunStatus.stopped);
-    }
-
-    if (generated.error != null || generated.content == null) {
-      return _markBlockError(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        placeholderId: placeholderId,
-        placeholder: placeholder,
-        errorMessage: generated.error ?? 'JS agent returned empty response',
-      );
-    }
-
-    final agentOutput = generated.content!;
-    _publishStreamingBlockContent(
-      charId: charId,
-      sessionId: sessionId,
-      messageId: messageId,
-      placeholder: placeholder,
-      content: agentOutput,
-      force: true,
-    );
-
-    final script = JsScriptExtractor.extractFromLlmResponse(agentOutput);
-    if (script == null || script.isEmpty) {
-      return _markBlockError(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        placeholderId: placeholderId,
-        placeholder: placeholder,
-        errorMessage:
-            'No JavaScript found in LLM response (expected ```js … ``` fence or raw code)',
-      );
-    }
-
-    _publishStreamingBlockContent(
-      charId: charId,
-      sessionId: sessionId,
-      messageId: messageId,
-      placeholder: placeholder,
-      content:
-          '$agentOutput\n<p class="ext-block-js-pending">⏳ Выполнение JS…</p>',
-      force: true,
-    );
-
+  Future<InfoBlock?> _executeContextJsScript({
+    required BlockContext context,
+    required String script,
+    String Function(String result)? panelContentBuilder,
+  }) {
     return _executeJsScript(
-      charId: charId,
-      sessionId: sessionId,
-      messageId: messageId,
-      messages: messages,
-      blockConfig: blockConfig,
-      character: character,
-      previousOutput: previousOutput,
-      cancelToken: cancelToken,
-      placeholderId: placeholderId,
-      placeholder: placeholder,
+      charId: context.charId,
+      sessionId: context.sessionId,
+      messageId: context.messageId,
+      messages: context.messages,
+      blockConfig: context.blockConfig,
+      character: context.character,
+      previousOutput: context.previousOutput,
+      cancelToken: context.cancelToken,
+      placeholderId: context.placeholderId,
+      placeholder: context.placeholder,
       script: script,
-      panelContentBuilder: (result) =>
-          JsScriptExtractor.formatPanelContent(script: script, result: result),
+      panelContentBuilder: panelContentBuilder,
     );
   }
 
