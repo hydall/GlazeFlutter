@@ -1,4 +1,5 @@
 import { Bridge } from './chat_bridge_controller.js';
+import { Renderer } from '../renderer/index.js';
 
 export { Bridge } from './chat_bridge_controller.js';
 export { EditController } from './edit_controller.js';

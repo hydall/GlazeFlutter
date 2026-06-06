@@ -15,8 +15,13 @@ String _asset(String name) =>
 String _bridgeAsset(String name) =>
     File('assets/chat_webview/bridge/$name').readAsStringSync();
 
+String _rendererAsset(String name) =>
+    File('assets/chat_webview/renderer/$name').readAsStringSync();
+
 void main() {
   late String rendererJs;
+  late String rendererIndexJs;
+  late String rendererMessageJs;
   late String bridgeIndexJs;
   late String bridgeControllerJs;
   late String editControllerJs;
@@ -30,7 +35,15 @@ void main() {
   late String stylessCss;
 
   setUpAll(() {
-    rendererJs = _asset('renderer.js');
+    rendererIndexJs = _rendererAsset('index.js');
+    rendererMessageJs = _rendererAsset('message_renderer.js');
+    rendererJs = [
+      _rendererAsset('shadow_style.js'),
+      _rendererAsset('markdown.js'),
+      _rendererAsset('image_embed.js'),
+      _rendererAsset('message_template.js'),
+      rendererMessageJs,
+    ].join('\n');
     bridgeIndexJs = _bridgeAsset('index.js');
     bridgeControllerJs = _bridgeAsset('chat_bridge_controller.js');
     editControllerJs = _bridgeAsset('edit_controller.js');
@@ -90,6 +103,10 @@ void main() {
         bridgeIndexJs,
         contains("import { Bridge } from './chat_bridge_controller.js'"),
       );
+      expect(
+        bridgeIndexJs,
+        contains("import { Renderer } from '../renderer/index.js'"),
+      );
       expect(bridgeIndexJs, contains('window.Bridge = Bridge'));
       expect(
         bridgeIndexJs,
@@ -115,6 +132,41 @@ void main() {
       final legacyJs = _asset('bridge.legacy.js');
       expect(legacyJs, contains('class Bridge'));
       expect(_asset('bridge.js'), contains('bridge.legacy.js'));
+    });
+  });
+
+  group('renderer ES module layout', () {
+    test('index.html loads renderer module before bridge module', () {
+      final rendererIdx = indexHtml.indexOf('renderer/index.js');
+      final bridgeIdx = indexHtml.indexOf('bridge/index.js');
+      expect(rendererIdx, isNonNegative);
+      expect(bridgeIdx, isNonNegative);
+      expect(rendererIdx < bridgeIdx, isTrue);
+      expect(indexHtml, contains('type="module" src="renderer/index.js"'));
+    });
+
+    test('module entrypoint exports and exposes Renderer', () {
+      expect(
+        rendererIndexJs,
+        contains("import { Renderer } from './message_renderer.js'"),
+      );
+      expect(rendererIndexJs, contains('window.Renderer = Renderer'));
+    });
+
+    test('message renderer imports extracted modules', () {
+      for (final module in [
+        'icon_library.js',
+        'image_embed.js',
+        'markdown.js',
+        'message_template.js',
+        'shadow_style.js',
+      ]) {
+        expect(rendererMessageJs, contains("'./$module'"));
+      }
+    });
+
+    test('legacy renderer shim points at active module entrypoint', () {
+      expect(_asset('renderer.js'), contains('renderer/index.js'));
     });
   });
 
@@ -269,7 +321,7 @@ void main() {
   });
 
   // ─── details/summary arrow ────────────────────────────────────────────────
-  group('details/summary arrow (SHADOW_STYLE in renderer.js)', () {
+  group('details/summary arrow (SHADOW_STYLE in renderer modules)', () {
     test('::-webkit-details-marker is hidden', () {
       expect(
         rendererJs,
@@ -283,7 +335,7 @@ void main() {
 
     test('::before is disabled (arrow injected as real DOM span instead)', () {
       // display:flex on <summary> is ignored in some Android WebView versions.
-      // The arrow is injected as a real .glaze-arrow <span> by _fixDetailsSummaryArrows()
+      // The arrow is injected as a real .glaze-arrow <span> by fixDetailsSummaryArrows()
       // so it always participates in flex layout correctly.
       final beforeBlock = _extractSummaryBeforeBlock(rendererJs);
       expect(
@@ -315,29 +367,29 @@ void main() {
     });
 
     test(
-      '_fixDetailsSummaryArrows injects .glaze-arrow into every summary',
+      'fixDetailsSummaryArrows injects .glaze-arrow into every summary',
       () {
-        expect(rendererJs, contains('_fixDetailsSummaryArrows'));
+        expect(rendererJs, contains('fixDetailsSummaryArrows'));
         expect(rendererJs, contains("arrow.className = 'glaze-arrow'"));
       },
     );
 
-    test('_writeShadowContent calls _fixDetailsSummaryArrows after innerHTML', () {
+    test('writeShadowContent calls fixDetailsSummaryArrows after innerHTML', () {
       // Must be called AFTER root.innerHTML so it sees the inserted <details>.
       final writeBlock = _extractWriteShadowContent(rendererJs);
       final innerIdx = writeBlock.indexOf('root.innerHTML');
-      final fixIdx = writeBlock.indexOf('_fixDetailsSummaryArrows');
+      final fixIdx = writeBlock.indexOf('fixDetailsSummaryArrows');
       expect(innerIdx, isNot(-1), reason: 'root.innerHTML must be present');
       expect(
         fixIdx,
         isNot(-1),
-        reason: '_fixDetailsSummaryArrows must be called',
+        reason: 'fixDetailsSummaryArrows must be called',
       );
       expect(
         fixIdx > innerIdx,
         isTrue,
         reason:
-            '_fixDetailsSummaryArrows must be called AFTER root.innerHTML = formatted',
+            'fixDetailsSummaryArrows must be called AFTER root.innerHTML = formatted',
       );
     });
   });
@@ -529,7 +581,7 @@ void main() {
   });
 
   // ─── renderMessage always returns array (Phase 3.6) ────────────────────────
-  group('renderMessage return type (renderer.js)', () {
+  group('renderMessage return type (renderer modules)', () {
     test('renderMessage returns elements array (not conditional)', () {
       final marker = 'renderMessage(messageData)';
       final idx = rendererJs.indexOf(marker);
@@ -580,7 +632,7 @@ void main() {
   });
 
   // ─── Streaming fast path (Phase 4.1) ───────────────────────────────────────
-  group('updateMessageContent fast path (renderer.js)', () {
+  group('updateMessageContent fast path (renderer modules)', () {
     test('updateMessageContent has fast path for text-only updates', () {
       final marker =
           'updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate)';
@@ -603,7 +655,7 @@ void main() {
   });
 
   // ─── _createGenStat dedup (Phase 4.3) ──────────────────────────────────────
-  group('_createGenStat dedup (renderer.js)', () {
+  group('_createGenStat dedup (renderer modules)', () {
     test('_createGenStat method exists', () {
       expect(rendererJs, contains('_createGenStat('));
     });
@@ -640,7 +692,7 @@ void main() {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-/// Extracts the summary::before CSS block from SHADOW_STYLE in renderer.js.
+/// Extracts the summary::before CSS block from SHADOW_STYLE in renderer modules.
 String _extractSummaryBeforeBlock(String src) {
   final marker = 'summary::before {';
   final idx = src.indexOf(marker);
@@ -650,22 +702,13 @@ String _extractSummaryBeforeBlock(String src) {
   return src.substring(idx, end + 1);
 }
 
-/// Extracts the _writeShadowContent method body from renderer.js.
+/// Extracts the writeShadowContent method body from renderer modules.
 /// Looks for the definition (not a call), i.e. the line that starts with the name.
 String _extractWriteShadowContent(String src) {
-  // Match the method definition: starts at column 2 with _writeShadowContent
-  final marker = '  _writeShadowContent(';
+  final marker = 'writeShadowContent({';
   int idx = src.indexOf(marker);
-  // Skip to the next occurrence if this is a call inside another method
-  while (idx != -1) {
-    // It's a definition if it's followed by a parameter list then `{`
-    final lineEnd = src.indexOf('\n', idx);
-    final line = lineEnd != -1
-        ? src.substring(idx, lineEnd)
-        : src.substring(idx);
-    if (line.contains(') {') || line.endsWith('{')) break;
-    idx = src.indexOf(marker, idx + 1);
-  }
+  if (idx == -1) return '';
+  idx = src.indexOf('}) {', idx);
   if (idx == -1) return '';
   int depth = 0;
   int start = src.indexOf('{', idx);

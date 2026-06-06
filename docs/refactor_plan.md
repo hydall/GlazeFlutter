@@ -1,6 +1,6 @@
 # Refactor Plan — Bridge, God-Widgets, God-Services
 
-**Status:** Phases 1-5 complete. Phases 6-7 pending.
+**Status:** Phases 1-6 complete. Phase 7 pending.
 **Scope:** Decompose 4 Dart god-objects and 3 JS god-scripts that grew during the
 `js-extension-bridge-sdk` branch (22 feature commits) into focused modules.
 **Goal:** Clean foundation for future feature work; no functional changes.
@@ -399,7 +399,7 @@ module files; the only remaining failure in that file is the pre-existing
 textarea wheel listener assertion. Full `test/webview_assets_test.dart` still
 has the same 5 pre-existing wheel/CSS failures called out in the project notes.
 
-### Phase 6 — `renderer.js` → modules (1 day)
+### Phase 6 — `renderer.js` → modules (1 day) ✅ Done
 
 **Before:** `assets/chat_webview/renderer.js` (1234 lines).
 
@@ -407,13 +407,42 @@ has the same 5 pre-existing wheel/CSS failures called out in the project notes.
 
 ```
 assets/chat_webview/renderer/
-  index.js                          (public `renderMessage` facade)
+  index.js                          (public `Renderer` facade)
+  message_renderer.js               (main Renderer class)
   markdown.js                       (markdown → safe HTML)
   code_highlight.js                 (```lang fences → highlighted)
   image_embed.js                    ([IMG:GEN] / data-uri rendering)
   message_template.js               (avatar, name, role-specific CSS classes)
+  shadow_style.js                   (shadow-root CSS)
+  icon_library.js                   (SVG icon constants)
   macros_in_message.js              ({{user}}, {{char}} in body)
 ```
+
+**Implemented:** `index.html` now loads the renderer through
+`<script type="module" src="renderer/index.js">`; the legacy
+`assets/chat_webview/renderer.js` path is a small compatibility marker. The
+active renderer lives under `assets/chat_webview/renderer/`, with `Renderer`
+exported and assigned to `window.Renderer` for existing bridge construction.
+`bridge/index.js` imports `Renderer` explicitly to avoid module-scope global
+lookup hazards.
+
+| File | Lines | Responsibility |
+|---|---:|---|
+| `renderer/index.js` | 7 | Module entrypoint, public exports, `window.Renderer` compatibility |
+| `renderer/message_renderer.js` | 948 | Main `Renderer` class: message DOM, metadata updates, search, animation |
+| `renderer/markdown.js` | 102 | Shadow-root writes, inline script execution, details arrow repair |
+| `renderer/shadow_style.js` | 140 | Shadow DOM CSS used by message content |
+| `renderer/icon_library.js` | 19 | SVG icon constants |
+| `renderer/image_embed.js` | 20 | Message image attachment DOM |
+| `renderer/message_template.js` | 49 | Role/name/date/status helpers |
+| `renderer/code_highlight.js` | 4 | Code-block boundary hook |
+| `renderer/macros_in_message.js` | 3 | Formatter boundary hook for message body macros |
+
+**Verification:** `node --check` passed for all renderer modules and the updated
+bridge module. `flutter analyze test/webview_assets_test.dart` passed. Targeted
+asset tests passed for `renderer ES module layout`, `bridge ES module layout`,
+`details/summary arrow`, `renderMessage return type`, `updateMessageContent fast
+path`, and `_createGenStat dedup`.
 
 ### Phase 7 — `formatter.js` → modules (0.5 day)
 
