@@ -214,4 +214,98 @@ void main() {
       expect(result['error']['code'], 'invalid_request');
     });
   });
+
+  group('JsBridgeService triggerGeneration', () {
+    test('delegates to injected handler with resolved charId', () async {
+      final bridge = JsBridgeService(
+        currentSessionId: () => 's1',
+        currentCharacterId: () => 'c1',
+        triggerGeneration: (charId, params) async {
+          expect(charId, 'c1');
+          expect(params['mode'], 'continue');
+          expect(params['reason'], 'tick');
+          return {
+            'accepted': true,
+            'mode': 'continue',
+            'reason': 'tick',
+          };
+        },
+      );
+
+      final result = await bridge.dispatch({
+        'method': 'triggerGeneration',
+        'params': {'mode': 'continue', 'reason': 'tick'},
+      });
+
+      expect(result['ok'], isTrue);
+      expect(result['result'], {
+        'accepted': true,
+        'mode': 'continue',
+        'reason': 'tick',
+      });
+    });
+
+    test('prefers context.characterId over currentCharacterId', () async {
+      final bridge = JsBridgeService(
+        currentCharacterId: () => 'fallback',
+        triggerGeneration: (charId, params) async {
+          return {'accepted': true, 'charId': charId};
+        },
+      );
+
+      final result = await bridge.dispatch({
+        'method': 'triggerGeneration',
+        'params': {'mode': 'auto'},
+        'context': {'characterId': 'explicit'},
+      });
+
+      expect(result['ok'], isTrue);
+      expect(result['result'], {'accepted': true, 'charId': 'explicit'});
+    });
+
+    test('rejects non-string params when the typed handler validates them',
+        () async {
+      // The validation contract lives in `TriggerGenerationHandler`; the
+      // bridge service itself is a thin dispatcher that propagates
+      // exceptions. We simulate the typed handler throwing an
+      // ArgumentError (mirroring real behavior) and check the bridge
+      // converts it into `invalid_request`.
+      final bridge = JsBridgeService(
+        currentCharacterId: () => 'c1',
+        triggerGeneration: (charId, params) async {
+          if (params['mode'] is! String && params['mode'] != null) {
+            throw ArgumentError('triggerGeneration mode must be a string');
+          }
+          if (params['reason'] is! String && params['reason'] != null) {
+            throw ArgumentError('triggerGeneration reason must be a string');
+          }
+          return {'accepted': true};
+        },
+      );
+
+      final badMode = await bridge.dispatch({
+        'method': 'triggerGeneration',
+        'params': {'mode': 42},
+      });
+      expect(badMode['ok'], isFalse);
+      expect(badMode['error']['code'], 'invalid_request');
+
+      final badReason = await bridge.dispatch({
+        'method': 'triggerGeneration',
+        'params': {'mode': 'auto', 'reason': 7},
+      });
+      expect(badReason['ok'], isFalse);
+      expect(badReason['error']['code'], 'invalid_request');
+    });
+
+    test('returns bridge_error when no handler is registered', () async {
+      final result = await bridge.dispatch({
+        'method': 'triggerGeneration',
+        'params': {'mode': 'auto'},
+      });
+
+      expect(result['ok'], isFalse);
+      expect(result['error']['code'], 'unsupported_method');
+    });
+  });
 }

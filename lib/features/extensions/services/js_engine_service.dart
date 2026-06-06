@@ -62,10 +62,17 @@ class _RaceResultCancelled extends _RaceResult {
 
 /// In-process bus that lets the headless controller forward `glazeBridge`
 /// calls into the same [JsBridgeService] used by the visual WebView.
+///
+/// [currentCharIdProvider] (optional) supplies a fallback `characterId`
+/// when the JS request has no `context.characterId`. The visual chat
+/// WebView always injects its own id, so this fallback is only used by
+/// the headless engine when scripts run without an open chat (e.g. timers
+/// or `afterAssistant` post-gen).
 class JsEngineBridgeHost {
-  JsEngineBridgeHost({required this.bridge});
+  JsEngineBridgeHost({required this.bridge, this.currentCharIdProvider});
 
   final JsBridgeService bridge;
+  final String? Function()? currentCharIdProvider;
 
   Future<Map<String, dynamic>> handle(List<dynamic> args) async {
     if (args.isEmpty) return {'ok': false, 'error': {'code': 'invalid_request'}};
@@ -75,6 +82,23 @@ class JsEngineBridgeHost {
         : raw is Map
             ? Map<String, dynamic>.from(raw)
             : const <String, dynamic>{};
+    final method = request['method'] as String? ?? '';
+    if (method == 'triggerGeneration') {
+      final context = request['context'];
+      final hasCharId =
+          context is Map && context['characterId'] is String &&
+              (context['characterId'] as String).isNotEmpty;
+      if (!hasCharId) {
+        final fallback = currentCharIdProvider?.call();
+        if (fallback != null && fallback.isNotEmpty) {
+          final patched = Map<String, dynamic>.from(
+            context is Map ? context as Map : const {},
+          );
+          patched['characterId'] = fallback;
+          request['context'] = patched;
+        }
+      }
+    }
     return bridge.dispatch(request);
   }
 }

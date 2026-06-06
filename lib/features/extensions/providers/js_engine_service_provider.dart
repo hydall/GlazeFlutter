@@ -22,6 +22,16 @@ final jsEngineServiceProvider = Provider<JsEngineService>(
 /// Builds a [JsEngineBridgeHost] backed by the supplied [JsBridgeService].
 /// Extracted into a small factory so the visual chat WebView and the
 /// headless engine can share the same bridge dispatcher.
-JsEngineBridgeHost jsEngineBridgeHostFor(JsBridgeService bridge) {
-  return JsEngineBridgeHost(bridge: bridge);
+///
+/// [currentCharIdProvider] is the fallback `characterId` used by
+/// `glaze.triggerGeneration` when the JS request has no
+/// `context.characterId` (e.g. scripts that run without an open chat).
+JsEngineBridgeHost jsEngineBridgeHostFor(
+  JsBridgeService bridge, {
+  String? Function()? currentCharIdProvider,
+}) {
+  return JsEngineBridgeHost(
+    bridge: bridge,
+    currentCharIdProvider: currentCharIdProvider,
+  );
 }

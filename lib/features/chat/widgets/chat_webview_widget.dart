@@ -23,15 +23,19 @@ import '../../../core/models/chat_message.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/theme/theme_font_provider.dart';
 import '../../extensions/models/info_block.dart';
+import '../../extensions/models/trigger_mode.dart';
+import '../../extensions/models/trigger_result.dart';
 import '../../extensions/providers/info_blocks_provider.dart';
 import '../../extensions/providers/extension_presets_provider.dart';
 import '../../extensions/providers/extensions_settings_provider.dart';
 import '../../extensions/services/ext_blocks_panel_builder.dart';
 import '../../extensions/services/extension_post_gen_service.dart';
+import '../../extensions/services/generation_dispatcher.dart';
 import '../../extensions/services/js_bridge_service.dart';
 import '../../extensions/services/js_engine_service.dart';
 import '../../extensions/services/panel_host_service.dart';
 import '../../extensions/services/runtime_prompt_injection_service.dart';
+import '../../extensions/services/trigger_generation_handler.dart';
 import '../../settings/api_list_provider.dart';
 import '../bridge/chat_bridge_registry.dart';
 import 'webview_callbacks.dart';
@@ -304,6 +308,25 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         .read(runtimePromptInjectionProvider.notifier)
         .uninject(sessionId: sessionId, id: id);
     return {'id': id.trim(), 'removed': removed};
+  }
+
+  Future<Map<String, dynamic>> _triggerBridgeGeneration(
+    String? charId,
+    Map<String, dynamic> params,
+  ) async {
+    final resolvedCharId =
+        (params['characterId'] as String?) ??
+        (charId) ??
+        widget.charId;
+    if (resolvedCharId == null || resolvedCharId.isEmpty) {
+      return TriggerNoSession(mode: TriggerMode.auto).toMap();
+    }
+    final dispatcher = ref.read(generationDispatcherProvider);
+    final handler = TriggerGenerationHandler(
+      dispatcher: dispatcher,
+      log: (line) => debugPrint(line),
+    );
+    return handler.handle(charId: resolvedCharId, params: params);
   }
 
   @override
@@ -1011,6 +1034,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
                   generateText: _generateBridgeText,
                   injectPrompt: _injectBridgePrompt,
                   uninjectPrompt: _uninjectBridgePrompt,
+                  triggerGeneration: _triggerBridgeGeneration,
                 );
                 _bridge = ChatBridgeController(
                   controller,
@@ -1029,7 +1053,10 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
                 // for jsRunner blocks and for background scripts.
                 unawaited(
                   JsEngineService.instance.init(
-                    host: JsEngineBridgeHost(bridge: jsBridgeService),
+                    host: JsEngineBridgeHost(
+                      bridge: jsBridgeService,
+                      currentCharIdProvider: () => widget.charId,
+                    ),
                   ),
                 );
                 unawaited(

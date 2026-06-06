@@ -27,6 +27,18 @@ typedef UninjectPromptHandler =
       Map<String, dynamic> context,
     );
 
+/// Optional handler for `glaze.triggerGeneration({ mode, reason })`.
+///
+/// `charId` is the resolved character id from the JS bridge context
+/// (`context.characterId` first, then the [_currentCharIdForTrigger]
+/// fallback, then null). Returns a structured result the JS SDK can
+/// inspect — see [TriggerGenerationHandler].
+typedef TriggerGenerationHandlerFn =
+    FutureOr<Map<String, dynamic>> Function(
+      String? charId,
+      Map<String, dynamic> params,
+    );
+
 class JsBridgeService {
   static const _chatVarsKey = '__glaze_variables';
   static const _characterVarsKey = 'glaze_variables';
@@ -39,6 +51,7 @@ class JsBridgeService {
   final GenerateTextHandler? _generateText;
   final InjectPromptHandler? _injectPrompt;
   final UninjectPromptHandler? _uninjectPrompt;
+  final TriggerGenerationHandlerFn? _triggerGeneration;
 
   JsBridgeService({
     ChatRepo? chatRepo,
@@ -48,6 +61,7 @@ class JsBridgeService {
     GenerateTextHandler? generateText,
     InjectPromptHandler? injectPrompt,
     UninjectPromptHandler? uninjectPrompt,
+    TriggerGenerationHandlerFn? triggerGeneration,
   }) : this._(
          chatRepo,
          characterRepo,
@@ -56,6 +70,7 @@ class JsBridgeService {
          generateText,
          injectPrompt,
          uninjectPrompt,
+         triggerGeneration,
        );
 
   const JsBridgeService._(
@@ -66,6 +81,7 @@ class JsBridgeService {
     this._generateText,
     this._injectPrompt,
     this._uninjectPrompt,
+    this._triggerGeneration,
   );
 
   Future<Map<String, dynamic>> dispatch(Map<String, dynamic> request) async {
@@ -107,9 +123,11 @@ class JsBridgeService {
       case 'deleteVariable':
         return _deleteVariable(params, context);
       case 'executeCommand':
+        throw UnsupportedError('glaze.executeCommand is not implemented yet');
       case 'triggerGeneration':
+        return _handleTriggerGeneration(params, context);
       case 'playAudio':
-        throw UnsupportedError('glaze.$method is not implemented yet');
+        throw UnsupportedError('glaze.playAudio is not implemented yet');
       case 'injectPrompt':
         return _handleInjectPrompt(params, context);
       case 'uninjectPrompt':
@@ -171,6 +189,27 @@ class JsBridgeService {
       _deleteAtPath(root, path);
       return root;
     });
+  }
+
+  FutureOr<Map<String, dynamic>> _handleTriggerGeneration(
+    Map<String, dynamic> params,
+    Map<String, dynamic> context,
+  ) {
+    final handler =
+        _triggerGeneration ??
+        (throw UnsupportedError(
+          'glaze.triggerGeneration is not available in this context',
+        ));
+    final charId = _characterIdOrNull(context);
+    return handler(charId, params);
+  }
+
+  String? _characterIdOrNull(Map<String, dynamic> context) {
+    final raw = context['characterId'];
+    if (raw is String && raw.isNotEmpty) return raw;
+    final fallback = _currentCharacterId?.call();
+    if (fallback == null || fallback.isEmpty) return null;
+    return fallback;
   }
 
   Future<String> _handleGenerateText(
