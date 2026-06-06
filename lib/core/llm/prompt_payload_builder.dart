@@ -18,6 +18,7 @@ import 'embedding_types.dart';
 import 'lorebook_providers.dart';
 import 'memory_injection_service.dart';
 import '../../features/extensions/services/ext_blocks_prompt_injection.dart';
+import '../../features/extensions/services/runtime_prompt_injection_service.dart';
 import 'prompt_builder.dart';
 import 'prompt_inputs.dart';
 import 'prompt_inputs_collector.dart';
@@ -25,8 +26,9 @@ import 'summary_service.dart';
 
 class PromptPayloadBuilder {
   final Ref _ref;
-  late final PromptInputsCollector _inputsCollector =
-      PromptInputsCollector(_ref);
+  late final PromptInputsCollector _inputsCollector = PromptInputsCollector(
+    _ref,
+  );
 
   PromptPayloadBuilder(this._ref);
 
@@ -37,12 +39,11 @@ class PromptPayloadBuilder {
     required String charId,
     required ChatSession? session,
     String? guidanceText,
-  }) =>
-      _inputsCollector.collectInputs(
-        charId: charId,
-        session: session,
-        guidanceText: guidanceText,
-      );
+  }) => _inputsCollector.collectInputs(
+    charId: charId,
+    session: session,
+    guidanceText: guidanceText,
+  );
 
   Future<PromptPayload> buildFromSession({
     required String charId,
@@ -73,7 +74,9 @@ class PromptPayloadBuilder {
     await _ref.read(apiListProvider.future);
     throwIfAborted();
     final chatApi = _ref.read(activeApiConfigProvider);
-    if (chatApi == null || chatApi.mode == 'embedding') throw StateError('No chat API config available');
+    if (chatApi == null || chatApi.mode == 'embedding') {
+      throw StateError('No chat API config available');
+    }
 
     debugPrint('[payload] reading preset...');
     final activePresetId = _ref.read(activePresetIdProvider);
@@ -91,7 +94,11 @@ class PromptPayloadBuilder {
     final sessionId = session?.id;
 
     final persona = getEffectivePersona(
-      personas, charId, sessionId, activePersonaId, connections,
+      personas,
+      charId,
+      sessionId,
+      activePersonaId,
+      connections,
     );
 
     debugPrint('[payload] reading lorebooks...');
@@ -106,6 +113,7 @@ class PromptPayloadBuilder {
     String memoryInjectionTarget = 'hard_block';
     Map<String, dynamic> memoryCoverage = {};
     List<TriggeredEntry> triggeredMemories = [];
+    List<RuntimePromptBlock> runtimePromptBlocks = const [];
     List<ChatMessage> history = session?.messages ?? [];
     Map<String, String> sessionVars = session?.sessionVars ?? {};
     List<LorebookEntry> vectorEntries = [];
@@ -116,6 +124,18 @@ class PromptPayloadBuilder {
           .read(extBlocksPromptInjectionProvider)
           .injectIntoHistory(sessionId: session.id, messages: history);
       throwIfAborted();
+      runtimePromptBlocks = _ref
+          .read(runtimePromptInjectionProvider.notifier)
+          .bySession(session.id)
+          .map(
+            (block) => RuntimePromptBlock(
+              id: block.id,
+              content: block.content,
+              depth: block.depth,
+              role: block.role,
+            ),
+          )
+          .toList(growable: false);
 
       debugPrint('[payload] getting summary...');
       final summaryService = _ref.read(summaryServiceProvider);
@@ -161,17 +181,20 @@ class PromptPayloadBuilder {
       );
 
       throwIfAborted();
-      final results = await Future.wait([
-        memoryFuture,
-        lorebookFuture,
-      ]);
+      final results = await Future.wait([memoryFuture, lorebookFuture]);
       throwIfAborted();
       final memoryResult = results[0] as MemoryInjectionResult;
       vectorEntries = results[1] as List<LorebookEntry>;
       throwIfAborted();
-      debugPrint('[payload] memory injection complete, entries=${memoryResult.entries.length}');
-      memoryContent = memoryResult.content.isNotEmpty ? memoryResult.content : null;
-      memoryMacroContent = memoryResult.macroContent.isNotEmpty ? memoryResult.macroContent : null;
+      debugPrint(
+        '[payload] memory injection complete, entries=${memoryResult.entries.length}',
+      );
+      memoryContent = memoryResult.content.isNotEmpty
+          ? memoryResult.content
+          : null;
+      memoryMacroContent = memoryResult.macroContent.isNotEmpty
+          ? memoryResult.macroContent
+          : null;
       memoryInjectionTarget = memoryResult.injectionTarget;
       if (memoryResult.entries.isNotEmpty) {
         memoryCoverage = {
@@ -180,15 +203,21 @@ class PromptPayloadBuilder {
           'stale': false,
           'injected': memoryContent != null,
         };
-        triggeredMemories = memoryResult.entries.map((e) => TriggeredEntry(
-          id: e.id,
-          name: e.title.isNotEmpty ? e.title : e.id,
-          source: 'memory',
-        )).toList();
+        triggeredMemories = memoryResult.entries
+            .map(
+              (e) => TriggeredEntry(
+                id: e.id,
+                name: e.title.isNotEmpty ? e.title : e.id,
+                source: 'memory',
+              ),
+            )
+            .toList();
       }
 
       if (!skipVectorSearch) {
-        debugPrint('[payload] vector search complete, entries=${vectorEntries.length}');
+        debugPrint(
+          '[payload] vector search complete, entries=${vectorEntries.length}',
+        );
       }
     }
 
@@ -217,6 +246,7 @@ class PromptPayloadBuilder {
       characterDepthPromptRole: character.depthPromptRole,
       globalRegexes: _ref.read(globalRegexProvider).valueOrNull ?? [],
       triggeredMemories: triggeredMemories,
+      runtimePromptBlocks: runtimePromptBlocks,
     );
   }
 
@@ -236,6 +266,7 @@ class PromptPayloadBuilder {
     List<TriggeredEntry> triggeredMemories = const [],
     String? guidanceText,
     bool skipVectorSearch = true,
+    List<RuntimePromptBlock> runtimePromptBlocks = const [],
   }) async {
     final lorebookSettings = _ref.read(lorebookSettingsProvider);
     final lorebookActivations = _ref.read(lorebookActivationsProvider);
@@ -280,6 +311,7 @@ class PromptPayloadBuilder {
       characterDepthPromptRole: character.depthPromptRole,
       globalRegexes: _ref.read(globalRegexProvider).valueOrNull ?? [],
       triggeredMemories: triggeredMemories,
+      runtimePromptBlocks: runtimePromptBlocks,
     );
   }
 
@@ -302,14 +334,20 @@ class PromptPayloadBuilder {
 
     try {
       final searchService = _ref.read(lorebookVectorSearchProvider);
-      final visibleHistory = history.where((m) => !m.isHidden && !m.isTyping).toList();
+      final visibleHistory = history
+          .where((m) => !m.isHidden && !m.isTyping)
+          .toList();
       final searchHistory = visibleHistory
           .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
           .toList();
       final activations = _ref.read(lorebookActivationsProvider);
       final overrideTopK = settings.maxInjectedEntries;
       final results = await searchService.search(
-        searchHistory, currentText, lorebooks, settings, config,
+        searchHistory,
+        currentText,
+        lorebooks,
+        settings,
+        config,
         charWorld: charWorld,
         character: character,
         activations: activations,

@@ -156,4 +156,62 @@ void main() {
       expect(result['error']['code'], 'invalid_request');
     });
   });
+
+  group('JsBridgeService prompt injection', () {
+    test('delegates injectPrompt to injected handler', () async {
+      final bridge = JsBridgeService(
+        currentSessionId: () => 's1',
+        injectPrompt: (id, content, options, context) {
+          expect(id, 'mood');
+          expect(content, 'Keep the scene tense.');
+          expect(options['depth'], 1);
+          expect(context['sessionId'], 's1');
+          return {'id': id, 'depth': options['depth'], 'role': 'system'};
+        },
+      );
+
+      final result = await bridge.dispatch({
+        'method': 'injectPrompt',
+        'params': {
+          'id': 'mood',
+          'content': 'Keep the scene tense.',
+          'options': {'depth': 1},
+        },
+        'context': {'sessionId': 's1'},
+      });
+
+      expect(result['ok'], isTrue);
+      expect(result['result'], {'id': 'mood', 'depth': 1, 'role': 'system'});
+    });
+
+    test('delegates uninjectPrompt to injected handler', () async {
+      final bridge = JsBridgeService(
+        currentSessionId: () => 's1',
+        uninjectPrompt: (id, context) {
+          expect(id, 'mood');
+          expect(context['sessionId'], 's1');
+          return {'id': id, 'removed': true};
+        },
+      );
+
+      final result = await bridge.dispatch({
+        'method': 'uninjectPrompt',
+        'params': {'id': 'mood'},
+        'context': {'sessionId': 's1'},
+      });
+
+      expect(result['ok'], isTrue);
+      expect(result['result'], {'id': 'mood', 'removed': true});
+    });
+
+    test('rejects empty injectPrompt content', () async {
+      final result = await bridge.dispatch({
+        'method': 'injectPrompt',
+        'params': {'id': 'mood', 'content': '   '},
+      });
+
+      expect(result['ok'], isFalse);
+      expect(result['error']['code'], 'invalid_request');
+    });
+  });
 }

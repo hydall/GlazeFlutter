@@ -13,6 +13,20 @@ typedef GenerateTextHandler =
       Map<String, dynamic> context,
     );
 
+typedef InjectPromptHandler =
+    FutureOr<Map<String, dynamic>> Function(
+      String id,
+      String content,
+      Map<String, dynamic> options,
+      Map<String, dynamic> context,
+    );
+
+typedef UninjectPromptHandler =
+    FutureOr<Map<String, dynamic>> Function(
+      String id,
+      Map<String, dynamic> context,
+    );
+
 class JsBridgeService {
   static const _chatVarsKey = '__glaze_variables';
   static const _characterVarsKey = 'glaze_variables';
@@ -23,6 +37,8 @@ class JsBridgeService {
   final String? Function()? _currentSessionId;
   final String? Function()? _currentCharacterId;
   final GenerateTextHandler? _generateText;
+  final InjectPromptHandler? _injectPrompt;
+  final UninjectPromptHandler? _uninjectPrompt;
 
   JsBridgeService({
     ChatRepo? chatRepo,
@@ -30,12 +46,16 @@ class JsBridgeService {
     String? Function()? currentSessionId,
     String? Function()? currentCharacterId,
     GenerateTextHandler? generateText,
+    InjectPromptHandler? injectPrompt,
+    UninjectPromptHandler? uninjectPrompt,
   }) : this._(
          chatRepo,
          characterRepo,
          currentSessionId,
          currentCharacterId,
          generateText,
+         injectPrompt,
+         uninjectPrompt,
        );
 
   const JsBridgeService._(
@@ -44,6 +64,8 @@ class JsBridgeService {
     this._currentSessionId,
     this._currentCharacterId,
     this._generateText,
+    this._injectPrompt,
+    this._uninjectPrompt,
   );
 
   Future<Map<String, dynamic>> dispatch(Map<String, dynamic> request) async {
@@ -86,10 +108,12 @@ class JsBridgeService {
         return _deleteVariable(params, context);
       case 'executeCommand':
       case 'triggerGeneration':
-      case 'injectPrompt':
-      case 'uninjectPrompt':
       case 'playAudio':
         throw UnsupportedError('glaze.$method is not implemented yet');
+      case 'injectPrompt':
+        return _handleInjectPrompt(params, context);
+      case 'uninjectPrompt':
+        return _handleUninjectPrompt(params, context);
       case 'generateText':
         return _handleGenerateText(params, context);
       default:
@@ -175,6 +199,42 @@ class JsBridgeService {
           'glaze.generateText is not available in this context',
         ));
     return handler(prompt, options, context);
+  }
+
+  FutureOr<Map<String, dynamic>> _handleInjectPrompt(
+    Map<String, dynamic> params,
+    Map<String, dynamic> context,
+  ) {
+    final id = params['id'];
+    if (id is! String || id.trim().isEmpty) {
+      throw ArgumentError('injectPrompt id is required');
+    }
+    final content = params['content'];
+    if (content is! String || content.trim().isEmpty) {
+      throw ArgumentError('injectPrompt content is required');
+    }
+    final handler =
+        _injectPrompt ??
+        (throw UnsupportedError(
+          'glaze.injectPrompt is not available in this context',
+        ));
+    return handler(id, content, _asMap(params['options']), context);
+  }
+
+  FutureOr<Map<String, dynamic>> _handleUninjectPrompt(
+    Map<String, dynamic> params,
+    Map<String, dynamic> context,
+  ) {
+    final id = params['id'];
+    if (id is! String || id.trim().isEmpty) {
+      throw ArgumentError('uninjectPrompt id is required');
+    }
+    final handler =
+        _uninjectPrompt ??
+        (throw UnsupportedError(
+          'glaze.uninjectPrompt is not available in this context',
+        ));
+    return handler(id, context);
   }
 
   Future<Map<String, dynamic>> _readScope(

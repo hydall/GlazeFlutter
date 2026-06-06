@@ -36,6 +36,7 @@ class PromptPayloadAssembler {
       characterDepthPromptRole: inputs.characterDepthPromptRole,
       globalRegexes: inputs.globalRegexes,
       triggeredMemories: const [],
+      runtimePromptBlocks: inputs.runtimePromptBlocks,
     );
   }
 }

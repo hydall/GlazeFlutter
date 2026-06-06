@@ -16,6 +16,35 @@ import 'fallback_prompt_builder.dart';
 import 'regex_service.dart';
 import 'tokenizer.dart';
 
+class RuntimePromptBlock {
+  final String id;
+  final String content;
+  final int depth;
+  final String role;
+
+  const RuntimePromptBlock({
+    required this.id,
+    required this.content,
+    required this.depth,
+    required this.role,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'content': content,
+    'depth': depth,
+    'role': role,
+  };
+
+  factory RuntimePromptBlock.fromJson(Map<String, dynamic> json) =>
+      RuntimePromptBlock(
+        id: json['id'] as String,
+        content: json['content'] as String,
+        depth: json['depth'] as int? ?? 0,
+        role: json['role'] as String? ?? 'system',
+      );
+}
+
 const _stToInternalBlockId = <String, String>{
   'personaDescription': 'user_persona',
   'charDescription': 'char_card',
@@ -39,6 +68,7 @@ class PromptPayload {
   final String? summaryContent;
   final String? summaryPrefix;
   final String? memoryContent;
+
   /// Raw entry text joined with \n\n — used in summary_macro mode to append
   /// directly onto the summary message (no bullet headers, no summary excerpt).
   /// Mirrors JS memoryInjection.macroContent.
@@ -57,6 +87,7 @@ class PromptPayload {
   final List<PresetRegex> globalRegexes;
   final List<ScannedEntry>? preScannedEntries;
   final List<TriggeredEntry> triggeredMemories;
+  final List<RuntimePromptBlock> runtimePromptBlocks;
 
   const PromptPayload({
     required this.character,
@@ -84,6 +115,7 @@ class PromptPayload {
     this.globalRegexes = const [],
     this.preScannedEntries,
     this.triggeredMemories = const [],
+    this.runtimePromptBlocks = const [],
   });
 }
 
@@ -114,12 +146,20 @@ class PromptResult {
   };
 
   factory PromptResult.fromJson(Map<String, dynamic> json) => PromptResult(
-    messages: (json['messages'] as List).map((m) => PromptMessage.fromJson(m as Map<String, dynamic>)).toList(),
-    breakdown: TokenBreakdown.fromJson(json['breakdown'] as Map<String, dynamic>),
+    messages: (json['messages'] as List)
+        .map((m) => PromptMessage.fromJson(m as Map<String, dynamic>))
+        .toList(),
+    breakdown: TokenBreakdown.fromJson(
+      json['breakdown'] as Map<String, dynamic>,
+    ),
     sessionVars: Map<String, String>.from(json['sessionVars'] as Map),
     globalVars: Map<String, String>.from(json['globalVars'] as Map),
-    triggeredLorebooks: (json['triggeredLorebooks'] as List? ?? []).map((t) => TriggeredEntry.fromJson(t as Map<String, dynamic>)).toList(),
-    triggeredMemories: (json['triggeredMemories'] as List? ?? []).map((t) => TriggeredEntry.fromJson(t as Map<String, dynamic>)).toList(),
+    triggeredLorebooks: (json['triggeredLorebooks'] as List? ?? [])
+        .map((t) => TriggeredEntry.fromJson(t as Map<String, dynamic>))
+        .toList(),
+    triggeredMemories: (json['triggeredMemories'] as List? ?? [])
+        .map((t) => TriggeredEntry.fromJson(t as Map<String, dynamic>))
+        .toList(),
   );
 }
 
@@ -129,16 +169,24 @@ class _ResolvedDepthBlock {
   final String content;
   final int depth;
   final bool isSummary;
-  const _ResolvedDepthBlock({required this.id, required this.role, required this.content, required this.depth, this.isSummary = false});
+  const _ResolvedDepthBlock({
+    required this.id,
+    required this.role,
+    required this.content,
+    required this.depth,
+    this.isSummary = false,
+  });
 }
 
 class _ResolvedRelativeBlock {
   final String id;
   final String name;
   final String role;
+
   /// Fully expanded content — what the LLM sees. Used for `messages` and
   /// `appendedEntries` (which merge into the last user message).
   final String content;
+
   /// Accounting-only content with dynamic macro injections blanked out.
   /// Used for `attributionBlocks` and `mergeBuffer` so that the preset's
   /// "static chrome" tokens are not double-counted alongside the dedicated
@@ -170,13 +218,13 @@ PromptResult buildPrompt(PromptPayload payload) {
   final effectiveReasoningTagStart = (preset.reasoningStart?.isNotEmpty == true)
       ? preset.reasoningStart!
       : (payload.apiConfig.reasoningTagStart?.isNotEmpty == true)
-          ? payload.apiConfig.reasoningTagStart!
-          : defaultTagStart;
+      ? payload.apiConfig.reasoningTagStart!
+      : defaultTagStart;
   final effectiveReasoningTagEnd = (preset.reasoningEnd?.isNotEmpty == true)
       ? preset.reasoningEnd!
       : (payload.apiConfig.reasoningTagEnd?.isNotEmpty == true)
-          ? payload.apiConfig.reasoningTagEnd!
-          : defaultTagEnd;
+      ? payload.apiConfig.reasoningTagEnd!
+      : defaultTagEnd;
 
   final macroCtx = MacroContext(
     charName: char.name,
@@ -206,17 +254,23 @@ PromptResult buildPrompt(PromptPayload payload) {
   final depthBlocks = <_ResolvedDepthBlock>[];
   final relativeBlocks = <_ResolvedRelativeBlock>[];
 
-  final visibleHistory = payload.history.where((m) => !m.isHidden && !m.isTyping).toList();
+  final visibleHistory = payload.history
+      .where((m) => !m.isHidden && !m.isTyping)
+      .toList();
 
-  final loreEntries = payload.preScannedEntries ?? scanLorebooks(
-    history: visibleHistory,
-    char: char,
-    textToScan: visibleHistory.where((m) => m.role == 'user').lastOrNull?.content ?? '',
-    chatId: null,
-    lorebooks: payload.lorebooks,
-    globalSettings: payload.lorebookSettings,
-    activations: payload.lorebookActivations,
-  );
+  final loreEntries =
+      payload.preScannedEntries ??
+      scanLorebooks(
+        history: visibleHistory,
+        char: char,
+        textToScan:
+            visibleHistory.where((m) => m.role == 'user').lastOrNull?.content ??
+            '',
+        chatId: null,
+        lorebooks: payload.lorebooks,
+        globalSettings: payload.lorebookSettings,
+        activations: payload.lorebookActivations,
+      );
 
   final mergedEntries = mergeKeywordVector(
     keywordEntries: loreEntries,
@@ -237,26 +291,34 @@ PromptResult buildPrompt(PromptPayload payload) {
   for (final merged in mergedEntries) {
     final kw = keywordIdToEntry[merged.id];
     if (kw != null) {
-      triggeredLorebooks.add(TriggeredEntry(
-        id: kw.id,
-        name: kw.comment.isNotEmpty ? kw.comment : kw.id,
-        lorebookName: kw.lorebookName,
-        lorebookId: kw.lorebookId,
-        source: kw.constant ? 'constant' : 'keyword',
-      ));
+      triggeredLorebooks.add(
+        TriggeredEntry(
+          id: kw.id,
+          name: kw.comment.isNotEmpty ? kw.comment : kw.id,
+          lorebookName: kw.lorebookName,
+          lorebookId: kw.lorebookId,
+          source: kw.constant ? 'constant' : 'keyword',
+        ),
+      );
       continue;
     }
     final vec = vectorIdToEntry[merged.id];
     if (vec != null) {
-      triggeredLorebooks.add(TriggeredEntry(
-        id: vec.id,
-        name: vec.comment.isNotEmpty ? vec.comment : vec.id,
-        source: 'vector',
-      ));
+      triggeredLorebooks.add(
+        TriggeredEntry(
+          id: vec.id,
+          name: vec.comment.isNotEmpty ? vec.comment : vec.id,
+          source: 'vector',
+        ),
+      );
     }
   }
 
-  final classified = _classifyLorebooks(mergedEntries, currentMacroCtx, payload.lorebookSettings);
+  final classified = _classifyLorebooks(
+    mergedEntries,
+    currentMacroCtx,
+    payload.lorebookSettings,
+  );
   final loreBefore = classified.loreBefore;
   final loreAfter = classified.loreAfter;
   final macroLoreContent = classified.loreMacroBuffer.join('\n\n');
@@ -276,13 +338,15 @@ PromptResult buildPrompt(PromptPayload payload) {
   }
   if (classified.lorePersonality.isNotEmpty) {
     final prefix = classified.lorePersonality.join('\n\n');
-    patchedPersonality = patchedPersonality != null && patchedPersonality.isNotEmpty
+    patchedPersonality =
+        patchedPersonality != null && patchedPersonality.isNotEmpty
         ? '$prefix\n\n$patchedPersonality'
         : prefix;
   }
   if (classified.loreDescription.isNotEmpty) {
     final prefix = classified.loreDescription.join('\n\n');
-    patchedDescription = patchedDescription != null && patchedDescription.isNotEmpty
+    patchedDescription =
+        patchedDescription != null && patchedDescription.isNotEmpty
         ? '$prefix\n\n$patchedDescription'
         : prefix;
   }
@@ -327,7 +391,8 @@ PromptResult buildPrompt(PromptPayload payload) {
 
     if (resolved == null) continue;
 
-    final blockIsSummary = id == 'summary' || rawBlock.content.contains('{{summary}}');
+    final blockIsSummary =
+        id == 'summary' || rawBlock.content.contains('{{summary}}');
 
     if (id == 'authors_note' && payload.authorsNote != null) {
       final anMode = payload.authorsNote!.insertionMode.isNotEmpty
@@ -337,53 +402,125 @@ PromptResult buildPrompt(PromptPayload payload) {
           ? payload.authorsNote!.depth
           : rawBlock.depth ?? 0;
       if (anMode == 'depth') {
-        depthBlocks.add(_ResolvedDepthBlock(id: id, role: resolved.role, content: resolved.content, depth: anDepth, isSummary: blockIsSummary));
+        depthBlocks.add(
+          _ResolvedDepthBlock(
+            id: id,
+            role: resolved.role,
+            content: resolved.content,
+            depth: anDepth,
+            isSummary: blockIsSummary,
+          ),
+        );
       } else {
-        relativeBlocks.add(_ResolvedRelativeBlock(id: id, name: rawBlock.name, role: resolved.role, content: resolved.content, contentForAccounting: resolved.contentForAccounting, isSummary: blockIsSummary, appendToLastMessage: rawBlock.appendToLastMessage));
+        relativeBlocks.add(
+          _ResolvedRelativeBlock(
+            id: id,
+            name: rawBlock.name,
+            role: resolved.role,
+            content: resolved.content,
+            contentForAccounting: resolved.contentForAccounting,
+            isSummary: blockIsSummary,
+            appendToLastMessage: rawBlock.appendToLastMessage,
+          ),
+        );
       }
     } else if (rawBlock.insertionMode == 'depth' && id != 'chat_history') {
-      depthBlocks.add(_ResolvedDepthBlock(id: id, role: resolved.role, content: resolved.content, depth: rawBlock.depth ?? 0, isSummary: blockIsSummary));
+      depthBlocks.add(
+        _ResolvedDepthBlock(
+          id: id,
+          role: resolved.role,
+          content: resolved.content,
+          depth: rawBlock.depth ?? 0,
+          isSummary: blockIsSummary,
+        ),
+      );
     } else {
-      relativeBlocks.add(_ResolvedRelativeBlock(id: id, name: rawBlock.name, role: resolved.role, content: resolved.content, contentForAccounting: resolved.contentForAccounting, isSummary: blockIsSummary, appendToLastMessage: rawBlock.appendToLastMessage));
+      relativeBlocks.add(
+        _ResolvedRelativeBlock(
+          id: id,
+          name: rawBlock.name,
+          role: resolved.role,
+          content: resolved.content,
+          contentForAccounting: resolved.contentForAccounting,
+          isSummary: blockIsSummary,
+          appendToLastMessage: rawBlock.appendToLastMessage,
+        ),
+      );
     }
   }
 
   if (payload.characterDepthPrompt.isNotEmpty) {
-    final dpContent = replaceMacros(payload.characterDepthPrompt, currentMacroCtx).text;
+    final dpContent = replaceMacros(
+      payload.characterDepthPrompt,
+      currentMacroCtx,
+    ).text;
     if (dpContent.trim().isNotEmpty) {
-      depthBlocks.add(_ResolvedDepthBlock(
-        id: 'char_depth_prompt',
-        role: payload.characterDepthPromptRole.isNotEmpty ? payload.characterDepthPromptRole : 'system',
-        content: dpContent,
-        depth: payload.characterDepthPromptDepth,
-      ));
+      depthBlocks.add(
+        _ResolvedDepthBlock(
+          id: 'char_depth_prompt',
+          role: payload.characterDepthPromptRole.isNotEmpty
+              ? payload.characterDepthPromptRole
+              : 'system',
+          content: dpContent,
+          depth: payload.characterDepthPromptDepth,
+        ),
+      );
     }
   }
 
-  final macroTokens = <String, int>{};
-  if (currentMacroCtx.lorebooksContent != null && currentMacroCtx.lorebooksContent!.isNotEmpty) {
-    macroTokens['lorebooks'] = estimateTokens(currentMacroCtx.lorebooksContent!);
+  for (final block in payload.runtimePromptBlocks) {
+    final content = replaceMacros(block.content, currentMacroCtx).text.trim();
+    if (content.isEmpty) continue;
+    depthBlocks.add(
+      _ResolvedDepthBlock(
+        id: 'runtime_prompt:${block.id}',
+        role: block.role.isNotEmpty ? block.role : 'system',
+        content: content,
+        depth: block.depth,
+      ),
+    );
   }
-  if (currentMacroCtx.summaryContent != null && currentMacroCtx.summaryContent!.isNotEmpty) {
+
+  final macroTokens = <String, int>{};
+  if (currentMacroCtx.lorebooksContent != null &&
+      currentMacroCtx.lorebooksContent!.isNotEmpty) {
+    macroTokens['lorebooks'] = estimateTokens(
+      currentMacroCtx.lorebooksContent!,
+    );
+  }
+  if (currentMacroCtx.summaryContent != null &&
+      currentMacroCtx.summaryContent!.isNotEmpty) {
     macroTokens['summary'] = estimateTokens(currentMacroCtx.summaryContent!);
   }
-  if (currentMacroCtx.memoryContent != null && currentMacroCtx.memoryContent!.isNotEmpty) {
+  if (currentMacroCtx.memoryContent != null &&
+      currentMacroCtx.memoryContent!.isNotEmpty) {
     macroTokens['memory'] = estimateTokens(currentMacroCtx.memoryContent!);
   }
-  if (currentMacroCtx.charDescription != null && currentMacroCtx.charDescription!.isNotEmpty) {
-    macroTokens['description'] = estimateTokens(currentMacroCtx.charDescription!);
+  if (currentMacroCtx.charDescription != null &&
+      currentMacroCtx.charDescription!.isNotEmpty) {
+    macroTokens['description'] = estimateTokens(
+      currentMacroCtx.charDescription!,
+    );
   }
-  if (currentMacroCtx.charPersonality != null && currentMacroCtx.charPersonality!.isNotEmpty) {
-    macroTokens['personality'] = estimateTokens(currentMacroCtx.charPersonality!);
+  if (currentMacroCtx.charPersonality != null &&
+      currentMacroCtx.charPersonality!.isNotEmpty) {
+    macroTokens['personality'] = estimateTokens(
+      currentMacroCtx.charPersonality!,
+    );
   }
-  if (currentMacroCtx.charScenario != null && currentMacroCtx.charScenario!.isNotEmpty) {
+  if (currentMacroCtx.charScenario != null &&
+      currentMacroCtx.charScenario!.isNotEmpty) {
     macroTokens['scenario'] = estimateTokens(currentMacroCtx.charScenario!);
   }
-  if (currentMacroCtx.personaPrompt != null && currentMacroCtx.personaPrompt!.isNotEmpty) {
+  if (currentMacroCtx.personaPrompt != null &&
+      currentMacroCtx.personaPrompt!.isNotEmpty) {
     macroTokens['persona'] = estimateTokens(currentMacroCtx.personaPrompt!);
   }
-  if (currentMacroCtx.charMesExample != null && currentMacroCtx.charMesExample!.isNotEmpty) {
-    macroTokens['mesExamples'] = estimateTokens(currentMacroCtx.charMesExample!);
+  if (currentMacroCtx.charMesExample != null &&
+      currentMacroCtx.charMesExample!.isNotEmpty) {
+    macroTokens['mesExamples'] = estimateTokens(
+      currentMacroCtx.charMesExample!,
+    );
   }
 
   return _assembleMessages(
@@ -409,7 +546,8 @@ int _calculateLorebookReserve(PromptPayload payload) {
   final settings = payload.lorebookSettings;
   if (settings.reserveValue <= 0) return 0;
   if (settings.reserveMode == 'percent') {
-    return (payload.apiConfig.contextSize * settings.reserveValue / 100).round();
+    return (payload.apiConfig.contextSize * settings.reserveValue / 100)
+        .round();
   }
   return settings.reserveValue;
 }
@@ -421,7 +559,8 @@ int _calculateLorebookReserve(PromptPayload payload) {
   List<String> loreScenario,
   List<String> lorePersonality,
   List<String> loreDescription,
-}) _classifyLorebooks(
+})
+_classifyLorebooks(
   List<LorebookEntry> entries,
   MacroContext macroCtx,
   LorebookGlobalSettings settings,
@@ -437,7 +576,9 @@ int _calculateLorebookReserve(PromptPayload payload) {
     var content = replaceMacros(entry.content, macroCtx).text;
     if (content.trim().isEmpty) continue;
 
-    final pos = entry.position == 'matchGlobal' ? settings.injectionPosition : entry.position;
+    final pos = entry.position == 'matchGlobal'
+        ? settings.injectionPosition
+        : entry.position;
 
     if (pos == 'charScenario') {
       loreScenario.add(content);
@@ -448,9 +589,27 @@ int _calculateLorebookReserve(PromptPayload payload) {
     } else if (pos == 'lorebooksMacro') {
       loreMacroBuffer.add(content);
     } else if (pos == 'worldInfoAfter') {
-      loreAfter.add(PromptMessage(role: 'system', content: content, isLorebook: true, blockId: 'worldInfoAfter', blockName: 'Lorebook: ${entry.comment.isNotEmpty ? entry.comment : entry.id}'));
+      loreAfter.add(
+        PromptMessage(
+          role: 'system',
+          content: content,
+          isLorebook: true,
+          blockId: 'worldInfoAfter',
+          blockName:
+              'Lorebook: ${entry.comment.isNotEmpty ? entry.comment : entry.id}',
+        ),
+      );
     } else {
-      loreBefore.add(PromptMessage(role: 'system', content: content, isLorebook: true, blockId: 'worldInfoBefore', blockName: 'Lorebook: ${entry.comment.isNotEmpty ? entry.comment : entry.id}'));
+      loreBefore.add(
+        PromptMessage(
+          role: 'system',
+          content: content,
+          isLorebook: true,
+          blockId: 'worldInfoBefore',
+          blockName:
+              'Lorebook: ${entry.comment.isNotEmpty ? entry.comment : entry.id}',
+        ),
+      );
     }
   }
   return (
@@ -485,7 +644,18 @@ PromptResult _assembleMessages({
   String? mergeBuffer;
   String? mergeRole;
 
-  final resolvedDepthMsgs = depthBlocks.map((b) => PromptMessage(role: b.role, content: b.content, blockId: b.id, depth: b.depth, isDepth: true, isSummary: b.isSummary)).toList();
+  final resolvedDepthMsgs = depthBlocks
+      .map(
+        (b) => PromptMessage(
+          role: b.role,
+          content: b.content,
+          blockId: b.id,
+          depth: b.depth,
+          isDepth: true,
+          isSummary: b.isSummary,
+        ),
+      )
+      .toList();
 
   // Track whether loreBefore/loreAfter were injected via char_card trigger.
   // If the preset has no char_card block, they fall through to the end.
@@ -495,15 +665,33 @@ PromptResult _assembleMessages({
   void injectLoreBefore() {
     if (loreBeforeInjected || loreBefore.isEmpty) return;
     final combined = loreBefore.map((e) => e.content).join('\n\n');
-    messages.add(PromptMessage(role: 'system', content: combined, isLorebook: true, blockId: 'worldInfoBefore', blockName: 'Lorebook (Before)'));
-    attributionBlocks.add(StaticBlock(id: 'worldInfoBefore', content: combined));
+    messages.add(
+      PromptMessage(
+        role: 'system',
+        content: combined,
+        isLorebook: true,
+        blockId: 'worldInfoBefore',
+        blockName: 'Lorebook (Before)',
+      ),
+    );
+    attributionBlocks.add(
+      StaticBlock(id: 'worldInfoBefore', content: combined),
+    );
     loreBeforeInjected = true;
   }
 
   void injectLoreAfter() {
     if (loreAfterInjected || loreAfter.isEmpty) return;
     final combined = loreAfter.map((e) => e.content).join('\n\n');
-    messages.add(PromptMessage(role: 'system', content: combined, isLorebook: true, blockId: 'worldInfoAfter', blockName: 'Lorebook (After)'));
+    messages.add(
+      PromptMessage(
+        role: 'system',
+        content: combined,
+        isLorebook: true,
+        blockId: 'worldInfoAfter',
+        blockName: 'Lorebook (After)',
+      ),
+    );
     attributionBlocks.add(StaticBlock(id: 'worldInfoAfter', content: combined));
     loreAfterInjected = true;
   }
@@ -524,17 +712,33 @@ PromptResult _assembleMessages({
     if (block.id == 'char_card') injectLoreBefore();
 
     if (block.id == 'chat_history') {
-      if (mergeBuffer != null) { messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer)); mergeBuffer = null; }
+      if (mergeBuffer != null) {
+        messages.add(
+          PromptMessage(
+            role: mergeRole ?? 'system',
+            blockId: 'preset',
+            content: mergeBuffer,
+          ),
+        );
+        mergeBuffer = null;
+      }
       // worldInfoAfter injects just before chat_history (mirrors JS generationWorker.js:680)
       injectLoreAfter();
 
       final historyMacroCtx = MacroContext(
-        charName: macroCtx.charName, charDescription: macroCtx.charDescription,
-        charScenario: macroCtx.charScenario, charPersonality: macroCtx.charPersonality,
-        charMesExample: macroCtx.charMesExample, userName: macroCtx.userName,
-        personaPrompt: macroCtx.personaPrompt, reasoningStart: macroCtx.reasoningStart,
-        reasoningEnd: macroCtx.reasoningEnd, sessionVars: currentSessionVars,
-        globalVars: currentGlobalVars, charId: macroCtx.charId, sessionId: macroCtx.sessionId,
+        charName: macroCtx.charName,
+        charDescription: macroCtx.charDescription,
+        charScenario: macroCtx.charScenario,
+        charPersonality: macroCtx.charPersonality,
+        charMesExample: macroCtx.charMesExample,
+        userName: macroCtx.userName,
+        personaPrompt: macroCtx.personaPrompt,
+        reasoningStart: macroCtx.reasoningStart,
+        reasoningEnd: macroCtx.reasoningEnd,
+        sessionVars: currentSessionVars,
+        globalVars: currentGlobalVars,
+        charId: macroCtx.charId,
+        sessionId: macroCtx.sessionId,
         macroName: macroCtx.macroName,
       );
       final historyMsgs = HistoryAssembler(historyMacroCtx).assemble(history);
@@ -542,9 +746,13 @@ PromptResult _assembleMessages({
           .map((b) => (name: b.name, content: b.content))
           .toList();
       applyAppendToLastMessage(historyMsgs, appendedForHistory);
-      messages.addAll(interleaveDepthWithHistory(historyMsgs, resolvedDepthMsgs));
+      messages.addAll(
+        interleaveDepthWithHistory(historyMsgs, resolvedDepthMsgs),
+      );
       for (final db in resolvedDepthMsgs) {
-        attributionBlocks.add(StaticBlock(id: db.blockId ?? 'preset', content: db.content));
+        attributionBlocks.add(
+          StaticBlock(id: db.blockId ?? 'preset', content: db.content),
+        );
       }
     } else {
       final content = block.content.trim();
@@ -553,7 +761,9 @@ PromptResult _assembleMessages({
       // setvar-only blocks: no LLM-visible text, but definitions count toward preset.
       if (content.isEmpty) {
         if (accountingContent.isNotEmpty) {
-          attributionBlocks.add(StaticBlock(id: block.id, content: accountingContent));
+          attributionBlocks.add(
+            StaticBlock(id: block.id, content: accountingContent),
+          );
         }
         if (block.id == 'char_card') injectLoreAfter();
         continue;
@@ -566,7 +776,9 @@ PromptResult _assembleMessages({
       // sourceTokens['summary'] / sourceTokens['lorebooks']. The
       // dynamic injections are counted separately via dedicated
       // StaticBlocks (hard-block injection) and macroTokens.
-      attributionBlocks.add(StaticBlock(id: block.id, content: accountingContent));
+      attributionBlocks.add(
+        StaticBlock(id: block.id, content: accountingContent),
+      );
 
       // appendToLastMessage blocks are merged into the last user message in
       // applyAppendToLastMessage (see appendedEntries above). They must NOT
@@ -575,10 +787,31 @@ PromptResult _assembleMessages({
       if (block.appendToLastMessage) continue;
 
       if (preset.mergePrompts && block.role != 'assistant') {
-        if (mergeBuffer != null) { mergeBuffer = '$mergeBuffer\n\n$content'; } else { mergeBuffer = content; mergeRole = preset.mergeRole; }
+        if (mergeBuffer != null) {
+          mergeBuffer = '$mergeBuffer\n\n$content';
+        } else {
+          mergeBuffer = content;
+          mergeRole = preset.mergeRole;
+        }
       } else {
-        if (mergeBuffer != null) { messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer)); mergeBuffer = null; }
-        messages.add(PromptMessage(role: block.role, blockId: block.id, content: content, isSummary: block.isSummary));
+        if (mergeBuffer != null) {
+          messages.add(
+            PromptMessage(
+              role: mergeRole ?? 'system',
+              blockId: 'preset',
+              content: mergeBuffer,
+            ),
+          );
+          mergeBuffer = null;
+        }
+        messages.add(
+          PromptMessage(
+            role: block.role,
+            blockId: block.id,
+            content: content,
+            isSummary: block.isSummary,
+          ),
+        );
       }
 
       // worldInfoAfter injects just after char_card (mirrors JS generationWorker.js:792)
@@ -589,14 +822,23 @@ PromptResult _assembleMessages({
   // Fallback: if preset had no char_card block, inject remaining lore at the end
   injectLoreBefore();
   injectLoreAfter();
-  if (mergeBuffer != null) messages.add(PromptMessage(role: mergeRole ?? 'system', blockId: 'preset', content: mergeBuffer));
+  if (mergeBuffer != null) {
+    messages.add(
+      PromptMessage(
+        role: mergeRole ?? 'system',
+        blockId: 'preset',
+        content: mergeBuffer,
+      ),
+    );
+  }
 
   if (payload.memoryContent != null && payload.memoryContent!.isNotEmpty) {
     if (payload.memoryInjectionTarget == 'hard_block') {
       // Skip the hard block if the preset already handles memory via
       // {{memory}} macro or via an explicit `id: 'memory'` block.
       // (See docs/INVARIANTS.md INV-PS5.)
-      final hasMemoryBlock = messages.any((m) => m.blockId == 'memory') ||
+      final hasMemoryBlock =
+          messages.any((m) => m.blockId == 'memory') ||
           appendedEntries.any((b) => b.id == 'memory');
       if (!hasMemoryBlock) {
         _injectMemoryBlock(messages, attributionBlocks, payload.memoryContent!);
@@ -622,7 +864,10 @@ PromptResult _assembleMessages({
       ? 0
       : estimateTokens(vectorContent);
 
-  final calculator = ContextCalculator(contextSize: payload.apiConfig.contextSize, maxTokens: payload.apiConfig.maxTokens);
+  final calculator = ContextCalculator(
+    contextSize: payload.apiConfig.contextSize,
+    maxTokens: payload.apiConfig.maxTokens,
+  );
   final historyOnly = messages.where((m) => m.isHistory).toList();
 
   final breakdown = calculator.calculate(
@@ -634,10 +879,14 @@ PromptResult _assembleMessages({
   );
 
   final finalMessages = <PromptMessage>[];
-  var historyInserted = false;
+  var historySeen = 0;
   for (final msg in messages) {
     if (msg.isHistory) {
-      if (!historyInserted) { finalMessages.addAll(breakdown.trimmedHistory); historyInserted = true; }
+      final trimmedIndex = historySeen - breakdown.cutoffIndex;
+      if (trimmedIndex >= 0 && trimmedIndex < breakdown.trimmedHistory.length) {
+        finalMessages.add(breakdown.trimmedHistory[trimmedIndex]);
+      }
+      historySeen++;
     } else if (msg.content.trim().isNotEmpty) {
       finalMessages.add(msg);
     }
@@ -651,18 +900,24 @@ PromptResult _assembleMessages({
   );
 
   final presetRegexes = preset.regexes.where((r) => !r.disabled).toList();
-  final globalRegexes = payload.globalRegexes.where((r) => !r.disabled).toList();
+  final globalRegexes = payload.globalRegexes
+      .where((r) => !r.disabled)
+      .toList();
   final regexScripts = [...presetRegexes, ...globalRegexes];
 
   for (int i = 0; i < finalMessages.length; i++) {
     final msg = finalMessages[i];
     if (msg.isHistory) {
       final placement = msg.role == 'user' ? 1 : 2;
-      final depth = finalMessages.where((m) => m.isHistory).length - 1 -
+      final depth =
+          finalMessages.where((m) => m.isHistory).length -
+          1 -
           finalMessages.sublist(0, i).where((m) => m.isHistory).length;
       final ctx = RegexApplyContext(
-        char: char, persona: persona,
-        sessionVars: currentSessionVars, globalVars: currentGlobalVars,
+        char: char,
+        persona: persona,
+        sessionVars: currentSessionVars,
+        globalVars: currentGlobalVars,
         depth: depth,
       );
       finalMessages[i] = PromptMessage(
@@ -675,6 +930,7 @@ PromptResult _assembleMessages({
           ctx,
           isPrompt: true,
         ),
+        blockId: msg.blockId,
         isLorebook: msg.isLorebook,
         blockName: msg.blockName,
         isHistory: msg.isHistory,
@@ -693,6 +949,7 @@ PromptResult _assembleMessages({
           regexCtx,
           isPrompt: true,
         ),
+        blockId: msg.blockId,
         isLorebook: msg.isLorebook,
         blockName: msg.blockName,
         isHistory: msg.isHistory,
@@ -702,10 +959,21 @@ PromptResult _assembleMessages({
     }
   }
 
-  return PromptResult(messages: finalMessages, breakdown: breakdown, sessionVars: currentSessionVars, globalVars: currentGlobalVars, triggeredLorebooks: triggeredLorebooks, triggeredMemories: triggeredMemories);
+  return PromptResult(
+    messages: finalMessages,
+    breakdown: breakdown,
+    sessionVars: currentSessionVars,
+    globalVars: currentGlobalVars,
+    triggeredLorebooks: triggeredLorebooks,
+    triggeredMemories: triggeredMemories,
+  );
 }
 
-void _injectMemoryBlock(List<PromptMessage> messages, List<StaticBlock> attributionBlocks, String content) {
+void _injectMemoryBlock(
+  List<PromptMessage> messages,
+  List<StaticBlock> attributionBlocks,
+  String content,
+) {
   attributionBlocks.add(StaticBlock(id: 'memory', content: content));
   final memMsg = PromptMessage(
     role: 'system',
