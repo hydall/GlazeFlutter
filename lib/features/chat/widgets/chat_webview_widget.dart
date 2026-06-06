@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../../core/state/active_regex_provider.dart';
 import '../../../core/state/character_provider.dart';
@@ -11,19 +9,15 @@ import '../../../core/state/persona_resolution.dart';
 import '../../../../shared/theme/theme_font_provider.dart';
 import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_webview_bridge_host.dart';
-import '../bridge/chat_webview_keep_alive.dart';
-import '../bridge/chat_webview_settings.dart';
 import '../bridge/chat_webview_theme_builder.dart';
 import '../../../core/models/chat_message.dart';
-import '../../extensions/services/js_engine_service.dart';
 import '../../extensions/services/panel_host_service.dart';
 import '../bridge/chat_bridge_registry.dart';
 import 'chat_message_sync.dart';
 import 'chat_webview_build_listeners.dart';
-import 'chat_webview_callbacks.dart';
-import 'chat_webview_ext_block_callbacks.dart';
 import 'chat_webview_initializer.dart';
 import 'chat_webview_panel_refresher.dart';
+import 'chat_webview_surface.dart';
 import 'chat_webview_sync_dispatcher.dart';
 import 'webview_callbacks.dart';
 
@@ -460,208 +454,25 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
 
     final bgImageBytes = ref.watch(bgImageBytesProvider);
 
-    return Stack(
-      children: [
-        // Theme surface color — always visible behind the transparent WebView
-        // so there's no white flash when no bg image is set.
-        Positioned.fill(
-          child: ColoredBox(color: Theme.of(context).colorScheme.surface),
-        ),
-        // Background image rendered in Flutter so it shows through the
-        // transparent WebView. Uses decoded bytes (same as GlazeBackground)
-        // because preset.bgImage is a base64 data URI, not a file path.
-        if (bgImageBytes != null) ...[
-          Positioned.fill(
-            child: Opacity(
-              opacity: widget.bgOpacity,
-              child: widget.bgBlur > 0
-                  ? ImageFiltered(
-                      imageFilter: ui.ImageFilter.blur(
-                        sigmaX: widget.bgBlur,
-                        sigmaY: widget.bgBlur,
-                        tileMode: TileMode.clamp,
-                      ),
-                      child: Image.memory(
-                        bgImageBytes,
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                      ),
-                    )
-                  : Image.memory(
-                      bgImageBytes,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                    ),
-            ),
-          ),
-          if (widget.bgDim > 0)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black.withValues(alpha: widget.bgDim),
-              ),
-            ),
-        ],
-        AnimatedOpacity(
-          opacity: _sessionSwitching ? 0.45 : 1.0,
-          duration: const Duration(milliseconds: 200),
-          child: IgnorePointer(
-            ignoring: _sessionSwitching,
-            child: InAppWebView(
-              keepAlive: chatWebViewKeepAlive,
-              initialFile: 'assets/chat_webview/index.html',
-              initialSettings: InAppWebViewSettings(
-                javaScriptEnabled: true,
-                domStorageEnabled: true,
-                transparentBackground: chatWebViewTransparentBackground(),
-                isInspectable: true,
-                useHybridComposition: true,
-                cacheEnabled: true,
-                useWideViewPort: true,
-                loadWithOverviewMode: true,
-                allowFileAccess: true,
-                allowContentAccess: true,
-                // The chat page is loaded from `file://` assets. We do NOT
-                // need file:// -> http(s) universal access — outbound links
-                // are handled via `launchUrl(..., externalApplication)` in
-                // the bridge, not from the WebView itself. Keeping these
-                // `false` blocks an XSS'd panel / extension JS from doing
-                // `fetch('file:///...')` or `fetch('http://...')` from a
-                // local origin.
-                allowFileAccessFromFileURLs: false,
-                allowUniversalAccessFromFileURLs: false,
-                // Mixed content is opt-in. The chat WebView itself does
-                // not load HTTP resources, but the iframe panels do
-                // receive base64 data: URIs only — never http(s).
-                mixedContentMode: MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
-              ),
-              onWebViewCreated: (controller) async {
-                final jsBridgeService = await _bridgeHost.buildJsBridgeService();
-                _bridge = ChatBridgeController(
-                  controller,
-                  jsBridgeService: jsBridgeService,
-                );
-                // Register bridge in the registry so services can access it.
-                ref
-                        .read(
-                          chatBridgeRegistryProvider(widget.charId).notifier,
-                        )
-                        .state =
-                    _bridge;
-
-                // Kick off the singleton headless engine. Failure is
-                // non-fatal — the visual bridge above remains the fallback
-                // for jsRunner blocks and for background scripts.
-                unawaited(
-                  JsEngineService.instance.init(
-                    host: JsEngineBridgeHost(
-                      bridge: jsBridgeService,
-                      currentCharIdProvider: () => widget.charId,
-                    ),
-                  ),
-                );
-                unawaited(
-                  controller.evaluateJavascript(
-                    source: 'if(window.bridge) window.bridge.clearAll();',
-                  ),
-                );
-                final callbacks = ChatWebViewCallbacks(
-                  ref: ref,
-                  charId: widget.charId,
-                  messageActions: widget.messageActions,
-                  editActions: widget.editActions,
-                  imageGenActions: widget.imageGenActions,
-                  scrollActions: widget.scrollActions,
-                  miscActions: widget.miscActions,
-                );
-                _bridge!.onMessageContext = callbacks.onMessageContext;
-                _bridge!.onSwipe = callbacks.onSwipe;
-                _bridge!.onChangeGreeting = callbacks.onChangeGreeting;
-                _bridge!.onHeaderScroll = callbacks.onHeaderScroll;
-                _bridge!.onScrollToBottomVisibility =
-                    callbacks.onScrollToBottomVisibility;
-                _bridge!.onRegenerate = callbacks.onRegenerate;
-                _bridge!.onSelectionAction = callbacks.onSelectionAction;
-                _bridge!.onSelectionChange = callbacks.onSelectionChange;
-                _bridge!.onEditSave = callbacks.onEditSave;
-                _bridge!.onEditCancel = callbacks.onEditCancel;
-                _bridge!.onEditFocusChange = callbacks.onEditFocusChange;
-                _bridge!.onImageClick = callbacks.onImageClick;
-                _bridge!.onGuidedSwipe = callbacks.onGuidedSwipe;
-                _bridge!.onMemoryClick = callbacks.onMemoryClick;
-                _bridge!.onToggleHidden = callbacks.onToggleHidden;
-                _bridge!.onInjectClick = callbacks.onInjectClick;
-                _bridge!.onImgRetry = callbacks.onImgRetry;
-                _bridge!.onImgFind = callbacks.onImgFind;
-                _bridge!.onImgRegen = callbacks.onImgRegen;
-                _bridge!.onImgCancel = callbacks.onImgCancel;
-                _bridge!.onStop = callbacks.onStop;
-                _bridge!.onLinkClick = callbacks.onLinkClick;
-                _bridge!.onLoadMore = callbacks.onLoadMore;
-                final extBlocks = ChatWebViewExtBlockCallbacks(
-                  ref: ref,
-                  charId: widget.charId,
-                  sessionId: widget.sessionId,
-                  // ignore: use_build_context_synchronously
-                  context: context,
-                  isMounted: () => mounted,
-                  refreshPanel: _refreshExtBlocksPanel,
-                );
-                _bridge!.onExtBlocksRunAll = extBlocks.onRunAll();
-                _bridge!.onExtBlockStop = extBlocks.onStop();
-                _bridge!.onExtBlockRegen = extBlocks.onRegen();
-                _bridge!.onExtBlockRegenImage = extBlocks.onRegenImage();
-                _bridge!.onExtBlockEdit = extBlocks.onEdit();
-                _bridge!.onExtBlockDelete = extBlocks.onDelete();
-
-                final isAlive = await controller.isLoading() == false;
-                if (isAlive && !_ready) {
-                  await _initWebView();
-                }
-              },
-              onLoadStop: (controller, url) async {
-                if (_bridge == null || _ready) return;
-                unawaited(
-                  controller.evaluateJavascript(
-                    source: '''
-              (function() {
-                var els = [document.documentElement, document.body, document.getElementById('chat-container'), document.getElementById('loading-screen')];
-                els.forEach(function(el) {
-                  if (!el) return;
-                  var cs = getComputedStyle(el);
-                  console.log('DIAG ' + (el.id || el.tagName) + ' bg=' + cs.backgroundColor + ' opacity=' + el.style.opacity);
-                });
-              })();
-            ''',
-                  ),
-                );
-                await _initWebView();
-              },
-              onConsoleMessage: (controller, consoleMessage) {
-                debugPrint('[JS] ${consoleMessage.message}');
-              },
-            ),
-          ),
-        ),
-        if (_sessionSwitching)
-          const Center(child: CircularProgressIndicator(strokeWidth: 3)),
-        if (widget.bottomInset > 0)
-          Positioned.fill(
-            child: IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.02),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
+    return ChatWebViewSurface(
+      bridgeHost: _bridgeHost,
+      charId: widget.charId,
+      sessionId: widget.sessionId,
+      messageActions: widget.messageActions,
+      editActions: widget.editActions,
+      imageGenActions: widget.imageGenActions,
+      scrollActions: widget.scrollActions,
+      miscActions: widget.miscActions,
+      isMounted: () => mounted,
+      sessionSwitching: _sessionSwitching,
+      refreshPanel: _refreshExtBlocksPanel,
+      bgImageBytes: bgImageBytes,
+      bgOpacity: widget.bgOpacity,
+      bgBlur: widget.bgBlur,
+      bgDim: widget.bgDim,
+      bottomInset: widget.bottomInset,
+      onBridgeReady: (ChatBridgeController b) => _bridge = b,
+      onInitWebView: _initWebView,
     );
   }
 
