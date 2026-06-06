@@ -385,7 +385,11 @@ class ImageGenService {
     if (settings.imageContextEnabled && recentImageContexts != null) {
       final count = settings.imageContextCount.clamp(1, 3);
       for (final ctx in recentImageContexts.take(count)) {
-        refs.add({'name': 'context', 'image': ctx});
+        final path = normalizeImageResultPayload(ctx);
+        final encoded = _fileToBase64(path);
+        if (encoded.isNotEmpty) {
+          refs.add({'name': 'context', 'image': encoded});
+        }
       }
     }
 
@@ -421,8 +425,66 @@ class ImageGenService {
   static List<String> extractImageResultPaths(String text) {
     return ImgGenPatterns.imgResultRegex
         .allMatches(text)
-        .map((m) => m.group(1) ?? '')
+        .map((m) => normalizeImageResultPayload(m.group(1) ?? ''))
         .where((p) => p.isNotEmpty)
         .toList();
+  }
+
+  /// Strips optional `|instructionJson` suffix from [IMG:RESULT:…] payloads.
+  static String normalizeImageResultPayload(String payload) {
+    final pipeIdx = payload.indexOf('|');
+    return pipeIdx != -1 ? payload.substring(0, pipeIdx) : payload;
+  }
+
+  /// [contentsNewestFirst] — text blobs ordered newest → oldest (e.g. ext-block bodies).
+  static List<String> collectRecentImageResultPaths(
+    Iterable<String> contentsNewestFirst, {
+    int maxPaths = 3,
+  }) {
+    final collected = <String>[];
+    for (final content in contentsNewestFirst) {
+      if (collected.length >= maxPaths) break;
+      for (final path in extractImageResultPaths(content)) {
+        if (collected.length >= maxPaths) break;
+        collected.add(path);
+      }
+    }
+    return collected.reversed.toList();
+  }
+
+  /// Reads image instructions from pending [IMG:GEN] tags or finished
+  /// [IMG:RESULT:path|json] tokens inside ext-block HTML.
+  List<Map<String, dynamic>> extractInstructionsFromImageContent(String text) {
+    final fromGen = extractImageGenInstructions(text);
+    if (fromGen.isNotEmpty) return fromGen;
+
+    final fromResult = <Map<String, dynamic>>[];
+    for (final match in ImgGenPatterns.imgResultRegex.allMatches(text)) {
+      final raw = match.group(1) ?? '';
+      final pipeIdx = raw.indexOf('|');
+      if (pipeIdx < 0 || pipeIdx >= raw.length - 1) continue;
+      try {
+        fromResult.add(
+          jsonDecode(raw.substring(pipeIdx + 1)) as Map<String, dynamic>,
+        );
+      } catch (_) {}
+    }
+    return fromResult;
+  }
+
+  /// Replaces the [index]-th [IMG:RESULT:…] token, preserving instruction JSON.
+  String replaceExtBlockImageResult(
+    String text,
+    String newPath, {
+    int index = 0,
+  }) {
+    var count = 0;
+    return text.replaceAllMapped(ImgGenPatterns.imgResultRegex, (match) {
+      if (count++ != index) return match.group(0)!;
+      final raw = match.group(1)!;
+      final pipeIdx = raw.indexOf('|');
+      final suffix = pipeIdx != -1 ? raw.substring(pipeIdx) : '';
+      return '[IMG:RESULT:$newPath$suffix]';
+    });
   }
 }

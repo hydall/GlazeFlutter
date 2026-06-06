@@ -4,17 +4,15 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/db/repositories/info_blocks_repository.dart';
 import '../../../core/llm/sse_client.dart';
 import '../../../core/models/api_config.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
-import '../../../core/state/db_provider.dart';
-import '../../../core/utils/id_generator.dart';
 import '../../settings/api_list_provider.dart';
 import '../models/block_config.dart';
-import '../models/extension_preset.dart';
-import '../models/info_block.dart';
+import 'block_content_extractor.dart';
+import 'ext_blocks_prompt_injection.dart';
+import 'block_context_builder.dart';
 
 final infoBlockServiceProvider = Provider<InfoBlockService>(
   (ref) => InfoBlockService(ref),
@@ -25,150 +23,205 @@ class InfoBlockService {
 
   final Ref _ref;
 
-  InfoBlocksRepository get _repo =>
-      InfoBlocksRepository(_ref.read(appDbProvider));
-
-  /// Generates infoblocks after assistant response
-  Future<List<InfoBlock>> generateBlocks({
-    required String sessionId,
-    required String messageId,
-    required List<ChatMessage> messages,
-    required ExtensionPreset preset,
-    required Character character,
-    required String? persona,
-    CancelToken? cancelToken,
-  }) async {
-    final results = <InfoBlock>[];
-
-    final infoBlocks = preset.blocks.where(
-      (b) => b.enabled && b.type == BlockType.infoblock,
-    );
-
-    for (final blockConfig in infoBlocks) {
-      if (cancelToken?.isCancelled == true) break;
-
-      try {
-        final block = await _generateSingleBlock(
-          sessionId: sessionId,
-          messageId: messageId,
-          messages: messages,
-          blockConfig: blockConfig,
-          preset: preset,
-          character: character,
-          persona: persona,
-          cancelToken: cancelToken,
-        );
-
-        if (block != null) {
-          await _repo.insert(block);
-          results.add(block);
-        }
-      } catch (e) {
-        debugPrint('[InfoBlockService] Error generating block ${blockConfig.name}: $e');
-      }
-    }
-
-    return results;
-  }
-
-  Future<InfoBlock?> _generateSingleBlock({
+  /// Generates the text content for a single infoblock block.
+  /// Returns `(content, error)` — on success `error` is null; on failure
+  /// `content` is null and `error` describes what went wrong.
+  Future<({String? content, String? error})> generateSingleBlockContent({
     required String sessionId,
     required String messageId,
     required List<ChatMessage> messages,
     required BlockConfig blockConfig,
-    required ExtensionPreset preset,
     required Character? character,
     required String? persona,
+    required String? previousOutput,
     CancelToken? cancelToken,
+    void Function(String partial)? onStreamUpdate,
   }) async {
-    // Build context from recent messages
-    final contextMessages = _buildContextMessages(
-      messages,
-      blockConfig.contextMessageCount,
+    if (cancelToken?.isCancelled == true) return (content: null, error: null);
+
+    final messagesWithInject = await _ref
+        .read(extBlocksPromptInjectionProvider)
+        .injectIntoHistory(sessionId: sessionId, messages: messages);
+
+    // Context is scoped to [messageId] — not the end of the session.
+    final contextMessages = buildContextMessages(
+      messages: messagesWithInject,
+      anchorMessageId: messageId,
+      count: blockConfig.contextMessageCount,
     );
 
-    // Get recent blocks of same type
-    final recentBlocks = await _repo.getRecentBlocks(
-      sessionId,
-      blockConfig.name,
-      blockConfig.contextBlockCount,
+    // Image / JS blocks run an LLM agent first; no XML template extract.
+    final isRawAgent = blockConfig.type == BlockType.imageGen ||
+        blockConfig.type == BlockType.jsRunner;
+    final resolvedTemplate =
+        isRawAgent ? '' : _resolveTemplate(blockConfig);
+    final systemContent = _buildSystemMessage(
+      blockConfig: blockConfig,
+      template: resolvedTemplate,
+      character: character,
+      persona: persona,
     );
-
-    // Build prompt for infoblock generation
-    final prompt = _buildInfoblockPrompt(
+    final userContent = _buildUserMessage(
       blockConfig: blockConfig,
       character: character,
       persona: persona,
       contextMessages: contextMessages,
-      recentBlocks: recentBlocks,
+      previousOutput: previousOutput,
     );
 
-    // Get API config
+    // Resolve API config.
     final apiConfigId = blockConfig.apiConfigId;
     if (apiConfigId.isEmpty) {
-      debugPrint('[InfoBlockService] No API config specified for block ${blockConfig.name}');
-      return null;
+      debugPrint('[InfoBlockService] No API config for block "${blockConfig.name}"');
+      return (content: null, error: 'API config not set for block "${blockConfig.name}"');
     }
 
     final apiConfigs = await _ref.read(apiListProvider.future);
     final apiConfig = apiConfigs.where((c) => c.id == apiConfigId).firstOrNull;
     if (apiConfig == null) {
       debugPrint('[InfoBlockService] API config not found: $apiConfigId');
-      return null;
+      return (content: null, error: 'API config not found: $apiConfigId');
     }
 
-    // Call LLM to generate infoblock content
-    final content = await _callLLMForInfoblock(
-      apiConfig: apiConfig,
+    if (cancelToken?.isCancelled == true) return (content: null, error: null);
+
+    String? rawResponse;
+    try {
+      rawResponse = await _callLLM(
+        apiConfig: apiConfig,
+        blockConfig: blockConfig,
+        systemContent: systemContent,
+        userContent: userContent,
+        cancelToken: cancelToken,
+        onStreamUpdate: onStreamUpdate,
+      );
+    } catch (e) {
+      if (cancelToken?.isCancelled == true) return (content: null, error: null);
+      return (content: null, error: e.toString());
+    }
+
+    if (cancelToken?.isCancelled == true) return (content: null, error: null);
+
+    if (rawResponse == null || rawResponse.trim().isEmpty) {
+      return (content: null, error: 'LLM returned empty response');
+    }
+
+    if (isRawAgent) {
+      final raw = rawResponse.trim();
+      if (raw.isEmpty) {
+        return (
+          content: null,
+          error: blockConfig.type == BlockType.imageGen
+              ? 'Image agent returned empty response'
+              : 'JS agent returned empty response',
+        );
+      }
+      return (content: raw, error: null);
+    }
+
+    final content = resolveBlockContent(
+      rawResponse: rawResponse,
       blockConfig: blockConfig,
-      prompt: prompt,
-      cancelToken: cancelToken,
+      resolvedTemplate: resolvedTemplate,
     );
+    if (content == null) {
+      return (
+        content: null,
+        error: resolvedTemplate.trim().isNotEmpty
+            ? 'LLM returned empty block (no text inside <${blockTagName(blockConfig, resolvedTemplate)}> tags)'
+            : 'LLM returned empty response',
+      );
+    }
+    return (content: content, error: null);
+  }
 
-    if (content == null || content.isEmpty) {
-      debugPrint('[InfoBlockService] Empty content generated for block ${blockConfig.name}');
-      return null;
+  // ─────────────────────────────────────────────────────────────────────────
+  // Context helpers
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Substitutes SillyTavern-style macros in [text].
+  String _applyMacros(String text, {Character? character, String? persona}) {
+    var result = text;
+    result = result.replaceAll('{{char}}', character?.name ?? '');
+    result = result.replaceAll('{{user}}', persona ?? '');
+    result = result.replaceAll('{{description}}', character?.description ?? '');
+    result = result.replaceAll('{{personality}}', character?.personality ?? '');
+    return result;
+  }
+
+  /// Returns the template sent to the LLM. Empty [blockConfig.template] means
+  /// no XML wrapper — the full model reply is stored as-is.
+  String _resolveTemplate(BlockConfig blockConfig) {
+    final raw = blockConfig.template.trim();
+    if (raw.isEmpty) return '';
+    return raw.replaceAll('{{name}}', blockConfig.name);
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Prompt building (system + user)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /// Builds the system message: shows the model the exact template layout it
+  /// must produce, plus optional user-defined prompt instructions.
+  /// Mirrors upstream `BlockService.getBlocksFullPrompt`.
+  String _buildSystemMessage({
+    required BlockConfig blockConfig,
+    required String template,
+    Character? character,
+    String? persona,
+  }) {
+    if (blockConfig.type == BlockType.imageGen) {
+      final prompt = blockConfig.prompt.trim();
+      if (prompt.isNotEmpty) {
+        return _applyMacros(prompt, character: character, persona: persona);
+      }
+      return 'Write the roleplay response, then append the visual HTML card with '
+          '[IMG:GEN] / data-iig-instruction as instructed.';
     }
 
-    return InfoBlock(
-      id: generateId(),
-      sessionId: sessionId,
-      messageId: messageId,
-      blockId: blockConfig.id,
-      blockName: blockConfig.name,
-      blockType: 'infoblock',
-      content: content,
-      createdAt: DateTime.now().millisecondsSinceEpoch,
-    );
-  }
-
-  List<ChatMessage> _buildContextMessages(
-    List<ChatMessage> messages,
-    int count,
-  ) {
-    if (messages.isEmpty) return [];
-
-    final startIdx = (messages.length - count).clamp(0, messages.length);
-    return messages.sublist(startIdx);
-  }
-
-  String _buildInfoblockPrompt({
-    required BlockConfig blockConfig,
-    required Character? character,
-    required String? persona,
-    required List<ChatMessage> contextMessages,
-    required List<InfoBlock> recentBlocks,
-  }) {
     final buffer = StringBuffer();
 
-    // Block-specific instructions
+    if (template.isNotEmpty) {
+      buffer.writeln('Output format — fill in the content between these tags:');
+      buffer.writeln(template);
+      buffer.writeln();
+    } else {
+      buffer.writeln(
+        'Write the block content directly. Do not wrap the answer in XML tags unless asked.',
+      );
+      buffer.writeln();
+    }
+
     if (blockConfig.prompt.isNotEmpty) {
       buffer.writeln('Instructions:');
       buffer.writeln(blockConfig.prompt);
       buffer.writeln();
     }
+    return buffer.toString().trimRight();
+  }
 
-    // Character info
+  /// Builds the user message: the conversation context, character, persona,
+  /// and optional chained block output. The model is meant to fill in the
+  /// template based on this material.
+  String _buildUserMessage({
+    required BlockConfig blockConfig,
+    required Character? character,
+    required String? persona,
+    required List<ChatMessage> contextMessages,
+    required String? previousOutput,
+  }) {
+    final buffer = StringBuffer();
+
+    if (blockConfig.contextSystemPrompt.isNotEmpty) {
+      final sysPrompt = _applyMacros(
+        blockConfig.contextSystemPrompt,
+        character: character,
+        persona: persona,
+      );
+      buffer.writeln(sysPrompt);
+      buffer.writeln();
+    }
+
     if (character != null) {
       buffer.writeln('Character: ${character.name}');
       if (character.description != null && character.description!.isNotEmpty) {
@@ -177,13 +230,11 @@ class InfoBlockService {
       buffer.writeln();
     }
 
-    // Persona info
     if (persona != null && persona.isNotEmpty) {
       buffer.writeln('User Persona: $persona');
       buffer.writeln();
     }
 
-    // Recent context
     if (contextMessages.isNotEmpty) {
       buffer.writeln('Recent conversation:');
       for (final msg in contextMessages) {
@@ -193,72 +244,75 @@ class InfoBlockService {
       buffer.writeln();
     }
 
-    // Recent blocks of same type
-    if (recentBlocks.isNotEmpty) {
-      buffer.writeln('Previous <${blockConfig.name}> blocks:');
-      buffer.writeln('<${blockConfig.name}>');
-      for (final block in recentBlocks) {
-        buffer.writeln(block.content);
-      }
-      buffer.writeln('</${blockConfig.name}>');
+    if (previousOutput != null && previousOutput.isNotEmpty) {
+      buffer.writeln('Output from previous block in chain:');
+      buffer.writeln(previousOutput);
       buffer.writeln();
     }
 
-    // Output format
-    buffer.writeln('Output the infoblock in the following format:');
-    buffer.writeln('<${blockConfig.name}>');
-    buffer.writeln('... block content ...');
-    buffer.writeln('</${blockConfig.name}>');
-
-    return buffer.toString();
+    return buffer.toString().trimRight();
   }
 
-  Future<String?> _callLLMForInfoblock({
+  // ─────────────────────────────────────────────────────────────────────────
+  // LLM call
+  // ─────────────────────────────────────────────────────────────────────────
+
+  Future<String?> _callLLM({
     required ApiConfig apiConfig,
     required BlockConfig blockConfig,
-    required String prompt,
+    required String systemContent,
+    required String userContent,
     CancelToken? cancelToken,
+    void Function(String accumulated)? onStreamUpdate,
   }) async {
-    const systemPrompt = 'You are an AI assistant that generates structured infoblocks describing current scene state.';
-
-    final messages = [
-      {'role': 'system', 'content': systemPrompt},
-      {'role': 'user', 'content': prompt},
+    final messages = <Map<String, String>>[
+      {'role': 'system', 'content': systemContent},
+      {'role': 'user', 'content': userContent},
     ];
+
+    final useStream = onStreamUpdate != null;
 
     try {
       final sseClient = SseClient();
       final completer = Completer<String>();
-      
+      final buffer = StringBuffer();
+
       await sseClient.streamChatCompletion(
         endpoint: apiConfig.endpoint,
         apiKey: apiConfig.apiKey,
-        model: blockConfig.model.isNotEmpty
-            ? blockConfig.model
-            : apiConfig.model,
+        model: blockConfig.model.isNotEmpty ? blockConfig.model : apiConfig.model,
         messages: messages,
         maxTokens: apiConfig.maxTokens,
         temperature: apiConfig.temperature,
         topP: apiConfig.topP,
-        stream: false,
+        stream: useStream,
         cancelToken: cancelToken,
+        onUpdate: useStream
+            ? (delta, _) {
+                if (delta.isEmpty) return;
+                buffer.write(delta);
+                onStreamUpdate!(buffer.toString());
+              }
+            : null,
         onComplete: (text, reasoning, {rawResponseJson}) {
-          if (!completer.isCompleted) {
-            completer.complete(text);
-          }
+          if (!completer.isCompleted) completer.complete(text);
         },
         onError: (error) {
-          if (!completer.isCompleted) {
-            completer.completeError(error);
-          }
+          if (!completer.isCompleted) completer.completeError(error);
         },
       );
 
       return await completer.future;
+    } on DioException catch (e) {
+      if (cancelToken?.isCancelled == true || CancelToken.isCancel(e)) {
+        return null;
+      }
+      debugPrint('[InfoBlockService] LLM call failed: $e');
+      rethrow;
     } catch (e) {
       if (cancelToken?.isCancelled == true) return null;
       debugPrint('[InfoBlockService] LLM call failed: $e');
-      return null;
+      rethrow;
     }
   }
 }

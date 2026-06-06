@@ -19,6 +19,13 @@ import '../editing_message_provider.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/theme/theme_font_provider.dart';
+import '../../extensions/models/info_block.dart';
+import '../../extensions/providers/info_blocks_provider.dart';
+import '../../extensions/providers/extension_presets_provider.dart';
+import '../../extensions/providers/extensions_settings_provider.dart';
+import '../../extensions/services/ext_blocks_panel_builder.dart';
+import '../../extensions/services/extension_post_gen_service.dart';
+import '../bridge/chat_bridge_registry.dart';
 import 'webview_callbacks.dart';
 
 const String _kStreamingId = '__streaming__';
@@ -147,6 +154,49 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   @override
   bool get wantKeepAlive => true;
 
+  String? get _lastAssistantMessageId {
+    for (int i = widget.messages.length - 1; i >= 0; i--) {
+      final m = widget.messages[i];
+      if (m.role == 'assistant' || m.role == 'character') return m.id;
+    }
+    return null;
+  }
+
+  Future<void> _refreshExtBlocksPanel(String sessionId, String messageId) async {
+    if (_bridge == null || !_ready) return;
+    final isLastAssistant = messageId == _lastAssistantMessageId;
+    final panelKey = (sessionId: sessionId, messageId: messageId);
+    final visibilityKey = (
+      sessionId: sessionId,
+      messageId: messageId,
+      isLastAssistant: isLastAssistant,
+    );
+    if (!ref.read(extBlocksPanelVisibleProvider(visibilityKey))) {
+      await _bridge!.hideExtBlocksPanel(messageId);
+      return;
+    }
+    final blocks = ref.read(extBlocksPanelBlocksProvider(panelKey));
+    final canRunAll = ref.read(extBlocksPanelCanRunAllProvider(panelKey));
+    await _bridge!.showExtBlocksPanel(messageId, blocks, canRunAll: canRunAll);
+  }
+
+  Future<void> _syncExtBlockPanels() async {
+    final sid = widget.sessionId;
+    if (sid == null || sid.isEmpty || _bridge == null || !_ready) return;
+    await ref.read(infoBlocksProvider(sid).notifier).refresh();
+    for (final msg in widget.messages) {
+      if (msg.role != 'assistant' && msg.role != 'character') continue;
+      await _refreshExtBlocksPanel(sid, msg.id);
+    }
+  }
+
+  @override
+  void dispose() {
+    // Unregister bridge so the service doesn't hold a stale reference.
+    ref.read(chatBridgeRegistryProvider(widget.charId).notifier).state = null;
+    super.dispose();
+  }
+
   /// Shallow comparison of two regex lists by id + disabled state.
   bool _regexListChanged(List<PresetRegex> a, List<PresetRegex> b) {
     if (a.length != b.length) return true;
@@ -230,6 +280,9 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     _bridge!.isGenerating = initialAnyGen;
     unawaited(_bridge!.evalJs('if (window.bridge) window.bridge.isGenerating = $initialAnyGen;'));
     _ready = true;
+
+    // Push initial ext-block panels on first load.
+    unawaited(_syncExtBlockPanels());
   }
 
   Future<void> applyIdentity({
@@ -308,6 +361,8 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       widget.messages,
       visibleStartIndex: widget.visibleStartIndex,
     );
+    // Restore ext-block panels after session switch.
+    unawaited(_syncExtBlockPanels());
     Future.delayed(const Duration(milliseconds: 150), () {
       bridge.scrollToBottom();
       if (mounted) setState(() => _sessionSwitching = false);
@@ -453,6 +508,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       }
       _streamingSent = false;
       _regenStreamingSent = false;
+      unawaited(_syncExtBlockPanels());
     }
 
     // Sync messages BEFORE injecting the typing placeholder, so the new user
@@ -460,6 +516,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     if (!identical(oldWidget.messages, widget.messages) &&
         !_listsEqual(oldWidget.messages, widget.messages)) {
       _syncMessages(oldWidget.messages);
+      unawaited(_syncExtBlockPanels());
     }
 
     // Fresh generation started (no regenTargetId) → inject typing placeholder immediately
@@ -673,6 +730,32 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       },
     );
 
+    // Refresh inline ext-block panels when DB rows or extension settings change.
+    final sessionId = widget.sessionId;
+    if (sessionId != null && sessionId.isNotEmpty) {
+      ref.listen<List<InfoBlock>>(
+        infoBlocksProvider(sessionId),
+        (prev, next) {
+          if (_bridge == null || !_ready) return;
+          final allIds = <String>{
+            for (final b in prev ?? const <InfoBlock>[]) b.messageId,
+            for (final b in next) b.messageId,
+            for (final m in widget.messages)
+              if (m.role == 'assistant' || m.role == 'character') m.id,
+          };
+          for (final msgId in allIds) {
+            unawaited(_refreshExtBlocksPanel(sessionId, msgId));
+          }
+        },
+      );
+    }
+    ref.listen(extensionsSettingsProvider, (_, _) {
+      if (_bridge != null && _ready) unawaited(_syncExtBlockPanels());
+    });
+    ref.listen(extensionPresetsProvider, (_, _) {
+      if (_bridge != null && _ready) unawaited(_syncExtBlockPanels());
+    });
+
     final bgImageBytes = ref.watch(bgImageBytesProvider);
 
     return Stack(
@@ -739,6 +822,8 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
           ),
           onWebViewCreated: (controller) async {
             _bridge = ChatBridgeController(controller);
+            // Register bridge in the registry so services can access it.
+            ref.read(chatBridgeRegistryProvider(widget.charId).notifier).state = _bridge;
             unawaited(controller.evaluateJavascript(source: 'if(window.bridge) window.bridge.clearAll();'));
             _bridge!.onMessageContext = (id, isUser, isSystem, content) {
               final allMsgs = ref.read(chatProvider(widget.charId)).value?.messages ?? [];
@@ -811,6 +896,101 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
             };
             _bridge!.onLoadMore = () {
               ref.read(chatProvider(widget.charId).notifier).loadOlderMessages();
+            };
+            _bridge!.onExtBlocksRunAll = (messageId) async {
+              final sessionId = widget.sessionId;
+              if (sessionId == null || sessionId.isEmpty) return;
+              final chatState = ref.read(chatProvider(widget.charId)).value;
+              if (chatState == null) return;
+              final character = ref.read(characterByIdProvider(widget.charId));
+              if (character == null) return;
+              await ref.read(extensionPostGenServiceProvider).runBlocksForMessage(
+                charId: widget.charId,
+                sessionId: sessionId,
+                messageId: messageId,
+                messages: chatState.messages,
+                character: character,
+                persona: null,
+              );
+            };
+            _bridge!.onExtBlockStop = (blockId, messageId) {
+              ref.read(extensionPostGenServiceProvider).cancelBlocks();
+            };
+            _bridge!.onExtBlockRegen = (blockId, messageId) async {
+              final sessionId = widget.sessionId;
+              if (sessionId == null || sessionId.isEmpty) return;
+              final chatState = ref.read(chatProvider(widget.charId)).value;
+              if (chatState == null) return;
+              final character = ref.read(characterByIdProvider(widget.charId));
+              if (character == null) return;
+              await ref.read(extensionPostGenServiceProvider).rerunBlock(
+                blockId: blockId,
+                messageId: messageId,
+                sessionId: sessionId,
+                charId: widget.charId,
+                messages: chatState.messages,
+                character: character,
+                persona: null,
+              );
+              await _refreshExtBlocksPanel(sessionId, messageId);
+            };
+            _bridge!.onExtBlockRegenImage = (blockId, messageId) async {
+              final sessionId = widget.sessionId;
+              if (sessionId == null || sessionId.isEmpty) return;
+              final character = ref.read(characterByIdProvider(widget.charId));
+              if (character == null) return;
+              await ref.read(extensionPostGenServiceProvider).rerunImageOnly(
+                blockId: blockId,
+                messageId: messageId,
+                sessionId: sessionId,
+                charId: widget.charId,
+                character: character,
+                persona: null,
+              );
+              await _refreshExtBlocksPanel(sessionId, messageId);
+            };
+            _bridge!.onExtBlockEdit = (blockId, messageId) async {
+              final sessionId = widget.sessionId;
+              if (sessionId == null || sessionId.isEmpty) return;
+              final blocks = ref
+                  .read(infoBlocksProvider(sessionId))
+                  .where((b) =>
+                      b.messageId == messageId && b.blockId == blockId)
+                  .toList();
+              if (blocks.isEmpty) return;
+              final block = blocks.first;
+              if (!mounted) return;
+              final newContent = await _promptEditBlock(
+                context: context,
+                blockName: block.blockName,
+                initialContent: block.content,
+              );
+              if (newContent == null) return;
+              await ref
+                  .read(infoBlocksProvider(sessionId).notifier)
+                  .updateContent(block.id, newContent);
+              await _refreshExtBlocksPanel(sessionId, messageId);
+            };
+            _bridge!.onExtBlockDelete = (blockId, messageId) async {
+              final sessionId = widget.sessionId;
+              if (sessionId == null || sessionId.isEmpty) return;
+              final blocks = ref
+                  .read(infoBlocksProvider(sessionId))
+                  .where((b) =>
+                      b.messageId == messageId && b.blockId == blockId)
+                  .toList();
+              if (blocks.isEmpty) return;
+              final block = blocks.first;
+              if (!mounted) return;
+              final confirmed = await _confirmDeleteBlock(
+                context: context,
+                blockName: block.blockName,
+              );
+              if (!confirmed) return;
+              await ref
+                  .read(infoBlocksProvider(sessionId).notifier)
+                  .delete(block.id);
+              await _refreshExtBlocksPanel(sessionId, messageId);
             };
 
             final isAlive = await controller.isLoading() == false;
@@ -941,5 +1121,77 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     final b = _bridge;
     if (b == null) return Future.value();
     return b.toggleMessageSelection(id);
+  }
+
+  Future<String?> _promptEditBlock({
+    required BuildContext context,
+    required String blockName,
+    required String initialContent,
+  }) {
+    final controller = TextEditingController(text: initialContent);
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('Редактировать «$blockName»'),
+          content: SizedBox(
+            width: 500,
+            child: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLines: 12,
+              minLines: 6,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+              ),
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Содержимое блока…',
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text),
+              child: const Text('Сохранить'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<bool> _confirmDeleteBlock({
+    required BuildContext context,
+    required String blockName,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: Text('Удалить «$blockName»?'),
+          content: const Text('Блок будет удалён из базы данных. Это нельзя отменить.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Отмена'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Удалить'),
+            ),
+          ],
+        );
+      },
+    );
+    return confirmed == true;
   }
 }

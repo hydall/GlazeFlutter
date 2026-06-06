@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -45,6 +46,7 @@ class ChatBridgeController {
   final Set<String> _coveredMemoryIds = {};
   final Set<String> _pendingMemoryIds = {};
   final Set<String> _draftMemoryIds = {};
+  final Map<String, String> _blockStatusByMessageId = {};
 
   List<PresetRegex> _displayRegexes = [];
   Character? _regexCharacter;
@@ -68,6 +70,7 @@ class ChatBridgeController {
   Set<String> get coveredMemoryIds => _coveredMemoryIds;
   Set<String> get pendingMemoryIds => _pendingMemoryIds;
   Set<String> get draftMemoryIds => _draftMemoryIds;
+  Map<String, String> get blockStatusByMessageId => _blockStatusByMessageId;
   List<PresetRegex> get displayRegexes => _displayRegexes;
   Character? get regexCharacter => _regexCharacter;
   Persona? get regexPersona => _regexPersona;
@@ -83,6 +86,7 @@ class ChatBridgeController {
         pendingMemoryIds: _pendingMemoryIds,
         draftMemoryIds: _draftMemoryIds,
         greetingTotal: currentGreetingTotal,
+        blockStatusByMessageId: Map.unmodifiable(_blockStatusByMessageId),
       );
 
   void setRegexContext(List<PresetRegex> regexes, Character? char, Persona? persona) {
@@ -156,6 +160,10 @@ class ChatBridgeController {
     await _controller.evaluateJavascript(source: source);
   }
 
+  Future<Object?> evalJsWithResult(String source) {
+    return _controller.evaluateJavascript(source: source);
+  }
+
   String escape(String s) {
     return s.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n');
   }
@@ -192,6 +200,12 @@ class ChatBridgeController {
   void Function(String instruction, String messageId)? onImgRegen;
   void Function()? onImgCancel;
   void Function()? onStop;
+  void Function(String messageId)? onExtBlocksRunAll;
+  void Function(String blockId, String messageId)? onExtBlockStop;
+  void Function(String blockId, String messageId)? onExtBlockRegen;
+  void Function(String blockId, String messageId)? onExtBlockRegenImage;
+  void Function(String blockId, String messageId)? onExtBlockEdit;
+  void Function(String blockId, String messageId)? onExtBlockDelete;
 
   /// Register JS handlers for every callback declared on this host. The
   /// declarations live in [bridgeHandlers] (data-driven) so the actual
@@ -261,6 +275,7 @@ class ChatBridgeController {
       case 'onMemoryClick': onMemoryClick?.call(s);
       case 'onToggleHidden': onToggleHidden?.call(s);
       case 'onInjectClick': onInjectClick?.call(s);
+      case 'onExtBlocksRunAll': onExtBlocksRunAll?.call(s);
     }
   }
 
@@ -340,6 +355,11 @@ class ChatBridgeController {
       case 'onImgRetry': onImgRetry?.call(instr, msgId);
       case 'onImgFind': onImgFind?.call(instr, msgId);
       case 'onImgRegen': onImgRegen?.call(instr, msgId);
+      case 'onExtBlockStop': onExtBlockStop?.call(instr, msgId);
+      case 'onExtBlockRegen': onExtBlockRegen?.call(instr, msgId);
+      case 'onExtBlockRegenImage': onExtBlockRegenImage?.call(instr, msgId);
+      case 'onExtBlockEdit': onExtBlockEdit?.call(instr, msgId);
+      case 'onExtBlockDelete': onExtBlockDelete?.call(instr, msgId);
     }
   }
 
@@ -460,4 +480,113 @@ class ChatBridgeController {
         entries: entries,
         pendingDrafts: pendingDrafts,
       );
+
+  // Ext Blocks
+
+  /// Sends block panel data to JS so the inline panel renders/updates.
+  Future<void> showExtBlocksPanel(
+    String messageId,
+    List<Map<String, dynamic>> blocks, {
+    bool canRunAll = false,
+  }) async {
+    final payload = jsonEncode({
+      'messageId': messageId,
+      'blocks': blocks,
+      'canRunAll': canRunAll,
+    });
+    await callJs('showExtBlocksPanel', payload);
+  }
+
+  Future<void> hideExtBlocksPanel(String messageId) async {
+    await callJs('hideExtBlocksPanel', messageId);
+  }
+
+  /// Updates only one block's body in an existing panel (streaming).
+  /// Returns false when the panel or block row is missing — caller should
+  /// fall back to [showExtBlocksPanel].
+  Future<bool> patchExtBlockContent({
+    required String messageId,
+    required String blockId,
+    required String content,
+    required String status,
+  }) async {
+    final payload = jsonEncode({
+      'messageId': messageId,
+      'blockId': blockId,
+      'content': content,
+      'status': status,
+    });
+    final result = await evalJsWithResult(
+      'window.bridge?.patchExtBlockContent(${escapeJsonStr(payload)})',
+    );
+    return result == true || result == 'true';
+  }
+
+  Future<void> updateBlockStatus(String messageId, String? status) async {
+    // Badge UX removed — block status is shown inline in the ext-blocks panel.
+  }
+
+  /// Runs [script] inside a sandboxed iframe in the Chat WebView and returns
+  /// the string result. Throws on timeout (>60 s) or script error.
+  ///
+  /// Context passed to the script:
+  ///   - messages: last [contextMessageCount] messages (role + text)
+  ///   - character: name, description, personality, scenario
+  ///   - previousOutput: output of the previous block in the chain (or null)
+  Future<String> runJsBlock({
+    required String script,
+    required List<ChatMessage> messages,
+    required Character? character,
+    required String? previousOutput,
+    int contextMessageCount = 10,
+    CancelToken? cancelToken,
+  }) async {
+    if (cancelToken?.isCancelled == true) {
+      throw Exception('Cancelled before JS execution');
+    }
+
+    // Build context object for the script.
+    final int take = contextMessageCount < 0
+        ? messages.length
+        : contextMessageCount;
+    final startIdx = (messages.length - take).clamp(0, messages.length);
+    final contextMessages = messages
+        .sublist(startIdx)
+        .map((m) => {'role': m.role, 'text': m.content})
+        .toList();
+
+    final contextMap = <String, dynamic>{
+      'messages': contextMessages,
+      'character': character != null
+          ? {
+              'name': character.name,
+              'description': character.description ?? '',
+              'personality': character.personality ?? '',
+              'scenario': character.scenario ?? '',
+            }
+          : null,
+      'previousOutput': previousOutput,
+    };
+    final contextJson = jsonEncode(contextMap);
+
+    // callAsyncJavaScript returns the JS Promise result.
+    // bridge.runSandboxedScript returns a Promise<string>.
+    final result = await _controller.callAsyncJavaScript(
+      functionBody: '''
+        return window.bridge.runSandboxedScript(script, contextJson);
+      ''',
+      arguments: {
+        'script': script,
+        'contextJson': contextJson,
+      },
+    ).timeout(
+      const Duration(seconds: 60),
+      onTimeout: () => throw TimeoutException('JS runner timed out', const Duration(seconds: 60)),
+    );
+
+    if (result == null) return '';
+    final value = result.value;
+    if (value is String) return value;
+    return value?.toString() ?? '';
+  }
 }

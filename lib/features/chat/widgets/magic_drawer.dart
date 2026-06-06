@@ -43,6 +43,10 @@ import 'summary_sheet.dart';
 import '../state/token_breakdown_cache.dart';
 import 'tokenizer_sheet.dart';
 import '../../glossary/glossary_sheet.dart';
+import '../../extensions/models/extension_preset.dart';
+import '../../extensions/models/extensions_settings.dart';
+import '../../extensions/providers/extension_presets_provider.dart';
+import '../../extensions/providers/extensions_settings_provider.dart';
 import '../../extensions/widgets/ext_blocks_settings_sheet.dart';
 
 class MagicDrawerPanel extends ConsumerStatefulWidget {
@@ -219,11 +223,17 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     _debounceTimer = Timer(const Duration(milliseconds: 500), _refreshStats);
   }
 
-  List<MagicDrawerCardItem> get _displayItems {
+  List<MagicDrawerCardItem> _displayItems(
+    ExtensionsSettings extSettings,
+    List<ExtensionPreset> extPresets,
+  ) {
     final list = _itemIds
         .map((id) => _allItems.where((item) => item.id == id).firstOrNull)
         .whereType<MagicDrawerItemDef>()
-        .map((def) => MagicDrawerCardItem(def: def, status: _statusFor(def.id)))
+        .map((def) => MagicDrawerCardItem(
+              def: def,
+              status: _statusFor(def.id, extSettings, extPresets),
+            ))
         .toList();
     if (_editing && _canAddMore) {
       list.add(
@@ -238,7 +248,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
 
   bool get _canAddMore => _allItems.any((item) => !_itemIds.contains(item.id));
 
-  String? _statusFor(String id) {
+  String? _statusFor(
+    String id,
+    ExtensionsSettings extSettings,
+    List<ExtensionPreset> extPresets,
+  ) {
     return switch (id) {
       'context' =>
         _stats.promptTokens > 0 && _stats.contextSize > 0
@@ -290,9 +304,15 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
                 _stats.session!.authorsNote!.content.isNotEmpty
             ? '${_stats.session!.authorsNote!.content.length} chars'
             : 'Empty',
-      'ext-blocks' => !_stats.extBlocksEnabled
+      'ext-blocks' => !extSettings.enabled
           ? 'Off'
-          : _stats.extBlocksActivePresetName ?? 'No preset',
+          : extSettings.activePresetId == null
+              ? 'No preset'
+              : extPresets
+                      .where((p) => p.id == extSettings.activePresetId)
+                      .firstOrNull
+                      ?.name ??
+                  'No preset',
       _ => null,
     };
   }
@@ -675,8 +695,34 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     ref.listen(lorebookActivationsProvider, (prev, next) {
       if (prev != next) _scheduleRefresh();
     });
+    ref.listen(extensionsSettingsProvider, (prev, next) {
+      if (prev == null) {
+        _scheduleRefresh();
+        return;
+      }
+      if (prev.enabled != next.enabled ||
+          prev.activePresetId != next.activePresetId) {
+        _scheduleRefresh();
+      }
+    });
+    ref.listen(extensionPresetsProvider, (prev, next) {
+      // Active preset name may have changed (renamed/edited).
+      final pl = prev ?? const [];
+      if (pl.length != next.length) {
+        _scheduleRefresh();
+      } else {
+        for (int i = 0; i < pl.length; i++) {
+          if (pl[i].name != next[i].name) {
+            _scheduleRefresh();
+            break;
+          }
+        }
+      }
+    });
 
-    final items = _displayItems;
+    final extSettings = ref.watch(extensionsSettingsProvider);
+    final extPresets = ref.watch(extensionPresetsProvider);
+    final items = _displayItems(extSettings, extPresets);
     final batterySaver =
         ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
 

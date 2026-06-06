@@ -1,4 +1,4 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -116,6 +116,20 @@ class GenerationPipeline {
       }
 
       // Regen vs normal-result dispatch.
+      final regenMsg = regenTargetId != null && result.session != null
+          ? result.session!.messages
+              .where((m) => m.id == regenTargetId)
+              .firstOrNull
+          : null;
+      final regenSucceeded = regenTargetId != null &&
+          regenMsg != null &&
+          !regenMsg.isError &&
+          !regenMsg.isTyping;
+      debugPrint(
+        '[GenerationPipeline] regen check: target=$regenTargetId '
+        'resultRegenId=${result.regenTargetId} succeeded=$regenSucceeded '
+        'msgError=${regenMsg?.isError}',
+      );
       final regenOutcome = _resolveRegenResult(
         result: result,
         regenTargetId: regenTargetId,
@@ -123,6 +137,28 @@ class GenerationPipeline {
         session: session,
       );
       if (regenOutcome != null) {
+        // INV-EG1: extensions + image tags must run after successful regen too.
+        if (regenSucceeded && result.session != null) {
+          debugPrint(
+            '[GenerationPipeline] regen succeeded — running post-text side '
+            'for msg=$regenTargetId',
+          );
+          await _runPostTextSide(
+            result: result.copyWith(isGenerating: false, regenTargetId: null),
+            genId: genId,
+            character: character,
+            service: service,
+            notifService: notifService,
+          );
+          if (!abortHandler.isCurrentGen(genId)) {
+            return null;
+          }
+        } else {
+          debugPrint(
+            '[GenerationPipeline] regen post-text SKIPPED: succeeded=$regenSucceeded '
+            'sessionNull=${result.session == null}',
+          );
+        }
         return regenOutcome;
       }
 
@@ -286,20 +322,33 @@ class GenerationPipeline {
     final imgCancelToken = CancelToken();
     abortHandler.imgGenCancelToken = imgCancelToken;
 
-    await service.processImageTags(
-      currentState: result,
-      charId: charId,
-      cancelToken: imgCancelToken,
-      onStateUpdate: (s) {
-        if (abortHandler.isCurrentGen(genId)) setState(AsyncData(s));
-      },
-    );
+    try {
+      await service.processImageTags(
+        currentState: result,
+        charId: charId,
+        cancelToken: imgCancelToken,
+        onStateUpdate: (s) {
+          if (abortHandler.isCurrentGen(genId)) setState(AsyncData(s));
+        },
+      );
+    } catch (e) {
+      debugPrint('[GenerationPipeline] processImageTags failed (continuing): $e');
+    }
 
     if (character != null && result.session != null) {
+      debugPrint(
+        '[GenerationPipeline] processExtensions: session=${result.session!.id} '
+        'msgs=${result.session!.messages.length}',
+      );
       await service.processExtensions(
         charId: charId,
         session: result.session!,
         character: character,
+      );
+    } else {
+      debugPrint(
+        '[GenerationPipeline] processExtensions SKIPPED: '
+        'character=${character != null} session=${result.session != null}',
       );
     }
 

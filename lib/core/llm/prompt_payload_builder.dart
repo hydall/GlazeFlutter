@@ -17,6 +17,7 @@ import '../state/lorebook_provider.dart';
 import 'embedding_types.dart';
 import 'lorebook_providers.dart';
 import 'memory_injection_service.dart';
+import '../../features/extensions/services/ext_blocks_prompt_injection.dart';
 import 'prompt_builder.dart';
 import 'prompt_inputs.dart';
 import 'prompt_inputs_collector.dart';
@@ -110,6 +111,12 @@ class PromptPayloadBuilder {
     List<LorebookEntry> vectorEntries = [];
 
     if (session != null) {
+      debugPrint('[payload] injecting ext blocks into history...');
+      history = await _ref
+          .read(extBlocksPromptInjectionProvider)
+          .injectIntoHistory(sessionId: session.id, messages: history);
+      throwIfAborted();
+
       debugPrint('[payload] getting summary...');
       final summaryService = _ref.read(summaryServiceProvider);
       summaryContent = await summaryService.getSummary(session.id);
@@ -234,10 +241,16 @@ class PromptPayloadBuilder {
     final lorebookActivations = _ref.read(lorebookActivationsProvider);
 
     List<LorebookEntry> vectorEntries = [];
+    List<ChatMessage> history = session?.messages ?? [];
+    if (session != null) {
+      history = await _ref
+          .read(extBlocksPromptInjectionProvider)
+          .injectIntoHistory(sessionId: session.id, messages: history);
+    }
     if (!skipVectorSearch && session != null) {
       vectorEntries = await _runVectorSearch(
-        session.messages,
-        session.messages.lastOrNull?.content ?? '',
+        history,
+        history.lastOrNull?.content ?? '',
         character.world,
         character,
       );
@@ -247,7 +260,7 @@ class PromptPayloadBuilder {
       character: character,
       persona: persona,
       preset: preset,
-      history: session?.messages ?? [],
+      history: history,
       apiConfig: chatApi,
       sessionVars: session?.sessionVars ?? {},
       globalVars: _ref.read(globalVarsProvider),

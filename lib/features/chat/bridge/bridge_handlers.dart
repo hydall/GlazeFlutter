@@ -85,4 +85,21 @@ const Map<String, HandlerSpec> bridgeHandlers = {
   ),
   // Stop
   'onStop': HandlerSpec(HandlerKind.noArgs),
+  // Ext blocks
+  'onExtBlocksRunAll': HandlerSpec(HandlerKind.stringArg),
+  'onExtBlockStop': HandlerSpec(
+    HandlerKind.imageAction,
+  ),
+  'onExtBlockRegen': HandlerSpec(
+    HandlerKind.imageAction,
+  ),
+  'onExtBlockRegenImage': HandlerSpec(
+    HandlerKind.imageAction,
+  ),
+  'onExtBlockEdit': HandlerSpec(
+    HandlerKind.imageAction,
+  ),
+  'onExtBlockDelete': HandlerSpec(
+    HandlerKind.imageAction,
+  ),
 };

@@ -36,7 +36,21 @@ class ExtensionsSettingsNotifier extends StateNotifier<ExtensionsSettings> {
   }
 
   Future<void> setActivePresetId(String? presetId) async {
+    // Only update the active preset id. The master enabled flag is
+    // controlled separately via setEnabled in Settings → Extensions so
+    // users can keep a chosen preset but temporarily disable the feature.
     state = state.copyWith(activePresetId: presetId);
+    await _save();
+  }
+
+  /// Selects a preset and ensures [enabled] is on if [presetId] is non-null.
+  /// Use this from the Ext Blocks sheet so a first-time setup works
+  /// without the user having to flip a separate master toggle.
+  Future<void> selectPreset(String? presetId) async {
+    state = state.copyWith(
+      activePresetId: presetId,
+      enabled: presetId != null ? true : state.enabled,
+    );
     await _save();
   }
 

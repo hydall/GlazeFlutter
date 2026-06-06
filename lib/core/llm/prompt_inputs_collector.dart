@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/api_list_provider.dart';
+import '../../features/extensions/services/ext_blocks_prompt_injection.dart';
 import '../models/chat_message.dart';
 import '../state/active_selection_provider.dart';
 import '../state/db_provider.dart';
@@ -73,11 +74,18 @@ class PromptInputsCollector {
 
     final memorySettings = _ref.read(memoryGlobalSettingsProvider);
 
+    var history = session?.messages ?? [];
+    if (session != null) {
+      history = await _ref
+          .read(extBlocksPromptInjectionProvider)
+          .injectIntoHistory(sessionId: session.id, messages: history);
+    }
+
     return PromptInputs(
       character: character,
       persona: persona,
       preset: preset,
-      history: session?.messages ?? [],
+      history: history,
       apiConfig: chatApi,
       sessionVars: session?.sessionVars ?? {},
       globalVars: _ref.read(globalVarsProvider),

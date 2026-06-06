@@ -21,6 +21,8 @@ sealed class ChatMessageMapperContext with _$ChatMessageMapperContext {
     @Default({}) Set<String> pendingMemoryIds,
     @Default({}) Set<String> draftMemoryIds,
     @Default(0) int greetingTotal,
+    /// messageId → aggregated block status ('running'|'done'|'error')
+    @Default({}) Map<String, String> blockStatusByMessageId,
   }) = _ChatMessageMapperContext;
 }
 
@@ -108,6 +110,7 @@ class ChatMessageMapper {
       if (m.greetingIndex != null && ctx.greetingTotal > 1)
         'greetingTotal': ctx.greetingTotal,
       'memoryStatus': ?memoryStatus,
+      'blockStatus': ?ctx.blockStatusByMessageId[m.id],
       if (m.triggeredLorebooks.isNotEmpty) 'triggeredLorebooks': _triggeredToJson(m.triggeredLorebooks),
       if (m.triggeredMemories.isNotEmpty) 'triggeredMemories': _triggeredToJson(m.triggeredMemories),
       'isGenerating': ctx.isGenerating,

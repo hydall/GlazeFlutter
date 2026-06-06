@@ -28,6 +28,10 @@ mixin _$ChatMessageMapperContext {
   Set<String> get draftMemoryIds => throw _privateConstructorUsedError;
   int get greetingTotal => throw _privateConstructorUsedError;
 
+  /// messageId → aggregated block status ('running'|'done'|'error')
+  Map<String, String> get blockStatusByMessageId =>
+      throw _privateConstructorUsedError;
+
   /// Create a copy of ChatMessageMapperContext
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
@@ -53,6 +57,7 @@ abstract class $ChatMessageMapperContextCopyWith<$Res> {
     Set<String> pendingMemoryIds,
     Set<String> draftMemoryIds,
     int greetingTotal,
+    Map<String, String> blockStatusByMessageId,
   });
 }
 
@@ -84,6 +89,7 @@ class _$ChatMessageMapperContextCopyWithImpl<
     Object? pendingMemoryIds = null,
     Object? draftMemoryIds = null,
     Object? greetingTotal = null,
+    Object? blockStatusByMessageId = null,
   }) {
     return _then(
       _value.copyWith(
@@ -127,6 +133,10 @@ class _$ChatMessageMapperContextCopyWithImpl<
                 ? _value.greetingTotal
                 : greetingTotal // ignore: cast_nullable_to_non_nullable
                       as int,
+            blockStatusByMessageId: null == blockStatusByMessageId
+                ? _value.blockStatusByMessageId
+                : blockStatusByMessageId // ignore: cast_nullable_to_non_nullable
+                      as Map<String, String>,
           )
           as $Val,
     );
@@ -153,6 +163,7 @@ abstract class _$$ChatMessageMapperContextImplCopyWith<$Res>
     Set<String> pendingMemoryIds,
     Set<String> draftMemoryIds,
     int greetingTotal,
+    Map<String, String> blockStatusByMessageId,
   });
 }
 
@@ -184,6 +195,7 @@ class __$$ChatMessageMapperContextImplCopyWithImpl<$Res>
     Object? pendingMemoryIds = null,
     Object? draftMemoryIds = null,
     Object? greetingTotal = null,
+    Object? blockStatusByMessageId = null,
   }) {
     return _then(
       _$ChatMessageMapperContextImpl(
@@ -227,6 +239,10 @@ class __$$ChatMessageMapperContextImplCopyWithImpl<$Res>
             ? _value.greetingTotal
             : greetingTotal // ignore: cast_nullable_to_non_nullable
                   as int,
+        blockStatusByMessageId: null == blockStatusByMessageId
+            ? _value._blockStatusByMessageId
+            : blockStatusByMessageId // ignore: cast_nullable_to_non_nullable
+                  as Map<String, String>,
       ),
     );
   }
@@ -246,9 +262,11 @@ class _$ChatMessageMapperContextImpl implements _ChatMessageMapperContext {
     final Set<String> pendingMemoryIds = const {},
     final Set<String> draftMemoryIds = const {},
     this.greetingTotal = 0,
+    final Map<String, String> blockStatusByMessageId = const {},
   }) : _coveredMemoryIds = coveredMemoryIds,
        _pendingMemoryIds = pendingMemoryIds,
-       _draftMemoryIds = draftMemoryIds;
+       _draftMemoryIds = draftMemoryIds,
+       _blockStatusByMessageId = blockStatusByMessageId;
 
   @override
   final String? currentCharName;
@@ -293,9 +311,22 @@ class _$ChatMessageMapperContextImpl implements _ChatMessageMapperContext {
   @JsonKey()
   final int greetingTotal;
 
+  /// messageId → aggregated block status ('running'|'done'|'error')
+  final Map<String, String> _blockStatusByMessageId;
+
+  /// messageId → aggregated block status ('running'|'done'|'error')
+  @override
+  @JsonKey()
+  Map<String, String> get blockStatusByMessageId {
+    if (_blockStatusByMessageId is EqualUnmodifiableMapView)
+      return _blockStatusByMessageId;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableMapView(_blockStatusByMessageId);
+  }
+
   @override
   String toString() {
-    return 'ChatMessageMapperContext(currentCharName: $currentCharName, currentCharColor: $currentCharColor, currentPersonaName: $currentPersonaName, charAvatarDataUrl: $charAvatarDataUrl, personaAvatarDataUrl: $personaAvatarDataUrl, isGenerating: $isGenerating, coveredMemoryIds: $coveredMemoryIds, pendingMemoryIds: $pendingMemoryIds, draftMemoryIds: $draftMemoryIds, greetingTotal: $greetingTotal)';
+    return 'ChatMessageMapperContext(currentCharName: $currentCharName, currentCharColor: $currentCharColor, currentPersonaName: $currentPersonaName, charAvatarDataUrl: $charAvatarDataUrl, personaAvatarDataUrl: $personaAvatarDataUrl, isGenerating: $isGenerating, coveredMemoryIds: $coveredMemoryIds, pendingMemoryIds: $pendingMemoryIds, draftMemoryIds: $draftMemoryIds, greetingTotal: $greetingTotal, blockStatusByMessageId: $blockStatusByMessageId)';
   }
 
   @override
@@ -328,7 +359,11 @@ class _$ChatMessageMapperContextImpl implements _ChatMessageMapperContext {
               _draftMemoryIds,
             ) &&
             (identical(other.greetingTotal, greetingTotal) ||
-                other.greetingTotal == greetingTotal));
+                other.greetingTotal == greetingTotal) &&
+            const DeepCollectionEquality().equals(
+              other._blockStatusByMessageId,
+              _blockStatusByMessageId,
+            ));
   }
 
   @override
@@ -344,6 +379,7 @@ class _$ChatMessageMapperContextImpl implements _ChatMessageMapperContext {
     const DeepCollectionEquality().hash(_pendingMemoryIds),
     const DeepCollectionEquality().hash(_draftMemoryIds),
     greetingTotal,
+    const DeepCollectionEquality().hash(_blockStatusByMessageId),
   );
 
   /// Create a copy of ChatMessageMapperContext
@@ -370,6 +406,7 @@ abstract class _ChatMessageMapperContext implements ChatMessageMapperContext {
     final Set<String> pendingMemoryIds,
     final Set<String> draftMemoryIds,
     final int greetingTotal,
+    final Map<String, String> blockStatusByMessageId,
   }) = _$ChatMessageMapperContextImpl;
 
   @override
@@ -392,6 +429,10 @@ abstract class _ChatMessageMapperContext implements ChatMessageMapperContext {
   Set<String> get draftMemoryIds;
   @override
   int get greetingTotal;
+
+  /// messageId → aggregated block status ('running'|'done'|'error')
+  @override
+  Map<String, String> get blockStatusByMessageId;
 
   /// Create a copy of ChatMessageMapperContext
   /// with the given fields replaced by the non-null parameter values.

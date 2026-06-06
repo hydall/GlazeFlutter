@@ -722,6 +722,12 @@ class InteractionDispatch {
     return {
       'memory-click': (e, el) => bridge._sendToFlutter('onMemoryClick', [el.dataset.messageId]),
       'inject-click': (e, el) => bridge._sendToFlutter('onInjectClick', [el.dataset.messageId]),
+      'ext-blocks-run-all': (e, el) => bridge._sendToFlutter('onExtBlocksRunAll', [el.dataset.messageId]),
+      'ext-block-stop': (e, el) => bridge._sendToFlutter('onExtBlockStop', [el.dataset.blockId, el.dataset.messageId]),
+      'ext-block-regen': (e, el) => bridge._sendToFlutter('onExtBlockRegen', [el.dataset.blockId, el.dataset.messageId]),
+      'ext-block-regen-image': (e, el) => bridge._sendToFlutter('onExtBlockRegenImage', [el.dataset.blockId, el.dataset.messageId]),
+      'ext-block-edit': (e, el) => bridge._sendToFlutter('onExtBlockEdit', [el.dataset.blockId, el.dataset.messageId]),
+      'ext-block-delete': (e, el) => bridge._sendToFlutter('onExtBlockDelete', [el.dataset.blockId, el.dataset.messageId]),
       'toggle-hidden': (e, el) => bridge._sendToFlutter('onToggleHidden', [el.dataset.messageId]),
       'toggle-image-hidden': (e, el) => {
         const section = el.closest('.message-section');
@@ -1479,5 +1485,356 @@ class Bridge {
   debugFormatter(text) {
     const formatted = this.renderer.formatter.format(text, false);
     document.title = 'DBG:' + formatted.substring(0, 200);
+  }
+
+  // ── Ext Blocks panel ──────────────────────────────────────────────────────
+
+  /**
+   * Called from Flutter to show/update the inline ext-blocks panel under a
+   * message. If `blocks` is empty the panel is removed.
+   * @param {string} json  - JSON string: { messageId: string, blocks: Array }
+   */
+  showExtBlocksPanel(json) {
+    let data;
+    try { data = JSON.parse(json); } catch (_) { return; }
+    const { messageId, blocks, canRunAll } = data;
+    if (!messageId) return;
+
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!section) return;
+
+    if (!blocks || blocks.length === 0) {
+      section.querySelector('.ext-blocks-panel')?.remove();
+      return;
+    }
+
+    let panel = section.querySelector('.ext-blocks-panel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.className = 'ext-blocks-panel';
+      const content = section.querySelector('.msg-content') || section;
+      content.appendChild(panel);
+    }
+
+    panel.innerHTML = '';
+
+    if (canRunAll) {
+      const toolbar = document.createElement('div');
+      toolbar.className = 'ext-blocks-toolbar';
+      const runAllBtn = document.createElement('button');
+      runAllBtn.type = 'button';
+      runAllBtn.className = 'ext-block-btn ext-blocks-run-all';
+      runAllBtn.dataset.action = 'ext-blocks-run-all';
+      runAllBtn.dataset.messageId = messageId;
+      runAllBtn.textContent = '▶ Запустить блоки';
+      toolbar.appendChild(runAllBtn);
+      panel.appendChild(toolbar);
+    }
+
+    for (const block of blocks) {
+      const item = document.createElement('div');
+      item.className = `ext-block-item ${block.status || 'done'}`;
+      item.dataset.blockId = block.blockId;
+
+      const header = document.createElement('div');
+      header.className = 'ext-block-header';
+
+      const caret = document.createElement('span');
+      caret.className = 'ext-block-caret';
+      caret.textContent = '▸';
+      header.appendChild(caret);
+
+      const name = document.createElement('span');
+      name.className = 'ext-block-name';
+      name.textContent = block.blockName || block.blockId || '—';
+      header.appendChild(name);
+
+      const statusEl = document.createElement('span');
+      statusEl.className = 'ext-block-status';
+      statusEl.textContent = this._extBlockStatusLabel(block.status);
+      header.appendChild(statusEl);
+
+      // Buttons — no per-btnGroup listener so the click bubbles up to the
+      // document-level delegation in `_interaction.handleClick` (which
+      // dispatches via `_actionMap`). The header's own click listener has
+      // a `closest('.ext-block-btn')` guard so it won't toggle collapse.
+      const btnGroup = document.createElement('span');
+      btnGroup.className = 'ext-block-actions';
+
+      // Edit button — always present.
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'ext-block-btn ext-block-btn-icon';
+      editBtn.dataset.action = 'ext-block-edit';
+      editBtn.dataset.blockId = block.blockId;
+      editBtn.dataset.messageId = messageId;
+      editBtn.title = 'Редактировать';
+      editBtn.textContent = '✎';
+      btnGroup.appendChild(editBtn);
+
+      // Delete button — always present.
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.className = 'ext-block-btn ext-block-btn-icon ext-block-btn-danger';
+      deleteBtn.dataset.action = 'ext-block-delete';
+      deleteBtn.dataset.blockId = block.blockId;
+      deleteBtn.dataset.messageId = messageId;
+      deleteBtn.title = 'Удалить';
+      deleteBtn.textContent = '✕';
+      btnGroup.appendChild(deleteBtn);
+
+      if (block.status === 'running') {
+        const stopBtn = document.createElement('button');
+        stopBtn.type = 'button';
+        stopBtn.className = 'ext-block-btn';
+        stopBtn.dataset.action = 'ext-block-stop';
+        stopBtn.dataset.blockId = block.blockId;
+        stopBtn.dataset.messageId = messageId;
+        stopBtn.textContent = '■ Стоп';
+        btnGroup.appendChild(stopBtn);
+      } else if (block.status === 'pending') {
+        const startBtn = document.createElement('button');
+        startBtn.type = 'button';
+        startBtn.className = 'ext-block-btn';
+        startBtn.dataset.action = 'ext-block-regen';
+        startBtn.dataset.blockId = block.blockId;
+        startBtn.dataset.messageId = messageId;
+        startBtn.textContent = '▶ Запустить';
+        btnGroup.appendChild(startBtn);
+      } else {
+        const canRegenImage = block.type === 'imageGen' && block.content && (
+          /\[IMG:RESULT:/.test(block.content) ||
+          /\[IMG:GEN:/.test(block.content) ||
+          /data-iig-instruction/i.test(block.content)
+        );
+        if (canRegenImage) {
+          const imgRegenBtn = document.createElement('button');
+          imgRegenBtn.type = 'button';
+          imgRegenBtn.className = 'ext-block-btn';
+          imgRegenBtn.dataset.action = 'ext-block-regen-image';
+          imgRegenBtn.dataset.blockId = block.blockId;
+          imgRegenBtn.dataset.messageId = messageId;
+          imgRegenBtn.textContent = '↺ Картинка';
+          btnGroup.appendChild(imgRegenBtn);
+        }
+        const regenBtn = document.createElement('button');
+        regenBtn.type = 'button';
+        regenBtn.className = 'ext-block-btn';
+        regenBtn.dataset.action = 'ext-block-regen';
+        regenBtn.dataset.blockId = block.blockId;
+        regenBtn.dataset.messageId = messageId;
+        regenBtn.textContent = '↺ Перегенерировать';
+        btnGroup.appendChild(regenBtn);
+      }
+
+      header.appendChild(btnGroup);
+      header.addEventListener('click', (e) => {
+        if (e.target.closest('.ext-block-btn')) return;
+        item.classList.toggle('collapsed');
+      });
+      item.appendChild(header);
+
+      // Content body (collapsible).
+      const body = document.createElement('div');
+      body.className = 'ext-block-body';
+      this._fillExtBlockBody(body, block);
+      item.appendChild(body);
+
+      panel.appendChild(item);
+    }
+  }
+
+  /**
+   * Lightweight streaming update — only replaces one block's body + status.
+   * Returns false if the panel or block row is not on screen yet.
+   */
+  patchExtBlockContent(json) {
+    let data;
+    try { data = JSON.parse(json); } catch (_) { return false; }
+    const { messageId, blockId, content, status } = data;
+    if (!messageId || !blockId) return false;
+
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    if (!section) return false;
+    const panel = section.querySelector('.ext-blocks-panel');
+    if (!panel) return false;
+
+    const item = panel.querySelector(`.ext-block-item[data-block-id="${blockId}"]`);
+    if (!item) return false;
+
+    item.className = `ext-block-item ${status || 'running'}`;
+    const statusEl = item.querySelector('.ext-block-status');
+    if (statusEl) statusEl.textContent = this._extBlockStatusLabel(status);
+
+    const body = item.querySelector('.ext-block-body');
+    if (!body) return false;
+    body.innerHTML = '';
+    this._fillExtBlockBody(body, { content, status });
+    item.classList.remove('collapsed');
+    return true;
+  }
+
+  _fillExtBlockBody(body, block) {
+    const hasContent = block.content && block.content.trim().length > 0;
+    if (!hasContent && block.status !== 'pending') {
+      const empty = document.createElement('div');
+      empty.className = 'ext-block-content empty';
+      empty.textContent = '(пусто)';
+      body.appendChild(empty);
+      return;
+    }
+    if (!hasContent) return;
+
+    const imgResultRegex = /\[IMG:RESULT:([^\]]+)\]/;
+    const hasImgResult = imgResultRegex.test(block.content);
+    const hasHtmlMarkup = /<[a-z][\s\S]*>/i.test(block.content);
+
+    if (hasImgResult && hasHtmlMarkup) {
+      let html = block.content.replace(
+        /\[IMG:RESULT:([^\]]+)\]/g,
+        (match, payload) => {
+          let path = payload;
+          const pipeIdx = path.indexOf('|');
+          if (pipeIdx !== -1) path = path.substring(0, pipeIdx);
+          const src = path.startsWith('file://')
+            ? path
+            : `file:///${path.replace(/\\/g, '/')}`;
+          return `<img src="${src}" class="ext-block-image" style="display:block;width:100%;border-radius:15px;">`;
+        },
+      );
+      const htmlEl = document.createElement('div');
+      htmlEl.className = 'ext-block-content';
+      htmlEl.innerHTML = html;
+      body.appendChild(htmlEl);
+    } else if (hasImgResult) {
+      const imgMatch = block.content.match(imgResultRegex);
+      const img = document.createElement('img');
+      let path = imgMatch[1];
+      const pipeIdx = path.indexOf('|');
+      if (pipeIdx !== -1) path = path.substring(0, pipeIdx);
+      img.src = path.startsWith('file://') ? path : `file:///${path.replace(/\\/g, '/')}`;
+      img.className = 'ext-block-image';
+      body.appendChild(img);
+    } else {
+      const html = document.createElement('div');
+      html.className = 'ext-block-content';
+      html.innerHTML = block.content;
+      body.appendChild(html);
+    }
+  }
+
+  /**
+   * Updates the panel if it's currently visible for this message.
+   * Has the same signature as showExtBlocksPanel — just delegates.
+   */
+  updateExtBlocksPanel(json) {
+    this.showExtBlocksPanel(json);
+  }
+
+  hideExtBlocksPanel(messageId) {
+    if (!messageId) return;
+    const section = document.querySelector(`[data-message-id="${messageId}"]`);
+    section?.querySelector('.ext-blocks-panel')?.remove();
+  }
+
+  _extBlockStatusLabel(status) {
+    switch (status) {
+      case 'pending': return 'ожидает';
+      case 'running': return 'генерация…';
+      case 'error': return 'ошибка';
+      case 'stopped': return 'остановлен';
+      case 'done': return 'готово';
+      default: return status || '—';
+    }
+  }
+
+  /**
+   * Called from Flutter to push a minimal updateMessageMeta call.
+   * `json` is the same shape as a message object (at least { id, blockStatus }).
+   */
+  updateMessageMeta(json) {
+    let msg;
+    try { msg = JSON.parse(json); } catch (_) { return; }
+    if (!msg.id) return;
+    const section = document.querySelector(`[data-message-id="${msg.id}"]`);
+    if (!section) return;
+    this.renderer.updateMessageMeta(section, msg);
+  }
+
+  /**
+   * Runs user-provided JS in a sandboxed iframe and returns a Promise<string>.
+   *
+   * Security model:
+   *   - iframe uses sandbox="allow-scripts" WITHOUT allow-same-origin
+   *   - This gives the iframe a null origin, blocking access to window.parent
+   *     and window.flutter_inappwebview (cross-origin barrier)
+   *   - Context is passed via srcdoc (not postMessage) to avoid the timing
+   *     issue of the iframe not being ready yet
+   *   - Only text data is passed: messages, character fields, previousOutput
+   *   - API keys are never in JS context (they live in Dart/SQLite)
+   *   - Source-check: e.source !== iframe.contentWindow guards against spoofing
+   *   - Timeout: 55 s (Dart side gives 60 s — races without leaking)
+   *
+   * @param {string} script - User JS. Must return a string (via `return`).
+   * @param {string} contextJson - JSON string with messages/character/previousOutput.
+   * @returns {Promise<string>}
+   */
+  runSandboxedScript(script, contextJson) {
+    return new Promise((resolve, reject) => {
+      let iframe = null;
+
+      const cleanup = () => {
+        if (iframe) {
+          iframe.remove();
+          iframe = null;
+        }
+      };
+
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('JS runner timeout (55s)'));
+      }, 55000);
+
+      // Escape script and contextJson for safe embedding in srcdoc attribute.
+      // We use a JSON string as the JS literal so that any quotes/backslashes
+      // inside the user script are properly escaped.
+      const escapedScript = JSON.stringify(script);
+      const escapedContext = contextJson;
+
+      const sandboxHtml = `<!DOCTYPE html><html><body><script>
+(function() {
+  var context;
+  try { context = ${escapedContext}; } catch(e) { context = {}; }
+  var userScript = ${escapedScript};
+  (new Function('context', '"use strict"; return (async function() { ' + userScript + ' })();'))(context)
+    .then(function(r) {
+      parent.postMessage({ ok: true, result: String(r !== undefined && r !== null ? r : '') }, '*');
+    })
+    .catch(function(e) {
+      parent.postMessage({ ok: false, error: String(e && e.message ? e.message : e) }, '*');
+    });
+})();
+<\/script></body></html>`;
+
+      const handler = (e) => {
+        if (!iframe || e.source !== iframe.contentWindow) return;
+        clearTimeout(timeoutId);
+        window.removeEventListener('message', handler);
+        cleanup();
+        if (e.data && e.data.ok) {
+          resolve(e.data.result);
+        } else {
+          reject(new Error(e.data && e.data.error ? e.data.error : 'JS runner error'));
+        }
+      };
+
+      window.addEventListener('message', handler);
+
+      iframe = document.createElement('iframe');
+      iframe.sandbox = 'allow-scripts';
+      iframe.style.display = 'none';
+      iframe.srcdoc = sandboxHtml;
+      document.body.appendChild(iframe);
+    });
   }
 }

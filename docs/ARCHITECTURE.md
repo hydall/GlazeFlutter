@@ -41,7 +41,7 @@ lib/
 │   ├── constants/
 │   │   └── image_gen_patterns.dart     # IMG-tag regex constants
 │   ├── db/
-│   │   ├── app_db.dart                 # AppDatabase singleton (11 tables, schema v21)
+│   │   ├── app_db.dart                 # AppDatabase singleton (11 tables, schema v22)
 │   │   ├── tables.dart                 # Drift table class definitions
 │   │   └── repositories/              # One repo per table (CRUD only)
 │   │       ├── api_config_repo.dart
@@ -204,7 +204,7 @@ lib/
 │   │   │   └── magic_drawer_stats_service.dart
 │   │   ├── bridge/                       # WebView ↔ Flutter bridge
 │   │   │   ├── chat_bridge_controller.dart  # Host: shared state + iterates bridgeHandlers
-│   │   │   ├── bridge_handlers.dart         # Single source of truth: 24 JS handler names
+│   │   │   ├── bridge_handlers.dart         # Single source of truth: 27 JS handler names
 │   │   │   ├── bridge_message_commands.dart # set/append/update/remove messages, scroll
 │   │   │   ├── bridge_theme_commands.dart   # applyTheme, fonts, background, performance
 │   │   │   ├── bridge_identity_commands.dart # setIdentity, applyLayout, regex context
@@ -232,10 +232,9 @@ lib/
 │   │   ├── providers/                  # extension_presets, info_blocks, extensions_settings
 │   │   ├── screens/                    # extensions_screen, preset_editor_screen
 │   │   ├── services/
-│   │   │   ├── extension_post_gen_service.dart # Runs after assistant message saved
-│   │   │   ├── info_block_service.dart
-│   │   │   ├── info_block_injector.dart
-│   │   │   └── image_block_service.dart
+│   │   │   ├── extension_post_gen_service.dart # Orchestrator: runs block chain after assistant msg saved
+│   │   │   ├── info_block_service.dart         # LLM call for infoblock type
+│   │   │   └── info_block_injector.dart        # Injects stored outputs into prompt context
 │   │   └── widgets/
 │   ├── chat_history/
 │   │   ├── chat_history_provider.dart    # All sessions across all characters
@@ -506,7 +505,7 @@ See `docs/INVARIANTS.md` INV-PS4.
 
 **File:** `lib/core/db/app_db.dart` + `lib/core/db/repositories/`
 
-### Tables (11 total, schema v21)
+### Tables (11 total, schema v22)
 
 | Table | Repo | Notes |
 |-------|------|-------|
@@ -520,7 +519,7 @@ See `docs/INVARIANTS.md` INV-PS4.
 | `ChatSummaries` | `summary_repo.dart` | one per session |
 | `MemoryBookRows` | `memory_book_repo.dart` | |
 | `ExtensionPresets` | `extension_presets_repository.dart` | v20 |
-| `InfoBlocks` | `info_blocks_repository.dart` | v20 |
+| `InfoBlocks` | `info_blocks_repository.dart` | v20; v22 adds `status` TEXT (default `'done'`) + `order` INTEGER (default 0) |
 
 ### Write Rule
 **Never** do `getChat → mutate → saveChat`. Use `patchChatData` to serialize reads.
@@ -588,14 +587,65 @@ Characters, sessions, presets, API configs, personas, lorebooks, theme presets, 
 
 Post-generation extension pipeline runs after the assistant message is saved on the
 **normal/regen path only** (via `GenerationPipeline`, not `continueMessage`).
-Formal rules: `docs/INVARIANTS.md` INV-EG1–INV-EG3.
+Formal rules: `docs/INVARIANTS.md` INV-EG1–INV-EG7.
+
+### Execution model
+
+Blocks within a preset are executed in `order` (ascending). Execution is **parallel by
+default**; a block with `dependsOnPrevious = true` waits for the preceding block to
+finish and receives its output as context (see INV-EG6).
+
+| `dependsOnPrevious` | Behaviour |
+|---|---|
+| `false` (default) | Launched as a `Future`, not awaited — runs in parallel with adjacent blocks |
+| `true` | `await`-ed; preceding block's `content` passed as `previousOutput` |
+
+Each block is stored as an `InfoBlock` row keyed by `(sessionId, messageId, blockId)`.
+`BlockRunStatus` (`pending → running → done / error / stopped`) is updated atomically
+per block via `InfoBlocksRepository.updateStatus()`.
+
+### Block types
+
+| `BlockType` | Handler | Notes |
+|---|---|---|
+| `infoblock` | `InfoBlockService` | Calls LLM; injects last N results into prompt context |
+| `imageGen` | inline in `ExtensionPostGenService` | Reads `[img gen:…]` tag, calls `ImageGenService`, saves via `ImageStorageService`; result stored as `[IMG:RESULT:<path>]` |
+| `jsRunner` | stub | Registered; execution is a placeholder until JS sandbox is implemented |
+
+### Cancellation
+
+`ExtensionPostGenService` owns an `extensionBlocksCancelToken` (`CancelToken`). Calling
+`cancelBlocks()` sets the token; each `_runSingleBlock` checks it before and after every
+`await`. Cancelled blocks are marked `stopped`. The cancel token is independent of the
+chat text-generation token (INV-EG5).
+
+### Key configuration fields (`BlockConfig`)
+
+| Field | Default | Meaning |
+|---|---|---|
+| `order` | 0 | Execution order (ascending) |
+| `dependsOnPrevious` | false | Serial/parallel mode |
+| `injectLastN` | 0 | Inject last N block outputs into LLM context; 0 = disabled |
+| `inject` | false | Whether to insert block output as a system message in the prompt |
 
 ### Files
-- `extension_post_gen_service.dart` — orchestrator called from `ChatGenerationService.processExtensions`
-- `info_block_service.dart` / `info_block_injector.dart` — block CRUD + prompt injection
-- `image_block_service.dart` — image-type blocks
+- `extension_post_gen_service.dart` — orchestrator + dispatch; owns cancel token
+- `info_block_service.dart` — LLM call + prompt assembly for `infoblock` type
+- `info_block_injector.dart` — inserts stored `InfoBlock` outputs into the prompt context
 - `extension_presets_provider.dart` / `info_blocks_provider.dart` — Riverpod state
-- DB: `ExtensionPresets`, `InfoBlocks` tables (schema v20)
+- `models/block_run_status.dart` — `BlockRunStatus` enum
+- DB: `ExtensionPresets`, `InfoBlocks` tables (v20; v22 adds `status` + `order` columns)
+
+### Bridge integration
+
+`ChatBridgeController` exposes:
+- `updateBlockStatus(messageId, status?)` — pushes `⬡` badge update to WebView
+- `showExtBlocksPanel(messageId, blocks)` — renders/removes inline block panel
+- Callbacks: `onExtBlocksClick`, `onExtBlockStop`, `onExtBlockRegen`
+
+`ChatMessageMapper` adds `blockStatus` (`'running' | 'done' | 'error' | null`) from
+`ChatMessageMapperContext.blockStatusByMessageId`; the WebView renders a `⬡` badge in
+the message header.
 
 ---
 

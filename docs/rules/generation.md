@@ -14,6 +14,7 @@ Full formal invariants with code references: `docs/INVARIANTS.md`
 | Image gen | `AbortHandler._imgGenCancelToken` + `isGeneratingImage` | No (one-shot) | Separate cancel token from text SSE |
 | Summary | Widget-local in `summary_sheet.dart` | No | Widget-scoped `CancelToken` |
 | Memory draft | `MemoryBookController` | No | Per-draft `CancelToken`; mutex via `memory_active_drafts_provider` |
+| Ext blocks | `ExtensionPostGenService._extensionBlocksCancelToken` | No (per-block LLM call) | `cancelBlocks()` — independent of chat cancel token (INV-EG5) |
 
 `ChatNotifier` owns `AbortHandler` per `charId` and delegates `abortGeneration()` to it.
 
@@ -129,7 +130,35 @@ See INV-CM1, INV-CM2 before changing this path.
 After normal/regen completion, `GenerationPipeline` calls
 `ChatGenerationService.processExtensions()` → `ExtensionPostGenService`.
 Failures are logged only (INV-EG2). Gated by `extensionsSettings.enabled` and
-active preset id (INV-EG3).
+active preset id (INV-EG3). The block chain does not start on aborted generation (INV-EG4).
+
+### Block execution model
+
+```
+blocks = preset.blocks.where(enabled).sortBy(order)
+prevFuture = null
+for block in blocks:
+    blockFuture = _runSingleBlock(block, prevFuture?.content)
+    if block.dependsOnPrevious:
+        prevFuture = await blockFuture   // serial
+    else:
+        prevFuture = null                // parallel; side-effect via .then(addOrReplace)
+```
+
+- **Serial** (`dependsOnPrevious = true`): block awaits the previous block; receives its output as `previousOutput`.
+- **Parallel** (`dependsOnPrevious = false`): block is launched without `await`; `unawaited(future.then(...))` writes the result via `infoBlocksProvider.notifier.addOrReplace()`.
+
+### Cancel
+
+`ExtensionPostGenService.cancelBlocks()` cancels `_extensionBlocksCancelToken`.
+Each `_runSingleBlock` checks the token before and after every `await`; cancelled
+blocks are marked `BlockRunStatus.stopped`. Does **not** affect the chat text cancel
+token or in-progress image generation.
+
+### Bridge feedback
+
+On status change, call `ChatBridgeController.updateBlockStatus(messageId, aggregatedStatus)`.
+On panel open/update, call `ChatBridgeController.showExtBlocksPanel(messageId, blocks)`.
 
 ---
 
@@ -159,7 +188,10 @@ Before merging any generation-related PR:
 - [ ] Summary does not touch `ChatState.isGenerating` or messages
 - [x] Memory draft mutex enforced (INV-M3, INV-M4)
 - [ ] Image tags run after text on send/regen (not on continue unless changed)
-- [ ] Extensions post-gen on send/regen only (INV-EG1)
+  - [ ] Extensions post-gen on send/regen only (INV-EG1)
+  - [ ] Block chain does not start on aborted generation (INV-EG4)
+  - [ ] Extension cancel token independent of chat cancel token (INV-EG5)
+  - [ ] `dependsOnPrevious` blocks await preceding block; output chained (INV-EG6)
 - [ ] Context limit / API-not-configured errors shown to user
 - [ ] Abort closes TCP (CancelToken reaches Dio)
 - [x] Session vars not leaked on abort/error (INV-C5)

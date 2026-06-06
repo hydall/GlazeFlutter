@@ -100,7 +100,7 @@ class ExtBlocksSettingsSheet extends ConsumerWidget {
       createdAt: DateTime.now().millisecondsSinceEpoch,
     );
     await ref.read(extensionPresetsProvider.notifier).add(preset);
-    await ref.read(extensionsSettingsProvider.notifier).setActivePresetId(preset.id);
+    await ref.read(extensionsSettingsProvider.notifier).selectPreset(preset.id);
   }
 
   void _showPresetSelector(
@@ -126,7 +126,7 @@ class ExtBlocksSettingsSheet extends ConsumerWidget {
             Navigator.pop(context);
             ref
                 .read(extensionsSettingsProvider.notifier)
-                .setActivePresetId(null);
+                .selectPreset(null);
           },
         ),
         ...presets.map((preset) => BottomSheetItem(
@@ -141,7 +141,7 @@ class ExtBlocksSettingsSheet extends ConsumerWidget {
                 Navigator.pop(context);
                 ref
                     .read(extensionsSettingsProvider.notifier)
-                    .setActivePresetId(preset.id);
+                    .selectPreset(preset.id);
               },
             )),
       ],
