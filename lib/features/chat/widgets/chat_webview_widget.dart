@@ -23,11 +23,13 @@ import '../../../core/models/chat_message.dart';
 import '../../../../shared/theme/app_colors.dart';
 import '../../../../shared/theme/theme_font_provider.dart';
 import '../../extensions/models/info_block.dart';
+import '../../extensions/models/preset_permissions.dart';
 import '../../extensions/models/trigger_mode.dart';
 import '../../extensions/models/trigger_result.dart';
 import '../../extensions/providers/info_blocks_provider.dart';
 import '../../extensions/providers/extension_presets_provider.dart';
 import '../../extensions/providers/extensions_settings_provider.dart';
+import '../../extensions/providers/preset_permissions_provider.dart';
 import '../../extensions/services/ext_blocks_panel_builder.dart';
 import '../../extensions/services/extension_post_gen_service.dart';
 import '../../extensions/services/generation_dispatcher.dart';
@@ -327,6 +329,19 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       log: (line) => debugPrint(line),
     );
     return handler.handle(charId: resolvedCharId, params: params);
+  }
+
+  /// Permission gate for the visual chat WebView bridge. Reads the
+  /// currently active preset's [PresetPermissions] from the Riverpod
+  /// graph; the bridge may have changed preset at any time (the user
+  /// can switch active preset without rebuilding the WebView).
+  bool _bridgePermissionCheck(String capabilityId) {
+    try {
+      final permissions = ref.read(activePresetPermissionsProvider);
+      return permissions.isGrantedById(capabilityId);
+    } catch (_) {
+      return false;
+    }
   }
 
   @override
@@ -1035,6 +1050,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
                   injectPrompt: _injectBridgePrompt,
                   uninjectPrompt: _uninjectBridgePrompt,
                   triggerGeneration: _triggerBridgeGeneration,
+                  permissionCheck: _bridgePermissionCheck,
                 );
                 _bridge = ChatBridgeController(
                   controller,

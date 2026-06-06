@@ -25,6 +25,7 @@ void main() {
       characterRepo: characterRepo,
       currentSessionId: () => 's1',
       currentCharacterId: () => 'c1',
+      permissionCheck: (_) => true,
     );
 
     await characterRepo.put(Character(id: 'c1', name: 'Alice'));
@@ -122,6 +123,7 @@ void main() {
         characterRepo: characterRepo,
         currentSessionId: () => 's1',
         currentCharacterId: () => 'c1',
+        permissionCheck: (_) => true,
         generateText: (prompt, options, context) async {
           expect(prompt, 'Write a short line');
           expect(options['preset'], 'small');
@@ -161,6 +163,7 @@ void main() {
     test('delegates injectPrompt to injected handler', () async {
       final bridge = JsBridgeService(
         currentSessionId: () => 's1',
+        permissionCheck: (_) => true,
         injectPrompt: (id, content, options, context) {
           expect(id, 'mood');
           expect(content, 'Keep the scene tense.');
@@ -187,6 +190,7 @@ void main() {
     test('delegates uninjectPrompt to injected handler', () async {
       final bridge = JsBridgeService(
         currentSessionId: () => 's1',
+        permissionCheck: (_) => true,
         uninjectPrompt: (id, context) {
           expect(id, 'mood');
           expect(context['sessionId'], 's1');
@@ -220,6 +224,7 @@ void main() {
       final bridge = JsBridgeService(
         currentSessionId: () => 's1',
         currentCharacterId: () => 'c1',
+        permissionCheck: (_) => true,
         triggerGeneration: (charId, params) async {
           expect(charId, 'c1');
           expect(params['mode'], 'continue');
@@ -248,6 +253,7 @@ void main() {
     test('prefers context.characterId over currentCharacterId', () async {
       final bridge = JsBridgeService(
         currentCharacterId: () => 'fallback',
+        permissionCheck: (_) => true,
         triggerGeneration: (charId, params) async {
           return {'accepted': true, 'charId': charId};
         },
@@ -272,6 +278,7 @@ void main() {
       // converts it into `invalid_request`.
       final bridge = JsBridgeService(
         currentCharacterId: () => 'c1',
+        permissionCheck: (_) => true,
         triggerGeneration: (charId, params) async {
           if (params['mode'] is! String && params['mode'] != null) {
             throw ArgumentError('triggerGeneration mode must be a string');

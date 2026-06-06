@@ -39,6 +39,11 @@ typedef TriggerGenerationHandlerFn =
       Map<String, dynamic> params,
     );
 
+/// Permission lookup. Returns `true` when the current context is
+/// allowed to call the glaze capability identified by [capabilityId]
+/// (see [GlazeCapability.id]).
+typedef PermissionCheck = bool Function(String capabilityId);
+
 class JsBridgeService {
   static const _chatVarsKey = '__glaze_variables';
   static const _characterVarsKey = 'glaze_variables';
@@ -52,6 +57,7 @@ class JsBridgeService {
   final InjectPromptHandler? _injectPrompt;
   final UninjectPromptHandler? _uninjectPrompt;
   final TriggerGenerationHandlerFn? _triggerGeneration;
+  final PermissionCheck? _permissionCheck;
 
   JsBridgeService({
     ChatRepo? chatRepo,
@@ -62,6 +68,7 @@ class JsBridgeService {
     InjectPromptHandler? injectPrompt,
     UninjectPromptHandler? uninjectPrompt,
     TriggerGenerationHandlerFn? triggerGeneration,
+    PermissionCheck? permissionCheck,
   }) : this._(
          chatRepo,
          characterRepo,
@@ -71,6 +78,7 @@ class JsBridgeService {
          injectPrompt,
          uninjectPrompt,
          triggerGeneration,
+         permissionCheck,
        );
 
   const JsBridgeService._(
@@ -82,6 +90,7 @@ class JsBridgeService {
     this._injectPrompt,
     this._uninjectPrompt,
     this._triggerGeneration,
+    this._permissionCheck,
   );
 
   Future<Map<String, dynamic>> dispatch(Map<String, dynamic> request) async {
@@ -114,28 +123,120 @@ class JsBridgeService {
   ) {
     switch (method) {
       case 'showToast':
+        _requireCapability('show_toast');
         debugPrint('[JsBridge] toast: ${params['message'] ?? ''}');
         return true;
       case 'getVariables':
-        return _getVariables(params, context);
+        return _handleGetVariables(params, context);
       case 'setVariables':
-        return _setVariables(params, context);
+        return _handleSetVariables(params, context);
       case 'deleteVariable':
-        return _deleteVariable(params, context);
+        return _handleDeleteVariable(params, context);
       case 'executeCommand':
+        _requireCapability('execute_command');
         throw UnsupportedError('glaze.executeCommand is not implemented yet');
       case 'triggerGeneration':
+        _requireCapability('trigger_generation');
         return _handleTriggerGeneration(params, context);
       case 'playAudio':
+        _requireCapability('play_audio');
         throw UnsupportedError('glaze.playAudio is not implemented yet');
       case 'injectPrompt':
+        _requireCapability('inject_prompt');
         return _handleInjectPrompt(params, context);
       case 'uninjectPrompt':
+        _requireCapability('uninject_prompt');
         return _handleUninjectPrompt(params, context);
       case 'generateText':
+        _requireCapability('generate_text');
         return _handleGenerateText(params, context);
       default:
         throw UnsupportedError('Unknown glaze method "$method"');
+    }
+  }
+
+  void _requireCapability(String capabilityId) {
+    final check = _permissionCheck;
+    if (check == null) {
+      // No permission check registered — treat as deny. The default
+      // production path always registers one (see ChatWebViewWidget),
+      // so this is a safe fallback for tests.
+      throw StateError('Permission denied: $capabilityId (no check)');
+    }
+    if (!check(capabilityId)) {
+      throw StateError('Permission denied: $capabilityId');
+    }
+  }
+
+  Future<dynamic> _handleGetVariables(
+    Map<String, dynamic> params,
+    Map<String, dynamic> context,
+  ) {
+    final scope = _scope(params);
+    _requireCapability(_readCapabilityForScope(scope));
+    return _getVariables(params, context);
+  }
+
+  Future<Map<String, dynamic>> _handleSetVariables(
+    Map<String, dynamic> params,
+    Map<String, dynamic> context,
+  ) {
+    final scope = _scope(params);
+    _requireCapability(_writeCapabilityForScope(scope));
+    return _setVariables(params, context);
+  }
+
+  Future<Map<String, dynamic>> _handleDeleteVariable(
+    Map<String, dynamic> params,
+    Map<String, dynamic> context,
+  ) {
+    final scope = _scope(params);
+    _requireCapability(_deleteCapabilityForScope(scope));
+    return _deleteVariable(params, context);
+  }
+
+  String _readCapabilityForScope(String scope) {
+    switch (scope) {
+      case 'chat':
+        return 'read_chat_vars';
+      case 'character':
+        return 'read_character_vars';
+      case 'global':
+        return 'read_global_vars';
+      case 'message':
+        return 'read_message_vars';
+      default:
+        return 'read_chat_vars';
+    }
+  }
+
+  String _writeCapabilityForScope(String scope) {
+    switch (scope) {
+      case 'chat':
+        return 'write_chat_vars';
+      case 'character':
+        return 'write_character_vars';
+      case 'global':
+        return 'write_global_vars';
+      case 'message':
+        return 'write_message_vars';
+      default:
+        return 'write_chat_vars';
+    }
+  }
+
+  String _deleteCapabilityForScope(String scope) {
+    switch (scope) {
+      case 'chat':
+        return 'delete_chat_vars';
+      case 'character':
+        return 'delete_character_vars';
+      case 'global':
+        return 'delete_global_vars';
+      case 'message':
+        return 'delete_message_vars';
+      default:
+        return 'delete_chat_vars';
     }
   }
 

@@ -12,6 +12,7 @@ import '../../../shared/widgets/menu_group.dart';
 import '../../settings/api_list_provider.dart';
 import '../models/block_config.dart';
 import '../models/extension_preset.dart';
+import '../models/preset_permissions.dart';
 import '../providers/extension_presets_provider.dart';
 
 class PresetEditorScreen extends ConsumerStatefulWidget {
@@ -76,8 +77,48 @@ class _PresetEditorScreenState extends ConsumerState<PresetEditorScreen> {
               label: const Text('Добавить блок'),
             ),
           ),
+          const SizedBox(height: 24),
+          MenuGroup(
+            header: 'Разрешения (capabilities)',
+            items: [
+              for (final cap in GlazeCapability.values)
+                _buildCapabilityTile(preset, cap),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Каждое разрешение открывает JS-блокам доступ к соответствующему методу glaze.*. По умолчанию всё запрещено (default-deny).',
+              style: TextStyle(
+                fontSize: 12,
+                color: context.cs.onSurfaceVariant.withValues(alpha: 0.7),
+              ),
+            ),
+          ),
         ],
       ),
+    );
+  }
+
+  Widget _buildCapabilityTile(ExtensionPreset preset, GlazeCapability cap) {
+    final granted = preset.permissions.isGranted(cap);
+    return SwitchListTile(
+      title: Text(cap.label),
+      subtitle: Text(
+        cap.id,
+        style: TextStyle(
+          fontSize: 11,
+          color: context.cs.onSurfaceVariant.withValues(alpha: 0.6),
+        ),
+      ),
+      value: granted,
+      onChanged: (v) {
+        final next = preset.permissions.copyWithField(cap, v);
+        ref.read(extensionPresetsProvider.notifier).update(
+          preset.copyWith(permissions: next),
+        );
+      },
     );
   }
 
