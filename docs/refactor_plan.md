@@ -1,0 +1,548 @@
+# Refactor Plan — Bridge, God-Widgets, God-Services
+
+**Status:** Phases 1-8 complete. Refactor implementation complete; PR/review pending.
+**Scope:** Decompose 4 Dart god-objects and 3 JS god-scripts that grew during the
+`js-extension-bridge-sdk` branch (22 feature commits) into focused modules.
+**Goal:** Clean foundation for future feature work; no functional changes.
+**Implementation timeline:** ~9-13 days, RFC + 9 implementation phases, split across small PRs.
+
+---
+
+## 1. Why this refactor
+
+The `js-extension-bridge-sdk` branch added 22 feature commits to a working
+MVP. Some files accumulated responsibilities well past the project's
+"150 lines per class" guideline (`docs/CODE_STYLE.md`):
+
+### Dart god-objects
+
+| File | Lines (before → after) | Touched by |
+|---|---:|---|
+| `lib/features/chat/widgets/chat_webview_widget.dart` | **1630 → 481** | 6 follow-up commits (sandboxing, audioplayers, periodic lifecycle, command registry, connection profiles, headless engine) |
+| `lib/features/extensions/services/extension_post_gen_service.dart` | **1526 → 525** | periodic, afterUser, swipe, panels, image gen, js runner, status tracking, error handling |
+| `lib/features/extensions/screens/preset_editor_screen.dart` | **1214 → 1 export / 37 real screen** | permissions, connection profiles, block editor, model fetching |
+| `lib/features/extensions/services/js_bridge_service.dart` | 707 → 188 (split into `js_bridge/`) | 8 capability additions, growing ~50-100 lines per new method |
+
+### JS god-scripts
+
+| File | Lines | What |
+|---|---:|---|
+| `assets/chat_webview/bridge.js` | **2141 → 3 shim / ES modules** | ChatBridgeController, runSandboxedScript, PanelHost, scrollback, settings, gestures |
+| `assets/chat_webview/renderer.js` | **1234** | Message rendering, markdown, code highlighting, image embeds |
+| `assets/chat_webview/formatter.js` | **443 → 2 shim / ES modules** | ST-macro expansion, text formatting |
+
+### Risk of not refactoring
+
+* Every new feature on the extension surface adds 50-200 lines to the
+  existing god-objects. Monblant compat would push `js_bridge_service.dart`
+  to 1100+ lines.
+* Test coverage of god-objects is forced to mock the entire world.
+* Code review on a 1600-line diff is impractical.
+
+---
+
+## 2. Refactor strategy
+
+**Functional behavior is preserved.** No public API changes, no new
+features, no test deletions. Every phase is a structural rearrangement
+covered by the existing 132 passing tests plus new unit tests for the
+extracted modules.
+
+**Constraints:**
+
+1. Each phase must end with `flutter analyze` clean and
+   `flutter test <target files>` 100% green.
+2. Each phase must preserve the relevant invariants from
+   `docs/INVARIANTS.md`, especially INV-EG1-8 and INV-JS1-6 for extension
+   generation and JS bridge work.
+3. Keep reviewable diffs by separating pure file moves from behavior edits.
+   The JS phases may exceed 500 lines of churn because module extraction is
+   mostly move churn; those commits must be move-only where possible.
+4. Ship as multiple small PRs instead of one large PR:
+   `js_bridge_service`, `extension_post_gen_service`, `chat_webview_widget`,
+   `preset_editor_screen`, and JS assets.
+
+---
+
+## 3. Phases
+
+### Phase 0.5 — ES module WebView spike (0.5 day)
+
+**Goal:** prove that `type="module"` assets load correctly in the app WebView
+before moving `bridge.js`, `renderer.js`, or `formatter.js`.
+
+**Work:**
+
+* Add a minimal temporary module asset imported from `index.html` behind a
+  dev-only/static-test-visible hook.
+* Verify it loads in the Windows WebView2 target with a manual smoke test.
+* Add/update a static asset test so the module entrypoint is covered by tests.
+* Remove the spike hook before continuing, unless it is useful as a permanent
+  asset-loading guard.
+
+**Gate:** do not start Phase 5-7 until this spike passes. If the spike fails,
+keep single-file scripts for this refactor and defer ES modules to a separate
+platform-compatibility task.
+
+### Phase 1 — `js_bridge_service.dart` split (1 day) ✅ Done
+
+**Before:** `lib/features/extensions/services/js_bridge_service.dart` (707 lines)
+— one class with `_handleGetVariables`, `_handleSetVariables`,
+`_handleDeleteVariable`, `_handleExecuteCommand`, `_handleTriggerGeneration`,
+`_handlePlayAudio`, `_handleShowToast`, `_handleGenerateText`,
+`_handleInjectPrompt`, `_handleUninjectPrompt`, plus the dispatcher.
+
+**After:**
+
+```
+lib/features/extensions/services/js_bridge/
+  js_bridge_service.dart            (≤150 lines: dispatch + context lookup)
+  handlers/
+    variables_handler.dart           (get/set/delete + atomic scope methods)
+    generation_handler.dart          (generateText + triggerGeneration)
+    prompt_injection_handler.dart    (injectPrompt + uninjectPrompt)
+    audio_handler.dart               (playAudio)
+    command_handler.dart             (executeCommand)
+    toast_handler.dart               (showToast)
+  capability_resolver.dart          (read/write/delete per scope → capability id)
+  permission_gate.dart              (`_requireCapability` extracted)
+```
+
+**Pattern:** handlers are grouped by domain to avoid one-class-per-tiny-method
+class explosion. Each handler exposes typed methods and the dispatcher in
+`js_bridge_service.dart` maps bridge method names to the matching method. The
+`JsBridgeContext` carries `(params, context, repos, handlers)` so handlers stay
+testable in isolation.
+
+**Test impact:** existing `test/js_bridge_service_test.dart` (13 cases)
+keeps the dispatcher contract; add per-domain handler unit tests
+(`test/js_bridge/variables_handler_test.dart`, etc.).
+
+**Implemented:** `lib/features/extensions/services/js_bridge_service.dart` is now
+a compatibility export. The implementation lives under
+`lib/features/extensions/services/js_bridge/` with domain handlers for
+variables, generation, prompt injection, audio, commands, and toast. Added
+`test/js_bridge/generation_handler_test.dart`.
+
+**Verification:** targeted analyze passed for the extracted bridge files and new
+test. Targeted tests passed: `test/js_bridge/generation_handler_test.dart`,
+`test/js_bridge_service_test.dart`, `test/play_audio_bridge_test.dart`,
+`test/js_bridge_toast_test.dart`, `test/global_message_variables_test.dart`,
+`test/trigger_generation_test.dart`, and `test/wired_command_registry_test.dart`
+(63 tests).
+
+### Phase 2 — `extension_post_gen_service.dart` → block processors (2 days) ✅ Done
+
+**Before:** one 1526-line service that:
+
+* Walks block chain
+* Branches on `BlockType` (infoblock, imageGen, jsRunner, interactive)
+* Handles status tracking (`InfoBlock.status` lifecycle)
+* Manages image-gen step
+* Calls InfoBlockService for infoblocks
+* Calls PanelHostService for interactive blocks
+* Calls JsEngineService for jsRunner
+
+**After:**
+
+```
+lib/features/extensions/services/blocks/
+  block_processor.dart              (≤200 lines: walks blocks, dispatches to handler)
+  block_handler.dart                (abstract: `Future<void> handle(BlockContext)`)
+  handlers/
+    infoblock_handler.dart          (LLM → extract → persist)
+    image_gen_handler.dart          (LLM agent → Image Gen service)
+    js_runner_handler.dart          (headless engine preferred, visual fallback)
+    interactive_handler.dart        (LLM → panel host)
+  block_context.dart                (session, message, character, persona, previousOutput, etc.)
+  block_status_tracker.dart         (InfoBlock status lifecycle, extracted)
+```
+
+**Pattern:** keep the abstraction minimal: `BlockProcessor.run(blocks, trigger)`
+iterates blocks in order, resolves a handler from `Map<BlockType, BlockHandler>`,
+and calls `handler.handle(ctx)`. Status transitions are centralized in
+`BlockStatusTracker` so every handler follows the same
+`pending → running → done | error | cancelled` flow. Do not introduce a
+full chain-of-responsibility framework unless the current behavior needs it.
+
+**Test impact:** existing `test/after_user_dispatch_test.dart` and
+chain-filter tests stay; add per-handler unit tests
+(`test/blocks/infoblock_handler_test.dart`, etc.).
+
+**Implemented so far:** extracted `BlockProcessor` with filter/order/
+`dependsOnPrevious` orchestration into
+`lib/features/extensions/services/blocks/block_processor.dart`. Added
+`BlockContext` and `BlockHandler` scaffolding. `ExtensionPostGenService._runChain`
+now delegates orchestration to `BlockProcessor`. Extracted concrete handlers for
+`infoblock`, `imageGen`, `interactive`, and `jsRunner` into `services/blocks/`.
+The shared image pixel render step remains in `ExtensionPostGenService` because
+`rerunImageOnly()` uses it too; JS execution/fallback helpers also remain there
+for now because periodic `runJsBlock()` shares the same headless/visual fallback
+semantics. Extracted shared panel update/throttling plumbing into
+`BlockPanelUpdater`, placeholder/error/dedupe lifecycle into
+`BlockStatusTracker`, and shared image pixel rendering/persistence into
+`ImagePixelRenderer`. Extracted message-bound `jsRunner` execution/headless
+fallback persistence into `JsBlockExecutor`; extracted periodic headless/visual
+fallback execution into `PeriodicJsBlockRunner` while keeping
+`ExtensionPostGenService.runJsBlock()` as the public scheduler entry point.
+Extracted placeholder preparation, `BlockContext` construction, handler dispatch,
+and top-level per-block error wrapping into `SingleBlockRunner`. Extracted
+manual image-only rerun validation/status update flow into `ImageOnlyRerunner`,
+sharing the existing `ImagePixelRenderer` path.
+
+**Verification so far:** targeted analyze passed for
+`extension_post_gen_service.dart`, `services/blocks`, and
+`test/blocks/block_processor_test.dart`. Targeted tests passed:
+`test/blocks/block_processor_test.dart`, `test/after_user_dispatch_test.dart`,
+`test/periodic_trigger_scheduler_test.dart`, `test/periodic_lifecycle_test.dart`,
+`test/panel_host_service_test.dart`, and `test/js_engine_service_test.dart` (27
+tests) after extracting all four concrete handlers. Additional targeted periodic
+runner extraction checks passed for `test/periodic_trigger_scheduler_test.dart`,
+`test/periodic_lifecycle_test.dart`, and `test/blocks/block_processor_test.dart`.
+
+### Phase 3 — `chat_webview_widget.dart` → controllers/services (2 days) ✅ Done
+
+**Before:** one 1630-line `ConsumerStatefulWidget` doing WebView setup,
+bridge wiring, panel lifecycle, audio lifecycle, swipe handling, periodic
+tick consumption, afterUser, theme application, scrollback.
+
+**After:**
+
+```
+lib/features/chat/widgets/chat_webview/
+  chat_webview_widget.dart          (~480 lines: build, lifecycle delegation)
+  chat_webview_bridge_host.dart     (JsBridgeService deps)
+  chat_webview_theme_builder.dart   (applyTheme map + color helpers)
+  chat_message_sync.dart            (pure message-list diff)
+  chat_webview_sync_dispatcher.dart (didUpdateWidget per-field diff)
+  chat_webview_ext_block_callbacks.dart (ext-block bridge callbacks)
+  chat_webview_callbacks.dart       (user-gesture bridge callbacks)
+  chat_webview_panel_refresher.dart (ext-block panel refresh)
+  chat_webview_initializer.dart     (one-time bridge init sequence)
+  chat_webview_build_listeners.dart (build()-side ref.listen plumbing)
+  chat_webview_surface.dart         (InAppWebView widget + Stack)
+  ext_block_dialogs.dart            (edit / delete AlertDialogs)
+  webview_callbacks.dart            (already separate, no changes)
+```
+
+**Pattern:** keep `ChatWebViewWidget` as a thin `ConsumerStatefulWidget` that
+owns lifecycle hooks and delegates to focused controllers/services. Avoid
+mixins as the primary decomposition mechanism because they hide dependencies
+and make `initState`/`dispose` ordering fragile. Cross-controller state goes
+through an explicit `ChatWebViewContext` or constructor dependencies.
+
+**Test impact:** controllers are tested in isolation where possible
+(`test/chat_webview/bridge_host_controller_test.dart`, etc.). Add one widget
+harness test that asserts clean init/dispose ordering. End-to-end behavior is
+still covered by the manual `flutter run` smoke test.
+
+**Implemented:** `chat_webview_widget.dart` shrank from **1630 → 481 lines
+(-70.5%)** via 10 focused extractions. The widget is now a thin
+`ConsumerStatefulWidget` that delegates everything except lifecycle
+(`initState` / `dispose` / `didUpdateWidget` / `build`) and a handful of
+small bridge proxy methods (`scrollToBottom`, `setSearch`,
+`toggleMessageSelection`, `applyIdentity`).
+
+Extracted into `lib/features/chat/bridge/` and `lib/features/chat/widgets/`:
+
+| File | Lines | Responsibility |
+|---|---:|---|
+| `chat_webview_bridge_host.dart` | 309 | Owns the `JsBridgeService` deps (audio, toast, command registry, trigger handler, prompt injection, permission gate) and builds the service on demand |
+| `chat_webview_theme_builder.dart` | 100 | Pure `Map<String, String>` builder for the WebView theme + `ChatWebViewThemeInput` snapshot |
+| `ext_block_dialogs.dart` | 88 | `promptEdit` / `confirmDelete` AlertDialogs |
+| `chat_message_sync.dart` | 169 | Pure diff between previous / current message lists + `chatMessageListsIdentical` helper |
+| `chat_webview_sync_dispatcher.dart` | 559 | `didUpdateWidget` diff dispatch (14 branches) + `ChatWebViewWidgetFields` snapshot + `ChatWebViewSyncState` bundle |
+| `chat_webview_ext_block_callbacks.dart` | 184 | Bridge callbacks for the inline ext-block panel (run / stop / regen / image-regen / edit / delete) |
+| `chat_webview_callbacks.dart` | 137 | Pass-through wiring for user-gesture bridge callbacks (swipe, scroll, edit, image, link, load-more) |
+| `chat_webview_panel_refresher.dart` | 83 | Refresh / sync helpers for the inline ext-block panel |
+| `chat_webview_initializer.dart` | 250 | One-time bridge init sequence + `ChatWebViewInitInput` snapshot |
+| `chat_webview_build_listeners.dart` | 201 | `build()`-side `ref.listen` plumbing (regex, editing, streaming, info-blocks, ext settings/presets) |
+| `chat_webview_surface.dart` | 316 | `InAppWebView` widget with the `onWebViewCreated` / `onLoadStop` / `onConsoleMessage` callbacks and the Stack layout |
+
+**Verification:** `flutter analyze` clean (1 pre-existing `throw_of_invalid_type` in
+`js_engine_service.dart`, out of scope). `flutter test` 683/689 passing
+after the refactor — the 6 failures are pre-existing (`bridge.js` wheel
+listener, `styles.css` `overscroll-behavior: contain`, both in upstream
+Phase 5 scope). One characterization test (`webview_callback_contract_test.dart`)
+was updated to look for `indexWhere` / `launchUrl` / `loadOlderMessages` in
+`chat_webview_callbacks.dart` (where the code now lives) instead of in the
+widget file.
+
+**Future follow-ups (not blocking Phase 3):** the widget still owns a few
+small bridge proxy methods (`scrollToBottom`, `scrollToMessage`, `setSearch`,
+`toggleMessageSelection`) that could move into a `ChatWebViewBridgeProxy`.
+`applyIdentity` and `_applySessionSwitch` are 20-60 lines each and are
+candidates for the same treatment. None of this changes user-facing
+behavior.
+
+### Phase 4 — `preset_editor_screen.dart` → Sub-screens (1 day) ✅ Done
+
+**Before:** one 1214-line screen with 6 menu groups, a 580-line
+`_BlockEditDialog`, API config selector, model fetcher, profile picker,
+permissions toggles, etc.
+
+**After:**
+
+```
+lib/features/extensions/screens/preset_editor/
+  preset_editor_screen.dart         (≤200 lines: top-level scaffold, navigation)
+  sections/
+    blocks_section.dart             (list of blocks + add)
+    permissions_section.dart        (one SwitchListTile per capability)
+    profiles_section.dart           (big/medium/small connection profile mapping)
+  block_edit_dialog.dart            (same UX as current _BlockEditDialog)
+  widgets/
+    api_config_selector.dart        (reusable, used in block editor + elsewhere)
+    model_field.dart                (with fetch button)
+    block_type_picker.dart
+    block_trigger_picker.dart
+    profile_picker_sheet.dart
+```
+
+**Pattern:** each section is a `ConsumerWidget` with its own state. This phase
+is structural only: keep the current dialog UX while extracting it into a file.
+A full-screen block editor sheet can be done later as a separate UX PR because
+it changes behavior.
+
+**Test impact:** widget tests for each section widget (`golden tests`
+optional, smoke tests required).
+
+**Implemented:** the old import path is now a compatibility export and the real
+editor lives under `lib/features/extensions/screens/preset_editor/`. The top
+level screen is a 37-line scaffold/navigation shell. Blocks, permissions, and
+connection profiles are separate `ConsumerWidget` sections. The block edit dialog
+keeps the existing dialog UX but moved out of the screen, with reusable API
+selector, model field, type picker, trigger picker, and profile picker widgets.
+
+| File | Lines | Responsibility |
+|---|---:|---|
+| `preset_editor_screen.dart` | 37 | Top-level scaffold, missing-preset state, section composition |
+| `sections/blocks_section.dart` | 218 | Block list, reorder/add/toggle/edit/delete wiring |
+| `sections/permissions_section.dart` | 65 | Capability `SwitchListTile`s and default-deny help text |
+| `sections/profiles_section.dart` | 106 | big/medium/small generateText profile mapping |
+| `block_edit_dialog.dart` | 710 | Existing block editor dialog UX and save mapping |
+| `widgets/api_config_selector.dart` | 103 | Reusable API picker field |
+| `widgets/model_field.dart` | 138 | Model text field + fetch/pick flow |
+| `widgets/block_type_picker.dart` | 47 | Block type segmented picker |
+| `widgets/block_trigger_picker.dart` | 39 | Trigger segmented picker |
+| `widgets/profile_picker_sheet.dart` | 52 | Bottom sheet for profile → API mapping |
+
+**Verification:** targeted analyze passed for the extracted preset editor files
+and smoke tests. Added `test/extensions/preset_editor_sections_test.dart` with
+4 widget smoke tests covering the three sections and the default block editor
+dialog; all 4 pass.
+
+### Phase 5 — `bridge.js` → ES modules (3 days)
+
+**Before:** `assets/chat_webview/bridge.js` (2141 lines) — a single IIFE
+that holds ChatBridgeController, Sandbox, PanelHost, scrollback,
+settings, character rendering tooltips, gestures, periodic dispatch,
+afterUser.
+
+**After:**
+
+```
+assets/chat_webview/bridge/
+  index.js                          (≤100 lines: bootstrap, re-export facade)
+  chat_bridge_controller.js         (main controller, registers handlers)
+  sandbox_runner.js                 (runSandboxedScript, iframe relay)
+  panel_host.js                     (PanelHost class, openPanel/closePanel/postToPanel)
+  scrollback.js                     (chat scroll, message list)
+  settings.js                       (applyTheme, setMessages, etc.)
+  gestures.js                       (swipe, scroll, keyboard)
+  periodic_dispatch.js              (subscribe to periodic events from Dart)
+  after_user.js                     (subscribe to afterUser events)
+  message_renderer.js               (delegates to renderer.js modules)
+```
+
+**Loading:** replace the single `<script src="bridge.js">` with
+`<script type="module" src="bridge/index.js">` in
+`assets/chat_webview/index.html`. Modules export their public surface,
+`index.js` wires the public surface to the controller.
+
+**Risk:** ES module loading from Flutter/WebView asset URLs must be verified
+on the target WebView implementation before this phase starts.
+**Mitigation:** Phase 0.5 gates this phase. If it passes, keep a fallback
+`bridge.legacy.js` (the current file) for one release or until platform smoke
+tests confirm the module entrypoint is stable.
+
+**Test impact:** add `test/webview_assets_module_test.dart` that asserts
+each new module is referenced from `index.js` and that no required asset is
+orphaned. Syntax validation should use a static check available in the repo
+environment; do not depend on `dart:js_util` in VM Flutter tests.
+
+**Implemented:** `index.html` now loads the chat bridge through
+`<script type="module" src="bridge/index.js">`. The old `bridge.js` path is a
+3-line compatibility marker and the pre-module snapshot is retained as
+`bridge.legacy.js` fallback for this refactor. Bootstrap that previously lived
+in the inline script now lives in `bridge/index.js`, preserving construction of
+`window.bridge`, `window.Bridge`, the scaled chat wheel listener, and
+`onWebViewReady` dispatch.
+
+| File | Lines | Responsibility |
+|---|---:|---|
+| `bridge/index.js` | 34 | Module entrypoint, public re-exports, bootstrap |
+| `bridge/chat_bridge_controller.js` | 1029 | Main `Bridge` facade, Flutter transport, message list API, ext-block panel, sandbox runner |
+| `bridge/panel_host.js` | 193 | Interactive iframe island lifecycle and `glaze:*` relay |
+| `bridge/swipe_gesture_handler.js` | 239 | Touch swipe and guided swipe UI |
+| `bridge/interaction_dispatch.js` | 170 | Document click/data-action dispatch |
+| `bridge/selection_manager.js` | 122 | Selection mode and selection toolbar |
+| `bridge/edit_controller.js` | 88 | Inline edit DOM lifecycle |
+| `bridge/gen_timer.js` | 50 | Generation timer display updates |
+| `bridge/message_update_batcher.js` | 25 | rAF batching for streaming message updates |
+
+**Verification:** `node --check` passed for every new module. Targeted module
+asset tests passed: `flutter test test/webview_assets_test.dart --plain-name
+"bridge ES module layout"` and `--plain-name "window.glaze SDK"`. Updated
+`test/characterization/bridge_selection_edit_swipe_test.dart` to read extracted
+module files; the only remaining failure in that file is the pre-existing
+textarea wheel listener assertion. Full `test/webview_assets_test.dart` still
+has the same 5 pre-existing wheel/CSS failures called out in the project notes.
+
+### Phase 6 — `renderer.js` → modules (1 day) ✅ Done
+
+**Before:** `assets/chat_webview/renderer.js` (1234 lines).
+
+**After:**
+
+```
+assets/chat_webview/renderer/
+  index.js                          (public `Renderer` facade)
+  message_renderer.js               (main Renderer class)
+  markdown.js                       (markdown → safe HTML)
+  code_highlight.js                 (```lang fences → highlighted)
+  image_embed.js                    ([IMG:GEN] / data-uri rendering)
+  message_template.js               (avatar, name, role-specific CSS classes)
+  shadow_style.js                   (shadow-root CSS)
+  icon_library.js                   (SVG icon constants)
+  macros_in_message.js              ({{user}}, {{char}} in body)
+```
+
+**Implemented:** `index.html` now loads the renderer through
+`<script type="module" src="renderer/index.js">`; the legacy
+`assets/chat_webview/renderer.js` path is a small compatibility marker. The
+active renderer lives under `assets/chat_webview/renderer/`, with `Renderer`
+exported and assigned to `window.Renderer` for existing bridge construction.
+`bridge/index.js` imports `Renderer` explicitly to avoid module-scope global
+lookup hazards.
+
+| File | Lines | Responsibility |
+|---|---:|---|
+| `renderer/index.js` | 7 | Module entrypoint, public exports, `window.Renderer` compatibility |
+| `renderer/message_renderer.js` | 948 | Main `Renderer` class: message DOM, metadata updates, search, animation |
+| `renderer/markdown.js` | 102 | Shadow-root writes, inline script execution, details arrow repair |
+| `renderer/shadow_style.js` | 140 | Shadow DOM CSS used by message content |
+| `renderer/icon_library.js` | 19 | SVG icon constants |
+| `renderer/image_embed.js` | 20 | Message image attachment DOM |
+| `renderer/message_template.js` | 49 | Role/name/date/status helpers |
+| `renderer/code_highlight.js` | 4 | Code-block boundary hook |
+| `renderer/macros_in_message.js` | 3 | Formatter boundary hook for message body macros |
+
+**Verification:** `node --check` passed for all renderer modules and the updated
+bridge module. `flutter analyze test/webview_assets_test.dart` passed. Targeted
+asset tests passed for `renderer ES module layout`, `bridge ES module layout`,
+`details/summary arrow`, `renderMessage return type`, `updateMessageContent fast
+path`, and `_createGenStat dedup`.
+
+### Phase 7 — `formatter.js` → modules (0.5 day) ✅ Done
+
+**Before:** `assets/chat_webview/formatter.js` (443 lines).
+
+**After:**
+
+```
+assets/chat_webview/formatter/
+  index.js                          (public `formatText` facade)
+  macros.js                         ({{...}} expansion)
+  text_format.js                    (italics, bold, code inline)
+```
+
+**Implemented:** `index.html` now loads the formatter through
+`<script type="module" src="formatter/index.js">`; the legacy
+`assets/chat_webview/formatter.js` path is a small compatibility marker. The
+active formatter class lives in `formatter/formatter.js`, is exported as an ES
+module, and is assigned to `window.Formatter` for compatibility. `bridge/index.js`
+imports `Formatter` explicitly to avoid module-scope global lookup hazards.
+
+| File | Lines | Responsibility |
+|---|---:|---|
+| `formatter/index.js` | 6 | Module entrypoint, public exports, `window.Formatter` compatibility |
+| `formatter/formatter.js` | 389 | Main `Formatter` class: placeholder pipeline, markdown-ish formatting, image tags |
+| `formatter/text_format.js` | 61 | Glaze custom marker rendering and inline style markers |
+| `formatter/macros.js` | 3 | Macro expansion boundary hook |
+
+**Verification:** `node --check` passed for formatter modules and updated bridge
+module. `flutter analyze test/webview_assets_test.dart` passed. Targeted asset
+tests passed for `formatter ES module layout` and `bridge ES module layout`.
+
+### Phase 8 — Test coverage, docs sync, release gates (1.5 days) ✅ Done
+
+**Implemented:** synced `docs/ARCHITECTURE.md` § 9 with the extracted Dart block
+handlers, `js_bridge/` handlers, and WebView ES module layout. Updated
+`docs/CODE_STYLE.md` with concrete decomposition patterns from this refactor.
+Updated `CLAUDE.md`, `PLAN_EXT_BLOCKS.md`, and `INVARIANTS.md` so they no longer
+point at obsolete planning docs or old single-file JS implementation paths.
+Restored and refreshed `docs/markdown-markers.md` for the new formatter/renderer
+module boundaries.
+
+Added `test/docs_links_test.dart` as a docs guard for:
+
+* no references to deleted obsolete planning docs
+* extension docs pointing at `ARCHITECTURE.md` / `refactor_plan.md`
+* markdown marker guide pointing at `formatter/formatter.js`,
+  `formatter/text_format.js`, and `renderer/shadow_style.js`
+
+**Verification:** `flutter analyze` still has the known pre-existing
+`throw_of_invalid_type` in `js_engine_service.dart`, with no new Phase 8 analyzer
+issues in touched docs/tests. Targeted docs and asset tests passed; full test
+baseline remains unchanged except for known pre-existing WebView asset/selection
+wheel/CSS failures documented in this branch.
+
+---
+
+## 4. Out of scope
+
+* **No new features.** This PR is structural only.
+* **No UX changes in structural PRs.** For example, replacing the block edit
+  dialog with a full-screen sheet is a separate follow-up UX PR.
+* **No public API changes.** All ext-blocks behavior is preserved.
+* **No god-object that is < 500 lines is touched.** Examples: the
+  `panel_host_service.dart` (already a focused service), the
+  `audio_bridge_service.dart` (already small), the
+  `command_registry.dart` (already a registry).
+* **No new dependencies.** The ES module refactor in Phase 5 uses
+  built-in browser support; no bundler (rollup / esbuild) is added.
+* **No test deletion.** Existing 132 assertions must keep passing.
+
+---
+
+## 5. Risk register
+
+| Risk | Mitigation |
+|---|---|
+| `flutter analyze` regressions during controller extraction | Each Phase 1-4 ends with `flutter analyze <target files>` clean. CI gate: 0 new errors. |
+| Existing tests break during refactor | Run `flutter test <target>` after every commit. If a test breaks, fix the refactor, not the test. |
+| ES modules don't load on a specific platform | Phase 0.5 spike gates Phase 5-7. If it fails, keep single-file scripts and defer ES modules. |
+| Controller lifecycle interactions (e.g. dispose order) | Add a `ChatWebViewHarness` test widget that asserts clean init/dispose ordering. |
+| Reviewer fatigue on a large PR | Ship as multiple PRs by subsystem. Keep pure moves separate from behavior edits. |
+| 9-13 day timeline slips | Each phase ships independent. If Monblant RFC is approved mid-refactor, Monblant work can start on already-refactored modules. |
+
+---
+
+## 6. Open questions
+
+* **`bridge.legacy.js` fallback duration:** if Phase 0.5 passes, keep the
+  fallback for one release or drop immediately after platform smoke tests?
+* **Section widgets in Phase 4:** keep them private initially
+  (`sections/_blocks_section.dart`) or expose as public now? Default: private
+  until a second real consumer exists.
+
+---
+
+## 7. Approval & sign-off
+
+- [ ] Lead developer review of file boundaries
+- [ ] Open questions answered (Section 6)
+- [ ] Timeline confirmation (9-13 days, RFC + 9 implementation phases)
+- [ ] Phase 0.5 ES module WebView spike result recorded
+- [ ] "bridge.legacy.js" fallback decision

@@ -45,7 +45,8 @@ class _ChatWebViewPreloaderState extends State<ChatWebViewPreloader> {
                     cacheEnabled: true,
                     allowFileAccess: true,
                     allowContentAccess: true,
-                    allowFileAccessFromFileURLs: false,
+                    allowFileAccessFromFileURLs:
+                        chatWebViewAllowFileAccessFromFileUrls(),
                     allowUniversalAccessFromFileURLs: false,
                     mixedContentMode:
                         MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,

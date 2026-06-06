@@ -28,6 +28,7 @@ class MessageBridgeCommands {
         character: _host.regexCharacter,
         persona: _host.regexPersona,
       );
+      _resolveMappedFileUrls(map);
       mapped.add(map);
     }
     final resolved = await Future.wait(
@@ -48,6 +49,7 @@ class MessageBridgeCommands {
       character: _host.regexCharacter,
       persona: _host.regexPersona,
     );
+    _resolveMappedFileUrls(map);
     map['text'] = await _host.resolveImgResults(map['text'] as String);
     final json = jsonEncode(map);
     return _host.callJs('appendMessage', json);
@@ -68,6 +70,7 @@ class MessageBridgeCommands {
         character: _host.regexCharacter,
         persona: _host.regexPersona,
       );
+      _resolveMappedFileUrls(map);
       mapped.add(map);
     }
     final resolved = await Future.wait(
@@ -94,6 +97,7 @@ class MessageBridgeCommands {
         character: _host.regexCharacter,
         persona: _host.regexPersona,
       );
+      _resolveMappedFileUrls(map);
       mapped.add(map);
     }
     final resolved = await Future.wait(
@@ -118,6 +122,7 @@ class MessageBridgeCommands {
       character: _host.regexCharacter,
       persona: _host.regexPersona,
     );
+    _resolveMappedFileUrls(map);
     map['text'] = await _host.resolveImgResults(map['text'] as String);
     final json = jsonEncode(map);
     return _host.callJs('updateMessage', json);
@@ -135,6 +140,13 @@ class MessageBridgeCommands {
 
   Future<void> removeMessage(String messageId) {
     return _host.callJs('removeMessage', messageId);
+  }
+
+  void _resolveMappedFileUrls(Map<String, dynamic> map) {
+    final imagePath = map['imagePath'];
+    if (imagePath is String) {
+      map['imagePath'] = _host.resolveLocalFileUrl(imagePath) ?? imagePath;
+    }
   }
 
   Future<void> setLastMessage(String? messageId) {

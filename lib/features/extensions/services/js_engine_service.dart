@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import '../../chat/bridge/chat_webview_environment.dart';
 import 'js_bridge_service.dart';
 
 /// Thrown when the headless engine cannot service a script run. Callers
@@ -362,6 +363,7 @@ class _DefaultFactory implements HeadlessInAppWebViewFactory {
     required void Function(InAppWebViewController controller) onWebViewCreated,
   }) {
     return HeadlessInAppWebView(
+      webViewEnvironment: chatWebViewEnvironment,
       initialFile: initialFile,
       initialSettings: InAppWebViewSettings(
         javaScriptEnabled: true,

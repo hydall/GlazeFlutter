@@ -47,6 +47,22 @@ Large UI files are acceptable. A 800-line screen with private widgets (`_HeroSec
 
 Rule of thumb: if removing the business logic leaves a file with only `build()` methods and `Widget` returns, it's done. Don't split further.
 
+## Refactor Patterns
+
+Use these concrete patterns when a file crosses the line from cohesive to hard to
+review:
+
+| Problem | Preferred shape | Example |
+|---|---|---|
+| Public service accumulated many private helpers | Keep a thin public orchestrator; move domain steps into injected specialists | `ExtensionPostGenService` delegates block order, status, image rendering, JS fallback, and rerun flows to `services/blocks/` |
+| Bridge dispatcher grew one method per capability | Keep one dispatcher and group handlers by domain, not by tiny method | `js_bridge/js_bridge_service.dart` dispatches to `handlers/variables_handler.dart`, `generation_handler.dart`, etc. |
+| Widget owns lifecycle plus bridge callbacks/listeners | Keep lifecycle in the widget; extract callback/listener/sync objects with explicit dependencies | `chat_webview_widget.dart` delegates init, build listeners, sync dispatch, panel refresh, and callback wiring |
+| Screen has independent sections/dialogs | Move distinct sections and complex dialogs under a feature subdirectory; keep old import path as an export only when needed | `preset_editor_screen.dart` exports `screens/preset_editor/preset_editor_screen.dart`, sections live under `screens/preset_editor/sections/` |
+| WebView script became a god-file | Use ES module entrypoints that expose the same `window.*` compatibility surface | `bridge/index.js`, `renderer/index.js`, and `formatter/index.js` import focused modules and assign `window.Bridge` / `window.Renderer` / `window.Formatter` |
+
+Avoid creating one class per tiny function. Prefer a few domain files with clear
+ownership over many shallow wrappers.
+
 ## Code Rules
 
 Key patterns to follow when editing:

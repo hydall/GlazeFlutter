@@ -9,7 +9,7 @@ Flutter rewrite of [Glaze](https://github.com/hydall/Glaze).
 >
 > Project workflow (git / PRs / Trello): `docs/WORKFLOW.md`.
 >
-> JS extension SDK plan / final state: `docs/js_extensions_implementation_plan.md`.
+> JS extension SDK final state: `docs/ARCHITECTURE.md` § 9 and `docs/refactor_plan.md`.
 
 ## Getting Started
 

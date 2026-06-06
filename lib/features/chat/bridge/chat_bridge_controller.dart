@@ -11,6 +11,7 @@ import '../../../core/models/chat_message.dart';
 import '../../../core/models/persona.dart';
 import '../../../core/models/preset.dart';
 import '../../extensions/services/js_bridge_service.dart';
+import 'chat_webview_environment.dart';
 import 'chat_message_mapper.dart';
 import 'bridge_handlers.dart';
 import 'bridge_message_commands.dart';
@@ -127,10 +128,19 @@ class ChatBridgeController {
   // private state of the host.
 
   Future<String> resolveImgResults(String text) async {
-    // Keep image paths in the bridge payload. The WebView formatter
-    // resolves local paths to file:// URLs, avoiding huge base64
-    // strings on Android.
-    return text;
+    return text.replaceAllMapped(
+      RegExp(r'\[IMG:RESULT:([^\]|]+)(\|[^\]]*)?\]'),
+      (match) {
+        final path = match.group(1) ?? '';
+        final suffix = match.group(2) ?? '';
+        final resolved = resolveLocalFileUrl(path) ?? path;
+        return '[IMG:RESULT:$resolved$suffix]';
+      },
+    );
+  }
+
+  String? resolveLocalFileUrl(String? source) {
+    return chatWebViewResolveLocalFileUrl(source);
   }
 
   String normalizeLayout(String? layout) {
@@ -146,9 +156,9 @@ class ChatBridgeController {
           path.startsWith('http://') ||
           path.startsWith('https://') ||
           path.startsWith('file://')) {
-        url = path;
+        url = resolveLocalFileUrl(path) ?? path;
       } else {
-        url = 'file:///${path.replaceAll('\\', '/')}';
+        url = resolveLocalFileUrl(path) ?? 'file:///${path.replaceAll('\\', '/')}';
       }
     }
     if (isChar) {
@@ -531,9 +541,12 @@ class ChatBridgeController {
     List<Map<String, dynamic>> blocks, {
     bool canRunAll = false,
   }) async {
+    final resolvedBlocks = await Future.wait(
+      blocks.map(_resolveExtBlockContent),
+    );
     final payload = jsonEncode({
       'messageId': messageId,
-      'blocks': blocks,
+      'blocks': resolvedBlocks,
       'canRunAll': canRunAll,
     });
     await callJs('showExtBlocksPanel', payload);
@@ -552,16 +565,28 @@ class ChatBridgeController {
     required String content,
     required String status,
   }) async {
+    final resolvedContent = await resolveImgResults(content);
     final payload = jsonEncode({
       'messageId': messageId,
       'blockId': blockId,
-      'content': content,
+      'content': resolvedContent,
       'status': status,
     });
     final result = await evalJsWithResult(
       'window.bridge?.patchExtBlockContent(${escapeJsonStr(payload)})',
     );
     return result == true || result == 'true';
+  }
+
+  Future<Map<String, dynamic>> _resolveExtBlockContent(
+    Map<String, dynamic> block,
+  ) async {
+    final copy = Map<String, dynamic>.from(block);
+    final content = copy['content'];
+    if (content is String) {
+      copy['content'] = await resolveImgResults(content);
+    }
+    return copy;
   }
 
   Future<void> updateBlockStatus(String messageId, String? status) async {

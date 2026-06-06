@@ -1,13 +1,15 @@
 # Custom Markdown Markers
 
-The app extends GptMarkdown with custom `==...==` inline markers. When adding a new marker, update **all** of the following in sync:
+The app extends GptMarkdown with custom `==...==` inline markers. When adding a
+new marker, update all of the following in sync:
 
 1. **Converter:** `lib/core/utils/html_to_markdown.dart` — produces marker syntax from HTML
-2. **JS renderer:** `assets/chat_webview/formatter.js` — `styledRegex` (extraction guard) + `_renderStyledSegment()` (HTML output)
-3. **JS CSS:** `assets/chat_webview/renderer.js` — `SHADOW_STYLE` constant (styling for marker classes)
-4. **Dart renderer:** `lib/shared/widgets/colored_markdown.dart` — `InlineMd` subclass for Flutter-native rendering
+2. **JS formatter extraction:** `assets/chat_webview/formatter/formatter.js` — `styledRegex` extraction guard
+3. **JS marker rendering:** `assets/chat_webview/formatter/text_format.js` — `renderStyledSegment()` HTML output
+4. **JS CSS:** `assets/chat_webview/renderer/shadow_style.js` — `SHADOW_STYLE` styling for marker classes
+5. **Dart renderer:** `lib/shared/widgets/colored_markdown.dart` — `InlineMd` subclass for Flutter-native rendering
 
-## Registered `==...==` markers
+## Registered `==...==` Markers
 
 | Marker | Example | Renders as | Dart class | CSS class |
 |---|---|---|---|---|
@@ -19,11 +21,14 @@ The app extends GptMarkdown with custom `==...==` inline markers. When adding a 
 | `==mark==text==` | `==mark=="dialogue"==` | Quote-highlighted text | `MarkMd` | `.glaze-mark` |
 | `==active==text==` | `==active==search hit==` | Active search match | `ActiveMarkMd` | `.glaze-active` |
 
-Note: `==mark==` and `==active==` are injected by the JS-side quote-highlighting and search-highlighting logic. `html_to_markdown.dart` does NOT produce these markers — it only produces the 5 styling markers above.
+Note: `==mark==` and `==active==` are injected by JS-side quote highlighting and
+search highlighting. `html_to_markdown.dart` does not produce these markers; it
+only produces the five styling markers above.
 
-## Additional custom InlineMd/BlockMd classes
+## Additional Custom InlineMd/BlockMd Classes
 
-These do not use `==...==` syntax but are registered alongside the markers in `colored_markdown.dart`:
+These do not use `==...==` syntax but are registered alongside the markers in
+`colored_markdown.dart`:
 
 | Class | Pattern | Renders as |
 |---|---|---|
@@ -33,14 +38,18 @@ These do not use `==...==` syntax but are registered alongside the markers in `c
 | `ColoredUnderscoreBoldMd` | `__bold__` | Underscore-bold with optional color override |
 | `DetailsSummaryMd` | `<details><summary>` | Collapsible details/summary block |
 
-## Guard: `styledRegex` in formatter.js
+## Guard: `styledRegex` In Formatter
 
-`_processText()` in `formatter.js` uses `styledRegex` to extract all custom `==...==` markers
-plus standard markdown formatting patterns (`**bold**`, `*italic*`, `__bold__`, `_italic_`, `~~strike~~`)
-before wrapping quotes in `==mark==`. This prevents `==mark==` from being injected inside other markers
-(e.g. a `"..."` inside `==grad:...==`). When adding a new marker, add its pattern to `styledRegex`
-so quotes inside it are left alone.
+`Formatter._processText()` in `assets/chat_webview/formatter/formatter.js` uses
+`styledRegex` to extract all custom `==...==` markers plus standard markdown
+formatting patterns (`**bold**`, `*italic*`, `__bold__`, `_italic_`,
+`~~strike~~`) before wrapping quotes in `==mark==`. This prevents `==mark==`
+from being injected inside other markers, for example a `"..."` inside
+`==grad:...==`.
 
-Single quotes (`'...'`) are **not** protected so that nested quotes like `"...'...'..."` work —
-the outer quote regex captures the entire span and the inner single quotes inherit the color from
-the outer `==mark==` region.
+When adding a marker, add its pattern to `styledRegex` and add matching output
+logic in `renderStyledSegment()`.
+
+Single quotes (`'...'`) are not protected so nested quotes like `"...'...'..."`
+work. The outer quote regex captures the entire span and the inner single quotes
+inherit the color from the outer `==mark==` region.

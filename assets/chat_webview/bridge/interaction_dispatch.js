@@ -1,0 +1,186 @@
+﻿/* Extracted from ../bridge.legacy.js. Keep public behavior stable. */
+
+export class InteractionDispatch {
+  constructor(bridge) {
+    this.bridge = bridge;
+  }
+
+  handleClick(e) {
+    const bridge = this.bridge;
+
+    if (bridge._selectionManager.handleClick(e)) return;
+
+    const reasoningHdr = e.target.closest('[data-action="toggle-reasoning"]');
+    if (reasoningHdr) {
+      const block = reasoningHdr.closest('.msg-reasoning');
+      if (block) block.classList.toggle('collapsed');
+      return;
+    }
+
+    const actionEl = e.target.closest('[data-action]');
+    if (actionEl) {
+      const action = actionEl.dataset.action;
+      const handler = this._actionMap[action];
+      if (handler) {
+        handler.call(this, e, actionEl);
+        return;
+      }
+    }
+
+    const link = e.target.closest('a');
+    if (link) {
+      e.preventDefault();
+      bridge._sendToFlutter('onLinkClick', [link.href]);
+      return;
+    }
+
+    const stopBtn = e.target.closest('.stop-btn');
+    if (stopBtn) {
+      bridge._sendToFlutter('onStop', []);
+      return;
+    }
+
+    const regenBtn = e.target.closest('.msg-regenerate');
+    if (regenBtn) {
+      const id = regenBtn.dataset.messageId;
+      const mode = regenBtn.dataset.mode || 'magic';
+      bridge._sendToFlutter('onRegenerate', [id, mode]);
+      return;
+    }
+
+    const guidedBtn = e.target.closest('.msg-guided-swipe-btn');
+    if (guidedBtn) {
+      bridge._swipeHandler.toggleGuidedSwipe(guidedBtn.dataset.messageId);
+      return;
+    }
+
+    const actionsBtn = e.target.closest('.msg-actions-btn');
+    if (actionsBtn) {
+      const id = actionsBtn.dataset.messageId;
+      const section = document.querySelector(`[data-message-id="${id}"]`);
+      if (section) {
+        const isUser = section.classList.contains('user');
+        const isSystem = section.classList.contains('system');
+        const content = bridge._extractText(section);
+        bridge._sendToFlutter('onMessageContext', [JSON.stringify({ id, isUser, isSystem, content })]);
+      }
+      return;
+    }
+
+    const errorCopyBtn = e.target.closest('.error-copy-btn');
+    if (errorCopyBtn) {
+      const id = errorCopyBtn.dataset.messageId;
+      const section = document.querySelector(`[data-message-id="${id}"]`);
+      if (section) {
+        const raw = section.dataset.rawText || '';
+        try { navigator.clipboard.writeText(raw); }
+        catch (_) {
+          const ta = document.createElement('textarea');
+          ta.value = raw;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          ta.remove();
+        }
+        errorCopyBtn.dataset.copied = '1';
+        setTimeout(() => { delete errorCopyBtn.dataset.copied; }, 1200);
+      }
+      return;
+    }
+
+    const avatar = e.target.closest('.msg-avatar');
+    if (avatar) {
+      const img = avatar.querySelector('img');
+      if (img && img.src) bridge._sendToFlutter('onImageClick', [img.src]);
+      return;
+    }
+
+    const img = e.target.closest('.msg-image-attachment img');
+    if (img && img.src) {
+      bridge._sendToFlutter('onImageClick', [img.src]);
+      return;
+    }
+
+    bridge._selectionManager.hideSelectionBar();
+  }
+
+  _extractImgInstruction(el, path) {
+    const sec = path.find(e => e.dataset?.messageId);
+    const messageId = sec ? sec.dataset.messageId : '';
+    let instr = '';
+    try { instr = decodeURIComponent(el.dataset.instruction || ''); }
+    catch (_) { instr = el.dataset.instruction || ''; }
+    return { instr, messageId };
+  }
+
+  get _actionMap() {
+    const bridge = this.bridge;
+    return {
+      'memory-click': (e, el) => bridge._sendToFlutter('onMemoryClick', [el.dataset.messageId]),
+      'inject-click': (e, el) => bridge._sendToFlutter('onInjectClick', [el.dataset.messageId]),
+      'ext-blocks-run-all': (e, el) => bridge._sendToFlutter('onExtBlocksRunAll', [el.dataset.messageId]),
+      'ext-block-stop': (e, el) => bridge._sendToFlutter('onExtBlockStop', [el.dataset.blockId, el.dataset.messageId]),
+      'ext-block-regen': (e, el) => bridge._sendToFlutter('onExtBlockRegen', [el.dataset.blockId, el.dataset.messageId]),
+      'ext-block-regen-image': (e, el) => bridge._sendToFlutter('onExtBlockRegenImage', [el.dataset.blockId, el.dataset.messageId]),
+      'ext-block-edit': (e, el) => bridge._sendToFlutter('onExtBlockEdit', [el.dataset.blockId, el.dataset.messageId]),
+      'ext-block-delete': (e, el) => bridge._sendToFlutter('onExtBlockDelete', [el.dataset.blockId, el.dataset.messageId]),
+      'toggle-hidden': (e, el) => bridge._sendToFlutter('onToggleHidden', [el.dataset.messageId]),
+      'toggle-image-hidden': (e, el) => {
+        const section = el.closest('.message-section');
+        bridge._sendToFlutter('onToggleImageHidden', [section ? section.dataset.messageId : '']);
+      },
+      'swipe-left': (e, el) => {
+        const id = el.dataset.messageId;
+        bridge._swipeHandler.animateVariantSwap(id, 'prev', () =>
+          bridge._sendToFlutter('onSwipe', [JSON.stringify({ id, direction: 'left' })])
+        );
+      },
+      'swipe-right': (e, el) => {
+        const id = el.dataset.messageId;
+        bridge._swipeHandler.animateVariantSwap(id, 'next', () =>
+          bridge._sendToFlutter('onSwipe', [JSON.stringify({ id, direction: 'right' })])
+        );
+      },
+      'greeting-prev': (e, el) => {
+        const id = el.dataset.messageId;
+        bridge._swipeHandler.animateVariantSwap(id, 'prev', () =>
+          bridge._sendToFlutter('onChangeGreeting', [id, -1])
+        );
+      },
+      'greeting-next': (e, el) => {
+        const id = el.dataset.messageId;
+        bridge._swipeHandler.animateVariantSwap(id, 'next', () =>
+          bridge._sendToFlutter('onChangeGreeting', [id, 1])
+        );
+      },
+      'stop': (e, el) => bridge._sendToFlutter('onStop', []),
+      'regenerate': (e, el) => bridge._sendToFlutter('onRegenerate', [el.dataset.messageId, el.dataset.mode || 'magic']),
+      'toggle-guided': (e, el) => bridge._swipeHandler.toggleGuidedSwipe(el.dataset.messageId),
+      'edit-save': (e, el) => bridge._editController.handleSave(el),
+      'edit-cancel': (e, el) => bridge._editController.handleCancel(el),
+      'open-actions': (e, el) => {
+        const id = el.dataset.messageId;
+        const section = document.querySelector(`[data-message-id="${id}"]`);
+        if (section) {
+          const isUser = section.classList.contains('user');
+          const isSystem = section.classList.contains('system');
+          const content = bridge._extractText(section);
+          bridge._sendToFlutter('onMessageContext', [JSON.stringify({ id, isUser, isSystem, content })]);
+        }
+      },
+      'img-retry': (e, el) => {
+        const { instr, messageId } = this._extractImgInstruction(el, e.composedPath());
+        bridge._sendToFlutter('onImgRetry', [instr, messageId]);
+      },
+      'img-find': (e, el) => {
+        const { instr, messageId } = this._extractImgInstruction(el, e.composedPath());
+        bridge._sendToFlutter('onImgFind', [instr, messageId]);
+      },
+      'img-regen': (e, el) => {
+        const { instr, messageId } = this._extractImgInstruction(el, e.composedPath());
+        bridge._sendToFlutter('onImgRegen', [instr, messageId]);
+      },
+      'img-stop': (e, el) => bridge._sendToFlutter('onImgCancel', []),
+    };
+  }
+}

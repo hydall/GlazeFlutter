@@ -10,3 +10,14 @@ bool chatWebViewTransparentBackground() {
   if (defaultTargetPlatform == TargetPlatform.windows) return false;
   return true;
 }
+
+/// Value for [InAppWebViewSettings.allowFileAccessFromFileURLs].
+///
+/// Windows/WebView2 loads Flutter assets through `file://` URLs, and ES module
+/// imports need access to sibling module files in `assets/chat_webview/`.
+/// Keep this disabled elsewhere; universal file URL access stays disabled on
+/// every platform.
+bool chatWebViewAllowFileAccessFromFileUrls() {
+  if (defaultTargetPlatform == TargetPlatform.windows) return true;
+  return false;
+}

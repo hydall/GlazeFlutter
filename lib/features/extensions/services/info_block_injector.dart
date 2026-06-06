@@ -3,6 +3,7 @@ import '../models/block_config.dart';
 import '../models/extension_preset.dart';
 import '../models/info_block.dart';
 import 'block_content_extractor.dart';
+import 'macro_expander.dart';
 
 /// Minimal read surface used by [InfoBlockInjector] (implemented by [InfoBlocksRepository]).
 abstract class InfoBlockReader {
@@ -16,8 +17,15 @@ abstract class InfoBlockReader {
 /// сохранённый вывод этого блока (`content\\n\\n<block>`).
 class InfoBlockInjector {
   final InfoBlockReader _repository;
+  final MacroContext Function() _macroContext;
 
-  InfoBlockInjector(InfoBlockReader repository) : _repository = repository;
+  InfoBlockInjector(
+    InfoBlockReader repository, {
+    MacroContext Function()? macroContextResolver,
+  })  : _repository = repository,
+        _macroContext = macroContextResolver ?? _emptyMacroContext;
+
+  static MacroContext _emptyMacroContext() => MacroContext.empty;
 
   Future<List<ChatMessage>> injectBlocks({
     required List<ChatMessage> messages,
@@ -41,6 +49,7 @@ class InfoBlockInjector {
     if (assistantIndices.isEmpty) return messages;
 
     final result = List<ChatMessage>.from(messages);
+    final macroCtx = _macroContext();
 
     for (final blockConfig in injectableBlocks) {
       final n = blockConfig.injectLastN.clamp(0, assistantIndices.length);
@@ -58,7 +67,7 @@ class InfoBlockInjector {
         if (blockResults.isEmpty) continue;
 
         final injected = blockResults
-            .map((b) => _formatInjectedContent(blockConfig, b.content))
+            .map((b) => _formatInjectedContent(blockConfig, b.content, macroCtx))
             .where((c) => c.trim().isNotEmpty)
             .join('\n')
             .trim();
@@ -81,22 +90,29 @@ class InfoBlockInjector {
     return '$prefix\n$blockBody';
   }
 
-  String _formatInjectedContent(BlockConfig blockConfig, String content) {
-    final trimmed = content.trim();
-    if (trimmed.isEmpty) return '';
+  String _formatInjectedContent(
+    BlockConfig blockConfig,
+    String content,
+    MacroContext macroCtx,
+  ) {
+    // Expand {{user}} / {{char}} / etc. in the stored content so the
+    // injected history reflects the current persona/character, not a
+    // snapshot the LLM may have left in place at generation time.
+    final expanded = expand(content, macroCtx).trim();
+    if (expanded.isEmpty) return '';
 
     final template = blockConfig.template
         .trim()
         .replaceAll('{{name}}', blockConfig.name);
-    if (template.isEmpty) return trimmed;
+    if (template.isEmpty) return expanded;
 
     final tag = blockTagName(blockConfig, template);
     final wrappedPattern = RegExp(
       '<$tag(\\s+[^>]*)?>[\\s\\S]*<\\/$tag>',
       caseSensitive: false,
     );
-    if (wrappedPattern.hasMatch(trimmed)) return trimmed;
+    if (wrappedPattern.hasMatch(expanded)) return expanded;
 
-    return '<$tag>\n$trimmed\n</$tag>';
+    return '<$tag>\n$expanded\n</$tag>';
   }
 }

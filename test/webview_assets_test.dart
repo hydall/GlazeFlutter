@@ -12,17 +12,52 @@ import 'package:flutter_test/flutter_test.dart';
 String _asset(String name) =>
     File('assets/chat_webview/$name').readAsStringSync();
 
+String _bridgeAsset(String name) =>
+    File('assets/chat_webview/bridge/$name').readAsStringSync();
+
+String _rendererAsset(String name) =>
+    File('assets/chat_webview/renderer/$name').readAsStringSync();
+
+String _formatterAsset(String name) =>
+    File('assets/chat_webview/formatter/$name').readAsStringSync();
+
 void main() {
   late String rendererJs;
-  late String bridgeJs;
+  late String rendererIndexJs;
+  late String rendererMessageJs;
+  late String formatterIndexJs;
+  late String formatterFormatterJs;
+  late String bridgeIndexJs;
+  late String bridgeControllerJs;
+  late String editControllerJs;
+  late String genTimerJs;
+  late String interactionDispatchJs;
+  late String panelHostJs;
+  late String selectionManagerJs;
   late String glazeSdkJs;
   late String indexHtml;
   late String headlessHtml;
   late String stylessCss;
 
   setUpAll(() {
-    rendererJs = _asset('renderer.js');
-    bridgeJs = _asset('bridge.js');
+    rendererIndexJs = _rendererAsset('index.js');
+    rendererMessageJs = _rendererAsset('message_renderer.js');
+    formatterIndexJs = _formatterAsset('index.js');
+    formatterFormatterJs = _formatterAsset('formatter.js');
+    rendererJs = [
+      _rendererAsset('shadow_style.js'),
+      _rendererAsset('markdown.js'),
+      _rendererAsset('image_embed.js'),
+      _rendererAsset('message_template.js'),
+      rendererMessageJs,
+    ].join('\n');
+    bridgeIndexJs = _bridgeAsset('index.js');
+    bridgeControllerJs = _bridgeAsset('chat_bridge_controller.js');
+    editControllerJs = _bridgeAsset('edit_controller.js');
+    genTimerJs = _bridgeAsset('gen_timer.js');
+    interactionDispatchJs = _bridgeAsset('interaction_dispatch.js');
+    panelHostJs = _bridgeAsset('panel_host.js');
+    selectionManagerJs = _bridgeAsset('selection_manager.js');
     glazeSdkJs = _asset('glaze_sdk.js');
     indexHtml = _asset('index.html');
     headlessHtml = _asset('headless.html');
@@ -30,12 +65,13 @@ void main() {
   });
 
   group('window.glaze SDK', () {
-    test('index.html loads glaze_sdk before bridge.js', () {
+    test('index.html loads glaze_sdk before bridge/index.js', () {
       final sdkIdx = indexHtml.indexOf('glaze_sdk.js');
-      final bridgeIdx = indexHtml.indexOf('bridge.js');
+      final bridgeIdx = indexHtml.indexOf('bridge/index.js');
       expect(sdkIdx, isNonNegative);
       expect(bridgeIdx, isNonNegative);
       expect(sdkIdx < bridgeIdx, isTrue);
+      expect(indexHtml, contains('type="module"'));
     });
 
     test('SDK exposes expected window.glaze methods', () {
@@ -55,10 +91,122 @@ void main() {
       }
     });
 
-    test('sandboxed runner relays glaze requests and ignores relay messages as final output', () {
-      expect(bridgeJs, contains("data.type !== 'glaze:request'"));
-      expect(bridgeJs, contains("type: 'glaze:response'"));
-      expect(bridgeJs, contains('if (e.data && e.data.type) return;'));
+    test(
+      'sandboxed runner relays glaze requests and ignores relay messages as final output',
+      () {
+        expect(bridgeControllerJs, contains("data.type !== 'glaze:request'"));
+        expect(bridgeControllerJs, contains("type: 'glaze:response'"));
+        expect(
+          bridgeControllerJs,
+          contains('if (e.data && e.data.type) return;'),
+        );
+      },
+    );
+  });
+
+  group('bridge ES module layout', () {
+    test('module entrypoint exports and bootstraps Bridge', () {
+      expect(
+        bridgeIndexJs,
+        contains("import { Bridge } from './chat_bridge_controller.js'"),
+      );
+      expect(
+        bridgeIndexJs,
+        contains("import { Renderer } from '../renderer/index.js'"),
+      );
+      expect(
+        bridgeIndexJs,
+        contains("import { Formatter } from '../formatter/index.js'"),
+      );
+      expect(bridgeIndexJs, contains('window.Bridge = Bridge'));
+      expect(
+        bridgeIndexJs,
+        contains('window.bridge = new Bridge(renderer, virtualList)'),
+      );
+    });
+
+    test('controller imports extracted modules', () {
+      for (final module in [
+        'gen_timer.js',
+        'message_update_batcher.js',
+        'selection_manager.js',
+        'edit_controller.js',
+        'swipe_gesture_handler.js',
+        'interaction_dispatch.js',
+        'panel_host.js',
+      ]) {
+        expect(bridgeControllerJs, contains("'./$module'"));
+      }
+    });
+
+    test('legacy fallback snapshot is retained outside active entrypoint', () {
+      final legacyJs = _asset('bridge.legacy.js');
+      expect(legacyJs, contains('class Bridge'));
+      expect(_asset('bridge.js'), contains('bridge.legacy.js'));
+    });
+  });
+
+  group('renderer ES module layout', () {
+    test('index.html loads renderer module before bridge module', () {
+      final rendererIdx = indexHtml.indexOf('renderer/index.js');
+      final bridgeIdx = indexHtml.indexOf('bridge/index.js');
+      expect(rendererIdx, isNonNegative);
+      expect(bridgeIdx, isNonNegative);
+      expect(rendererIdx < bridgeIdx, isTrue);
+      expect(indexHtml, contains('type="module" src="renderer/index.js"'));
+    });
+
+    test('module entrypoint exports and exposes Renderer', () {
+      expect(
+        rendererIndexJs,
+        contains("import { Renderer } from './message_renderer.js'"),
+      );
+      expect(rendererIndexJs, contains('window.Renderer = Renderer'));
+    });
+
+    test('message renderer imports extracted modules', () {
+      for (final module in [
+        'icon_library.js',
+        'image_embed.js',
+        'markdown.js',
+        'message_template.js',
+        'shadow_style.js',
+      ]) {
+        expect(rendererMessageJs, contains("'./$module'"));
+      }
+    });
+
+    test('legacy renderer shim points at active module entrypoint', () {
+      expect(_asset('renderer.js'), contains('renderer/index.js'));
+    });
+  });
+
+  group('formatter ES module layout', () {
+    test('index.html loads formatter module before renderer module', () {
+      final formatterIdx = indexHtml.indexOf('formatter/index.js');
+      final rendererIdx = indexHtml.indexOf('renderer/index.js');
+      expect(formatterIdx, isNonNegative);
+      expect(rendererIdx, isNonNegative);
+      expect(formatterIdx < rendererIdx, isTrue);
+      expect(indexHtml, contains('type="module" src="formatter/index.js"'));
+    });
+
+    test('module entrypoint exports and exposes Formatter', () {
+      expect(
+        formatterIndexJs,
+        contains("import { Formatter } from './formatter.js'"),
+      );
+      expect(formatterIndexJs, contains('window.Formatter = Formatter'));
+    });
+
+    test('formatter imports extracted text formatting modules', () {
+      expect(formatterFormatterJs, contains("'./macros.js'"));
+      expect(formatterFormatterJs, contains("'./text_format.js'"));
+      expect(formatterFormatterJs, contains('renderStyledSegment('));
+    });
+
+    test('legacy formatter shim points at active module entrypoint', () {
+      expect(_asset('formatter.js'), contains('formatter/index.js'));
     });
   });
 
@@ -70,10 +218,7 @@ void main() {
 
     test('exposes window.headlessBridge.runSandboxedScript', () {
       expect(headlessHtml, contains('window.headlessBridge'));
-      expect(
-        headlessHtml,
-        contains('runSandboxedScript'),
-      );
+      expect(headlessHtml, contains('runSandboxedScript'));
     });
 
     test('sandbox uses allow-scripts iframe', () {
@@ -87,33 +232,46 @@ void main() {
   // ─── Interactive panels (Phase 6.2) ─────────────────────────────────────
   group('interactive panels (PanelHost in bridge.js)', () {
     test('PanelHost class is defined', () {
-      expect(bridgeJs, contains('class PanelHost'));
+      expect(panelHostJs, contains('class PanelHost'));
     });
 
     test('Bridge exposes openPanel/closePanel/postToPanel helpers', () {
-      expect(bridgeJs, contains('openPanel(messageId, html, optionsJson)'));
-      expect(bridgeJs, contains('closePanel(panelId)'));
-      expect(bridgeJs, contains('postToPanel(panelId, method, paramsJson)'));
-    });
-
-    test('panel iframe uses sandbox=allow-scripts without allow-same-origin', () {
-      // The construction site inside PanelHost.open() must set the strict
-      // sandbox so the panel's null-origin cannot reach window.parent or
-      // window.flutter_inappwebview directly.
-      final marker = "iframe.sandbox = 'allow-scripts'";
-      final idx = bridgeJs.indexOf(marker);
-      expect(idx, isNot(-1), reason: 'panel iframe must use sandbox="allow-scripts"');
-      final block = _extractBlockBody(bridgeJs, idx);
       expect(
-        block,
-        isNot(contains('allow-same-origin')),
-        reason: 'panel iframe must NOT enable allow-same-origin',
+        bridgeControllerJs,
+        contains('openPanel(messageId, html, optionsJson)'),
+      );
+      expect(bridgeControllerJs, contains('closePanel(panelId)'));
+      expect(
+        bridgeControllerJs,
+        contains('postToPanel(panelId, method, paramsJson)'),
       );
     });
 
+    test(
+      'panel iframe uses sandbox=allow-scripts without allow-same-origin',
+      () {
+        // The construction site inside PanelHost.open() must set the strict
+        // sandbox so the panel's null-origin cannot reach window.parent or
+        // window.flutter_inappwebview directly.
+        final marker = "iframe.sandbox = 'allow-scripts'";
+        final idx = panelHostJs.indexOf(marker);
+        expect(
+          idx,
+          isNot(-1),
+          reason: 'panel iframe must use sandbox="allow-scripts"',
+        );
+        final block = _extractBlockBody(panelHostJs, idx);
+        expect(
+          block,
+          isNot(contains('allow-same-origin')),
+          reason: 'panel iframe must NOT enable allow-same-origin',
+        );
+      },
+    );
+
     test('parent->panel iframe is appended inside the message section', () {
       expect(
-        bridgeJs,
+        panelHostJs,
         contains("section.querySelector('.msg-content') || section"),
         reason: 'panel must be attached to the message section, not the body',
       );
@@ -121,21 +279,22 @@ void main() {
 
     test('clearAll() also closes all panels', () {
       final marker = 'clearAll() {';
-      final idx = bridgeJs.indexOf(marker);
+      final idx = bridgeControllerJs.indexOf(marker);
       expect(idx, isNot(-1));
-      final body = _extractBlockBody(bridgeJs, idx);
+      final body = _extractBlockBody(bridgeControllerJs, idx);
       expect(
         body,
         contains('_panelHost?.closeAll()'),
-        reason: 'Bridge.clearAll must close all panels before clearing messages',
+        reason:
+            'Bridge.clearAll must close all panels before clearing messages',
       );
     });
 
     test('setMessages() closes panels before rendering a new batch', () {
       final marker = 'setMessages(messagesJson) {';
-      final idx = bridgeJs.indexOf(marker);
+      final idx = bridgeControllerJs.indexOf(marker);
       expect(idx, isNot(-1));
-      final body = _extractBlockBody(bridgeJs, idx);
+      final body = _extractBlockBody(bridgeControllerJs, idx);
       expect(
         body,
         contains('_panelHost?.closeAll()'),
@@ -145,9 +304,9 @@ void main() {
 
     test('removeMessage() closes panels attached to that message', () {
       final marker = 'removeMessage(messageId) {';
-      final idx = bridgeJs.indexOf(marker);
+      final idx = bridgeControllerJs.indexOf(marker);
       expect(idx, isNot(-1));
-      final body = _extractBlockBody(bridgeJs, idx);
+      final body = _extractBlockBody(bridgeControllerJs, idx);
       expect(
         body,
         contains('_panelHost.close(panelId)'),
@@ -156,51 +315,58 @@ void main() {
     });
 
     test('panel relays glaze:request back through the bridge', () {
-      expect(bridgeJs, contains("_relayGlazeRequest(panel, data)"));
+      expect(panelHostJs, contains("_relayGlazeRequest(panel, data)"));
       // The PanelHost listener branches on `glaze:request` and forwards
       // to _relayGlazeRequest. We don't extract a sub-block here because
       // the call site is nested inside a for-of loop, which makes
       // brace-matching fragile.
       expect(
-        bridgeJs,
+        panelHostJs,
         contains("data.type === 'glaze:request'"),
         reason: 'panel listener must branch on glaze:request type',
       );
     });
 
     test('panel iframe receives a glaze SDK copy via __glazeSdkSource', () {
-      expect(bridgeJs, contains("JSON.stringify(window.__glazeSdkSource || '')"));
+      expect(
+        panelHostJs,
+        contains("JSON.stringify(window.__glazeSdkSource || '')"),
+      );
     });
 
     test('panel iframe cannot impersonate the parent (source check)', () {
       final marker = '_setupListener() {';
-      final idx = bridgeJs.indexOf(marker);
+      final idx = panelHostJs.indexOf(marker);
       expect(idx, isNot(-1));
-      final body = _extractBlockBody(bridgeJs, idx);
+      final body = _extractBlockBody(panelHostJs, idx);
       expect(
         body,
         contains('e.source !== panel.iframe.contentWindow'),
-        reason: 'PanelHost message listener must verify e.source to prevent spoofing',
+        reason:
+            'PanelHost message listener must verify e.source to prevent spoofing',
       );
     });
 
     test('panel resize observer pushes glaze:panel-resize events', () {
-      expect(bridgeJs, contains('ResizeObserver'));
-      expect(bridgeJs, contains("'onPanelResize'"));
-      expect(bridgeJs, contains("'glaze:panel-resize'"));
+      expect(panelHostJs, contains('ResizeObserver'));
+      expect(panelHostJs, contains("'onPanelResize'"));
+      expect(panelHostJs, contains("'glaze:panel-resize'"));
     });
 
     test('panel exposes window.glazePanel helpers to user code', () {
-      expect(bridgeJs, contains('window.glazePanel'));
-      expect(bridgeJs, contains('reportHeight'));
-      expect(bridgeJs, contains('sendAction'));
+      expect(panelHostJs, contains('window.glazePanel'));
+      expect(panelHostJs, contains('reportHeight'));
+      expect(panelHostJs, contains('sendAction'));
     });
   });
 
   // ─── details/summary arrow ────────────────────────────────────────────────
-  group('details/summary arrow (SHADOW_STYLE in renderer.js)', () {
+  group('details/summary arrow (SHADOW_STYLE in renderer modules)', () {
     test('::-webkit-details-marker is hidden', () {
-      expect(rendererJs, contains('::-webkit-details-marker { display: none !important; }'));
+      expect(
+        rendererJs,
+        contains('::-webkit-details-marker { display: none !important; }'),
+      );
     });
 
     test('::marker is hidden', () {
@@ -209,41 +375,62 @@ void main() {
 
     test('::before is disabled (arrow injected as real DOM span instead)', () {
       // display:flex on <summary> is ignored in some Android WebView versions.
-      // The arrow is injected as a real .glaze-arrow <span> by _fixDetailsSummaryArrows()
+      // The arrow is injected as a real .glaze-arrow <span> by fixDetailsSummaryArrows()
       // so it always participates in flex layout correctly.
       final beforeBlock = _extractSummaryBeforeBlock(rendererJs);
       expect(
         beforeBlock,
         contains('display: none !important'),
-        reason: '::before must be hidden — real DOM .glaze-arrow span is used instead',
+        reason:
+            '::before must be hidden — real DOM .glaze-arrow span is used instead',
       );
     });
 
     test('.glaze-arrow span is styled', () {
-      expect(rendererJs, contains('.glaze-arrow {'),
-          reason: 'Real DOM arrow span must have CSS styles');
-      expect(rendererJs, contains('transition: transform 0.2s'),
-          reason: '.glaze-arrow must have rotation transition');
+      expect(
+        rendererJs,
+        contains('.glaze-arrow {'),
+        reason: 'Real DOM arrow span must have CSS styles',
+      );
+      expect(
+        rendererJs,
+        contains('transition: transform 0.2s'),
+        reason: '.glaze-arrow must have rotation transition',
+      );
     });
 
     test('.glaze-arrow-open rotates 90deg when details is open', () {
-      expect(rendererJs, contains('.glaze-arrow.glaze-arrow-open { transform: rotate(90deg); }'));
+      expect(
+        rendererJs,
+        contains('.glaze-arrow.glaze-arrow-open { transform: rotate(90deg); }'),
+      );
     });
 
-    test('_fixDetailsSummaryArrows injects .glaze-arrow into every summary', () {
-      expect(rendererJs, contains('_fixDetailsSummaryArrows'));
-      expect(rendererJs, contains("arrow.className = 'glaze-arrow'"));
-    });
+    test(
+      'fixDetailsSummaryArrows injects .glaze-arrow into every summary',
+      () {
+        expect(rendererJs, contains('fixDetailsSummaryArrows'));
+        expect(rendererJs, contains("arrow.className = 'glaze-arrow'"));
+      },
+    );
 
-    test('_writeShadowContent calls _fixDetailsSummaryArrows after innerHTML', () {
+    test('writeShadowContent calls fixDetailsSummaryArrows after innerHTML', () {
       // Must be called AFTER root.innerHTML so it sees the inserted <details>.
       final writeBlock = _extractWriteShadowContent(rendererJs);
       final innerIdx = writeBlock.indexOf('root.innerHTML');
-      final fixIdx   = writeBlock.indexOf('_fixDetailsSummaryArrows');
+      final fixIdx = writeBlock.indexOf('fixDetailsSummaryArrows');
       expect(innerIdx, isNot(-1), reason: 'root.innerHTML must be present');
-      expect(fixIdx,   isNot(-1), reason: '_fixDetailsSummaryArrows must be called');
-      expect(fixIdx > innerIdx, isTrue,
-          reason: '_fixDetailsSummaryArrows must be called AFTER root.innerHTML = formatted');
+      expect(
+        fixIdx,
+        isNot(-1),
+        reason: 'fixDetailsSummaryArrows must be called',
+      );
+      expect(
+        fixIdx > innerIdx,
+        isTrue,
+        reason:
+            'fixDetailsSummaryArrows must be called AFTER root.innerHTML = formatted',
+      );
     });
   });
 
@@ -252,11 +439,12 @@ void main() {
     test('wheel listener on textarea uses preventDefault (not passive)', () {
       // passive:true prevents preventDefault — the scroll speed multiplier
       // requires preventDefault so we can set scrollTop manually.
-      final wheelSection = _extractTextareaWheelListener(bridgeJs);
+      final wheelSection = _extractTextareaWheelListener(editControllerJs);
       expect(
         wheelSection,
         contains('preventDefault'),
-        reason: 'textarea wheel listener must call preventDefault to control scroll speed',
+        reason:
+            'textarea wheel listener must call preventDefault to control scroll speed',
       );
       expect(
         wheelSection,
@@ -267,61 +455,68 @@ void main() {
       );
     });
 
-    test('wheel listener applies 0.3 multiplier for pixel-mode scroll (deltaMode 0)', () {
-      final wheelSection = _extractTextareaWheelListener(bridgeJs);
-      expect(
-        wheelSection,
-        contains('deltaMode === 0'),
-        reason: 'must handle deltaMode 0 (pixel scroll from trackpad/mouse)',
-      );
-      expect(
-        wheelSection,
-        contains('deltaY * 0.3'),
-        reason: '0.3 multiplier slows down fast trackpad/mouse scroll in the textarea',
-      );
-    });
+    test(
+      'wheel listener applies 0.3 multiplier for pixel-mode scroll (deltaMode 0)',
+      () {
+        final wheelSection = _extractTextareaWheelListener(editControllerJs);
+        expect(
+          wheelSection,
+          contains('deltaMode === 0'),
+          reason: 'must handle deltaMode 0 (pixel scroll from trackpad/mouse)',
+        );
+        expect(
+          wheelSection,
+          contains('deltaY * 0.3'),
+          reason:
+              '0.3 multiplier slows down fast trackpad/mouse scroll in the textarea',
+        );
+      },
+    );
 
-    test('wheel listener applies line multiplier for line-mode scroll (deltaMode 1)', () {
-      final wheelSection = _extractTextareaWheelListener(bridgeJs);
-      expect(
-        wheelSection,
-        contains('deltaMode === 1'),
-      );
-      expect(
-        wheelSection,
-        contains('deltaY * 16'),
-        reason: '16px per line is the correct line-mode multiplier for the textarea',
-      );
-    });
+    test(
+      'wheel listener applies line multiplier for line-mode scroll (deltaMode 1)',
+      () {
+        final wheelSection = _extractTextareaWheelListener(editControllerJs);
+        expect(wheelSection, contains('deltaMode === 1'));
+        expect(
+          wheelSection,
+          contains('deltaY * 16'),
+          reason:
+              '16px per line is the correct line-mode multiplier for the textarea',
+        );
+      },
+    );
 
-    test('wheel listener calls stopPropagation to prevent chat container from also scrolling', () {
-      final wheelSection = _extractTextareaWheelListener(bridgeJs);
-      expect(
-        wheelSection,
-        contains('stopPropagation'),
-      );
-    });
+    test(
+      'wheel listener calls stopPropagation to prevent chat container from also scrolling',
+      () {
+        final wheelSection = _extractTextareaWheelListener(editControllerJs);
+        expect(wheelSection, contains('stopPropagation'));
+      },
+    );
   });
 
   // ─── main chat container scroll speed ────────────────────────────────────
   group('chat container wheel scroll (index.html)', () {
     test('chat container wheel listener is registered', () {
-      expect(indexHtml, contains("container.addEventListener('wheel'"));
+      expect(bridgeIndexJs, contains("container.addEventListener('wheel'"));
     });
 
     test('pixel-mode scroll uses 0.3 multiplier', () {
       expect(
-        indexHtml,
+        bridgeIndexJs,
         contains('deltaY * 0.3'),
-        reason: 'Chat container scroll must use 0.3 multiplier for pixel-mode events',
+        reason:
+            'Chat container scroll must use 0.3 multiplier for pixel-mode events',
       );
     });
 
     test('line-mode scroll uses 16px multiplier', () {
       expect(
-        indexHtml,
+        bridgeIndexJs,
         contains('deltaY * 16'),
-        reason: 'Chat container scroll must use 16px-per-line for line-mode events',
+        reason:
+            'Chat container scroll must use 16px-per-line for line-mode events',
       );
     });
 
@@ -329,9 +524,10 @@ void main() {
       // The chat container listener calls preventDefault to suppress native scroll
       // and replace it with the manually-scaled scrollTop assignment.
       expect(
-        indexHtml,
+        bridgeIndexJs,
         contains('passive: false'),
-        reason: 'Chat container wheel listener must be passive:false to allow preventDefault',
+        reason:
+            'Chat container wheel listener must be passive:false to allow preventDefault',
       );
     });
   });
@@ -352,11 +548,11 @@ void main() {
   // ─── InteractionDispatch extraction (Phase 3.1) ────────────────────────────
   group('InteractionDispatch (bridge.js)', () {
     test('InteractionDispatch class exists', () {
-      expect(bridgeJs, contains('class InteractionDispatch'));
+      expect(interactionDispatchJs, contains('class InteractionDispatch'));
     });
 
     test('handleClick method exists', () {
-      expect(bridgeJs, contains('handleClick(e)'));
+      expect(interactionDispatchJs, contains('handleClick(e)'));
     });
 
     test('action map contains all expected data-action keys', () {
@@ -382,7 +578,7 @@ void main() {
       ];
       for (final action in requiredActions) {
         expect(
-          bridgeJs,
+          interactionDispatchJs,
           contains("'$action':"),
           reason: 'InteractionDispatch._actionMap must contain key "$action"',
         );
@@ -390,45 +586,42 @@ void main() {
     });
 
     test('Bridge creates InteractionDispatch instance', () {
-      expect(bridgeJs, contains('new InteractionDispatch(this)'));
+      expect(bridgeControllerJs, contains('new InteractionDispatch(this)'));
     });
 
     test('click listener delegates to InteractionDispatch.handleClick', () {
-      expect(
-        bridgeJs,
-        contains('this._interaction.handleClick(e)'),
-      );
+      expect(bridgeControllerJs, contains('this._interaction.handleClick(e)'));
     });
   });
 
   // ─── GenTimer extraction (Phase 3.5) ───────────────────────────────────────
   group('GenTimer (bridge.js)', () {
     test('GenTimer class exists', () {
-      expect(bridgeJs, contains('class GenTimer'));
+      expect(genTimerJs, contains('class GenTimer'));
     });
 
     test('GenTimer has start method', () {
-      expect(bridgeJs, contains('GenTimer'));
-      expect(bridgeJs, contains('start()'));
+      expect(genTimerJs, contains('GenTimer'));
+      expect(genTimerJs, contains('start()'));
     });
 
     test('GenTimer has stop method', () {
-      expect(bridgeJs, contains('GenTimer'));
-      expect(bridgeJs, contains('stop()'));
+      expect(genTimerJs, contains('GenTimer'));
+      expect(genTimerJs, contains('stop()'));
     });
 
     test('Bridge creates GenTimer instance', () {
-      expect(bridgeJs, contains('new GenTimer('));
+      expect(bridgeControllerJs, contains('new GenTimer('));
     });
 
     test('setGenerating delegates to _genTimer.start/stop', () {
-      expect(bridgeJs, contains('this._genTimer.start()'));
-      expect(bridgeJs, contains('this._genTimer.stop()'));
+      expect(bridgeControllerJs, contains('this._genTimer.start()'));
+      expect(bridgeControllerJs, contains('this._genTimer.stop()'));
     });
   });
 
   // ─── renderMessage always returns array (Phase 3.6) ────────────────────────
-  group('renderMessage return type (renderer.js)', () {
+  group('renderMessage return type (renderer modules)', () {
     test('renderMessage returns elements array (not conditional)', () {
       final marker = 'renderMessage(messageData)';
       final idx = rendererJs.indexOf(marker);
@@ -438,7 +631,8 @@ void main() {
       expect(
         body,
         isNot(contains('elements.length > 1 ? elements : messageEl')),
-        reason: 'renderMessage must always return array, not conditional HTMLElement|Array',
+        reason:
+            'renderMessage must always return array, not conditional HTMLElement|Array',
       );
       expect(
         body,
@@ -449,9 +643,10 @@ void main() {
 
     test('no Array.isArray checks remain in bridge.js call sites', () {
       expect(
-        bridgeJs,
+        bridgeControllerJs,
         isNot(contains('Array.isArray(rendered)')),
-        reason: 'All Array.isArray(rendered) checks should be removed since renderMessage always returns array',
+        reason:
+            'All Array.isArray(rendered) checks should be removed since renderMessage always returns array',
       );
     });
   });
@@ -460,7 +655,7 @@ void main() {
   group('selectionMode encapsulation (SelectionManager)', () {
     test('SelectionManager has public selectionMode getter', () {
       expect(
-        bridgeJs,
+        selectionManagerJs,
         contains('get selectionMode()'),
         reason: 'SelectionManager must expose selectionMode as public getter',
       );
@@ -468,17 +663,19 @@ void main() {
 
     test('bridge.js does not access _selectionMode directly', () {
       expect(
-        bridgeJs,
+        bridgeControllerJs,
         isNot(contains('renderer._selectionMode')),
-        reason: 'Bridge must use SelectionManager.selectionMode, not the private _selectionMode field',
+        reason:
+            'Bridge must use SelectionManager.selectionMode, not the private _selectionMode field',
       );
     });
   });
 
   // ─── Streaming fast path (Phase 4.1) ───────────────────────────────────────
-  group('updateMessageContent fast path (renderer.js)', () {
+  group('updateMessageContent fast path (renderer modules)', () {
     test('updateMessageContent has fast path for text-only updates', () {
-      final marker = 'updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate)';
+      final marker =
+          'updateMessageContent(sectionEl, text, reasoning, isUser, isTyping, animate)';
       final idx = rendererJs.indexOf(marker);
       expect(idx, isNot(-1), reason: 'updateMessageContent must exist');
 
@@ -486,7 +683,8 @@ void main() {
       expect(
         body,
         contains('!isTyping && !isError && !animate'),
-        reason: 'Fast path condition must check not-typing, not-error, not-animate',
+        reason:
+            'Fast path condition must check not-typing, not-error, not-animate',
       );
       expect(
         body,
@@ -497,7 +695,7 @@ void main() {
   });
 
   // ─── _createGenStat dedup (Phase 4.3) ──────────────────────────────────────
-  group('_createGenStat dedup (renderer.js)', () {
+  group('_createGenStat dedup (renderer modules)', () {
     test('_createGenStat method exists', () {
       expect(rendererJs, contains('_createGenStat('));
     });
@@ -514,7 +712,8 @@ void main() {
       expect(
         body,
         contains('_createGenStat'),
-        reason: '_createBubbleMeta must delegate to _createGenStat instead of inline DOM construction',
+        reason:
+            '_createBubbleMeta must delegate to _createGenStat instead of inline DOM construction',
       );
     });
 
@@ -524,7 +723,8 @@ void main() {
       expect(
         body,
         contains('_createGenStat'),
-        reason: '_createFooter must delegate to _createGenStat instead of inline DOM construction',
+        reason:
+            '_createFooter must delegate to _createGenStat instead of inline DOM construction',
       );
     });
   });
@@ -532,7 +732,7 @@ void main() {
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-/// Extracts the summary::before CSS block from SHADOW_STYLE in renderer.js.
+/// Extracts the summary::before CSS block from SHADOW_STYLE in renderer modules.
 String _extractSummaryBeforeBlock(String src) {
   final marker = 'summary::before {';
   final idx = src.indexOf(marker);
@@ -542,20 +742,13 @@ String _extractSummaryBeforeBlock(String src) {
   return src.substring(idx, end + 1);
 }
 
-/// Extracts the _writeShadowContent method body from renderer.js.
+/// Extracts the writeShadowContent method body from renderer modules.
 /// Looks for the definition (not a call), i.e. the line that starts with the name.
 String _extractWriteShadowContent(String src) {
-  // Match the method definition: starts at column 2 with _writeShadowContent
-  final marker = '  _writeShadowContent(';
+  final marker = 'writeShadowContent({';
   int idx = src.indexOf(marker);
-  // Skip to the next occurrence if this is a call inside another method
-  while (idx != -1) {
-    // It's a definition if it's followed by a parameter list then `{`
-    final lineEnd = src.indexOf('\n', idx);
-    final line = lineEnd != -1 ? src.substring(idx, lineEnd) : src.substring(idx);
-    if (line.contains(') {') || line.endsWith('{')) break;
-    idx = src.indexOf(marker, idx + 1);
-  }
+  if (idx == -1) return '';
+  idx = src.indexOf('}) {', idx);
   if (idx == -1) return '';
   int depth = 0;
   int start = src.indexOf('{', idx);

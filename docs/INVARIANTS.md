@@ -442,7 +442,8 @@ INV-JS3). Two execution paths share the same `JsBridgeService`:
   preferred for periodic ticks / background scripts. Falls back to
   the visual bridge on `HeadlessUnavailableError`.
 
-`runSandboxedScript` is implemented in `bridge.js` (visual) and
+`runSandboxedScript` is implemented in
+`assets/chat_webview/bridge/chat_bridge_controller.js` (visual) and
 `headless.html` (headless). Both wire the iframe's
 `postMessage` channel to a Dart `glazeBridge` handler with a
 matching source-check (`e.source !== iframe.contentWindow` /

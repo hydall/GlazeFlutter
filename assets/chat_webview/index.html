@@ -59,38 +59,11 @@
   <div id="header-blur-overlay" class="blur-overlay" aria-hidden="true"></div>
   <div id="input-blur-overlay" class="blur-overlay" aria-hidden="true"></div>
 
-  <script src="formatter.js"></script>
+  <script type="module" src="formatter/index.js"></script>
   <script src="RollingNumber.js"></script>
-  <script src="renderer.js"></script>
+  <script type="module" src="renderer/index.js"></script>
   <script src="useVirtualScroll.js"></script>
   <script src="glaze_sdk.js"></script>
-  <script src="bridge.js"></script>
-
-  <script>
-    window.onerror = function(msg, src, line, col, err) {
-      document.title = 'JS_ERR: ' + msg + ' @' + line;
-      console.error('JS_ERR:', msg, src, line, err);
-    };
-    try {
-      const container = document.getElementById('chat-container');
-      const formatter = new Formatter();
-      const virtualList = new UseVirtualScroll(container);
-      const renderer = new Renderer(formatter, virtualList);
-      window.bridge = new Bridge(renderer, virtualList);
-      container.addEventListener('wheel', (e) => {
-        if (e.deltaMode === 0) {
-          e.preventDefault();
-          container.scrollTop += e.deltaY * 0.3;
-        } else if (e.deltaMode === 1) {
-          e.preventDefault();
-          container.scrollTop += e.deltaY * 16;
-        }
-      }, { passive: false });
-      window.bridge._sendToFlutter('onWebViewReady', []);
-    } catch(e) {
-      document.title = 'JS_ERR: ' + e.message;
-      document.getElementById('loading-screen').textContent = 'Error: ' + e.message;
-    }
-  </script>
+  <script type="module" src="bridge/index.js"></script>
 </body>
 </html>

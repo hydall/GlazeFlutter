@@ -2,12 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/db/repositories/info_blocks_repository.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/db_provider.dart';
+import '../../personas/persona_list_provider.dart';
 import '../models/extension_preset.dart';
 import '../models/info_block.dart';
 import '../providers/extension_presets_provider.dart';
 import '../providers/extensions_settings_provider.dart';
 import 'info_block_injector.dart';
+import 'macro_expander.dart';
 
 final extBlocksPromptInjectionProvider =
     Provider<ExtBlocksPromptInjection>((ref) => ExtBlocksPromptInjection(ref));
@@ -29,6 +32,23 @@ class ExtBlocksPromptInjection {
         .firstOrNull;
   }
 
+  /// Builds a [MacroContext] from the active persona. Used by
+  /// [InfoBlockInjector] to expand `{{user}}` in stored block content
+  /// before injecting it into the chat history.
+  ///
+  /// Character is not resolved here because the inject path is called
+  /// per-session and the character is implied by the session. Future
+  /// enhancement: pass `charId` through `injectIntoHistory` so
+  /// `{{char}}` / `{{description}}` / `{{personality}}` / `{{scenario}}`
+  /// can also be expanded here.
+  MacroContext _resolveMacroContext() {
+    final personaId = _ref.read(activePersonaIdProvider);
+    if (personaId == null) return MacroContext.empty;
+    final personas = _ref.read(personaListProvider).valueOrNull ?? const [];
+    final persona = personas.where((p) => p.id == personaId).firstOrNull;
+    return MacroContext(persona: persona?.name);
+  }
+
   Future<List<ChatMessage>> injectIntoHistory({
     required String sessionId,
     required List<ChatMessage> messages,
@@ -37,7 +57,11 @@ class ExtBlocksPromptInjection {
     if (preset == null || messages.isEmpty) return messages;
 
     final repo = InfoBlocksRepository(_ref.read(appDbProvider));
-    final injector = InfoBlockInjector(_InfoBlocksRepoReader(repo));
+    final macroCtx = _resolveMacroContext();
+    final injector = InfoBlockInjector(
+      _InfoBlocksRepoReader(repo),
+      macroContextResolver: () => macroCtx,
+    );
     return injector.injectBlocks(
       messages: messages,
       sessionId: sessionId,

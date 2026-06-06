@@ -105,24 +105,39 @@ void main() {
     });
 
     test('onMessageContext is adapted (adds index lookup)', () {
+      // The index lookup is now in `ChatWebViewCallbacks` (extracted
+      // from the widget during the Phase 3 refactor).
+      final callbacksAdapterSource = File(
+        'lib/features/chat/widgets/chat_webview_callbacks.dart',
+      ).readAsStringSync();
       expect(
-        webviewWidgetSource,
+        callbacksAdapterSource,
         contains('indexWhere'),
         reason: 'onMessageContext adapter must look up message index',
       );
     });
 
     test('onLinkClick is handled internally (url_launcher)', () {
+      // The `launchUrl` call is now in `ChatWebViewCallbacks`
+      // (extracted from the widget during the Phase 3 refactor).
+      final callbacksAdapterSource = File(
+        'lib/features/chat/widgets/chat_webview_callbacks.dart',
+      ).readAsStringSync();
       expect(
-        webviewWidgetSource,
+        callbacksAdapterSource,
         contains('launchUrl'),
         reason: 'onLinkClick must be handled internally with url_launcher',
       );
     });
 
     test('onLoadMore is handled internally (chatProvider)', () {
+      // The `loadOlderMessages` call is now in `ChatWebViewCallbacks`
+      // (extracted from the widget during the Phase 3 refactor).
+      final callbacksAdapterSource = File(
+        'lib/features/chat/widgets/chat_webview_callbacks.dart',
+      ).readAsStringSync();
       expect(
-        webviewWidgetSource,
+        callbacksAdapterSource,
         contains('loadOlderMessages'),
         reason: 'onLoadMore must be handled internally via chatProvider',
       );
