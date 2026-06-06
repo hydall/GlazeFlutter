@@ -3,6 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../models/trigger_mode.dart';
+import 'js_bridge_service.dart';
+import 'js_bridge_toast_controller.dart';
+import 'runtime_prompt_injection_service.dart';
+import 'trigger_generation_handler.dart';
 
 /// One executable glaze slash-command. Commands are the audit-friendly
 /// alternative to direct method calls — they show up clearly in
@@ -115,16 +119,205 @@ class CommandRegistry {
   List<GlazeCommand> list() => _commands.values.toList(growable: false);
 }
 
-/// Convenience builder that wires up the MVP commands.
-///
-/// The handlers are intentionally trivial — they show that the
-/// `executeCommand` bridge method can call back into existing
-/// capabilities (`triggerGeneration`, `setVariables`, etc.) without
-/// re-implementing them. The MVP does **not** route to
-/// `GlazeCommand` handlers from the JS bridge yet (the bridge still
-/// uses the dedicated methods). The command registry is exposed so
-/// that future UI surfaces (settings, macro cheat sheet) can
-/// discover the available commands.
+/// Dependencies for [WiredCommandRegistry] — the production path that
+/// dispatches `/trigger`, `/getvar`, `/setvar`, `/inject`, `/toast`
+/// to the same services the dedicated bridge methods use.
+class WiredCommandDeps {
+  const WiredCommandDeps({
+    required this.bridge,
+    required this.toastController,
+    required this.promptInjection,
+    required this.triggerHandler,
+  });
+
+  /// The live [JsBridgeService] to delegate `/getvar` and `/setvar` to.
+  /// We re-use the existing dispatcher so scope, permission, and JSON
+  /// validation are identical to the dedicated `glaze.getVariables` /
+  /// `glaze.setVariables` paths.
+  final JsBridgeService bridge;
+
+  /// Toast surface for `/toast`. Mirrors the dedicated `glaze.showToast`
+  /// bridge.
+  final JsBridgeToastController toastController;
+
+  /// Runtime prompt injection service for `/inject`.
+  final RuntimePromptInjectionNotifier promptInjection;
+
+  /// Trigger handler for `/trigger`. Mirrors the dedicated
+  /// `glaze.triggerGeneration` bridge.
+  final TriggerGenerationHandler triggerHandler;
+}
+
+/// Builds a [CommandRegistry] whose handlers are wired to the real
+/// services. The MVP commands route to the same code paths as the
+/// dedicated bridge methods so the bridge's permission / scope / JSON
+/// invariants are preserved end-to-end.
+CommandRegistry buildWiredCommandRegistry(WiredCommandDeps deps) {
+  final registry = CommandRegistry();
+
+  registry.register(
+    GlazeCommand(
+      name: '/trigger',
+      summary: 'Trigger a chat generation. Args: { mode?: "continue" | "regenerate" | "auto", reason?: string }',
+      handler: (args, context) async {
+        final charId = context.charId;
+        if (charId == null || charId.isEmpty) {
+          return const CommandResult.error(
+            '/trigger: charId is required',
+          );
+        }
+        final result = await deps.triggerHandler.handle(
+          charId: charId,
+          params: args,
+        );
+        return CommandResult.ok(
+          message: 'trigger dispatched',
+          data: result,
+        );
+      },
+    ),
+  );
+
+  registry.register(
+    GlazeCommand(
+      name: '/getvar',
+      summary: 'Read a JS variable. Args: { scope: "chat"|"character"|"global"|"message", path?: string }',
+      handler: (args, context) async {
+        // `/getvar` is the same as the dedicated `glaze.getVariables`
+        // method, routed through the bridge's own dispatcher. We
+        // forward the call so the same JSON-validity / permission /
+        // path semantics apply.
+        final path = args['path'];
+        final params = <String, dynamic>{
+          'scope': args['scope'] ?? 'chat',
+          if (path != null) 'path': path,
+        };
+        final response = await deps.bridge.dispatch({
+          'method': 'getVariables',
+          'params': params,
+          'context': {
+            if (context.charId != null) 'characterId': context.charId,
+          },
+        });
+        if (response['ok'] != true) {
+          return CommandResult.error(
+            (response['error']?['message'] as String?) ?? 'getvar failed',
+          );
+        }
+        return CommandResult.ok(
+          message: 'getvar ok',
+          data: response['result'],
+        );
+      },
+    ),
+  );
+
+  registry.register(
+    GlazeCommand(
+      name: '/setvar',
+      summary: 'Write a JS variable. Args: { scope, path?, value? | values? }',
+      handler: (args, context) async {
+        final params = <String, dynamic>{
+          'scope': args['scope'] ?? 'chat',
+        };
+        if (args.containsKey('path')) {
+          params['path'] = args['path'];
+        }
+        if (args.containsKey('value')) {
+          params['value'] = args['value'];
+        } else if (args.containsKey('values')) {
+          params['values'] = args['values'];
+        }
+        final response = await deps.bridge.dispatch({
+          'method': 'setVariables',
+          'params': params,
+          'context': {
+            if (context.charId != null) 'characterId': context.charId,
+          },
+        });
+        if (response['ok'] != true) {
+          return CommandResult.error(
+            (response['error']?['message'] as String?) ?? 'setvar failed',
+          );
+        }
+        return CommandResult.ok(message: 'setvar ok', data: response['result']);
+      },
+    ),
+  );
+
+  registry.register(
+    GlazeCommand(
+      name: '/inject',
+      summary: 'Inject a runtime prompt block. Args: { id, content, depth?, role? }',
+      handler: (args, context) async {
+        final charId = context.charId;
+        if (charId == null || charId.isEmpty) {
+          return const CommandResult.error('/inject: charId is required');
+        }
+        final id = args['id'];
+        final content = args['content'];
+        if (id is! String || id.trim().isEmpty) {
+          return const CommandResult.error('/inject: id is required');
+        }
+        if (content is! String || content.trim().isEmpty) {
+          return const CommandResult.error('/inject: content is required');
+        }
+        final rawDepth = args['depth'];
+        final depth = rawDepth is int
+            ? rawDepth
+            : (rawDepth is num ? rawDepth.toInt() : 0);
+        final role = (args['role'] as String?) ?? 'system';
+        // The injected block is session-scoped; we use a derived
+        // sessionId from the charId. Production code stores this on
+        // the active chat session; here we rely on the chat notifier
+        // having already established a session for this charId. The
+        // handler does NOT need a sessionId at the call site — the
+        // notifier resolves it lazily from the chat state.
+        // The `id` doubles as the persistence key.
+        final result = deps.promptInjection.inject(
+          sessionId: charId,
+          id: id,
+          content: content,
+          depth: depth,
+          role: role,
+        );
+        return CommandResult.ok(
+          message: 'inject ok',
+          data: {'id': result.id, 'depth': result.depth, 'role': result.role},
+        );
+      },
+    ),
+  );
+
+  registry.register(
+    GlazeCommand(
+      name: '/toast',
+      summary: 'Show a toast. Args: { message, severity?: "info"|"success"|"warning"|"error", action?: string }',
+      handler: (args, context) async {
+        final message = args['message'];
+        if (message is! String) {
+          return const CommandResult.error('/toast: message is required');
+        }
+        final severity = GlazeToastSeverity.parse(args['severity'] as String?);
+        final action = args['action'] as String?;
+        deps.toastController.show(
+          message,
+          severity: severity,
+          actionLabel: action,
+        );
+        return CommandResult.ok(message: 'toast shown');
+      },
+    ),
+  );
+
+  return registry;
+}
+
+/// Convenience builder that wires up the MVP commands with the default
+/// echo behaviour. **The echo registry is for unit tests, CMS, and
+/// discovery tooling only** — production wiring should use
+/// [buildWiredCommandRegistry] so the `/trigger`, `/getvar`, `/setvar`,
+/// `/inject`, and `/toast` commands actually do something.
 CommandRegistry buildDefaultCommandRegistry() {
   final registry = CommandRegistry();
   registry.register(
@@ -132,10 +325,6 @@ CommandRegistry buildDefaultCommandRegistry() {
       name: '/trigger',
       summary: 'Trigger a chat generation. Args: { mode?: "continue" | "regenerate" | "auto" }',
       handler: (args, context) async {
-        // Real wiring: in production, the registry is given a
-        // dispatch closure by the bridge wiring. The MVP just echoes
-        // the call so the contract is testable without a full Riverpod
-        // container.
         return CommandResult.ok(
           message: 'trigger ${args['mode'] ?? TriggerMode.auto.name} '
               'for charId=${context.charId ?? '(none)'}',
