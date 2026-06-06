@@ -2,18 +2,18 @@ import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:collection/collection.dart';
-import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/llm/sse_client.dart';
 import '../../../core/models/preset.dart';
-import '../../../core/state/active_selection_provider.dart';
+import '../../../core/state/active_regex_provider.dart';
 import '../../../core/state/character_provider.dart';
-import '../../../core/state/db_provider.dart';
+import '../../../core/state/persona_resolution.dart';
+import '../../../../shared/theme/theme_font_provider.dart';
 import '../bridge/chat_bridge_controller.dart';
+import '../bridge/chat_webview_bridge_host.dart';
 import '../bridge/chat_webview_keep_alive.dart';
 import '../bridge/chat_webview_settings.dart';
 import '../chat_provider.dart';
@@ -21,31 +21,14 @@ import '../chat_state.dart';
 import '../editing_message_provider.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../../shared/theme/app_colors.dart';
-import '../../../../shared/theme/theme_font_provider.dart';
-import '../../extensions/models/connection_profiles.dart';
 import '../../extensions/models/info_block.dart';
-import '../../extensions/models/preset_permissions.dart';
-import '../../extensions/models/trigger_mode.dart';
-import '../../extensions/models/trigger_result.dart';
-import '../../extensions/providers/global_variables_repo_provider.dart';
-import '../../extensions/providers/info_blocks_provider.dart';
 import '../../extensions/providers/extension_presets_provider.dart';
 import '../../extensions/providers/extensions_settings_provider.dart';
-import '../../extensions/providers/preset_permissions_provider.dart';
-import '../../extensions/services/audio_bridge_service.dart';
-import '../../extensions/services/command_registry.dart';
-import '../../extensions/services/connection_profile_resolver.dart';
+import '../../extensions/providers/info_blocks_provider.dart';
 import '../../extensions/services/ext_blocks_panel_builder.dart';
 import '../../extensions/services/extension_post_gen_service.dart';
-import '../../extensions/services/generation_dispatcher.dart';
-import '../../extensions/services/js_bridge_service.dart';
-import '../../extensions/services/js_bridge_toast_controller.dart';
 import '../../extensions/services/js_engine_service.dart';
 import '../../extensions/services/panel_host_service.dart';
-import '../../extensions/services/runtime_prompt_injection_service.dart';
-import '../../extensions/services/trigger_generation_handler.dart';
-import '../../extensions/state/message_variables_notifier.dart';
-import '../../settings/api_list_provider.dart';
 import '../bridge/chat_bridge_registry.dart';
 import 'webview_callbacks.dart';
 
@@ -216,247 +199,18 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     }
   }
 
-  /// Shared connection-profile resolver for `glaze.generateText`.
-  /// When the active extension preset has a `big/medium/small` API
-  /// config id configured, the bridge dispatches to that config;
-  /// otherwise it falls back to the active API config.
-  final ConnectionProfileResolver _profileResolver =
-      const ConnectionProfileResolver();
-
-  Future<String> _generateBridgeText(
-    String prompt,
-    Map<String, dynamic> options,
-    Map<String, dynamic> bridgeContext,
-  ) async {
-    await ref.read(apiListProvider.future);
-    final configs = ref.read(apiListProvider).valueOrNull ?? const [];
-    final activeApiConfig = ref.read(activeApiConfigProvider);
-    final profile = ConnectionProfileX.parse(options['preset']) ??
-        ConnectionProfile.medium;
-    final activePresetId =
-        ref.read(extensionsSettingsProvider).activePresetId;
-    final preset = activePresetId == null
-        ? null
-        : ref
-            .read(extensionPresetsProvider)
-            .where((p) => p.id == activePresetId)
-            .firstOrNull;
-    final apiConfig = _profileResolver.resolve(
-      preset,
-      profile,
-      activeApiConfig,
-      configs,
-    );
-    if (apiConfig == null) {
-      throw StateError('No active API config available');
-    }
-    if (apiConfig.endpoint.isEmpty || apiConfig.model.isEmpty) {
-      throw StateError('Active API config is incomplete');
-    }
-
-    final cancelToken = CancelToken();
-    final completer = Completer<String>();
-    unawaited(
-      SseClient().streamChatCompletion(
-        endpoint: apiConfig.endpoint,
-        apiKey: apiConfig.apiKey,
-        model: apiConfig.model,
-        messages: [
-          {'role': 'user', 'content': prompt},
-        ],
-        maxTokens: apiConfig.maxTokens,
-        temperature: apiConfig.temperature,
-        topP: apiConfig.topP,
-        stream: false,
-        cancelToken: cancelToken,
-        requestReasoning: apiConfig.requestReasoning,
-        reasoningEffort: apiConfig.reasoningEffort,
-        omitTemperature: apiConfig.omitTemperature,
-        omitTopP: apiConfig.omitTopP,
-        omitReasoning: apiConfig.omitReasoning,
-        omitReasoningEffort: apiConfig.omitReasoningEffort,
-        sessionId: widget.sessionId,
-        cacheControlTtl: apiConfig.cacheControlTtl,
-        onComplete: (text, _, {rawResponseJson}) {
-          if (!completer.isCompleted) completer.complete(text);
-        },
-        onError: (error) {
-          if (!completer.isCompleted) completer.completeError(error);
-        },
-      ),
-    );
-    return completer.future.timeout(
-      const Duration(seconds: 55),
-      onTimeout: () {
-        cancelToken.cancel('glaze.generateText timed out');
-        throw TimeoutException('glaze.generateText timed out');
-      },
-    );
-  }
-
-  Map<String, dynamic> _injectBridgePrompt(
-    String id,
-    String content,
-    Map<String, dynamic> options,
-    Map<String, dynamic> bridgeContext,
-  ) {
-    final sessionId =
-        (bridgeContext['sessionId'] as String?) ?? widget.sessionId;
-    if (sessionId == null || sessionId.isEmpty) {
-      throw StateError('Chat session context is not available');
-    }
-    final rawDepth = options['depth'];
-    final depth = rawDepth == null
-        ? 0
-        : rawDepth is int
-        ? rawDepth
-        : throw ArgumentError('injectPrompt depth must be an integer');
-    final rawRole = options['role'];
-    if (rawRole != null && rawRole is! String) {
-      throw ArgumentError('injectPrompt role must be a string');
-    }
-    final role = rawRole as String? ?? 'system';
-    final injected = ref
-        .read(runtimePromptInjectionProvider.notifier)
-        .inject(
-          sessionId: sessionId,
-          id: id,
-          content: content,
-          depth: depth,
-          role: role,
-        );
-    return {'id': injected.id, 'depth': injected.depth, 'role': injected.role};
-  }
-
-  Map<String, dynamic> _uninjectBridgePrompt(
-    String id,
-    Map<String, dynamic> bridgeContext,
-  ) {
-    final sessionId =
-        (bridgeContext['sessionId'] as String?) ?? widget.sessionId;
-    if (sessionId == null || sessionId.isEmpty) {
-      throw StateError('Chat session context is not available');
-    }
-    final removed = ref
-        .read(runtimePromptInjectionProvider.notifier)
-        .uninject(sessionId: sessionId, id: id);
-    return {'id': id.trim(), 'removed': removed};
-  }
-
-  Future<Map<String, dynamic>> _triggerBridgeGeneration(
-    String? charId,
-    Map<String, dynamic> params,
-  ) async {
-    final resolvedCharId =
-        (params['characterId'] as String?) ??
-        (charId) ??
-        widget.charId;
-    if (resolvedCharId == null || resolvedCharId.isEmpty) {
-      return TriggerNoSession(mode: TriggerMode.auto).toMap();
-    }
-    final dispatcher = ref.read(generationDispatcherProvider);
-    final handler = TriggerGenerationHandler(
-      dispatcher: dispatcher,
-      log: (line) => debugPrint(line),
-    );
-    return handler.handle(charId: resolvedCharId, params: params);
-  }
-
-  /// Permission gate for the visual chat WebView bridge. Reads the
-  /// currently active preset's [PresetPermissions] from the Riverpod
-  /// graph; the bridge may have changed preset at any time (the user
-  /// can switch active preset without rebuilding the WebView).
-  bool _bridgePermissionCheck(String capabilityId) {
-    try {
-      final permissions = ref.read(activePresetPermissionsProvider);
-      return permissions.isGrantedById(capabilityId);
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Shared audio facade for `glaze.playAudio`. Re-uses one
-  /// [AudioBridgeService] per widget.
-  final AudioBridgeService _audioBridge = AudioBridgeService();
-
-  Future<void> _playBridgeAudio(
-    String? source,
-    Map<String, dynamic> options,
-  ) {
-    return _audioBridge.play(source, options);
-  }
-
-  /// Toast surface for the JS bridge. Resolves the active `BuildContext`
-  /// lazily so the toast surfaces from the currently mounted chat.
-  final JsBridgeToastController _toastController = JsBridgeToastController();
-
-  void _showBridgeToast(String? message, Map<String, dynamic> options) {
-    final severity = GlazeToastSeverity.parse(options['severity'] as String?);
-    // Re-resolve the BuildContext on every call so the toast surfaces
-    // from the currently mounted screen, not the snapshot at bridge init.
-    _toastController.overlayResolver = () => context;
-    _toastController.show(
-      message,
-      severity: severity,
-      actionLabel: options['action'] as String?,
-    );
-  }
-
-  /// Trigger handler shared with the wired command registry's `/trigger`.
-  late final TriggerGenerationHandler _triggerHandler = TriggerGenerationHandler(
-    dispatcher: ref.read(generationDispatcherProvider),
-    log: (line) => debugPrint(line),
+  /// Owns the chat WebView's bridge-side dependencies: the
+  /// [JsBridgeService] handler implementations (generateText,
+  /// injectPrompt, uninjectPrompt, triggerGeneration, playAudio,
+  /// showToast, executeCommand), the permission gate, and the long-lived
+  /// helper instances (audio bridge, toast controller, command registry,
+  /// trigger handler, prompt injection notifier).
+  late final ChatWebViewBridgeHost _bridgeHost = ChatWebViewBridgeHost(
+    ref: ref,
+    overlayContextResolver: () => context,
+    currentSessionId: () => widget.sessionId,
+    currentCharacterId: () => widget.charId,
   );
-
-  /// Runtime prompt injection notifier shared with the wired command
-  /// registry's `/inject`.
-  late final RuntimePromptInjectionNotifier _promptInjection =
-      ref.read(runtimePromptInjectionProvider.notifier);
-
-  /// Shared slash-command registry. The wired registry routes
-  /// `/trigger`, `/getvar`, `/setvar`, `/inject`, and `/toast` to the
-  /// same services as the dedicated bridge methods (so permissions /
-  /// scope / JSON validation are preserved end-to-end).
-  late final CommandRegistry _commandRegistry = _buildWiredCommandRegistry();
-
-  CommandRegistry _buildWiredCommandRegistry() {
-    return buildWiredCommandRegistry(
-      WiredCommandDeps(
-        // The deps-only bridge is intentionally minimal: it has
-        // access to the same repos / session id / permission check
-        // as the live bridge, but no trigger / generate / audio
-        // handlers. `/getvar` and `/setvar` only need the repos.
-        bridge: JsBridgeService(
-          chatRepo: ref.read(chatRepoProvider),
-          characterRepo: ref.read(characterRepoProvider),
-          currentSessionId: () => widget.sessionId,
-          currentCharacterId: () => widget.charId,
-          permissionCheck: _bridgePermissionCheck,
-          messageVariables: () =>
-              ref.read(messageVariablesProvider.notifier),
-        ),
-        toastController: _toastController,
-        promptInjection: _promptInjection,
-        triggerHandler: _triggerHandler,
-      ),
-    );
-  }
-
-  Future<Map<String, dynamic>> _executeBridgeCommand(
-    String command,
-    Map<String, dynamic> args,
-    Map<String, dynamic> context,
-  ) async {
-    final result = await _commandRegistry.run(
-      command,
-      args,
-      context: CommandContext(
-        charId: widget.charId,
-        presetId: ref.read(extensionsSettingsProvider).activePresetId,
-      ),
-    );
-    return result.toMap();
-  }
 
   @override
   void dispose() {
@@ -465,8 +219,9 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     // Drop interactive panel state for this character so the singleton
     // registry doesn't keep references to disposed bridge callbacks.
     PanelHostService.instance.disposeAll(charId: widget.charId);
-    // Release the audio player owned by this widget.
-    unawaited(_audioBridge.dispose());
+    // Release long-lived resources owned by the bridge host (audio
+    // player, etc.). Errors are swallowed; teardown must not throw.
+    _bridgeHost.dispose().catchError((Object _) {});
     super.dispose();
   }
 
@@ -1167,26 +922,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
                 mixedContentMode: MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
               ),
               onWebViewCreated: (controller) async {
-                final globalRepo = await ref.read(
-                  globalVariablesRepoProvider.future,
-                );
-                final jsBridgeService = JsBridgeService(
-                  chatRepo: ref.read(chatRepoProvider),
-                  characterRepo: ref.read(characterRepoProvider),
-                  globalVariablesRepo: globalRepo,
-                  messageVariables: () =>
-                      ref.read(messageVariablesProvider.notifier),
-                  currentSessionId: () => widget.sessionId,
-                  currentCharacterId: () => widget.charId,
-                  generateText: _generateBridgeText,
-                  injectPrompt: _injectBridgePrompt,
-                  uninjectPrompt: _uninjectBridgePrompt,
-                  triggerGeneration: _triggerBridgeGeneration,
-                  permissionCheck: _bridgePermissionCheck,
-                  playAudio: _playBridgeAudio,
-                  executeCommand: _executeBridgeCommand,
-                  showToast: _showBridgeToast,
-                );
+                final jsBridgeService = await _bridgeHost.buildJsBridgeService();
                 _bridge = ChatBridgeController(
                   controller,
                   jsBridgeService: jsBridgeService,

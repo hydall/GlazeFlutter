@@ -1,6 +1,6 @@
 # Refactor Plan — Bridge, God-Widgets, God-Services
 
-**Status:** Phase 2 complete. Phase 1 complete.
+**Status:** Phase 3 in progress. Phases 1-2 complete.
 **Scope:** Decompose 4 Dart god-objects and 3 JS god-scripts that grew during the
 `js-extension-bridge-sdk` branch (22 feature commits) into focused modules.
 **Goal:** Clean foundation for future feature work; no functional changes.
@@ -200,7 +200,7 @@ tests) after extracting all four concrete handlers. Additional targeted periodic
 runner extraction checks passed for `test/periodic_trigger_scheduler_test.dart`,
 `test/periodic_lifecycle_test.dart`, and `test/blocks/block_processor_test.dart`.
 
-### Phase 3 — `chat_webview_widget.dart` → controllers/services (2 days)
+### Phase 3 — `chat_webview_widget.dart` → controllers/services (2 days) 🚧 In progress
 
 **Before:** one 1630-line `ConsumerStatefulWidget` doing WebView setup,
 bridge wiring, panel lifecycle, audio lifecycle, swipe handling, periodic
@@ -230,6 +230,16 @@ through an explicit `ChatWebViewContext` or constructor dependencies.
 (`test/chat_webview/bridge_host_controller_test.dart`, etc.). Add one widget
 harness test that asserts clean init/dispose ordering. End-to-end behavior is
 still covered by the manual `flutter run` smoke test.
+
+**Implemented so far:** extracted the chat WebView's bridge-side dependencies
+(`JsBridgeService` handler implementations, permission gate, audio bridge,
+toast controller, trigger handler, prompt injection notifier, command
+registry) into `ChatWebViewBridgeHost` in
+`lib/features/chat/bridge/chat_webview_bridge_host.dart`. The widget now
+just creates the host as a `late final` and calls `buildJsBridgeService()`
+from `onWebViewCreated`. `chat_webview_widget.dart` shrank from 1630 → 1279
+lines (-21.5%). Disposal is centralized in `ChatWebViewBridgeHost.dispose()`
+which the widget calls from `State.dispose`.
 
 ### Phase 4 — `preset_editor_screen.dart` → Sub-screens (1 day)
 
