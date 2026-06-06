@@ -62,8 +62,7 @@ class ChatWebViewSurface extends ConsumerWidget {
   final MiscCallbacks miscActions;
   final bool Function() isMounted;
   final bool sessionSwitching;
-  final Future<void> Function(String sessionId, String messageId)
-      refreshPanel;
+  final Future<void> Function(String sessionId, String messageId) refreshPanel;
   final Uint8List? bgImageBytes;
   final double bgOpacity;
   final double bgBlur;
@@ -118,9 +117,7 @@ class ChatWebViewSurface extends ConsumerWidget {
           ),
           if (bgDim > 0)
             Positioned.fill(
-              child: Container(
-                color: Colors.black.withValues(alpha: bgDim),
-              ),
+              child: Container(color: Colors.black.withValues(alpha: bgDim)),
             ),
         ],
         AnimatedOpacity(
@@ -129,7 +126,7 @@ class ChatWebViewSurface extends ConsumerWidget {
           child: IgnorePointer(
             ignoring: sessionSwitching,
             child: InAppWebView(
-              keepAlive: chatWebViewKeepAlive,
+              keepAlive: chatWebViewKeepAliveForPlatform(),
               initialFile: 'assets/chat_webview/index.html',
               initialSettings: InAppWebViewSettings(
                 javaScriptEnabled: true,
@@ -157,8 +154,7 @@ class ChatWebViewSurface extends ConsumerWidget {
                 mixedContentMode: MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
               ),
               onWebViewCreated: (controller) async {
-                final jsBridgeService =
-                    await bridgeHost.buildJsBridgeService();
+                final jsBridgeService = await bridgeHost.buildJsBridgeService();
                 final bridge = ChatBridgeController(
                   controller,
                   jsBridgeService: jsBridgeService,
