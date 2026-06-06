@@ -1,6 +1,6 @@
 # Refactor Plan — Bridge, God-Widgets, God-Services
 
-**Status:** Phase 2 in progress. Phase 1 complete.
+**Status:** Phase 2 complete. Phase 1 complete.
 **Scope:** Decompose 4 Dart god-objects and 3 JS god-scripts that grew during the
 `js-extension-bridge-sdk` branch (22 feature commits) into focused modules.
 **Goal:** Clean foundation for future feature work; no functional changes.
@@ -131,7 +131,7 @@ test. Targeted tests passed: `test/js_bridge/generation_handler_test.dart`,
 `test/trigger_generation_test.dart`, and `test/wired_command_registry_test.dart`
 (63 tests).
 
-### Phase 2 — `extension_post_gen_service.dart` → block processors (2 days) 🚧 In progress
+### Phase 2 — `extension_post_gen_service.dart` → block processors (2 days) ✅ Done
 
 **Before:** one 1526-line service that:
 
@@ -182,8 +182,13 @@ semantics. Extracted shared panel update/throttling plumbing into
 `BlockPanelUpdater`, placeholder/error/dedupe lifecycle into
 `BlockStatusTracker`, and shared image pixel rendering/persistence into
 `ImagePixelRenderer`. Extracted message-bound `jsRunner` execution/headless
-fallback persistence into `JsBlockExecutor`; periodic `runJsBlock()` still stays
-on `ExtensionPostGenService` because it is the public scheduler entry point.
+fallback persistence into `JsBlockExecutor`; extracted periodic headless/visual
+fallback execution into `PeriodicJsBlockRunner` while keeping
+`ExtensionPostGenService.runJsBlock()` as the public scheduler entry point.
+Extracted placeholder preparation, `BlockContext` construction, handler dispatch,
+and top-level per-block error wrapping into `SingleBlockRunner`. Extracted
+manual image-only rerun validation/status update flow into `ImageOnlyRerunner`,
+sharing the existing `ImagePixelRenderer` path.
 
 **Verification so far:** targeted analyze passed for
 `extension_post_gen_service.dart`, `services/blocks`, and
@@ -191,7 +196,9 @@ on `ExtensionPostGenService` because it is the public scheduler entry point.
 `test/blocks/block_processor_test.dart`, `test/after_user_dispatch_test.dart`,
 `test/periodic_trigger_scheduler_test.dart`, `test/periodic_lifecycle_test.dart`,
 `test/panel_host_service_test.dart`, and `test/js_engine_service_test.dart` (27
-tests) after extracting all four concrete handlers.
+tests) after extracting all four concrete handlers. Additional targeted periodic
+runner extraction checks passed for `test/periodic_trigger_scheduler_test.dart`,
+`test/periodic_lifecycle_test.dart`, and `test/blocks/block_processor_test.dart`.
 
 ### Phase 3 — `chat_webview_widget.dart` → controllers/services (2 days)
 

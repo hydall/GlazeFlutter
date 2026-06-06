@@ -7,27 +7,27 @@ import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/persona.dart';
 import '../../../core/state/db_provider.dart';
-import '../../chat/bridge/chat_bridge_registry.dart';
-import '../../image_gen/image_gen_provider.dart';
 import '../models/block_config.dart';
-import '../models/block_run_status.dart';
 import '../models/extension_preset.dart';
 import '../models/info_block.dart';
 import '../providers/extension_presets_provider.dart';
 import '../providers/extensions_settings_provider.dart';
 import '../providers/info_blocks_provider.dart';
 import 'info_block_service.dart';
-import 'js_engine_service.dart';
 import 'blocks/block_processor.dart';
 import 'blocks/block_context.dart';
+import 'blocks/block_handler.dart';
 import 'blocks/block_panel_updater.dart';
 import 'blocks/image_gen_block_handler.dart';
+import 'blocks/image_only_rerunner.dart';
 import 'blocks/image_pixel_renderer.dart';
 import 'blocks/interactive_block_handler.dart';
 import 'blocks/js_block_executor.dart';
 import 'blocks/js_runner_block_handler.dart';
 import 'blocks/infoblock_handler.dart';
 import 'blocks/block_status_tracker.dart';
+import 'blocks/periodic_js_block_runner.dart';
+import 'blocks/single_block_runner.dart';
 
 final extensionPostGenServiceProvider = Provider<ExtensionPostGenService>(
   (ref) => ExtensionPostGenService(ref),
@@ -72,24 +72,6 @@ class ExtensionPostGenService {
   }) {
     return _statusTracker.markError(
       context: context,
-      errorMessage: errorMessage,
-    );
-  }
-
-  Future<InfoBlock> _markBlockError({
-    required String charId,
-    required String sessionId,
-    required String messageId,
-    required String placeholderId,
-    required InfoBlock placeholder,
-    required String errorMessage,
-  }) {
-    return _statusTracker.markErrorForPlaceholder(
-      charId: charId,
-      sessionId: sessionId,
-      messageId: messageId,
-      placeholderId: placeholderId,
-      placeholder: placeholder,
       errorMessage: errorMessage,
     );
   }
@@ -314,41 +296,22 @@ class ExtensionPostGenService {
     final preset = _resolveActivePreset();
     if (preset == null) return;
 
-    final blockConfig = preset.blocks.where((b) => b.id == blockId).firstOrNull;
-    if (blockConfig == null || blockConfig.type != BlockType.imageGen) return;
-
-    final rows = await _repo.getByMessageId(sessionId, messageId);
-    final existing = rows.where((b) => b.blockId == blockId).firstOrNull;
-    if (existing == null || existing.content.isEmpty) return;
-
-    final imageService = await _ref
-        .read(imageGenSettingsProvider.notifier)
-        .getServiceAsync();
-    if (imageService
-        .extractInstructionsFromImageContent(existing.content)
-        .isEmpty) {
-      return;
-    }
-
     final cancelToken = CancelToken();
     _blocksCancelToken = cancelToken;
 
-    await _repo.updateStatus(existing.id, BlockRunStatus.running);
-    _ref
-        .read(infoBlocksProvider(sessionId).notifier)
-        .addOrReplace(existing.copyWith(status: BlockRunStatus.running));
-    _refreshPanelForMessage(charId, sessionId, messageId);
-
-    await _renderImagePixels(
+    await ImageOnlyRerunner(
+      ref: _ref,
+      repo: _repo,
+      refreshPanelForMessage: _refreshPanelForMessage,
+      renderImagePixels: _renderImagePixels,
+    ).rerun(
+      blockId: blockId,
       charId: charId,
       sessionId: sessionId,
       messageId: messageId,
-      blockConfig: blockConfig,
       character: character,
       persona: persona,
-      sourceContent: existing.content,
-      placeholderId: existing.id,
-      placeholder: existing,
+      blocks: preset.blocks,
       cancelToken: cancelToken,
     );
   }
@@ -408,144 +371,68 @@ class ExtensionPostGenService {
     required String? previousOutput,
     required CancelToken cancelToken,
     String? reuseBlockId,
-  }) async {
-    if (cancelToken.isCancelled) return null;
+  }) =>
+      SingleBlockRunner(
+        statusTracker: _statusTracker,
+        refreshPanelForMessage: _refreshPanelForMessage,
+        handlerFor: _handlerFor,
+      ).run(
+        charId: charId,
+        sessionId: sessionId,
+        messageId: messageId,
+        messages: messages,
+        blockConfig: blockConfig,
+        preset: preset,
+        character: character,
+        persona: persona,
+        previousOutput: previousOutput,
+        cancelToken: cancelToken,
+        reuseBlockId: reuseBlockId,
+      );
 
-    debugPrint(
-      '[ExtPostGen] _runSingleBlock START: name="${blockConfig.name}" type=${blockConfig.type.name} order=${blockConfig.order} reuse=${reuseBlockId ?? "new"}',
-    );
-
-    final prepared = await _statusTracker.prepare(
-      charId: charId,
-      sessionId: sessionId,
-      messageId: messageId,
-      blockConfig: blockConfig,
-      reuseBlockId: reuseBlockId,
-    );
-    final placeholderId = prepared.placeholderId;
-    final placeholder = prepared.placeholder;
-
-    _refreshPanelForMessage(charId, sessionId, messageId);
-
-    try {
-      InfoBlock? result;
-
-      switch (blockConfig.type) {
-        case BlockType.infoblock:
-          result = await _runInfoblock(
-            BlockContext(
-              charId: charId,
-              sessionId: sessionId,
-              messageId: messageId,
-              messages: messages,
-              blockConfig: blockConfig,
-              preset: preset,
-              character: character,
-              persona: persona,
-              previousOutput: previousOutput,
-              cancelToken: cancelToken,
-              placeholderId: placeholderId,
-              placeholder: placeholder,
-            ),
-          );
-        case BlockType.imageGen:
-          result = await _runImageGen(
-            BlockContext(
-              charId: charId,
-              sessionId: sessionId,
-              messageId: messageId,
-              messages: messages,
-              blockConfig: blockConfig,
-              preset: preset,
-              character: character,
-              persona: persona,
-              previousOutput: previousOutput,
-              cancelToken: cancelToken,
-              placeholderId: placeholderId,
-              placeholder: placeholder,
-            ),
-          );
-        case BlockType.jsRunner:
-          result = await _runJsRunner(
-            BlockContext(
-              charId: charId,
-              sessionId: sessionId,
-              messageId: messageId,
-              messages: messages,
-              blockConfig: blockConfig,
-              preset: preset,
-              character: character,
-              persona: persona,
-              previousOutput: previousOutput,
-              cancelToken: cancelToken,
-              placeholderId: placeholderId,
-              placeholder: placeholder,
-            ),
-          );
-        case BlockType.interactive:
-          result = await _runInteractive(
-            BlockContext(
-              charId: charId,
-              sessionId: sessionId,
-              messageId: messageId,
-              messages: messages,
-              blockConfig: blockConfig,
-              preset: preset,
-              character: character,
-              persona: persona,
-              previousOutput: previousOutput,
-              cancelToken: cancelToken,
-              placeholderId: placeholderId,
-              placeholder: placeholder,
-            ),
-          );
-      }
-
-      return result;
-    } catch (e) {
-      if (!cancelToken.isCancelled) {
-        debugPrint('[ExtPostGen] Error in block "${blockConfig.name}": $e');
-        return _markBlockError(
-          charId: charId,
-          sessionId: sessionId,
-          messageId: messageId,
-          placeholderId: placeholderId,
-          placeholder: placeholder,
-          errorMessage: e.toString(),
+  BlockHandler _handlerFor(BlockType type) {
+    switch (type) {
+      case BlockType.infoblock:
+        return InfoblockHandler(
+          ref: _ref,
+          repo: _repo,
+          markBlockError: _markContextBlockError,
+          refreshPanelForMessage: _refreshPanelForMessage,
+          makeStreamHandler: _makeStreamHandler,
         );
-      }
-      return null;
+      case BlockType.imageGen:
+        return ImageGenBlockHandler(
+          ref: _ref,
+          repo: _repo,
+          markBlockError: _markContextBlockError,
+          makeStreamHandler: _makeStreamHandler,
+          publishStreamingBlockContent: _publishStreamingBlockContent,
+          renderImagePixels: _renderContextImagePixels,
+        );
+      case BlockType.jsRunner:
+        return JsRunnerBlockHandler(
+          repo: _repo,
+          infoBlockService: _ref.read(infoBlockServiceProvider),
+          markBlockError: _markContextBlockError,
+          refreshPanelForMessage: _refreshPanelForMessage,
+          makeStreamHandler: _makeStreamHandler,
+          publishStreamingBlockContent: _publishStreamingBlockContent,
+          executeJsScript: _executeContextJsScript,
+        );
+      case BlockType.interactive:
+        return InteractiveBlockHandler(
+          ref: _ref,
+          repo: _repo,
+          markBlockError: _markContextBlockError,
+          refreshPanelForMessage: _refreshPanelForMessage,
+          publishStreamingBlockContent: _publishStreamingBlockContent,
+        );
     }
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // Infoblock
-  // ─────────────────────────────────────────────────────────────────────────
-
-  Future<InfoBlock?> _runInfoblock(BlockContext context) {
-    return InfoblockHandler(
-      ref: _ref,
-      repo: _repo,
-      markBlockError: _markContextBlockError,
-      refreshPanelForMessage: _refreshPanelForMessage,
-      makeStreamHandler: _makeStreamHandler,
-    ).handle(context);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Image gen
   // ─────────────────────────────────────────────────────────────────────────
-
-  Future<InfoBlock?> _runImageGen(BlockContext context) {
-    return ImageGenBlockHandler(
-      ref: _ref,
-      repo: _repo,
-      markBlockError: _markContextBlockError,
-      makeStreamHandler: _makeStreamHandler,
-      publishStreamingBlockContent: _publishStreamingBlockContent,
-      renderImagePixels: _renderContextImagePixels,
-    ).handle(context);
-  }
 
   Future<InfoBlock?> _renderContextImagePixels({
     required BlockContext context,
@@ -598,34 +485,8 @@ class ExtensionPostGenService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Interactive panel
-  // ─────────────────────────────────────────────────────────────────────────
-
-  Future<InfoBlock?> _runInteractive(BlockContext context) {
-    return InteractiveBlockHandler(
-      ref: _ref,
-      repo: _repo,
-      markBlockError: _markContextBlockError,
-      refreshPanelForMessage: _refreshPanelForMessage,
-      publishStreamingBlockContent: _publishStreamingBlockContent,
-    ).handle(context);
-  }
-
-  // ─────────────────────────────────────────────────────────────────────────
   // JS Runner
   // ─────────────────────────────────────────────────────────────────────────
-
-  Future<InfoBlock?> _runJsRunner(BlockContext context) {
-    return JsRunnerBlockHandler(
-      repo: _repo,
-      infoBlockService: _ref.read(infoBlockServiceProvider),
-      markBlockError: _markContextBlockError,
-      refreshPanelForMessage: _refreshPanelForMessage,
-      makeStreamHandler: _makeStreamHandler,
-      publishStreamingBlockContent: _publishStreamingBlockContent,
-      executeJsScript: _executeContextJsScript,
-    ).handle(context);
-  }
 
   Future<InfoBlock?> _executeContextJsScript({
     required BlockContext context,
@@ -658,67 +519,7 @@ class ExtensionPostGenService {
     required String charId,
     required BlockConfig block,
     required List<ChatMessage> contextMessages,
-  }) async {
-    if (block.type != BlockType.jsRunner) {
-      throw ArgumentError(
-        'runJsBlock only supports BlockType.jsRunner (got ${block.type.name})',
-      );
-    }
-    final script = block.prompt.isNotEmpty ? block.prompt : block.script;
-    if (script.isEmpty) {
-      return null;
-    }
-    final engine = JsEngineService.instance;
-    final bridge = _ref.read(chatBridgeRegistryProvider(charId));
-    if (!engine.isReady && bridge == null) {
-      debugPrint(
-        '[ExtPostGen] runJsBlock: no engine or bridge (block "${block.name}")',
-      );
-      return null;
-    }
-    final cancelToken = CancelToken();
-    try {
-      if (engine.isReady) {
-        try {
-          final contextMap = JsBlockExecutor.jsContextMap(
-            messages: contextMessages
-                .map((m) => {'role': m.role, 'text': m.content})
-                .toList(),
-            character: null, // no character payload for periodic
-            sessionId: '',
-            previousOutput: null,
-          );
-          // Periodic ticks have no character/session payload; the script
-          // can still read `messages` from the context (empty list by
-          // default).
-          final patchedContext = Map<String, dynamic>.from(contextMap)
-            ..['characterId'] = charId
-            ..['sessionId'] = '';
-          return await engine.runScript(
-            script: script,
-            context: patchedContext,
-            cancelToken: cancelToken,
-          );
-        } on HeadlessUnavailableError catch (_) {
-          // Fall through to visual bridge.
-        }
-      }
-      final visualBridge = bridge;
-      if (visualBridge == null) {
-        return null;
-      }
-      return await visualBridge.runJsBlock(
-        script: script,
-        messages: contextMessages,
-        character: null,
-        sessionId: '',
-        previousOutput: null,
-        contextMessageCount: -1,
-        cancelToken: cancelToken,
-      );
-    } catch (e) {
-      debugPrint('[ExtPostGen] runJsBlock failed: $e');
-      return null;
-    }
-  }
+  }) => PeriodicJsBlockRunner(
+    ref: _ref,
+  ).run(charId: charId, block: block, contextMessages: contextMessages);
 }
