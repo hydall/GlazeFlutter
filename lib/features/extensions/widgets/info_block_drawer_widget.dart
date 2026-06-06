@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/state/active_selection_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../personas/persona_list_provider.dart';
 import '../models/info_block.dart';
 import '../providers/extensions_settings_provider.dart';
 import '../providers/info_blocks_provider.dart';
+import '../services/macro_expander.dart';
 
 class InfoBlockDrawerWidget extends ConsumerStatefulWidget {
   const InfoBlockDrawerWidget({
@@ -227,12 +230,23 @@ class _PanelContent extends StatelessWidget {
   }
 }
 
-class _BlockCard extends StatelessWidget {
+class _BlockCard extends ConsumerWidget {
   const _BlockCard({required this.block});
   final InfoBlock block;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Expand {{user}} / {{char}} / etc. in the stored content so the
+    // panel reflects the current persona/character, not a snapshot the
+    // LLM may have left in place at generation time.
+    final personaId = ref.watch(activePersonaIdProvider);
+    final personas = ref.watch(personaListProvider).valueOrNull ?? const [];
+    final persona = personaId != null
+        ? personas.where((p) => p.id == personaId).firstOrNull
+        : null;
+    final macroCtx = MacroContext(persona: persona?.name);
+    final renderedContent = expand(block.content, macroCtx);
+
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -274,7 +288,7 @@ class _BlockCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            block.content,
+            renderedContent,
             style: TextStyle(
               fontSize: 12,
               color: context.cs.onSurface.withValues(alpha: 0.8),

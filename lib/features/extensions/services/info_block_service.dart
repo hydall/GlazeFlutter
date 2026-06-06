@@ -13,6 +13,7 @@ import '../models/block_config.dart';
 import 'block_content_extractor.dart';
 import 'ext_blocks_prompt_injection.dart';
 import 'block_context_builder.dart';
+import 'macro_expander.dart';
 
 final infoBlockServiceProvider = Provider<InfoBlockService>(
   (ref) => InfoBlockService(ref),
@@ -139,14 +140,12 @@ class InfoBlockService {
   // Context helpers
   // ─────────────────────────────────────────────────────────────────────────
 
-  /// Substitutes SillyTavern-style macros in [text].
-  String _applyMacros(String text, {Character? character, String? persona}) {
-    var result = text;
-    result = result.replaceAll('{{char}}', character?.name ?? '');
-    result = result.replaceAll('{{user}}', persona ?? '');
-    result = result.replaceAll('{{description}}', character?.description ?? '');
-    result = result.replaceAll('{{personality}}', character?.personality ?? '');
-    return result;
+  /// Builds a [MacroContext] snapshot from the current block generation
+  /// arguments. Used to expand `{{char}}` / `{{user}}` / `{{description}}`
+  /// / `{{personality}}` / `{{scenario}}` in the LLM-bound prompt and in
+  /// the post-LLM content (via [MacroExpander.expand]).
+  MacroContext _macroContext({Character? character, String? persona}) {
+    return MacroContext(character: character, persona: persona);
   }
 
   /// Returns the template sent to the LLM. Empty [blockConfig.template] means
@@ -173,7 +172,7 @@ class InfoBlockService {
     if (blockConfig.type == BlockType.imageGen) {
       final prompt = blockConfig.prompt.trim();
       if (prompt.isNotEmpty) {
-        return _applyMacros(prompt, character: character, persona: persona);
+        return expand(prompt, _macroContext(character: character, persona: persona));
       }
       return 'Write the roleplay response, then append the visual HTML card with '
           '[IMG:GEN] / data-iig-instruction as instructed.';
@@ -213,10 +212,9 @@ class InfoBlockService {
     final buffer = StringBuffer();
 
     if (blockConfig.contextSystemPrompt.isNotEmpty) {
-      final sysPrompt = _applyMacros(
+      final sysPrompt = expand(
         blockConfig.contextSystemPrompt,
-        character: character,
-        persona: persona,
+        _macroContext(character: character, persona: persona),
       );
       buffer.writeln(sysPrompt);
       buffer.writeln();
