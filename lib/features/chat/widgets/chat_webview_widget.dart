@@ -31,6 +31,7 @@ import '../../extensions/providers/info_blocks_provider.dart';
 import '../../extensions/providers/extension_presets_provider.dart';
 import '../../extensions/providers/extensions_settings_provider.dart';
 import '../../extensions/providers/preset_permissions_provider.dart';
+import '../../extensions/services/audio_bridge_service.dart';
 import '../../extensions/services/ext_blocks_panel_builder.dart';
 import '../../extensions/services/extension_post_gen_service.dart';
 import '../../extensions/services/generation_dispatcher.dart';
@@ -344,6 +345,17 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     } catch (_) {
       return false;
     }
+  }
+
+  /// Shared audio facade for `glaze.playAudio`. Re-uses one
+  /// [AudioBridgeService] per widget.
+  final AudioBridgeService _audioBridge = AudioBridgeService();
+
+  Future<void> _playBridgeAudio(
+    String? source,
+    Map<String, dynamic> options,
+  ) {
+    return _audioBridge.play(source, options);
   }
 
   @override
@@ -1059,6 +1071,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
                   uninjectPrompt: _uninjectBridgePrompt,
                   triggerGeneration: _triggerBridgeGeneration,
                   permissionCheck: _bridgePermissionCheck,
+                  playAudio: _playBridgeAudio,
                 );
                 _bridge = ChatBridgeController(
                   controller,

@@ -53,6 +53,11 @@ typedef PermissionCheck = bool Function(String capabilityId);
 /// function that reads from `ref.read(messageVariablesProvider.notifier)`.
 typedef MessageVariablesAccessor = MessageVariablesNotifier Function();
 
+/// Audio facade for `glaze.playAudio(source, options)`. Returns when
+/// the cue has been handed off to the platform. See [AudioBridgeService].
+typedef PlayAudioHandler =
+    FutureOr<void> Function(String? source, Map<String, dynamic> options);
+
 class JsBridgeService {
   static const _chatVarsKey = '__glaze_variables';
   static const _characterVarsKey = 'glaze_variables';
@@ -69,6 +74,7 @@ class JsBridgeService {
   final UninjectPromptHandler? _uninjectPrompt;
   final TriggerGenerationHandlerFn? _triggerGeneration;
   final PermissionCheck? _permissionCheck;
+  final PlayAudioHandler? _playAudio;
 
   JsBridgeService({
     ChatRepo? chatRepo,
@@ -82,6 +88,7 @@ class JsBridgeService {
     UninjectPromptHandler? uninjectPrompt,
     TriggerGenerationHandlerFn? triggerGeneration,
     PermissionCheck? permissionCheck,
+    PlayAudioHandler? playAudio,
   }) : this._(
          chatRepo,
          characterRepo,
@@ -94,6 +101,7 @@ class JsBridgeService {
          uninjectPrompt,
          triggerGeneration,
          permissionCheck,
+         playAudio,
        );
 
   const JsBridgeService._(
@@ -108,6 +116,7 @@ class JsBridgeService {
     this._uninjectPrompt,
     this._triggerGeneration,
     this._permissionCheck,
+    this._playAudio,
   );
 
   Future<Map<String, dynamic>> dispatch(Map<String, dynamic> request) async {
@@ -157,7 +166,7 @@ class JsBridgeService {
         return _handleTriggerGeneration(params, context);
       case 'playAudio':
         _requireCapability('play_audio');
-        throw UnsupportedError('glaze.playAudio is not implemented yet');
+        return _handlePlayAudio(params, context);
       case 'injectPrompt':
         _requireCapability('inject_prompt');
         return _handleInjectPrompt(params, context);
@@ -328,6 +337,22 @@ class JsBridgeService {
     final fallback = _currentCharacterId?.call();
     if (fallback == null || fallback.isEmpty) return null;
     return fallback;
+  }
+
+  FutureOr<void> _handlePlayAudio(
+    Map<String, dynamic> params,
+    Map<String, dynamic> context,
+  ) {
+    final source = params['source'];
+    if (source != null && source is! String) {
+      throw ArgumentError('playAudio source must be a string');
+    }
+    final handler =
+        _playAudio ??
+        (throw UnsupportedError(
+          'glaze.playAudio is not available in this context',
+        ));
+    return handler(source as String?, _asMap(params['options']));
   }
 
   Future<String> _handleGenerateText(
