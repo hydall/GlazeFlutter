@@ -17,6 +17,7 @@ void main() {
   late String bridgeJs;
   late String glazeSdkJs;
   late String indexHtml;
+  late String headlessHtml;
   late String stylessCss;
 
   setUpAll(() {
@@ -24,6 +25,7 @@ void main() {
     bridgeJs = _asset('bridge.js');
     glazeSdkJs = _asset('glaze_sdk.js');
     indexHtml = _asset('index.html');
+    headlessHtml = _asset('headless.html');
     stylessCss = _asset('styles.css');
   });
 
@@ -57,6 +59,28 @@ void main() {
       expect(bridgeJs, contains("data.type !== 'glaze:request'"));
       expect(bridgeJs, contains("type: 'glaze:response'"));
       expect(bridgeJs, contains('if (e.data && e.data.type) return;'));
+    });
+  });
+
+  // ─── Headless engine (Phase 6.1) ────────────────────────────────────────────
+  group('headless engine (headless.html)', () {
+    test('loads glaze_sdk.js', () {
+      expect(headlessHtml, contains('glaze_sdk.js'));
+    });
+
+    test('exposes window.headlessBridge.runSandboxedScript', () {
+      expect(headlessHtml, contains('window.headlessBridge'));
+      expect(
+        headlessHtml,
+        contains('runSandboxedScript'),
+      );
+    });
+
+    test('sandbox uses allow-scripts iframe', () {
+      expect(headlessHtml, contains("sandbox"));
+      expect(headlessHtml, contains('allow-scripts'));
+      // Must not opt into same-origin execution.
+      expect(headlessHtml, isNot(contains('allow-same-origin')));
     });
   });
 

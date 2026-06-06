@@ -29,6 +29,7 @@ import '../../extensions/providers/extensions_settings_provider.dart';
 import '../../extensions/services/ext_blocks_panel_builder.dart';
 import '../../extensions/services/extension_post_gen_service.dart';
 import '../../extensions/services/js_bridge_service.dart';
+import '../../extensions/services/js_engine_service.dart';
 import '../../extensions/services/runtime_prompt_injection_service.dart';
 import '../../settings/api_list_provider.dart';
 import '../bridge/chat_bridge_registry.dart';
@@ -993,17 +994,18 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
                 mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
               ),
               onWebViewCreated: (controller) async {
+                final jsBridgeService = JsBridgeService(
+                  chatRepo: ref.read(chatRepoProvider),
+                  characterRepo: ref.read(characterRepoProvider),
+                  currentSessionId: () => widget.sessionId,
+                  currentCharacterId: () => widget.charId,
+                  generateText: _generateBridgeText,
+                  injectPrompt: _injectBridgePrompt,
+                  uninjectPrompt: _uninjectBridgePrompt,
+                );
                 _bridge = ChatBridgeController(
                   controller,
-                  jsBridgeService: JsBridgeService(
-                    chatRepo: ref.read(chatRepoProvider),
-                    characterRepo: ref.read(characterRepoProvider),
-                    currentSessionId: () => widget.sessionId,
-                    currentCharacterId: () => widget.charId,
-                    generateText: _generateBridgeText,
-                    injectPrompt: _injectBridgePrompt,
-                    uninjectPrompt: _uninjectBridgePrompt,
-                  ),
+                  jsBridgeService: jsBridgeService,
                 );
                 // Register bridge in the registry so services can access it.
                 ref
@@ -1012,6 +1014,15 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
                         )
                         .state =
                     _bridge;
+
+                // Kick off the singleton headless engine. Failure is
+                // non-fatal — the visual bridge above remains the fallback
+                // for jsRunner blocks and for background scripts.
+                unawaited(
+                  JsEngineService.instance.init(
+                    host: JsEngineBridgeHost(bridge: jsBridgeService),
+                  ),
+                );
                 unawaited(
                   controller.evaluateJavascript(
                     source: 'if(window.bridge) window.bridge.clearAll();',

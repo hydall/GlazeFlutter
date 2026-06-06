@@ -13,6 +13,7 @@ import '../../../core/models/persona.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/constants/image_gen_patterns.dart';
 import '../../../core/utils/id_generator.dart';
+import '../../chat/bridge/chat_bridge_controller.dart';
 import '../../chat/bridge/chat_bridge_registry.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../models/block_config.dart';
@@ -26,6 +27,7 @@ import '../providers/info_blocks_provider.dart';
 import 'block_context_builder.dart';
 import 'ext_blocks_panel_builder.dart';
 import 'info_block_service.dart';
+import 'js_engine_service.dart';
 import 'js_script_extractor.dart';
 
 final extensionPostGenServiceProvider = Provider<ExtensionPostGenService>(
@@ -1104,9 +1106,10 @@ class ExtensionPostGenService {
     String Function(String result)? panelContentBuilder,
   }) async {
     final bridge = _ref.read(chatBridgeRegistryProvider(charId));
-    if (bridge == null) {
+    final engine = JsEngineService.instance;
+    if (!engine.isReady && bridge == null) {
       debugPrint(
-        '[ExtPostGen] jsRunner "${blockConfig.name}" — bridge not available',
+        '[ExtPostGen] jsRunner "${blockConfig.name}" — no JS engine or bridge',
       );
       return _markBlockError(
         charId: charId,
@@ -1115,7 +1118,7 @@ class ExtensionPostGenService {
         placeholderId: placeholderId,
         placeholder: placeholder,
         errorMessage:
-            'WebView bridge not available (JS runner requires open chat)',
+            'JS engine not ready and WebView bridge not available (jsRunner needs at least one of them)',
       );
     }
 
@@ -1125,13 +1128,14 @@ class ExtensionPostGenService {
         anchorMessageId: messageId,
         count: blockConfig.contextMessageCount,
       );
-      final result = await bridge.runJsBlock(
+      final result = await _runJsWithFallback(
+        engine: engine,
+        bridge: bridge,
         script: script,
-        messages: contextMessages,
+        contextMessages: contextMessages,
         character: character,
         sessionId: sessionId,
         previousOutput: previousOutput,
-        contextMessageCount: -1,
         cancelToken: cancelToken,
       );
 
@@ -1181,5 +1185,80 @@ class ExtensionPostGenService {
         errorMessage: e.toString(),
       );
     }
+  }
+
+  /// Runs [script] preferring the headless [engine] and falling back to
+  /// the visual chat WebView [bridge] when the engine is not ready or
+  /// raises [HeadlessUnavailableError]. Returns the script's string output.
+  Future<String> _runJsWithFallback({
+    required JsEngineService engine,
+    required ChatBridgeController? bridge,
+    required String script,
+    required List<ChatMessage> contextMessages,
+    required Character character,
+    required String sessionId,
+    required String? previousOutput,
+    required CancelToken cancelToken,
+  }) async {
+    if (engine.isReady) {
+      try {
+        final contextMap = _jsContextMap(
+          messages: contextMessages
+              .map((m) => {'role': m.role, 'text': m.content})
+              .toList(),
+          character: character,
+          sessionId: sessionId,
+          previousOutput: previousOutput,
+        );
+        return await engine.runScript(
+          script: script,
+          context: contextMap,
+          cancelToken: cancelToken,
+        );
+      } on HeadlessUnavailableError catch (e) {
+        debugPrint(
+          '[ExtPostGen] headless engine unavailable, falling back: $e',
+        );
+      } catch (e) {
+        // Non-fatal: fall through to visual bridge. Bridge will record the
+        // error in its own logs.
+        debugPrint('[ExtPostGen] headless engine run failed: $e');
+      }
+    }
+    final visualBridge = bridge;
+    if (visualBridge == null) {
+      throw StateError(
+        'JS engine is not ready and visual WebView bridge is not available',
+      );
+    }
+    return visualBridge.runJsBlock(
+      script: script,
+      messages: contextMessages,
+      character: character,
+      sessionId: sessionId,
+      previousOutput: previousOutput,
+      contextMessageCount: -1,
+      cancelToken: cancelToken,
+    );
+  }
+
+  Map<String, dynamic> _jsContextMap({
+    required List<Map<String, String>> messages,
+    required Character character,
+    required String sessionId,
+    required String? previousOutput,
+  }) {
+    return {
+      'messages': messages,
+      'sessionId': sessionId,
+      'characterId': character.id,
+      'character': {
+        'name': character.name,
+        'description': character.description ?? '',
+        'personality': character.personality ?? '',
+        'scenario': character.scenario ?? '',
+      },
+      'previousOutput': previousOutput,
+    };
   }
 }
