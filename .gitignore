@@ -162,7 +162,7 @@ package-lock.json
 
 # Local planning docs
 /js_extensions_implementation_plan.md
-
+/refactor_plan.md
 
 # ===========================
 # Cursor local hooks (per-machine, contain absolute paths)
