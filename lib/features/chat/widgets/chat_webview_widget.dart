@@ -31,6 +31,7 @@ import '../../extensions/services/js_engine_service.dart';
 import '../../extensions/services/panel_host_service.dart';
 import '../bridge/chat_bridge_registry.dart';
 import 'chat_message_sync.dart';
+import 'chat_webview_sync_dispatcher.dart';
 import 'ext_block_dialogs.dart';
 import 'webview_callbacks.dart';
 
@@ -154,10 +155,10 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     with AutomaticKeepAliveClientMixin {
   ChatBridgeController? _bridge;
   bool _ready = false;
-  bool _streamingSent = false;
-  bool _regenStreamingSent = false;
-  bool _wasGenerating = false;
   bool _sessionSwitching = false;
+  final ChatWebViewSyncState _syncState = ChatWebViewSyncState();
+  late final ChatWebViewSyncDispatcher _syncDispatcher =
+      ChatWebViewSyncDispatcher(state: _syncState);
 
   @override
   bool get wantKeepAlive => true;
@@ -356,16 +357,6 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     );
   }
 
-  bool _identityChanged(ChatWebViewWidget old) {
-    return widget.charName != old.charName ||
-        widget.charColor != old.charColor ||
-        widget.personaName != old.personaName ||
-        widget.charAvatarPath != old.charAvatarPath ||
-        widget.personaAvatarPath != old.personaAvatarPath ||
-        widget.chatLayout != old.chatLayout ||
-        widget.greetingTotal != old.greetingTotal;
-  }
-
   Future<void> _applySessionSwitch(ChatWebViewWidget old) async {
     final bridge = _bridge;
     if (bridge == null) return;
@@ -422,198 +413,91 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       bridge.scrollToBottom();
       if (mounted) setState(() => _sessionSwitching = false);
     });
-    _wasGenerating = widget.isGenerating;
-    _streamingSent = false;
+    _syncState.wasGenerating = widget.isGenerating;
+    _syncState.streamingSent = false;
+  }
+
+  ChatWebViewWidgetFields _fieldsFor(ChatWebViewWidget w) {
+    return ChatWebViewWidgetFields(
+      charId: w.charId,
+      charName: w.charName,
+      charColor: w.charColor,
+      personaName: w.personaName,
+      charAvatarPath: w.charAvatarPath,
+      personaAvatarPath: w.personaAvatarPath,
+      bgImagePath: w.bgImagePath,
+      bgBlur: w.bgBlur,
+      bgOpacity: w.bgOpacity,
+      bgDim: w.bgDim,
+      bgNoiseOpacity: w.bgNoiseOpacity,
+      bgNoiseIntensity: w.bgNoiseIntensity,
+      bottomInset: w.bottomInset,
+      topInset: w.topInset,
+      headerOverlayTop: w.headerOverlayTop,
+      headerOverlayHeight: w.headerOverlayHeight,
+      inputOverlayHeight: w.inputOverlayHeight,
+      searchQuery: w.searchQuery,
+      searchCurrentIndex: w.searchCurrentIndex,
+      chatLayout: w.chatLayout,
+      themeSyncKey: w.themeSyncKey,
+      elementOpacity: w.elementOpacity,
+      elementBlur: w.elementBlur,
+      chatFontName: w.chatFontName,
+      chatFontDataUrl: w.chatFontDataUrl,
+      chatFontSize: w.chatFontSize,
+      chatLetterSpacing: w.chatLetterSpacing,
+      isSelectionMode: w.isSelectionMode,
+      batterySaver: w.batterySaver,
+      hideMessageId: w.hideMessageId,
+      hideGenerationTime: w.hideGenerationTime,
+      hideTokenCount: w.hideTokenCount,
+      disableSwipeRegeneration: w.disableSwipeRegeneration,
+      memoryEntries: w.memoryEntries,
+      memoryDrafts: w.memoryDrafts,
+      sessionId: w.sessionId,
+      isGenerating: w.isGenerating,
+      isGeneratingImage: w.isGeneratingImage,
+      regenTargetId: w.regenTargetId,
+      greetingTotal: w.greetingTotal,
+      messages: w.messages,
+      buildThemeMap: _buildThemeMap,
+    );
   }
 
   @override
   void didUpdateWidget(ChatWebViewWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_ready || _bridge == null) return;
-
-    if (widget.memoryEntries != oldWidget.memoryEntries ||
-        widget.memoryDrafts != oldWidget.memoryDrafts) {
-      _bridge!.updateMemoryBookData(
-        entries: widget.memoryEntries
-            .map((e) => {'status': e.status, 'messageIds': e.messageIds})
-            .toList(),
-        pendingDrafts: widget.memoryDrafts
-            .map((e) => {'messageIds': e.messageIds})
-            .toList(),
-      );
-    }
-
-    if (widget.charId != oldWidget.charId ||
-        widget.sessionId != oldWidget.sessionId) {
-      unawaited(_applySessionSwitch(oldWidget));
-      return;
-    }
-
-    if (_identityChanged(oldWidget)) {
-      _bridge!.setIdentity(
-        charName: widget.charName,
-        charColor: widget.charColor,
-        personaName: widget.personaName,
-        layout: widget.chatLayout,
-        charAvatarPath: widget.charAvatarPath,
-        personaAvatarPath: widget.personaAvatarPath,
-        greetingTotal: widget.greetingTotal,
-      );
-    }
-
-    if (widget.themeSyncKey != oldWidget.themeSyncKey ||
-        widget.chatLayout != oldWidget.chatLayout ||
-        widget.elementOpacity != oldWidget.elementOpacity ||
-        widget.elementBlur != oldWidget.elementBlur ||
-        widget.chatFontSize != oldWidget.chatFontSize) {
-      _bridge!.applyTheme(_buildThemeMap());
-    }
-
-    if (widget.bgImagePath != oldWidget.bgImagePath ||
-        widget.bgBlur != oldWidget.bgBlur ||
-        widget.bgOpacity != oldWidget.bgOpacity ||
-        widget.bgDim != oldWidget.bgDim) {
-      _bridge!.setBackgroundImage(
-        widget.bgImagePath,
-        widget.bgBlur.toInt(),
-        widget.bgOpacity,
-      );
-      _bridge!.applyTheme({'bg-dim': widget.bgDim.toStringAsFixed(2)});
-    }
-
-    if (widget.bgNoiseOpacity != oldWidget.bgNoiseOpacity ||
-        widget.bgNoiseIntensity != oldWidget.bgNoiseIntensity) {
-      _bridge!.setBackgroundNoise(
-        widget.bgNoiseOpacity,
-        widget.bgNoiseIntensity,
-      );
-    }
-
-    if (widget.chatFontName != oldWidget.chatFontName ||
-        widget.chatFontDataUrl != oldWidget.chatFontDataUrl ||
-        widget.chatFontSize != oldWidget.chatFontSize ||
-        widget.chatLetterSpacing != oldWidget.chatLetterSpacing) {
-      _bridge!.setChatFont(
-        fontName: widget.chatFontName,
-        fontDataUrl: widget.chatFontDataUrl,
-        fontSize: widget.chatFontSize,
-        letterSpacing: widget.chatLetterSpacing,
-      );
-    }
-
-    if (widget.isSelectionMode != oldWidget.isSelectionMode) {
-      _bridge!.setSelectionMode(widget.isSelectionMode);
-    }
-
-    if (widget.batterySaver != oldWidget.batterySaver ||
-        widget.hideMessageId != oldWidget.hideMessageId ||
-        widget.hideGenerationTime != oldWidget.hideGenerationTime ||
-        widget.hideTokenCount != oldWidget.hideTokenCount ||
-        widget.disableSwipeRegeneration != oldWidget.disableSwipeRegeneration) {
-      _bridge!.setMessageSettings(
-        batterySaver: widget.batterySaver,
-        hideMessageId: widget.hideMessageId,
-        hideGenerationTime: widget.hideGenerationTime,
-        hideTokenCount: widget.hideTokenCount,
-        disableSwipeRegeneration: widget.disableSwipeRegeneration,
-      );
-    }
-
-    if (widget.searchQuery != oldWidget.searchQuery ||
-        widget.searchCurrentIndex != oldWidget.searchCurrentIndex) {
-      if (widget.searchQuery != null && widget.searchQuery!.isNotEmpty) {
-        _bridge!.setSearch(
-          query: widget.searchQuery!,
-          activeIndex: widget.searchCurrentIndex,
-        );
-      } else {
-        _bridge!.setSearch(query: '', activeIndex: -1);
-      }
-    }
-
-    if (widget.bottomInset != oldWidget.bottomInset) {
-      _bridge!.setBottomPadding(widget.bottomInset);
-    }
-
-    if (widget.topInset != oldWidget.topInset) {
-      _bridge!.setTopPadding(widget.topInset);
-    }
-
-    if (widget.headerOverlayTop != oldWidget.headerOverlayTop ||
-        widget.headerOverlayHeight != oldWidget.headerOverlayHeight) {
-      _bridge!.setHeaderOverlay(
-        widget.headerOverlayTop,
-        widget.headerOverlayHeight,
-      );
-    }
-
-    if (widget.inputOverlayHeight != oldWidget.inputOverlayHeight) {
-      _bridge!.setInputOverlay(widget.inputOverlayHeight);
-    }
-
-    final anyGenerating = widget.isGenerating || widget.isGeneratingImage;
-    final oldAnyGenerating =
-        oldWidget.isGenerating || oldWidget.isGeneratingImage;
-    if (anyGenerating != oldAnyGenerating ||
-        widget.isGenerating != oldWidget.isGenerating) {
-      _bridge!.isGenerating = widget.isGenerating;
-      _bridge!.isGeneratingImage = widget.isGeneratingImage;
-      _bridge!.evalJs(
-        'if (window.bridge) { window.bridge.setGenerating(${widget.isGenerating}); window.bridge.isGeneratingImage = ${widget.isGeneratingImage}; }',
-      );
-      if (!anyGenerating && widget.messages.isNotEmpty) {
-        // Generation finished → mark the actual last message; bridge injects
-        // the regen button only when that last message is from the user.
-        _bridge?.setLastMessage(widget.messages.last.id);
-      } else if (widget.isGenerating) {
-        // Generation started → remove regen button
-        _bridge?.setLastMessage(null);
-      }
-    }
-
-    if (_wasGenerating && !widget.isGenerating) {
-      final finishedRegenId = oldWidget.regenTargetId;
-      if (finishedRegenId != null) {
-        final finalMsg = widget.messages
-            .where((m) => m.id == finishedRegenId)
-            .firstOrNull;
-        if (finalMsg != null) {
-          _bridge?.updateMessage(finalMsg);
-        }
-      }
-      if (!_regenStreamingSent) {
-        _bridge?.removeMessage(_kStreamingId);
-      }
-      _streamingSent = false;
-      _regenStreamingSent = false;
-      unawaited(_syncExtBlockPanels());
-    }
-
-    // Sync messages BEFORE injecting the typing placeholder, so the new user
-    // message lands at its correct position (placeholder is appended after).
-    if (!identical(oldWidget.messages, widget.messages) &&
-        !chatMessageListsIdentical(oldWidget.messages, widget.messages)) {
-      _syncMessages(oldWidget.messages);
-      unawaited(_syncExtBlockPanels());
-    }
-
-    // Fresh generation started (no regenTargetId) → inject typing placeholder immediately
-    final shouldInjectPlaceholder =
-        !_wasGenerating &&
-        widget.isGenerating &&
-        widget.regenTargetId == null &&
-        !_streamingSent;
-    _wasGenerating = widget.isGenerating;
-    if (shouldInjectPlaceholder) {
-      final typingMsg = ChatMessage(
+    final result = _syncDispatcher.dispatch(
+      bridge: _bridge,
+      old: _fieldsFor(oldWidget),
+      current: _fieldsFor(widget),
+      oldMessages: oldWidget.messages,
+      newMessages: widget.messages,
+      streamingId: _kStreamingId,
+      onSyncExtBlockPanels: _syncExtBlockPanels,
+      appendMessage: (m) async {
+        await _bridge?.appendMessage(m);
+      },
+      buildStreamingPlaceholder: () => ChatMessage(
         id: _kStreamingId,
         role: 'assistant',
         content: '',
         timestamp: DateTime.now().millisecondsSinceEpoch,
         isTyping: true,
-      );
-      _bridge?.appendMessage(typingMsg);
-      _streamingSent = true;
+      ),
+      ready: _ready,
+    );
+    if (result.sessionSwitched) {
+      unawaited(_applySessionSwitch(oldWidget));
+      return;
+    }
+    if (result.runMessageSync) {
+      _syncMessages(oldWidget.messages);
+      unawaited(_syncExtBlockPanels());
+    }
+    if (result.appendPlaceholder && result.placeholder != null) {
+      unawaited(_bridge?.appendMessage(result.placeholder!));
+      _syncDispatcher.onPlaceholderAppended();
     }
   }
 
@@ -625,7 +509,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       oldMsgs: oldMsgs,
       newMsgs: widget.messages,
       visibleStartIndex: widget.visibleStartIndex,
-      streamingSkipLast: widget.isGenerating && _streamingSent,
+      streamingSkipLast: widget.isGenerating && _syncState.streamingSent,
       isGenerating: widget.isGenerating,
       sessionSwitching: _sessionSwitching,
     );
@@ -697,7 +581,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
             isTyping: true,
           );
           _bridge?.updateMessage(updated);
-          _regenStreamingSent = true;
+          _syncState.regenStreamingSent = true;
         }
         return;
       }
@@ -711,9 +595,9 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         isTyping: true,
       );
 
-      if (!_streamingSent) {
+      if (!_syncState.streamingSent) {
         _bridge?.appendMessage(msg);
-        _streamingSent = true;
+        _syncState.streamingSent = true;
       } else {
         _bridge?.updateMessage(msg);
       }
