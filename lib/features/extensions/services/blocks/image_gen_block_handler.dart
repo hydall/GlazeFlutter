@@ -19,7 +19,7 @@ typedef StreamingBlockPublisher =
       bool force,
     });
 
-typedef ImagePixelRenderer =
+typedef ImagePixelRenderFn =
     Future<InfoBlock?> Function({
       required BlockContext context,
       required String sourceContent,
@@ -40,7 +40,7 @@ class ImageGenBlockHandler implements BlockHandler {
   final BlockErrorMarker markBlockError;
   final StreamHandlerFactory makeStreamHandler;
   final StreamingBlockPublisher publishStreamingBlockContent;
-  final ImagePixelRenderer renderImagePixels;
+  final ImagePixelRenderFn renderImagePixels;
 
   @override
   Future<InfoBlock?> handle(BlockContext context) async {

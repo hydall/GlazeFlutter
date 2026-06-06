@@ -13,7 +13,7 @@ class BlockContext {
   final String messageId;
   final List<ChatMessage> messages;
   final BlockConfig blockConfig;
-  final ExtensionPreset preset;
+  final ExtensionPreset? preset;
   final Character character;
   final Persona? persona;
   final String? previousOutput;

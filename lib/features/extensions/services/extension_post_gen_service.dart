@@ -1,21 +1,16 @@
-import 'dart:io';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 
 import '../../../core/db/repositories/info_blocks_repository.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/persona.dart';
 import '../../../core/state/db_provider.dart';
-import '../../../core/constants/image_gen_patterns.dart';
 import '../../chat/bridge/chat_bridge_controller.dart';
 import '../../chat/bridge/chat_bridge_registry.dart';
 import '../../image_gen/image_gen_provider.dart';
 import '../models/block_config.dart';
-import '../../image_gen/services/image_gen_service.dart';
 import '../models/block_run_status.dart';
 import '../models/extension_preset.dart';
 import '../models/info_block.dart';
@@ -29,6 +24,7 @@ import 'blocks/block_processor.dart';
 import 'blocks/block_context.dart';
 import 'blocks/block_panel_updater.dart';
 import 'blocks/image_gen_block_handler.dart';
+import 'blocks/image_pixel_renderer.dart';
 import 'blocks/interactive_block_handler.dart';
 import 'blocks/js_runner_block_handler.dart';
 import 'blocks/infoblock_handler.dart';
@@ -581,164 +577,25 @@ class ExtensionPostGenService {
     required String placeholderId,
     required InfoBlock placeholder,
     required CancelToken cancelToken,
-  }) async {
-    final imgGenSettings = _ref.read(imageGenSettingsProvider).value;
-    if (imgGenSettings == null || !imgGenSettings.enabled) {
-      await _repo.updateContent(placeholderId, sourceContent);
-      await _repo.updateStatus(placeholderId, BlockRunStatus.done);
-      final done = placeholder.copyWith(
-        content: sourceContent,
-        status: BlockRunStatus.done,
-      );
-      _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(done);
-      _refreshPanelForMessage(charId, sessionId, messageId);
-      return done;
-    }
-
-    final imageService = await _ref
-        .read(imageGenSettingsProvider.notifier)
-        .getServiceAsync();
-    final instructions = imageService.extractInstructionsFromImageContent(
-      sourceContent,
-    );
-    if (instructions.isEmpty) {
-      return _markBlockError(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        placeholderId: placeholderId,
-        placeholder: placeholder,
-        errorMessage:
-            'No image instruction found (expected [IMG:GEN] or [IMG:RESULT:…|json])',
-      );
-    }
-
-    final rawPrompt = instructions.first['prompt'] as String? ?? '';
-    if (rawPrompt.isEmpty) {
-      return _markBlockError(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        placeholderId: placeholderId,
-        placeholder: placeholder,
-        errorMessage: 'Image instruction JSON has empty prompt',
-      );
-    }
-
-    _publishStreamingBlockContent(
+  }) {
+    return ImagePixelRenderer(
+      ref: _ref,
+      repo: _repo,
+      markBlockError: _markContextBlockError,
+      refreshPanelForMessage: _refreshPanelForMessage,
+      publishStreamingBlockContent: _publishStreamingBlockContent,
+    ).render(
       charId: charId,
       sessionId: sessionId,
       messageId: messageId,
+      blockConfig: blockConfig,
+      character: character,
+      persona: persona,
+      sourceContent: sourceContent,
+      placeholderId: placeholderId,
       placeholder: placeholder,
-      content:
-          '$sourceContent\n<p class="ext-block-image-pending">⏳ Генерация изображения…</p>',
-      force: true,
+      cancelToken: cancelToken,
     );
-
-    try {
-      List<String>? recentImageContexts;
-      if (imgGenSettings.imageContextEnabled) {
-        final sessionBlocks = await _repo.getBySessionId(sessionId);
-        final imageContents =
-            sessionBlocks
-                .where(
-                  (b) =>
-                      b.blockType == BlockType.imageGen.name &&
-                      b.status == BlockRunStatus.done &&
-                      b.id != placeholderId,
-                )
-                .toList()
-              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        recentImageContexts = ImageGenService.collectRecentImageResultPaths(
-          imageContents.map((b) => b.content),
-          maxPaths: 3,
-        );
-        if (recentImageContexts.isEmpty) recentImageContexts = null;
-      }
-
-      final style = instructions.first['style'] as String? ?? '';
-      var cleanPrompt = rawPrompt.replaceFirst(
-        RegExp(r'^SCENE_PROMPT:\s*'),
-        '',
-      );
-      final prompt = style.isNotEmpty ? '$style, $cleanPrompt' : cleanPrompt;
-      final instructionAspectRatio =
-          instructions.first['aspect_ratio'] as String?;
-      final instructionImageSize = instructions.first['image_size'] as String?;
-
-      final imageBytes = await imageService.generateImage(
-        settings: imgGenSettings,
-        prompt: prompt,
-        llmEndpoint: '',
-        llmApiKey: '',
-        llmModel: '',
-        character: character,
-        persona: persona,
-        recentImageContexts: recentImageContexts,
-        instructionAspectRatio: instructionAspectRatio,
-        instructionImageSize: instructionImageSize,
-        cancelToken: cancelToken,
-      );
-
-      if (cancelToken.isCancelled) {
-        await _repo.updateStatus(placeholderId, BlockRunStatus.stopped);
-        return placeholder.copyWith(status: BlockRunStatus.stopped);
-      }
-
-      final storage = await _ref.read(imageStorageProvider.future);
-      final dir = Directory(p.join(storage.baseDir, 'generated'));
-      if (!await dir.exists()) await dir.create(recursive: true);
-      final filename = 'extblock_${DateTime.now().millisecondsSinceEpoch}.png';
-      final filePath = p.join(dir.path, filename);
-      await File(filePath).writeAsBytes(imageBytes);
-
-      final hasResultToken = ImgGenPatterns.imgResultRegex.hasMatch(
-        sourceContent,
-      );
-      final content = hasResultToken
-          ? imageService.replaceExtBlockImageResult(sourceContent, filePath)
-          : imageService.replaceTagWithResult(sourceContent, 0, filePath);
-      await _repo.updateContent(placeholderId, content);
-      await _repo.updateStatus(placeholderId, BlockRunStatus.done);
-
-      final done = InfoBlock(
-        id: placeholderId,
-        sessionId: sessionId,
-        messageId: messageId,
-        blockId: blockConfig.id,
-        blockName: blockConfig.name,
-        blockType: blockConfig.type.name,
-        content: content,
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        order: blockConfig.order,
-        status: BlockRunStatus.done,
-      );
-      _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(done);
-      _refreshPanelForMessage(charId, sessionId, messageId);
-      return done;
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) {
-        await _repo.updateStatus(placeholderId, BlockRunStatus.stopped);
-        return placeholder.copyWith(status: BlockRunStatus.stopped);
-      }
-      return _markBlockError(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        placeholderId: placeholderId,
-        placeholder: placeholder,
-        errorMessage: e.toString(),
-      );
-    } catch (e) {
-      return _markBlockError(
-        charId: charId,
-        sessionId: sessionId,
-        messageId: messageId,
-        placeholderId: placeholderId,
-        placeholder: placeholder,
-        errorMessage: e.toString(),
-      );
-    }
   }
 
   // ─────────────────────────────────────────────────────────────────────────
