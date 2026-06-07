@@ -5,7 +5,7 @@ part 'theme_preset.freezed.dart';
 part 'theme_preset.g.dart';
 
 @Freezed(fromJson: true, toJson: true)
-class ThemePreset with _$ThemePreset {
+abstract class ThemePreset with _$ThemePreset {
   const factory ThemePreset({
     required String id,
     required String name,

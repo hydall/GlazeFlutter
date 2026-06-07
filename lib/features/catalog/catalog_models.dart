@@ -3,7 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'catalog_models.freezed.dart';
 
 @freezed
-class CatalogItem with _$CatalogItem {
+abstract class CatalogItem with _$CatalogItem {
   const factory CatalogItem({
     required String id,
     required String name,
@@ -23,7 +23,7 @@ class CatalogItem with _$CatalogItem {
 }
 
 @freezed
-class CatalogFilters with _$CatalogFilters {
+abstract class CatalogFilters with _$CatalogFilters {
   const factory CatalogFilters({
     @Default('trending') String sort,
     @Default(false) bool nsfw,
@@ -37,7 +37,7 @@ class CatalogFilters with _$CatalogFilters {
 }
 
 @freezed
-class CatalogTag with _$CatalogTag {
+abstract class CatalogTag with _$CatalogTag {
   const factory CatalogTag({
     int? id,
     required String name,

@@ -10,7 +10,7 @@ part 'preset_permissions.g.dart';
 /// set before dispatching any side-effectful or potentially dangerous
 /// method.
 @freezed
-class PresetPermissions with _$PresetPermissions {
+abstract class PresetPermissions with _$PresetPermissions {
   const factory PresetPermissions({
     /// `glaze.getVariables` / `setVariables` / `deleteVariable` for
     /// the `chat` scope. Read-only scopes (character read) are

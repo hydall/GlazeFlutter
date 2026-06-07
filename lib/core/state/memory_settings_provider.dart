@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import 'shared_prefs_provider.dart';
@@ -9,7 +10,7 @@ part 'memory_settings_provider.freezed.dart';
 part 'memory_settings_provider.g.dart';
 
 @freezed
-class MemoryGlobalSettings with _$MemoryGlobalSettings {
+abstract class MemoryGlobalSettings with _$MemoryGlobalSettings {
   const factory MemoryGlobalSettings({
     @Default(true) bool enabled,
     @Default(true) bool autoCreateEnabled,
@@ -55,8 +56,8 @@ Map<String, dynamic> _migrateInjectionTargetInPlace(Map<String, dynamic> json) {
 
 final memoryGlobalSettingsProvider =
     StateNotifierProvider<MemoryGlobalSettingsNotifier, MemoryGlobalSettings>(
-  (ref) => MemoryGlobalSettingsNotifier(ref),
-);
+      (ref) => MemoryGlobalSettingsNotifier(ref),
+    );
 
 class MemoryGlobalSettingsNotifier extends StateNotifier<MemoryGlobalSettings> {
   final Ref _ref;

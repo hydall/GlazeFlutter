@@ -126,8 +126,7 @@ class ChatWebViewInitializer {
         sessionId: input.sessionId,
       )),
     );
-    final displayRegexes =
-        ref.read(displayRegexesProvider).valueOrNull ?? const [];
+    final displayRegexes = ref.read(displayRegexesProvider).value ?? const [];
     bridge.setRegexContext(displayRegexes, character, effectivePersona);
 
     await _setIdentity();

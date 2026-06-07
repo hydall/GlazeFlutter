@@ -186,7 +186,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
 
   void _scheduleTokenStats() {
     _debounceTimer?.cancel();
-    final delay = ref.read(appSettingsProvider).valueOrNull?.batterySaver == true
+    final delay = ref.read(appSettingsProvider).value?.batterySaver == true
         ? const Duration(milliseconds: 700)
         : const Duration(milliseconds: 300);
     _debounceTimer = Timer(delay, _loadTokenStats);
@@ -230,10 +230,12 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     final list = _itemIds
         .map((id) => _allItems.where((item) => item.id == id).firstOrNull)
         .whereType<MagicDrawerItemDef>()
-        .map((def) => MagicDrawerCardItem(
-              def: def,
-              status: _statusFor(def.id, extSettings, extPresets),
-            ))
+        .map(
+          (def) => MagicDrawerCardItem(
+            def: def,
+            status: _statusFor(def.id, extSettings, extPresets),
+          ),
+        )
         .toList();
     if (_editing && _canAddMore) {
       list.add(
@@ -304,11 +306,12 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
                 _stats.session!.authorsNote!.content.isNotEmpty
             ? '${_stats.session!.authorsNote!.content.length} chars'
             : 'Empty',
-      'ext-blocks' => !extSettings.enabled
-          ? 'Off'
-          : extSettings.activePresetId == null
-              ? 'No preset'
-              : extPresets
+      'ext-blocks' =>
+        !extSettings.enabled
+            ? 'Off'
+            : extSettings.activePresetId == null
+            ? 'No preset'
+            : extPresets
                       .where((p) => p.id == extSettings.activePresetId)
                       .firstOrNull
                       ?.name ??
@@ -596,11 +599,13 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       if (!mounted) return;
       switch (result) {
         case 'export':
-          await ref.read(chatActionsServiceProvider).exportSessionUI(
-            context,
-            charId: widget.charId,
-            sessionId: sessionId,
-          );
+          await ref
+              .read(chatActionsServiceProvider)
+              .exportSessionUI(
+                context,
+                charId: widget.charId,
+                sessionId: sessionId,
+              );
         case 'rename':
           await _showRenameDialog(sessionId);
         case 'delete':
@@ -611,7 +616,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   }
 
   Future<void> _showRenameDialog(String sessionId) async {
-    final session = await ref.read(chatSessionOpsProvider.notifier).getSession(sessionId);
+    final session = await ref
+        .read(chatSessionOpsProvider.notifier)
+        .getSession(sessionId);
     if (!mounted || session == null) return;
     final currentName = session.sessionVars['sessionName']?.isNotEmpty == true
         ? session.sessionVars['sessionName']!
@@ -628,7 +635,9 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
           if (val.trim().isNotEmpty) {
             final updatedVars = Map<String, String>.from(session.sessionVars);
             updatedVars['sessionName'] = val.trim();
-            await ref.read(chatSessionOpsProvider.notifier).saveSession(session.copyWith(sessionVars: updatedVars));
+            await ref
+                .read(chatSessionOpsProvider.notifier)
+                .saveSession(session.copyWith(sessionVars: updatedVars));
             ref.invalidate(chatProvider(widget.charId));
           }
         },
@@ -652,10 +661,12 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         final importResult = importChatFromJsonlString(
           utf8.decode(file.bytes!),
         );
-        count = await ref.read(chatActionsServiceProvider)
+        count = await ref
+            .read(chatActionsServiceProvider)
             .importChatFromResult(widget.charId, importResult);
       } else if (filePath != null) {
-        count = await ref.read(chatActionsServiceProvider)
+        count = await ref
+            .read(chatActionsServiceProvider)
             .importChat(widget.charId, filePath);
       } else {
         return;
@@ -724,7 +735,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     final extPresets = ref.watch(extensionPresetsProvider);
     final items = _displayItems(extSettings, extPresets);
     final batterySaver =
-        ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
+        ref.watch(appSettingsProvider).value?.batterySaver ?? false;
 
     final scrollable = RawScrollbar(
       controller: _scrollController,

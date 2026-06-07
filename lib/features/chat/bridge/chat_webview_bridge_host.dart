@@ -60,13 +60,15 @@ class ChatWebViewBridgeHost {
 
   final JsBridgeToastController _toastController = JsBridgeToastController();
 
-  late final TriggerGenerationHandler _triggerHandler = TriggerGenerationHandler(
-    dispatcher: ref.read(generationDispatcherProvider),
-    log: (line) => debugPrint(line),
-  );
+  late final TriggerGenerationHandler _triggerHandler =
+      TriggerGenerationHandler(
+        dispatcher: ref.read(generationDispatcherProvider),
+        log: (line) => debugPrint(line),
+      );
 
-  late final RuntimePromptInjectionNotifier _promptInjection =
-      ref.read(runtimePromptInjectionProvider.notifier);
+  late final RuntimePromptInjectionNotifier _promptInjection = ref.read(
+    runtimePromptInjectionProvider.notifier,
+  );
 
   late final CommandRegistry _commandRegistry = _buildWiredCommandRegistry();
 
@@ -134,18 +136,17 @@ class ChatWebViewBridgeHost {
     Map<String, dynamic> bridgeContext,
   ) async {
     await ref.read(apiListProvider.future);
-    final configs = ref.read(apiListProvider).valueOrNull ?? const [];
+    final configs = ref.read(apiListProvider).value ?? const [];
     final activeApiConfig = ref.read(activeApiConfigProvider);
-    final profile = ConnectionProfileX.parse(options['preset']) ??
-        ConnectionProfile.medium;
-    final activePresetId =
-        ref.read(extensionsSettingsProvider).activePresetId;
+    final profile =
+        ConnectionProfileX.parse(options['preset']) ?? ConnectionProfile.medium;
+    final activePresetId = ref.read(extensionsSettingsProvider).activePresetId;
     final preset = activePresetId == null
         ? null
         : ref
-            .read(extensionPresetsProvider)
-            .where((p) => p.id == activePresetId)
-            .firstOrNull;
+              .read(extensionPresetsProvider)
+              .where((p) => p.id == activePresetId)
+              .firstOrNull;
     final apiConfig = _profileResolver.resolve(
       preset,
       profile,
@@ -261,9 +262,7 @@ class ChatWebViewBridgeHost {
     Map<String, dynamic> params,
   ) async {
     final resolvedCharId =
-        (params['characterId'] as String?) ??
-        (charId) ??
-        currentCharacterId();
+        (params['characterId'] as String?) ?? (charId) ?? currentCharacterId();
     if (resolvedCharId == null || resolvedCharId.isEmpty) {
       return TriggerNoSession(mode: TriggerMode.auto).toMap();
     }
@@ -275,10 +274,7 @@ class ChatWebViewBridgeHost {
     return handler.handle(charId: resolvedCharId, params: params);
   }
 
-  Future<void> _playBridgeAudio(
-    String? source,
-    Map<String, dynamic> options,
-  ) {
+  Future<void> _playBridgeAudio(String? source, Map<String, dynamic> options) {
     return _audioBridge.play(source, options);
   }
 

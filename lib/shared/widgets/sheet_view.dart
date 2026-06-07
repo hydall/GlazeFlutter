@@ -97,8 +97,7 @@ class _SheetViewState extends ConsumerState<SheetView>
   /// Fallback controller used when [SheetView.scrollController] is null.
   /// Ensures the [RawScrollbar] always has a valid controller attached,
   /// even if the child [Scrollable] uses [PrimaryScrollController] or its own.
-  late final ScrollController _fallbackScrollController =
-      ScrollController();
+  late final ScrollController _fallbackScrollController = ScrollController();
 
   /// Whether this SheetView is hosted inside [showModalBottomSheet]. When
   /// false (e.g. opened as a route via GoRouter), we behave as a regular
@@ -273,7 +272,8 @@ class _SheetViewState extends ConsumerState<SheetView>
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
+    final batterySaver =
+        ref.watch(appSettingsProvider).value?.batterySaver ?? false;
     final isKeyboardOpen = bottomInset > 0;
 
     if (isKeyboardOpen != _keyboardOpen) {
@@ -282,7 +282,9 @@ class _SheetViewState extends ConsumerState<SheetView>
         if (!_expanded && !widget.fitContent) {
           _wasExpandedBeforeKeyboard = false;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && !_expanded) _animateTo(_full(context), expanding: true);
+            if (mounted && !_expanded) {
+              _animateTo(_full(context), expanding: true);
+            }
           });
         } else {
           _wasExpandedBeforeKeyboard = true;
@@ -290,7 +292,9 @@ class _SheetViewState extends ConsumerState<SheetView>
       } else {
         if (!_wasExpandedBeforeKeyboard) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && _expanded) _animateTo(_collapsed(context), expanding: false);
+            if (mounted && _expanded) {
+              _animateTo(_collapsed(context), expanding: false);
+            }
           });
         }
       }
@@ -321,7 +325,9 @@ class _SheetViewState extends ConsumerState<SheetView>
               child: Builder(
                 builder: (context) {
                   final mediaQuery = MediaQuery.of(context);
-                  final extraTop = _hasHeader ? (mediaQuery.padding.top + 10 + _headerH) : mediaQuery.padding.top;
+                  final extraTop = _hasHeader
+                      ? (mediaQuery.padding.top + 10 + _headerH)
+                      : mediaQuery.padding.top;
                   final newPadding = mediaQuery.padding.copyWith(
                     top: extraTop,
                     bottom: navHeight > mediaQuery.padding.bottom
@@ -332,7 +338,9 @@ class _SheetViewState extends ConsumerState<SheetView>
                   final innerChild = Padding(
                     padding: widget.bodyPadding ?? EdgeInsets.zero,
                     child: Padding(
-                      padding: EdgeInsets.only(bottom: isKeyboardOpen ? bottomInset + 10 : 0),
+                      padding: EdgeInsets.only(
+                        bottom: isKeyboardOpen ? bottomInset + 10 : 0,
+                      ),
                       child: widget.body,
                     ),
                   );
@@ -340,7 +348,8 @@ class _SheetViewState extends ConsumerState<SheetView>
                   return MediaQuery(
                     data: mediaQuery.copyWith(padding: newPadding),
                     child: _MaybeScrollbar(
-                      controller: widget.scrollController ?? _fallbackScrollController,
+                      controller:
+                          widget.scrollController ?? _fallbackScrollController,
                       child: innerChild,
                     ),
                   );
@@ -370,7 +379,8 @@ class _SheetViewState extends ConsumerState<SheetView>
                               return _HeaderIconButton(
                                 onPressed: action.onPressed,
                                 tooltip: action.tooltip,
-                                foregroundColor: action.color ?? context.cs.primary,
+                                foregroundColor:
+                                    action.color ?? context.cs.primary,
                                 child: action.icon,
                               );
                             }).toList(),
@@ -379,16 +389,27 @@ class _SheetViewState extends ConsumerState<SheetView>
                             Padding(
                               padding: const EdgeInsets.only(top: 12),
                               child: Row(
-                                children: widget.tabs.map((tab) => Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                                    child: _SheetTabButton(
-                                      tab: tab,
-                                      active: widget.activeTabId == tab.id,
-                                      onTap: widget.onTabSelected == null ? null : () => widget.onTabSelected!(tab.id),
-                                    ),
-                                  ),
-                                )).toList(),
+                                children: widget.tabs
+                                    .map(
+                                      (tab) => Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 4,
+                                          ),
+                                          child: _SheetTabButton(
+                                            tab: tab,
+                                            active:
+                                                widget.activeTabId == tab.id,
+                                            onTap: widget.onTabSelected == null
+                                                ? null
+                                                : () => widget.onTabSelected!(
+                                                    tab.id,
+                                                  ),
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
                               ),
                             ),
                           if (widget.headerBottom != null)
@@ -407,7 +428,8 @@ class _SheetViewState extends ConsumerState<SheetView>
             if (widget.floatingActionButton != null)
               Positioned(
                 right: 16,
-                bottom: 16 + MediaQuery.of(context).padding.bottom + bottomInset,
+                bottom:
+                    16 + MediaQuery.of(context).padding.bottom + bottomInset,
                 child: widget.floatingActionButton!,
               ),
           ],
@@ -432,7 +454,9 @@ class _SheetViewState extends ConsumerState<SheetView>
         ? ((_currentHeight - collapsed) / (full - collapsed)).clamp(0.0, 1.0)
         : 0.0;
     final radius = 20.0 * (1.0 - t);
-    final realTopPadding = MediaQueryData.fromView(View.of(context)).padding.top;
+    final realTopPadding = MediaQueryData.fromView(
+      View.of(context),
+    ).padding.top;
     final topPad = realTopPadding * t;
 
     if (_hasHeader) {
@@ -448,7 +472,13 @@ class _SheetViewState extends ConsumerState<SheetView>
         child: ClipRRect(
           borderRadius: BorderRadius.vertical(top: Radius.circular(radius)),
           child: batterySaver
-              ? _sheetContent(context, topPad, bottomInset, radius, opaque: true)
+              ? _sheetContent(
+                  context,
+                  topPad,
+                  bottomInset,
+                  radius,
+                  opaque: true,
+                )
               : BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
                   child: _sheetContent(context, topPad, bottomInset, radius),
@@ -458,7 +488,13 @@ class _SheetViewState extends ConsumerState<SheetView>
     );
   }
 
-  Widget _sheetContent(BuildContext context, double topPad, double bottomInset, double radius, {bool opaque = false}) {
+  Widget _sheetContent(
+    BuildContext context,
+    double topPad,
+    double bottomInset,
+    double radius, {
+    bool opaque = false,
+  }) {
     final isKeyboardOpen = _keyboardOpen;
     return Container(
       color: context.cs.surface.withValues(alpha: opaque ? 1.0 : 0.8),
@@ -467,53 +503,63 @@ class _SheetViewState extends ConsumerState<SheetView>
           widget.fitContent
               ? _buildBodyChild(context, topPad, bottomInset, isKeyboardOpen)
               : Positioned.fill(
-                  child: _buildBodyChild(context, topPad, bottomInset, isKeyboardOpen),
+                  child: _buildBodyChild(
+                    context,
+                    topPad,
+                    bottomInset,
+                    isKeyboardOpen,
+                  ),
                 ),
 
-                // Interactive header — rendered above the gradient so buttons
-                // and drag handle are unobscured and fully hittable.
-                if (_hasHeader)
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: KeyedSubtree(
-                      key: _headerKey,
-                      child: _SheetViewHeader(
-                        title: widget.title,
-                        titleWidget: widget.titleWidget,
-                        showBack: widget.showBack,
-                        onBack: widget.onBack,
-                        actions: widget.actions,
-                        tabs: widget.tabs,
-                        activeTabId: widget.activeTabId,
-                        onTabSelected: widget.onTabSelected,
-                        headerBottom: widget.headerBottom,
-                        showHandle: _effectiveShowHandle,
-                        expanded: _expanded,
-                        topPad: topPad,
-                        onHandleTap: _toggle,
-                        onDragStart: widget.fitContent ? null : _onDragStart,
-                        onDragUpdate: widget.fitContent ? null : _onDragUpdate,
-                        onDragEnd: widget.fitContent ? null : _onDragEnd,
-                      ),
-                    ),
-                  ),
-                if (widget.floating != null)
-                  Positioned.fill(child: widget.floating!),
-                if (widget.floatingActionButton != null)
-                  Positioned(
-                    right: 16,
-                    bottom: 16 + MediaQuery.of(context).padding.bottom + bottomInset,
-                    child: widget.floatingActionButton!,
-                  ),
-              ],
+          // Interactive header — rendered above the gradient so buttons
+          // and drag handle are unobscured and fully hittable.
+          if (_hasHeader)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: KeyedSubtree(
+                key: _headerKey,
+                child: _SheetViewHeader(
+                  title: widget.title,
+                  titleWidget: widget.titleWidget,
+                  showBack: widget.showBack,
+                  onBack: widget.onBack,
+                  actions: widget.actions,
+                  tabs: widget.tabs,
+                  activeTabId: widget.activeTabId,
+                  onTabSelected: widget.onTabSelected,
+                  headerBottom: widget.headerBottom,
+                  showHandle: _effectiveShowHandle,
+                  expanded: _expanded,
+                  topPad: topPad,
+                  onHandleTap: _toggle,
+                  onDragStart: widget.fitContent ? null : _onDragStart,
+                  onDragUpdate: widget.fitContent ? null : _onDragUpdate,
+                  onDragEnd: widget.fitContent ? null : _onDragEnd,
+                ),
+              ),
             ),
-          );
+          if (widget.floating != null) Positioned.fill(child: widget.floating!),
+          if (widget.floatingActionButton != null)
+            Positioned(
+              right: 16,
+              bottom: 16 + MediaQuery.of(context).padding.bottom + bottomInset,
+              child: widget.floatingActionButton!,
+            ),
+        ],
+      ),
+    );
   }
 
-  Widget _buildBodyChild(BuildContext context, double topPad, double bottomInset, bool isKeyboardOpen) {
-    return (_hasHeader && !(ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false))
+  Widget _buildBodyChild(
+    BuildContext context,
+    double topPad,
+    double bottomInset,
+    bool isKeyboardOpen,
+  ) {
+    return (_hasHeader &&
+            !(ref.watch(appSettingsProvider).value?.batterySaver ?? false))
         ? SoftEdgeBlur(
             edges: [
               EdgeBlur(
@@ -523,16 +569,29 @@ class _SheetViewState extends ConsumerState<SheetView>
                 tintColor: context.cs.surface.withValues(alpha: 0.4),
                 controlPoints: [
                   ControlPoint(position: 0.5, type: ControlPointType.visible),
-                  ControlPoint(position: 1.0, type: ControlPointType.transparent),
+                  ControlPoint(
+                    position: 1.0,
+                    type: ControlPointType.transparent,
+                  ),
                 ],
-              )
+              ),
             ],
-            child: _buildScrollConfig(context, topPad, bottomInset, isKeyboardOpen),
+            child: _buildScrollConfig(
+              context,
+              topPad,
+              bottomInset,
+              isKeyboardOpen,
+            ),
           )
         : _buildScrollConfig(context, topPad, bottomInset, isKeyboardOpen);
   }
 
-  Widget _buildScrollConfig(BuildContext context, double topPad, double bottomInset, bool isKeyboardOpen) {
+  Widget _buildScrollConfig(
+    BuildContext context,
+    double topPad,
+    double bottomInset,
+    bool isKeyboardOpen,
+  ) {
     return ScrollConfiguration(
       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
       child: Builder(
@@ -541,7 +600,9 @@ class _SheetViewState extends ConsumerState<SheetView>
           final extraTop = _hasHeader ? _headerH : topPad;
           final newPadding = mediaQuery.padding.copyWith(top: extraTop);
 
-          final safeBottom = widget.fitContent ? mediaQuery.padding.bottom : 0.0;
+          final safeBottom = widget.fitContent
+              ? mediaQuery.padding.bottom
+              : 0.0;
           final innerChild = Padding(
             padding: widget.bodyPadding ?? EdgeInsets.zero,
             child: Padding(
@@ -551,10 +612,7 @@ class _SheetViewState extends ConsumerState<SheetView>
               child: Align(
                 alignment: Alignment.topCenter,
                 heightFactor: widget.fitContent ? 1.0 : null,
-                child: SizedBox(
-                  width: double.infinity,
-                  child: widget.body,
-                ),
+                child: SizedBox(width: double.infinity, child: widget.body),
               ),
             ),
           );
@@ -659,7 +717,7 @@ class _SheetViewHeader extends StatelessWidget {
                       child: Icon(
                         Icons.arrow_back,
                         size: 20,
-                         color: context.cs.primary,
+                        color: context.cs.primary,
                       ),
                     )
                   else
@@ -691,7 +749,8 @@ class _SheetViewHeader extends StatelessWidget {
                             child: _HeaderIconButton(
                               tooltip: action.tooltip,
                               onPressed: action.onPressed,
-                              foregroundColor: action.color ?? context.cs.primary,
+                              foregroundColor:
+                                  action.color ?? context.cs.primary,
                               child: action.icon,
                             ),
                           ),
@@ -784,7 +843,9 @@ class _SheetTabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = active ? context.cs.primary : context.cs.onSurfaceVariant;
+    final foreground = active
+        ? context.cs.primary
+        : context.cs.onSurfaceVariant;
     return Material(
       color: active
           ? context.cs.primary.withValues(alpha: 0.12)
@@ -890,4 +951,3 @@ class _MaybeScrollbarState extends State<_MaybeScrollbar> {
     );
   }
 }
-

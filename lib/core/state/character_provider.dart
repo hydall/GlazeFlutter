@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:path/path.dart' as p;
 import '../db/repositories/character_repo.dart';
 import '../models/character.dart';
@@ -46,18 +47,18 @@ class InfiniteCharactersState {
     int? totalCount,
     int? loadedLimit,
     bool? isLoadingMore,
-  }) =>
-      InfiniteCharactersState(
-        items: items ?? this.items,
-        totalCount: totalCount ?? this.totalCount,
-        loadedLimit: loadedLimit ?? this.loadedLimit,
-        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-      );
+  }) => InfiniteCharactersState(
+    items: items ?? this.items,
+    totalCount: totalCount ?? this.totalCount,
+    loadedLimit: loadedLimit ?? this.loadedLimit,
+    isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+  );
 }
 
-final charactersProvider = AsyncNotifierProvider<CharactersNotifier, List<Character>>(
-  CharactersNotifier.new,
-);
+final charactersProvider =
+    AsyncNotifierProvider<CharactersNotifier, List<Character>>(
+      CharactersNotifier.new,
+    );
 
 final characterByIdProvider = Provider.family<Character?, String>((ref, id) {
   ref.watch(avatarVersionProvider);
@@ -65,10 +66,12 @@ final characterByIdProvider = Provider.family<Character?, String>((ref, id) {
   return chars.where((c) => c.id == id).firstOrNull;
 });
 
-final infiniteCharactersProvider = AsyncNotifierProvider.family<
-    InfiniteCharactersNotifier, InfiniteCharactersState, InfiniteCharactersKey>(
-  InfiniteCharactersNotifier.new,
-);
+final infiniteCharactersProvider =
+    AsyncNotifierProvider.family<
+      InfiniteCharactersNotifier,
+      InfiniteCharactersState,
+      InfiniteCharactersKey
+    >(InfiniteCharactersNotifier.new);
 
 final avatarVersionProvider = StateProvider<int>((ref) => 0);
 
@@ -77,13 +80,16 @@ void bumpAvatarVersion(dynamic ref) {
 }
 
 class InfiniteCharactersNotifier
-    extends FamilyAsyncNotifier<InfiniteCharactersState, InfiniteCharactersKey> {
+    extends AsyncNotifier<InfiniteCharactersState> {
+  InfiniteCharactersNotifier(this.arg);
+
+  final InfiniteCharactersKey arg;
   StreamSubscription<List<Character>>? _itemsSub;
   StreamSubscription<int>? _countSub;
   int _loadedLimit = kCharactersPageSize;
 
   @override
-  Future<InfiniteCharactersState> build(InfiniteCharactersKey arg) async {
+  Future<InfiniteCharactersState> build() async {
     final repo = ref.read(characterRepoProvider);
     _loadedLimit = kCharactersPageSize;
 
@@ -98,11 +104,13 @@ class InfiniteCharactersNotifier
       dir: arg.dir,
     );
 
-    state = AsyncData(InfiniteCharactersState(
-      items: initialItems,
-      totalCount: initialCount,
-      loadedLimit: _loadedLimit,
-    ));
+    state = AsyncData(
+      InfiniteCharactersState(
+        items: initialItems,
+        totalCount: initialCount,
+        loadedLimit: _loadedLimit,
+      ),
+    );
 
     _subscribeItems();
     _subscribeCount();
@@ -119,26 +127,23 @@ class InfiniteCharactersNotifier
     final repo = ref.read(characterRepoProvider);
     _itemsSub?.cancel();
     _itemsSub = repo
-        .watchPage(
-          limit: _loadedLimit,
-          offset: 0,
-          sort: arg.sort,
-          dir: arg.dir,
-        )
+        .watchPage(limit: _loadedLimit, offset: 0, sort: arg.sort, dir: arg.dir)
         .listen(
-      (data) {
-        final current = state.valueOrNull;
-        if (current == null) return;
-        state = AsyncData(current.copyWith(
-          items: data,
-          loadedLimit: _loadedLimit,
-          isLoadingMore: false,
-        ));
-      },
-      onError: (Object error, StackTrace stackTrace) {
-        state = AsyncError(error, stackTrace);
-      },
-    );
+          (data) {
+            final current = state.value;
+            if (current == null) return;
+            state = AsyncData(
+              current.copyWith(
+                items: data,
+                loadedLimit: _loadedLimit,
+                isLoadingMore: false,
+              ),
+            );
+          },
+          onError: (Object error, StackTrace stackTrace) {
+            state = AsyncError<InfiniteCharactersState>(error, stackTrace);
+          },
+        );
   }
 
   void _subscribeCount() {
@@ -146,18 +151,18 @@ class InfiniteCharactersNotifier
     _countSub?.cancel();
     _countSub = repo.watchTotalCount().listen(
       (count) {
-        final current = state.valueOrNull;
+        final current = state.value;
         if (current == null) return;
         state = AsyncData(current.copyWith(totalCount: count));
       },
       onError: (Object error, StackTrace stackTrace) {
-        state = AsyncError(error, stackTrace);
+        state = AsyncError<InfiniteCharactersState>(error, stackTrace);
       },
     );
   }
 
   Future<void> loadMore() async {
-    final current = state.valueOrNull;
+    final current = state.value;
     if (current == null || current.isLoadingMore || !current.hasMore) return;
     _loadedLimit += kCharactersPageSize;
     state = AsyncData(current.copyWith(isLoadingMore: true));
@@ -240,7 +245,10 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
         for (final e in activations.character.entries) {
           if (e.key != id) charMap[e.key] = List<String>.from(e.value);
         }
-        final cleaned = LorebookActivations(character: charMap, chat: activations.chat);
+        final cleaned = LorebookActivations(
+          character: charMap,
+          chat: activations.chat,
+        );
         ref.read(lorebookActivationsProvider.notifier).state = cleaned;
         await saveLorebookActivations(cleaned);
       }
@@ -269,8 +277,12 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
             ? p.dirname(character.avatarPath!)
             : null;
         if (avatarDir != null) {
-          final galleryDir = Directory(p.join(p.dirname(avatarDir), 'gallery', character.id));
-          if (await galleryDir.exists()) await galleryDir.delete(recursive: true);
+          final galleryDir = Directory(
+            p.join(p.dirname(avatarDir), 'gallery', character.id),
+          );
+          if (await galleryDir.exists()) {
+            await galleryDir.delete(recursive: true);
+          }
         }
       }
     } catch (_) {}

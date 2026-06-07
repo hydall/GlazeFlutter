@@ -3,7 +3,6 @@
 import 'package:glaze_flutter/core/llm/macro_engine.dart';
 import 'package:glaze_flutter/core/llm/prompt_block_resolver.dart';
 import 'package:glaze_flutter/core/models/character.dart';
-import 'package:glaze_flutter/core/models/persona.dart';
 
 /// Characterization test for the preset accounting split
 /// (introduced to fix the double-count where preset chrome that

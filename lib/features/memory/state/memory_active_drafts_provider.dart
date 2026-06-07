@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 class MemoryActiveDraftsNotifier extends StateNotifier<Set<String>> {
   MemoryActiveDraftsNotifier() : super(const <String>{});
@@ -18,5 +18,5 @@ class MemoryActiveDraftsNotifier extends StateNotifier<Set<String>> {
 
 final memoryActiveDraftsProvider =
     StateNotifierProvider<MemoryActiveDraftsNotifier, Set<String>>(
-  (ref) => MemoryActiveDraftsNotifier(),
-);
+      (ref) => MemoryActiveDraftsNotifier(),
+    );

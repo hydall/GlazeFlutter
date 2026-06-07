@@ -34,7 +34,7 @@ class GlassSurface extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final preset = ref.watch(themeProvider).activePreset;
     final batterySaver =
-        ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
+        ref.watch(appSettingsProvider).value?.batterySaver ?? false;
     return _build(context, preset, batterySaver);
   }
 

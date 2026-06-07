@@ -53,7 +53,7 @@ class _ProfileTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final current = _profileId(preset, profile);
     final configsAsync = ref.watch(apiListProvider);
-    final configs = configsAsync.valueOrNull ?? const <ApiConfig>[];
+    final configs = configsAsync.value ?? const <ApiConfig>[];
     return Material(
       color: Colors.transparent,
       child: ListTile(

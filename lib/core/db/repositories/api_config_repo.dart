@@ -16,9 +16,9 @@ class ApiConfigRepo implements SyncApiConfigStore {
 
   @override
   Future<ApiConfig?> getById(String id) async {
-    final row = await (_db.select(_db.apiConfigs)
-          ..where((t) => t.configId.equals(id)))
-        .getSingleOrNull();
+    final row = await (_db.select(
+      _db.apiConfigs,
+    )..where((t) => t.configId.equals(id))).getSingleOrNull();
     return row != null ? _toModel(row) : null;
   }
 
@@ -29,7 +29,9 @@ class ApiConfigRepo implements SyncApiConfigStore {
 
   @override
   Future<void> delete(String id) async {
-    await (_db.delete(_db.apiConfigs)..where((t) => t.configId.equals(id))).go();
+    await (_db.delete(
+      _db.apiConfigs,
+    )..where((t) => t.configId.equals(id))).go();
   }
 
   Future<void> putFromMap(Map<String, dynamic> m) async {
@@ -38,70 +40,74 @@ class ApiConfigRepo implements SyncApiConfigStore {
   }
 
   ApiConfig _toModel(ApiConfigRow c) => ApiConfig(
-        id: c.configId,
-        name: c.name,
-        providerId: c.providerId,
-        protocol: c.protocol,
-        endpoint: c.endpoint ?? '',
-        apiKey: c.apiKey ?? '',
-        model: c.model ?? '',
-        mode: c.mode,
-        maxTokens: c.maxTokens,
-        contextSize: c.contextSize,
-        temperature: c.temperature,
-        topP: c.topP,
-        topK: c.topK,
-        frequencyPenalty: c.frequencyPenalty,
-        presencePenalty: c.presencePenalty,
-        stream: c.stream,
-        reasoningEffort: c.reasoningEffort ?? 'medium',
-        requestReasoning: c.requestReasoning,
-        reasoningTagStart: c.reasoningTagStart,
-        reasoningTagEnd: c.reasoningTagEnd,
-        embeddingUseSame: c.embeddingUseSame,
-        embeddingEnabled: c.embeddingEnabled,
-        embeddingEndpoint: c.embeddingEndpoint ?? '',
-        embeddingApiKey: c.embeddingApiKey ?? '',
-        embeddingModel: c.embeddingModel ?? '',
-        embeddingMaxChunkTokens: c.embeddingMaxChunkTokens,
-        omitTemperature: c.omitTemperature,
-        omitTopP: c.omitTopP,
-        omitReasoning: c.omitReasoning,
-        omitReasoningEffort: c.omitReasoningEffort,
-        cacheControlTtl: c.cacheControlTtl,
-      );
+    id: c.configId,
+    name: c.name,
+    providerId: c.providerId,
+    protocol: c.protocol,
+    endpoint: c.endpoint ?? '',
+    apiKey: c.apiKey ?? '',
+    model: c.model ?? '',
+    mode: c.mode,
+    maxTokens: c.maxTokens,
+    contextSize: c.contextSize,
+    temperature: c.temperature,
+    topP: c.topP,
+    topK: c.topK,
+    frequencyPenalty: c.frequencyPenalty,
+    presencePenalty: c.presencePenalty,
+    stream: c.stream,
+    reasoningEffort: c.reasoningEffort ?? 'medium',
+    requestReasoning: c.requestReasoning,
+    reasoningTagStart: c.reasoningTagStart,
+    reasoningTagEnd: c.reasoningTagEnd,
+    embeddingUseSame: c.embeddingUseSame,
+    embeddingEnabled: c.embeddingEnabled,
+    embeddingEndpoint: c.embeddingEndpoint ?? '',
+    embeddingApiKey: c.embeddingApiKey ?? '',
+    embeddingModel: c.embeddingModel ?? '',
+    embeddingMaxChunkTokens: c.embeddingMaxChunkTokens,
+    omitTemperature: c.omitTemperature,
+    omitTopP: c.omitTopP,
+    omitReasoning: c.omitReasoning,
+    omitReasoningEffort: c.omitReasoningEffort,
+    cacheControlTtl: c.cacheControlTtl,
+    cacheBreakpointMode: c.cacheBreakpointMode,
+    sessionIdMode: c.sessionIdMode,
+  );
 
   ApiConfigsCompanion _toCompanion(ApiConfig m) => ApiConfigsCompanion(
-        configId: Value(m.id),
-        name: Value(m.name),
-        providerId: Value(m.providerId),
-        protocol: Value(m.protocol),
-        endpoint: Value(m.endpoint),
-        apiKey: Value(m.apiKey),
-        model: Value(m.model),
-        mode: Value(m.mode),
-        maxTokens: Value(m.maxTokens),
-        contextSize: Value(m.contextSize),
-        temperature: Value(m.temperature),
-        topP: Value(m.topP),
-        topK: Value(m.topK),
-        frequencyPenalty: Value(m.frequencyPenalty),
-        presencePenalty: Value(m.presencePenalty),
-        stream: Value(m.stream),
-        reasoningEffort: Value(m.reasoningEffort),
-        requestReasoning: Value(m.requestReasoning),
-        reasoningTagStart: Value(m.reasoningTagStart),
-        reasoningTagEnd: Value(m.reasoningTagEnd),
-        embeddingUseSame: Value(m.embeddingUseSame),
-        embeddingEnabled: Value(m.embeddingEnabled),
-        embeddingEndpoint: Value(m.embeddingEndpoint),
-        embeddingApiKey: Value(m.embeddingApiKey),
-        embeddingModel: Value(m.embeddingModel),
-        embeddingMaxChunkTokens: Value(m.embeddingMaxChunkTokens),
-        omitTemperature: Value(m.omitTemperature),
-        omitTopP: Value(m.omitTopP),
-        omitReasoning: Value(m.omitReasoning),
-        omitReasoningEffort: Value(m.omitReasoningEffort),
-        cacheControlTtl: Value(m.cacheControlTtl),
-      );
+    configId: Value(m.id),
+    name: Value(m.name),
+    providerId: Value(m.providerId),
+    protocol: Value(m.protocol),
+    endpoint: Value(m.endpoint),
+    apiKey: Value(m.apiKey),
+    model: Value(m.model),
+    mode: Value(m.mode),
+    maxTokens: Value(m.maxTokens),
+    contextSize: Value(m.contextSize),
+    temperature: Value(m.temperature),
+    topP: Value(m.topP),
+    topK: Value(m.topK),
+    frequencyPenalty: Value(m.frequencyPenalty),
+    presencePenalty: Value(m.presencePenalty),
+    stream: Value(m.stream),
+    reasoningEffort: Value(m.reasoningEffort),
+    requestReasoning: Value(m.requestReasoning),
+    reasoningTagStart: Value(m.reasoningTagStart),
+    reasoningTagEnd: Value(m.reasoningTagEnd),
+    embeddingUseSame: Value(m.embeddingUseSame),
+    embeddingEnabled: Value(m.embeddingEnabled),
+    embeddingEndpoint: Value(m.embeddingEndpoint),
+    embeddingApiKey: Value(m.embeddingApiKey),
+    embeddingModel: Value(m.embeddingModel),
+    embeddingMaxChunkTokens: Value(m.embeddingMaxChunkTokens),
+    omitTemperature: Value(m.omitTemperature),
+    omitTopP: Value(m.omitTopP),
+    omitReasoning: Value(m.omitReasoning),
+    omitReasoningEffort: Value(m.omitReasoningEffort),
+    cacheControlTtl: Value(m.cacheControlTtl),
+    cacheBreakpointMode: Value(m.cacheBreakpointMode),
+    sessionIdMode: Value(m.sessionIdMode),
+  );
 }

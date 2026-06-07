@@ -4,7 +4,7 @@ part 'preset.freezed.dart';
 part 'preset.g.dart';
 
 @freezed
-class PresetBlock with _$PresetBlock {
+abstract class PresetBlock with _$PresetBlock {
   const factory PresetBlock({
     required String id,
     required String name,
@@ -29,7 +29,7 @@ class PresetBlock with _$PresetBlock {
 }
 
 @freezed
-class PresetRegex with _$PresetRegex {
+abstract class PresetRegex with _$PresetRegex {
   const factory PresetRegex({
     required String id,
     required String name,
@@ -53,7 +53,7 @@ class PresetRegex with _$PresetRegex {
 }
 
 @freezed
-class Preset with _$Preset {
+abstract class Preset with _$Preset {
   const factory Preset({
     required String id,
     required String name,
@@ -167,7 +167,7 @@ String _coerceString(dynamic v, String fallback) {
 ///   `character`: charId → presetId  (one preset per character)
 ///   `chat`:      sessionId → presetId  (one preset per chat session)
 @freezed
-class PresetConnections with _$PresetConnections {
+abstract class PresetConnections with _$PresetConnections {
   const factory PresetConnections({
     @Default({}) Map<String, String> character,
     @Default({}) Map<String, String> chat,

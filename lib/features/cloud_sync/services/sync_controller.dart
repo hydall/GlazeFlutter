@@ -56,7 +56,9 @@ class SyncController {
 
   Future<void> resolveFolderIdIfNeeded() async {
     final service = _ref.read(syncServiceProvider).value;
-    if (service != null && service.provider == SyncProvider.gdrive && service.isConnected()) {
+    if (service != null &&
+        service.provider == SyncProvider.gdrive &&
+        service.isConnected()) {
       if (service.gdriveFolderId != null) {
         _gdriveFolderId = service.gdriveFolderId;
       } else {
@@ -71,7 +73,8 @@ class SyncController {
       _ref.read(syncStatusProvider.notifier).state = service.status;
       _ref.read(syncConnectedProvider.notifier).state = service.isConnected();
       _ref.read(syncProviderProvider.notifier).state = service.provider;
-      _ref.read(syncAutoEnabledProvider.notifier).state = service.autoSyncEnabled;
+      _ref.read(syncAutoEnabledProvider.notifier).state =
+          service.autoSyncEnabled;
     }
   }
 
@@ -113,7 +116,7 @@ class SyncController {
   }
 
   Future<String?> disconnect() async {
-    final service = _ref.read(syncServiceProvider).valueOrNull;
+    final service = _ref.read(syncServiceProvider).value;
     if (service == null) return null;
 
     _isDisconnecting = true;
@@ -229,12 +232,13 @@ class SyncController {
   }
 
   Future<String?> resolveConflict(SyncConflict conflict, String choice) async {
-    final service = _ref.read(syncServiceProvider).valueOrNull;
+    final service = _ref.read(syncServiceProvider).value;
     if (service == null) return null;
 
     // Optimistically remove from UI immediately — the user should not wait
     // for a manifest-rewrite before seeing the conflict row disappear.
-    final optimistic = _ref.read(syncConflictsProvider)
+    final optimistic = _ref
+        .read(syncConflictsProvider)
         .where((c) => c.key != conflict.key)
         .toList();
     _ref.read(syncConflictsProvider.notifier).state = optimistic;
@@ -242,7 +246,9 @@ class SyncController {
     try {
       await service.resolveConflict(conflict, choice);
       // Sync provider state with service truth (in case of partial failure).
-      _ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
+      _ref.read(syncConflictsProvider.notifier).state = List.from(
+        service.conflicts,
+      );
 
       if (service.conflicts.isEmpty) {
         return await _applyPendingPullAndFinalize(service);
@@ -250,7 +256,9 @@ class SyncController {
       return null;
     } catch (e) {
       // Roll back optimistic removal on error.
-      _ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
+      _ref.read(syncConflictsProvider.notifier).state = List.from(
+        service.conflicts,
+      );
       _ref.read(syncLastErrorProvider.notifier).state = e.toString();
       _ref.read(syncStatusProvider.notifier).state = service.status;
       return 'Could not resolve conflict: $e';
@@ -258,17 +266,21 @@ class SyncController {
   }
 
   Future<String?> resolveAllConflicts(String choice) async {
-    final service = _ref.read(syncServiceProvider).valueOrNull;
+    final service = _ref.read(syncServiceProvider).value;
     if (service == null) return null;
     // Optimistically clear all conflict rows immediately.
     _ref.read(syncConflictsProvider.notifier).state = [];
     try {
       await service.resolveAllConflicts(choice);
-      _ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
+      _ref.read(syncConflictsProvider.notifier).state = List.from(
+        service.conflicts,
+      );
       return await _applyPendingPullAndFinalize(service);
     } catch (e) {
       _ref.read(syncLastErrorProvider.notifier).state = e.toString();
-      _ref.read(syncConflictsProvider.notifier).state = List.from(service.conflicts);
+      _ref.read(syncConflictsProvider.notifier).state = List.from(
+        service.conflicts,
+      );
       _ref.read(syncStatusProvider.notifier).state = service.status;
       return 'Could not resolve conflicts: $e';
     }
@@ -331,7 +343,10 @@ class SyncController {
   Future<void> setAutoSync(bool val) async {
     final service = _ref.read(syncServiceProvider).value;
     if (service != null) {
-      await service.setAutoSync(val, messageCount: service.autoSyncMessageCount);
+      await service.setAutoSync(
+        val,
+        messageCount: service.autoSyncMessageCount,
+      );
       _ref.read(syncAutoEnabledProvider.notifier).state = val;
     }
   }

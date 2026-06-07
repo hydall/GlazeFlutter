@@ -1,13 +1,13 @@
 import 'dart:convert';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/extensions_settings.dart';
 
 final extensionsSettingsProvider =
     StateNotifierProvider<ExtensionsSettingsNotifier, ExtensionsSettings>(
-  (ref) => ExtensionsSettingsNotifier(),
-);
+      (ref) => ExtensionsSettingsNotifier(),
+    );
 
 class ExtensionsSettingsNotifier extends StateNotifier<ExtensionsSettings> {
   ExtensionsSettingsNotifier() : super(const ExtensionsSettings()) {

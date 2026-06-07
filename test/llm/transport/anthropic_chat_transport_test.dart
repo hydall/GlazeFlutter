@@ -12,12 +12,15 @@ ChatTransportRequest _req({
   bool requestReasoning = false,
   String? reasoningEffort,
   String cacheControlTtl = 'off',
+  String cacheBreakpointMode = 'depth',
+  List<Map<String, dynamic>>? previousMessages,
 }) {
   return ChatTransportRequest(
     endpoint: 'https://api.anthropic.com',
     apiKey: 'sk-ant-test',
     model: model,
-    messages: messages ??
+    messages:
+        messages ??
         [
           {'role': 'system', 'content': 'you are helpful'},
           {'role': 'user', 'content': 'hi'},
@@ -29,6 +32,8 @@ ChatTransportRequest _req({
     requestReasoning: requestReasoning,
     reasoningEffort: reasoningEffort,
     cacheControlTtl: cacheControlTtl,
+    cacheBreakpointMode: cacheBreakpointMode,
+    previousMessages: previousMessages,
   );
 }
 
@@ -88,9 +93,11 @@ void main() {
 
     test('omits system when no leading system messages', () {
       final built = AnthropicChatTransport.buildRequest(
-        _req(messages: [
-          {'role': 'user', 'content': 'hi'},
-        ]),
+        _req(
+          messages: [
+            {'role': 'user', 'content': 'hi'},
+          ],
+        ),
       );
       expect(built.body.containsKey('system'), isFalse);
     });
@@ -102,13 +109,15 @@ void main() {
     });
 
     test('detects prefill from trailing assistant turn', () {
-      final built = AnthropicChatTransport.buildRequest(_req(
-        messages: [
-          {'role': 'system', 'content': 'sys'},
-          {'role': 'user', 'content': 'q'},
-          {'role': 'assistant', 'content': 'Continuing:  '},
-        ],
-      ));
+      final built = AnthropicChatTransport.buildRequest(
+        _req(
+          messages: [
+            {'role': 'system', 'content': 'sys'},
+            {'role': 'user', 'content': 'q'},
+            {'role': 'assistant', 'content': 'Continuing:  '},
+          ],
+        ),
+      );
       expect(built.prefill, 'Continuing:');
       // Trailing assistant message stays in messages array.
       final lastMsg =
@@ -119,12 +128,14 @@ void main() {
 
   group('buildRequest — thinking', () {
     test('traditional thinking adds enabled+budget, drops sampling', () {
-      final built = AnthropicChatTransport.buildRequest(_req(
-        model: 'claude-3-7-sonnet',
-        requestReasoning: true,
-        reasoningEffort: 'medium',
-        maxTokens: 10000,
-      ));
+      final built = AnthropicChatTransport.buildRequest(
+        _req(
+          model: 'claude-3-7-sonnet',
+          requestReasoning: true,
+          reasoningEffort: 'medium',
+          maxTokens: 10000,
+        ),
+      );
       expect(built.body['thinking'], isA<Map<dynamic, dynamic>>());
       final thinking = built.body['thinking'] as Map;
       expect(thinking['type'], 'enabled');
@@ -135,21 +146,25 @@ void main() {
     });
 
     test('thinking with small max_tokens bumps it up for response budget', () {
-      final built = AnthropicChatTransport.buildRequest(_req(
-        model: 'claude-3-7-sonnet',
-        requestReasoning: true,
-        reasoningEffort: 'medium',
-        maxTokens: 500, // below 1024 minimum response budget
-      ));
+      final built = AnthropicChatTransport.buildRequest(
+        _req(
+          model: 'claude-3-7-sonnet',
+          requestReasoning: true,
+          reasoningEffort: 'medium',
+          maxTokens: 500, // below 1024 minimum response budget
+        ),
+      );
       expect(built.body['max_tokens'], 1524); // 500 + 1024
     });
 
     test('adaptive thinking for Opus 4.7+: type=adaptive, effort=string', () {
-      final built = AnthropicChatTransport.buildRequest(_req(
-        model: 'claude-opus-4-7',
-        requestReasoning: true,
-        reasoningEffort: 'medium',
-      ));
+      final built = AnthropicChatTransport.buildRequest(
+        _req(
+          model: 'claude-opus-4-7',
+          requestReasoning: true,
+          reasoningEffort: 'medium',
+        ),
+      );
       final thinking = built.body['thinking'] as Map;
       expect(thinking['type'], 'adaptive');
       final output = built.body['output_config'] as Map;
@@ -157,57 +172,98 @@ void main() {
     });
 
     test('thinking drops trailing assistant turn (prefill disabled)', () {
-      final built = AnthropicChatTransport.buildRequest(_req(
-        model: 'claude-3-7-sonnet',
-        requestReasoning: true,
-        reasoningEffort: 'medium',
-        messages: [
-          {'role': 'system', 'content': 'sys'},
-          {'role': 'user', 'content': 'q'},
-          {'role': 'assistant', 'content': 'prefill text  '},
-        ],
-      ));
+      final built = AnthropicChatTransport.buildRequest(
+        _req(
+          model: 'claude-3-7-sonnet',
+          requestReasoning: true,
+          reasoningEffort: 'medium',
+          messages: [
+            {'role': 'system', 'content': 'sys'},
+            {'role': 'user', 'content': 'q'},
+            {'role': 'assistant', 'content': 'prefill text  '},
+          ],
+        ),
+      );
       expect(built.prefill, isNull);
       final messages = built.body['messages'] as List;
       expect(messages.last['role'], 'user');
     });
 
     test('no thinking when requestReasoning is false', () {
-      final built = AnthropicChatTransport.buildRequest(_req(
-        model: 'claude-3-7-sonnet',
-        requestReasoning: false,
-        reasoningEffort: 'high',
-      ));
+      final built = AnthropicChatTransport.buildRequest(
+        _req(
+          model: 'claude-3-7-sonnet',
+          requestReasoning: false,
+          reasoningEffort: 'high',
+        ),
+      );
       expect(built.body.containsKey('thinking'), isFalse);
     });
   });
 
   group('buildRequest — cache control', () {
-    test('5min ttl adds ephemeral marker on last system part + beta header', () {
-      final built = AnthropicChatTransport.buildRequest(_req(
-        cacheControlTtl: '5min',
-      ));
-      final sys = built.body['system'] as List;
-      expect(sys.last['cache_control'], {'type': 'ephemeral', 'ttl': '5m'});
-      expect(built.headers['anthropic-beta'],
-          contains('prompt-caching-2024-07-31'));
-    });
+    test(
+      '5min ttl adds ephemeral marker on last system part + beta header',
+      () {
+        final built = AnthropicChatTransport.buildRequest(
+          _req(cacheControlTtl: '5min'),
+        );
+        final sys = built.body['system'] as List;
+        expect(sys.last['cache_control'], {'type': 'ephemeral', 'ttl': '5m'});
+        expect(
+          built.headers['anthropic-beta'],
+          contains('prompt-caching-2024-07-31'),
+        );
+      },
+    );
 
     test('1h ttl', () {
-      final built = AnthropicChatTransport.buildRequest(_req(
-        cacheControlTtl: '1h',
-      ));
+      final built = AnthropicChatTransport.buildRequest(
+        _req(cacheControlTtl: '1h'),
+      );
       final sys = built.body['system'] as List;
       expect(sys.last['cache_control'], {'type': 'ephemeral', 'ttl': '1h'});
     });
 
     test('off ttl → no caching', () {
-      final built = AnthropicChatTransport.buildRequest(_req(
-        cacheControlTtl: 'off',
-      ));
+      final built = AnthropicChatTransport.buildRequest(
+        _req(cacheControlTtl: 'off'),
+      );
       final sys = built.body['system'] as List;
       expect(sys.last.containsKey('cache_control'), isFalse);
       expect(built.headers.containsKey('anthropic-beta'), isFalse);
+    });
+
+    test('stable_prefix marks last matching message instead of depth', () {
+      final built = AnthropicChatTransport.buildRequest(
+        _req(
+          cacheControlTtl: '5min',
+          cacheBreakpointMode: 'stable_prefix',
+          previousMessages: [
+            {'role': 'system', 'content': 'sys'},
+            {'role': 'user', 'content': 'u1'},
+            {'role': 'assistant', 'content': 'a1'},
+            {'role': 'user', 'content': 'u2'},
+            {'role': 'assistant', 'content': 'volatile-old'},
+          ],
+          messages: [
+            {'role': 'system', 'content': 'sys'},
+            {'role': 'user', 'content': 'u1'},
+            {'role': 'assistant', 'content': 'a1'},
+            {'role': 'user', 'content': 'u2'},
+            {'role': 'assistant', 'content': 'volatile-new'},
+            {'role': 'user', 'content': 'u3'},
+          ],
+        ),
+      );
+
+      final messages = built.body['messages'] as List;
+      final marked = messages
+          .cast<Map<dynamic, dynamic>>()
+          .expand<dynamic>((m) => m['content'] as List)
+          .where((p) => p is Map && p.containsKey('cache_control'));
+      expect(marked, hasLength(1));
+      expect(marked.single['text'], 'u2');
     });
   });
 

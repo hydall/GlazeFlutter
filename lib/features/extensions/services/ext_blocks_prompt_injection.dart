@@ -12,8 +12,9 @@ import '../providers/extensions_settings_provider.dart';
 import 'info_block_injector.dart';
 import 'macro_expander.dart';
 
-final extBlocksPromptInjectionProvider =
-    Provider<ExtBlocksPromptInjection>((ref) => ExtBlocksPromptInjection(ref));
+final extBlocksPromptInjectionProvider = Provider<ExtBlocksPromptInjection>(
+  (ref) => ExtBlocksPromptInjection(ref),
+);
 
 /// Injects ext-block outputs into chat history for main prompt assembly.
 class ExtBlocksPromptInjection {
@@ -44,7 +45,7 @@ class ExtBlocksPromptInjection {
   MacroContext _resolveMacroContext() {
     final personaId = _ref.read(activePersonaIdProvider);
     if (personaId == null) return MacroContext.empty;
-    final personas = _ref.read(personaListProvider).valueOrNull ?? const [];
+    final personas = _ref.read(personaListProvider).value ?? const [];
     final persona = personas.where((p) => p.id == personaId).firstOrNull;
     return MacroContext(persona: persona?.name);
   }
@@ -76,9 +77,6 @@ class _InfoBlocksRepoReader implements InfoBlockReader {
   final InfoBlocksRepository _repo;
 
   @override
-  Future<List<InfoBlock>> getByMessageId(
-    String sessionId,
-    String messageId,
-  ) =>
+  Future<List<InfoBlock>> getByMessageId(String sessionId, String messageId) =>
       _repo.getByMessageId(sessionId, messageId);
 }

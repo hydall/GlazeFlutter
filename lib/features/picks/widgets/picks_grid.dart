@@ -14,7 +14,13 @@ class PicksGrid extends ConsumerWidget {
   final double topPadding;
   final double bottomPadding;
   final Widget? tabBar;
-  final void Function(String title, String? description, bool canGoBack, VoidCallback? onBack)? onFolderChanged;
+  final void Function(
+    String title,
+    String? description,
+    bool canGoBack,
+    VoidCallback? onBack,
+  )?
+  onFolderChanged;
 
   const PicksGrid({
     super.key,
@@ -83,10 +89,7 @@ class _CharacterItem {
   final PicksCharacter character;
   final List<String> path;
 
-  const _CharacterItem({
-    required this.character,
-    required this.path,
-  });
+  const _CharacterItem({required this.character, required this.path});
 }
 
 class _PicksFolderView extends StatefulWidget {
@@ -94,7 +97,13 @@ class _PicksFolderView extends StatefulWidget {
   final double topPadding;
   final double bottomPadding;
   final Widget? tabBar;
-  final void Function(String title, String? description, bool canGoBack, VoidCallback? onBack)? onFolderChanged;
+  final void Function(
+    String title,
+    String? description,
+    bool canGoBack,
+    VoidCallback? onBack,
+  )?
+  onFolderChanged;
 
   const _PicksFolderView({
     required this.folders,
@@ -116,7 +125,10 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
     PicksFolder? folder;
     List<PicksFolder> current = widget.folders;
     for (final segment in _path) {
-      folder = current.firstWhere((f) => f.id == segment, orElse: () => folder!);
+      folder = current.firstWhere(
+        (f) => f.id == segment,
+        orElse: () => folder!,
+      );
       current = folder.subfolders;
     }
     return folder;
@@ -141,12 +153,7 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
         },
       );
     } else {
-      widget.onFolderChanged!(
-        'Our Picks',
-        null,
-        false,
-        null,
-      );
+      widget.onFolderChanged!('Our Picks', null, false, null);
     }
   }
 
@@ -181,12 +188,14 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
     if (isRoot) {
       for (final curator in widget.folders) {
         for (final sub in curator.subfolders) {
-          foldersToDisplay.add(_FolderItem(
-            folder: sub,
-            path: [curator.id],
-            onTap: () => _navigateInto([curator.id, sub.id]),
-            curatorName: curator.name,
-          ));
+          foldersToDisplay.add(
+            _FolderItem(
+              folder: sub,
+              path: [curator.id],
+              onTap: () => _navigateInto([curator.id, sub.id]),
+              curatorName: curator.name,
+            ),
+          );
         }
       }
     } else {
@@ -197,12 +206,14 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
           : null;
       if (current != null) {
         for (final sub in current.subfolders) {
-          foldersToDisplay.add(_FolderItem(
-            folder: sub,
-            path: _path,
-            onTap: () => _navigateInto([..._path, sub.id]),
-            curatorName: curator?.name,
-          ));
+          foldersToDisplay.add(
+            _FolderItem(
+              folder: sub,
+              path: _path,
+              onTap: () => _navigateInto([..._path, sub.id]),
+              curatorName: curator?.name,
+            ),
+          );
         }
       }
     }
@@ -211,20 +222,16 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
     if (isRoot) {
       for (final curator in widget.folders) {
         for (final char in curator.characters) {
-          charactersToDisplay.add(_CharacterItem(
-            character: char,
-            path: [curator.id],
-          ));
+          charactersToDisplay.add(
+            _CharacterItem(character: char, path: [curator.id]),
+          );
         }
       }
     } else {
       final current = _currentFolder;
       if (current != null) {
         for (final char in current.characters) {
-          charactersToDisplay.add(_CharacterItem(
-            character: char,
-            path: _path,
-          ));
+          charactersToDisplay.add(_CharacterItem(character: char, path: _path));
         }
       }
     }
@@ -236,12 +243,16 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
       switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, animation) {
         final isIncoming = child.key == ValueKey(_path.join('/'));
-        
+
         Offset beginOffset;
         if (_isBackTransition) {
-          beginOffset = isIncoming ? const Offset(-0.15, 0.0) : const Offset(0.2, 0.0);
+          beginOffset = isIncoming
+              ? const Offset(-0.15, 0.0)
+              : const Offset(0.2, 0.0);
         } else {
-          beginOffset = isIncoming ? const Offset(0.2, 0.0) : const Offset(-0.15, 0.0);
+          beginOffset = isIncoming
+              ? const Offset(0.2, 0.0)
+              : const Offset(-0.15, 0.0);
         }
 
         final slide = Tween<Offset>(
@@ -251,10 +262,7 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
 
         return FadeTransition(
           opacity: animation,
-          child: SlideTransition(
-            position: slide,
-            child: child,
-          ),
+          child: SlideTransition(position: slide, child: child),
         );
       },
       child: CustomScrollView(
@@ -262,8 +270,7 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
         slivers: [
           if (widget.topPadding > 0)
             SliverToBoxAdapter(child: SizedBox(height: widget.topPadding)),
-          if (widget.tabBar != null)
-            SliverToBoxAdapter(child: widget.tabBar!),
+          if (widget.tabBar != null) SliverToBoxAdapter(child: widget.tabBar!),
           if (_currentFolder?.description != null)
             SliverToBoxAdapter(
               child: Padding(
@@ -279,12 +286,7 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
             ),
           if (foldersToDisplay.isNotEmpty)
             SliverPadding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                _path.isEmpty ? 12 : 8,
-                16,
-                0,
-              ),
+              padding: EdgeInsets.fromLTRB(16, _path.isEmpty ? 12 : 8, 16, 0),
               sliver: SliverGrid(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
@@ -292,18 +294,15 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
                   crossAxisSpacing: 12,
                   childAspectRatio: 2 / 3.2,
                 ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final item = foldersToDisplay[index];
-                    return _FolderCard(
-                      folder: item.folder,
-                      path: item.path,
-                      onTap: item.onTap,
-                      curatorName: item.curatorName,
-                    );
-                  },
-                  childCount: foldersToDisplay.length,
-                ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final item = foldersToDisplay[index];
+                  return _FolderCard(
+                    folder: item.folder,
+                    path: item.path,
+                    onTap: item.onTap,
+                    curatorName: item.curatorName,
+                  );
+                }, childCount: foldersToDisplay.length),
               ),
             ),
           if (charactersToDisplay.isNotEmpty)
@@ -321,16 +320,13 @@ class _PicksFolderViewState extends State<_PicksFolderView> {
                   crossAxisSpacing: 12,
                   childAspectRatio: 2 / 3.2,
                 ),
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final item = charactersToDisplay[index];
-                    return _PicksCharacterCard(
-                      character: item.character,
-                      path: item.path,
-                    );
-                  },
-                  childCount: charactersToDisplay.length,
-                ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final item = charactersToDisplay[index];
+                  return _PicksCharacterCard(
+                    character: item.character,
+                    path: item.path,
+                  );
+                }, childCount: charactersToDisplay.length),
               ),
             ),
           if (charactersToDisplay.isEmpty &&
@@ -394,10 +390,7 @@ class _FolderCardState extends State<_FolderCard> {
       curve: Curves.easeOut,
       builder: (_, t, child) => Opacity(
         opacity: t,
-        child: Transform.scale(
-          scale: 0.9 + 0.1 * t,
-          child: child,
-        ),
+        child: Transform.scale(scale: 0.9 + 0.1 * t, child: child),
       ),
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
@@ -589,10 +582,7 @@ class _PicksCharacterCard extends ConsumerStatefulWidget {
   final PicksCharacter character;
   final List<String> path;
 
-  const _PicksCharacterCard({
-    required this.character,
-    required this.path,
-  });
+  const _PicksCharacterCard({required this.character, required this.path});
 
   @override
   ConsumerState<_PicksCharacterCard> createState() =>
@@ -619,14 +609,16 @@ class _PicksCharacterCardState extends ConsumerState<_PicksCharacterCard> {
   }
 
   bool get _isImported {
-    final chars = ref.read(charactersProvider).valueOrNull ?? [];
+    final chars = ref.read(charactersProvider).value ?? [];
     return chars.any((c) => c.picksHash == char.hash && c.name == char.name);
   }
 
   bool get _needsUpdate {
     if (char.hash == null) return false;
-    final chars = ref.read(charactersProvider).valueOrNull ?? [];
-    final existing = chars.where((c) => c.name == char.name && c.picksHash != null);
+    final chars = ref.read(charactersProvider).value ?? [];
+    final existing = chars.where(
+      (c) => c.name == char.name && c.picksHash != null,
+    );
     return existing.any((c) => c.picksHash != char.hash);
   }
 
@@ -645,10 +637,7 @@ class _PicksCharacterCardState extends ConsumerState<_PicksCharacterCard> {
       curve: Curves.easeOut,
       builder: (_, t, child) => Opacity(
         opacity: t,
-        child: Transform.scale(
-          scale: 0.9 + 0.1 * t,
-          child: child,
-        ),
+        child: Transform.scale(scale: 0.9 + 0.1 * t, child: child),
       ),
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovered = true),
@@ -823,7 +812,8 @@ class _FolderCardInfo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final desc = folder.description;
-    final count = folder.characters.length +
+    final count =
+        folder.characters.length +
         folder.subfolders.fold<int>(0, (sum, sf) => sum + sf.characters.length);
 
     return Padding(
@@ -856,9 +846,7 @@ class _FolderCardInfo extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
                     color: Colors.white,
-                    shadows: [
-                      Shadow(blurRadius: 4, color: Colors.black54),
-                    ],
+                    shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
                   ),
                 ),
               ),
@@ -932,9 +920,7 @@ class _PicksCharacterCardInfo extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
                     color: Colors.white,
-                    shadows: [
-                      Shadow(blurRadius: 4, color: Colors.black54),
-                    ],
+                    shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
                   ),
                 ),
               ),

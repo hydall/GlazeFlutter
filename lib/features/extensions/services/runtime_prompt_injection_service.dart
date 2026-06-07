@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/llm/history_assembler.dart';
 

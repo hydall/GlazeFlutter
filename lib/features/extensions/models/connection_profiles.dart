@@ -17,7 +17,7 @@ part 'connection_profiles.g.dart';
 /// list. When a profile is unset, the bridge falls back to the active
 /// API config so existing single-config setups keep working unchanged.
 @freezed
-class ConnectionProfiles with _$ConnectionProfiles {
+abstract class ConnectionProfiles with _$ConnectionProfiles {
   const factory ConnectionProfiles({
     /// `apiConfigId` to use when the JS caller asks for `big`.
     /// Empty string means "fall back to the active API config".

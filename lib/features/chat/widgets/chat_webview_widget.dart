@@ -150,16 +150,13 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   bool get wantKeepAlive => true;
 
   ChatWebViewPanelRefresher _panelRefresher() => ChatWebViewPanelRefresher(
-        ref: ref,
-        bridge: _bridge,
-        ready: () => _ready,
-        messages: () => widget.messages,
-      );
+    ref: ref,
+    bridge: _bridge,
+    ready: () => _ready,
+    messages: () => widget.messages,
+  );
 
-  Future<void> _refreshExtBlocksPanel(
-    String sessionId,
-    String messageId,
-  ) {
+  Future<void> _refreshExtBlocksPanel(String sessionId, String messageId) {
     return _panelRefresher().refreshForMessage(sessionId, messageId);
   }
 
@@ -431,7 +428,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         sessionId: widget.sessionId,
       )),
     );
-    final displayRegexes = ref.watch(displayRegexesProvider).valueOrNull ?? [];
+    final displayRegexes = ref.watch(displayRegexesProvider).value ?? [];
 
     if (_bridge != null) {
       _bridge!.setRegexContext(displayRegexes, character, effectivePersona);

@@ -190,7 +190,7 @@ CommandRegistry buildWiredCommandRegistry(WiredCommandDeps deps) {
         final path = args['path'];
         final params = <String, dynamic>{
           'scope': args['scope'] ?? 'chat',
-          if (path != null) 'path': path,
+          'path': ?path,
         };
         final response = await deps.bridge.dispatch({
           'method': 'getVariables',

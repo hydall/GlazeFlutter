@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../converters/claude_messages.dart';
+import '../converters/cache_breakpoint_marker.dart';
 import '../converters/thinking_budget.dart';
 import 'chat_transport.dart';
 import 'chat_transport_request.dart';
@@ -151,7 +152,20 @@ class AnthropicChatTransport implements ChatTransport {
       last['cache_control'] = {'type': 'ephemeral', 'ttl': ttl};
       systemParts[systemParts.length - 1] = last;
     }
-    if (ttl != null) {
+    if (ttl != null &&
+        request.cacheBreakpointMode == cacheBreakpointModeStablePrefix) {
+      final previousConverted = request.previousMessages == null
+          ? null
+          : convertClaudeMessages(
+              request.previousMessages!,
+              extractPrefill: !useThinking,
+            ).messages;
+      messages = markStablePrefixCacheControl(
+        messages,
+        previousConverted,
+        ttl: ttl,
+      );
+    } else if (ttl != null) {
       messages = _applyCacheAtDepth(messages, _defaultCacheDepth, ttl);
     }
 
@@ -163,6 +177,11 @@ class AnthropicChatTransport implements ChatTransport {
       'stream': request.stream,
     };
     if (systemParts.isNotEmpty) body['system'] = systemParts;
+    if (request.sessionIdMode == 'always' &&
+        request.sessionId != null &&
+        request.sessionId!.isNotEmpty) {
+      body['session_id'] = request.sessionId;
+    }
 
     if (!request.omitTemperature && request.temperature > 0) {
       body['temperature'] = request.temperature;
@@ -197,10 +216,7 @@ class AnthropicChatTransport implements ChatTransport {
         if (currentMax <= _minThinkResponseTokens) {
           body['max_tokens'] = currentMax + _minThinkResponseTokens;
         }
-        body['thinking'] = {
-          'type': 'enabled',
-          'budget_tokens': budget,
-        };
+        body['thinking'] = {'type': 'enabled', 'budget_tokens': budget};
         body.remove('temperature');
         body.remove('top_p');
         body.remove('top_k');
@@ -233,8 +249,7 @@ class AnthropicChatTransport implements ChatTransport {
     List<Map<String, dynamic>> input,
     int depthTarget,
     String ttl,
-  ) =>
-      _applyCacheAtDepth(input, depthTarget, ttl);
+  ) => _applyCacheAtDepth(input, depthTarget, ttl);
 
   Future<void> _streamResponse(
     String url,
@@ -370,8 +385,7 @@ class AnthropicChatTransport implements ChatTransport {
 
     if (cancelToken?.isCancelled == true) return;
 
-    if (!doneReceived &&
-        (fullText.isNotEmpty || fullReasoning.isNotEmpty)) {
+    if (!doneReceived && (fullText.isNotEmpty || fullReasoning.isNotEmpty)) {
       onComplete?.call(
         fullText,
         fullReasoning.isNotEmpty ? fullReasoning : null,
@@ -401,9 +415,7 @@ class AnthropicChatTransport implements ChatTransport {
   }) async {
     final response = await _dio.post<dynamic>(
       url,
-      options: Options(
-        headers: {...headers, 'Accept': 'application/json'},
-      ),
+      options: Options(headers: {...headers, 'Accept': 'application/json'}),
       data: body,
       cancelToken: cancelToken,
     );
@@ -474,10 +486,7 @@ class AnthropicChatTransport implements ChatTransport {
       final response = await _dio.get<Map<String, dynamic>>(
         '$base/models',
         options: Options(
-          headers: {
-            'x-api-key': apiKey,
-            'anthropic-version': _apiVersion,
-          },
+          headers: {'x-api-key': apiKey, 'anthropic-version': _apiVersion},
         ),
       );
       final data = response.data?['data'] as List?;

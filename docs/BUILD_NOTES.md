@@ -30,3 +30,22 @@ dependency_overrides:
 **Checked 2026-05-31 (Flutter 3.44.0):** `path_provider_foundation 2.6.0` — still broken.
 Hook folder is gone from the repo, but `objective_c`/`hooks` transitively still
 triggers "Building native assets failed" on Windows. Override stays.
+
+## MSVC 14.51+ rejects `<experimental/coroutine>`
+
+**Symptom:** `flutter build windows` fails while compiling Windows plugins with:
+
+```text
+error STL1011: The /await compiler option, <experimental/coroutine>,
+<experimental/generator>, and <experimental/resumable> are deprecated by
+Microsoft and will be REMOVED SOON.
+```
+
+**Cause:** Some plugin/native dependencies still include the deprecated MSVC
+experimental coroutine header. Visual Studio 18 / MSVC 14.51 promotes that to a
+static assertion failure.
+
+**Workaround (active):** `windows/CMakeLists.txt` defines
+`_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS` globally for the Windows
+build. Remove it once all affected Windows plugins stop depending on
+`<experimental/coroutine>`.

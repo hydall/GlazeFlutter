@@ -4,7 +4,7 @@ part 'lorebook.freezed.dart';
 part 'lorebook.g.dart';
 
 @freezed
-class LorebookEntry with _$LorebookEntry {
+abstract class LorebookEntry with _$LorebookEntry {
   const factory LorebookEntry({
     required String id,
     @Default('') String comment,
@@ -39,7 +39,7 @@ class LorebookEntry with _$LorebookEntry {
 }
 
 @freezed
-class LorebookCharacterFilter with _$LorebookCharacterFilter {
+abstract class LorebookCharacterFilter with _$LorebookCharacterFilter {
   const factory LorebookCharacterFilter({
     @Default([]) List<String> names,
     @Default(false) bool isExclude,
@@ -50,7 +50,7 @@ class LorebookCharacterFilter with _$LorebookCharacterFilter {
 }
 
 @freezed
-class Lorebook with _$Lorebook {
+abstract class Lorebook with _$Lorebook {
   const factory Lorebook({
     required String id,
     required String name,
@@ -68,7 +68,7 @@ class Lorebook with _$Lorebook {
 }
 
 @freezed
-class LorebookGlobalSettings with _$LorebookGlobalSettings {
+abstract class LorebookGlobalSettings with _$LorebookGlobalSettings {
   const factory LorebookGlobalSettings({
     @Default('keyword') String searchType,
     @Default('tavern') String keySearchMode,
@@ -90,7 +90,7 @@ class LorebookGlobalSettings with _$LorebookGlobalSettings {
 }
 
 @freezed
-class LorebookSettings with _$LorebookSettings {
+abstract class LorebookSettings with _$LorebookSettings {
   const factory LorebookSettings({
     int? scanDepth,
     int? maxInjectedEntries,
@@ -124,7 +124,7 @@ class LorebookSettings with _$LorebookSettings {
 }
 
 @freezed
-class LorebookActivations with _$LorebookActivations {
+abstract class LorebookActivations with _$LorebookActivations {
   const factory LorebookActivations({
     @Default({}) Map<String, List<String>> character,
     @Default({}) Map<String, List<String>> chat,

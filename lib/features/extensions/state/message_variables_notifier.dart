@@ -1,6 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../core/models/chat_message.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 /// In-memory storage for per-message JS extension variables.
 ///
@@ -13,7 +11,8 @@ import '../../../core/models/chat_message.dart';
 ///
 /// Reads/writes go through the in-process notifier so the bridge stays
 /// the single source of truth.
-class MessageVariablesNotifier extends StateNotifier<Map<String, MessageVariablesEntry>> {
+class MessageVariablesNotifier
+    extends StateNotifier<Map<String, MessageVariablesEntry>> {
   MessageVariablesNotifier() : super(const {});
 
   /// Read the root variable map for a message. Returns an empty map when
@@ -21,7 +20,9 @@ class MessageVariablesNotifier extends StateNotifier<Map<String, MessageVariable
   Map<String, dynamic> read(String sessionId, String messageId) {
     final key = _key(sessionId, messageId);
     final entry = state[key];
-    return entry == null ? <String, dynamic>{} : Map<String, dynamic>.from(entry.vars);
+    return entry == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(entry.vars);
   }
 
   /// Atomically transform the message's variable map. Concurrent writes
@@ -38,7 +39,9 @@ class MessageVariablesNotifier extends StateNotifier<Map<String, MessageVariable
   ) {
     final key = _key(sessionId, messageId);
     final entry = state[key];
-    final root = entry == null ? <String, dynamic>{} : Map<String, dynamic>.from(entry.vars);
+    final root = entry == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(entry.vars);
     final next = update(root);
     state = {
       ...state,
@@ -90,6 +93,7 @@ class MessageVariablesEntry {
 }
 
 final messageVariablesProvider =
-    StateNotifierProvider<MessageVariablesNotifier, Map<String, MessageVariablesEntry>>(
-  (ref) => MessageVariablesNotifier(),
-);
+    StateNotifierProvider<
+      MessageVariablesNotifier,
+      Map<String, MessageVariablesEntry>
+    >((ref) => MessageVariablesNotifier());

@@ -27,7 +27,7 @@ import '../models/trigger_result.dart';
 class GenerationDispatcher {
   GenerationDispatcher(this._ref);
 
-  final Ref _ref;
+  final Ref? _ref;
 
   /// Resolve [rawMode] (a JS-supplied string) and dispatch the generation
   /// against the chat notifier of [charId].
@@ -43,19 +43,21 @@ class GenerationDispatcher {
       );
     }
 
-    final ChatNotifier? notifier = _ref.read(chatProvider(charId).notifier);
+    final ref = _ref!;
+    final ChatNotifier? notifier = ref.read(chatProvider(charId).notifier);
 
     if (notifier == null) {
       return TriggerNoSession(mode: mode);
     }
 
-    final current = _ref.read(chatProvider(charId)).value;
+    final current = ref.read(chatProvider(charId)).value;
     if (current == null || current.session == null) {
       return TriggerNoSession(mode: mode);
     }
 
-    final memoryActive =
-        _ref.read(memoryActiveDraftsProvider).contains(current.session!.id);
+    final memoryActive = ref
+        .read(memoryActiveDraftsProvider)
+        .contains(current.session!.id);
     if (memoryActive) {
       return TriggerBusy(busyKind: 'memory_draft', mode: mode);
     }
@@ -86,10 +88,11 @@ class GenerationDispatcher {
   /// Returns the resolved mode (or null when the chat is busy / no session
   /// is available) without actually starting a generation.
   TriggerMode? peekResolvedMode({required String charId, String? rawMode}) {
-    final current = _ref.read(chatProvider(charId)).value;
+    final ref = _ref!;
+    final current = ref.read(chatProvider(charId)).value;
     if (current == null || current.session == null) return null;
     if (current.isGenerating) return null;
-    if (_ref.read(memoryActiveDraftsProvider).contains(current.session!.id)) {
+    if (ref.read(memoryActiveDraftsProvider).contains(current.session!.id)) {
       return null;
     }
     return _resolveAuto(current, TriggerMode.parse(rawMode));

@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/state/db_provider.dart';
@@ -88,12 +89,18 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       (p) => p.name == savedProvider,
       orElse: () => CatalogProvider.janitor,
     );
-    final savedSort = prefs.getString('${_sortKey}_${provider.name}') ?? providerSortDefaults[provider]!;
+    final savedSort =
+        prefs.getString('${_sortKey}_${provider.name}') ??
+        providerSortDefaults[provider]!;
     final savedFilters = _loadFilters(prefs);
 
     state = state.copyWith(
       activeProvider: provider,
-      filters: state.filters.copyWith(sort: savedSort, tagIds: savedFilters.tagIds, tagNames: savedFilters.tagNames),
+      filters: state.filters.copyWith(
+        sort: savedSort,
+        tagIds: savedFilters.tagIds,
+        tagNames: savedFilters.tagNames,
+      ),
     );
     await search(reset: true);
   }
@@ -119,22 +126,32 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   Future<void> _saveState() async {
     final prefs = await _ref.read(sharedPreferencesProvider.future);
     await prefs.setString(_providerKey, state.activeProvider.name);
-    await prefs.setString('${_sortKey}_${state.activeProvider.name}', state.filters.sort);
-    await prefs.setString(_filtersKey, jsonEncode({
-      'nsfw': state.filters.nsfw,
-      'nsfl': state.filters.nsfl,
-      'tagIds': state.filters.tagIds,
-      'tagNames': state.filters.tagNames,
-      'minTokens': state.filters.minTokens,
-      'maxTokens': state.filters.maxTokens,
-    }));
+    await prefs.setString(
+      '${_sortKey}_${state.activeProvider.name}',
+      state.filters.sort,
+    );
+    await prefs.setString(
+      _filtersKey,
+      jsonEncode({
+        'nsfw': state.filters.nsfw,
+        'nsfl': state.filters.nsfl,
+        'tagIds': state.filters.tagIds,
+        'tagNames': state.filters.tagNames,
+        'minTokens': state.filters.minTokens,
+        'maxTokens': state.filters.maxTokens,
+      }),
+    );
   }
 
   void setProvider(CatalogProvider provider) {
     final defaultSort = providerSortDefaults[provider] ?? 'trending';
     state = state.copyWith(
       activeProvider: provider,
-      filters: state.filters.copyWith(sort: defaultSort, tagIds: [], tagNames: []),
+      filters: state.filters.copyWith(
+        sort: defaultSort,
+        tagIds: [],
+        tagNames: [],
+      ),
     );
     _saveState();
     search(reset: true);
@@ -160,12 +177,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
     if (state.loading) return;
 
     if (reset) {
-      state = state.copyWith(
-        page: 1,
-        results: [],
-        hasMore: true,
-        error: null,
-      );
+      state = state.copyWith(page: 1, results: [], hasMore: true, error: null);
     }
 
     if (!state.hasMore) return;
@@ -174,7 +186,8 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
     try {
       final provider = state.activeProvider;
-      if (provider == CatalogProvider.janitor || provider == CatalogProvider.janny) {
+      if (provider == CatalogProvider.janitor ||
+          provider == CatalogProvider.janny) {
         unawaited(fetchJanitorTags().catchError((_) => <CatalogTag>[]));
       }
 
@@ -184,32 +197,56 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       state = state.copyWith(
         results: reset ? items : [...state.results, ...items],
         total: result.total,
-        hasMore: result.hasMore ?? (items.isNotEmpty && (state.results.length + items.length) < (result.total)),
+        hasMore:
+            result.hasMore ??
+            (items.isNotEmpty &&
+                (state.results.length + items.length) < (result.total)),
         page: state.page + 1,
         loading: false,
       );
     } catch (e) {
-      state = state.copyWith(
-        loading: false,
-        error: e.toString(),
-      );
+      state = state.copyWith(loading: false, error: e.toString());
     }
   }
 
-  Future<CatalogSearchResult> _fetchFromProvider(CatalogProvider provider) async {
+  Future<CatalogSearchResult> _fetchFromProvider(
+    CatalogProvider provider,
+  ) async {
     switch (provider) {
       case CatalogProvider.janitor:
-        return janitorSearch(query: state.query, page: state.page, filters: state.filters);
+        return janitorSearch(
+          query: state.query,
+          page: state.page,
+          filters: state.filters,
+        );
       case CatalogProvider.janny:
-        return jannySearch(query: state.query, page: state.page, filters: state.filters);
+        return jannySearch(
+          query: state.query,
+          page: state.page,
+          filters: state.filters,
+        );
       case CatalogProvider.datacat:
         await datacatEnsureSession();
         if (state.query.isNotEmpty) {
-          return datacatSearch(query: state.query, page: state.page, limit: _pageSize, filters: state.filters);
+          return datacatSearch(
+            query: state.query,
+            page: state.page,
+            limit: _pageSize,
+            filters: state.filters,
+          );
         }
-        return datacatBrowse(page: state.page, limit: _pageSize, filters: state.filters);
+        return datacatBrowse(
+          page: state.page,
+          limit: _pageSize,
+          filters: state.filters,
+        );
       case CatalogProvider.chub:
-        return chubSearch(query: state.query, page: state.page, limit: _pageSize, filters: state.filters);
+        return chubSearch(
+          query: state.query,
+          page: state.page,
+          limit: _pageSize,
+          filters: state.filters,
+        );
     }
   }
 
@@ -262,14 +299,16 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
             content: (entry['content'] ?? '') as String,
             extensions: (entry['extensions'] as Map<String, dynamic>?) ?? {},
             enabled: entry['enabled'] as bool? ?? true,
-            insertionOrder: (entry['insertion_order'] ?? entry['position'] ?? 0) as int,
+            insertionOrder:
+                (entry['insertion_order'] ?? entry['position'] ?? 0) as int,
             caseSensitive: entry['case_sensitive'] as bool? ?? false,
             name: (entry['name'] ?? '') as String,
             priority: (entry['priority'] ?? 0) as int,
             id: (entry['id'] ?? 0) as int,
             comment: (entry['comment'] ?? '') as String,
             selective: entry['selective'] as bool? ?? false,
-            secondaryKeys: (entry['secondary_keys'] as List?)?.cast<String>() ?? [],
+            secondaryKeys:
+                (entry['secondary_keys'] as List?)?.cast<String>() ?? [],
             constant: entry['constant'] as bool? ?? false,
             order: (entry['order'] ?? 0) as int,
           );
@@ -290,15 +329,16 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
   }
 
   void resetFilters() {
-    final defaultSort = providerSortDefaults[state.activeProvider] ?? 'trending';
-    state = state.copyWith(
-      filters: CatalogFilters(sort: defaultSort),
-    );
+    final defaultSort =
+        providerSortDefaults[state.activeProvider] ?? 'trending';
+    state = state.copyWith(filters: CatalogFilters(sort: defaultSort));
     _saveState();
     search(reset: true);
   }
 }
 
-final catalogProvider = StateNotifierProvider<CatalogNotifier, CatalogState>((ref) {
+final catalogProvider = StateNotifierProvider<CatalogNotifier, CatalogState>((
+  ref,
+) {
   return CatalogNotifier(ref);
 });

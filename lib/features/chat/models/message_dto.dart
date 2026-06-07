@@ -4,7 +4,7 @@ part 'message_dto.freezed.dart';
 part 'message_dto.g.dart';
 
 @freezed
-class MessageDto with _$MessageDto {
+abstract class MessageDto with _$MessageDto {
   const factory MessageDto({
     required String id,
     required String role,
@@ -32,7 +32,7 @@ class MessageDto with _$MessageDto {
 }
 
 @freezed
-class TriggeredItemDto with _$TriggeredItemDto {
+abstract class TriggeredItemDto with _$TriggeredItemDto {
   const factory TriggeredItemDto({
     required String id,
     required String name,

@@ -29,8 +29,7 @@ class ModelField extends ConsumerWidget {
       GlazeToast.show(context, 'Сначала выберите API');
       return;
     }
-    final configs =
-        ref.read(apiListProvider).valueOrNull ?? const <ApiConfig>[];
+    final configs = ref.read(apiListProvider).value ?? const <ApiConfig>[];
     final cfg = configs.where((c) => c.id == apiConfigId).firstOrNull;
     if (cfg == null) {
       GlazeToast.show(context, 'API не найден');

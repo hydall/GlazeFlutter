@@ -67,7 +67,7 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
     final batterySaver =
-        ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
+        ref.watch(appSettingsProvider).value?.batterySaver ?? false;
 
     final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
@@ -130,13 +130,27 @@ class _NavButton extends StatelessWidget {
           final inactiveLum = inactive.computeLuminance();
           final activeLum = active.computeLuminance();
           final surfaceLum = context.cs.surface.computeLuminance();
-          final effectiveActive = (activeLum > surfaceLum) == (inactiveLum > surfaceLum)
+          final effectiveActive =
+              (activeLum > surfaceLum) == (inactiveLum > surfaceLum)
               ? active
               : (surfaceLum < 0.5
-                  ? HSLColor.fromColor(active).withLightness((HSLColor.fromColor(active).lightness + 0.3).clamp(0.0, 1.0)).toColor()
-                  : HSLColor.fromColor(active).withLightness((HSLColor.fromColor(active).lightness - 0.3).clamp(0.0, 1.0)).toColor());
-          final color =
-              Color.lerp(inactive, effectiveActive, t)!;
+                    ? HSLColor.fromColor(active)
+                          .withLightness(
+                            (HSLColor.fromColor(active).lightness + 0.3).clamp(
+                              0.0,
+                              1.0,
+                            ),
+                          )
+                          .toColor()
+                    : HSLColor.fromColor(active)
+                          .withLightness(
+                            (HSLColor.fromColor(active).lightness - 0.3).clamp(
+                              0.0,
+                              1.0,
+                            ),
+                          )
+                          .toColor());
+          final color = Color.lerp(inactive, effectiveActive, t)!;
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Column(

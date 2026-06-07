@@ -100,10 +100,7 @@ class _InfoBlockDrawerWidgetState extends ConsumerState<InfoBlockDrawerWidget>
                   bottom: 0,
                   right: rightOffset,
                   width: _panelWidth,
-                  child: _PanelContent(
-                    blocks: blocks,
-                    onClose: _close,
-                  ),
+                  child: _PanelContent(blocks: blocks, onClose: _close),
                 ),
               ],
             );
@@ -135,9 +132,7 @@ class _InfoBlockDrawerWidgetState extends ConsumerState<InfoBlockDrawerWidget>
                       ),
                     ),
                     child: Icon(
-                      _isOpen
-                          ? Icons.chevron_right
-                          : Icons.article_outlined,
+                      _isOpen ? Icons.chevron_right : Icons.article_outlined,
                       color: _isOpen
                           ? context.cs.primary
                           : context.cs.onSurface,
@@ -155,10 +150,7 @@ class _InfoBlockDrawerWidgetState extends ConsumerState<InfoBlockDrawerWidget>
 }
 
 class _PanelContent extends StatelessWidget {
-  const _PanelContent({
-    required this.blocks,
-    required this.onClose,
-  });
+  const _PanelContent({required this.blocks, required this.onClose});
 
   final List<InfoBlock> blocks;
   final VoidCallback onClose;
@@ -240,7 +232,7 @@ class _BlockCard extends ConsumerWidget {
     // panel reflects the current persona/character, not a snapshot the
     // LLM may have left in place at generation time.
     final personaId = ref.watch(activePersonaIdProvider);
-    final personas = ref.watch(personaListProvider).valueOrNull ?? const [];
+    final personas = ref.watch(personaListProvider).value ?? const [];
     final persona = personaId != null
         ? personas.where((p) => p.id == personaId).firstOrNull
         : null;

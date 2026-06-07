@@ -9,7 +9,7 @@ void main() {
       final r = CommandRegistry();
       expect(
         () => r.register(
-          GlazeCommand(name: 'trigger', summary: '', handler: (_, __) async => const CommandResult.ok()),
+          GlazeCommand(name: 'trigger', summary: '', handler: (_, _) async => const CommandResult.ok()),
         ),
         throwsA(isA<ArgumentError>()),
       );
@@ -48,7 +48,7 @@ void main() {
         GlazeCommand(
           name: '/boom',
           summary: '',
-          handler: (_, __) async => throw StateError('kaboom'),
+          handler: (_, _) async => throw StateError('kaboom'),
         ),
       );
       final result = await r.run('/boom', const {});
@@ -94,7 +94,7 @@ void main() {
     test('rejects empty command with invalid_request', () async {
       final bridge = JsBridgeService(
         permissionCheck: (_) => true,
-        executeCommand: (_, __, ___) async => const {'ok': true},
+        executeCommand: (_, _, _) async => const {'ok': true},
       );
       final result = await bridge.dispatch({
         'method': 'executeCommand',
@@ -107,7 +107,7 @@ void main() {
     test('denies when execute_command capability is not granted', () async {
       final bridge = JsBridgeService(
         permissionCheck: (_) => false,
-        executeCommand: (_, __, ___) async => const {'ok': true},
+        executeCommand: (_, _, _) async => const {'ok': true},
       );
       final result = await bridge.dispatch({
         'method': 'executeCommand',

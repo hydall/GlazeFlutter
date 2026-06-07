@@ -192,7 +192,8 @@ class _GlazeBottomSheetContent extends ConsumerStatefulWidget {
       _GlazeBottomSheetContentState();
 }
 
-class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetContent> {
+class _GlazeBottomSheetContentState
+    extends ConsumerState<_GlazeBottomSheetContent> {
   late final TextEditingController _inputController;
   final FocusNode _inputFocus = FocusNode();
   final ScrollController _scrollController = ScrollController();
@@ -235,7 +236,8 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
   @override
   Widget build(BuildContext context) {
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
-    final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
+    final batterySaver =
+        ref.watch(appSettingsProvider).value?.batterySaver ?? false;
 
     _measureHeader();
 
@@ -258,11 +260,15 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
                         tintColor: context.cs.surface.withValues(alpha: 0.4),
                         controlPoints: [
                           ControlPoint(
-                              position: 0.5, type: ControlPointType.visible),
+                            position: 0.5,
+                            type: ControlPointType.visible,
+                          ),
                           ControlPoint(
-                              position: 1.0, type: ControlPointType.transparent),
+                            position: 1.0,
+                            type: ControlPointType.transparent,
+                          ),
                         ],
-                      )
+                      ),
                     ],
                     child: Padding(
                       padding: EdgeInsets.only(
@@ -276,7 +282,9 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
                         thickness: 4,
                         padding: const EdgeInsets.only(right: 3),
                         child: ScrollConfiguration(
-                          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                          behavior: ScrollConfiguration.of(
+                            context,
+                          ).copyWith(scrollbars: false),
                           child: SingleChildScrollView(
                             controller: _scrollController,
                             child: Column(
@@ -285,15 +293,19 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
                               children: [
                                 const SizedBox(height: 4),
                                 if (widget.child != null) widget.child!,
-                                if (widget.bigInfo != null) _BigInfo(info: widget.bigInfo!),
-                                if (widget.items != null && widget.items!.isNotEmpty)
+                                if (widget.bigInfo != null)
+                                  _BigInfo(info: widget.bigInfo!),
+                                if (widget.items != null &&
+                                    widget.items!.isNotEmpty)
                                   _ItemsList(items: widget.items!),
-                                if (widget.itemsAsCards != null && widget.itemsAsCards!.isNotEmpty)
+                                if (widget.itemsAsCards != null &&
+                                    widget.itemsAsCards!.isNotEmpty)
                                   _ItemsCardList(items: widget.itemsAsCards!),
                                 if (widget.sessionItems != null &&
                                     widget.sessionItems!.isNotEmpty)
                                   GlazeSessionList(items: widget.sessionItems!),
-                                if (widget.cardItems != null && widget.cardItems!.isNotEmpty)
+                                if (widget.cardItems != null &&
+                                    widget.cardItems!.isNotEmpty)
                                   _CardList(items: widget.cardItems!),
                                 if (widget.input != null)
                                   _InputSection(
@@ -320,7 +332,9 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
                       thickness: 4,
                       padding: const EdgeInsets.only(right: 3),
                       child: ScrollConfiguration(
-                        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                        behavior: ScrollConfiguration.of(
+                          context,
+                        ).copyWith(scrollbars: false),
                         child: SingleChildScrollView(
                           controller: _scrollController,
                           child: Column(
@@ -329,15 +343,19 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
                             children: [
                               const SizedBox(height: 4),
                               if (widget.child != null) widget.child!,
-                              if (widget.bigInfo != null) _BigInfo(info: widget.bigInfo!),
-                              if (widget.items != null && widget.items!.isNotEmpty)
+                              if (widget.bigInfo != null)
+                                _BigInfo(info: widget.bigInfo!),
+                              if (widget.items != null &&
+                                  widget.items!.isNotEmpty)
                                 _ItemsList(items: widget.items!),
-                              if (widget.itemsAsCards != null && widget.itemsAsCards!.isNotEmpty)
+                              if (widget.itemsAsCards != null &&
+                                  widget.itemsAsCards!.isNotEmpty)
                                 _ItemsCardList(items: widget.itemsAsCards!),
                               if (widget.sessionItems != null &&
                                   widget.sessionItems!.isNotEmpty)
                                 GlazeSessionList(items: widget.sessionItems!),
-                              if (widget.cardItems != null && widget.cardItems!.isNotEmpty)
+                              if (widget.cardItems != null &&
+                                  widget.cardItems!.isNotEmpty)
                                 _CardList(items: widget.cardItems!),
                               if (widget.input != null)
                                 _InputSection(
@@ -352,8 +370,6 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
                     ),
                   ),
 
-
-
             Positioned(
               top: 0,
               left: 0,
@@ -365,10 +381,7 @@ class _GlazeBottomSheetContentState extends ConsumerState<_GlazeBottomSheetConte
                   children: [
                     _HandleBar(),
                     if (_hasHeader)
-                      _Header(
-                        title: widget.title,
-                        action: widget.headerAction,
-                      ),
+                      _Header(title: widget.title, action: widget.headerAction),
                   ],
                 ),
               ),
@@ -500,7 +513,8 @@ class _ItemRowState extends State<_ItemRow> {
               Icon(
                 item.icon,
                 size: 22,
-                color: item.iconColor ??
+                color:
+                    item.iconColor ??
                     (item.isDestructive
                         ? const Color(0xFFFF4444)
                         : context.cs.onSurfaceVariant),
@@ -593,7 +607,8 @@ class _ItemCardRowState extends State<_ItemCardRow> {
                 Icon(
                   item.icon,
                   size: 22,
-                  color: item.iconColor ??
+                  color:
+                      item.iconColor ??
                       (item.isDestructive
                           ? const Color(0xFFFF4444)
                           : context.cs.onSurfaceVariant),
@@ -650,10 +665,7 @@ class _ItemLabel extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             item.hint!,
-            style: TextStyle(
-              fontSize: 12,
-              color: context.cs.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
           ),
         ],
       );
@@ -740,13 +752,16 @@ class GlazeSessionRow extends StatelessWidget {
                             ),
                             if (item.time.isNotEmpty) ...[
                               Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
                                 child: Text(
                                   '·',
                                   style: TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
-                                    color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
+                                    color: context.cs.onSurfaceVariant
+                                        .withValues(alpha: 0.5),
                                   ),
                                 ),
                               ),
@@ -918,7 +933,8 @@ class _CardRowState extends State<_CardRow> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if ((item.icon != null || item.faviconUrl != null) && !hasImage) ...[
+                  if ((item.icon != null || item.faviconUrl != null) &&
+                      !hasImage) ...[
                     Container(
                       width: 40,
                       height: 40,
@@ -932,9 +948,17 @@ class _CardRowState extends State<_CardRow> {
                               item.faviconUrl!,
                               fit: BoxFit.cover,
                               errorBuilder: (context, error, stackTrace) =>
-                                  Icon(item.icon ?? Icons.api_rounded, size: 20, color: context.cs.primary),
+                                  Icon(
+                                    item.icon ?? Icons.api_rounded,
+                                    size: 20,
+                                    color: context.cs.primary,
+                                  ),
                             )
-                          : Icon(item.icon, size: 20, color: context.cs.primary),
+                          : Icon(
+                              item.icon,
+                              size: 20,
+                              color: context.cs.primary,
+                            ),
                     ),
                     const SizedBox(width: 12),
                   ],
@@ -999,7 +1023,9 @@ class _CardItemInfo extends StatelessWidget {
                     Icon(
                       Icons.description_outlined,
                       size: 12,
-                      color: hasImage ? Colors.white : context.cs.onSurfaceVariant,
+                      color: hasImage
+                          ? Colors.white
+                          : context.cs.onSurfaceVariant,
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -1066,7 +1092,7 @@ class _CardActions extends StatelessWidget {
                   size: 20,
                   color: hasImage
                       ? Colors.white
-                       : (a.color ?? context.cs.onSurfaceVariant),
+                      : (a.color ?? context.cs.onSurfaceVariant),
                 ),
               ),
             ),

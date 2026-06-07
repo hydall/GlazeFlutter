@@ -11,8 +11,10 @@ class _FakeBridge implements ChatBridgeController {
   int _counter = 0;
   String? openThrows;
 
+  @override
   void Function(String panelId, String messageId, double height)?
       onPanelResize;
+  @override
   void Function(String panelId, String messageId, String event,
           Map<String, dynamic> payload)?
       onPanelEvent;

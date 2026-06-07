@@ -57,10 +57,12 @@ class _PicksDetailLauncherState extends ConsumerState<PicksDetailLauncher> {
     });
 
     try {
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 60),
-      ));
+      final dio = Dio(
+        BaseOptions(
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(seconds: 60),
+        ),
+      );
 
       final res = await dio.get<List<int>>(
         '$kPicksBaseUrl/${widget.relativePath}',
@@ -98,7 +100,7 @@ class _PicksDetailLauncherState extends ConsumerState<PicksDetailLauncher> {
     setState(() => _importing = true);
 
     try {
-      final existingChars = ref.read(charactersProvider).valueOrNull ?? [];
+      final existingChars = ref.read(charactersProvider).value ?? [];
       final existing = existingChars.where(
         (c) => c.picksHash != null && c.name == char.name,
       );
@@ -117,8 +119,10 @@ class _PicksDetailLauncherState extends ConsumerState<PicksDetailLauncher> {
       await ref.read(charactersProvider.notifier).add(characterWithHash);
 
       final importer = await ref.read(characterImporterProvider.future);
-      final result =
-          await importer.importFromBytes(_pngBytes!, '${char.id}.png');
+      final result = await importer.importFromBytes(
+        _pngBytes!,
+        '${char.id}.png',
+      );
 
       if (result.characterBookData != null) {
         final converted = convertCharacterBook(
@@ -132,7 +136,9 @@ class _PicksDetailLauncherState extends ConsumerState<PicksDetailLauncher> {
         Navigator.of(context, rootNavigator: true).pop();
         final wasUpdate = existing.isNotEmpty;
         GlazeToast.show(
-            context, '${wasUpdate ? 'Updated' : 'Imported'} ${char.name}');
+          context,
+          '${wasUpdate ? 'Updated' : 'Imported'} ${char.name}',
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -149,10 +155,7 @@ class _PicksDetailLauncherState extends ConsumerState<PicksDetailLauncher> {
     }
 
     if (_downloading) {
-      return _DownloadingView(
-        name: char.name,
-        progress: _downloadProgress,
-      );
+      return _DownloadingView(name: char.name, progress: _downloadProgress);
     }
 
     final character = _character;
@@ -211,10 +214,7 @@ class _DownloadingView extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             progress > 0 ? '${(progress * 100).round()}%' : 'Connecting...',
-            style: TextStyle(
-              fontSize: 13,
-              color: context.cs.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -266,10 +266,7 @@ class _ErrorView extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             message,
-            style: TextStyle(
-              color: context.cs.onSurfaceVariant,
-              fontSize: 13,
-            ),
+            style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 13),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 16),

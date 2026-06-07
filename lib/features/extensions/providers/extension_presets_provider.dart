@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/db/repositories/extension_presets_repository.dart';
 import '../../../core/state/db_provider.dart';
@@ -6,11 +7,13 @@ import '../models/extension_preset.dart';
 
 final extensionPresetsProvider =
     StateNotifierProvider<ExtensionPresetsNotifier, List<ExtensionPreset>>(
-  (ref) => ExtensionPresetsNotifier(ref),
-);
+      (ref) => ExtensionPresetsNotifier(ref),
+    );
 
-final extensionPresetByIdProvider =
-    Provider.family<ExtensionPreset?, String>((ref, id) {
+final extensionPresetByIdProvider = Provider.family<ExtensionPreset?, String>((
+  ref,
+  id,
+) {
   final presets = ref.watch(extensionPresetsProvider);
   return presets.where((p) => p.id == id).firstOrNull;
 });

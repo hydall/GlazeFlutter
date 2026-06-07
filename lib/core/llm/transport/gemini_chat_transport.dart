@@ -81,9 +81,7 @@ class GeminiChatTransport implements ChatTransport {
     required bool stream,
   }) {
     final base = _normaliseBase(endpoint);
-    final responseType = stream
-        ? 'streamGenerateContent'
-        : 'generateContent';
+    final responseType = stream ? 'streamGenerateContent' : 'generateContent';
     final params = <String>[
       'key=${Uri.encodeQueryComponent(apiKey)}',
       if (stream) 'alt=sse',
@@ -96,9 +94,7 @@ class GeminiChatTransport implements ChatTransport {
   static GeminiBuiltRequest buildRequest(ChatTransportRequest request) {
     final converted = convertGoogleMessagesMerged(request.messages);
 
-    final generationConfig = <String, dynamic>{
-      'candidateCount': 1,
-    };
+    final generationConfig = <String, dynamic>{'candidateCount': 1};
     if (request.maxTokens > 0) {
       generationConfig['maxOutputTokens'] = request.maxTokens;
     }
@@ -138,6 +134,11 @@ class GeminiChatTransport implements ChatTransport {
     };
     if (converted.hasSystemInstruction) {
       body['systemInstruction'] = converted.systemInstruction;
+    }
+    if (request.sessionIdMode == 'always' &&
+        request.sessionId != null &&
+        request.sessionId!.isNotEmpty) {
+      body['session_id'] = request.sessionId;
     }
 
     final url = buildGenerateUrl(
@@ -332,9 +333,7 @@ class GeminiChatTransport implements ChatTransport {
   }) async {
     final response = await _dio.post<dynamic>(
       url,
-      options: Options(
-        headers: {...headers, 'Accept': 'application/json'},
-      ),
+      options: Options(headers: {...headers, 'Accept': 'application/json'}),
       data: body,
       cancelToken: cancelToken,
     );
@@ -414,10 +413,7 @@ class GeminiChatTransport implements ChatTransport {
         final id = name is String && name.startsWith('models/')
             ? name.substring('models/'.length)
             : name;
-        return <String, dynamic>{
-          'id': id,
-          ...map,
-        };
+        return <String, dynamic>{'id': id, ...map};
       }).toList();
     } catch (_) {
       return const [];

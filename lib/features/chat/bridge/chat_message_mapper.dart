@@ -9,7 +9,7 @@ import 'package:glaze_flutter/core/utils/think_tags.dart';
 part 'chat_message_mapper.freezed.dart';
 
 @freezed
-sealed class ChatMessageMapperContext with _$ChatMessageMapperContext {
+abstract class ChatMessageMapperContext with _$ChatMessageMapperContext {
   const factory ChatMessageMapperContext({
     String? currentCharName,
     String? currentCharColor,

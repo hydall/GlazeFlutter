@@ -1,5 +1,4 @@
 import '../models/character.dart';
-import '../models/persona.dart';
 import '../models/preset.dart';
 import 'macro_engine.dart';
 import 'prompt_block_resolver.dart';

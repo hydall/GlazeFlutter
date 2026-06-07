@@ -36,7 +36,7 @@ class TriggeredEntry {
 }
 
 @freezed
-class ChatMessage with _$ChatMessage {
+abstract class ChatMessage with _$ChatMessage {
   const factory ChatMessage({
     required String id,
     required String role,
@@ -72,7 +72,7 @@ class ChatMessage with _$ChatMessage {
 }
 
 @freezed
-class AuthorsNote with _$AuthorsNote {
+abstract class AuthorsNote with _$AuthorsNote {
   const factory AuthorsNote({
     @Default('') String content,
     @Default('system') String role,
@@ -86,7 +86,7 @@ class AuthorsNote with _$AuthorsNote {
 }
 
 @freezed
-class ChatSummary with _$ChatSummary {
+abstract class ChatSummary with _$ChatSummary {
   const factory ChatSummary({
     @Default('') String content,
     @Default('system') String role,
@@ -100,7 +100,7 @@ class ChatSummary with _$ChatSummary {
 }
 
 @freezed
-class ChatSession with _$ChatSession {
+abstract class ChatSession with _$ChatSession {
   const factory ChatSession({
     required String id,
     required String characterId,

@@ -9,12 +9,10 @@ class _FakeTransport implements ChatTransport {
   _FakeTransport({
     this.models = const [],
     this.responseText,
-    this.streamError,
   });
 
   final List<Map<String, dynamic>> models;
   final String? responseText;
-  final Object? streamError;
   ChatTransportRequest? lastRequest;
 
   @override
@@ -34,10 +32,6 @@ class _FakeTransport implements ChatTransport {
     ChatTransportOnError? onError,
   }) async {
     lastRequest = request;
-    if (streamError != null) {
-      onError?.call(streamError!);
-      return;
-    }
     if (responseText != null) {
       onComplete?.call(responseText!, null);
     }

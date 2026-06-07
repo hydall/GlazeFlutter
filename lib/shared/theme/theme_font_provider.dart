@@ -21,7 +21,10 @@ Future<String?> _loadInterDataUrl() async {
   _interLoadFuture ??= () async {
     try {
       final data = await rootBundle.load(_kInterAssetPath);
-      final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+      final bytes = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
       _cachedInterDataUrl = 'data:font/ttf;base64,${base64Encode(bytes)}';
       return _cachedInterDataUrl;
     } catch (_) {
@@ -51,7 +54,11 @@ class ChatFontStyle {
   final double fontSize;
   final double letterSpacing;
   final String? fontFamily;
-  const ChatFontStyle({required this.fontSize, required this.letterSpacing, this.fontFamily});
+  const ChatFontStyle({
+    required this.fontSize,
+    required this.letterSpacing,
+    this.fontFamily,
+  });
 }
 
 final chatFontStyleProvider = Provider<ChatFontStyle>((ref) {
@@ -59,7 +66,7 @@ final chatFontStyleProvider = Provider<ChatFontStyle>((ref) {
   return ChatFontStyle(
     fontSize: preset.chatFontSizeValue,
     letterSpacing: preset.chatLetterSpacing,
-    fontFamily: ref.watch(chatFontFamilyProvider).valueOrNull,
+    fontFamily: ref.watch(chatFontFamilyProvider).value,
   );
 });
 
@@ -100,7 +107,8 @@ Uint8List? _extractFontBytes(String dataUri) {
     final isTtf = b0 == 0x00 && b1 == 0x01 && b2 == 0x00 && b3 == 0x00;
     final isOtf = b0 == 0x4F && b1 == 0x54 && b2 == 0x54 && b3 == 0x4F; // OTTO
     final isWoff = b0 == 0x77 && b1 == 0x4F && b2 == 0x46 && b3 == 0x46; // wOFF
-    final isWoff2 = b0 == 0x77 && b1 == 0x4F && b2 == 0x46 && b3 == 0x32; // wOF2
+    final isWoff2 =
+        b0 == 0x77 && b1 == 0x4F && b2 == 0x46 && b3 == 0x32; // wOF2
     final isTtc = b0 == 0x74 && b1 == 0x74 && b2 == 0x63 && b3 == 0x66; // ttcf
 
     if (!isTtf && !isOtf && !isWoff && !isWoff2 && !isTtc) return null;

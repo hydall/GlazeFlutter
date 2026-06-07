@@ -26,9 +26,13 @@ class GlassBox extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final batterySaver = ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
-    final br = borderRadiusOnly ??
-        (borderRadius > 0 ? BorderRadius.circular(borderRadius) : BorderRadius.zero);
+    final batterySaver =
+        ref.watch(appSettingsProvider).value?.batterySaver ?? false;
+    final br =
+        borderRadiusOnly ??
+        (borderRadius > 0
+            ? BorderRadius.circular(borderRadius)
+            : BorderRadius.zero);
 
     if (batterySaver) {
       return Container(

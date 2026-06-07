@@ -34,7 +34,8 @@ class GlazeApp extends ConsumerStatefulWidget {
   ConsumerState<GlazeApp> createState() => _GlazeAppState();
 }
 
-class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver {
+class _GlazeAppState extends ConsumerState<GlazeApp>
+    with WidgetsBindingObserver {
   StreamSubscription<NotificationNavigationData>? _navSub;
 
   @override
@@ -64,7 +65,7 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
   void didChangeAppLifecycleState(AppLifecycleState state) {
     GenerationNotificationService.instance.updateLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
-      final service = ref.read(syncServiceProvider).valueOrNull;
+      final service = ref.read(syncServiceProvider).value;
       if (service != null && service.status != SyncStatus.syncing) {
         ref.read(syncStatusProvider.notifier).state = service.status;
       }
@@ -72,16 +73,16 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
   }
 
   void _listenNotificationNavigation() {
-    _navSub = GenerationNotificationService.instance.navigationStream.listen(
-      (data) {
-        if (mounted) context.push('/chat/${data.charId}');
-      },
-    );
+    _navSub = GenerationNotificationService.instance.navigationStream.listen((
+      data,
+    ) {
+      if (mounted) context.push('/chat/${data.charId}');
+    });
   }
 
   void _handleColdStartNotification() {
-    final data =
-        GenerationNotificationService.instance.consumePendingNotificationData();
+    final data = GenerationNotificationService.instance
+        .consumePendingNotificationData();
     if (data != null && mounted) {
       context.push('/chat/${data.charId}');
     }
@@ -90,21 +91,21 @@ class _GlazeAppState extends ConsumerState<GlazeApp> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     ref.listen<AsyncValue<AppSettings>>(appSettingsProvider, (prev, next) {
-      final lang = next.valueOrNull?.language;
-      if (lang != null && lang != prev?.valueOrNull?.language) {
+      final lang = next.value?.language;
+      if (lang != null && lang != prev?.value?.language) {
         context.setLocale(Locale(lang));
       }
     });
 
     final router = ref.watch(routerProvider);
     final themeSettings = ref.watch(themeProvider);
-    final uiFont = ref.watch(uiFontFamilyProvider).valueOrNull;
+    final uiFont = ref.watch(uiFontFamilyProvider).value;
     final preset = themeSettings.activePreset;
     final mode = preset.themeMode == 'light'
         ? ThemeMode.light
         : preset.themeMode == 'dark'
-            ? ThemeMode.dark
-            : themeSettings.mode;
+        ? ThemeMode.dark
+        : themeSettings.mode;
     return MaterialApp.router(
       title: 'Glaze',
       theme: AppTheme.light(preset, fontFamily: uiFont),

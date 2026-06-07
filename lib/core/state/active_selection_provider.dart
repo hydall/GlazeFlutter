@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../models/persona.dart';
 import '../models/preset.dart';
@@ -26,30 +27,39 @@ final presetConnectionsProvider = StateProvider<PresetConnections>((ref) {
 
 Future<void> loadActiveSelections(WidgetRef ref) async {
   final prefs = await ref.read(sharedPreferencesProvider.future);
-  ref.read(activePresetIdProvider.notifier).state =
-      prefs.getString('activePresetId');
-  ref.read(activePersonaIdProvider.notifier).state =
-      prefs.getString('activePersonaId');
+  ref.read(activePresetIdProvider.notifier).state = prefs.getString(
+    'activePresetId',
+  );
+  ref.read(activePersonaIdProvider.notifier).state = prefs.getString(
+    'activePersonaId',
+  );
   final gvJson = prefs.getString('globalVars');
   if (gvJson != null) {
     try {
       final map = jsonDecode(gvJson) as Map<String, dynamic>;
-      ref.read(globalVarsProvider.notifier).state =
-          map.map((k, v) => MapEntry(k, v.toString()));
+      ref.read(globalVarsProvider.notifier).state = map.map(
+        (k, v) => MapEntry(k, v.toString()),
+      );
     } catch (_) {}
   }
   final pcJson = prefs.getString('personaConnections');
   if (pcJson != null) {
     try {
-      ref.read(personaConnectionsProvider.notifier).state =
-          PersonaConnections.fromJson(jsonDecode(pcJson) as Map<String, dynamic>);
+      ref
+          .read(personaConnectionsProvider.notifier)
+          .state = PersonaConnections.fromJson(
+        jsonDecode(pcJson) as Map<String, dynamic>,
+      );
     } catch (_) {}
   }
   final prConnJson = prefs.getString('presetConnections');
   if (prConnJson != null) {
     try {
-      ref.read(presetConnectionsProvider.notifier).state =
-          PresetConnections.fromJson(jsonDecode(prConnJson) as Map<String, dynamic>);
+      ref
+          .read(presetConnectionsProvider.notifier)
+          .state = PresetConnections.fromJson(
+        jsonDecode(prConnJson) as Map<String, dynamic>,
+      );
     } catch (_) {}
   }
   await ref.read(memoryGlobalSettingsProvider.notifier).load();
@@ -122,7 +132,7 @@ void setPersonaConnectionRef(
   final current = ref.read(personaConnectionsProvider);
   final updated = _buildUpdatedConnections(current, type, targetId, personaId);
   ref.read(personaConnectionsProvider.notifier).state = updated;
-  final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+  final prefs = ref.read(sharedPreferencesProvider).value;
   if (prefs != null) {
     prefs.setString('personaConnections', jsonEncode(updated.toJson()));
   }
@@ -130,7 +140,7 @@ void setPersonaConnectionRef(
 
 void updateGlobalVarsRef(Ref ref, Map<String, String> vars) {
   ref.read(globalVarsProvider.notifier).state = vars;
-  final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+  final prefs = ref.read(sharedPreferencesProvider).value;
   if (prefs != null) {
     prefs.setString('globalVars', jsonEncode(vars));
   }
@@ -170,7 +180,12 @@ Future<void> setPresetConnection(
   String? presetId,
 ) async {
   final current = ref.read(presetConnectionsProvider);
-  final updated = _buildUpdatedPresetConnections(current, type, targetId, presetId);
+  final updated = _buildUpdatedPresetConnections(
+    current,
+    type,
+    targetId,
+    presetId,
+  );
   ref.read(presetConnectionsProvider.notifier).state = updated;
   final prefs = await ref.read(sharedPreferencesProvider.future);
   await prefs.setString('presetConnections', jsonEncode(updated.toJson()));

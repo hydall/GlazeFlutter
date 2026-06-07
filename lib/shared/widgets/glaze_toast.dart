@@ -33,7 +33,14 @@ class GlazeToast {
   }) {
     final overlay = _resolveOverlay(context);
     if (overlay != null) {
-      _showOnOverlay(overlay, text, duration: duration, position: position, isError: isError, showCopyButton: showCopyButton);
+      _showOnOverlay(
+        overlay,
+        text,
+        duration: duration,
+        position: position,
+        isError: isError,
+        showCopyButton: showCopyButton,
+      );
     }
   }
 
@@ -84,18 +91,37 @@ class GlazeToast {
   }) {
     final overlay = _resolveOverlay(null);
     if (overlay != null) {
-      _showOnOverlay(overlay, text, duration: duration, position: position, isError: isError);
+      _showOnOverlay(
+        overlay,
+        text,
+        duration: duration,
+        position: position,
+        isError: isError,
+      );
     }
   }
 
   static void error(BuildContext context, String prefix, Object err) {
     final text = '$prefix$err';
-    show(context, text, duration: 4000, position: ToastPosition.top, isError: true);
+    show(
+      context,
+      text,
+      duration: 4000,
+      position: ToastPosition.top,
+      isError: true,
+    );
   }
 
   static void errorWithCopy(BuildContext context, String prefix, Object err) {
     final text = '$prefix$err';
-    show(context, text, duration: 8000, position: ToastPosition.top, isError: true, showCopyButton: true);
+    show(
+      context,
+      text,
+      duration: 8000,
+      position: ToastPosition.top,
+      isError: true,
+      showCopyButton: true,
+    );
   }
 }
 
@@ -212,7 +238,12 @@ class _ToastAnimatorState extends State<_ToastAnimator>
                   scale: _scale.value,
                   child: Opacity(
                     opacity: _opacity.value,
-                    child: _ToastChip(text: widget.text, onTap: dismiss, isError: widget.isError, showCopyButton: widget.showCopyButton),
+                    child: _ToastChip(
+                      text: widget.text,
+                      onTap: dismiss,
+                      isError: widget.isError,
+                      showCopyButton: widget.showCopyButton,
+                    ),
                   ),
                 ),
               ),
@@ -260,12 +291,14 @@ class _ToastChipState extends ConsumerState<_ToastChip> {
       type: MaterialType.transparency,
       child: GestureDetector(
         onTap: widget.showCopyButton ? null : widget.onTap,
-        onLongPress: widget.showCopyButton ? null : () {
-          Clipboard.setData(ClipboardData(text: widget.text));
-        },
+        onLongPress: widget.showCopyButton
+            ? null
+            : () {
+                Clipboard.setData(ClipboardData(text: widget.text));
+              },
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
-          child: (ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false)
+          child: (ref.watch(appSettingsProvider).value?.batterySaver ?? false)
               ? _toastContent(opaque: true)
               : BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
@@ -287,7 +320,9 @@ class _ToastChipState extends ConsumerState<_ToastChip> {
       padding: EdgeInsets.fromLTRB(20, 10, widget.showCopyButton ? 8 : 20, 10),
       decoration: BoxDecoration(
         color: bgColor,
-        border: widget.isError ? Border.all(color: const Color(0x80FF4444), width: 1) : null,
+        border: widget.isError
+            ? Border.all(color: const Color(0x80FF4444), width: 1)
+            : null,
         borderRadius: BorderRadius.circular(24),
         boxShadow: const [
           BoxShadow(
@@ -319,7 +354,10 @@ class _ToastChipState extends ConsumerState<_ToastChip> {
             GestureDetector(
               onTap: _copy,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0x33FFFFFF),
                   borderRadius: BorderRadius.circular(12),

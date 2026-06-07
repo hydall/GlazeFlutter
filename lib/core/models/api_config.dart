@@ -4,7 +4,7 @@ part 'api_config.freezed.dart';
 part 'api_config.g.dart';
 
 @freezed
-class ApiConfig with _$ApiConfig {
+abstract class ApiConfig with _$ApiConfig {
   const factory ApiConfig({
     required String id,
     @Default('') String name,
@@ -37,6 +37,8 @@ class ApiConfig with _$ApiConfig {
     @Default('') String embeddingModel,
     @Default(512) int embeddingMaxChunkTokens,
     @Default('off') String cacheControlTtl,
+    @Default('depth') String cacheBreakpointMode,
+    @Default('openrouter') String sessionIdMode,
   }) = _ApiConfig;
 
   factory ApiConfig.fromJson(Map<String, dynamic> json) =>

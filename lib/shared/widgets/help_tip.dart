@@ -20,8 +20,7 @@ class HelpTip extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final hidden =
-        ref.watch(appSettingsProvider).valueOrNull?.hideTooltips ?? false;
+    final hidden = ref.watch(appSettingsProvider).value?.hideTooltips ?? false;
     if (hidden) return const SizedBox.shrink();
 
     return Padding(

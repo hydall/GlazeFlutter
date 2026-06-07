@@ -26,10 +26,10 @@ class QuickReply {
   Map<String, dynamic> toJson() => {'id': id, 'label': label, 'text': text};
 
   factory QuickReply.fromJson(Map<String, dynamic> json) => QuickReply(
-        id: json['id'] as String,
-        label: json['label'] as String? ?? '',
-        text: json['text'] as String? ?? '',
-      );
+    id: json['id'] as String,
+    label: json['label'] as String? ?? '',
+    text: json['text'] as String? ?? '',
+  );
 }
 
 const List<QuickReply> _defaults = [
@@ -68,7 +68,7 @@ class QuickRepliesNotifier extends AsyncNotifier<List<QuickReply>> {
   }
 
   Future<void> add(String label, String text) async {
-    final current = state.valueOrNull ?? const [];
+    final current = state.value ?? const [];
     final id = 'qr-${DateTime.now().microsecondsSinceEpoch}';
     final next = [...current, QuickReply(id: id, label: label, text: text)];
     state = AsyncData(next);
@@ -76,7 +76,7 @@ class QuickRepliesNotifier extends AsyncNotifier<List<QuickReply>> {
   }
 
   Future<void> edit(String id, {String? label, String? text}) async {
-    final current = state.valueOrNull ?? const [];
+    final current = state.value ?? const [];
     final next = current
         .map((q) => q.id == id ? q.copyWith(label: label, text: text) : q)
         .toList();
@@ -85,14 +85,14 @@ class QuickRepliesNotifier extends AsyncNotifier<List<QuickReply>> {
   }
 
   Future<void> remove(String id) async {
-    final current = state.valueOrNull ?? const [];
+    final current = state.value ?? const [];
     final next = current.where((q) => q.id != id).toList();
     state = AsyncData(next);
     await _persist(next);
   }
 
   Future<void> reorder(int from, int to) async {
-    final current = state.valueOrNull ?? const [];
+    final current = state.value ?? const [];
     if (from < 0 || to < 0 || from >= current.length || to >= current.length) {
       return;
     }
@@ -106,5 +106,5 @@ class QuickRepliesNotifier extends AsyncNotifier<List<QuickReply>> {
 
 final quickRepliesProvider =
     AsyncNotifierProvider<QuickRepliesNotifier, List<QuickReply>>(
-  QuickRepliesNotifier.new,
-);
+      QuickRepliesNotifier.new,
+    );

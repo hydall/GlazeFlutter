@@ -7,14 +7,14 @@ Architecture: `docs/ARCHITECTURE.md`. Workflow (git, PRs, Trello): `docs/WORKFLO
 
 ## Commands
 
-Flutter SDK is at `Z:\Glaze project\flutter`. The agent's shell may not have `flutter` on PATH. Try `flutter` first; if it fails with "not recognized", fall back to the full path.
+Flutter SDK is at `Z:\GlazeProject\flutter`. The agent's shell may not have `flutter` on PATH. Try `flutter` first; if it fails with "not recognized", fall back to the full path.
 
 ```powershell
 # Preferred — try PATH first:
 flutter analyze
 
 # Fallback if flutter is not on PATH:
-& "Z:\Glaze project\flutter\bin\flutter.bat" <subcommand>
+& "Z:\GlazeProject\flutter\bin\flutter.bat" <subcommand>
 ```
 
 Full examples:
@@ -28,11 +28,11 @@ flutter build windows                    # Production build
 dart run build_runner build              # Regenerate after editing freezed/drift models
 
 # Same commands via full path (fallback if flutter not on PATH):
-& "Z:\Glaze project\flutter\bin\flutter.bat" analyze
-& "Z:\Glaze project\flutter\bin\flutter.bat" test
-& "Z:\Glaze project\flutter\bin\flutter.bat" test test/bar_test.dart
-& "Z:\Glaze project\flutter\bin\flutter.bat" build windows
-& "Z:\Glaze project\flutter\bin\dart.bat" run build_runner build
+& "Z:\GlazeProject\flutter\bin\flutter.bat" analyze
+& "Z:\GlazeProject\flutter\bin\flutter.bat" test
+& "Z:\GlazeProject\flutter\bin\flutter.bat" test test/bar_test.dart
+& "Z:\GlazeProject\flutter\bin\flutter.bat" build windows
+& "Z:\GlazeProject\flutter\bin\dart.bat" run build_runner build
 ```
 
 For `flutter run` (dev server), see below — the agent cannot run it.

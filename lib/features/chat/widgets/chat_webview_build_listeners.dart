@@ -53,7 +53,7 @@ class ChatWebViewBuildListeners {
   final String? regenTargetId;
   final int visibleStartIndex;
   final Future<void> Function(String sessionId, String messageId)
-      onRefreshExtBlocksPanel;
+  onRefreshExtBlocksPanel;
   final Future<void> Function() onSyncExtBlockPanels;
 
   /// Attach all `ref.listen` callbacks for the current build. Call
@@ -73,8 +73,8 @@ class ChatWebViewBuildListeners {
     ) {
       final b = bridge;
       if (b == null || !ready()) return;
-      final oldList = prev?.valueOrNull ?? const <PresetRegex>[];
-      final newList = next.valueOrNull ?? const <PresetRegex>[];
+      final oldList = prev?.value ?? const <PresetRegex>[];
+      final newList = next.value ?? const <PresetRegex>[];
       if (_regexListChanged(oldList, newList)) {
         final character = ref.read(characterByIdProvider(charId));
         final effectivePersona = ref.read(

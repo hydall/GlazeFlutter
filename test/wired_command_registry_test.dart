@@ -14,13 +14,14 @@
 //     for malformed inputs instead of throwing.
 
 import 'package:drift/native.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/db/repositories/character_repo.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/features/extensions/services/command_registry.dart';
+import 'package:glaze_flutter/features/extensions/models/trigger_mode.dart';
+import 'package:glaze_flutter/features/extensions/models/trigger_result.dart';
 import 'package:glaze_flutter/features/extensions/services/generation_dispatcher.dart';
 import 'package:glaze_flutter/features/extensions/services/js_bridge_service.dart';
 import 'package:glaze_flutter/features/extensions/services/js_bridge_toast_controller.dart';
@@ -34,16 +35,16 @@ AppDatabase _testDb() => AppDatabase.forTesting(NativeDatabase.memory());
 /// when it does, we return `TriggerNoSession` to keep the test
 /// deterministic without touching `Ref`.
 class _NoopDispatcher extends GenerationDispatcher {
-  _NoopDispatcher() : super(_NoopRef());
-}
-
-class _NoopRef implements Ref {
   @override
-  dynamic noSuchMethod(Invocation invocation) {
-    throw UnimplementedError(
-      '_NoopRef: no Riverpod reads expected (${invocation.memberName})',
-    );
+  Future<TriggerResult> dispatch({
+    required String charId,
+    String? rawMode,
+    String? reason,
+  }) async {
+    return TriggerNoSession(mode: TriggerMode.parse(rawMode));
   }
+
+  _NoopDispatcher() : super(null);
 }
 
 void main() {
@@ -62,7 +63,7 @@ void main() {
   });
 
   /// Helper to build a wired registry backed by a real bridge.
-  WiredCommandDeps _buildDeps() {
+  WiredCommandDeps buildDeps() {
     final bridge = JsBridgeService(
       chatRepo: null,
       characterRepo: characterRepo,
@@ -84,7 +85,7 @@ void main() {
 
   group('wired registry setup', () {
     test('registers all five MVP commands', () {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       final names = registry.list().map((c) => c.name).toSet();
       expect(names, {'/trigger', '/getvar', '/setvar', '/inject', '/toast'});
     });
@@ -92,102 +93,93 @@ void main() {
 
   group('/getvar and /setvar route through the bridge', () {
     test('/getvar returns the stored value', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       // Pre-populate the character variables.
-      await characterRepo.put(Character(
-        id: 'c1',
-        name: 'Alice',
-        extensions: {
-          'glaze_variables': {
-            'flag': true,
+      await characterRepo.put(
+        Character(
+          id: 'c1',
+          name: 'Alice',
+          extensions: {
+            'glaze_variables': {'flag': true},
           },
-        },
-      ));
-      final result = await registry.run(
-        '/getvar',
-        {'scope': 'character', 'path': 'flag'},
-        context: const CommandContext(charId: 'c1'),
+        ),
       );
+      final result = await registry.run('/getvar', {
+        'scope': 'character',
+        'path': 'flag',
+      }, context: const CommandContext(charId: 'c1'));
       expect(result.ok, isTrue);
       expect(result.data, isTrue);
     });
 
     test('/getvar returns an error for unsupported scope', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
-      final result = await registry.run(
-        '/getvar',
-        {'scope': 'unknown', 'path': 'x'},
-        context: const CommandContext(charId: 'c1'),
-      );
+      final registry = buildWiredCommandRegistry(buildDeps());
+      final result = await registry.run('/getvar', {
+        'scope': 'unknown',
+        'path': 'x',
+      }, context: const CommandContext(charId: 'c1'));
       expect(result.ok, isFalse);
       expect(result.message, isNotEmpty);
     });
 
-    test('/setvar writes to the requested scope and /getvar reads it back',
-        () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
-      final setResult = await registry.run(
-        '/setvar',
-        {
+    test(
+      '/setvar writes to the requested scope and /getvar reads it back',
+      () async {
+        final registry = buildWiredCommandRegistry(buildDeps());
+        final setResult = await registry.run('/setvar', {
           'scope': 'character',
           'path': 'greeting',
           'value': 'hi',
-        },
-        context: const CommandContext(charId: 'c1'),
-      );
-      expect(setResult.ok, isTrue);
+        }, context: const CommandContext(charId: 'c1'));
+        expect(setResult.ok, isTrue);
 
-      final getResult = await registry.run(
-        '/getvar',
-        {'scope': 'character', 'path': 'greeting'},
-        context: const CommandContext(charId: 'c1'),
-      );
-      expect(getResult.ok, isTrue);
-      expect(getResult.data, 'hi');
-    });
+        final getResult = await registry.run('/getvar', {
+          'scope': 'character',
+          'path': 'greeting',
+        }, context: const CommandContext(charId: 'c1'));
+        expect(getResult.ok, isTrue);
+        expect(getResult.data, 'hi');
+      },
+    );
   });
 
   group('/inject validation', () {
     test('rejects missing id', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
-      final result = await registry.run(
-        '/inject',
-        {'content': 'hi'},
-        context: const CommandContext(charId: 'c1'),
-      );
+      final registry = buildWiredCommandRegistry(buildDeps());
+      final result = await registry.run('/inject', {
+        'content': 'hi',
+      }, context: const CommandContext(charId: 'c1'));
       expect(result.ok, isFalse);
       expect(result.message, contains('id'));
     });
 
     test('rejects missing content', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
-      final result = await registry.run(
-        '/inject',
-        {'id': 'mood'},
-        context: const CommandContext(charId: 'c1'),
-      );
+      final registry = buildWiredCommandRegistry(buildDeps());
+      final result = await registry.run('/inject', {
+        'id': 'mood',
+      }, context: const CommandContext(charId: 'c1'));
       expect(result.ok, isFalse);
       expect(result.message, contains('content'));
     });
 
     test('rejects missing charId in context', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
-      final result = await registry.run(
-        '/inject',
-        {'id': 'mood', 'content': 'hi'},
-        context: const CommandContext(),
-      );
+      final registry = buildWiredCommandRegistry(buildDeps());
+      final result = await registry.run('/inject', {
+        'id': 'mood',
+        'content': 'hi',
+      }, context: const CommandContext());
       expect(result.ok, isFalse);
       expect(result.message, contains('charId'));
     });
 
     test('successful inject echoes the result payload', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
-      final result = await registry.run(
-        '/inject',
-        {'id': 'mood', 'content': 'tense', 'depth': 1, 'role': 'system'},
-        context: const CommandContext(charId: 'c1'),
-      );
+      final registry = buildWiredCommandRegistry(buildDeps());
+      final result = await registry.run('/inject', {
+        'id': 'mood',
+        'content': 'tense',
+        'depth': 1,
+        'role': 'system',
+      }, context: const CommandContext(charId: 'c1'));
       expect(result.ok, isTrue);
       expect(result.message, 'inject ok');
       expect(result.data, isA<Map<String, dynamic>>());
@@ -199,46 +191,40 @@ void main() {
 
   group('/toast validation', () {
     test('rejects non-string message', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
-      final result = await registry.run(
-        '/toast',
-        {'message': 7},
-        context: const CommandContext(),
-      );
+      final registry = buildWiredCommandRegistry(buildDeps());
+      final result = await registry.run('/toast', {
+        'message': 7,
+      }, context: const CommandContext());
       expect(result.ok, isFalse);
       expect(result.message, contains('message'));
     });
 
     test('successful toast resolves ok', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
-      final result = await registry.run(
-        '/toast',
-        {'message': 'hi', 'severity': 'success', 'action': 'open'},
-        context: const CommandContext(),
-      );
+      final registry = buildWiredCommandRegistry(buildDeps());
+      final result = await registry.run('/toast', {
+        'message': 'hi',
+        'severity': 'success',
+        'action': 'open',
+      }, context: const CommandContext());
       expect(result.ok, isTrue);
     });
   });
 
   group('/trigger validation', () {
     test('rejects missing charId in context', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
-      final result = await registry.run(
-        '/trigger',
-        const {'mode': 'auto'},
-        context: const CommandContext(),
-      );
+      final registry = buildWiredCommandRegistry(buildDeps());
+      final result = await registry.run('/trigger', const {
+        'mode': 'auto',
+      }, context: const CommandContext());
       expect(result.ok, isFalse);
       expect(result.message, contains('charId'));
     });
 
     test('rejects non-string mode', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
-      final result = await registry.run(
-        '/trigger',
-        {'mode': 5},
-        context: const CommandContext(charId: 'c1'),
-      );
+      final registry = buildWiredCommandRegistry(buildDeps());
+      final result = await registry.run('/trigger', {
+        'mode': 5,
+      }, context: const CommandContext(charId: 'c1'));
       expect(result.ok, isFalse);
     });
   });

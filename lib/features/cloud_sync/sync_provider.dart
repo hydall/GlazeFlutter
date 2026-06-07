@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/theme_preset_storage.dart';
@@ -36,7 +37,9 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
 });
 
 final syncStatusProvider = StateProvider<SyncStatus>((ref) => SyncStatus.idle);
-final syncProviderProvider = StateProvider<SyncProvider>((ref) => SyncProvider.dropbox);
+final syncProviderProvider = StateProvider<SyncProvider>(
+  (ref) => SyncProvider.dropbox,
+);
 final syncConnectedProvider = StateProvider<bool>((ref) => false);
 final syncAutoEnabledProvider = StateProvider<bool>((ref) => false);
 final syncConflictsProvider = StateProvider<List<SyncConflict>>((ref) => []);

@@ -18,10 +18,18 @@ class GlossarySheet extends ConsumerStatefulWidget {
   final String? initialTerm;
   final bool startExpanded;
 
-  const GlossarySheet({super.key, this.initialTerm, this.startExpanded = false});
+  const GlossarySheet({
+    super.key,
+    this.initialTerm,
+    this.startExpanded = false,
+  });
 
   /// Convenience launcher used by `HelpTip` and menu entries.
-  static Future<void> show(BuildContext context, {String? initialTerm, bool startExpanded = false}) {
+  static Future<void> show(
+    BuildContext context, {
+    String? initialTerm,
+    bool startExpanded = false,
+  }) {
     return showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
@@ -29,7 +37,8 @@ class GlossarySheet extends ConsumerStatefulWidget {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black54,
-      builder: (_) => GlossarySheet(initialTerm: initialTerm, startExpanded: startExpanded),
+      builder: (_) =>
+          GlossarySheet(initialTerm: initialTerm, startExpanded: startExpanded),
     );
   }
 
@@ -155,15 +164,15 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
   };
 
   static const Map<String, (Color, Color)> _categoryColors = {
-    'basics':     (Color(0x2E6495ED), Color(0xFF6495ED)),
+    'basics': (Color(0x2E6495ED), Color(0xFF6495ED)),
     'characters': (Color(0x2EED8936), Color(0xFFED8936)),
-    'chat':       (Color(0x2EECC94B), Color(0xFFECC94B)),
-    'presets':    (Color(0x2E9F7AEA), Color(0xFF9F7AEA)),
-    'lorebooks':  (Color(0x2EED6464), Color(0xFFED6464)),
-    'regex':      (Color(0x2E38BDB2), Color(0xFF38BDB2)),
-    'interface':  (Color(0x2EED64A6), Color(0xFFED64A6)),
-    'faq':        (Color(0x2E48BB78), Color(0xFF48BB78)),
-    'advanced':   (Color(0x2EA0AEC0), Color(0xFFA0AEC0)),
+    'chat': (Color(0x2EECC94B), Color(0xFFECC94B)),
+    'presets': (Color(0x2E9F7AEA), Color(0xFF9F7AEA)),
+    'lorebooks': (Color(0x2EED6464), Color(0xFFED6464)),
+    'regex': (Color(0x2E38BDB2), Color(0xFF38BDB2)),
+    'interface': (Color(0x2EED64A6), Color(0xFFED64A6)),
+    'faq': (Color(0x2E48BB78), Color(0xFF48BB78)),
+    'advanced': (Color(0x2EA0AEC0), Color(0xFFA0AEC0)),
   };
 
   IconData _iconFor(String id) =>
@@ -192,8 +201,7 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
 
   @override
   Widget build(BuildContext context) {
-    final lang =
-        ref.watch(appSettingsProvider).valueOrNull?.language ?? 'en';
+    final lang = ref.watch(appSettingsProvider).value?.language ?? 'en';
     final asyncCats = ref.watch(glossaryProvider(lang));
 
     return asyncCats.when(
@@ -226,7 +234,9 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
 
         return SheetView(
           title: _title(),
-          showBack: _view != _View.categories || ModalRoute.of(context) is! ModalBottomSheetRoute,
+          showBack:
+              _view != _View.categories ||
+              ModalRoute.of(context) is! ModalBottomSheetRoute,
           onBack: _goBack,
           startExpanded: widget.startExpanded,
           headerBottom: showSearch ? _buildSearchBar(context) : null,
@@ -269,51 +279,54 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
       child: Container(
         height: 44,
         padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          Icon(Icons.search,
-              size: 18, color: context.cs.onSurfaceVariant),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _searchCtrl,
-              onChanged: (v) => setState(() => _query = v),
-              decoration: InputDecoration(
-                isCollapsed: true,
-                border: InputBorder.none,
-                hintText: _safeTr('search', fallback: 'Search...'),
-                hintStyle: TextStyle(color: context.cs.onSurfaceVariant),
-              ),
-              style: TextStyle(
-                fontSize: 15,
-                color: context.cs.onSurface,
-              ),
-            ),
-          ),
-          if (_query.trim().isNotEmpty)
-            GestureDetector(
-              onTap: () {
-                _searchCtrl.clear();
-                setState(() => _query = '');
-              },
-              child: Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
+        child: Row(
+          children: [
+            Icon(Icons.search, size: 18, color: context.cs.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: (v) => setState(() => _query = v),
+                decoration: InputDecoration(
+                  isCollapsed: true,
+                  border: InputBorder.none,
+                  hintText: _safeTr('search', fallback: 'Search...'),
+                  hintStyle: TextStyle(color: context.cs.onSurfaceVariant),
                 ),
-                child: Icon(Icons.close,
-                    size: 14, color: context.cs.onSurfaceVariant),
+                style: TextStyle(fontSize: 15, color: context.cs.onSurface),
               ),
             ),
-        ],
+            if (_query.trim().isNotEmpty)
+              GestureDetector(
+                onTap: () {
+                  _searchCtrl.clear();
+                  setState(() => _query = '');
+                },
+                child: Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close,
+                    size: 14,
+                    color: context.cs.onSurfaceVariant,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
-    ));
+    );
   }
 
   Widget _buildContent(
-      BuildContext context, List<GlossaryCategory> cats, EdgeInsets mediaPad) {
+    BuildContext context,
+    List<GlossaryCategory> cats,
+    EdgeInsets mediaPad,
+  ) {
     switch (_view) {
       case _View.categories:
         return KeyedSubtree(
@@ -336,7 +349,10 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
   }
 
   Widget _buildCategoriesGrid(
-      BuildContext context, List<GlossaryCategory> cats, EdgeInsets mediaPad) {
+    BuildContext context,
+    List<GlossaryCategory> cats,
+    EdgeInsets mediaPad,
+  ) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 80).add(mediaPad),
       children: [
@@ -356,12 +372,16 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
   }
 
   Widget _buildSearchResults(
-      BuildContext context, List<GlossaryCategory> cats, EdgeInsets mediaPad) {
+    BuildContext context,
+    List<GlossaryCategory> cats,
+    EdgeInsets mediaPad,
+  ) {
     final q = _query.trim().toLowerCase();
     final results = <(GlossaryTerm, String)>[];
     for (final c in cats) {
       for (final t in c.terms) {
-        final hit = t.name.toLowerCase().contains(q) ||
+        final hit =
+            t.name.toLowerCase().contains(q) ||
             (t.alt?.toLowerCase().contains(q) ?? false) ||
             t.desc.toLowerCase().contains(q);
         if (hit) results.add((t, c.label));
@@ -373,9 +393,11 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.search_off,
-                size: 32,
-                color: context.cs.onSurfaceVariant.withValues(alpha: 0.5)),
+            Icon(
+              Icons.search_off,
+              size: 32,
+              color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
+            ),
             const SizedBox(height: 10),
             Text(
               _safeTr('no_results', fallback: 'No results'),
@@ -394,8 +416,7 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
       separatorBuilder: (_, _) => const SizedBox(height: 6),
       itemBuilder: (_, i) {
         final (term, catLabel) = results[i];
-        final sub =
-            term.alt != null ? '$catLabel · ${term.alt}' : catLabel;
+        final sub = term.alt != null ? '$catLabel · ${term.alt}' : catLabel;
         return _TermTile(
           name: term.name,
           sub: sub,
@@ -406,7 +427,10 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
   }
 
   Widget _buildTermsList(
-      BuildContext context, List<GlossaryCategory> cats, EdgeInsets mediaPad) {
+    BuildContext context,
+    List<GlossaryCategory> cats,
+    EdgeInsets mediaPad,
+  ) {
     final terms = _cat?.terms ?? const [];
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 80).add(mediaPad),
@@ -424,7 +448,10 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
   }
 
   Widget _buildArticle(
-      BuildContext context, List<GlossaryCategory> cats, EdgeInsets mediaPad) {
+    BuildContext context,
+    List<GlossaryCategory> cats,
+    EdgeInsets mediaPad,
+  ) {
     final term = _term;
     if (term == null) return const SizedBox.shrink();
     return ListView(
@@ -443,8 +470,7 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
         if (term.alt != null) ...[
           const SizedBox(height: 10),
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: context.cs.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
@@ -460,9 +486,7 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
           ),
         ],
         const SizedBox(height: 16),
-        Container(
-            height: 1,
-            color: Colors.white.withValues(alpha: 0.08)),
+        Container(height: 1, color: Colors.white.withValues(alpha: 0.08)),
         const SizedBox(height: 16),
         _RichDescription(
           desc: term.desc,
@@ -505,48 +529,50 @@ class _CategoryCard extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Row(
-            children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  color: colors.$1,
-                  borderRadius: BorderRadius.circular(12),
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: colors.$1,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: colors.$2, size: 22),
                 ),
-                child: Icon(icon, color: colors.$2, size: 22),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: context.cs.onSurface,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: context.cs.onSurface,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$count $countLabel',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: context.cs.onSurfaceVariant,
+                      const SizedBox(height: 2),
+                      Text(
+                        '$count $countLabel',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.cs.onSurfaceVariant,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right,
-                  color: context.cs.onSurfaceVariant
-                      .withValues(alpha: 0.5)),
-            ],
+                Icon(
+                  Icons.chevron_right,
+                  color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ));
+    );
   }
 }
 
@@ -567,43 +593,44 @@ class _TermTile extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 14, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: context.cs.onSurface,
-                      ),
-                    ),
-                    if (sub != null) ...[
-                      const SizedBox(height: 2),
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        sub!,
+                        name,
                         style: TextStyle(
-                          fontSize: 12,
-                          color: context.cs.onSurfaceVariant,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: context.cs.onSurface,
                         ),
                       ),
+                      if (sub != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          sub!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              Icon(Icons.chevron_right,
-                  color: context.cs.onSurfaceVariant
-                      .withValues(alpha: 0.5)),
-            ],
+                Icon(
+                  Icons.chevron_right,
+                  color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ));
+    );
   }
 }
 
@@ -662,44 +689,49 @@ class _RichDescription extends StatelessWidget {
         // inline icon
         final id = m.group(5)!;
         final icon = _inlineIcons[id] ?? Icons.layers_outlined;
-        spans.add(WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: Icon(icon,
-                size: 15, color: context.cs.onSurfaceVariant),
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Icon(icon, size: 15, color: context.cs.onSurfaceVariant),
+            ),
           ),
-        ));
+        );
       } else if (m.group(4) != null) {
         // external link
         final label = m.group(3)!;
         final url = m.group(4)!;
-        spans.add(WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: _LinkChip(
-            label: label,
-            color: const Color(0xFF68D391),
-            bg: const Color(0x2D48BB78),
-            border: const Color(0x4D48BB78),
-            onTap: () => _openLink(url),
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: _LinkChip(
+              label: label,
+              color: const Color(0xFF68D391),
+              bg: const Color(0x2D48BB78),
+              border: const Color(0x4D48BB78),
+              onTap: () => _openLink(url),
+            ),
           ),
-        ));
+        );
       } else {
         // term chip
         final termId = m.group(1)!;
         final display = m.group(2);
         final ref = _lookup(termId);
         final label = display ?? ref?.name ?? termId;
-        spans.add(WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: _LinkChip(
-            label: label,
-            color: context.cs.primary,
-            bg: context.cs.primary.withValues(alpha: 0.18),
-            border: context.cs.primary.withValues(alpha: 0.28),
-            onTap: () => onChipTap(termId),
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: _LinkChip(
+              label: label,
+              color: context.cs.primary,
+              bg: context.cs.primary.withValues(alpha: 0.18),
+              border: context.cs.primary.withValues(alpha: 0.28),
+              onTap: () => onChipTap(termId),
+            ),
           ),
-        ));
+        );
       }
       lastEnd = m.end;
     }

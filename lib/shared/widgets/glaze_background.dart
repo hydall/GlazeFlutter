@@ -13,18 +13,14 @@ class GlazeBackground extends ConsumerWidget {
   final Widget child;
   final Color? backgroundColor;
 
-  const GlazeBackground({
-    super.key,
-    required this.child,
-    this.backgroundColor,
-  });
+  const GlazeBackground({super.key, required this.child, this.backgroundColor});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bytes = ref.watch(bgImageBytesProvider);
     final preset = ref.watch(themeProvider).activePreset;
     final batterySaver =
-        ref.watch(appSettingsProvider).valueOrNull?.batterySaver ?? false;
+        ref.watch(appSettingsProvider).value?.batterySaver ?? false;
     final base = backgroundColor ?? context.cs.surface;
 
     return Container(

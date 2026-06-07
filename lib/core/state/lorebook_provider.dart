@@ -1,15 +1,17 @@
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/lorebook.dart';
 import 'db_provider.dart';
 import 'shared_prefs_provider.dart';
 
-final lorebooksProvider = AsyncNotifierProvider<LorebooksNotifier, List<Lorebook>>(
-  LorebooksNotifier.new,
-);
+final lorebooksProvider =
+    AsyncNotifierProvider<LorebooksNotifier, List<Lorebook>>(
+      LorebooksNotifier.new,
+    );
 
 final lorebookSettingsProvider = StateProvider<LorebookGlobalSettings>((ref) {
   return const LorebookGlobalSettings();
@@ -32,7 +34,9 @@ Future<void> loadLorebookActivations(WidgetRef ref) async {
       if (char != null) {
         for (final e in char.entries) {
           if (e.value is List) {
-            charMap[e.key] = (e.value as List).map((v) => v.toString()).toList();
+            charMap[e.key] = (e.value as List)
+                .map((v) => v.toString())
+                .toList();
           }
         }
       }
@@ -41,7 +45,9 @@ Future<void> loadLorebookActivations(WidgetRef ref) async {
       if (chat != null) {
         for (final e in chat.entries) {
           if (e.value is List) {
-            chatMap[e.key] = (e.value as List).map((v) => v.toString()).toList();
+            chatMap[e.key] = (e.value as List)
+                .map((v) => v.toString())
+                .toList();
           }
         }
       }
@@ -52,9 +58,15 @@ Future<void> loadLorebookActivations(WidgetRef ref) async {
   }
 }
 
-Future<void> saveLorebookActivations(LorebookActivations activations, [SharedPreferences? prefs]) async {
+Future<void> saveLorebookActivations(
+  LorebookActivations activations, [
+  SharedPreferences? prefs,
+]) async {
   prefs ??= await SharedPreferences.getInstance();
-  await prefs.setString('lorebookActivations', jsonEncode(activations.toJson()));
+  await prefs.setString(
+    'lorebookActivations',
+    jsonEncode(activations.toJson()),
+  );
 }
 
 Future<void> loadLorebookSettings(WidgetRef ref) async {
@@ -63,13 +75,17 @@ Future<void> loadLorebookSettings(WidgetRef ref) async {
   if (settingsJson != null) {
     try {
       final settings = LorebookGlobalSettings.fromJson(
-          jsonDecode(settingsJson) as Map<String, dynamic>);
+        jsonDecode(settingsJson) as Map<String, dynamic>,
+      );
       ref.read(lorebookSettingsProvider.notifier).state = settings;
     } catch (_) {}
   }
 }
 
-Future<void> saveLorebookSettings(LorebookGlobalSettings settings, [SharedPreferences? prefs]) async {
+Future<void> saveLorebookSettings(
+  LorebookGlobalSettings settings, [
+  SharedPreferences? prefs,
+]) async {
   prefs ??= await SharedPreferences.getInstance();
   await prefs.setString('lorebookSettings', jsonEncode(settings.toJson()));
 }
@@ -103,7 +119,10 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
 
   void _syncActivationToPrefs(Lorebook lorebook) async {
     if (lorebook.activationTargetId == null) return;
-    if (lorebook.activationScope != 'character' && lorebook.activationScope != 'chat') return;
+    if (lorebook.activationScope != 'character' &&
+        lorebook.activationScope != 'chat') {
+      return;
+    }
     final scope = lorebook.activationScope;
     final targetId = lorebook.activationTargetId!;
 
@@ -119,7 +138,7 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
           ? current.copyWith(character: map)
           : current.copyWith(chat: map);
       ref.read(lorebookActivationsProvider.notifier).state = updated;
-      final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+      final prefs = ref.read(sharedPreferencesProvider).value;
       await saveLorebookActivations(updated, prefs);
     }
   }
@@ -142,13 +161,17 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
     for (final e in activations.chat.entries) {
       chatMap[e.key] = List<String>.from(e.value);
     }
-    for (final ids in charMap.values) { ids.remove(id); }
-    for (final ids in chatMap.values) { ids.remove(id); }
+    for (final ids in charMap.values) {
+      ids.remove(id);
+    }
+    for (final ids in chatMap.values) {
+      ids.remove(id);
+    }
     charMap.removeWhere((_, ids) => ids.isEmpty);
     chatMap.removeWhere((_, ids) => ids.isEmpty);
     final cleaned = LorebookActivations(character: charMap, chat: chatMap);
     ref.read(lorebookActivationsProvider.notifier).state = cleaned;
-    final prefs = ref.read(sharedPreferencesProvider).valueOrNull;
+    final prefs = ref.read(sharedPreferencesProvider).value;
     await saveLorebookActivations(cleaned, prefs);
 
     ref.invalidateSelf();

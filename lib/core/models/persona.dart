@@ -4,7 +4,7 @@ part 'persona.freezed.dart';
 part 'persona.g.dart';
 
 @freezed
-class Persona with _$Persona {
+abstract class Persona with _$Persona {
   const factory Persona({
     required String id,
     required String name,
@@ -18,7 +18,7 @@ class Persona with _$Persona {
 }
 
 @freezed
-class PersonaConnections with _$PersonaConnections {
+abstract class PersonaConnections with _$PersonaConnections {
   const factory PersonaConnections({
     @Default({}) Map<String, String> character,
     @Default({}) Map<String, String> chat,

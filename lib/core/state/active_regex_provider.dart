@@ -12,8 +12,15 @@ final activeRegexesProvider = FutureProvider<List<PresetRegex>>((ref) async {
   final preset = activeId != null
       ? presets.where((p) => p.id == activeId).firstOrNull
       : (presets.isNotEmpty ? presets.first : null);
-  final presetRegexes = preset?.regexes.where((r) => !r.disabled).toList() ?? <PresetRegex>[];
-  final globalRegexes = ref.watch(globalRegexProvider).valueOrNull?.where((r) => !r.disabled).toList() ?? <PresetRegex>[];
+  final presetRegexes =
+      preset?.regexes.where((r) => !r.disabled).toList() ?? <PresetRegex>[];
+  final globalRegexes =
+      ref
+          .watch(globalRegexProvider)
+          .value
+          ?.where((r) => !r.disabled)
+          .toList() ??
+      <PresetRegex>[];
   return [...presetRegexes, ...globalRegexes];
 });
 

@@ -244,7 +244,7 @@ class PromptPayloadBuilder {
       characterDepthPrompt: character.depthPrompt,
       characterDepthPromptDepth: character.depthPromptDepth,
       characterDepthPromptRole: character.depthPromptRole,
-      globalRegexes: _ref.read(globalRegexProvider).valueOrNull ?? [],
+      globalRegexes: _ref.read(globalRegexProvider).value ?? [],
       triggeredMemories: triggeredMemories,
       runtimePromptBlocks: runtimePromptBlocks,
     );
@@ -309,7 +309,7 @@ class PromptPayloadBuilder {
       characterDepthPrompt: character.depthPrompt,
       characterDepthPromptDepth: character.depthPromptDepth,
       characterDepthPromptRole: character.depthPromptRole,
-      globalRegexes: _ref.read(globalRegexProvider).valueOrNull ?? [],
+      globalRegexes: _ref.read(globalRegexProvider).value ?? [],
       triggeredMemories: triggeredMemories,
       runtimePromptBlocks: runtimePromptBlocks,
     );

@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../core/models/api_config.dart';
 import '../../core/state/db_provider.dart';
@@ -10,7 +11,7 @@ final activeApiPresetIdProvider = StateProvider<String?>((ref) => null);
 final _activeIdInitializedProvider = Provider<bool>((ref) => false);
 
 final activeApiConfigProvider = Provider<ApiConfig?>((ref) {
-  final list = ref.watch(apiListProvider).valueOrNull;
+  final list = ref.watch(apiListProvider).value;
   final id = ref.watch(activeApiPresetIdProvider);
   if (list == null || list.isEmpty) return null;
   if (id == null) return list.first;

@@ -674,11 +674,16 @@ class _InfoTab extends StatelessWidget {
                 final uri = Uri.tryParse(url);
                 if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
               },
-              imageBuilder: (context, url) {
+              imageBuilder: (context, url, width, height) {
                 if (url.startsWith('http://') || url.startsWith('https://')) {
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(imageUrl: url, fit: BoxFit.contain),
+                    child: CachedNetworkImage(
+                      imageUrl: url,
+                      width: width,
+                      height: height,
+                      fit: BoxFit.contain,
+                    ),
                   );
                 }
                 if (url.startsWith('data:')) {
@@ -688,7 +693,12 @@ class _InfoTab extends StatelessWidget {
                       final bytes = Uri.parse(url).data!.contentAsBytes();
                       return ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.memory(bytes, fit: BoxFit.contain),
+                        child: Image.memory(
+                          bytes,
+                          width: width,
+                          height: height,
+                          fit: BoxFit.contain,
+                        ),
                       );
                     } catch (_) {}
                   }
@@ -697,7 +707,12 @@ class _InfoTab extends StatelessWidget {
                 if (file.existsSync()) {
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.file(file, fit: BoxFit.contain),
+                    child: Image.file(
+                      file,
+                      width: width,
+                      height: height,
+                      fit: BoxFit.contain,
+                    ),
                   );
                 }
                 return const SizedBox.shrink();

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import 'theme_preset.dart';
 import 'theme_preset_storage.dart';
@@ -25,14 +25,13 @@ class ThemeSettings {
     ThemePreset? activePreset,
     List<ThemePreset>? presets,
     bool? ignoreCustomFont,
-  }) =>
-      ThemeSettings(
-        mode: mode ?? this.mode,
-        accentColor: accentColor ?? this.accentColor,
-        activePreset: activePreset ?? this.activePreset,
-        presets: presets ?? this.presets,
-        ignoreCustomFont: ignoreCustomFont ?? this.ignoreCustomFont,
-      );
+  }) => ThemeSettings(
+    mode: mode ?? this.mode,
+    accentColor: accentColor ?? this.accentColor,
+    activePreset: activePreset ?? this.activePreset,
+    presets: presets ?? this.presets,
+    ignoreCustomFont: ignoreCustomFont ?? this.ignoreCustomFont,
+  );
 }
 
 class ThemeNotifier extends StateNotifier<ThemeSettings> {
@@ -72,10 +71,7 @@ class ThemeNotifier extends StateNotifier<ThemeSettings> {
   }
 
   Future<void> applyPreset(ThemePreset preset) async {
-    state = state.copyWith(
-      accentColor: preset.accent,
-      activePreset: preset,
-    );
+    state = state.copyWith(accentColor: preset.accent, activePreset: preset);
     await _storage?.setActive(preset.id);
   }
 
@@ -101,7 +97,9 @@ class ThemeNotifier extends StateNotifier<ThemeSettings> {
 
   /// Live-update the active preset and persist it (mirrors JS auto-save on change).
   Future<void> updatePreset(ThemePreset preset) async {
-    final updated = state.presets.map((p) => p.id == preset.id ? preset : p).toList();
+    final updated = state.presets
+        .map((p) => p.id == preset.id ? preset : p)
+        .toList();
     state = state.copyWith(
       activePreset: preset,
       accentColor: preset.accent,

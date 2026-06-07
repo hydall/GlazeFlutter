@@ -9,7 +9,7 @@ final appSettingsProvider = AsyncNotifierProvider<AppSettingsNotifier, AppSettin
     AppSettingsNotifier.new);
 
 @freezed
-class AppSettings with _$AppSettings {
+abstract class AppSettings with _$AppSettings {
   const factory AppSettings({
     @Default(true) bool enterToSend,
     @Default(false) bool hideMessageId,

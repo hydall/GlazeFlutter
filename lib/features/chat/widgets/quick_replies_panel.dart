@@ -140,8 +140,10 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
                           Navigator.of(sheetCtx).pop();
                           await _remove(existing.id);
                         },
-                        icon: const Icon(Icons.delete_outline,
-                            color: Colors.redAccent),
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.redAccent,
+                        ),
                         label: Text(
                           'btn_delete'.tr(),
                           style: const TextStyle(color: Colors.redAccent),
@@ -159,13 +161,17 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
                         final text = textCtrl.text;
                         if (label.isEmpty) return;
                         Navigator.of(sheetCtx).pop();
-                        final notifier =
-                            ref.read(quickRepliesProvider.notifier);
+                        final notifier = ref.read(
+                          quickRepliesProvider.notifier,
+                        );
                         if (isNew) {
                           await notifier.add(label, text);
                         } else {
-                          await notifier.edit(existing.id,
-                              label: label, text: text);
+                          await notifier.edit(
+                            existing.id,
+                            label: label,
+                            text: text,
+                          );
                         }
                       },
                       child: Text(isNew ? 'action_add'.tr() : 'btn_save'.tr()),
@@ -191,7 +197,7 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
   @override
   Widget build(BuildContext context) {
     final repliesAsync = ref.watch(quickRepliesProvider);
-    final replies = repliesAsync.valueOrNull ?? const <QuickReply>[];
+    final replies = repliesAsync.value ?? const <QuickReply>[];
 
     final cards = <MagicDrawerCardItem>[
       for (final r in replies)
@@ -223,8 +229,7 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
       radius: const Radius.circular(3),
       thumbColor: Colors.white24,
       child: ScrollConfiguration(
-        behavior:
-            ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final itemWidth = (constraints.maxWidth - 24 - 12) / 3;
@@ -244,19 +249,14 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
                   if (item.isAddButton) {
                     return SizedBox(
                       width: itemWidth,
-                      child: AddMagicCard(
-                        onTap: () => _showEditSheet(),
-                      ),
+                      child: AddMagicCard(onTap: () => _showEditSheet()),
                     );
                   }
-                  final reply = replies.firstWhere(
-                    (r) => r.id == item.def.id,
-                  );
+                  final reply = replies.firstWhere((r) => r.id == item.def.id);
                   final card = MagicCard(
                     item: item,
                     editing: _editing,
-                    hovered:
-                        _hoverIndex == index && _draggingIndex != index,
+                    hovered: _hoverIndex == index && _draggingIndex != index,
                     onTap: () => _handleTap(reply),
                     onDelete: () => _remove(reply.id),
                   );
@@ -297,12 +297,13 @@ class _QuickRepliesPanelState extends ConsumerState<QuickRepliesPanel> {
                             width: itemWidth,
                             child: Material(
                               color: Colors.transparent,
-                              child:
-                                  Opacity(opacity: 0.92, child: card),
+                              child: Opacity(opacity: 0.92, child: card),
                             ),
                           ),
-                          childWhenDragging:
-                              Opacity(opacity: 0.25, child: card),
+                          childWhenDragging: Opacity(
+                            opacity: 0.25,
+                            child: card,
+                          ),
                           child: card,
                         );
                       },
@@ -380,8 +381,7 @@ class QuickRepliesHeader extends StatelessWidget {
                   Icon(
                     editing ? Icons.check : Icons.edit,
                     size: 16,
-                    color:
-                        editing ? context.cs.primary : context.cs.onSurface,
+                    color: editing ? context.cs.primary : context.cs.onSurface,
                   ),
                   const SizedBox(width: 8),
                   Text(
@@ -389,8 +389,9 @@ class QuickRepliesHeader extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color:
-                          editing ? context.cs.primary : context.cs.onSurface,
+                      color: editing
+                          ? context.cs.primary
+                          : context.cs.onSurface,
                     ),
                   ),
                 ],

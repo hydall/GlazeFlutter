@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 
 /// In battery-saver mode we want to read provider values once and
 /// avoid subscribing to rebuilds. Outside battery-saver mode, we want

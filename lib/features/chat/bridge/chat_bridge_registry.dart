@@ -1,4 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import 'chat_bridge_controller.dart';
 
@@ -11,6 +11,4 @@ import 'chat_bridge_controller.dart';
 /// The controller is nullable — if the WebView is not mounted the
 /// JS runner block is skipped with an error status.
 final chatBridgeRegistryProvider =
-    StateProvider.family<ChatBridgeController?, String>(
-  (ref, charId) => null,
-);
+    StateProvider.family<ChatBridgeController?, String>((ref, charId) => null);

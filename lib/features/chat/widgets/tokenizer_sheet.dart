@@ -33,8 +33,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   @override
   void initState() {
     super.initState();
-    final settings =
-        ref.read(appSettingsProvider).valueOrNull ?? const AppSettings();
+    final settings = ref.read(appSettingsProvider).value ?? const AppSettings();
     _hidePercent = settings.tokenizerHidePercent;
     _historyFillThreshold = settings.tokenizerHistoryFillThreshold;
     _loadOrCalculate();
@@ -58,7 +57,9 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     }
 
     final visibleCount = session.messages.where((m) => !m.isHidden).length;
-    final summaryContent = ref.read(cachedTokenBreakdownProvider(widget.charId));
+    final summaryContent = ref.read(
+      cachedTokenBreakdownProvider(widget.charId),
+    );
     final hash = TokenBreakdownCache.computeHash(
       charId: widget.charId,
       sessionId: session.id,
@@ -119,7 +120,9 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       final result = await buildFromInputsInIsolate(inputs);
       var breakdown = result.breakdown;
 
-      final lastVectorTokens = ref.read(lastVectorLoreTokensProvider(widget.charId));
+      final lastVectorTokens = ref.read(
+        lastVectorLoreTokensProvider(widget.charId),
+      );
       if (lastVectorTokens > 0 && breakdown.vectorLoreTokens == 0) {
         // The fast-path collectInputs skips vector search (it can take
         // seconds via the embedding endpoint), but vector entries were
@@ -156,9 +159,8 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       );
       TokenBreakdownCache.set(hash, breakdown);
 
-      ref
-          .read(cachedTokenBreakdownProvider(widget.charId).notifier)
-          .state = breakdown;
+      ref.read(cachedTokenBreakdownProvider(widget.charId).notifier).state =
+          breakdown;
 
       if (mounted) setState(() => _breakdown = breakdown);
     } catch (e) {
@@ -205,24 +207,23 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : bd == null
-              ? Center(
-                  child: Text(
-                    'No data',
-                    style:
-                        TextStyle(color: context.cs.onSurfaceVariant),
-                  ),
-                )
-              : _showSettings
-                  ? _buildSettings()
-                  : _buildMainView(
-                      bd,
-                      contextSize,
-                      used,
-                      remaining,
-                      usedPercent,
-                      historyFill,
-                      nearLimit,
-                    ),
+          ? Center(
+              child: Text(
+                'No data',
+                style: TextStyle(color: context.cs.onSurfaceVariant),
+              ),
+            )
+          : _showSettings
+          ? _buildSettings()
+          : _buildMainView(
+              bd,
+              contextSize,
+              used,
+              remaining,
+              usedPercent,
+              historyFill,
+              nearLimit,
+            ),
     );
   }
 
@@ -235,9 +236,10 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     double historyFill,
     bool nearLimit,
   ) {
-    final hideCount = (_visibleCount * _hidePercent / 100)
-        .ceil()
-        .clamp(1, _visibleCount > 1 ? _visibleCount - 1 : 0);
+    final hideCount = (_visibleCount * _hidePercent / 100).ceil().clamp(
+      1,
+      _visibleCount > 1 ? _visibleCount - 1 : 0,
+    );
     final historyTokens = bd.sourceTokens['history'] ?? 0;
     final hideTokens = _visibleCount > 0
         ? ((historyTokens / _visibleCount) * hideCount).toInt()
@@ -246,8 +248,9 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     return Builder(
       builder: (context) => ListView(
         shrinkWrap: true,
-        padding: const EdgeInsets.all(16)
-            .add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+        padding: const EdgeInsets.all(
+          16,
+        ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
         children: [
           HeroCard(
             used: used,
@@ -263,8 +266,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
           ],
           if (nearLimit) ...[
             const SizedBox(height: 24),
-            NearLimitWarning(
-                hideCount: hideCount, hideTokens: hideTokens),
+            NearLimitWarning(hideCount: hideCount, hideTokens: hideTokens),
           ],
           const SizedBox(height: 24),
           Row(
@@ -277,17 +279,20 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
                   style: FilledButton.styleFrom(
                     backgroundColor: context.cs.primary,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 12),
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: Text(
-                      hideCount > 0
-                          ? 'Hide top $hideCount'
-                          : 'Hide top messages',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white)),
+                    hideCount > 0 ? 'Hide top $hideCount' : 'Hide top messages',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -297,17 +302,22 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: context.cs.onSurface,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 12),
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
                     side: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.1)),
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
                     backgroundColor: context.cs.surfaceContainerHighest
                         .withValues(alpha: 0.5),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  child: const Text('Settings',
-                      style:
-                          TextStyle(fontWeight: FontWeight.w600)),
+                  child: const Text(
+                    'Settings',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
             ],
@@ -318,12 +328,15 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
   }
 
   void _saveSettings() {
-    final settings =
-        ref.read(appSettingsProvider).valueOrNull ?? const AppSettings();
-    ref.read(appSettingsProvider.notifier).save(settings.copyWith(
-          tokenizerHidePercent: _hidePercent,
-          tokenizerHistoryFillThreshold: _historyFillThreshold,
-        ));
+    final settings = ref.read(appSettingsProvider).value ?? const AppSettings();
+    ref
+        .read(appSettingsProvider.notifier)
+        .save(
+          settings.copyWith(
+            tokenizerHidePercent: _hidePercent,
+            tokenizerHistoryFillThreshold: _historyFillThreshold,
+          ),
+        );
   }
 
   void _confirmHide(BuildContext context, int count) async {
@@ -339,14 +352,12 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
         BottomSheetItem(
           label: 'Hide $count',
           centered: true,
-          onTap: () =>
-              Navigator.of(context, rootNavigator: true).pop(true),
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
         ),
         BottomSheetItem(
           label: 'Cancel',
           centered: true,
-          onTap: () =>
-              Navigator.of(context, rootNavigator: true).pop(false),
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
         ),
       ],
     );
@@ -362,8 +373,9 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
     return Builder(
       builder: (context) => ListView(
         shrinkWrap: true,
-        padding: const EdgeInsets.all(16)
-            .add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
+        padding: const EdgeInsets.all(
+          16,
+        ).add(EdgeInsets.only(top: MediaQuery.paddingOf(context).top)),
         children: [
           SettingsSlider(
             label: 'History fill threshold',
@@ -384,8 +396,7 @@ class _TokenizerSheetState extends ConsumerState<TokenizerSheet> {
             min: 1,
             max: 95,
             unit: '%',
-            description:
-                'What % of visible messages the Hide button will hide',
+            description: 'What % of visible messages the Hide button will hide',
             onChanged: (v) {
               setState(() => _hidePercent = v);
               _saveSettings();

@@ -23,7 +23,8 @@ import '../../shared/theme/theme_provider.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../settings/app_settings_provider.dart';
-import 'chat_drawer_controller.dart' show ChatDrawerController, DrawerPanel, kKeyboardHeightPref;
+import 'chat_drawer_controller.dart'
+    show ChatDrawerController, DrawerPanel, kKeyboardHeightPref;
 import 'chat_provider.dart';
 import 'controllers/chat_message_selection_controller.dart';
 import 'chat_search_delegate.dart';
@@ -158,7 +159,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
         : 'status_connecting'.tr();
     final sessionIndex = chatState?.session?.sessionIndex ?? 0;
 
-    final appSettings = ref.watch(appSettingsProvider).valueOrNull;
+    final appSettings = ref.watch(appSettingsProvider).value;
     final virtualKeyboardSend = appSettings?.virtualKeyboardSend ?? false;
     final enterToSend = appSettings?.enterToSend ?? true;
     final batterySaver = appSettings?.batterySaver ?? false;
@@ -173,7 +174,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       });
     }
 
-    if (keyboardHeight > 0 && _drawerCtrl.drawerOpen && !_drawerCtrl.switchingToDrawer) {
+    if (keyboardHeight > 0 &&
+        _drawerCtrl.drawerOpen &&
+        !_drawerCtrl.switchingToDrawer) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _drawerCtrl.checkDrawerCollision(keyboardHeight);
       });
@@ -181,7 +184,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     return SessionLifecycleTracker(
       charId: charId,
-child: PopScope(
+      child: PopScope(
         canPop: _drawerCtrl.canPop() && !_search.showSearch,
         onPopInvokedWithResult: (didPop, result) {
           if (didPop) return;
@@ -344,7 +347,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       final commaIdx = imageUrl.indexOf(',');
       if (commaIdx == -1) return;
       provider = MemoryImage(base64Decode(imageUrl.substring(commaIdx + 1)));
-    } else if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+    } else if (imageUrl.startsWith('http://') ||
+        imageUrl.startsWith('https://')) {
       provider = NetworkImage(imageUrl);
     } else {
       final path = imageUrl
@@ -437,7 +441,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                       : e.source == 'memory'
                                       ? Colors.teal.withValues(alpha: 0.15)
                                       : e.source == 'constant'
-                                      ? Colors.deepPurple.withValues(alpha: 0.18)
+                                      ? Colors.deepPurple.withValues(
+                                          alpha: 0.18,
+                                        )
                                       : context.cs.primaryContainer,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
@@ -485,25 +491,26 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   Widget build(BuildContext context) {
     final isEditingMessage =
         ref.watch(editingMessageIdProvider(widget.charId)) != null;
-    ref.listen<String?>(
-      editingMessageIdProvider(widget.charId),
-      (prev, next) {
-        if (next != null) {
-          if (widget.drawerCtrl.inputFocus.hasFocus) {
-            widget.drawerCtrl.inputFocus.unfocus();
-          }
-          if (_selectionCtrl.isSelectionMode || _selectionCtrl.selectedMessageIds.isNotEmpty) {
-            setState(() {
-              _selectionCtrl.clearSelection();
-            });
-          }
+    ref.listen<String?>(editingMessageIdProvider(widget.charId), (prev, next) {
+      if (next != null) {
+        if (widget.drawerCtrl.inputFocus.hasFocus) {
+          widget.drawerCtrl.inputFocus.unfocus();
         }
-      },
-    );
-    final appSettings = ref.watch(appSettingsProvider).valueOrNull;
+        if (_selectionCtrl.isSelectionMode ||
+            _selectionCtrl.selectedMessageIds.isNotEmpty) {
+          setState(() {
+            _selectionCtrl.clearSelection();
+          });
+        }
+      }
+    });
+    final appSettings = ref.watch(appSettingsProvider).value;
     final batterySaverMode = appSettings?.batterySaver ?? false;
-    final preset = batteryAware(ref, batterySaverMode,
-        themeProvider.select((p) => p.activePreset));
+    final preset = batteryAware(
+      ref,
+      batterySaverMode,
+      themeProvider.select((p) => p.activePreset),
+    );
     final batterySaver = appSettings?.batterySaver ?? false;
     final safeBottom = MediaQuery.paddingOf(context).bottom;
     final messageListTop = MediaQuery.paddingOf(context).top + 10 + 56;
@@ -512,17 +519,29 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final bgOpacity = preset.bgOpacity.clamp(0.0, 1.0);
     final bgPath = preset.bgImage;
     final fontStyle = batteryAware(
-        ref, batterySaverMode, chatFontStyleProvider);
-    final fontDataUrl = batteryAware(ref, batterySaverMode,
-        chatFontDataProvider.select((p) => p.valueOrNull));
+      ref,
+      batterySaverMode,
+      chatFontStyleProvider,
+    );
+    final fontDataUrl = batteryAware(
+      ref,
+      batterySaverMode,
+      chatFontDataProvider.select((p) => p.value),
+    );
     final character = batteryAware(
-        ref, batterySaverMode, characterByIdProvider(widget.charId));
+      ref,
+      batterySaverMode,
+      characterByIdProvider(widget.charId),
+    );
     final personaKey = (
       charId: widget.charId,
       sessionId: widget.state.session?.id,
     );
     final effectivePersona = batteryAware(
-        ref, batterySaverMode, effectivePersonaForChatProvider(personaKey));
+      ref,
+      batterySaverMode,
+      effectivePersonaForChatProvider(personaKey),
+    );
     ref.listen(effectivePersonaForChatProvider(personaKey), (prev, next) {
       if (prev?.id == next?.id &&
           prev?.name == next?.name &&
@@ -538,42 +557,38 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         greetingTotal: character == null
             ? 0
             : ((character.firstMes?.isNotEmpty == true ? 1 : 0) +
-                character.alternateGreetings
-                    .where((g) => g.isNotEmpty)
-                    .length),
+                  character.alternateGreetings
+                      .where((g) => g.isNotEmpty)
+                      .length),
       );
     });
-    final memBook = batteryAware(ref, batterySaverMode,
-        memoryBookProvider(widget.state.session?.id ?? ''));
+    final memBook = batteryAware(
+      ref,
+      batterySaverMode,
+      memoryBookProvider(widget.state.session?.id ?? ''),
+    );
     final greetingTotal = character == null
         ? 0
         : ((character.firstMes?.isNotEmpty == true ? 1 : 0) +
-            character.alternateGreetings.where((g) => g.isNotEmpty).length);
+              character.alternateGreetings.where((g) => g.isNotEmpty).length);
 
     return AnimatedBuilder(
       animation: widget.drawerCtrl.drawerAnim,
       builder: (context, _) {
         final progress = widget.drawerCtrl.drawerAnim.value;
         final bool drawerActive =
-            widget.drawerCtrl.drawerOpen ||
-                widget.drawerCtrl.switchingToDrawer;
+            widget.drawerCtrl.drawerOpen || widget.drawerCtrl.switchingToDrawer;
         final targetDrawerInset = drawerActive
             ? widget.drawerCtrl.activeDrawerHeight * progress
             : 0.0;
-        final panelHeight =
-            math.max(targetDrawerInset, widget.keyboardHeight);
-        final factor = math.min(
-          1.0,
-          panelHeight / math.max(1.0, safeBottom),
-        );
-        final effectiveBottomInset =
-            panelHeight + (safeBottom * (1 - factor));
+        final panelHeight = math.max(targetDrawerInset, widget.keyboardHeight);
+        final factor = math.min(1.0, panelHeight / math.max(1.0, safeBottom));
+        final effectiveBottomInset = panelHeight + (safeBottom * (1 - factor));
         final messageListBottom = _inputBarHeight + effectiveBottomInset;
 
         final animatedBottomPanelInset =
             panelHeight + (safeBottom * (1 - factor));
-        final renderDrawer =
-            widget.drawerCtrl.drawerOpen || progress > 0.001;
+        final renderDrawer = widget.drawerCtrl.drawerOpen || progress > 0.001;
 
         return Stack(
           children: [
@@ -595,8 +610,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     regenTargetId: widget.state.regenTargetId,
                     bottomInset: messageListBottom,
                     topInset: messageListTop,
-                    headerOverlayTop:
-                        MediaQuery.paddingOf(context).top + 10,
+                    headerOverlayTop: MediaQuery.paddingOf(context).top + 10,
                     headerOverlayHeight: 56,
                     inputOverlayHeight: messageListBottom,
                     charName: character?.name,
@@ -622,38 +636,37 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     chatFontDataUrl: fontDataUrl,
                     chatFontSize: fontStyle.fontSize,
                     chatLetterSpacing: fontStyle.letterSpacing,
-                    memoryEntries: memBook.valueOrNull?.entries ?? [],
-                    memoryDrafts:
-                        memBook.valueOrNull?.pendingDrafts ?? [],
+                    memoryEntries: memBook.value?.entries ?? [],
+                    memoryDrafts: memBook.value?.pendingDrafts ?? [],
                     sessionId: widget.state.session?.id,
                     visibleStartIndex: widget.state.visibleStartIndex,
                     batterySaver: appSettings?.batterySaver ?? false,
-                    hideMessageId:
-                        appSettings?.hideMessageId ?? false,
+                    hideMessageId: appSettings?.hideMessageId ?? false,
                     hideGenerationTime:
                         appSettings?.hideGenerationTime ?? false,
-                    hideTokenCount:
-                        appSettings?.hideTokenCount ?? false,
+                    hideTokenCount: appSettings?.hideTokenCount ?? false,
                     disableSwipeRegeneration:
-                        appSettings?.disableSwipeRegeneration ??
-                            false,
+                        appSettings?.disableSwipeRegeneration ?? false,
                     messageActions: MessageActionsCallbacks(
-                      onMessageContext: (index, messageId, isUser, isSystem, content) {
-                        showMessageContextMenu(
-                          context: context,
-                          ref: ref,
-                          charId: widget.charId,
-                          content: content,
-                          messageIndex: index,
-                          messageId: messageId,
-                          isUser: isUser,
-                          isTyping: widget.state.isGenerating && index == widget.state.messages.length - 1,
-                          isError: false,
-                          isLast: index == widget.state.messages.length - 1,
-                          isGenerating: widget.state.isGenerating,
-                          isHidden: widget.state.messages[index].isHidden,
-                        );
-                      },
+                      onMessageContext:
+                          (index, messageId, isUser, isSystem, content) {
+                            showMessageContextMenu(
+                              context: context,
+                              ref: ref,
+                              charId: widget.charId,
+                              content: content,
+                              messageIndex: index,
+                              messageId: messageId,
+                              isUser: isUser,
+                              isTyping:
+                                  widget.state.isGenerating &&
+                                  index == widget.state.messages.length - 1,
+                              isError: false,
+                              isLast: index == widget.state.messages.length - 1,
+                              isGenerating: widget.state.isGenerating,
+                              isHidden: widget.state.messages[index].isHidden,
+                            );
+                          },
                       onSwipe: (id, direction) {
                         final idx = widget.state.messages.indexWhere(
                           (m) => m.id == id,
@@ -746,7 +759,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                         if (idx >= 0 && text.isNotEmpty) {
                           ref
                               .read(chatProvider(widget.charId).notifier)
-                              .editMessage(idx, text, tagStart: '<think>', tagEnd: '</think>');
+                              .editMessage(
+                                idx,
+                                text,
+                                tagStart: '<think>',
+                                tagEnd: '</think>',
+                              );
                         }
                         ref
                                 .read(
@@ -772,7 +790,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                         final activeEditingId = ref.read(
                           editingMessageIdProvider(widget.charId),
                         );
-                        if (activeEditingId == id && widget.drawerCtrl.inputFocus.hasFocus) {
+                        if (activeEditingId == id &&
+                            widget.drawerCtrl.inputFocus.hasFocus) {
                           widget.drawerCtrl.inputFocus.unfocus();
                         }
                       },
@@ -780,7 +799,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     imageGenActions: ImageGenCallbacks(
                       onImgRetry: (instruction, messageId) {
                         final allMsgs = widget.state.messages;
-                        final idx = allMsgs.indexWhere((m) => m.id == messageId);
+                        final idx = allMsgs.indexWhere(
+                          (m) => m.id == messageId,
+                        );
                         if (idx >= 0) {
                           ref
                               .read(chatProvider(widget.charId).notifier)
@@ -794,7 +815,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                       },
                       onImgRegen: (instruction, messageId) {
                         final allMsgs = widget.state.messages;
-                        final idx = allMsgs.indexWhere((m) => m.id == messageId);
+                        final idx = allMsgs.indexWhere(
+                          (m) => m.id == messageId,
+                        );
                         if (idx >= 0) {
                           ref
                               .read(chatProvider(widget.charId).notifier)
@@ -950,23 +973,25 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     Positioned(
                       left: 0,
                       right: 0,
-                      bottom: -widget.drawerCtrl.activeDrawerHeight *
+                      bottom:
+                          -widget.drawerCtrl.activeDrawerHeight *
                           (1 - progress),
                       height: widget.drawerCtrl.activeDrawerHeight,
-                      child: widget.drawerCtrl.activePanel ==
+                      child:
+                          widget.drawerCtrl.activePanel ==
                               DrawerPanel.quickReplies
                           ? QuickRepliesPanel(
                               charId: widget.charId,
-                              onClose: () =>
-                                  widget.drawerCtrl.closeDrawer(),
-                              disableEffects: batterySaver &&
+                              onClose: () => widget.drawerCtrl.closeDrawer(),
+                              disableEffects:
+                                  batterySaver &&
                                   widget.drawerCtrl.isDrawerAnimating,
                             )
                           : MagicDrawerPanel(
                               charId: widget.charId,
-                              onClose: () =>
-                                  widget.drawerCtrl.closeDrawer(),
-                              disableEffects: batterySaver &&
+                              onClose: () => widget.drawerCtrl.closeDrawer(),
+                              disableEffects:
+                                  batterySaver &&
                                   widget.drawerCtrl.isDrawerAnimating,
                             ),
                     ),
@@ -977,11 +1002,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        NotificationListener<
-                            SizeChangedLayoutNotification>(
+                        NotificationListener<SizeChangedLayoutNotification>(
                           onNotification: (n) {
-                            WidgetsBinding.instance
-                                .addPostFrameCallback(
+                            WidgetsBinding.instance.addPostFrameCallback(
                               (_) => _checkHeight(),
                             );
                             return true;
@@ -991,19 +1014,14 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                               key: _inputBarKey,
                               child: Builder(
                                 builder: (context) {
-                                  final allSelectedHidden =
-                                      _selectionCtrl.allSelectedHidden(
-                                        widget.state.messages,
-                                      );
+                                  final allSelectedHidden = _selectionCtrl
+                                      .allSelectedHidden(widget.state.messages);
                                   return ChatInputBar(
-                                    focusNode:
-                                        widget.drawerCtrl.inputFocus,
-                                    initialDraft: widget
-                                            .state.session?.draft ??
-                                        '',
-                                    batterySaver: appSettings
-                                            ?.batterySaver ??
-                                        false,
+                                    focusNode: widget.drawerCtrl.inputFocus,
+                                    initialDraft:
+                                        widget.state.session?.draft ?? '',
+                                    batterySaver:
+                                        appSettings?.batterySaver ?? false,
                                     onDraftChanged: (text) {
                                       ref
                                           .read(
@@ -1015,25 +1033,19 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                     },
                                     showSearchControls:
                                         widget.search.showSearch,
-                                    searchQuery:
-                                        widget.search.searchQuery,
-                                    searchMatchCount:
-                                        widget.search.matchCount,
-                                    searchCurrentIndex: widget
-                                        .search
-                                        .searchCurrentIndex,
-                                    onSearchNext:
-                                        widget.search.onSearchNext,
-                                    onSearchPrev:
-                                        widget.search.onSearchPrev,
-                                    isEditingMessage:
-                                        isEditingMessage,
+                                    searchQuery: widget.search.searchQuery,
+                                    searchMatchCount: widget.search.matchCount,
+                                    searchCurrentIndex:
+                                        widget.search.searchCurrentIndex,
+                                    onSearchNext: widget.search.onSearchNext,
+                                    onSearchPrev: widget.search.onSearchPrev,
+                                    isEditingMessage: isEditingMessage,
                                     isSelectionMode:
                                         _selectionCtrl.isSelectionMode,
-                                    selectedCount:
-                                        _selectionCtrl.selectedMessageIds.length,
-                                    allSelectedHidden:
-                                        allSelectedHidden,
+                                    selectedCount: _selectionCtrl
+                                        .selectedMessageIds
+                                        .length,
+                                    allSelectedHidden: allSelectedHidden,
                                     onCancelSelection: () {
                                       setState(() {
                                         _selectionCtrl.clearSelection();
@@ -1055,17 +1067,17 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                       );
                                       if (mounted) setState(() {});
                                     },
-                                    isDrawerOpen: (widget
+                                    isDrawerOpen:
+                                        (widget.drawerCtrl.drawerOpen ||
+                                            widget
                                                 .drawerCtrl
-                                                .drawerOpen ||
-                                            widget.drawerCtrl
                                                 .switchingToDrawer) &&
                                         widget.drawerCtrl.activePanel ==
                                             DrawerPanel.magic,
-                                    isQuickRepliesOpen: (widget
+                                    isQuickRepliesOpen:
+                                        (widget.drawerCtrl.drawerOpen ||
+                                            widget
                                                 .drawerCtrl
-                                                .drawerOpen ||
-                                            widget.drawerCtrl
                                                 .switchingToDrawer) &&
                                         widget.drawerCtrl.activePanel ==
                                             DrawerPanel.quickReplies,
@@ -1082,8 +1094,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                           )
                                           .sendMessage(text);
                                     },
-                                    onSendWithGuidance:
-                                        (text, guidance) {
+                                    onSendWithGuidance: (text, guidance) {
                                       if (text.trim().isEmpty) return;
                                       ref
                                           .read(
@@ -1098,63 +1109,51 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                     },
                                     onSendWithImage:
                                         (text, guidanceText, imageDataUrl) {
-                                      ref
-                                          .read(
-                                            chatProvider(
-                                              widget.charId,
-                                            ).notifier,
-                                          )
-                                          .sendMessage(
-                                            text,
-                                            guidanceText: guidanceText,
-                                            imageDataUrl: imageDataUrl,
-                                          );
-                                    },
-                                    isGenerating:
-                                        widget.state.isGenerating,
-                                    isGeneratingImage: widget
-                                        .state
-                                        .isGeneratingImage,
-                                    onStop: (widget
-                                                    .state
-                                                    .isGenerating ||
-                                                widget
-                                                    .state
-                                                    .isGeneratingImage)
+                                          ref
+                                              .read(
+                                                chatProvider(
+                                                  widget.charId,
+                                                ).notifier,
+                                              )
+                                              .sendMessage(
+                                                text,
+                                                guidanceText: guidanceText,
+                                                imageDataUrl: imageDataUrl,
+                                              );
+                                        },
+                                    isGenerating: widget.state.isGenerating,
+                                    isGeneratingImage:
+                                        widget.state.isGeneratingImage,
+                                    onStop:
+                                        (widget.state.isGenerating ||
+                                            widget.state.isGeneratingImage)
                                         ? () {
-                                            final notifier =
-                                                ref.read(
+                                            final notifier = ref.read(
                                               chatProvider(
                                                 widget.charId,
                                               ).notifier,
                                             );
-                                            if (widget.state
+                                            if (widget
+                                                    .state
                                                     .isGeneratingImage &&
-                                                !widget.state
-                                                    .isGenerating) {
-                                              notifier
-                                                  .abortImageGeneration();
+                                                !widget.state.isGenerating) {
+                                              notifier.abortImageGeneration();
                                             } else {
-                                              notifier
-                                                  .abortGeneration();
+                                              notifier.abortGeneration();
                                             }
                                           }
                                         : null,
-                                    onMagicDrawer: () => widget
-                                        .drawerCtrl
-                                        .toggleDrawer(context),
+                                    onMagicDrawer: () =>
+                                        widget.drawerCtrl.toggleDrawer(context),
                                     onFullScreen: () {},
-                                    onQuickReplies: () => widget
-                                        .drawerCtrl
-                                        .toggleDrawer(
+                                    onQuickReplies: () =>
+                                        widget.drawerCtrl.toggleDrawer(
                                           context,
                                           panel: DrawerPanel.quickReplies,
                                         ),
                                     onImpersonate: () => ref
                                         .read(
-                                          chatProvider(
-                                            widget.charId,
-                                          ).notifier,
+                                          chatProvider(widget.charId).notifier,
                                         )
                                         .regenerateLastAssistant(),
                                   );

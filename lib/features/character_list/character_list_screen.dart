@@ -46,14 +46,13 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   VoidCallback? _picksGoBackFn;
 
   CharacterSortField get _sortField => switch (_sortBy) {
-        SortType.name => CharacterSortField.name,
-        SortType.date => CharacterSortField.date,
-        SortType.lastChat => CharacterSortField.lastChat,
-      };
+    SortType.name => CharacterSortField.name,
+    SortType.date => CharacterSortField.date,
+    SortType.lastChat => CharacterSortField.lastChat,
+  };
 
-  CharacterSortDir get _sortDirEnum => _sortDir == SortDir.asc
-      ? CharacterSortDir.asc
-      : CharacterSortDir.desc;
+  CharacterSortDir get _sortDirEnum =>
+      _sortDir == SortDir.asc ? CharacterSortDir.asc : CharacterSortDir.desc;
 
   @override
   Widget build(BuildContext context) {
@@ -72,21 +71,19 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
               switchInCurve: Curves.easeOutQuart,
               switchOutCurve: Curves.easeInQuart,
               transitionBuilder: (child, animation) {
-                final slide = Tween<Offset>(
-                  begin: const Offset(0.0, 0.06),
-                  end: Offset.zero,
-                ).animate(
-                  CurvedAnimation(
-                    parent: animation,
-                    curve: Curves.easeOutBack,
-                  ),
-                );
+                final slide =
+                    Tween<Offset>(
+                      begin: const Offset(0.0, 0.06),
+                      end: Offset.zero,
+                    ).animate(
+                      CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeOutBack,
+                      ),
+                    );
                 return FadeTransition(
                   opacity: animation,
-                  child: SlideTransition(
-                    position: slide,
-                    child: child,
-                  ),
+                  child: SlideTransition(position: slide, child: child),
                 );
               },
               child: _tabIndex == 2
@@ -94,25 +91,26 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                       key: const ValueKey('picks_grid'),
                       topPadding: MediaQuery.of(context).padding.top + 76.0,
                       bottomPadding: navHeight + 20,
-                      onFolderChanged: (title, description, canGoBack, goBackFn) {
-                        setState(() {
-                          _picksTitle = title;
-                          _picksCanGoBack = canGoBack;
-                          _picksGoBackFn = goBackFn;
-                        });
-                      },
+                      onFolderChanged:
+                          (title, description, canGoBack, goBackFn) {
+                            setState(() {
+                              _picksTitle = title;
+                              _picksCanGoBack = canGoBack;
+                              _picksGoBackFn = goBackFn;
+                            });
+                          },
                     )
                   : _tabIndex == 1
-                      ? CatalogGrid(
-                          key: const ValueKey('catalog_grid'),
-                          topPadding: topPad,
-                          bottomPadding: navHeight + 20,
-                          tabBar: _buildTabBar(),
-                        )
-                      : KeyedSubtree(
-                          key: const ValueKey('my_characters'),
-                          child: _buildMyCharacters(context, topPad, navHeight),
-                        ),
+                  ? CatalogGrid(
+                      key: const ValueKey('catalog_grid'),
+                      topPadding: topPad,
+                      bottomPadding: navHeight + 20,
+                      tabBar: _buildTabBar(),
+                    )
+                  : KeyedSubtree(
+                      key: const ValueKey('my_characters'),
+                      child: _buildMyCharacters(context, topPad, navHeight),
+                    ),
             ),
           ),
           Positioned(
@@ -130,8 +128,8 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                       showBack: _tabIndex == 2,
                       onBack: _tabIndex == 2
                           ? (_picksCanGoBack && _picksGoBackFn != null
-                              ? _picksGoBackFn
-                              : () => setState(() => _tabIndex = 0))
+                                ? _picksGoBackFn
+                                : () => setState(() => _tabIndex = 0))
                           : null,
                       actions: _tabIndex == 2
                           ? null
@@ -140,7 +138,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                                 width: 44,
                                 height: 44,
                                 child: IconButton(
-                                  icon: const Icon(Icons.search_rounded, size: 22),
+                                  icon: const Icon(
+                                    Icons.search_rounded,
+                                    size: 22,
+                                  ),
                                   color: context.cs.primary,
                                   onPressed: () async {
                                     final query = await showSearch<String>(
@@ -171,9 +172,14 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     );
   }
 
-  Widget _buildMyCharacters(BuildContext context, double topPad, double navHeight) {
-    final showOurPicks = _searchQuery.isEmpty &&
-        (ref.watch(appSettingsProvider).valueOrNull?.showOurPicks ?? true);
+  Widget _buildMyCharacters(
+    BuildContext context,
+    double topPad,
+    double navHeight,
+  ) {
+    final showOurPicks =
+        _searchQuery.isEmpty &&
+        (ref.watch(appSettingsProvider).value?.showOurPicks ?? true);
 
     if (_searchQuery.isNotEmpty) {
       return _buildSearchResults(context, topPad, navHeight);
@@ -183,9 +189,8 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     final infinite = ref.watch(infiniteCharactersProvider(key));
 
     return infinite.when(
-      loading: () => Center(
-        child: CircularProgressIndicator(color: context.cs.primary),
-      ),
+      loading: () =>
+          Center(child: CircularProgressIndicator(color: context.cs.primary)),
       error: (e, _) => Center(
         child: Text(
           'Error: $e',
@@ -212,9 +217,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
             if (state.hasMore &&
                 !state.isLoadingMore &&
                 n.metrics.extentAfter < 600) {
-              ref
-                  .read(infiniteCharactersProvider(key).notifier)
-                  .loadMore();
+              ref.read(infiniteCharactersProvider(key).notifier).loadMore();
             }
             return false;
           },
@@ -229,11 +232,11 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
             showOurPicksCard: showOurPicks,
             onOurPicksTap: () => setState(() => _tabIndex = 2),
             onOurPicksHide: () {
-              final s = ref.read(appSettingsProvider).valueOrNull;
+              final s = ref.read(appSettingsProvider).value;
               if (s != null) {
-                ref.read(appSettingsProvider.notifier).save(
-                  s.copyWith(showOurPicks: false),
-                );
+                ref
+                    .read(appSettingsProvider.notifier)
+                    .save(s.copyWith(showOurPicks: false));
                 GlazeToast.show(context, 'our_picks_hidden_toast'.tr());
               }
             },
@@ -249,12 +252,15 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     );
   }
 
-  Widget _buildSearchResults(BuildContext context, double topPad, double navHeight) {
+  Widget _buildSearchResults(
+    BuildContext context,
+    double topPad,
+    double navHeight,
+  ) {
     final chars = ref.watch(charactersProvider);
     return chars.when(
-      loading: () => Center(
-        child: CircularProgressIndicator(color: context.cs.primary),
-      ),
+      loading: () =>
+          Center(child: CircularProgressIndicator(color: context.cs.primary)),
       error: (e, _) => Center(
         child: Text(
           'Error: $e',
@@ -317,15 +323,17 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
 
   List<Character> _sortChars(List<Character> chars) {
     final list = List<Character>.from(chars);
-    final effectiveSort =
-        _sortBy == SortType.lastChat ? SortType.name : _sortBy;
+    final effectiveSort = _sortBy == SortType.lastChat
+        ? SortType.name
+        : _sortBy;
     list.sort((a, b) {
       if (a.fav != b.fav) return a.fav ? -1 : 1;
       final cmp = switch (effectiveSort) {
         SortType.name => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
         SortType.date => a.createdAt.compareTo(b.createdAt),
-        SortType.lastChat =>
-          a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        SortType.lastChat => a.name.toLowerCase().compareTo(
+          b.name.toLowerCase(),
+        ),
       };
       if (cmp != 0) return _sortDir == SortDir.desc ? -cmp : cmp;
       return a.id.compareTo(b.id);
@@ -380,14 +388,18 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
             BottomSheetItem(
               icon: Icons.photo_library,
               label: 'From Gallery',
-              onTap: () =>
-                  Navigator.of(context, rootNavigator: true).pop(_ImportSource.gallery),
+              onTap: () => Navigator.of(
+                context,
+                rootNavigator: true,
+              ).pop(_ImportSource.gallery),
             ),
             BottomSheetItem(
               icon: Icons.folder_open,
               label: 'From Files',
-              onTap: () =>
-                  Navigator.of(context, rootNavigator: true).pop(_ImportSource.files),
+              onTap: () => Navigator.of(
+                context,
+                rootNavigator: true,
+              ).pop(_ImportSource.files),
             ),
           ],
         );
@@ -434,7 +446,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
         if (r.galleryImages != null) {
           for (final img in r.galleryImages!) {
             await galleryService.addImageBytes(
-              r.character.id, img.bytes, img.ext, label: img.label,
+              r.character.id,
+              img.bytes,
+              img.ext,
+              label: img.label,
             );
           }
         }
@@ -458,7 +473,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   Future<void> _importFromFiles(BuildContext context, WidgetRef ref) async {
     final result = await FilePicker.pickFiles(
       type: Platform.isIOS ? FileType.any : FileType.custom,
-      allowedExtensions: Platform.isIOS ? null : ['png', 'json', 'charx', 'zip'],
+      allowedExtensions: Platform.isIOS
+          ? null
+          : ['png', 'json', 'charx', 'zip'],
       allowMultiple: true,
       withData: true,
     );
@@ -492,7 +509,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
         if (r.galleryImages != null) {
           for (final img in r.galleryImages!) {
             await galleryService.addImageBytes(
-              r.character.id, img.bytes, img.ext, label: img.label,
+              r.character.id,
+              img.bytes,
+              img.ext,
+              label: img.label,
             );
           }
         }
@@ -519,9 +539,9 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
   _CharacterSearchDelegate(this.ref);
 
   @override
-  ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
-    appBarTheme: AppBarTheme(backgroundColor: context.cs.surface),
-  );
+  ThemeData appBarTheme(BuildContext context) => Theme.of(
+    context,
+  ).copyWith(appBarTheme: AppBarTheme(backgroundColor: context.cs.surface));
 
   @override
   List<Widget> buildActions(BuildContext context) => [
@@ -541,15 +561,14 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
   Widget buildSuggestions(BuildContext context) => _buildList(context);
 
   Widget _buildList(BuildContext context) {
-    final chars = ref.read(charactersProvider).valueOrNull ?? [];
+    final chars = ref.read(charactersProvider).value ?? [];
     final q = query.toLowerCase();
-    final filtered = chars
-        .where((c) => c.fav || c.name.toLowerCase().contains(q))
-        .toList()
-      ..sort((a, b) {
-        if (a.fav != b.fav) return a.fav ? -1 : 1;
-        return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-      });
+    final filtered =
+        chars.where((c) => c.fav || c.name.toLowerCase().contains(q)).toList()
+          ..sort((a, b) {
+            if (a.fav != b.fav) return a.fav ? -1 : 1;
+            return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+          });
 
     if (filtered.isEmpty) {
       return Center(
@@ -577,10 +596,7 @@ class _CharacterSearchDelegate extends SearchDelegate<String> {
                   )
                 : null,
           ),
-          title: Text(
-            c.name,
-            style: TextStyle(color: context.cs.onSurface),
-          ),
+          title: Text(c.name, style: TextStyle(color: context.cs.onSurface)),
           subtitle: c.description != null
               ? Text(
                   c.description!,

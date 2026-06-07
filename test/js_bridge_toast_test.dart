@@ -74,7 +74,7 @@ void main() {
     test('rejects non-string message with invalid_request', () async {
       final bridge = JsBridgeService(
         permissionCheck: (_) => true,
-        showToast: (_, __) {},
+        showToast: (_, _) {},
       );
       final result = await bridge.dispatch({
         'method': 'showToast',
@@ -87,7 +87,7 @@ void main() {
     test('denies when show_toast capability is not granted', () async {
       final bridge = JsBridgeService(
         permissionCheck: (_) => false,
-        showToast: (_, __) {},
+        showToast: (_, _) {},
       );
       final result = await bridge.dispatch({
         'method': 'showToast',

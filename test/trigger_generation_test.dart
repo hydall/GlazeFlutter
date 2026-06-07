@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/core/db/app_db.dart';
@@ -17,12 +18,8 @@ import 'package:glaze_flutter/features/memory/state/memory_active_drafts_provide
 
 AppDatabase _testDb() => AppDatabase.forTesting(NativeDatabase.memory());
 
-ChatMessage _msg(String id, String role, String content) => ChatMessage(
-  id: id,
-  role: role,
-  content: content,
-  timestamp: 0,
-);
+ChatMessage _msg(String id, String role, String content) =>
+    ChatMessage(id: id, role: role, content: content, timestamp: 0);
 
 /// A no-op mock that lets the test drive the chat state directly without
 /// running the real generation pipeline. We deliberately do not stub
@@ -31,12 +28,12 @@ ChatMessage _msg(String id, String role, String content) => ChatMessage(
 /// `auto` happy-path test does call through to those methods — we record
 /// the call and return immediately.
 class _MockChatNotifier extends ChatNotifier {
-  _MockChatNotifier(this._initial);
+  _MockChatNotifier(this._initial, String charId) : super(charId);
   final ChatState _initial;
   final List<String> calls = [];
 
   @override
-  Future<ChatState> build(String arg) async {
+  Future<ChatState> build() async {
     state = AsyncData(_initial);
     return _initial;
   }
@@ -59,7 +56,9 @@ ProviderContainer _container({
 }) {
   return ProviderContainer(
     overrides: [
-      chatProvider.overrideWith(() => _MockChatNotifier(initial)),
+      chatProvider.overrideWith2(
+        (charId) => _MockChatNotifier(initial, charId),
+      ),
       ...extra,
     ],
   );
@@ -108,8 +107,8 @@ void main() {
     test('rejects with TriggerNoSession when chat state is loading', () async {
       final container = ProviderContainer(
         overrides: [
-          chatProvider.overrideWith(
-            () => _MockChatNotifier(const ChatState()),
+          chatProvider.overrideWith2(
+            (charId) => _MockChatNotifier(const ChatState(), charId),
           ),
         ],
       );
@@ -122,8 +121,7 @@ void main() {
       expect(result.accepted, isFalse);
     });
 
-    test('rejects with TriggerBusy when chat is already generating',
-        () async {
+    test('rejects with TriggerBusy when chat is already generating', () async {
       final state = ChatState(
         session: ChatSession(
           id: 's1',
@@ -156,9 +154,7 @@ void main() {
       );
       final container = _container(charId: 'c1', initial: state);
       addTearDown(container.dispose);
-      container
-          .read(memoryActiveDraftsProvider.notifier)
-          .markActive('s1');
+      container.read(memoryActiveDraftsProvider.notifier).markActive('s1');
 
       final dispatcher = container.read(generationDispatcherProvider);
       final result = await dispatcher.dispatch(charId: 'c1');
@@ -167,8 +163,7 @@ void main() {
       expect((result as TriggerBusy).busyKind, 'memory_draft');
     });
 
-    test('auto-resolves to continue when last message is assistant',
-        () async {
+    test('auto-resolves to continue when last message is assistant', () async {
       final state = ChatState(
         session: ChatSession(
           id: 's1',
@@ -249,46 +244,47 @@ void main() {
       expect(notifier.calls, ['continue']);
     });
 
-    test('explicit regenerate mode delegates to regenerateLastAssistant',
-        () async {
-      final state = ChatState(
-        session: ChatSession(
-          id: 's1',
-          characterId: 'c1',
-          sessionIndex: 0,
-          sessionVars: const {},
-          messages: [_msg('m1', 'user', 'Hi')],
-        ),
-      );
-      final container = _container(charId: 'c1', initial: state);
-      addTearDown(container.dispose);
+    test(
+      'explicit regenerate mode delegates to regenerateLastAssistant',
+      () async {
+        final state = ChatState(
+          session: ChatSession(
+            id: 's1',
+            characterId: 'c1',
+            sessionIndex: 0,
+            sessionVars: const {},
+            messages: [_msg('m1', 'user', 'Hi')],
+          ),
+        );
+        final container = _container(charId: 'c1', initial: state);
+        addTearDown(container.dispose);
 
-      final dispatcher = container.read(generationDispatcherProvider);
-      final result = await dispatcher.dispatch(
-        charId: 'c1',
-        rawMode: 'regenerate',
-      );
+        final dispatcher = container.read(generationDispatcherProvider);
+        final result = await dispatcher.dispatch(
+          charId: 'c1',
+          rawMode: 'regenerate',
+        );
 
-      expect(result, isA<TriggerAccepted>());
-      final notifier =
-          container.read(chatProvider('c1').notifier) as _MockChatNotifier;
-      expect(notifier.calls, ['regenerate']);
-    });
+        expect(result, isA<TriggerAccepted>());
+        final notifier =
+            container.read(chatProvider('c1').notifier) as _MockChatNotifier;
+        expect(notifier.calls, ['regenerate']);
+      },
+    );
 
     test('peekResolvedMode reflects busy / no-session conditions', () async {
       final emptyContainer = ProviderContainer(
         overrides: [
-          chatProvider.overrideWith(
-            () => _MockChatNotifier(const ChatState()),
+          chatProvider.overrideWith2(
+            (charId) => _MockChatNotifier(const ChatState(), charId),
           ),
         ],
       );
       addTearDown(emptyContainer.dispose);
       expect(
-        emptyContainer.read(generationDispatcherProvider).peekResolvedMode(
-              charId: 'c1',
-              rawMode: 'auto',
-            ),
+        emptyContainer
+            .read(generationDispatcherProvider)
+            .peekResolvedMode(charId: 'c1', rawMode: 'auto'),
         isNull,
       );
 
@@ -305,10 +301,9 @@ void main() {
       final busyContainer = _container(charId: 'c1', initial: busyState);
       addTearDown(busyContainer.dispose);
       expect(
-        busyContainer.read(generationDispatcherProvider).peekResolvedMode(
-              charId: 'c1',
-              rawMode: 'auto',
-            ),
+        busyContainer
+            .read(generationDispatcherProvider)
+            .peekResolvedMode(charId: 'c1', rawMode: 'auto'),
         isNull,
       );
     });
@@ -349,10 +344,8 @@ void main() {
       );
 
       expect(
-        () => handler.handle(
-          charId: 'c1',
-          params: {'mode': 'auto', 'reason': 7},
-        ),
+        () =>
+            handler.handle(charId: 'c1', params: {'mode': 'auto', 'reason': 7}),
         throwsA(isA<ArgumentError>()),
       );
     });

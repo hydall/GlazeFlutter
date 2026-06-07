@@ -76,7 +76,9 @@ class JsEngineBridgeHost {
   final String? Function()? currentCharIdProvider;
 
   Future<Map<String, dynamic>> handle(List<dynamic> args) async {
-    if (args.isEmpty) return {'ok': false, 'error': {'code': 'invalid_request'}};
+    if (args.isEmpty) {
+      return {'ok': false, 'error': {'code': 'invalid_request'}};
+    }
     final raw = args.first;
     final request = raw is Map<String, dynamic>
         ? raw
@@ -93,7 +95,7 @@ class JsEngineBridgeHost {
         final fallback = currentCharIdProvider?.call();
         if (fallback != null && fallback.isNotEmpty) {
           final patched = Map<String, dynamic>.from(
-            context is Map ? context as Map : const {},
+            context is Map ? context : const {},
           );
           patched['characterId'] = fallback;
           request['context'] = patched;
@@ -285,7 +287,8 @@ class JsEngineService {
         jsFuture.then((r) => _RaceResult.js(r)),
         runCompleter.future.then(
           (_) => _RaceResult.cancelled(),
-          onError: (e) => throw e,
+          onError: (Object error, StackTrace stackTrace) =>
+              Error.throwWithStackTrace(error, stackTrace),
         ),
       ]).timeout(timeout, onTimeout: () {
         throw TimeoutException('Headless JS run timed out', timeout);

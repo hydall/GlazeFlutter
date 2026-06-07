@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/db/repositories/info_blocks_repository.dart';
 import '../../../core/state/db_provider.dart';
@@ -9,21 +10,21 @@ extension InfoBlockBridgeMap on InfoBlock {
   /// Converts an InfoBlock to a plain map suitable for sending to the WebView
   /// bridge (showExtBlocksPanel / updateExtBlocksPanel).
   Map<String, dynamic> toMap() => {
-        'id': id,
-        'blockId': blockId,
-        'blockName': blockName,
-        'name': blockName,
-        'type': blockType,
-        'status': status.name,
-        'content': content,
-        'order': order,
-      };
+    'id': id,
+    'blockId': blockId,
+    'blockName': blockName,
+    'name': blockName,
+    'type': blockType,
+    'status': status.name,
+    'content': content,
+    'order': order,
+  };
 }
 
-final infoBlocksProvider = StateNotifierProvider.family<
-    InfoBlocksNotifier, List<InfoBlock>, String>(
-  (ref, sessionId) => InfoBlocksNotifier(ref, sessionId),
-);
+final infoBlocksProvider =
+    StateNotifierProvider.family<InfoBlocksNotifier, List<InfoBlock>, String>(
+      (ref, sessionId) => InfoBlocksNotifier(ref, sessionId),
+    );
 
 class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
   InfoBlocksNotifier(this._ref, this.sessionId) : super([]) {

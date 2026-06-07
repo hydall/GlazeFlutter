@@ -56,12 +56,12 @@ class PeriodicTriggerScheduler with WidgetsBindingObserver {
     // scheduler itself doesn't need to be a Riverpod consumer.
     _presetSub = _ref.listen<List<ExtensionPreset>>(
       extensionPresetsProvider,
-      (_, __) => _rebuildTimers(),
+      (_, _) => _rebuildTimers(),
       fireImmediately: true,
     );
     _settingsSub = _ref.listen<dynamic>(
       extensionsSettingsProvider,
-      (_, __) => _rebuildTimers(),
+      (_, _) => _rebuildTimers(),
       fireImmediately: true,
     );
   }

@@ -82,7 +82,8 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
     }
   }
 
-  String? get _effectivePresetId => widget.presetId ?? ref.read(activePresetIdProvider);
+  String? get _effectivePresetId =>
+      widget.presetId ?? ref.read(activePresetIdProvider);
 
   // ── Script changes ───────────────────────────────────────────────────────────
 
@@ -101,14 +102,22 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
       final presets = ref.read(presetListProvider).value ?? [];
       final preset = presets.where((p) => p.id == pid).firstOrNull;
       if (preset == null) return;
-      final updated = preset.regexes.map((r) => r.id == script.id ? script : r).toList();
-      await ref.read(presetListProvider.notifier).updatePreset(preset.copyWith(regexes: updated));
+      final updated = preset.regexes
+          .map((r) => r.id == script.id ? script : r)
+          .toList();
+      await ref
+          .read(presetListProvider.notifier)
+          .updatePreset(preset.copyWith(regexes: updated));
     } else {
       await ref.read(globalRegexProvider.notifier).updateRegex(script);
     }
   }
 
-  Future<void> _toggleScript(PresetRegex script, bool enabled, {required bool isPreset}) async {
+  Future<void> _toggleScript(
+    PresetRegex script,
+    bool enabled, {
+    required bool isPreset,
+  }) async {
     final updated = script.copyWith(disabled: !enabled);
     if (isPreset) {
       final pid = _effectivePresetId;
@@ -116,8 +125,12 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
       final presets = ref.read(presetListProvider).value ?? [];
       final preset = presets.where((p) => p.id == pid).firstOrNull;
       if (preset == null) return;
-      final updatedRegexes = preset.regexes.map((r) => r.id == script.id ? updated : r).toList();
-      await ref.read(presetListProvider.notifier).updatePreset(preset.copyWith(regexes: updatedRegexes));
+      final updatedRegexes = preset.regexes
+          .map((r) => r.id == script.id ? updated : r)
+          .toList();
+      await ref
+          .read(presetListProvider.notifier)
+          .updatePreset(preset.copyWith(regexes: updatedRegexes));
     } else {
       await ref.read(globalRegexProvider.notifier).updateRegex(updated);
     }
@@ -130,8 +143,12 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
       final presets = ref.read(presetListProvider).value ?? [];
       final preset = presets.where((p) => p.id == pid).firstOrNull;
       if (preset == null) return;
-      final updatedRegexes = preset.regexes.where((r) => r.id != script.id).toList();
-      await ref.read(presetListProvider.notifier).updatePreset(preset.copyWith(regexes: updatedRegexes));
+      final updatedRegexes = preset.regexes
+          .where((r) => r.id != script.id)
+          .toList();
+      await ref
+          .read(presetListProvider.notifier)
+          .updatePreset(preset.copyWith(regexes: updatedRegexes));
     } else {
       await ref.read(globalRegexProvider.notifier).removeRegex(script.id);
     }
@@ -143,22 +160,34 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
     final presets = ref.read(presetListProvider).value ?? [];
     final preset = presets.where((p) => p.id == pid).firstOrNull;
     if (preset == null) return null;
-    final newScript = PresetRegex(id: generateId(), name: 'New Script', regex: '');
-    await ref.read(presetListProvider.notifier).updatePreset(
-      preset.copyWith(regexes: [...preset.regexes, newScript]),
+    final newScript = PresetRegex(
+      id: generateId(),
+      name: 'New Script',
+      regex: '',
     );
+    await ref
+        .read(presetListProvider.notifier)
+        .updatePreset(preset.copyWith(regexes: [...preset.regexes, newScript]));
     return newScript;
   }
 
   PresetRegex _addGlobalRegex() {
-    final newScript = PresetRegex(id: generateId(), name: 'New Global Script', regex: '');
+    final newScript = PresetRegex(
+      id: generateId(),
+      name: 'New Global Script',
+      regex: '',
+    );
     ref.read(globalRegexProvider.notifier).addRegex(newScript);
     return newScript;
   }
 
   // ── Menus ────────────────────────────────────────────────────────────────────
 
-  void _showScriptMenu(BuildContext context, PresetRegex script, bool isPreset) {
+  void _showScriptMenu(
+    BuildContext context,
+    PresetRegex script,
+    bool isPreset,
+  ) {
     GlazeBottomSheet.show<void>(
       context,
       title: script.name,
@@ -261,14 +290,23 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
     final safe = script.name.replaceAll(RegExp(r'[^\w\-]'), '_');
     final filename = 'regex-$safe.json';
     try {
-      await FileExportService.export(data: json, filename: filename, subfolder: 'regexes');
+      await FileExportService.export(
+        data: json,
+        filename: filename,
+        subfolder: 'regexes',
+      );
       if (context.mounted) GlazeToast.show(context, 'export_success'.tr());
     } catch (e) {
-      if (context.mounted) GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+      if (context.mounted) {
+        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+      }
     }
   }
 
-  Future<void> _importRegex(BuildContext context, {required bool globally}) async {
+  Future<void> _importRegex(
+    BuildContext context, {
+    required bool globally,
+  }) async {
     FilePickerResult? result;
     try {
       result = await FilePicker.pickFiles(
@@ -294,8 +332,13 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
         if (picked.name.toLowerCase().endsWith('.zip')) {
           final archive = ZipDecoder().decodeBytes(bytes);
           for (final entry in archive) {
-            if (!entry.isFile || !entry.name.toLowerCase().endsWith('.json')) continue;
-            _appendFromJson(utf8.decode(entry.content as List<int>), combinedRaw);
+            if (!entry.isFile || !entry.name.toLowerCase().endsWith('.json')) {
+              continue;
+            }
+            _appendFromJson(
+              utf8.decode(entry.content as List<int>),
+              combinedRaw,
+            );
           }
         } else {
           _appendFromJson(utf8.decode(bytes), combinedRaw);
@@ -308,12 +351,16 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
       }
 
       if (globally) {
-        await ref.read(globalRegexProvider.notifier).importFromJsBackup(combinedRaw);
+        await ref
+            .read(globalRegexProvider.notifier)
+            .importFromJsBackup(combinedRaw);
         if (context.mounted) GlazeToast.show(context, 'import_success'.tr());
       } else {
         final pid = _effectivePresetId;
         if (pid == null) {
-          if (context.mounted) GlazeToast.show(context, 'label_active_preset'.tr());
+          if (context.mounted) {
+            GlazeToast.show(context, 'label_active_preset'.tr());
+          }
           return;
         }
         final presets = ref.read(presetListProvider).value ?? [];
@@ -323,15 +370,19 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
           return;
         }
         final newRegexes = _normalizeRawRegexList(combinedRaw);
-        await ref.read(presetListProvider.notifier).updatePreset(
-          preset.copyWith(regexes: [...preset.regexes, ...newRegexes]),
-        );
+        await ref
+            .read(presetListProvider.notifier)
+            .updatePreset(
+              preset.copyWith(regexes: [...preset.regexes, ...newRegexes]),
+            );
         if (context.mounted) {
           GlazeToast.show(context, 'import_success'.tr());
         }
       }
     } catch (e) {
-      if (context.mounted) GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+      if (context.mounted) {
+        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+      }
     }
   }
 
@@ -353,7 +404,9 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
       final m = normalizeJsGlobalRegex(Map<String, dynamic>.from(r));
       if (!m.containsKey('id')) m['id'] = generateId();
       if (r['isEnabled'] is bool) m['disabled'] = !(r['isEnabled'] as bool);
-      try { result.add(PresetRegex.fromJson(m)); } catch (_) {}
+      try {
+        result.add(PresetRegex.fromJson(m));
+      } catch (_) {}
     }
     return result;
   }
@@ -382,13 +435,13 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
     final globalAsync = ref.watch(globalRegexProvider);
     final activePresetId = ref.watch(activePresetIdProvider);
 
-    final presets = presetsAsync.valueOrNull ?? [];
+    final presets = presetsAsync.value ?? [];
     final effectivePresetId = widget.presetId ?? activePresetId;
     final activePreset = effectivePresetId != null
         ? presets.where((p) => p.id == effectivePresetId).firstOrNull
         : presets.firstOrNull;
     final presetRegexes = activePreset?.regexes ?? <PresetRegex>[];
-    final globalRegexes = globalAsync.valueOrNull ?? <PresetRegex>[];
+    final globalRegexes = globalAsync.value ?? <PresetRegex>[];
 
     final isEdit = _view == 'edit';
 
@@ -407,7 +460,12 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
                 script: _activeScript!,
                 onChanged: _onScriptChanged,
               )
-            : _buildListView(context, activePreset, presetRegexes, globalRegexes),
+            : _buildListView(
+                context,
+                activePreset,
+                presetRegexes,
+                globalRegexes,
+              ),
       ),
       floatingActionButton: isEdit
           ? null
@@ -451,14 +509,16 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
                           : null,
                     ),
                   ),
-                ...presetRegexes.map((r) => MenuScriptItem(
-                  name: r.name,
-                  subtitle: r.regex.isNotEmpty ? r.regex : null,
-                  enabled: !r.disabled,
-                  onToggle: (v) => _toggleScript(r, v, isPreset: true),
-                  onTap: () => _selectScript(r, isPreset: true),
-                  onMore: () => _showScriptMenu(innerContext, r, true),
-                )),
+                ...presetRegexes.map(
+                  (r) => MenuScriptItem(
+                    name: r.name,
+                    subtitle: r.regex.isNotEmpty ? r.regex : null,
+                    enabled: !r.disabled,
+                    onToggle: (v) => _toggleScript(r, v, isPreset: true),
+                    onTap: () => _selectScript(r, isPreset: true),
+                    onMore: () => _showScriptMenu(innerContext, r, true),
+                  ),
+                ),
               ],
             ),
           MenuGroup(
@@ -467,14 +527,16 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
               if (globalRegexes.isEmpty)
                 const _EmptyState()
               else
-                ...globalRegexes.map((r) => MenuScriptItem(
-                  name: r.name,
-                  subtitle: r.regex.isNotEmpty ? r.regex : null,
-                  enabled: !r.disabled,
-                  onToggle: (v) => _toggleScript(r, v, isPreset: false),
-                  onTap: () => _selectScript(r, isPreset: false),
-                  onMore: () => _showScriptMenu(innerContext, r, false),
-                )),
+                ...globalRegexes.map(
+                  (r) => MenuScriptItem(
+                    name: r.name,
+                    subtitle: r.regex.isNotEmpty ? r.regex : null,
+                    enabled: !r.disabled,
+                    onToggle: (v) => _toggleScript(r, v, isPreset: false),
+                    onTap: () => _selectScript(r, isPreset: false),
+                    onMore: () => _showScriptMenu(innerContext, r, false),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 80),
@@ -501,24 +563,38 @@ class _PresetChip extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
           decoration: BoxDecoration(
             color: context.cs.primary.withValues(alpha: 0.12),
-            border: Border.all(color: context.cs.primary.withValues(alpha: 0.25)),
+            border: Border.all(
+              color: context.cs.primary.withValues(alpha: 0.25),
+            ),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.description_outlined, size: 14, color: context.cs.primary),
+              Icon(
+                Icons.description_outlined,
+                size: 14,
+                color: context.cs.primary,
+              ),
               const SizedBox(width: 6),
               Flexible(
                 child: Text(
                   presetName,
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.cs.primary),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: context.cs.primary,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               if (onTap != null) ...[
                 const SizedBox(width: 4),
-                Icon(Icons.chevron_right, size: 16, color: context.cs.primary.withValues(alpha: 0.7)),
+                Icon(
+                  Icons.chevron_right,
+                  size: 16,
+                  color: context.cs.primary.withValues(alpha: 0.7),
+                ),
               ],
             ],
           ),
@@ -551,7 +627,11 @@ class _RegexEditView extends StatefulWidget {
   final PresetRegex script;
   final ValueChanged<PresetRegex> onChanged;
 
-  const _RegexEditView({super.key, required this.script, required this.onChanged});
+  const _RegexEditView({
+    super.key,
+    required this.script,
+    required this.onChanged,
+  });
 
   @override
   State<_RegexEditView> createState() => _RegexEditViewState();
@@ -627,10 +707,28 @@ class _RegexEditViewState extends State<_RegexEditView> {
         MenuGroup(
           header: 'regex_script_settings'.tr(),
           items: [
-            MenuFieldItem(label: 'regex_script_name'.tr(), controller: _nameCtrl, onChanged: (v) => _update(s.copyWith(name: v))),
-            MenuFieldItem(label: 'regex_find'.tr(), controller: _regexCtrl, onChanged: (v) => _update(s.copyWith(regex: v))),
-            MenuFieldItem(label: 'regex_replace_with'.tr(), controller: _replacementCtrl, onChanged: (v) => _update(s.copyWith(replacement: v)), maxLines: 3),
-            MenuFieldItem(label: 'regex_trim_out'.tr(), controller: _trimOutCtrl, onChanged: (v) => _update(s.copyWith(trimOut: v)), maxLines: 2),
+            MenuFieldItem(
+              label: 'regex_script_name'.tr(),
+              controller: _nameCtrl,
+              onChanged: (v) => _update(s.copyWith(name: v)),
+            ),
+            MenuFieldItem(
+              label: 'regex_find'.tr(),
+              controller: _regexCtrl,
+              onChanged: (v) => _update(s.copyWith(regex: v)),
+            ),
+            MenuFieldItem(
+              label: 'regex_replace_with'.tr(),
+              controller: _replacementCtrl,
+              onChanged: (v) => _update(s.copyWith(replacement: v)),
+              maxLines: 3,
+            ),
+            MenuFieldItem(
+              label: 'regex_trim_out'.tr(),
+              controller: _trimOutCtrl,
+              onChanged: (v) => _update(s.copyWith(trimOut: v)),
+              maxLines: 2,
+            ),
           ],
         ),
         const SizedBox(height: 4),
@@ -642,7 +740,10 @@ class _RegexEditViewState extends State<_RegexEditView> {
             if (wide) {
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [Expanded(child: col1), Expanded(child: col2)],
+                children: [
+                  Expanded(child: col1),
+                  Expanded(child: col2),
+                ],
               );
             }
             return Column(children: [col1, col2]);
@@ -760,7 +861,11 @@ class _CheckboxOption extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
-  const _CheckboxOption({required this.label, required this.value, required this.onChanged});
+  const _CheckboxOption({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -782,7 +887,14 @@ class _CheckboxOption extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 12),
-            Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: context.cs.onSurface)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: context.cs.onSurface,
+              ),
+            ),
           ],
         ),
       ),
@@ -795,7 +907,11 @@ class _DepthInput extends StatelessWidget {
   final TextEditingController controller;
   final ValueChanged<int?> onChanged;
 
-  const _DepthInput({required this.label, required this.controller, required this.onChanged});
+  const _DepthInput({
+    required this.label,
+    required this.controller,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -807,7 +923,14 @@ class _DepthInput extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurfaceVariant,
+              ),
+            ),
             const SizedBox(height: 4),
             TextField(
               controller: controller,
@@ -819,7 +942,10 @@ class _DepthInput extends StatelessWidget {
                 border: InputBorder.none,
                 contentPadding: EdgeInsets.zero,
                 hintText: 'regex_unlimited_placeholder'.tr(),
-                hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.4), fontSize: 15),
+                hintStyle: TextStyle(
+                  color: context.cs.onSurfaceVariant.withValues(alpha: 0.4),
+                  fontSize: 15,
+                ),
               ),
             ),
           ],

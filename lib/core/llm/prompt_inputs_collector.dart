@@ -117,7 +117,7 @@ class PromptInputsCollector {
       characterDepthPrompt: character.depthPrompt,
       characterDepthPromptDepth: character.depthPromptDepth,
       characterDepthPromptRole: character.depthPromptRole,
-      globalRegexes: _ref.read(globalRegexProvider).valueOrNull ?? [],
+      globalRegexes: _ref.read(globalRegexProvider).value ?? [],
       memoryEntries: memoryEntries,
       memoryEnabled: memorySettings.enabled,
       memoryMaxInjected: memorySettings.maxInjectedEntries,

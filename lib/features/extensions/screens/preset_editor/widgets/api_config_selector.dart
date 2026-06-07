@@ -66,7 +66,7 @@ class ApiConfigSelector extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final configsAsync = ref.watch(apiListProvider);
-    final configs = configsAsync.valueOrNull ?? const <ApiConfig>[];
+    final configs = configsAsync.value ?? const <ApiConfig>[];
 
     return Material(
       color: Colors.white.withValues(alpha: 0.06),

@@ -34,7 +34,8 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
     final sessionsAsync = ref.watch(chatHistoryProvider);
     final settingsAsync = ref.watch(appSettingsProvider);
 
-    final topPad = MediaQuery.of(context).padding.top +
+    final topPad =
+        MediaQuery.of(context).padding.top +
         66.0 +
         16.0 +
         (_searchQuery.isNotEmpty ? 32.0 : 0.0);
@@ -50,7 +51,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
               ),
               error: (e, _) => Center(child: Text('Error: $e')),
               data: (list) {
-                final settings = settingsAsync.valueOrNull ?? const AppSettings();
+                final settings = settingsAsync.value ?? const AppSettings();
                 var filtered = list;
                 if (_searchQuery.isNotEmpty) {
                   final q = _searchQuery.toLowerCase();
@@ -58,7 +59,8 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                       .where(
                         (s) =>
                             s.characterName.toLowerCase().contains(q) ||
-                            (s.sessionName?.toLowerCase().contains(q) ?? false) ||
+                            (s.sessionName?.toLowerCase().contains(q) ??
+                                false) ||
                             s.lastMessage.toLowerCase().contains(q),
                       )
                       .toList();
@@ -123,9 +125,11 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
     }
 
     final sortedGroups = groupsMap.entries.toList()
-      ..sort((a, b) => b.value.first.lastMessageTime.compareTo(
-            a.value.first.lastMessageTime,
-          ));
+      ..sort(
+        (a, b) => b.value.first.lastMessageTime.compareTo(
+          a.value.first.lastMessageTime,
+        ),
+      );
 
     return ListView.builder(
       padding: EdgeInsets.only(
@@ -262,16 +266,14 @@ class _ChatHistoryGroupSectionState extends State<_ChatHistoryGroupSection>
       curve: Curves.easeOut,
       reverseCurve: Curves.easeIn,
     );
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, -0.04),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Cubic(0.2, 0.8, 0.2, 1),
-        reverseCurve: Curves.easeInOut,
-      ),
-    );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, -0.04), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: const Cubic(0.2, 0.8, 0.2, 1),
+            reverseCurve: Curves.easeInOut,
+          ),
+        );
   }
 
   @override
@@ -334,9 +336,9 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
   _ChatSearchDelegate(this.ref);
 
   @override
-  ThemeData appBarTheme(BuildContext context) => Theme.of(context).copyWith(
-    appBarTheme: AppBarTheme(backgroundColor: context.cs.surface),
-  );
+  ThemeData appBarTheme(BuildContext context) => Theme.of(
+    context,
+  ).copyWith(appBarTheme: AppBarTheme(backgroundColor: context.cs.surface));
 
   @override
   List<Widget> buildActions(BuildContext context) => [
@@ -356,7 +358,7 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
   Widget buildSuggestions(BuildContext context) => _buildList(context);
 
   Widget _buildList(BuildContext context) {
-    final sessions = ref.read(chatHistoryProvider).valueOrNull ?? [];
+    final sessions = ref.read(chatHistoryProvider).value ?? [];
     final q = query.toLowerCase();
     final filtered = sessions
         .where(
@@ -417,10 +419,7 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
             stripHtml(s.lastMessage).replaceAll('\n', ' '),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: context.cs.onSurfaceVariant,
-              fontSize: 12,
-            ),
+            style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
           ),
           onTap: () => close(ctx, s.characterName),
         );
@@ -433,10 +432,7 @@ class _SessionTile extends ConsumerWidget {
   final ChatSessionInfo info;
   final bool isGrouped;
 
-  const _SessionTile({
-    required this.info,
-    this.isGrouped = false,
-  });
+  const _SessionTile({required this.info, this.isGrouped = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -445,8 +441,8 @@ class _SessionTile extends ConsumerWidget {
     }
 
     return InkWell(
-      onTap: () => context
-          .go('/chat/${info.characterId}?session=${info.sessionIndex}'),
+      onTap: () =>
+          context.go('/chat/${info.characterId}?session=${info.sessionIndex}'),
       onLongPress: () => _showSessionActions(context, ref),
       child: Container(
         height: 72,
@@ -516,8 +512,9 @@ class _SessionTile extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       child: InkWell(
-        onTap: () => context
-            .go('/chat/${info.characterId}?session=${info.sessionIndex}'),
+        onTap: () => context.go(
+          '/chat/${info.characterId}?session=${info.sessionIndex}',
+        ),
         onLongPress: () => _showSessionActions(context, ref),
         borderRadius: BorderRadius.circular(12),
         child: Container(
@@ -549,8 +546,10 @@ class _SessionTile extends ConsumerWidget {
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.white.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(12),
@@ -613,7 +612,9 @@ class _SessionTile extends ConsumerWidget {
         onConfirm: (val) {
           Navigator.of(context, rootNavigator: true).pop();
           if (val.trim().isNotEmpty) {
-            ref.read(chatHistoryProvider.notifier).renameSession(info.sessionId, val.trim());
+            ref
+                .read(chatHistoryProvider.notifier)
+                .renameSession(info.sessionId, val.trim());
           }
         },
       ),
@@ -626,7 +627,8 @@ class _SessionTile extends ConsumerWidget {
       title: 'Delete Chat',
       bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
-        description: 'Delete chat with ${info.characterName}? This cannot be undone.',
+        description:
+            'Delete chat with ${info.characterName}? This cannot be undone.',
       ),
       items: [
         BottomSheetItem(
@@ -635,7 +637,9 @@ class _SessionTile extends ConsumerWidget {
           centered: true,
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
-            ref.read(chatHistoryProvider.notifier).deleteSession(info.sessionId);
+            ref
+                .read(chatHistoryProvider.notifier)
+                .deleteSession(info.sessionId);
           },
         ),
         BottomSheetItem(
@@ -673,11 +677,13 @@ class _SessionTile extends ConsumerWidget {
       if (!context.mounted) return;
       switch (result) {
         case 'export':
-          ref.read(chatActionsServiceProvider).exportSessionUI(
-            context,
-            charId: info.characterId,
-            sessionId: info.sessionId,
-          );
+          ref
+              .read(chatActionsServiceProvider)
+              .exportSessionUI(
+                context,
+                charId: info.characterId,
+                sessionId: info.sessionId,
+              );
         case 'rename':
           _showRenameDialog(context, ref);
         case 'delete':
@@ -685,7 +691,6 @@ class _SessionTile extends ConsumerWidget {
       }
     });
   }
-
 
   Widget _buildAvatar(BuildContext context, WidgetRef ref) {
     ref.watch(avatarVersionProvider);
@@ -705,15 +710,13 @@ class _SessionTile extends ConsumerWidget {
   }
 
   Widget _defaultAvatar(BuildContext context) => CircleAvatar(
-        radius: 24,
-        backgroundColor: context.cs.primary,
-        child: Text(
-          info.characterName.isNotEmpty
-              ? info.characterName[0].toUpperCase()
-              : '?',
-          style: const TextStyle(color: Colors.black, fontSize: 18),
-        ),
-      );
+    radius: 24,
+    backgroundColor: context.cs.primary,
+    child: Text(
+      info.characterName.isNotEmpty ? info.characterName[0].toUpperCase() : '?',
+      style: const TextStyle(color: Colors.black, fontSize: 18),
+    ),
+  );
 
   Widget _buildTime(BuildContext context) {
     final text = _formatTime();
@@ -818,7 +821,11 @@ class _GroupHeader extends ConsumerWidget {
     );
   }
 
-  Widget _buildAvatar(BuildContext context, WidgetRef ref, ChatSessionInfo info) {
+  Widget _buildAvatar(
+    BuildContext context,
+    WidgetRef ref,
+    ChatSessionInfo info,
+  ) {
     ref.watch(avatarVersionProvider);
     if (info.avatarPath != null && info.avatarPath!.isNotEmpty) {
       return ClipOval(
@@ -873,7 +880,10 @@ class _GroupHeader extends ConsumerWidget {
   }
 
   void _showGroupActions(
-      BuildContext context, WidgetRef ref, ChatSessionInfo info) {
+    BuildContext context,
+    WidgetRef ref,
+    ChatSessionInfo info,
+  ) {
     GlazeBottomSheet.show<String>(
       context,
       title: info.characterName,
@@ -892,9 +902,7 @@ class _GroupHeader extends ConsumerWidget {
     ).then((result) {
       if (!context.mounted) return;
       if (result == 'new') {
-        ref
-            .read(chatProvider(info.characterId).notifier)
-            .createNewSession();
+        ref.read(chatProvider(info.characterId).notifier).createNewSession();
         context.go('/chat/${info.characterId}');
       } else if (result == 'edit') {
         context.push('/characters/${info.characterId}/edit');

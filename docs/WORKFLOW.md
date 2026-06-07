@@ -4,7 +4,7 @@ Git, branching, PR, and task-tracking conventions. Loaded on demand — `CLAUDE.
 
 ## Branching
 
-Each feature = a branch off `master`, pushed to `origin`, then a PR into `origin/master`.
+Each feature = a branch off `master`, pushed to `origin`, then a PR into upstream `hydall/GlazeFlutter:master`.
 
 - **No direct commits to `master`** — always use a feature branch.
 - **Stack while catching up** — if a feature depends on another not-yet-merged branch, branch off that branch instead of `master`.
@@ -17,7 +17,7 @@ git checkout -b feat/xxx
 git push -u origin feat/xxx
 ```
 
-Open the PR with the **GitHub MCP tools** (`mcp__plugin_github_github__create_pull_request`) or the GitHub web UI. Do **not** use the `gh` CLI — GitHub operations go through GitHub MCP (project + global convention).
+Open the PR against `hydall/GlazeFlutter:master`, not a fork's `master`. Use the **GitHub MCP tools** (`mcp__plugin_github_github__create_pull_request`) or the GitHub web UI. Do **not** use the `gh` CLI — GitHub operations go through GitHub MCP (project + global convention).
 
 ## Before starting work
 

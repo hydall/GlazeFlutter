@@ -256,6 +256,18 @@ class EditController {
     textarea.dataset.originalText = editText;
     body.appendChild(textarea);
 
+    textarea.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.deltaMode === 0) {
+        textarea.scrollTop += e.deltaY * 0.3;
+      } else if (e.deltaMode === 1) {
+        textarea.scrollTop += e.deltaY * 16;
+      } else {
+        textarea.scrollTop += e.deltaY * textarea.clientHeight;
+      }
+    }, { passive: false });
+
     // Modern Chromium (123+) sizes textareas to content via `field-sizing: content`.
     // Old WebViews don't — fall back to JS-driven auto-grow on input.
     const supportsFieldSizing = typeof CSS !== 'undefined'

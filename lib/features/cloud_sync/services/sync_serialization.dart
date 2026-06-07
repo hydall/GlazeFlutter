@@ -49,8 +49,8 @@ class SyncSerialization {
     final settings = json['settings'];
     return {
       'sessionId': json['sessionId'],
-      'entries': json['entries'] ?? [],
-      'pendingDrafts': json['pendingDrafts'] ?? [],
+      'entries': json['entries'] ?? <dynamic>[],
+      'pendingDrafts': json['pendingDrafts'] ?? <dynamic>[],
       'settings': _memoryBookSettingsForHash(settings),
     };
   }
