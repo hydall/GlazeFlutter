@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -148,6 +148,15 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(apiConfigs, apiConfigs.topK);
         await m.addColumn(apiConfigs, apiConfigs.frequencyPenalty);
         await m.addColumn(apiConfigs, apiConfigs.presencePenalty);
+        await customStatement(
+          'UPDATE api_configs SET top_k = 0 WHERE top_k IS NULL',
+        );
+        await customStatement(
+          'UPDATE api_configs SET frequency_penalty = 0.0 WHERE frequency_penalty IS NULL',
+        );
+        await customStatement(
+          'UPDATE api_configs SET presence_penalty = 0.0 WHERE presence_penalty IS NULL',
+        );
       }
       if (from < 25) {
         // Guard: previous versions of these migrations may have been partially
@@ -164,6 +173,45 @@ class AppDatabase extends _$AppDatabase {
         if (!colNames.contains('session_id_mode')) {
           await m.addColumn(apiConfigs, apiConfigs.sessionIdMode);
         }
+      }
+      if (from < 27) {
+        // Schema may have been bumped past v24 without addColumn running (e.g.
+        // early builds). Ensure columns exist before backfilling NULLs — Drift
+        // map() uses ! on these fields.
+        final cols = await customSelect(
+          'PRAGMA table_info("api_configs")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('top_k')) {
+          await m.addColumn(apiConfigs, apiConfigs.topK);
+        }
+        if (!colNames.contains('frequency_penalty')) {
+          await m.addColumn(apiConfigs, apiConfigs.frequencyPenalty);
+        }
+        if (!colNames.contains('presence_penalty')) {
+          await m.addColumn(apiConfigs, apiConfigs.presencePenalty);
+        }
+        if (!colNames.contains('cache_breakpoint_mode')) {
+          await m.addColumn(apiConfigs, apiConfigs.cacheBreakpointMode);
+        }
+        if (!colNames.contains('session_id_mode')) {
+          await m.addColumn(apiConfigs, apiConfigs.sessionIdMode);
+        }
+        await customStatement(
+          'UPDATE api_configs SET top_k = 0 WHERE top_k IS NULL',
+        );
+        await customStatement(
+          'UPDATE api_configs SET frequency_penalty = 0.0 WHERE frequency_penalty IS NULL',
+        );
+        await customStatement(
+          'UPDATE api_configs SET presence_penalty = 0.0 WHERE presence_penalty IS NULL',
+        );
+        await customStatement(
+          "UPDATE api_configs SET cache_breakpoint_mode = 'depth' WHERE cache_breakpoint_mode IS NULL",
+        );
+        await customStatement(
+          "UPDATE api_configs SET session_id_mode = 'openrouter' WHERE session_id_mode IS NULL",
+        );
       }
     },
   );
