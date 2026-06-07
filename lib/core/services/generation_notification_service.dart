@@ -75,7 +75,7 @@ class GenerationNotificationService {
 
     try {
       await _notifications.initialize(
-        settings,
+        settings: settings,
         onDidReceiveNotificationResponse: _onNotificationTapped,
       );
       _initialized = true;
@@ -267,8 +267,13 @@ class GenerationNotificationService {
         );
       }
 
-      await _notifications.show(notifId, title, body, details,
-          payload: payload);
+      await _notifications.show(
+        id: notifId,
+        title: title,
+        body: body,
+        notificationDetails: details,
+        payload: payload,
+      );
     } catch (e) {
       debugPrint('NOTIF: sendMessageNotification failed: $e');
     }
@@ -279,7 +284,7 @@ class GenerationNotificationService {
   Future<void> clearMessageNotifications(String charId) async {
     if (!_isMobile) return;
     try {
-      await _notifications.cancel(_stableId(charId));
+      await _notifications.cancel(id: _stableId(charId));
     } catch (e) {
       debugPrint('NOTIF: clearMessageNotifications failed: $e');
     }

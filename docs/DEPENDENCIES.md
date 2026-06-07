@@ -197,7 +197,7 @@ Verification for this batch:
 | `app_links` | 7.1.1 | 7.1.1 | done; source-compatible, analyze/test pass |
 | `flutter_dotenv` | 6.0.1 | 6.0.1 | done; `.env` load API source-compatible, analyze/test pass |
 | `flutter_foreground_task` | 9.2.2 | 9.2.2 | done; Android foreground service compiles, analyze/test/Android debug build pass |
-| `flutter_local_notifications` | 18.0.1 | 22.0.0 | platform setup risk |
+| `flutter_local_notifications` | 22.0.0 | 22.0.0 | done; named-argument API migrated, analyze/test/Android debug build pass |
 | `share_plus` | 12.0.2 | 13.1.0 | done to highest resolvable; migrated to `SharePlus.instance.share`, AGP 8.12.1; Android debug build pass after wrapper restore |
 | `sqlite3_flutter_libs` | 0.6.0+eol | 0.6.0+eol | done; no Dart API usage, analyze/test pass |
 
