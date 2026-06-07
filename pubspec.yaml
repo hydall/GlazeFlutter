@@ -73,6 +73,6 @@ flutter:
         - asset: assets/fonts/InterVariable.ttf
 
 dependency_overrides:
-  path_provider: ^2.1.5
-  path_provider_foundation: ^2.4.2
+  path_provider: 2.1.5
+  path_provider_foundation: 2.4.2
 

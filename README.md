@@ -14,9 +14,9 @@ Flutter rewrite of [Glaze](https://github.com/hydall/Glaze).
 ## Getting Started
 
 Prerequisites: Flutter 3.44+ (Dart 3.12+). The Flutter SDK is at
-`Z:\Glaze project\flutter` on the project lead's machine; the agent's
+`Z:\GlazeProject\flutter` on the project lead's machine; the agent's
 shell may not have `flutter` on PATH — fall back to the full path
-(`& "Z:\Glaze project\flutter\bin\flutter.bat" <subcommand>`) when
+(`& "Z:\GlazeProject\flutter\bin\flutter.bat" <subcommand>`) when
 the bare command fails with "not recognized".
 
 ### Common commands
@@ -28,12 +28,12 @@ flutter test
 flutter build windows
 
 # Fallback if `flutter` is not on PATH
-& "Z:\Glaze project\flutter\bin\flutter.bat" analyze
-& "Z:\Glaze project\flutter\bin\flutter.bat" test
-& "Z:\Glaze project\flutter\bin\flutter.bat" build windows
+& "Z:\GlazeProject\flutter\bin\flutter.bat" analyze
+& "Z:\GlazeProject\flutter\bin\flutter.bat" test
+& "Z:\GlazeProject\flutter\bin\flutter.bat" build windows
 
 # After editing freezed / drift / json_serializable models
-dart run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 ```
 
 See `docs/BUILD_NOTES.md` for the `path_provider_foundation` override

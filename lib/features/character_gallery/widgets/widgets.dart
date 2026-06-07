@@ -1,6 +1,6 @@
-export 'catalog_card.dart';
-export 'catalog_controls.dart';
-export 'catalog_filter_sheet.dart';
-export 'catalog_grid.dart';
-export 'catalog_preview_sheet.dart';
-export 'import_url_dialog.dart';
+export '../../catalog/widgets/catalog_card.dart';
+export '../../catalog/widgets/catalog_controls.dart';
+export '../../catalog/widgets/catalog_filter_sheet.dart';
+export '../../catalog/widgets/catalog_grid.dart';
+export '../../catalog/widgets/catalog_preview_sheet.dart';
+export '../../catalog/widgets/import_url_dialog.dart';

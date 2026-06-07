@@ -10,11 +10,11 @@
 | Пакет | Версия | Назначение |
 |---|---|---|
 | `flutter_riverpod` | 2.6.1 | Riverpod 2 — провайдеры, AsyncNotifier, StateNotifier |
-| `drift` | 2.28.2 | SQLite ORM, Drift code generation |
+| `drift` | 2.33.0 | SQLite ORM, Drift code generation |
 | `sqlite3_flutter_libs` | 0.5.28 | native sqlite3 binding |
 | `dio` | 5.7.0 | HTTP-клиент + SSE streaming для LLM |
 | `go_router` | 14.6.0 | декларативная навигация |
-| `freezed_annotation` | 2.4.4 | immutable модели с sealed unions (с `freezed` dev) |
+| `freezed_annotation` | 3.1.0 | immutable модели с sealed unions (с `freezed` dev) |
 | `json_annotation` | 4.9.0 | JSON сериализация (с `json_serializable` dev) |
 | `collection` | 1.18.0 | `firstWhereOrNull`, `IterableExtension` |
 | `path` | 1.9.0 | кросс-платформенные пути |
@@ -46,7 +46,15 @@
 
 ## Контекст: path_provider_foundation override
 
-В `pubspec.yaml` стоит override `path_provider_foundation: 2.4.2`.
+В `pubspec.yaml` стоит override (exact pin, без caret):
+
+```yaml
+dependency_overrides:
+  path_provider: 2.1.5
+  path_provider_foundation: 2.4.2
+```
+
+См. также `docs/BUILD_NOTES.md`. Caret (`^2.4.2`) нельзя — pub резолвит 2.6.0 и тянет `objective_c`.
 
 **Причина:** версии 2.5.0+ тянут `objective_c`, чей `hook/build.dart` использует macOS-only API.
 На Windows сборка падает с ошибкой компиляции нативного хука.
@@ -71,7 +79,7 @@
 | `flutter_svg` | 2.2.4 | 2.3.0 | `imageBuilder` у `SvgPicture` — нам не нужен |
 | `gpt_markdown` | 1.1.6 | 1.1.7 | патч |
 | `image` | 4.8.0 | 4.9.1 | патч-фиксы |
-| `drift` | 2.28.2 | 2.33.0 | `rightOuterJoin`, `isNotNull()` в manager API, перфоманс больших join-ов, DevTools экспорт БД |
+| `drift` | 2.33.0 | 2.33.0+ | уже в lock; дальнейший upgrade — по необходимости |
 
 **Реальный выигрыш минимален.** Делать только если появится конкретная нужда.
 
@@ -101,13 +109,10 @@ Future<List<Character>> characters(Ref ref) async { ... }
 
 ---
 
-### `freezed` 2.5.8 → 3.x + `freezed_annotation` 2.4.4 → 3.x
+### ~~`freezed` 2.5.8 → 3.x + `freezed_annotation` 2.4.4 → 3.x~~ **Выполнено (июнь 2026)**
 
-**Что меняется:** синтаксис классов (`abstract class` → `class`), новый стиль
-primary constructors. Нужна перегенерация всех `.freezed.dart` файлов.
-
-**Объём миграции:** все модели с `@freezed` + `dart run build_runner build`.
-**Приоритет:** низкий — breaking только в синтаксисе аннотаций, логика не меняется.
+Миграция завершена: `freezed` 3.2.x (dev), `freezed_annotation` 3.1.0, `build_runner` 2.15.0.
+Все `@freezed` классы используют `abstract class`. После правок моделей: `dart run build_runner build`.
 
 ---
 
@@ -126,18 +131,17 @@ primary constructors. Нужна перегенерация всех `.freezed.d
 
 ---
 
-### `build_runner` 2.5.4 → 2.15.0
+### ~~`build_runner` 2.5.4 → 2.15.0~~ **Выполнено (июнь 2026)**
 
-`build_resolvers` и `build_runner_core` помечены как discontinued.
-В 2.15.0 они заменены новыми пакетами автоматически.
-**Можно обновить вместе с freezed 3** — они связаны.
+`build_resolvers` и `build_runner_core` заменены новыми пакетами в 2.15.0.
+Флаг `--delete-conflicting-outputs` deprecated — удаление конфликтов включено по умолчанию.
 
 ---
 
-## Порядок миграции (когда придёт время)
+## Порядок миграции
 
-1. `build_runner` → 2.15.0 (prerequisite для freezed 3)
-2. `freezed` + `freezed_annotation` → 3.x + перегенерация
-3. `riverpod` → 3.x (самый большой объём)
-4. `go_router` → 17.x
-5. Снять override `path_provider_foundation` (когда закроют dart-lang/native#2480)
+1. ~~`build_runner` → 2.15.0~~ — **done**
+2. ~~`freezed` + `freezed_annotation` → 3.x + перегенерация~~ — **done**
+3. `riverpod` → 3.x (самый большой объём) — backlog
+4. `go_router` → 17.x — backlog
+5. Снять override `path_provider_foundation` (когда закроют dart-lang/native#2480) — backlog
