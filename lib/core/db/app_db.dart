@@ -150,10 +150,20 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(apiConfigs, apiConfigs.presencePenalty);
       }
       if (from < 25) {
-        await m.addColumn(apiConfigs, apiConfigs.cacheBreakpointMode);
-      }
-      if (from < 26) {
-        await m.addColumn(apiConfigs, apiConfigs.sessionIdMode);
+        // Guard: previous versions of these migrations may have been partially
+        // applied (e.g. an early `feat/freezed-3x-migration` build that landed
+        // these columns under different schema versions). Without the guard
+        // Drift's `addColumn` raises "duplicate column name" on upgrade.
+        final cols = await customSelect(
+          'PRAGMA table_info("api_configs")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('cache_breakpoint_mode')) {
+          await m.addColumn(apiConfigs, apiConfigs.cacheBreakpointMode);
+        }
+        if (!colNames.contains('session_id_mode')) {
+          await m.addColumn(apiConfigs, apiConfigs.sessionIdMode);
+        }
       }
     },
   );
