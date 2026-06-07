@@ -52,6 +52,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   // Non-text form state
   double _temperature = 0.7;
   double _topP = 0.9;
+  double _frequencyPenalty = 0.0;
+  double _presencePenalty = 0.0;
+  int _topK = 0;
   bool _stream = true;
   bool _requestReasoning = false;
   String _reasoningEffort = 'medium';
@@ -157,6 +160,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     setState(() {
       _temperature = config.temperature;
       _topP = config.topP;
+      _topK = config.topK;
+      _frequencyPenalty = config.frequencyPenalty;
+      _presencePenalty = config.presencePenalty;
       _stream = config.stream;
       _requestReasoning = config.requestReasoning;
       _reasoningEffort = config.reasoningEffort;
@@ -170,6 +176,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       _protocol = LlmProtocol.isValid(config.protocol)
           ? config.protocol
           : LlmProtocol.openai;
+      _applyProtocolUiPolicy(_protocol);
       _fetchedModels = [];
     });
 
@@ -192,6 +199,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 int.tryParse(_contextSizeCtrl.text) ?? config.contextSize,
             temperature: _temperature,
             topP: _topP,
+            topK: _topK,
+            frequencyPenalty: _frequencyPenalty,
+            presencePenalty: _presencePenalty,
             stream: _stream,
             requestReasoning: _requestReasoning,
             reasoningEffort: _reasoningEffort,
@@ -211,6 +221,79 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 config.embeddingMaxChunkTokens,
           ),
         );
+  }
+
+  bool get _supportsTemperature => true;
+
+  bool get _supportsTopP => true;
+
+  bool get _supportsTopK =>
+      _protocol == LlmProtocol.openai ||
+      _protocol == LlmProtocol.openrouter ||
+      _protocol == LlmProtocol.anthropic ||
+      _protocol == LlmProtocol.gemini;
+
+  bool get _supportsFrequencyPenalty =>
+      _protocol == LlmProtocol.openai || _protocol == LlmProtocol.openrouter;
+
+  bool get _supportsPresencePenalty =>
+      _protocol == LlmProtocol.openai || _protocol == LlmProtocol.openrouter;
+
+  bool get _supportsPromptCache =>
+      _protocol == LlmProtocol.anthropic || _protocol == LlmProtocol.openai;
+
+  bool get _supportsReasoning => true;
+
+  bool get _showsOmitSamplingControls =>
+      _protocol == LlmProtocol.openai || _protocol == LlmProtocol.openrouter;
+
+  bool get _showsOmitReasoningControls =>
+      _protocol == LlmProtocol.openai || _protocol == LlmProtocol.openrouter;
+
+  bool get _hideSamplingWhileReasoningAnthropic =>
+      _protocol == LlmProtocol.anthropic && _requestReasoning;
+
+  List<String> get _reasoningEffortOptions {
+    switch (_protocol) {
+      case LlmProtocol.anthropic:
+      case LlmProtocol.gemini:
+        return const ['auto', 'min', 'low', 'medium', 'high', 'max'];
+      case LlmProtocol.openai:
+      case LlmProtocol.openrouter:
+      default:
+        return const ['auto', 'low', 'medium', 'high'];
+    }
+  }
+
+  String _normalizeReasoningEffortForProtocol(String protocol, String effort) {
+    final allowed =
+        protocol == LlmProtocol.anthropic || protocol == LlmProtocol.gemini
+        ? const ['auto', 'min', 'low', 'medium', 'high', 'max']
+        : const ['auto', 'low', 'medium', 'high'];
+    if (allowed.contains(effort)) return effort;
+    if (effort == 'min') return 'low';
+    if (effort == 'max') return 'high';
+    return 'medium';
+  }
+
+  void _applyProtocolUiPolicy(String protocol) {
+    _reasoningEffort = _normalizeReasoningEffortForProtocol(
+      protocol,
+      _reasoningEffort,
+    );
+    if (protocol != LlmProtocol.openai && protocol != LlmProtocol.openrouter) {
+      _omitTemperature = false;
+      _omitTopP = false;
+      _omitReasoning = false;
+      _omitReasoningEffort = false;
+    }
+    if (protocol != LlmProtocol.openai && protocol != LlmProtocol.openrouter) {
+      _frequencyPenalty = 0.0;
+      _presencePenalty = 0.0;
+    }
+    if (protocol != LlmProtocol.anthropic && protocol != LlmProtocol.openai) {
+      _cacheControlTtl = 'off';
+    }
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────────
@@ -381,9 +464,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 MenuFieldItem(
                   label: 'onboarding_label_endpoint'.tr(),
                   controller: _endpointCtrl,
-                  placeholder:
-                      LlmProtocol.defaultEndpoints[_protocol] ??
-                      'http://127.0.0.1:5000/v1',
+                  placeholder: 'https://your-endpoint.example',
                 ),
               MenuFieldItem(
                 label: 'onboarding_label_model'.tr(),
@@ -444,28 +525,66 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             header: 'section_gen_params'.tr(),
             helpTerm: 'guided',
             items: [
-              MenuRangeItem(
-                label: 'label_temperature'.tr(),
-                value: _temperature,
-                min: 0,
-                max: 2,
-                divisions: 200,
-                onChanged: (v) {
-                  setState(() => _temperature = v);
-                  _scheduleSave();
-                },
-              ),
-              MenuRangeItem(
-                label: 'label_top_p'.tr(),
-                value: _topP,
-                min: 0,
-                max: 1,
-                divisions: 100,
-                onChanged: (v) {
-                  setState(() => _topP = v);
-                  _scheduleSave();
-                },
-              ),
+              if (_supportsTemperature && !_hideSamplingWhileReasoningAnthropic)
+                MenuRangeItem(
+                  label: 'label_temperature'.tr(),
+                  value: _temperature,
+                  min: 0,
+                  max: 2,
+                  divisions: 200,
+                  onChanged: (v) {
+                    setState(() => _temperature = v);
+                    _scheduleSave();
+                  },
+                ),
+              if (_supportsTopP && !_hideSamplingWhileReasoningAnthropic)
+                MenuRangeItem(
+                  label: 'label_top_p'.tr(),
+                  value: _topP,
+                  min: 0,
+                  max: 1,
+                  divisions: 100,
+                  onChanged: (v) {
+                    setState(() => _topP = v);
+                    _scheduleSave();
+                  },
+                ),
+              if (_supportsTopK && !_hideSamplingWhileReasoningAnthropic)
+                MenuRangeItem(
+                  label: 'label_top_k_sampling'.tr(),
+                  value: _topK.toDouble(),
+                  min: 0,
+                  max: 200,
+                  divisions: 200,
+                  onChanged: (v) {
+                    setState(() => _topK = v.round());
+                    _scheduleSave();
+                  },
+                ),
+              if (_supportsFrequencyPenalty)
+                MenuRangeItem(
+                  label: 'label_frequency_penalty'.tr(),
+                  value: _frequencyPenalty,
+                  min: -2,
+                  max: 2,
+                  divisions: 80,
+                  onChanged: (v) {
+                    setState(() => _frequencyPenalty = v);
+                    _scheduleSave();
+                  },
+                ),
+              if (_supportsPresencePenalty)
+                MenuRangeItem(
+                  label: 'label_presence_penalty'.tr(),
+                  value: _presencePenalty,
+                  min: -2,
+                  max: 2,
+                  divisions: 80,
+                  onChanged: (v) {
+                    setState(() => _presencePenalty = v);
+                    _scheduleSave();
+                  },
+                ),
               MenuFieldItem(
                 label: 'label_max_tokens'.tr(),
                 controller: _maxTokensCtrl,
@@ -485,69 +604,77 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             header: 'label_reasoning_settings'.tr(),
             helpTerm: 'preset-reasoning',
             items: [
-              MenuSwitchItem(
-                label: 'label_reasoning'.tr(),
-                description: 'desc_reasoning'.tr(),
-                value: _requestReasoning,
-                onChanged: (v) {
-                  setState(() => _requestReasoning = v);
-                  _scheduleSave();
-                },
-              ),
-              MenuSelectorItem(
-                label: 'label_reasoning_effort'.tr(),
-                currentValue: _reasoningEffortLabel(_reasoningEffort),
-                onTap: _openReasoningEffortSelector,
-              ),
-              MenuSelectorItem(
-                label: 'label_prompt_cache_ttl'.tr(),
-                currentValue: _cacheControlTtlLabel(_cacheControlTtl),
-                onTap: _openCacheControlTtlSelector,
-              ),
+              if (_supportsReasoning)
+                MenuSwitchItem(
+                  label: 'label_reasoning'.tr(),
+                  description: 'desc_reasoning'.tr(),
+                  value: _requestReasoning,
+                  onChanged: (v) {
+                    setState(() => _requestReasoning = v);
+                    _scheduleSave();
+                  },
+                ),
+              if (_supportsReasoning)
+                MenuSelectorItem(
+                  label: 'label_reasoning_effort'.tr(),
+                  currentValue: _reasoningEffortLabel(_reasoningEffort),
+                  onTap: _openReasoningEffortSelector,
+                ),
+              if (_supportsPromptCache)
+                MenuSelectorItem(
+                  label: 'label_prompt_cache_ttl'.tr(),
+                  currentValue: _cacheControlTtlLabel(_cacheControlTtl),
+                  onTap: _openCacheControlTtlSelector,
+                ),
             ],
           ),
-          MenuGroup(
-            compact: true,
-            header: 'section_omit_params'.tr(),
-            items: [
-              MenuSwitchItem(
-                label: 'label_omit_temperature'.tr(),
-                description: 'desc_omit_temperature'.tr(),
-                value: _omitTemperature,
-                onChanged: (v) {
-                  setState(() => _omitTemperature = v);
-                  _scheduleSave();
-                },
-              ),
-              MenuSwitchItem(
-                label: 'label_omit_top_p'.tr(),
-                description: 'desc_omit_top_p'.tr(),
-                value: _omitTopP,
-                onChanged: (v) {
-                  setState(() => _omitTopP = v);
-                  _scheduleSave();
-                },
-              ),
-              MenuSwitchItem(
-                label: 'label_omit_reasoning'.tr(),
-                description: 'desc_omit_reasoning'.tr(),
-                value: _omitReasoning,
-                onChanged: (v) {
-                  setState(() => _omitReasoning = v);
-                  _scheduleSave();
-                },
-              ),
-              MenuSwitchItem(
-                label: 'label_omit_reasoning_effort'.tr(),
-                description: 'desc_omit_reasoning_effort'.tr(),
-                value: _omitReasoningEffort,
-                onChanged: (v) {
-                  setState(() => _omitReasoningEffort = v);
-                  _scheduleSave();
-                },
-              ),
-            ],
-          ),
+          if (_showsOmitSamplingControls || _showsOmitReasoningControls)
+            MenuGroup(
+              compact: true,
+              header: 'section_omit_params'.tr(),
+              items: [
+                if (_showsOmitSamplingControls)
+                  MenuSwitchItem(
+                    label: 'label_omit_temperature'.tr(),
+                    description: 'desc_omit_temperature'.tr(),
+                    value: _omitTemperature,
+                    onChanged: (v) {
+                      setState(() => _omitTemperature = v);
+                      _scheduleSave();
+                    },
+                  ),
+                if (_showsOmitSamplingControls)
+                  MenuSwitchItem(
+                    label: 'label_omit_top_p'.tr(),
+                    description: 'desc_omit_top_p'.tr(),
+                    value: _omitTopP,
+                    onChanged: (v) {
+                      setState(() => _omitTopP = v);
+                      _scheduleSave();
+                    },
+                  ),
+                if (_showsOmitReasoningControls)
+                  MenuSwitchItem(
+                    label: 'label_omit_reasoning'.tr(),
+                    description: 'desc_omit_reasoning'.tr(),
+                    value: _omitReasoning,
+                    onChanged: (v) {
+                      setState(() => _omitReasoning = v);
+                      _scheduleSave();
+                    },
+                  ),
+                if (_showsOmitReasoningControls)
+                  MenuSwitchItem(
+                    label: 'label_omit_reasoning_effort'.tr(),
+                    description: 'desc_omit_reasoning_effort'.tr(),
+                    value: _omitReasoningEffort,
+                    onChanged: (v) {
+                      setState(() => _omitReasoningEffort = v);
+                      _scheduleSave();
+                    },
+                  ),
+              ],
+            ),
         ],
       ),
     );
@@ -799,19 +926,20 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   String _reasoningEffortLabel(String effort) {
     return switch (effort) {
       'auto' => 'reasoning_effort_auto'.tr(),
+      'min' => 'reasoning_effort_min'.tr(),
       'low' => 'reasoning_effort_low'.tr(),
       'medium' => 'reasoning_effort_medium'.tr(),
       'high' => 'reasoning_effort_high'.tr(),
+      'max' => 'reasoning_effort_max'.tr(),
       _ => effort,
     };
   }
 
   void _openReasoningEffortSelector() {
-    const options = ['auto', 'low', 'medium', 'high'];
     GlazeBottomSheet.show<void>(
       context,
       title: 'label_reasoning_effort'.tr(),
-      items: options.map((e) {
+      items: _reasoningEffortOptions.map((e) {
         final label = _reasoningEffortLabel(e);
         final active = e == _reasoningEffort;
         return BottomSheetItem(
@@ -873,15 +1001,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             Navigator.of(context, rootNavigator: true).pop();
             setState(() {
               _protocol = p;
-              // Pre-fill endpoint when switching to a protocol that has a
-              // known default and the user hasn't customized it yet. Skip for
-              // openrouter (URL is hardcoded in the transport).
-              if (p != LlmProtocol.openrouter) {
-                final defaultEp = LlmProtocol.defaultEndpoints[p] ?? '';
-                if (defaultEp.isNotEmpty && _endpointCtrl.text.trim().isEmpty) {
-                  _endpointCtrl.text = defaultEp;
-                }
-              }
+              _applyProtocolUiPolicy(_protocol);
+              _fetchedModels = [];
             });
             _scheduleSave();
           },

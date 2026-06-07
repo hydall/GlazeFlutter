@@ -108,13 +108,18 @@ class GeminiChatTransport implements ChatTransport {
     if (!request.omitTopP && request.topP > 0 && request.topP < 1) {
       generationConfig['topP'] = request.topP;
     }
+    if (request.topK > 0) {
+      generationConfig['topK'] = request.topK;
+    }
 
     // Thinking config: only emit for known 2.5+ / 3.x thinking models.
     final useThinking = request.requestReasoning && !request.omitReasoning;
     if (useThinking && _isThinkingModel(request.model)) {
       final budget = calculateGoogleBudgetTokens(
         maxTokens: request.maxTokens > 0 ? request.maxTokens : 4096,
-        reasoningEffort: request.reasoningEffort ?? 'auto',
+        reasoningEffort: request.omitReasoningEffort
+            ? 'auto'
+            : request.reasoningEffort ?? 'auto',
         model: request.model,
       );
       final thinkingConfig = <String, dynamic>{'includeThoughts': true};

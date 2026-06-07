@@ -9,6 +9,7 @@ import '../../../core/llm/history_assembler.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
+import '../../../core/llm/transport/llm_protocol.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/api_config.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -312,9 +313,41 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
         final items = [
           _ParamItem(label: 'model', value: config.model),
           _ParamItem(label: 'max_tokens', value: config.maxTokens.toString()),
-          _ParamItem(label: 'temperature', value: config.temperature.toString()),
-          _ParamItem(label: 'top_p', value: config.topP.toString()),
+          if (!(config.protocol == LlmProtocol.anthropic &&
+              config.requestReasoning))
+            _ParamItem(
+              label: 'temperature',
+              value: config.temperature.toString(),
+            ),
+          if (!(config.protocol == LlmProtocol.anthropic &&
+              config.requestReasoning))
+            _ParamItem(label: 'top_p', value: config.topP.toString()),
+          if (config.topK > 0 &&
+              !(config.protocol == LlmProtocol.anthropic &&
+                  config.requestReasoning))
+            _ParamItem(label: 'top_k', value: config.topK.toString()),
+          if ((config.protocol == LlmProtocol.openai ||
+                  config.protocol == LlmProtocol.openrouter) &&
+              config.frequencyPenalty != 0)
+            _ParamItem(
+              label: 'frequency_penalty',
+              value: config.frequencyPenalty.toString(),
+            ),
+          if ((config.protocol == LlmProtocol.openai ||
+                  config.protocol == LlmProtocol.openrouter) &&
+              config.presencePenalty != 0)
+            _ParamItem(
+              label: 'presence_penalty',
+              value: config.presencePenalty.toString(),
+            ),
           _ParamItem(label: 'stream', value: config.stream.toString()),
+          if (config.requestReasoning)
+            _ParamItem(label: 'reasoning', value: 'true'),
+          if (config.requestReasoning)
+            _ParamItem(
+              label: 'reasoning_effort',
+              value: config.reasoningEffort,
+            ),
         ];
         return Wrap(
           spacing: 8,
@@ -396,8 +429,10 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       final body = <String, dynamic>{
         'model': _apiConfig!.model,
       };
-      if (_apiConfig!.cacheControlTtl == '5min' ||
-          _apiConfig!.cacheControlTtl == '1h') {
+      if ((_apiConfig!.protocol == LlmProtocol.anthropic ||
+              _apiConfig!.protocol == LlmProtocol.openai) &&
+          (_apiConfig!.cacheControlTtl == '5min' ||
+              _apiConfig!.cacheControlTtl == '1h')) {
         body['cache_control'] = <String, dynamic>{
           'type': 'ephemeral',
           if (_apiConfig!.cacheControlTtl == '1h') 'ttl': '1h',
@@ -408,9 +443,28 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       }
       body['messages'] = apiMessages;
       body['max_tokens'] = _apiConfig!.maxTokens;
-      body['temperature'] = _apiConfig!.temperature;
-      body['top_p'] = _apiConfig!.topP;
+      if (!(_apiConfig!.protocol == LlmProtocol.anthropic &&
+          _apiConfig!.requestReasoning)) {
+        body['temperature'] = _apiConfig!.temperature;
+        body['top_p'] = _apiConfig!.topP;
+        if (_apiConfig!.topK > 0) {
+          body[_apiConfig!.protocol == LlmProtocol.gemini ? 'topK' : 'top_k'] =
+              _apiConfig!.topK;
+        }
+      }
+      if (_apiConfig!.protocol == LlmProtocol.openai ||
+          _apiConfig!.protocol == LlmProtocol.openrouter) {
+        if (_apiConfig!.frequencyPenalty != 0) {
+          body['frequency_penalty'] = _apiConfig!.frequencyPenalty;
+        }
+        if (_apiConfig!.presencePenalty != 0) {
+          body['presence_penalty'] = _apiConfig!.presencePenalty;
+        }
+      }
       body['stream'] = _apiConfig!.stream;
+      if (_apiConfig!.requestReasoning) {
+        body['reasoning_effort'] = _apiConfig!.reasoningEffort;
+      }
       return const JsonEncoder.withIndent('  ').convert(body);
     } catch (_) {
       return '';

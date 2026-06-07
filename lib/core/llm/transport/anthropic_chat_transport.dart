@@ -170,6 +170,9 @@ class AnthropicChatTransport implements ChatTransport {
     if (!request.omitTopP && request.topP > 0 && request.topP < 1) {
       body['top_p'] = request.topP;
     }
+    if (request.topK > 0) {
+      body['top_k'] = request.topK;
+    }
 
     final betaHeaders = <String>[];
     if (ttl != null) {
@@ -182,7 +185,9 @@ class AnthropicChatTransport implements ChatTransport {
     if (useThinking) {
       final budget = calculateClaudeBudgetTokens(
         maxTokens: body['max_tokens'] as int,
-        reasoningEffort: request.reasoningEffort ?? 'auto',
+        reasoningEffort: request.omitReasoningEffort
+            ? 'auto'
+            : request.reasoningEffort ?? 'auto',
         stream: request.stream,
         isAdaptiveModel: adaptive,
       );
@@ -198,10 +203,12 @@ class AnthropicChatTransport implements ChatTransport {
         };
         body.remove('temperature');
         body.remove('top_p');
+        body.remove('top_k');
       } else if (budget is String) {
         body['thinking'] = {'type': 'adaptive'};
         body.putIfAbsent('output_config', () => <String, dynamic>{});
         (body['output_config'] as Map<String, dynamic>)['effort'] = budget;
+        body.remove('top_k');
       }
       // budget == null → 'auto', omit thinking config entirely.
     }

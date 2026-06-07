@@ -28,20 +28,10 @@ class LlmProtocol {
   static const List<String> all = [openai, anthropic, gemini, openrouter];
 
   static const Map<String, String> labels = {
-    openai: 'OpenAI (compatible)',
+    openai: 'Custom (OpenAI Compatible)',
     anthropic: 'Anthropic',
     gemini: 'Google Gemini',
     openrouter: 'OpenRouter',
-  };
-
-  /// Default endpoint to pre-fill in the UI when the user picks a protocol.
-  /// `openrouter` is intentionally empty here because the transport hardcodes
-  /// the URL.
-  static const Map<String, String> defaultEndpoints = {
-    openai: 'https://api.openai.com',
-    anthropic: 'https://api.anthropic.com',
-    gemini: 'https://generativelanguage.googleapis.com',
-    openrouter: '',
   };
 
   static bool isValid(String value) => all.contains(value);

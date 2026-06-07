@@ -315,6 +315,11 @@ class JsApiConfigImporter extends BackupHelpers {
             contextSize: Value(toInt(preset['context']) ?? 32000),
             temperature: Value(toDouble(preset['temp']) ?? 0.7),
             topP: Value(toDouble(preset['topp']) ?? 0.9),
+            topK: Value(toInt(preset['top_k']) ?? 0),
+            frequencyPenalty:
+                Value(toDouble(preset['frequency_penalty']) ?? 0.0),
+            presencePenalty:
+                Value(toDouble(preset['presence_penalty']) ?? 0.0),
             stream: Value(preset['stream'] as bool? ?? true),
             reasoningEffort: Value(preset['reasoningEffort'] as String? ??
                 preset['reasoning_effort'] as String? ??

@@ -20,6 +20,9 @@ class ChatTransportRequest {
   final int maxTokens;
   final double temperature;
   final double topP;
+  final int topK;
+  final double frequencyPenalty;
+  final double presencePenalty;
   final bool stream;
   final bool requestReasoning;
   final String? reasoningEffort;
@@ -43,6 +46,9 @@ class ChatTransportRequest {
     required this.maxTokens,
     required this.temperature,
     required this.topP,
+    this.topK = 0,
+    this.frequencyPenalty = 0.0,
+    this.presencePenalty = 0.0,
     this.stream = true,
     this.requestReasoning = false,
     this.reasoningEffort,

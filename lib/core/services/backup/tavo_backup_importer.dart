@@ -266,6 +266,11 @@ class TavoBackupImporter {
 
         final temperature = (params['temperature'] as num?)?.toDouble() ?? 0.7;
         final topP = (params['top_p'] as num?)?.toDouble() ?? 0.9;
+        final topK = (params['top_k'] as num?)?.toInt() ?? 0;
+        final frequencyPenalty =
+            (params['frequency_penalty'] as num?)?.toDouble() ?? 0.0;
+        final presencePenalty =
+            (params['presence_penalty'] as num?)?.toDouble() ?? 0.0;
         final maxTokens = (params['max_tokens'] as num?)?.toInt() ?? 8000;
         final contextSize = (params['context_length'] as num?)?.toInt() ?? 32000;
 
@@ -279,6 +284,9 @@ class TavoBackupImporter {
           contextSize: contextSize,
           temperature: temperature,
           topP: topP,
+          topK: topK,
+          frequencyPenalty: frequencyPenalty,
+          presencePenalty: presencePenalty,
           stream: true,
         ));
         result.apis++;

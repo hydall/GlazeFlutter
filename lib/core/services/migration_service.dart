@@ -203,6 +203,9 @@ class MigrationService {
           contextSize: _toInt(json['context']) ?? 32000,
           temperature: _toDouble(json['temp']) ?? 0.7,
           topP: _toDouble(json['topp']) ?? 0.9,
+          topK: _toInt(json['top_k']) ?? 0,
+          frequencyPenalty: _toDouble(json['frequency_penalty']) ?? 0.0,
+          presencePenalty: _toDouble(json['presence_penalty']) ?? 0.0,
           stream: json['stream'] as bool? ?? true,
         );
         await _apiRepo.put(config);

@@ -39,8 +39,13 @@ void showRawPromptDialog(
       'max_tokens': payload.apiConfig.maxTokens,
       'temperature': payload.apiConfig.temperature,
       'top_p': payload.apiConfig.topP,
-    'stream': payload.apiConfig.stream,
-  });
+      if (payload.apiConfig.topK > 0) 'top_k': payload.apiConfig.topK,
+      if (payload.apiConfig.frequencyPenalty != 0)
+        'frequency_penalty': payload.apiConfig.frequencyPenalty,
+      if (payload.apiConfig.presencePenalty != 0)
+        'presence_penalty': payload.apiConfig.presencePenalty,
+      'stream': payload.apiConfig.stream,
+    });
 
   if (!context.mounted) return;
 

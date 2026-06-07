@@ -100,6 +100,9 @@ class ApiConfigs extends Table {
   IntColumn get contextSize => integer().withDefault(const Constant(32000))();
   RealColumn get temperature => real().withDefault(const Constant(0.7))();
   RealColumn get topP => real().withDefault(const Constant(0.9))();
+  IntColumn get topK => integer().withDefault(const Constant(0))();
+  RealColumn get frequencyPenalty => real().withDefault(const Constant(0.0))();
+  RealColumn get presencePenalty => real().withDefault(const Constant(0.0))();
   BoolColumn get stream => boolean().withDefault(const Constant(true))();
   TextColumn get reasoningEffort => text().nullable()();
   BoolColumn get requestReasoning => boolean().withDefault(const Constant(false))();
