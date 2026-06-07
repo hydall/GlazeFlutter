@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/llm/sse_client.dart';
+import '../../core/llm/transport/llm_protocol.dart';
 import '../../core/services/api_connection_tester.dart';
 import '../../core/models/api_config.dart';
 import '../../core/state/shared_prefs_provider.dart';
@@ -61,6 +62,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   bool _embeddingEnabled = false;
   bool _embeddingUseSame = true;
   String _cacheControlTtl = 'off';
+  String _protocol = LlmProtocol.openai;
 
   String? _loadedPresetId;
   final _scrollController = ScrollController();
@@ -165,6 +167,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       _embeddingEnabled = config.embeddingEnabled;
       _embeddingUseSame = config.embeddingUseSame;
       _cacheControlTtl = config.cacheControlTtl;
+      _protocol = LlmProtocol.isValid(config.protocol)
+          ? config.protocol
+          : LlmProtocol.openai;
       _fetchedModels = [];
     });
 
@@ -197,6 +202,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             embeddingEnabled: _embeddingEnabled,
             embeddingUseSame: _embeddingUseSame,
             cacheControlTtl: _cacheControlTtl,
+            protocol: _protocol,
             embeddingEndpoint: _embEndpointCtrl.text.trim(),
             embeddingApiKey: _embApiKeyCtrl.text.trim(),
             embeddingModel: _embModelCtrl.text.trim(),
@@ -365,11 +371,20 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 controller: _nameCtrl,
                 placeholder: 'My OpenAI',
               ),
-              MenuFieldItem(
-                label: 'onboarding_label_endpoint'.tr(),
-                controller: _endpointCtrl,
-                placeholder: 'http://127.0.0.1:5000/v1',
+              MenuSelectorItem(
+                label: 'settings_protocol'.tr(),
+                currentValue:
+                    LlmProtocol.labels[_protocol] ?? _protocol,
+                onTap: _openProtocolSelector,
               ),
+              if (_protocol != LlmProtocol.openrouter)
+                MenuFieldItem(
+                  label: 'onboarding_label_endpoint'.tr(),
+                  controller: _endpointCtrl,
+                  placeholder:
+                      LlmProtocol.defaultEndpoints[_protocol] ??
+                      'http://127.0.0.1:5000/v1',
+                ),
               MenuFieldItem(
                 label: 'onboarding_label_model'.tr(),
                 controller: _modelCtrl,
@@ -836,6 +851,38 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             setState(() => _cacheControlTtl = e);
+            _scheduleSave();
+          },
+        );
+      }).toList(),
+    );
+  }
+
+  void _openProtocolSelector() {
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'settings_protocol'.tr(),
+      items: LlmProtocol.all.map((p) {
+        final label = LlmProtocol.labels[p] ?? p;
+        final active = p == _protocol;
+        return BottomSheetItem(
+          label: label,
+          icon: active ? Icons.check : null,
+          iconColor: context.cs.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            setState(() {
+              _protocol = p;
+              // Pre-fill endpoint when switching to a protocol that has a
+              // known default and the user hasn't customized it yet. Skip for
+              // openrouter (URL is hardcoded in the transport).
+              if (p != LlmProtocol.openrouter) {
+                final defaultEp = LlmProtocol.defaultEndpoints[p] ?? '';
+                if (defaultEp.isNotEmpty && _endpointCtrl.text.trim().isEmpty) {
+                  _endpointCtrl.text = defaultEp;
+                }
+              }
+            });
             _scheduleSave();
           },
         );

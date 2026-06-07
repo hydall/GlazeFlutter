@@ -9,6 +9,7 @@ class ApiConfig with _$ApiConfig {
     required String id,
     @Default('') String name,
     @Default('openai_compatible') String providerId,
+    @Default('openai') String protocol,
     @Default('') String endpoint,
     @Default('') String apiKey,
     @Default('') String model,

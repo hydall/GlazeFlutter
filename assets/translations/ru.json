@@ -1118,6 +1118,7 @@
     "settings_no_api_configs": "Нет конфигураций API",
     "settings_add_api_config": "Добавить конфигурацию API",
     "settings_config_name": "Название конфигурации",
+    "settings_protocol": "Протокол",
     "settings_fetch_models": "Получить модели",
     "settings_select_model": "Выбрать модель",
     "settings_enable_vector_desc": "Включить семантический поиск по записям лорбуков",

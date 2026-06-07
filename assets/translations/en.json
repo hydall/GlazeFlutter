@@ -1111,6 +1111,7 @@
     "settings_no_api_configs": "No API configs yet",
     "settings_add_api_config": "Add API Config",
     "settings_config_name": "Config Name",
+    "settings_protocol": "Protocol",
     "settings_fetch_models": "Fetch models",
     "settings_select_model": "Select model",
     "settings_enable_vector_desc": "Enable semantic search for lorebook entries",
