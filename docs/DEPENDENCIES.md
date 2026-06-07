@@ -51,6 +51,7 @@ Remove-Item -LiteralPath "Z:\Pub\Cache\hosted" -Recurse -Force
 | `go_router` | 17.3.0 | done |
 | `app_links` | 7.1.1 | done |
 | `flutter_dotenv` | 6.0.1 | done |
+| `sqlite3_flutter_libs` | 0.6.0+eol | done |
 | `gpt_markdown` | 1.1.7 | patched, `imageBuilder` API changed |
 | `path_provider` | 2.1.5 | overridden |
 | `path_provider_foundation` | 2.4.2 | overridden, do not unpin yet |
@@ -195,7 +196,7 @@ Verification for this batch:
 | `flutter_foreground_task` | 8.17.0 | 9.2.2 | Android foreground-service risk |
 | `flutter_local_notifications` | 18.0.1 | 22.0.0 | platform setup risk |
 | `share_plus` | 10.1.4 | 13.1.0 | export/share flow risk |
-| `sqlite3_flutter_libs` | 0.5.42 | 0.6.0+eol | native package risk, verify DB tests |
+| `sqlite3_flutter_libs` | 0.6.0+eol | 0.6.0+eol | done; no Dart API usage, analyze/test pass |
 
 Do not batch all of these together. One package or one tightly related group per commit.
 

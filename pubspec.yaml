@@ -12,7 +12,7 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_riverpod: ^3.3.1
   drift: ^2.22.1
-  sqlite3_flutter_libs: ^0.5.28
+  sqlite3_flutter_libs: ^0.6.0+eol
   dio: ^5.7.0
   go_router: ^17.3.0
   freezed_annotation: ^3.1.0
