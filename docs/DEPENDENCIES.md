@@ -52,6 +52,7 @@ Remove-Item -LiteralPath "Z:\Pub\Cache\hosted" -Recurse -Force
 | `app_links` | 7.1.1 | done |
 | `flutter_dotenv` | 6.0.1 | done |
 | `sqlite3_flutter_libs` | 0.6.0+eol | done |
+| `share_plus` | 12.0.2 | done |
 | `gpt_markdown` | 1.1.7 | patched, `imageBuilder` API changed |
 | `path_provider` | 2.1.5 | overridden |
 | `path_provider_foundation` | 2.4.2 | overridden, do not unpin yet |
@@ -195,7 +196,7 @@ Verification for this batch:
 | `flutter_dotenv` | 6.0.1 | 6.0.1 | done; `.env` load API source-compatible, analyze/test pass |
 | `flutter_foreground_task` | 8.17.0 | 9.2.2 | Android foreground-service risk |
 | `flutter_local_notifications` | 18.0.1 | 22.0.0 | platform setup risk |
-| `share_plus` | 10.1.4 | 13.1.0 | export/share flow risk |
+| `share_plus` | 12.0.2 | 13.1.0 | done to highest resolvable; migrated to `SharePlus.instance.share`, AGP 8.12.1; local Android build blocked by ignored no-op Gradle wrapper |
 | `sqlite3_flutter_libs` | 0.6.0+eol | 0.6.0+eol | done; no Dart API usage, analyze/test pass |
 
 Do not batch all of these together. One package or one tightly related group per commit.

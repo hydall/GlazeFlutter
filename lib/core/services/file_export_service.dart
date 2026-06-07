@@ -163,7 +163,7 @@ class FileExportService {
     final tempDir = await getTemporaryDirectory();
     final file = File('${tempDir.path}/$filename');
     await file.writeAsString(data);
-    await Share.shareXFiles([XFile(file.path)]);
+    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
     return file.path;
   }
 
@@ -172,7 +172,7 @@ class FileExportService {
     final tempDir = await getTemporaryDirectory();
     final file = File('${tempDir.path}/$filename');
     await file.writeAsBytes(bytes);
-    await Share.shareXFiles([XFile(file.path)]);
+    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
     return file.path;
   }
 
@@ -217,7 +217,7 @@ class FileExportService {
   }
 
   static Future<String> _shareFile(String sourcePath, String filename) async {
-    await Share.shareXFiles([XFile(sourcePath)]);
+    await SharePlus.instance.share(ShareParams(files: [XFile(sourcePath)]));
     return sourcePath;
   }
 }
