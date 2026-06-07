@@ -30,7 +30,7 @@ dependencies:
   flutter_svg: ^2.0.16
   tiktoken: ^1.0.3
   cached_network_image: ^3.4.1
-  flutter_dotenv: ^5.2.1
+  flutter_dotenv: ^6.0.1
   share_plus: ^10.1.4
   flutter_foreground_task: ^8.0.0
   flutter_local_notifications: ^18.0.1
