@@ -75,6 +75,8 @@ Migration history:
 - v23: added `api_configs.protocol` TEXT DEFAULT `'openai'` — wire protocol selector (openai / anthropic / gemini / openrouter). Drives `ChatTransport` factory routing
 - v24: added `api_configs.cacheBreakpointMode` TEXT DEFAULT `'depth'` — Anthropic/OpenRouter prompt cache marker placement (`depth` / `stable_prefix`)
 - v25: added `api_configs.sessionIdMode` TEXT DEFAULT `'openrouter'` — controls when `session_id` is sent for provider sticky routing
+- v27: added `info_blocks.swipe_id` INTEGER DEFAULT 0 — scopes ext blocks per message swipe
+- v28: data migration — `UPDATE info_blocks SET swipe_id = 0 WHERE swipe_id IS NULL` (backfill for v27 upgrades)
 
 ---
 
