@@ -35,8 +35,14 @@ class ChatTransportRequest {
   /// caching is enabled (OpenRouter / Anthropic-via-OR scenarios).
   final String? sessionId;
 
+  /// Previous request body messages for hash-based cache breakpoint placement.
+  final List<Map<String, dynamic>>? previousMessages;
+
   /// Anthropic prompt cache TTL: `'off' | '5min' | '1h'`.
   final String cacheControlTtl;
+
+  /// Prompt cache breakpoint placement: `'depth' | 'stable_prefix'`.
+  final String cacheBreakpointMode;
 
   const ChatTransportRequest({
     required this.endpoint,
@@ -57,6 +63,8 @@ class ChatTransportRequest {
     this.omitReasoning = false,
     this.omitReasoningEffort = false,
     this.sessionId,
+    this.previousMessages,
     this.cacheControlTtl = 'off',
+    this.cacheBreakpointMode = 'depth',
   });
 }

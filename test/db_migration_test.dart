@@ -12,7 +12,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 AppDatabase _testDb() => AppDatabase.forTesting(NativeDatabase.memory());
 
 class _TestImageStorage extends ImageStorageService {
-  _TestImageStorage() : super(Directory.systemTemp.createTempSync('glaze_test_img_').path);
+  _TestImageStorage()
+    : super(Directory.systemTemp.createTempSync('glaze_test_img_').path);
 
   @override
   Future<String> saveAvatar(String characterId, Uint8List imageBytes) async {
@@ -20,7 +21,10 @@ class _TestImageStorage extends ImageStorageService {
   }
 
   @override
-  Future<String?> saveThumbnail(String characterId, Uint8List imageBytes) async {
+  Future<String?> saveThumbnail(
+    String characterId,
+    Uint8List imageBytes,
+  ) async {
     return '/fake/thumbnails/$characterId.jpg';
   }
 }
@@ -63,21 +67,21 @@ void main() {
       expect(names, contains('picks_hash'));
     });
 
-    test('23 after import', () async {
+    test('25 after import', () async {
       final importer = JsBackupImporter(db, imageStorage);
       await importer.import(_minimalBackup(), onProgress: (_) {});
 
       final result = await db.customSelect('PRAGMA user_version').get();
       final version = result.first.read<int>('user_version');
 
-      expect(version, 23);
+      expect(version, 25);
     });
   });
 }
 
 Map<String, dynamic> _minimalBackup() => {
-      'keyvalue': <String, dynamic>{},
-      'localStorage': <String, dynamic>{},
-      'characters': <dynamic>[],
-      'personas': <dynamic>[],
-    };
+  'keyvalue': <String, dynamic>{},
+  'localStorage': <String, dynamic>{},
+  'characters': <dynamic>[],
+  'personas': <dynamic>[],
+};

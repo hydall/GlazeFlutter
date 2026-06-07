@@ -17,6 +17,9 @@ import '../state/cached_token_breakdown.dart';
 import 'saved_message_writer.dart';
 
 class StreamGenerationService {
+  static final Map<String, List<Map<String, dynamic>>> _lastRequestsBySession =
+      <String, List<Map<String, dynamic>>>{};
+
   final Ref _ref;
   final String _charId;
   final int _genId;
@@ -46,9 +49,15 @@ class StreamGenerationService {
     debugPrint('[gen] generate() START charId=$_charId genId=$_genId');
     final vsi = currentState.visibleStartIndex;
     final cancelToken = CancelToken();
-    _ref.read(chatProvider(_charId).notifier).setCancelToken(cancelToken, genId: _genId);
+    _ref
+        .read(chatProvider(_charId).notifier)
+        .setCancelToken(cancelToken, genId: _genId);
     if (cancelToken.isCancelled) {
-      return ChatState(session: saveSession ?? session, isGenerating: false, visibleStartIndex: vsi);
+      return ChatState(
+        session: saveSession ?? session,
+        isGenerating: false,
+        visibleStartIndex: vsi,
+      );
     }
     try {
       debugPrint('[gen] building payload...');
@@ -61,7 +70,11 @@ class StreamGenerationService {
         cancelToken: cancelToken,
       );
       if (_isAborted()) {
-        return ChatState(session: saveSession ?? session, isGenerating: false, visibleStartIndex: vsi);
+        return ChatState(
+          session: saveSession ?? session,
+          isGenerating: false,
+          visibleStartIndex: vsi,
+        );
       }
       debugPrint('[gen] payload built, building prompt in isolate...');
 
@@ -69,9 +82,15 @@ class StreamGenerationService {
 
       final promptResult = await buildPromptInIsolate(payload);
       if (_isAborted()) {
-        return ChatState(session: saveSession ?? session, isGenerating: false, visibleStartIndex: vsi);
+        return ChatState(
+          session: saveSession ?? session,
+          isGenerating: false,
+          visibleStartIndex: vsi,
+        );
       }
-      debugPrint('[gen] prompt built, messages=${promptResult.messages.length}, totalTokens=${promptResult.breakdown.totalTokens}');
+      debugPrint(
+        '[gen] prompt built, messages=${promptResult.messages.length}, totalTokens=${promptResult.breakdown.totalTokens}',
+      );
 
       _ref.read(cachedTokenBreakdownProvider(_charId).notifier).state =
           promptResult.breakdown;
@@ -80,27 +99,34 @@ class StreamGenerationService {
           promptResult.breakdown.vectorLoreTokens;
 
       Map<String, String>? pendingSessionVars;
-      if (promptResult.sessionVars.isNotEmpty || promptResult.globalVars.isNotEmpty) {
+      if (promptResult.sessionVars.isNotEmpty ||
+          promptResult.globalVars.isNotEmpty) {
         pendingSessionVars = promptResult.sessionVars;
         if (promptResult.globalVars.isNotEmpty) {
           updateGlobalVarsRef(_ref, promptResult.globalVars);
         }
       }
 
-      if (_isAborted()) return ChatState(session: saveSession ?? session, isGenerating: false, visibleStartIndex: vsi);
+      if (_isAborted()) {
+        return ChatState(
+          session: saveSession ?? session,
+          isGenerating: false,
+          visibleStartIndex: vsi,
+        );
+      }
       final preset = payload.preset;
       const defaultTagStart = '<think>';
       const defaultTagEnd = '</think>';
       final reasoningTagStart = (preset?.reasoningStart?.isNotEmpty == true)
           ? preset!.reasoningStart!
           : (apiConfig.reasoningTagStart?.isNotEmpty == true)
-              ? apiConfig.reasoningTagStart!
-              : defaultTagStart;
+          ? apiConfig.reasoningTagStart!
+          : defaultTagStart;
       final reasoningTagEnd = (preset?.reasoningEnd?.isNotEmpty == true)
           ? preset!.reasoningEnd!
           : (apiConfig.reasoningTagEnd?.isNotEmpty == true)
-              ? apiConfig.reasoningTagEnd!
-              : defaultTagEnd;
+          ? apiConfig.reasoningTagEnd!
+          : defaultTagEnd;
 
       final hasInlineTags =
           reasoningTagStart.isNotEmpty && reasoningTagEnd.isNotEmpty;
@@ -115,6 +141,8 @@ class StreamGenerationService {
           .where((m) => m.content.trim().isNotEmpty)
           .map((m) => m.toApiMap())
           .toList();
+      final previousApiMessages = _lastRequestsBySession[session.id];
+      _rememberRequest(session.id, apiMessages);
 
       final startGenTime = DateTime.now();
       final transport = pickChatTransport(apiConfig.protocol);
@@ -123,7 +151,9 @@ class StreamGenerationService {
       final triggeredLorebooks = promptResult.triggeredLorebooks;
       final triggeredMemories = promptResult.triggeredMemories;
 
-      debugPrint('[gen] starting SSE stream to ${apiConfig.endpoint} model=${apiConfig.model}');
+      debugPrint(
+        '[gen] starting SSE stream to ${apiConfig.endpoint} model=${apiConfig.model}',
+      );
 
       bool frameScheduled = false;
 
@@ -147,7 +177,9 @@ class StreamGenerationService {
           omitReasoning: apiConfig.omitReasoning,
           omitReasoningEffort: apiConfig.omitReasoningEffort,
           sessionId: session.id,
+          previousMessages: previousApiMessages,
           cacheControlTtl: apiConfig.cacheControlTtl,
+          cacheBreakpointMode: apiConfig.cacheBreakpointMode,
         ),
         cancelToken: cancelToken,
         onUpdate: (delta, reasoningDelta) {
@@ -158,13 +190,14 @@ class StreamGenerationService {
             SchedulerBinding.instance.scheduleFrameCallback((_) {
               frameScheduled = false;
               if (_isAborted()) return;
-              _ref.read(streamingStateProvider(_charId).notifier).state =
-                  StreamingState(
-                    text: accumulator.text.trimLeft(),
-                    reasoning: accumulator.reasoning.isNotEmpty
-                        ? accumulator.reasoning
-                        : null,
-                  );
+              _ref
+                  .read(streamingStateProvider(_charId).notifier)
+                  .state = StreamingState(
+                text: accumulator.text.trimLeft(),
+                reasoning: accumulator.reasoning.isNotEmpty
+                    ? accumulator.reasoning
+                    : null,
+              );
             });
           }
         },
@@ -173,19 +206,35 @@ class StreamGenerationService {
           if (!apiConfig.stream &&
               accumulator.text.isEmpty &&
               accumulator.reasoning.isEmpty &&
-              (text.isNotEmpty || (reasoning != null && reasoning.isNotEmpty))) {
+              (text.isNotEmpty ||
+                  (reasoning != null && reasoning.isNotEmpty))) {
             accumulator.consumeDelta(text, reasoningDelta: reasoning);
           }
           var finalText = accumulator.text.trimLeft();
-          var finalReasoning = accumulator.reasoning.isNotEmpty ? accumulator.reasoning : reasoning;
+          var finalReasoning = accumulator.reasoning.isNotEmpty
+              ? accumulator.reasoning
+              : reasoning;
 
-          finalText = _writer.sanitizeReasoningMarkers(finalText, reasoningTagStart, reasoningTagEnd);
+          finalText = _writer.sanitizeReasoningMarkers(
+            finalText,
+            reasoningTagStart,
+            reasoningTagEnd,
+          );
           if (finalReasoning != null && finalReasoning.isNotEmpty) {
-            finalReasoning = _writer.sanitizeReasoningMarkers(finalReasoning, reasoningTagStart, reasoningTagEnd);
+            finalReasoning = _writer.sanitizeReasoningMarkers(
+              finalReasoning,
+              reasoningTagStart,
+              reasoningTagEnd,
+            );
           }
 
-          final isAllReasoning = finalText.isEmpty && finalReasoning != null && finalReasoning.isNotEmpty;
-          final elapsed = DateTime.now().difference(startGenTime).inMilliseconds;
+          final isAllReasoning =
+              finalText.isEmpty &&
+              finalReasoning != null &&
+              finalReasoning.isNotEmpty;
+          final elapsed = DateTime.now()
+              .difference(startGenTime)
+              .inMilliseconds;
           final timeStr = '${(elapsed / 1000).toStringAsFixed(1)}s';
           final tokenCount = estimateTokens(finalText);
           finalState = _writer.writeAssistant(
@@ -213,11 +262,17 @@ class StreamGenerationService {
           );
         },
         onError: (error) {
-          final isCancelled = (error is DioException && error.type == DioExceptionType.cancel)
-              || cancelToken.isCancelled
-              || _isAborted();
+          final isCancelled =
+              (error is DioException &&
+                  error.type == DioExceptionType.cancel) ||
+              cancelToken.isCancelled ||
+              _isAborted();
           if (isCancelled) {
-            finalState = ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
+            finalState = ChatState(
+              session: session,
+              isGenerating: false,
+              visibleStartIndex: vsi,
+            );
           } else if (regenTargetId != null && saveSession != null) {
             finalState = _writer.writeRegenError(
               errorText: error.toString(),
@@ -235,9 +290,20 @@ class StreamGenerationService {
         },
       );
 
-      return finalState ?? ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
+      return finalState ??
+          ChatState(
+            session: session,
+            isGenerating: false,
+            visibleStartIndex: vsi,
+          );
     } catch (e) {
-      if (_isAborted()) return ChatState(session: session, isGenerating: false, visibleStartIndex: vsi);
+      if (_isAborted()) {
+        return ChatState(
+          session: session,
+          isGenerating: false,
+          visibleStartIndex: vsi,
+        );
+      }
       if (regenTargetId != null && saveSession != null) {
         return _writer.writeRegenError(
           errorText: e.toString(),
@@ -251,6 +317,18 @@ class StreamGenerationService {
         currentSession: session,
         visibleStartIndex: vsi,
       );
+    }
+  }
+
+  static void _rememberRequest(
+    String sessionId,
+    List<Map<String, dynamic>> messages,
+  ) {
+    _lastRequestsBySession[sessionId] = messages
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList(growable: false);
+    if (_lastRequestsBySession.length > 64) {
+      _lastRequestsBySession.remove(_lastRequestsBySession.keys.first);
     }
   }
 }

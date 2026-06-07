@@ -140,9 +140,11 @@ class OpenAiChatTransport implements ChatTransport {
         'type': 'ephemeral',
         if (r.cacheControlTtl == '1h') 'ttl': '1h',
       };
-      if (r.sessionId != null && r.sessionId!.isNotEmpty) {
-        body['session_id'] = r.sessionId;
-      }
+    }
+    if (r.sessionId != null &&
+        r.sessionId!.isNotEmpty &&
+        r.endpoint.contains('openrouter.ai')) {
+      body['session_id'] = r.sessionId;
     }
 
     return body;
@@ -191,7 +193,9 @@ class OpenAiChatTransport implements ChatTransport {
     subscription = (responseStream as Stream<List<int>>).listen(
       (chunk) {
         if (cancelToken?.isCancelled == true) {
-          debugPrint('[SSE] cancel detected in listen callback, stopping stream');
+          debugPrint(
+            '[SSE] cancel detected in listen callback, stopping stream',
+          );
           subscription?.cancel();
           if (!completer.isCompleted) completer.complete();
           return;
@@ -215,7 +219,9 @@ class OpenAiChatTransport implements ChatTransport {
           final data = trimmed.substring(6).trim();
           if (data == '[DONE]') {
             if (cancelToken != null && cancelToken.isCancelled) {
-              debugPrint('[SSE] cancel detected at [DONE], suppressing onComplete');
+              debugPrint(
+                '[SSE] cancel detected at [DONE], suppressing onComplete',
+              );
             } else {
               onComplete?.call(
                 fullText,
@@ -241,7 +247,8 @@ class OpenAiChatTransport implements ChatTransport {
             final delta = choice?['delta'];
 
             final contentDelta = delta?['content'] as String? ?? '';
-            final reasoningDelta = delta?['reasoning_content'] as String? ??
+            final reasoningDelta =
+                delta?['reasoning_content'] as String? ??
                 delta?['reasoning'] as String?;
 
             if (contentDelta.isNotEmpty) {
@@ -271,7 +278,9 @@ class OpenAiChatTransport implements ChatTransport {
     if (cancelToken != null) {
       unawaited(
         cancelToken.whenCancel.then((_) {
-          debugPrint('[SSE] CancelToken fired — cancelling stream subscription');
+          debugPrint(
+            '[SSE] CancelToken fired — cancelling stream subscription',
+          );
           subscription?.cancel();
           if (!completer.isCompleted) completer.complete();
         }),
@@ -281,7 +290,9 @@ class OpenAiChatTransport implements ChatTransport {
     await completer.future;
 
     if (cancelToken != null && cancelToken.isCancelled) {
-      debugPrint('[SSE] stream completed with cancel active; suppressing onComplete');
+      debugPrint(
+        '[SSE] stream completed with cancel active; suppressing onComplete',
+      );
       return;
     }
 
@@ -365,13 +376,15 @@ class OpenAiChatTransport implements ChatTransport {
       );
     }
 
-    final choice = (data['choices'] is List && (data['choices'] as List).isNotEmpty)
+    final choice =
+        (data['choices'] is List && (data['choices'] as List).isNotEmpty)
         ? (data['choices'] as List).first
         : null;
     final message = choice is Map<String, dynamic> ? choice['message'] : null;
     final content =
-        (message is Map<String, dynamic> ? message['content'] : null) as String? ??
-            '';
+        (message is Map<String, dynamic> ? message['content'] : null)
+            as String? ??
+        '';
     final reasoningRaw = message is Map<String, dynamic>
         ? (message['reasoning_content'] ?? message['reasoning'])
         : null;

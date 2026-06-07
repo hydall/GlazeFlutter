@@ -23,7 +23,8 @@ class Characters extends Table {
   TextColumn get tagsJson => text().nullable()();
   TextColumn get alternateGreetingsJson => text().nullable()();
   TextColumn get galleryJson => text().nullable()();
-  IntColumn get currentSessionIndex => integer().withDefault(const Constant(0))();
+  IntColumn get currentSessionIndex =>
+      integer().withDefault(const Constant(0))();
   BoolColumn get fav => boolean().withDefault(const Constant(false))();
   TextColumn get extensionsJson => text().nullable()();
   TextColumn get characterVersion => text().withDefault(const Constant('1'))();
@@ -62,14 +63,17 @@ class MemoryBookRows extends Table {
 
   TextColumn get sessionId => text()();
   TextColumn get entriesJson => text().withDefault(const Constant('[]'))();
-  TextColumn get pendingDraftsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get pendingDraftsJson =>
+      text().withDefault(const Constant('[]'))();
   TextColumn get settingsJson => text().withDefault(const Constant('{}'))();
-  IntColumn get lastProcessedMessageCount => integer().withDefault(const Constant(0))();
+  IntColumn get lastProcessedMessageCount =>
+      integer().withDefault(const Constant(0))();
   IntColumn get updatedAt => integer().withDefault(const Constant(0))();
 
   @override
   Set<Column> get primaryKey => {sessionId};
 }
+
 @DataClassName('PresetRow')
 class Presets extends Table {
   @override
@@ -90,7 +94,8 @@ class ApiConfigs extends Table {
 
   TextColumn get configId => text()();
   TextColumn get name => text()();
-  TextColumn get providerId => text().withDefault(const Constant('openai_compatible'))();
+  TextColumn get providerId =>
+      text().withDefault(const Constant('openai_compatible'))();
   TextColumn get protocol => text().withDefault(const Constant('openai'))();
   TextColumn get endpoint => text().nullable()();
   TextColumn get apiKey => text().nullable()();
@@ -105,20 +110,29 @@ class ApiConfigs extends Table {
   RealColumn get presencePenalty => real().withDefault(const Constant(0.0))();
   BoolColumn get stream => boolean().withDefault(const Constant(true))();
   TextColumn get reasoningEffort => text().nullable()();
-  BoolColumn get requestReasoning => boolean().withDefault(const Constant(false))();
+  BoolColumn get requestReasoning =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get reasoningTagStart => text().nullable()();
   TextColumn get reasoningTagEnd => text().nullable()();
-  BoolColumn get omitTemperature => boolean().withDefault(const Constant(false))();
+  BoolColumn get omitTemperature =>
+      boolean().withDefault(const Constant(false))();
   BoolColumn get omitTopP => boolean().withDefault(const Constant(false))();
-  BoolColumn get omitReasoning => boolean().withDefault(const Constant(false))();
-  BoolColumn get omitReasoningEffort => boolean().withDefault(const Constant(false))();
-  BoolColumn get embeddingUseSame => boolean().withDefault(const Constant(true))();
-  BoolColumn get embeddingEnabled => boolean().withDefault(const Constant(false))();
+  BoolColumn get omitReasoning =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get omitReasoningEffort =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get embeddingUseSame =>
+      boolean().withDefault(const Constant(true))();
+  BoolColumn get embeddingEnabled =>
+      boolean().withDefault(const Constant(false))();
   TextColumn get embeddingEndpoint => text().nullable()();
   TextColumn get embeddingApiKey => text().nullable()();
   TextColumn get embeddingModel => text().nullable()();
-  IntColumn get embeddingMaxChunkTokens => integer().withDefault(const Constant(512))();
+  IntColumn get embeddingMaxChunkTokens =>
+      integer().withDefault(const Constant(512))();
   TextColumn get cacheControlTtl => text().withDefault(const Constant('off'))();
+  TextColumn get cacheBreakpointMode =>
+      text().withDefault(const Constant('depth'))();
 
   @override
   Set<Column> get primaryKey => {configId};
@@ -141,7 +155,10 @@ class Personas extends Table {
 
 @DataClassName('LorebookRow')
 @TableIndex(name: 'idx_lorebooks_activation_scope', columns: {#activationScope})
-@TableIndex(name: 'idx_lorebooks_activation_target_id', columns: {#activationTargetId})
+@TableIndex(
+  name: 'idx_lorebooks_activation_target_id',
+  columns: {#activationTargetId},
+)
 class Lorebooks extends Table {
   @override
   String get tableName => 'lorebooks';
@@ -149,7 +166,8 @@ class Lorebooks extends Table {
   TextColumn get lorebookId => text()();
   TextColumn get name => text()();
   BoolColumn get enabled => boolean().withDefault(const Constant(true))();
-  TextColumn get activationScope => text().withDefault(const Constant('global'))();
+  TextColumn get activationScope =>
+      text().withDefault(const Constant('global'))();
   TextColumn get activationTargetId => text().nullable()();
   TextColumn get entriesJson => text()();
   TextColumn get settingsJson => text().withDefault(const Constant(''))();
@@ -168,7 +186,8 @@ class Embeddings extends Table {
   String get tableName => 'embeddings';
 
   TextColumn get entryId => text()();
-  TextColumn get sourceType => text().withDefault(const Constant('lorebook_entry'))();
+  TextColumn get sourceType =>
+      text().withDefault(const Constant('lorebook_entry'))();
   TextColumn get sourceId => text().nullable()();
   BlobColumn get vectorsBlob => blob().nullable()();
   TextColumn get textHash => text().nullable()();

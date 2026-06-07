@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
 import '../converters/openrouter_messages.dart';
+import '../converters/cache_breakpoint_marker.dart';
 import 'chat_transport.dart';
 import 'chat_transport_request.dart';
 import 'openai_chat_transport.dart';
@@ -45,7 +46,25 @@ class OpenRouterChatTransport implements ChatTransport {
     var messages = input.messages;
     if (ttl != null && isClaudeModelOnOpenRouter(input.model)) {
       messages = cachingSystemPromptForOpenRouter(messages, ttl: ttl);
-      messages = cachingAtDepthForOpenRouterClaude(messages, _cacheDepth, ttl);
+      if (input.cacheBreakpointMode == cacheBreakpointModeStablePrefix) {
+        final previousMessages = input.previousMessages == null
+            ? null
+            : cachingSystemPromptForOpenRouter(
+                input.previousMessages!,
+                ttl: ttl,
+              );
+        messages = markStablePrefixCacheControl(
+          messages,
+          previousMessages,
+          ttl: ttl,
+        );
+      } else {
+        messages = cachingAtDepthForOpenRouterClaude(
+          messages,
+          _cacheDepth,
+          ttl,
+        );
+      }
     } else if (ttl == null && isClaudeModelOnOpenRouter(input.model)) {
       debugPrint(
         '[openrouter] Claude model "${input.model}" — cacheControlTtl is off; '
@@ -75,6 +94,7 @@ class OpenRouterChatTransport implements ChatTransport {
       omitReasoning: input.omitReasoning,
       omitReasoningEffort: input.omitReasoningEffort,
       sessionId: input.sessionId,
+      previousMessages: input.previousMessages,
       // OR doesn't take cache_control on the body level the same way the
       // OpenAI builder expects — strip it so the body doesn't grow a stray
       // top-level `cache_control` field. Cache markers are now on the

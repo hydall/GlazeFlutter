@@ -53,10 +53,10 @@ class InfoBlockService {
     );
 
     // Image / JS blocks run an LLM agent first; no XML template extract.
-    final isRawAgent = blockConfig.type == BlockType.imageGen ||
+    final isRawAgent =
+        blockConfig.type == BlockType.imageGen ||
         blockConfig.type == BlockType.jsRunner;
-    final resolvedTemplate =
-        isRawAgent ? '' : _resolveTemplate(blockConfig);
+    final resolvedTemplate = isRawAgent ? '' : _resolveTemplate(blockConfig);
     final systemContent = _buildSystemMessage(
       blockConfig: blockConfig,
       template: resolvedTemplate,
@@ -74,8 +74,13 @@ class InfoBlockService {
     // Resolve API config.
     final apiConfigId = blockConfig.apiConfigId;
     if (apiConfigId.isEmpty) {
-      debugPrint('[InfoBlockService] No API config for block "${blockConfig.name}"');
-      return (content: null, error: 'API config not set for block "${blockConfig.name}"');
+      debugPrint(
+        '[InfoBlockService] No API config for block "${blockConfig.name}"',
+      );
+      return (
+        content: null,
+        error: 'API config not set for block "${blockConfig.name}"',
+      );
     }
 
     final apiConfigs = await _ref.read(apiListProvider.future);
@@ -173,7 +178,10 @@ class InfoBlockService {
     if (blockConfig.type == BlockType.imageGen) {
       final prompt = blockConfig.prompt.trim();
       if (prompt.isNotEmpty) {
-        return expand(prompt, _macroContext(character: character, persona: persona));
+        return expand(
+          prompt,
+          _macroContext(character: character, persona: persona),
+        );
       }
       return 'Write the roleplay response, then append the visual HTML card with '
           '[IMG:GEN] / data-iig-instruction as instructed.';
@@ -280,7 +288,9 @@ class InfoBlockService {
         request: ChatTransportRequest(
           endpoint: apiConfig.endpoint,
           apiKey: apiConfig.apiKey,
-          model: blockConfig.model.isNotEmpty ? blockConfig.model : apiConfig.model,
+          model: blockConfig.model.isNotEmpty
+              ? blockConfig.model
+              : apiConfig.model,
           messages: messages,
           maxTokens: apiConfig.maxTokens,
           temperature: apiConfig.temperature,
@@ -296,6 +306,7 @@ class InfoBlockService {
           omitReasoning: apiConfig.omitReasoning,
           omitReasoningEffort: apiConfig.omitReasoningEffort,
           cacheControlTtl: apiConfig.cacheControlTtl,
+          cacheBreakpointMode: apiConfig.cacheBreakpointMode,
         ),
         cancelToken: cancelToken,
         onUpdate: useStream

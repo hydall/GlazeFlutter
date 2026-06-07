@@ -65,6 +65,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   bool _embeddingEnabled = false;
   bool _embeddingUseSame = true;
   String _cacheControlTtl = 'off';
+  String _cacheBreakpointMode = 'depth';
   String _protocol = LlmProtocol.openai;
 
   String? _loadedPresetId;
@@ -173,6 +174,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       _embeddingEnabled = config.embeddingEnabled;
       _embeddingUseSame = config.embeddingUseSame;
       _cacheControlTtl = config.cacheControlTtl;
+      _cacheBreakpointMode = config.cacheBreakpointMode;
       _protocol = LlmProtocol.isValid(config.protocol)
           ? config.protocol
           : LlmProtocol.openai;
@@ -212,6 +214,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             embeddingEnabled: _embeddingEnabled,
             embeddingUseSame: _embeddingUseSame,
             cacheControlTtl: _cacheControlTtl,
+            cacheBreakpointMode: _cacheBreakpointMode,
             protocol: _protocol,
             embeddingEndpoint: _embEndpointCtrl.text.trim(),
             embeddingApiKey: _embApiKeyCtrl.text.trim(),
@@ -461,8 +464,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
               ),
               MenuSelectorItem(
                 label: 'settings_protocol'.tr(),
-                currentValue:
-                    LlmProtocol.labels[_protocol] ?? _protocol,
+                currentValue: LlmProtocol.labels[_protocol] ?? _protocol,
                 onTap: _openProtocolSelector,
               ),
               if (_protocol != LlmProtocol.openrouter)
@@ -630,6 +632,12 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   label: 'label_prompt_cache_ttl'.tr(),
                   currentValue: _cacheControlTtlLabel(_cacheControlTtl),
                   onTap: _openCacheControlTtlSelector,
+                ),
+              if (_supportsPromptCache)
+                MenuSelectorItem(
+                  label: 'label_prompt_cache_breakpoint'.tr(),
+                  currentValue: _cacheBreakpointModeLabel(_cacheBreakpointMode),
+                  onTap: _openCacheBreakpointModeSelector,
                 ),
             ],
           ),
@@ -974,6 +982,13 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     };
   }
 
+  String _cacheBreakpointModeLabel(String mode) {
+    return switch (mode) {
+      'stable_prefix' => 'prompt_cache_breakpoint_stable'.tr(),
+      _ => 'prompt_cache_breakpoint_depth'.tr(),
+    };
+  }
+
   void _openCacheControlTtlSelector() {
     const options = ['off', '5min', '1h'];
     GlazeBottomSheet.show<void>(
@@ -989,6 +1004,28 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             setState(() => _cacheControlTtl = e);
+            _scheduleSave();
+          },
+        );
+      }).toList(),
+    );
+  }
+
+  void _openCacheBreakpointModeSelector() {
+    const options = ['depth', 'stable_prefix'];
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'label_prompt_cache_breakpoint'.tr(),
+      items: options.map((e) {
+        final label = _cacheBreakpointModeLabel(e);
+        final active = e == _cacheBreakpointMode;
+        return BottomSheetItem(
+          label: label,
+          icon: active ? Icons.check : null,
+          iconColor: context.cs.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            setState(() => _cacheBreakpointMode = e);
             _scheduleSave();
           },
         );
@@ -1031,10 +1068,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     }
     setState(() => _isLoadingModels = true);
     try {
-      final models = await pickChatTransport(_protocol).fetchModels(
-        endpoint: endpoint,
-        apiKey: apiKey,
-      );
+      final models = await pickChatTransport(
+        _protocol,
+      ).fetchModels(endpoint: endpoint, apiKey: apiKey);
       if (!mounted) return;
       setState(() {
         _fetchedModels = models;
