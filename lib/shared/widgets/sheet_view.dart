@@ -282,8 +282,9 @@ class _SheetViewState extends ConsumerState<SheetView>
         if (!_expanded && !widget.fitContent) {
           _wasExpandedBeforeKeyboard = false;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && !_expanded)
+            if (mounted && !_expanded) {
               _animateTo(_full(context), expanding: true);
+            }
           });
         } else {
           _wasExpandedBeforeKeyboard = true;
@@ -291,8 +292,9 @@ class _SheetViewState extends ConsumerState<SheetView>
       } else {
         if (!_wasExpandedBeforeKeyboard) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && _expanded)
+            if (mounted && _expanded) {
               _animateTo(_collapsed(context), expanding: false);
+            }
           });
         }
       }

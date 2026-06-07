@@ -29,7 +29,7 @@ void main() {
     test('rejects non-string source with invalid_request', () async {
       final bridge = JsBridgeService(
         permissionCheck: (_) => true,
-        playAudio: (_, __) async {},
+        playAudio: (_, _) async {},
       );
       final result = await bridge.dispatch({
         'method': 'playAudio',
@@ -42,7 +42,7 @@ void main() {
     test('denies when play_audio capability is not granted', () async {
       final bridge = JsBridgeService(
         permissionCheck: (_) => false,
-        playAudio: (_, __) async {},
+        playAudio: (_, _) async {},
       );
       final result = await bridge.dispatch({
         'method': 'playAudio',

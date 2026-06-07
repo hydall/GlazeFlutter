@@ -16,12 +16,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// [ArgumentError] so the caller can surface a JS error.
 class GlobalVariablesRepo {
   GlobalVariablesRepo._({
-    required Future<SharedPreferences> prefsLoader,
-    String storageKey = _defaultStorageKey,
-    int maxJsonBytes = _defaultMaxJsonBytes,
-  })  : _prefsLoader = prefsLoader,
-        _storageKey = storageKey,
-        _maxJsonBytes = maxJsonBytes;
+    required this._prefsLoader,
+  });
 
   static const _defaultStorageKey = 'glaze.global_variables';
   static const _defaultMaxJsonBytes = 64 * 1024;
@@ -40,8 +36,8 @@ class GlobalVariablesRepo {
       GlobalVariablesRepo._(prefsLoader: loader());
 
   final Future<SharedPreferences> _prefsLoader;
-  final String _storageKey;
-  final int _maxJsonBytes;
+  final String _storageKey = _defaultStorageKey;
+  final int _maxJsonBytes = _defaultMaxJsonBytes;
   Future<void> _writeLock = Future.value();
 
   Future<SharedPreferences> get _prefs => _prefsLoader;

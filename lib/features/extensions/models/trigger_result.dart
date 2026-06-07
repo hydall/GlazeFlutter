@@ -1,7 +1,7 @@
-/// Result of a JS-side `glaze.triggerGeneration(...)` call as resolved by
-/// [GenerationDispatcher]. Serialized back to the bridge as a plain map.
 import 'trigger_mode.dart';
 
+/// Result of a JS-side `glaze.triggerGeneration(...)` call as resolved by
+/// GenerationDispatcher. Serialized back to the bridge as a plain map.
 sealed class TriggerResult {
   const TriggerResult();
 

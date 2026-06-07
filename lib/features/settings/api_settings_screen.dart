@@ -332,8 +332,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   }
 
   String _activeName(ApiConfig? config, List<ApiConfig> list) {
-    if (config == null)
+    if (config == null) {
       return list.isEmpty ? 'no_active_connections'.tr() : 'unnamed_entry'.tr();
+    }
     if (config.name.isNotEmpty) return config.name;
     if (config.model.isNotEmpty) return config.model;
     return 'unnamed_entry'.tr();
@@ -1039,8 +1040,9 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         _fetchedModels = models;
         _isLoadingModels = false;
       });
-      if (models.isEmpty)
+      if (models.isEmpty) {
         GlazeToast.show(context, 'settings_err_no_models'.tr());
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingModels = false);

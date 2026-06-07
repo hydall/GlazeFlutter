@@ -297,8 +297,9 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
       );
       if (context.mounted) GlazeToast.show(context, 'export_success'.tr());
     } catch (e) {
-      if (context.mounted)
+      if (context.mounted) {
         GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+      }
     }
   }
 
@@ -331,8 +332,9 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
         if (picked.name.toLowerCase().endsWith('.zip')) {
           final archive = ZipDecoder().decodeBytes(bytes);
           for (final entry in archive) {
-            if (!entry.isFile || !entry.name.toLowerCase().endsWith('.json'))
+            if (!entry.isFile || !entry.name.toLowerCase().endsWith('.json')) {
               continue;
+            }
             _appendFromJson(
               utf8.decode(entry.content as List<int>),
               combinedRaw,
@@ -356,8 +358,9 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
       } else {
         final pid = _effectivePresetId;
         if (pid == null) {
-          if (context.mounted)
+          if (context.mounted) {
             GlazeToast.show(context, 'label_active_preset'.tr());
+          }
           return;
         }
         final presets = ref.read(presetListProvider).value ?? [];
@@ -377,8 +380,9 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
         }
       }
     } catch (e) {
-      if (context.mounted)
+      if (context.mounted) {
         GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+      }
     }
   }
 

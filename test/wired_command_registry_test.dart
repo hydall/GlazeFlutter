@@ -63,7 +63,7 @@ void main() {
   });
 
   /// Helper to build a wired registry backed by a real bridge.
-  WiredCommandDeps _buildDeps() {
+  WiredCommandDeps buildDeps() {
     final bridge = JsBridgeService(
       chatRepo: null,
       characterRepo: characterRepo,
@@ -85,7 +85,7 @@ void main() {
 
   group('wired registry setup', () {
     test('registers all five MVP commands', () {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       final names = registry.list().map((c) => c.name).toSet();
       expect(names, {'/trigger', '/getvar', '/setvar', '/inject', '/toast'});
     });
@@ -93,7 +93,7 @@ void main() {
 
   group('/getvar and /setvar route through the bridge', () {
     test('/getvar returns the stored value', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       // Pre-populate the character variables.
       await characterRepo.put(
         Character(
@@ -113,7 +113,7 @@ void main() {
     });
 
     test('/getvar returns an error for unsupported scope', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       final result = await registry.run('/getvar', {
         'scope': 'unknown',
         'path': 'x',
@@ -125,7 +125,7 @@ void main() {
     test(
       '/setvar writes to the requested scope and /getvar reads it back',
       () async {
-        final registry = buildWiredCommandRegistry(_buildDeps());
+        final registry = buildWiredCommandRegistry(buildDeps());
         final setResult = await registry.run('/setvar', {
           'scope': 'character',
           'path': 'greeting',
@@ -145,7 +145,7 @@ void main() {
 
   group('/inject validation', () {
     test('rejects missing id', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       final result = await registry.run('/inject', {
         'content': 'hi',
       }, context: const CommandContext(charId: 'c1'));
@@ -154,7 +154,7 @@ void main() {
     });
 
     test('rejects missing content', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       final result = await registry.run('/inject', {
         'id': 'mood',
       }, context: const CommandContext(charId: 'c1'));
@@ -163,7 +163,7 @@ void main() {
     });
 
     test('rejects missing charId in context', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       final result = await registry.run('/inject', {
         'id': 'mood',
         'content': 'hi',
@@ -173,7 +173,7 @@ void main() {
     });
 
     test('successful inject echoes the result payload', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       final result = await registry.run('/inject', {
         'id': 'mood',
         'content': 'tense',
@@ -191,7 +191,7 @@ void main() {
 
   group('/toast validation', () {
     test('rejects non-string message', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       final result = await registry.run('/toast', {
         'message': 7,
       }, context: const CommandContext());
@@ -200,7 +200,7 @@ void main() {
     });
 
     test('successful toast resolves ok', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       final result = await registry.run('/toast', {
         'message': 'hi',
         'severity': 'success',
@@ -212,7 +212,7 @@ void main() {
 
   group('/trigger validation', () {
     test('rejects missing charId in context', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       final result = await registry.run('/trigger', const {
         'mode': 'auto',
       }, context: const CommandContext());
@@ -221,7 +221,7 @@ void main() {
     });
 
     test('rejects non-string mode', () async {
-      final registry = buildWiredCommandRegistry(_buildDeps());
+      final registry = buildWiredCommandRegistry(buildDeps());
       final result = await registry.run('/trigger', {
         'mode': 5,
       }, context: const CommandContext(charId: 'c1'));

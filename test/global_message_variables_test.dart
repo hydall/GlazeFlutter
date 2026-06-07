@@ -38,7 +38,7 @@ void main() {
     });
 
     test('update serializes concurrent writes (no lost update)', () async {
-      final repo = await GlobalVariablesRepo.withPrefsLoader(
+      final repo = GlobalVariablesRepo.withPrefsLoader(
         SharedPreferences.getInstance,
       );
 
@@ -56,7 +56,7 @@ void main() {
     });
 
     test('replaceAll clears missing keys', () async {
-      final repo = await GlobalVariablesRepo.withPrefsLoader(
+      final repo = GlobalVariablesRepo.withPrefsLoader(
         SharedPreferences.getInstance,
       );
       await repo.replaceAll({'a': 1, 'b': 2});

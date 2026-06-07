@@ -302,7 +302,7 @@ class InfoBlockService {
             ? (delta, _) {
                 if (delta.isEmpty) return;
                 buffer.write(delta);
-                onStreamUpdate!(buffer.toString());
+                onStreamUpdate(buffer.toString());
               }
             : null,
         onComplete: (text, reasoning, {rawResponseJson}) {

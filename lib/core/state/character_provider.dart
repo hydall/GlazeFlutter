@@ -280,8 +280,9 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
           final galleryDir = Directory(
             p.join(p.dirname(avatarDir), 'gallery', character.id),
           );
-          if (await galleryDir.exists())
+          if (await galleryDir.exists()) {
             await galleryDir.delete(recursive: true);
+          }
         }
       }
     } catch (_) {}

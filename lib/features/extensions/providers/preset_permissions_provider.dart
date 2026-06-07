@@ -1,8 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/db/repositories/extension_presets_repository.dart';
-import '../../../core/state/db_provider.dart';
-import '../models/extension_preset.dart';
 import '../models/preset_permissions.dart';
 import '../providers/extension_presets_provider.dart';
 import '../providers/extensions_settings_provider.dart';

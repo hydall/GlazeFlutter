@@ -73,13 +73,10 @@ class SyncEngine {
 
     final localManifest = await _manifestBuilder.buildLocalManifest();
     SyncManifest? cloudManifest;
-    var cloudManifestDownloadFailed = false;
     try {
       final raw = await _adapter.download(cloudPath('manifest', 'manifest'));
       cloudManifest = SyncManifest.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-    } catch (_) {
-      cloudManifestDownloadFailed = true;
-    }
+    } catch (_) {}
 
     final cloudFilePaths = await _loadCloudFilePaths();
 
@@ -657,7 +654,7 @@ class SyncEngine {
   Future<void> _applyCloudCharacter(String id, Map<String, dynamic> data) async {
     final local = await _characterRepo.getById(id);
     final json = Map<String, dynamic>.from(data);
-    final cloudAvatarPath = json.remove('avatarPath') as String?;
+    json.remove('avatarPath');
     json.remove('gallery');
     var character = Character.fromJson(json);
     if (local != null) {
@@ -672,7 +669,7 @@ class SyncEngine {
   Future<void> _applyCloudPersona(String id, Map<String, dynamic> data) async {
     final local = await _personaRepo.getById(id);
     final json = Map<String, dynamic>.from(data);
-    final cloudAvatarPath = json.remove('avatarPath') as String?;
+    json.remove('avatarPath');
     var persona = Persona.fromJson(json);
     if (local != null) {
       persona = persona.copyWith(avatarPath: local.avatarPath);

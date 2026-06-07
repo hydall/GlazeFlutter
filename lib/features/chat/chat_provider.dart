@@ -74,8 +74,9 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
   void loadOlderMessages() {
     final current = state.value;
-    if (current == null || !current.hasMoreOlder || current.isLoadingOlder)
+    if (current == null || !current.hasMoreOlder || current.isLoadingOlder) {
       return;
+    }
 
     final newStart = current.visibleStartIndex > ChatState.olderPageSize
         ? current.visibleStartIndex - ChatState.olderPageSize
@@ -303,8 +304,9 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       abortGeneration();
     }
     final current = state.value;
-    if (current == null || current.session == null || current.isGenerating)
+    if (current == null || current.session == null || current.isGenerating) {
       return;
+    }
     if (_isMemoryDraftActive(current)) return;
 
     final lastIdx = current.messages.length - 1;
@@ -389,8 +391,9 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
   Future<void> continueMessage() async {
     final current = state.value;
-    if (current == null || current.session == null || current.isGenerating)
+    if (current == null || current.session == null || current.isGenerating) {
       return;
+    }
     if (_isMemoryDraftActive(current)) return;
 
     final lastIdx = current.messages.length - 1;

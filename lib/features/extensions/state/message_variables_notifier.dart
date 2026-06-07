@@ -1,7 +1,5 @@
 import 'package:flutter_riverpod/legacy.dart';
 
-import '../../../core/models/chat_message.dart';
-
 /// In-memory storage for per-message JS extension variables.
 ///
 /// Message variables are not persisted in the current design (per the
