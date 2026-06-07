@@ -9,7 +9,7 @@ part 'memory_settings_provider.freezed.dart';
 part 'memory_settings_provider.g.dart';
 
 @freezed
-class MemoryGlobalSettings with _$MemoryGlobalSettings {
+abstract class MemoryGlobalSettings with _$MemoryGlobalSettings {
   const factory MemoryGlobalSettings({
     @Default(true) bool enabled,
     @Default(true) bool autoCreateEnabled,

@@ -5,7 +5,7 @@ part 'image_gen_models.freezed.dart';
 enum ImageGenApiType { openai, gemini, naistera, routmy, ruRoutmy }
 
 @freezed
-class ReferenceImage with _$ReferenceImage {
+abstract class ReferenceImage with _$ReferenceImage {
   const factory ReferenceImage({
     required String name,
     required String imageData,
@@ -14,7 +14,7 @@ class ReferenceImage with _$ReferenceImage {
 }
 
 @freezed
-class ImageGenSettings with _$ImageGenSettings {
+abstract class ImageGenSettings with _$ImageGenSettings {
   const factory ImageGenSettings({
     @Default(false) bool enabled,
     @Default(ImageGenApiType.openai) ImageGenApiType apiType,

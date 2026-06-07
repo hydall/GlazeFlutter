@@ -6,7 +6,7 @@ part 'info_block.freezed.dart';
 part 'info_block.g.dart';
 
 @freezed
-class InfoBlock with _$InfoBlock {
+abstract class InfoBlock with _$InfoBlock {
   const factory InfoBlock({
     required String id,
     required String sessionId,

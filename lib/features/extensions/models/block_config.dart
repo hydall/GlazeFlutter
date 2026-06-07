@@ -17,7 +17,7 @@ enum BlockTrigger {
 }
 
 @freezed
-class BlockConfig with _$BlockConfig {
+abstract class BlockConfig with _$BlockConfig {
   const factory BlockConfig({
     required String id,
     required String name,

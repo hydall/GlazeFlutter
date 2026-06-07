@@ -4,7 +4,7 @@ part 'memory_book.freezed.dart';
 part 'memory_book.g.dart';
 
 @freezed
-class MemoryDraft with _$MemoryDraft {
+abstract class MemoryDraft with _$MemoryDraft {
   const factory MemoryDraft({
     required String id,
     @Default('') String title,
@@ -27,7 +27,7 @@ class MemoryDraft with _$MemoryDraft {
 }
 
 @freezed
-class MessageRange with _$MessageRange {
+abstract class MessageRange with _$MessageRange {
   const factory MessageRange({
     required int start,
     required int end,
@@ -38,7 +38,7 @@ class MessageRange with _$MessageRange {
 }
 
 @freezed
-class MemoryEntry with _$MemoryEntry {
+abstract class MemoryEntry with _$MemoryEntry {
   const factory MemoryEntry({
     required String id,
     @Default('') String title,
@@ -55,7 +55,7 @@ class MemoryEntry with _$MemoryEntry {
 }
 
 @freezed
-class MemoryBookSettings with _$MemoryBookSettings {
+abstract class MemoryBookSettings with _$MemoryBookSettings {
   const factory MemoryBookSettings({
     @Default(true) bool enabled,
     @Default(true) bool autoCreateEnabled,
@@ -97,7 +97,7 @@ Map<String, dynamic> _migrateInjectionTargetInPlace(Map<String, dynamic> json) {
 }
 
 @freezed
-class MemoryBook with _$MemoryBook {
+abstract class MemoryBook with _$MemoryBook {
   const factory MemoryBook({
     required String id,
     required String sessionId,

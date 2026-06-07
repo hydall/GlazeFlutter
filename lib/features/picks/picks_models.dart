@@ -3,7 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 part 'picks_models.freezed.dart';
 
 @freezed
-class PicksFolder with _$PicksFolder {
+abstract class PicksFolder with _$PicksFolder {
   const factory PicksFolder({
     required String id,
     required String name,
@@ -32,7 +32,7 @@ class PicksFolder with _$PicksFolder {
 }
 
 @freezed
-class PicksCharacter with _$PicksCharacter {
+abstract class PicksCharacter with _$PicksCharacter {
   const factory PicksCharacter({
     required String id,
     required String name,
@@ -57,7 +57,7 @@ class PicksCharacter with _$PicksCharacter {
 }
 
 @freezed
-class PicksIndex with _$PicksIndex {
+abstract class PicksIndex with _$PicksIndex {
   const factory PicksIndex({
     @Default([]) List<PicksFolder> folders,
   }) = _PicksIndex;

@@ -8,7 +8,7 @@ part 'extension_preset.freezed.dart';
 part 'extension_preset.g.dart';
 
 @freezed
-class ExtensionPreset with _$ExtensionPreset {
+abstract class ExtensionPreset with _$ExtensionPreset {
   const factory ExtensionPreset({
     required String id,
     required String name,

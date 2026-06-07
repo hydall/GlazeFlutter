@@ -4,7 +4,7 @@ part 'api_config.freezed.dart';
 part 'api_config.g.dart';
 
 @freezed
-class ApiConfig with _$ApiConfig {
+abstract class ApiConfig with _$ApiConfig {
   const factory ApiConfig({
     required String id,
     @Default('') String name,
