@@ -49,6 +49,7 @@ Remove-Item -LiteralPath "Z:\Pub\Cache\hosted" -Recurse -Force
 | `drift` / `drift_dev` | 2.33.0 | latest stable на момент проверки |
 | `flutter_riverpod` / `riverpod` | 3.3.1 / 3.2.1 | done |
 | `go_router` | 17.3.0 | done |
+| `app_links` | 7.1.1 | done |
 | `gpt_markdown` | 1.1.7 | patched, `imageBuilder` API changed |
 | `path_provider` | 2.1.5 | overridden |
 | `path_provider_foundation` | 2.4.2 | overridden, do not unpin yet |
@@ -188,7 +189,7 @@ Verification for this batch:
 
 | Пакет | Current | Latest | Notes |
 |---|---:|---:|---|
-| `app_links` | 6.4.1 | 7.1.1 | проверить OAuth/deep-link flow |
+| `app_links` | 7.1.1 | 7.1.1 | done; source-compatible, analyze/test pass |
 | `flutter_dotenv` | 5.2.1 | 6.0.1 | проверить `.env` asset loading |
 | `flutter_foreground_task` | 8.17.0 | 9.2.2 | Android foreground-service risk |
 | `flutter_local_notifications` | 18.0.1 | 22.0.0 | platform setup risk |
