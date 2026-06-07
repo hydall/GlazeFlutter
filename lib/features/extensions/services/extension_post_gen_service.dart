@@ -62,8 +62,9 @@ class ExtensionPostGenService {
     String charId,
     String sessionId,
     String messageId,
+    int swipeId,
   ) {
-    _panelUpdater.refreshForMessage(charId, sessionId, messageId);
+    _panelUpdater.refreshForMessage(charId, sessionId, messageId, swipeId);
   }
 
   Future<InfoBlock> _markContextBlockError({
@@ -101,7 +102,7 @@ class ExtensionPostGenService {
           .deleteByMessageId(messageId, swipeId: swipeId);
     }
 
-    _refreshPanelForMessage(charId, sessionId, messageId);
+    _refreshPanelForMessage(charId, sessionId, messageId, swipeId);
 
     _blocksCancelToken = CancelToken();
     await _runChain(
@@ -116,7 +117,7 @@ class ExtensionPostGenService {
       cancelToken: _blocksCancelToken!,
       trigger: BlockTrigger.afterAssistant,
     );
-    _refreshPanelForMessage(charId, sessionId, messageId);
+    _refreshPanelForMessage(charId, sessionId, messageId, swipeId);
   }
 
   ExtensionPreset? _resolveActivePreset() {
@@ -200,7 +201,7 @@ class ExtensionPostGenService {
       cancelToken: _blocksCancelToken!,
       trigger: BlockTrigger.afterUser,
     );
-    _refreshPanelForMessage(charId, session.id, lastMessage.id);
+    _refreshPanelForMessage(charId, session.id, lastMessage.id, lastMessage.swipeId);
   }
 
   /// Re-runs a single block for an already-existing message.
@@ -248,7 +249,7 @@ class ExtensionPostGenService {
     if (block != null) {
       _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(block);
     }
-    _refreshPanelForMessage(charId, sessionId, messageId);
+    _refreshPanelForMessage(charId, sessionId, messageId, swipeId);
   }
 
   /// Cancels any in-flight block generation for the current session.

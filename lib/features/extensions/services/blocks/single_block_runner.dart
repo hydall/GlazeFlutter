@@ -53,7 +53,7 @@ class SingleBlockRunner {
     final placeholderId = prepared.placeholderId;
     final placeholder = prepared.placeholder;
 
-    refreshPanelForMessage(charId, sessionId, messageId);
+    refreshPanelForMessage(charId, sessionId, messageId, swipeId);
 
     final context = BlockContext(
       charId: charId,

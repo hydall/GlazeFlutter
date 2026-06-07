@@ -59,7 +59,7 @@ class ImageOnlyRerunner {
     ref
         .read(infoBlocksProvider(sessionId).notifier)
         .addOrReplace(existing.copyWith(status: BlockRunStatus.running));
-    refreshPanelForMessage(charId, sessionId, messageId);
+    refreshPanelForMessage(charId, sessionId, messageId, swipeId);
 
     await renderImagePixels(
       charId: charId,

@@ -6,8 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/block_config.dart';
 import '../../models/block_run_status.dart';
 import '../../models/info_block.dart';
+import '../../../../core/state/character_provider.dart';
+import '../../../../core/state/persona_resolution.dart';
 import '../../providers/info_blocks_provider.dart';
 import '../ext_blocks_panel_builder.dart';
+import '../macro_expander.dart';
 import '../../../../features/chat/bridge/chat_bridge_registry.dart';
 
 class BlockPanelUpdater {
@@ -28,7 +31,12 @@ class BlockPanelUpdater {
     });
   }
 
-  void refreshForMessage(String charId, String sessionId, String messageId) {
+  void refreshForMessage(
+    String charId,
+    String sessionId,
+    String messageId,
+    int swipeId,
+  ) {
     _enqueuePanelJs(() async {
       final bridge = _ref.read(chatBridgeRegistryProvider(charId));
       if (bridge == null) return;
@@ -36,6 +44,7 @@ class BlockPanelUpdater {
         _ref,
         sessionId: sessionId,
         messageId: messageId,
+        swipeId: swipeId,
       );
       if (blocks.isEmpty) {
         await bridge.hideExtBlocksPanel(messageId);
@@ -43,7 +52,7 @@ class BlockPanelUpdater {
       }
       await bridge.showExtBlocksPanel(
         messageId,
-        blocks,
+        _expandBlockPayloads(blocks, charId, sessionId),
         canRunAll: ExtBlocksPanelBuilder.canRunAll(blocks),
       );
     });
@@ -54,6 +63,7 @@ class BlockPanelUpdater {
     required String sessionId,
     required String messageId,
     required String blockId,
+    required int swipeId,
     required String content,
     required String status,
   }) async {
@@ -66,7 +76,7 @@ class BlockPanelUpdater {
       status: status,
     );
     if (patched) return;
-    refreshForMessage(charId, sessionId, messageId);
+    refreshForMessage(charId, sessionId, messageId, swipeId);
   }
 
   void publishStreamingContent({
@@ -96,11 +106,43 @@ class BlockPanelUpdater {
         sessionId: sessionId,
         messageId: messageId,
         blockId: placeholder.blockId,
-        content: content,
+        swipeId: placeholder.swipeId,
+        content: _expandContent(content, charId, sessionId),
         status: BlockRunStatus.running.name,
       ),
     );
   }
+
+  List<Map<String, dynamic>> _expandBlockPayloads(
+    List<Map<String, dynamic>> blocks,
+    String charId,
+    String sessionId,
+  ) {
+    return [
+      for (final block in blocks)
+        {
+          ...block,
+          if (block['content'] is String)
+            'content': _expandContent(
+              block['content'] as String,
+              charId,
+              sessionId,
+            ),
+        },
+    ];
+  }
+
+  String _expandContent(String content, String charId, String sessionId) {
+    final character = _ref.read(characterByIdProvider(charId));
+    final persona = _ref.read(
+      effectivePersonaForChatProvider((charId: charId, sessionId: sessionId)),
+    );
+    return expand(
+      content,
+      MacroContext(character: character, persona: persona?.name),
+    );
+  }
+
 
   void Function(String)? makeStreamHandler({
     required BlockConfig blockConfig,

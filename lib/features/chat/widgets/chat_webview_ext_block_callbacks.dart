@@ -1,7 +1,10 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/persona.dart';
+
 import '../../../core/state/character_provider.dart';
+import '../../../core/state/persona_resolution.dart';
 import '../../extensions/providers/info_blocks_provider.dart';
 import '../../extensions/services/extension_post_gen_service.dart';
 import '../chat_provider.dart';
@@ -47,6 +50,7 @@ class ChatWebViewExtBlockCallbacks {
       if (chatState == null) return;
       final character = ref.read(characterByIdProvider(charId));
       if (character == null) return;
+      final persona = _effectivePersona();
       await ref.read(extensionPostGenServiceProvider).runBlocksForMessage(
             charId: charId,
             sessionId: sessionId,
@@ -54,7 +58,7 @@ class ChatWebViewExtBlockCallbacks {
             swipeId: _swipeIdFor(chatState.messages, messageId),
             messages: chatState.messages,
             character: character,
-            persona: null,
+            persona: persona,
           );
     };
   }
@@ -77,6 +81,7 @@ class ChatWebViewExtBlockCallbacks {
       if (chatState == null) return;
       final character = ref.read(characterByIdProvider(charId));
       if (character == null) return;
+      final persona = _effectivePersona();
       await ref.read(extensionPostGenServiceProvider).rerunBlock(
             blockId: blockId,
             messageId: messageId,
@@ -85,7 +90,7 @@ class ChatWebViewExtBlockCallbacks {
             charId: charId,
             messages: chatState.messages,
             character: character,
-            persona: null,
+            persona: persona,
           );
       await refreshPanel(sessionId, messageId);
     };
@@ -101,6 +106,7 @@ class ChatWebViewExtBlockCallbacks {
       if (chatState == null) return;
       final character = ref.read(characterByIdProvider(charId));
       if (character == null) return;
+      final persona = _effectivePersona();
       await ref.read(extensionPostGenServiceProvider).rerunImageOnly(
             blockId: blockId,
             messageId: messageId,
@@ -108,7 +114,7 @@ class ChatWebViewExtBlockCallbacks {
             sessionId: sessionId,
             charId: charId,
             character: character,
-            persona: null,
+            persona: persona,
           );
       await refreshPanel(sessionId, messageId);
     };
@@ -175,6 +181,12 @@ class ChatWebViewExtBlockCallbacks {
           .delete(block.id);
       await refreshPanel(sessionId, messageId);
     };
+  }
+
+  Persona? _effectivePersona() {
+    return ref.read(
+      effectivePersonaForChatProvider((charId: charId, sessionId: sessionId)),
+    );
   }
 
   int _swipeIdForChat(String messageId) {

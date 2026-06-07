@@ -9,8 +9,12 @@ import '../../models/info_block.dart';
 import '../../providers/info_blocks_provider.dart';
 import 'block_context.dart';
 
-typedef BlockPanelRefresh =
-    void Function(String charId, String sessionId, String messageId);
+typedef BlockPanelRefresh = void Function(
+  String charId,
+  String sessionId,
+  String messageId,
+  int swipeId,
+);
 
 class PreparedBlockRun {
   const PreparedBlockRun({
@@ -89,7 +93,7 @@ class BlockStatusTracker {
       status: BlockRunStatus.error,
     );
     ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(errored);
-    refreshPanelForMessage(charId, sessionId, messageId);
+    refreshPanelForMessage(charId, sessionId, messageId, placeholder.swipeId);
     return errored;
   }
 
@@ -148,7 +152,7 @@ class BlockStatusTracker {
     await repo.updateContent(reuseBlockId, '');
     await repo.updateStatus(reuseBlockId, BlockRunStatus.running);
     ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(placeholder);
-    refreshPanelForMessage(charId, sessionId, messageId);
+    refreshPanelForMessage(charId, sessionId, messageId, placeholder.swipeId);
     debugPrint(
       '[ExtPostGen] reused block id=$reuseBlockId messageId=$messageId status=running',
     );

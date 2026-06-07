@@ -76,6 +76,7 @@ class JsBlockExecutor {
           context.charId,
           context.sessionId,
           context.messageId,
+          context.swipeId,
         );
         return stopped;
       }
@@ -105,6 +106,7 @@ class JsBlockExecutor {
         context.charId,
         context.sessionId,
         context.messageId,
+        context.swipeId,
       );
       return done;
     } catch (e) {
@@ -120,6 +122,7 @@ class JsBlockExecutor {
           context.charId,
           context.sessionId,
           context.messageId,
+          context.swipeId,
         );
         return stopped;
       }

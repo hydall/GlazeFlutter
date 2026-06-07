@@ -202,7 +202,12 @@ class InfoBlockService {
 
     if (blockConfig.prompt.isNotEmpty) {
       buffer.writeln('Instructions:');
-      buffer.writeln(blockConfig.prompt);
+      buffer.writeln(
+        expand(
+          blockConfig.prompt,
+          _macroContext(character: character, persona: persona),
+        ),
+      );
       buffer.writeln();
     }
     return buffer.toString().trimRight();

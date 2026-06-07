@@ -75,7 +75,7 @@ class ImagePixelRenderer {
         status: BlockRunStatus.done,
       );
       ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(done);
-      refreshPanelForMessage(charId, sessionId, messageId);
+      refreshPanelForMessage(charId, sessionId, messageId, swipeId);
       return done;
     }
 
@@ -213,7 +213,7 @@ class ImagePixelRenderer {
         status: BlockRunStatus.done,
       );
       ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(done);
-      refreshPanelForMessage(charId, sessionId, messageId);
+      refreshPanelForMessage(charId, sessionId, messageId, swipeId);
       return done;
     } on DioException catch (e) {
       if (CancelToken.isCancel(e)) {

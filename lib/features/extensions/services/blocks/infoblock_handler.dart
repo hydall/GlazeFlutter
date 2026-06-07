@@ -16,8 +16,12 @@ typedef BlockErrorMarker =
       required String errorMessage,
     });
 
-typedef PanelRefresher =
-    void Function(String charId, String sessionId, String messageId);
+typedef PanelRefresher = void Function(
+  String charId,
+  String sessionId,
+  String messageId,
+  int swipeId,
+);
 
 typedef StreamHandlerFactory =
     void Function(String)? Function({
@@ -93,6 +97,7 @@ class InfoblockHandler implements BlockHandler {
         context.charId,
         context.sessionId,
         context.messageId,
+        context.swipeId,
       );
       return stopped;
     }
@@ -130,6 +135,7 @@ class InfoblockHandler implements BlockHandler {
       context.charId,
       context.sessionId,
       context.messageId,
+      context.swipeId,
     );
     return done;
   }

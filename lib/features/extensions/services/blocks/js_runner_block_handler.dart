@@ -62,6 +62,7 @@ class JsRunnerBlockHandler implements BlockHandler {
         context.charId,
         context.sessionId,
         context.messageId,
+        context.swipeId,
       );
       return placeholder.copyWith(status: BlockRunStatus.done);
     }

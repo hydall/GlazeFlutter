@@ -153,6 +153,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     ref: ref,
     bridge: _bridge,
     ready: () => _ready,
+    charId: widget.charId,
     messages: () => widget.messages,
   );
 
