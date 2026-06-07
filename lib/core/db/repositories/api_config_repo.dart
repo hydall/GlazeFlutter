@@ -72,6 +72,7 @@ class ApiConfigRepo implements SyncApiConfigStore {
     omitReasoningEffort: c.omitReasoningEffort,
     cacheControlTtl: c.cacheControlTtl,
     cacheBreakpointMode: c.cacheBreakpointMode,
+    sessionIdMode: c.sessionIdMode,
   );
 
   ApiConfigsCompanion _toCompanion(ApiConfig m) => ApiConfigsCompanion(
@@ -107,5 +108,6 @@ class ApiConfigRepo implements SyncApiConfigStore {
     omitReasoningEffort: Value(m.omitReasoningEffort),
     cacheControlTtl: Value(m.cacheControlTtl),
     cacheBreakpointMode: Value(m.cacheBreakpointMode),
+    sessionIdMode: Value(m.sessionIdMode),
   );
 }

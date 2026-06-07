@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/llm/transport/chat_transport_request.dart';
+import 'package:glaze_flutter/core/llm/transport/openai_chat_transport.dart';
 import 'package:glaze_flutter/core/llm/transport/openrouter_chat_transport.dart';
 
 ChatTransportRequest _req({
@@ -7,6 +8,7 @@ ChatTransportRequest _req({
   List<Map<String, dynamic>>? messages,
   String cacheControlTtl = 'off',
   String cacheBreakpointMode = 'depth',
+  String sessionIdMode = 'openrouter',
   List<Map<String, dynamic>>? previousMessages,
   String endpoint = 'https://intentionally-ignored.example',
 }) {
@@ -24,8 +26,10 @@ ChatTransportRequest _req({
     temperature: 0.7,
     topP: 0.9,
     stream: true,
+    sessionId: 'sess-1',
     cacheControlTtl: cacheControlTtl,
     cacheBreakpointMode: cacheBreakpointMode,
+    sessionIdMode: sessionIdMode,
     previousMessages: previousMessages,
   );
 }
@@ -57,6 +61,15 @@ void main() {
         expect(r.cacheControlTtl, 'off');
       },
     );
+
+    test('keeps session_id for OpenRouter sticky routing', () {
+      final r = OpenRouterChatTransport.buildRouterRequest(
+        _req(model: 'anthropic/claude-3-5-sonnet', cacheControlTtl: '5min'),
+      );
+      final body = OpenAiChatTransport.buildBody(r);
+
+      expect(body['session_id'], 'sess-1');
+    });
   });
 
   group('cache_control on Claude-via-OR', () {

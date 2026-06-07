@@ -180,6 +180,7 @@ class StreamGenerationService {
           previousMessages: previousApiMessages,
           cacheControlTtl: apiConfig.cacheControlTtl,
           cacheBreakpointMode: apiConfig.cacheBreakpointMode,
+          sessionIdMode: apiConfig.sessionIdMode,
         ),
         cancelToken: cancelToken,
         onUpdate: (delta, reasoningDelta) {

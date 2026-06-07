@@ -66,6 +66,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
   bool _embeddingUseSame = true;
   String _cacheControlTtl = 'off';
   String _cacheBreakpointMode = 'depth';
+  String _sessionIdMode = 'openrouter';
   String _protocol = LlmProtocol.openai;
 
   String? _loadedPresetId;
@@ -175,6 +176,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       _embeddingUseSame = config.embeddingUseSame;
       _cacheControlTtl = config.cacheControlTtl;
       _cacheBreakpointMode = config.cacheBreakpointMode;
+      _sessionIdMode = config.sessionIdMode;
       _protocol = LlmProtocol.isValid(config.protocol)
           ? config.protocol
           : LlmProtocol.openai;
@@ -215,6 +217,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             embeddingUseSame: _embeddingUseSame,
             cacheControlTtl: _cacheControlTtl,
             cacheBreakpointMode: _cacheBreakpointMode,
+            sessionIdMode: _sessionIdMode,
             protocol: _protocol,
             embeddingEndpoint: _embEndpointCtrl.text.trim(),
             embeddingApiKey: _embApiKeyCtrl.text.trim(),
@@ -639,6 +642,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                   currentValue: _cacheBreakpointModeLabel(_cacheBreakpointMode),
                   onTap: _openCacheBreakpointModeSelector,
                 ),
+              MenuSelectorItem(
+                label: 'label_session_id_mode'.tr(),
+                currentValue: _sessionIdModeLabel(_sessionIdMode),
+                onTap: _openSessionIdModeSelector,
+              ),
             ],
           ),
           if (_showsOmitSamplingControls || _showsOmitReasoningControls)
@@ -989,6 +997,14 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     };
   }
 
+  String _sessionIdModeLabel(String mode) {
+    return switch (mode) {
+      'always' => 'session_id_mode_always'.tr(),
+      'off' => 'session_id_mode_off'.tr(),
+      _ => 'session_id_mode_openrouter'.tr(),
+    };
+  }
+
   void _openCacheControlTtlSelector() {
     const options = ['off', '5min', '1h'];
     GlazeBottomSheet.show<void>(
@@ -1026,6 +1042,28 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             setState(() => _cacheBreakpointMode = e);
+            _scheduleSave();
+          },
+        );
+      }).toList(),
+    );
+  }
+
+  void _openSessionIdModeSelector() {
+    const options = ['openrouter', 'always', 'off'];
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'label_session_id_mode'.tr(),
+      items: options.map((e) {
+        final label = _sessionIdModeLabel(e);
+        final active = e == _sessionIdMode;
+        return BottomSheetItem(
+          label: label,
+          icon: active ? Icons.check : null,
+          iconColor: context.cs.primary,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            setState(() => _sessionIdMode = e);
             _scheduleSave();
           },
         );

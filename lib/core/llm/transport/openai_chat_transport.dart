@@ -141,9 +141,13 @@ class OpenAiChatTransport implements ChatTransport {
         if (r.cacheControlTtl == '1h') 'ttl': '1h',
       };
     }
-    if (r.sessionId != null &&
+    final shouldSendSessionId =
+        r.sessionId != null &&
         r.sessionId!.isNotEmpty &&
-        r.endpoint.contains('openrouter.ai')) {
+        (r.sessionIdMode == 'always' ||
+            (r.sessionIdMode == 'openrouter' &&
+                r.endpoint.contains('openrouter.ai')));
+    if (shouldSendSessionId) {
       body['session_id'] = r.sessionId;
     }
 

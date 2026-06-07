@@ -177,6 +177,11 @@ class AnthropicChatTransport implements ChatTransport {
       'stream': request.stream,
     };
     if (systemParts.isNotEmpty) body['system'] = systemParts;
+    if (request.sessionIdMode == 'always' &&
+        request.sessionId != null &&
+        request.sessionId!.isNotEmpty) {
+      body['session_id'] = request.sessionId;
+    }
 
     if (!request.omitTemperature && request.temperature > 0) {
       body['temperature'] = request.temperature;

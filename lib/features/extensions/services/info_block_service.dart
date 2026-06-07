@@ -307,6 +307,7 @@ class InfoBlockService {
           omitReasoningEffort: apiConfig.omitReasoningEffort,
           cacheControlTtl: apiConfig.cacheControlTtl,
           cacheBreakpointMode: apiConfig.cacheBreakpointMode,
+          sessionIdMode: apiConfig.sessionIdMode,
         ),
         cancelToken: cancelToken,
         onUpdate: useStream

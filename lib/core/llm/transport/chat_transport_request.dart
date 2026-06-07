@@ -44,6 +44,9 @@ class ChatTransportRequest {
   /// Prompt cache breakpoint placement: `'depth' | 'stable_prefix'`.
   final String cacheBreakpointMode;
 
+  /// Controls when `session_id` is sent: `'openrouter' | 'always' | 'off'`.
+  final String sessionIdMode;
+
   const ChatTransportRequest({
     required this.endpoint,
     required this.apiKey,
@@ -66,5 +69,6 @@ class ChatTransportRequest {
     this.previousMessages,
     this.cacheControlTtl = 'off',
     this.cacheBreakpointMode = 'depth',
+    this.sessionIdMode = 'openrouter',
   });
 }

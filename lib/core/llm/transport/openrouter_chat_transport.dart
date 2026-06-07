@@ -95,6 +95,7 @@ class OpenRouterChatTransport implements ChatTransport {
       omitReasoningEffort: input.omitReasoningEffort,
       sessionId: input.sessionId,
       previousMessages: input.previousMessages,
+      sessionIdMode: input.sessionIdMode,
       // OR doesn't take cache_control on the body level the same way the
       // OpenAI builder expects — strip it so the body doesn't grow a stray
       // top-level `cache_control` field. Cache markers are now on the

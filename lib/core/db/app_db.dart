@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -151,6 +151,9 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 25) {
         await m.addColumn(apiConfigs, apiConfigs.cacheBreakpointMode);
+      }
+      if (from < 26) {
+        await m.addColumn(apiConfigs, apiConfigs.sessionIdMode);
       }
     },
   );

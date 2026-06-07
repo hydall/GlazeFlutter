@@ -133,6 +133,8 @@ class ApiConfigs extends Table {
   TextColumn get cacheControlTtl => text().withDefault(const Constant('off'))();
   TextColumn get cacheBreakpointMode =>
       text().withDefault(const Constant('depth'))();
+  TextColumn get sessionIdMode =>
+      text().withDefault(const Constant('openrouter'))();
 
   @override
   Set<Column> get primaryKey => {configId};
