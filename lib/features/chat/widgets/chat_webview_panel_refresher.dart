@@ -1,3 +1,4 @@
+import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
@@ -32,11 +33,17 @@ class ChatWebViewPanelRefresher {
     final b = bridge;
     if (b == null || !ready()) return;
     final isLastAssistant = messageId == _lastAssistantMessageId();
-    final panelKey = (sessionId: sessionId, messageId: messageId);
+    final swipeId = _swipeIdForMessage(messageId);
+    final panelKey = (
+      sessionId: sessionId,
+      messageId: messageId,
+      swipeId: swipeId,
+    );
     final visibilityKey = (
       sessionId: sessionId,
       messageId: messageId,
       isLastAssistant: isLastAssistant,
+      swipeId: swipeId,
     );
     if (!ref.read(extBlocksPanelVisibleProvider(visibilityKey))) {
       await b.hideExtBlocksPanel(messageId);
@@ -60,6 +67,11 @@ class ChatWebViewPanelRefresher {
       if (msg.role != 'assistant' && msg.role != 'character') continue;
       await refreshForMessage(sid, msg.id);
     }
+  }
+
+  int _swipeIdForMessage(String messageId) {
+    final msg = messages().where((m) => m.id == messageId).firstOrNull;
+    return msg?.swipeId ?? 0;
   }
 
   String? _lastAssistantMessageId() {

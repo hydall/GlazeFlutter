@@ -11,6 +11,7 @@ class BlockContext {
   final String charId;
   final String sessionId;
   final String messageId;
+  final int swipeId;
   final List<ChatMessage> messages;
   final BlockConfig blockConfig;
   final ExtensionPreset? preset;
@@ -25,6 +26,7 @@ class BlockContext {
     required this.charId,
     required this.sessionId,
     required this.messageId,
+    required this.swipeId,
     required this.messages,
     required this.blockConfig,
     required this.preset,

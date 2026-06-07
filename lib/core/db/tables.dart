@@ -233,6 +233,7 @@ class ExtensionPresets extends Table {
 @DataClassName('InfoBlockRow')
 @TableIndex(name: 'idx_info_blocks_session_id', columns: {#sessionId})
 @TableIndex(name: 'idx_info_blocks_message_id', columns: {#messageId})
+@TableIndex(name: 'idx_info_blocks_message_swipe', columns: {#messageId, #swipeId})
 class InfoBlocks extends Table {
   @override
   String get tableName => 'info_blocks';
@@ -240,6 +241,7 @@ class InfoBlocks extends Table {
   TextColumn get id => text()();
   TextColumn get sessionId => text()();
   TextColumn get messageId => text()();
+  IntColumn get swipeId => integer().withDefault(const Constant(0))();
   TextColumn get blockId => text()();
   TextColumn get blockName => text()();
   TextColumn get blockType => text()();

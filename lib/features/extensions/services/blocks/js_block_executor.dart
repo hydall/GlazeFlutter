@@ -89,6 +89,7 @@ class JsBlockExecutor {
         id: context.placeholderId,
         sessionId: context.sessionId,
         messageId: context.messageId,
+        swipeId: context.swipeId,
         blockId: blockConfig.id,
         blockName: blockConfig.name,
         blockType: blockConfig.type.name,

@@ -64,7 +64,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **25**
+Current version: **27**
 
 Migration history:
 - v18: added `characters.picksHash`

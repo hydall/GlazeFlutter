@@ -37,6 +37,7 @@ class BlockStatusTracker {
     required String charId,
     required String sessionId,
     required String messageId,
+    required int swipeId,
     required BlockConfig blockConfig,
     String? reuseBlockId,
   }) async {
@@ -45,6 +46,7 @@ class BlockStatusTracker {
         charId: charId,
         sessionId: sessionId,
         messageId: messageId,
+        swipeId: swipeId,
         blockConfig: blockConfig,
         reuseBlockId: reuseBlockId,
       );
@@ -52,6 +54,7 @@ class BlockStatusTracker {
     return _prepareNew(
       sessionId: sessionId,
       messageId: messageId,
+      swipeId: swipeId,
       blockConfig: blockConfig,
     );
   }
@@ -93,9 +96,14 @@ class BlockStatusTracker {
   Future<String?> dedupeForConfig({
     required String sessionId,
     required String messageId,
+    required int swipeId,
     required String blockId,
   }) async {
-    final existing = await repo.getByMessageId(sessionId, messageId);
+    final existing = await repo.getByMessageId(
+      sessionId,
+      messageId,
+      swipeId: swipeId,
+    );
     final matching = existing.where((b) => b.blockId == blockId).toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     if (matching.isEmpty) return null;
@@ -111,10 +119,15 @@ class BlockStatusTracker {
     required String charId,
     required String sessionId,
     required String messageId,
+    required int swipeId,
     required BlockConfig blockConfig,
     required String reuseBlockId,
   }) async {
-    final existing = await repo.getByMessageId(sessionId, messageId);
+    final existing = await repo.getByMessageId(
+      sessionId,
+      messageId,
+      swipeId: swipeId,
+    );
     final row = existing.where((b) => b.id == reuseBlockId).firstOrNull;
     final placeholder =
         (row ??
@@ -122,6 +135,7 @@ class BlockStatusTracker {
                   id: reuseBlockId,
                   sessionId: sessionId,
                   messageId: messageId,
+                  swipeId: swipeId,
                   blockId: blockConfig.id,
                   blockName: blockConfig.name,
                   blockType: blockConfig.type.name,
@@ -147,6 +161,7 @@ class BlockStatusTracker {
   Future<PreparedBlockRun> _prepareNew({
     required String sessionId,
     required String messageId,
+    required int swipeId,
     required BlockConfig blockConfig,
   }) async {
     final placeholderId = generateId();
@@ -154,6 +169,7 @@ class BlockStatusTracker {
       id: placeholderId,
       sessionId: sessionId,
       messageId: messageId,
+      swipeId: swipeId,
       blockId: blockConfig.id,
       blockName: blockConfig.name,
       blockType: blockConfig.type.name,

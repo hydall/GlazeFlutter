@@ -12,6 +12,7 @@ extension InfoBlockBridgeMap on InfoBlock {
   Map<String, dynamic> toMap() => {
     'id': id,
     'blockId': blockId,
+    'swipeId': swipeId,
     'blockName': blockName,
     'name': blockName,
     'type': blockType,
@@ -56,9 +57,16 @@ class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
 
   /// Removes all blocks for [messageId] + [blockId] from in-memory state.
   /// Does NOT delete from DB — caller handles that.
-  void removeByBlockId({required String messageId, required String blockId}) {
+  void removeByBlockId({
+    required String messageId,
+    required String blockId,
+    int? swipeId,
+  }) {
     state = state
-        .where((b) => !(b.messageId == messageId && b.blockId == blockId))
+        .where((b) =>
+            !(b.messageId == messageId &&
+                b.blockId == blockId &&
+                (swipeId == null || b.swipeId == swipeId)))
         .toList();
   }
 
@@ -82,14 +90,18 @@ class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
   }
 
   /// Removes all blocks for [messageId] from in-memory state.
-  void removeByMessageId(String messageId) {
-    state = state.where((b) => b.messageId != messageId).toList();
+  void removeByMessageId(String messageId, {int? swipeId}) {
+    state = state
+        .where((b) =>
+            !(b.messageId == messageId &&
+                (swipeId == null || b.swipeId == swipeId)))
+        .toList();
   }
 
   /// Deletes all blocks for [messageId] from DB and state.
-  Future<void> deleteByMessageId(String messageId) async {
-    await _repo.deleteByMessageId(sessionId, messageId);
-    removeByMessageId(messageId);
+  Future<void> deleteByMessageId(String messageId, {int? swipeId}) async {
+    await _repo.deleteByMessageId(sessionId, messageId, swipeId: swipeId);
+    removeByMessageId(messageId, swipeId: swipeId);
   }
 
   Future<void> delete(String id) async {
@@ -108,8 +120,10 @@ class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
 
   /// Returns all blocks for a specific message, sorted by order.
   /// When duplicates exist for the same preset block, keeps the newest row.
-  List<InfoBlock> getByMessageId(String messageId) {
-    final blocks = state.where((b) => b.messageId == messageId).toList();
+  List<InfoBlock> getByMessageId(String messageId, {int swipeId = 0}) {
+    final blocks = state
+        .where((b) => b.messageId == messageId && b.swipeId == swipeId)
+        .toList();
     final byBlockId = <String, InfoBlock>{};
     for (final block in blocks) {
       final existing = byBlockId[block.blockId];
@@ -126,8 +140,8 @@ class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
   /// - 'error' if any block errored (and none running)
   /// - 'done' if all blocks done/stopped
   /// - null if no blocks
-  String? aggregatedStatus(String messageId) {
-    final blocks = getByMessageId(messageId);
+  String? aggregatedStatus(String messageId, {int swipeId = 0}) {
+    final blocks = getByMessageId(messageId, swipeId: swipeId);
     if (blocks.isEmpty) return null;
     if (blocks.any((b) => b.status == BlockRunStatus.running)) return 'running';
     if (blocks.any((b) => b.status == BlockRunStatus.error)) return 'error';

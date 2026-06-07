@@ -17,6 +17,7 @@ class InfoBlocksRepository extends DatabaseAccessor<AppDatabase>
       id: block.id,
       sessionId: block.sessionId,
       messageId: block.messageId,
+      swipeId: Value(block.swipeId),
       blockId: block.blockId,
       blockType: block.blockType,
       blockName: block.blockName,
@@ -48,12 +49,14 @@ class InfoBlocksRepository extends DatabaseAccessor<AppDatabase>
 
   Future<List<InfoBlock>> getByMessageId(
     String sessionId,
-    String messageId,
-  ) async {
+    String messageId, {
+    int swipeId = 0,
+  }) async {
     final rows = await (select(infoBlocks)
           ..where((tbl) =>
               tbl.sessionId.equals(sessionId) &
-              tbl.messageId.equals(messageId))
+              tbl.messageId.equals(messageId) &
+              tbl.swipeId.equals(swipeId))
           ..orderBy([(t) => OrderingTerm.asc(t.order_)]))
         .get();
 
@@ -89,11 +92,17 @@ class InfoBlocksRepository extends DatabaseAccessor<AppDatabase>
     await (delete(infoBlocks)..where((tbl) => tbl.id.equals(id))).go();
   }
 
-  Future<void> deleteByMessageId(String sessionId, String messageId) async {
+  Future<void> deleteByMessageId(
+    String sessionId,
+    String messageId, {
+    int? swipeId,
+  }) async {
     await (delete(infoBlocks)
-          ..where((tbl) =>
-              tbl.sessionId.equals(sessionId) &
-              tbl.messageId.equals(messageId)))
+          ..where((tbl) {
+            final base =
+                tbl.sessionId.equals(sessionId) & tbl.messageId.equals(messageId);
+            return swipeId == null ? base : base & tbl.swipeId.equals(swipeId);
+          }))
         .go();
   }
 
@@ -102,6 +111,7 @@ class InfoBlocksRepository extends DatabaseAccessor<AppDatabase>
       id: row.id,
       sessionId: row.sessionId,
       messageId: row.messageId,
+      swipeId: row.swipeId,
       blockId: row.blockId,
       blockName: row.blockName,
       blockType: row.blockType,

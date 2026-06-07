@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -163,6 +163,15 @@ class AppDatabase extends _$AppDatabase {
         }
         if (!colNames.contains('session_id_mode')) {
           await m.addColumn(apiConfigs, apiConfigs.sessionIdMode);
+        }
+      }
+      if (from < 27) {
+        final cols = await customSelect(
+          'PRAGMA table_info("info_blocks")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('swipe_id')) {
+          await m.addColumn(infoBlocks, infoBlocks.swipeId);
         }
       }
     },

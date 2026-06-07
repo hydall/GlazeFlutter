@@ -26,6 +26,7 @@ class SingleBlockRunner {
     required String charId,
     required String sessionId,
     required String messageId,
+    required int swipeId,
     required List<ChatMessage> messages,
     required BlockConfig blockConfig,
     required ExtensionPreset preset,
@@ -45,6 +46,7 @@ class SingleBlockRunner {
       charId: charId,
       sessionId: sessionId,
       messageId: messageId,
+      swipeId: swipeId,
       blockConfig: blockConfig,
       reuseBlockId: reuseBlockId,
     );
@@ -57,6 +59,7 @@ class SingleBlockRunner {
       charId: charId,
       sessionId: sessionId,
       messageId: messageId,
+      swipeId: swipeId,
       messages: messages,
       blockConfig: blockConfig,
       preset: preset,

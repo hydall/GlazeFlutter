@@ -51,6 +51,7 @@ class ChatWebViewExtBlockCallbacks {
             charId: charId,
             sessionId: sessionId,
             messageId: messageId,
+            swipeId: _swipeIdFor(chatState.messages, messageId),
             messages: chatState.messages,
             character: character,
             persona: null,
@@ -79,6 +80,7 @@ class ChatWebViewExtBlockCallbacks {
       await ref.read(extensionPostGenServiceProvider).rerunBlock(
             blockId: blockId,
             messageId: messageId,
+            swipeId: _swipeIdFor(chatState.messages, messageId),
             sessionId: sessionId,
             charId: charId,
             messages: chatState.messages,
@@ -95,11 +97,14 @@ class ChatWebViewExtBlockCallbacks {
     return (String blockId, String messageId) async {
       final sessionId = this.sessionId;
       if (sessionId == null || sessionId.isEmpty) return;
+      final chatState = ref.read(chatProvider(charId)).value;
+      if (chatState == null) return;
       final character = ref.read(characterByIdProvider(charId));
       if (character == null) return;
       await ref.read(extensionPostGenServiceProvider).rerunImageOnly(
             blockId: blockId,
             messageId: messageId,
+            swipeId: _swipeIdFor(chatState.messages, messageId),
             sessionId: sessionId,
             charId: charId,
             character: character,
@@ -118,7 +123,10 @@ class ChatWebViewExtBlockCallbacks {
       final blocks = ref
           .read(infoBlocksProvider(sessionId))
           .where(
-            (b) => b.messageId == messageId && b.blockId == blockId,
+            (b) =>
+                b.messageId == messageId &&
+                b.swipeId == _swipeIdForChat(messageId) &&
+                b.blockId == blockId,
           )
           .toList();
       if (blocks.isEmpty) return;
@@ -147,7 +155,10 @@ class ChatWebViewExtBlockCallbacks {
       final blocks = ref
           .read(infoBlocksProvider(sessionId))
           .where(
-            (b) => b.messageId == messageId && b.blockId == blockId,
+            (b) =>
+                b.messageId == messageId &&
+                b.swipeId == _swipeIdForChat(messageId) &&
+                b.blockId == blockId,
           )
           .toList();
       if (blocks.isEmpty) return;
@@ -164,5 +175,18 @@ class ChatWebViewExtBlockCallbacks {
           .delete(block.id);
       await refreshPanel(sessionId, messageId);
     };
+  }
+
+  int _swipeIdForChat(String messageId) {
+    final chatState = ref.read(chatProvider(charId)).value;
+    if (chatState == null) return 0;
+    return _swipeIdFor(chatState.messages, messageId);
+  }
+
+  static int _swipeIdFor(List<dynamic> messages, String messageId) {
+    for (final message in messages) {
+      if (message.id == messageId) return message.swipeId as int;
+    }
+    return 0;
   }
 }

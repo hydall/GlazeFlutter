@@ -77,6 +77,10 @@ class _InfoBlocksRepoReader implements InfoBlockReader {
   final InfoBlocksRepository _repo;
 
   @override
-  Future<List<InfoBlock>> getByMessageId(String sessionId, String messageId) =>
-      _repo.getByMessageId(sessionId, messageId);
+  Future<List<InfoBlock>> getByMessageId(
+    String sessionId,
+    String messageId, {
+    int swipeId = 0,
+  }) =>
+      _repo.getByMessageId(sessionId, messageId, swipeId: swipeId);
 }

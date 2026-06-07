@@ -5,12 +5,17 @@ import '../providers/extension_presets_provider.dart';
 import '../providers/extensions_settings_provider.dart';
 import '../providers/info_blocks_provider.dart';
 
-typedef ExtBlocksPanelKey = ({String sessionId, String messageId});
+typedef ExtBlocksPanelKey = ({
+  String sessionId,
+  String messageId,
+  int swipeId,
+});
 
 typedef ExtBlocksPanelVisibilityKey = ({
   String sessionId,
   String messageId,
   bool isLastAssistant,
+  int swipeId,
 });
 
 /// Builds WebView panel payloads by merging preset block definitions with
@@ -30,11 +35,17 @@ class ExtBlocksPanelBuilder {
     Ref ref, {
     required String sessionId,
     required String messageId,
+    required int swipeId,
     required bool isAssistant,
     required bool isLastAssistant,
   }) {
     if (!isAssistant || !extensionsActive(ref)) return false;
-    final blocks = build(ref, sessionId: sessionId, messageId: messageId);
+    final blocks = build(
+      ref,
+      sessionId: sessionId,
+      messageId: messageId,
+      swipeId: swipeId,
+    );
     if (blocks.isNotEmpty) return true;
     return isLastAssistant;
   }
@@ -44,6 +55,7 @@ class ExtBlocksPanelBuilder {
     Ref ref, {
     required String sessionId,
     required String messageId,
+    required int swipeId,
   }) {
     final settings = ref.read(extensionsSettingsProvider);
     if (!settings.enabled) return [];
@@ -58,7 +70,7 @@ class ExtBlocksPanelBuilder {
 
     final dbBlocks = ref
         .read(infoBlocksProvider(sessionId).notifier)
-        .getByMessageId(messageId);
+        .getByMessageId(messageId, swipeId: swipeId);
     final dbByBlockId = {for (final b in dbBlocks) b.blockId: b};
 
     final enabledConfigs = preset.blocks.where((b) => b.enabled).toList()
@@ -98,6 +110,7 @@ final extBlocksPanelBlocksProvider =
       ref,
       sessionId: key.sessionId,
       messageId: key.messageId,
+      swipeId: key.swipeId,
     );
   },
 );
@@ -112,6 +125,7 @@ final extBlocksPanelVisibleProvider =
       ref,
       sessionId: key.sessionId,
       messageId: key.messageId,
+      swipeId: key.swipeId,
       isAssistant: true,
       isLastAssistant: key.isLastAssistant,
     );

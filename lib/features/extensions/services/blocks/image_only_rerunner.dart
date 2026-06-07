@@ -27,6 +27,7 @@ class ImageOnlyRerunner {
   Future<void> rerun({
     required String blockId,
     required String messageId,
+    required int swipeId,
     required String sessionId,
     required String charId,
     required Character character,
@@ -37,7 +38,11 @@ class ImageOnlyRerunner {
     final blockConfig = blocks.where((b) => b.id == blockId).firstOrNull;
     if (blockConfig == null || blockConfig.type != BlockType.imageGen) return;
 
-    final rows = await repo.getByMessageId(sessionId, messageId);
+    final rows = await repo.getByMessageId(
+      sessionId,
+      messageId,
+      swipeId: swipeId,
+    );
     final existing = rows.where((b) => b.blockId == blockId).firstOrNull;
     if (existing == null || existing.content.isEmpty) return;
 
@@ -60,6 +65,7 @@ class ImageOnlyRerunner {
       charId: charId,
       sessionId: sessionId,
       messageId: messageId,
+      swipeId: swipeId,
       blockConfig: blockConfig,
       character: character,
       persona: persona,
@@ -76,6 +82,7 @@ typedef ImagePixelRerenderFn =
       required String charId,
       required String sessionId,
       required String messageId,
+      required int swipeId,
       required BlockConfig blockConfig,
       required Character character,
       required Persona? persona,

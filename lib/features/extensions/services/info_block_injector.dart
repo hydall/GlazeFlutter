@@ -7,7 +7,11 @@ import 'macro_expander.dart';
 
 /// Minimal read surface used by [InfoBlockInjector] (implemented by [InfoBlocksRepository]).
 abstract class InfoBlockReader {
-  Future<List<InfoBlock>> getByMessageId(String sessionId, String messageId);
+  Future<List<InfoBlock>> getByMessageId(
+    String sessionId,
+    String messageId, {
+    int swipeId = 0,
+  });
 }
 
 /// Инжектирует инфоблоки в историю перед сборкой основного промпта.
@@ -61,7 +65,11 @@ class InfoBlockInjector {
       for (final idx in targetIndices) {
         final msg = result[idx];
         final blocks =
-            await _repository.getByMessageId(sessionId, msg.id);
+            await _repository.getByMessageId(
+          sessionId,
+          msg.id,
+          swipeId: msg.swipeId,
+        );
         final blockResults =
             blocks.where((b) => b.blockName == blockConfig.name).toList();
         if (blockResults.isEmpty) continue;
