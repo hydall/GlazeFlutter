@@ -36,6 +36,11 @@ add_definitions(-DUNICODE -D_UNICODE)
 # Windows plugins still include it transitively; suppress until they migrate.
 add_definitions(-D_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
 
+# flutter_inappwebview_windows 0.6.x uses DEPENDS with add_custom_command(TARGET),
+# which CMake 3.31+ rejects under CMP0175. Keep the old policy for plugin
+# subdirectories until upstream fixes it.
+set(CMAKE_POLICY_DEFAULT_CMP0175 OLD)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
@@ -59,7 +64,6 @@ add_subdirectory("runner")
 
 # Generated plugin build rules, which manage building the plugins and adding
 # them to the application.
-include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/patch_inappwebview_cmake.cmake")
 include(flutter/generated_plugins.cmake)
 
 
