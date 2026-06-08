@@ -161,8 +161,8 @@ package-lock.json
 /rebuild.bat
 
 # Local planning docs
-/js_extensions_implementation_plan.md
 /refactor_plan.md
+/archival_memory_extension_plan.md
 
 # ===========================
 # Cursor local hooks (per-machine, contain absolute paths)
