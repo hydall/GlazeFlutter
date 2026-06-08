@@ -49,3 +49,20 @@ static assertion failure.
 `_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS` globally for the Windows
 build. Remove it once all affected Windows plugins stop depending on
 `<experimental/coroutine>`.
+
+## GitHub Actions `windows-latest` redirects to Windows Server 2025
+
+**Symptom:** the Windows release workflow fails during
+`subosito/flutter-action@v2` before `flutter pub get` or `flutter build windows`.
+The log shows the runner image as `windows-2025` and the notice:
+
+```text
+windows-latest requests are being redirected to windows-2025-vs2026
+```
+
+**Cause:** GitHub started redirecting `windows-latest` to the Windows Server 2025
+image. The Flutter setup/cache step is not reliable there yet for this workflow.
+
+**Workaround (active):** `.github/workflows/build-branch.yml` pins the Windows
+job to `windows-2022`. Revisit after `subosito/flutter-action` and the GitHub
+Windows 2025 image settle.

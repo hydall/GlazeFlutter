@@ -76,7 +76,7 @@ jobs:
           path: build/app/outputs/flutter-apk/*.apk
 
   build-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
         with:
