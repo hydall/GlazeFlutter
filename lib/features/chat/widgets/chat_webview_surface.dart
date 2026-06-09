@@ -155,11 +155,9 @@ class ChatWebViewSurface extends ConsumerWidget {
                     ),
                   ),
                 );
-                unawaited(
-                  controller.evaluateJavascript(
-                    source: 'if(window.bridge) window.bridge.clearAll();',
-                  ),
-                );
+                // Do not call clearAll() here — it races with _initWebViewOnce
+                // (shows #loading-screen via JS) and broke UseVirtualScroll on
+                // keep-alive re-attach. Initializer.setMessages resets the DOM.
 
                 final callbacks = ChatWebViewCallbacks(
                   ref: ref,

@@ -191,6 +191,19 @@ class UseVirtualScroll {
 
     // --- API parity with VirtualList ---
 
+    clear() {
+        this._clearDOM();
+        this.items = [];
+        this.itemMap.clear();
+        this.cache.clear();
+        this.renderStart = 0;
+        this.renderEnd = 20;
+        this.paddingTop = 0;
+        this.paddingBottom = 0;
+        this.topSpacer.style.height = '0px';
+        this.bottomSpacer.style.height = '0px';
+    }
+
     setMessagesBatch(ids, elements) {
         this._clearDOM();
         this.items = [];
