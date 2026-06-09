@@ -51,6 +51,9 @@ class ChatMessageSync {
 
     if (oldIds.isEmpty) {
       bridge.setMessages(newMsgs, visibleStartIndex: visibleStartIndex);
+      if (!isGenerating) {
+        bridge.setLastMessage(_lastUserId(newMsgs));
+      }
       return;
     }
 
@@ -76,7 +79,9 @@ class ChatMessageSync {
           startIndex: visibleStartIndex + oldIds.length,
         );
         if (appends.isNotEmpty && !isGenerating) {
-          bridge.setLastMessage(newMsgs.lastOrNull?.id);
+          bridge.setLastMessage(
+            _lastUserId(appends) ?? newMsgs.lastOrNull?.id,
+          );
         }
         return;
       }
@@ -98,21 +103,28 @@ class ChatMessageSync {
           bridge.removeMessage(oldIds[i]);
         }
         if (!isGenerating) {
-          bridge.setLastMessage(newMsgs.lastOrNull?.id);
+          bridge.setLastMessage(_lastUserId(newMsgs));
         }
         return;
       }
       bridge.clearAll();
       bridge.setMessages(newMsgs, visibleStartIndex: visibleStartIndex);
+      if (!isGenerating) {
+        bridge.setLastMessage(_lastUserId(newMsgs));
+      }
       return;
     }
 
     final minLen = newLen < oldIds.length ? newLen : oldIds.length;
+    var anyUpdated = false;
     for (int i = 0; i < minLen; i++) {
       if (i >= newIds.length) break;
       if (newIds[i] != oldIds[i]) {
         bridge.clearAll();
         bridge.setMessages(newMsgs, visibleStartIndex: visibleStartIndex);
+        if (!isGenerating) {
+          bridge.setLastMessage(_lastUserId(newMsgs));
+        }
         return;
       }
       final o = oldMsgs[i];
@@ -139,9 +151,29 @@ class ChatMessageSync {
 
       if (needsUpdate) {
         bridge.updateMessage(n);
+        anyUpdated = true;
       }
     }
+    // Same-length per-index edits (e.g. user editMessage while the
+    // last message is still a user message) need a fresh setLastMessage
+    // because the WebView footer/regen controls are not re-rendered by
+    // `updateMessage`. The previous dispatcher call relied on a
+    // changing isGenerating flag, which does not move on edit.
+    if (anyUpdated && !isGenerating) {
+      bridge.setLastMessage(_lastUserId(newMsgs));
+    }
   }
+}
+
+/// Returns the id of the last user-authored message in [msgs] (or
+/// null if the list contains no user messages). The WebView needs
+/// this id to inject the Regenerate button under the last user
+/// message — the renderer only sets `data-is-last` for char messages.
+String? _lastUserId(List<ChatMessage> msgs) {
+  for (int i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role == 'user') return msgs[i].id;
+  }
+  return null;
 }
 
 /// Returns `true` when both [a] and [b] contain the same object
