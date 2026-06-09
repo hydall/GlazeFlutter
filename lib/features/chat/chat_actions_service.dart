@@ -15,11 +15,24 @@ import '../../core/state/db_provider.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../chat_history/chat_history_provider.dart';
+import 'chat_session_service.dart';
 import 'chat_provider.dart';
 
 final chatActionsServiceProvider = Provider<ChatActionsService>((ref) {
   return ChatActionsService(ref);
 });
+
+class ChatImportSaveResult {
+  const ChatImportSaveResult({
+    required this.count,
+    required this.sessionId,
+    required this.sessionIndex,
+  });
+
+  final int count;
+  final String? sessionId;
+  final int? sessionIndex;
+}
 
 class ChatActionsService {
   final Ref _ref;
@@ -106,15 +119,24 @@ class ChatActionsService {
     }
   }
 
-  Future<int> importChat(String charId, String filePath) async {
+  Future<ChatImportSaveResult> importChat(
+    String charId,
+    String filePath,
+  ) async {
     final importResult = await importChatFromJsonl(filePath);
     return importChatFromResult(charId, importResult);
   }
 
-  Future<int> importChatFromResult(
-      String charId, ChatImportResult importResult) async {
+  Future<ChatImportSaveResult> importChatFromResult(
+    String charId,
+    ChatImportResult importResult,
+  ) async {
     if (importResult.messages.isEmpty) {
-      return 0;
+      return const ChatImportSaveResult(
+        count: 0,
+        sessionId: null,
+        sessionIndex: null,
+      );
     }
 
     final repo = _ref.read(chatRepoProvider);
@@ -135,6 +157,7 @@ class ChatActionsService {
     );
 
     await repo.put(newSession);
+    ChatSessionService.updateCache(newSession);
 
     final charRepo = _ref.read(characterRepoProvider);
     final character = await charRepo.getById(charId);
@@ -145,6 +168,10 @@ class ChatActionsService {
     _ref.invalidate(chatProvider(charId));
     _ref.invalidate(chatHistoryProvider);
 
-    return importResult.messages.length;
+    return ChatImportSaveResult(
+      count: importResult.messages.length,
+      sessionId: newSession.id,
+      sessionIndex: newIdx,
+    );
   }
 }
