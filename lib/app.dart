@@ -80,19 +80,51 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
 
   Future<void> _initializeStartup() async {
     try {
-      await dotenv.load(fileName: '.env');
-      await preloadO200kBase();
-      await PromptWorker.ensureInitialized();
-      await initChatWebViewEnvironment();
-      await GenerationNotificationService.instance.init();
-      await DeepLinkService.instance.init();
-    } finally {
+      await _runStartupStep('dotenv', () => dotenv.load(fileName: '.env'));
+      await _runStartupStep('tokenizer', preloadO200kBase);
+      await _runStartupStep('prompt worker', PromptWorker.ensureInitialized);
+      await _runStartupStep(
+        'chat webview environment',
+        initChatWebViewEnvironment,
+      );
+      await _runStartupStep(
+        'generation notifications',
+        GenerationNotificationService.instance.init,
+      );
+      await _runStartupStep('deep links', DeepLinkService.instance.init);
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'startup',
+          context: ErrorDescription('startup initialization failed'),
+        ),
+      );
+    }
+    if (!mounted) return;
+    setState(() => _startupReady = true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      setState(() => _startupReady = true);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _attachStartupHooks();
-      });
+      _attachStartupHooks();
+    });
+  }
+
+  Future<void> _runStartupStep(
+    String name,
+    Future<void> Function() step,
+  ) async {
+    try {
+      await step();
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'startup',
+          context: ErrorDescription('$name initialization failed'),
+        ),
+      );
     }
   }
 
