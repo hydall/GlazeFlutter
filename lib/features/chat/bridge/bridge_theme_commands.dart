@@ -27,7 +27,7 @@ class ThemeBridgeCommands {
         src.startsWith('file://')) {
       url = _host.resolveLocalFileUrl(src) ?? src;
     } else {
-      url = _host.resolveLocalFileUrl(src) ?? 'file:///${src.replaceAll('\\', '/')}';
+      url = _host.resolveLocalFileUrl(src) ?? Uri.file(src).toString();
     }
     // Pass through JSON encoder — data URIs can be megabytes long and
     // may contain characters that the lightweight escape helper doesn't
@@ -54,8 +54,9 @@ class ThemeBridgeCommands {
   Future<void> applyTheme(Map<String, String> theme) {
     final normalizedTheme = Map<String, String>.from(theme);
     if (normalizedTheme.containsKey('chat-layout')) {
-      normalizedTheme['chat-layout'] =
-          _host.normalizeLayout(normalizedTheme['chat-layout']);
+      normalizedTheme['chat-layout'] = _host.normalizeLayout(
+        normalizedTheme['chat-layout'],
+      );
     }
     final json = jsonEncode(normalizedTheme);
     return _host.callJs('applyTheme', json);

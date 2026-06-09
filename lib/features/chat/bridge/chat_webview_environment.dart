@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import '../../../core/utils/platform_paths.dart';
 import 'chat_webview_settings.dart';
 
 WebViewEnvironment? _chatWebViewEnvironment;
@@ -35,8 +36,7 @@ URLRequest? chatWebViewInitialUrlRequest() {
 }
 
 String? chatWebViewResolveLocalFileUrl(String? source) {
-  final baseUrl = _chatWebViewAssetBaseUrl;
-  if (source == null || source.isEmpty || baseUrl == null) return source;
+  if (source == null || source.isEmpty) return source;
   if (source.startsWith('data:') ||
       source.startsWith('http://') ||
       source.startsWith('https://')) {
@@ -45,20 +45,33 @@ String? chatWebViewResolveLocalFileUrl(String? source) {
 
   final path = _sourceToFilePath(source);
   if (path == null) return source;
-  final file = File(path).absolute;
-  if (!_isInsideGlazeData(file.path)) {
+  final filePath = chatWebViewUsesAndroidAssetLoader()
+      ? path
+      : File(path).absolute.path;
+  if (!_isInsideGlazeData(filePath)) {
     return source;
   }
 
+  final androidUrl = _androidLocalFileUrl(filePath);
+  if (androidUrl != null) return androidUrl;
+
+  final baseUrl = _chatWebViewAssetBaseUrl;
+  if (baseUrl == null) return source;
+
   final url = baseUrl.uriValue.replace(
     path: '/__glaze_file__',
-    queryParameters: {'path': file.path},
+    queryParameters: {'path': filePath},
   );
   return url.toString();
 }
 
 Future<void> initChatWebViewEnvironment() async {
-  if (kIsWeb || defaultTargetPlatform != TargetPlatform.windows) return;
+  if (kIsWeb) return;
+  if (defaultTargetPlatform == TargetPlatform.android) {
+    setChatWebViewAndroidFileRoot(await getAppDataDir());
+    return;
+  }
+  if (defaultTargetPlatform != TargetPlatform.windows) return;
   if (_chatWebViewEnvironment != null) return;
 
   try {
@@ -69,8 +82,7 @@ Future<void> initChatWebViewEnvironment() async {
 
     _chatWebViewEnvironment = await WebViewEnvironment.create();
     await _startChatWebViewAssetServer();
-  } catch (_) {
-  }
+  } catch (_) {}
 }
 
 Future<void> _startChatWebViewAssetServer() async {
@@ -83,9 +95,7 @@ Future<void> _startChatWebViewAssetServer() async {
 
   final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
   _chatWebViewAssetServer = server;
-  _chatWebViewAssetBaseUrl = WebUri(
-    'http://127.0.0.1:${server.port}/',
-  );
+  _chatWebViewAssetBaseUrl = WebUri('http://127.0.0.1:${server.port}/');
   unawaited(_serveChatWebViewAssets(server, assetDir));
 }
 
@@ -155,6 +165,25 @@ Future<void> _serveGlazeDataFile(HttpRequest request) async {
   await request.response.close();
 }
 
+String? _androidLocalFileUrl(String path) {
+  if (!chatWebViewUsesAndroidAssetLoader()) return null;
+  final root = chatWebViewAndroidFileRoot;
+  if (root == null || root.isEmpty) return null;
+
+  final rootDir = _normalizeAndroidPath(root);
+  final rootPrefix = rootDir.endsWith('/') ? rootDir : '$rootDir/';
+  final filePath = _normalizeAndroidPath(path);
+  if (!filePath.startsWith(rootPrefix)) return null;
+
+  final relativePath = filePath.substring(rootPrefix.length).split('/');
+  return Uri.https(
+    kChatWebViewAndroidAssetDomain,
+    '$kChatWebViewAndroidFilePath${relativePath.join('/')}',
+  ).toString();
+}
+
+String _normalizeAndroidPath(String path) => path.replaceAll('\\', '/');
+
 String? _sourceToFilePath(String source) {
   if (source.startsWith('file://')) {
     try {
@@ -170,6 +199,14 @@ String? _sourceToFilePath(String source) {
 }
 
 bool _isInsideGlazeData(String path) {
+  if (chatWebViewUsesAndroidAssetLoader()) {
+    final root = chatWebViewAndroidFileRoot;
+    if (root == null || root.isEmpty) return false;
+    final rootDir = _normalizeAndroidPath(root);
+    final rootPrefix = rootDir.endsWith('/') ? rootDir : '$rootDir/';
+    return _normalizeAndroidPath(path).startsWith(rootPrefix);
+  }
+
   final root = _glazeDataDirectory().absolute.path;
   final file = File(path).absolute.path;
   final rootPrefix = root.endsWith(Platform.pathSeparator)
@@ -182,6 +219,10 @@ bool _isInsideGlazeData(String path) {
 }
 
 Directory _glazeDataDirectory() {
+  if (Platform.isAndroid) {
+    final root = chatWebViewAndroidFileRoot;
+    if (root != null && root.isNotEmpty) return Directory(root);
+  }
   if (Platform.isWindows) {
     final appData = Platform.environment['APPDATA'];
     if (appData != null && appData.isNotEmpty) {
@@ -209,7 +250,9 @@ ContentType _contentTypeFor(String path) {
   if (lower.endsWith('.js')) {
     return ContentType('application', 'javascript', charset: 'utf-8');
   }
-  if (lower.endsWith('.css')) return ContentType('text', 'css', charset: 'utf-8');
+  if (lower.endsWith('.css')) {
+    return ContentType('text', 'css', charset: 'utf-8');
+  }
   if (lower.endsWith('.svg')) return ContentType('image', 'svg+xml');
   if (lower.endsWith('.png')) return ContentType('image', 'png');
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) {

@@ -62,6 +62,22 @@ void main() {
       );
     });
 
+    test('maps local Glaze files to the Android asset loader origin', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      setChatWebViewAndroidFileRoot('/data/user/0/com.hydall.glaze/Glaze');
+
+      expect(
+        chatWebViewResolveLocalFileUrl(
+          '/data/user/0/com.hydall.glaze/Glaze/avatars/char 1.png',
+        ),
+        'https://$kChatWebViewAndroidAssetDomain/glaze-files/avatars/char%201.png',
+      );
+      expect(
+        chatWebViewResolveLocalFileUrl('/data/user/0/com.other/app/avatar.png'),
+        '/data/user/0/com.other/app/avatar.png',
+      );
+    });
+
     test('does not use Android asset loader on Windows', () {
       debugDefaultTargetPlatformOverride = TargetPlatform.windows;
 
