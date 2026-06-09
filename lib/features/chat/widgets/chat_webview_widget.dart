@@ -195,18 +195,54 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   Future<void> _waitForJsBridgeReady() async {
     final bridge = _bridge;
     if (bridge == null) return;
-    final deadline = DateTime.now().add(_kJsBridgeReadyTimeout);
-    while (DateTime.now().isBefore(deadline)) {
-      final ready = await bridge.evalJsWithResult(
-        'typeof window.bridge !== "undefined" && window.bridge != null',
-      );
-      if (ready == true) return;
-      await Future<void>.delayed(const Duration(milliseconds: 50));
-    }
-    throw TimeoutException(
-      'Chat WebView JS bridge did not initialize within '
-      '${_kJsBridgeReadyTimeout.inSeconds}s',
+
+    // Fast path: JS already fired onWebViewReady (keep-alive preload case —
+    // the page was loaded before the chat screen opened).
+    final alreadyReady = await bridge.evalJsWithResult(
+      'typeof window.bridge !== "undefined" && window.bridge != null',
     );
+    if (alreadyReady == true) return;
+
+    // Slow path: race between the JS-side onWebViewReady signal (event-driven)
+    // and a polling fallback. The event wins on normal loads; the poll catches
+    // the race where JS fired onWebViewReady before Dart installed the handler.
+    final completer = Completer<void>();
+    final prevOnReady = bridge.onReady;
+    bridge.onReady = () {
+      bridge.onReady = prevOnReady;
+      if (!completer.isCompleted) completer.complete();
+      prevOnReady?.call();
+    };
+
+    // Polling fallback: re-check window.bridge every 200 ms independently of
+    // the event so we don't miss a signal that arrived before the callback was
+    // wired (can happen on iOS keep-alive WebView re-attach).
+    unawaited(() async {
+      final deadline = DateTime.now().add(_kJsBridgeReadyTimeout);
+      while (!completer.isCompleted && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+        if (completer.isCompleted) return;
+        final ready = await bridge.evalJsWithResult(
+          'typeof window.bridge !== "undefined" && window.bridge != null',
+        );
+        if (ready == true && !completer.isCompleted) completer.complete();
+      }
+    }());
+
+    try {
+      await completer.future.timeout(
+        _kJsBridgeReadyTimeout,
+        onTimeout: () {
+          throw TimeoutException(
+            'Chat WebView JS bridge did not initialize within '
+            '${_kJsBridgeReadyTimeout.inSeconds}s',
+          );
+        },
+      );
+    } finally {
+      // Restore the previous callback if we were disposed before the signal.
+      if (!completer.isCompleted) bridge.onReady = prevOnReady;
+    }
   }
 
   Future<void> _initWebViewOnce() async {
