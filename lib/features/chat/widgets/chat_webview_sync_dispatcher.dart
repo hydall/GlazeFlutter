@@ -4,7 +4,7 @@ import 'package:collection/collection.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../bridge/chat_bridge_controller.dart';
-import 'chat_message_sync.dart';
+import 'chat_message_sync.dart' show chatMessageListsIdentical, lastUserMessageId;
 
 /// Mutable per-frame state owned by the [ChatWebViewSyncDispatcher].
 /// Lifted out of the widget so the dispatcher can be tested in
@@ -312,7 +312,9 @@ class ChatWebViewSyncDispatcher {
         'if (window.bridge) { window.bridge.setGenerating(${current.isGenerating}); window.bridge.isGeneratingImage = ${current.isGeneratingImage}; }',
       );
       if (!anyGenerating && current.messages.isNotEmpty) {
-        bridge.setLastMessage(current.messages.last.id);
+        bridge.setLastMessage(
+          lastUserMessageId(current.messages) ?? current.messages.last.id,
+        );
       } else if (current.isGenerating) {
         bridge.setLastMessage(null);
       }

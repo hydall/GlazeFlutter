@@ -52,7 +52,7 @@ class ChatMessageSync {
     if (oldIds.isEmpty) {
       bridge.setMessages(newMsgs, visibleStartIndex: visibleStartIndex);
       if (!isGenerating) {
-        bridge.setLastMessage(_lastUserId(newMsgs));
+        bridge.setLastMessage(lastUserMessageId(newMsgs));
       }
       return;
     }
@@ -80,7 +80,7 @@ class ChatMessageSync {
         );
         if (appends.isNotEmpty && !isGenerating) {
           bridge.setLastMessage(
-            _lastUserId(appends) ?? newMsgs.lastOrNull?.id,
+            lastUserMessageId(appends) ?? newMsgs.lastOrNull?.id,
           );
         }
         return;
@@ -103,14 +103,14 @@ class ChatMessageSync {
           bridge.removeMessage(oldIds[i]);
         }
         if (!isGenerating) {
-          bridge.setLastMessage(_lastUserId(newMsgs));
+          bridge.setLastMessage(lastUserMessageId(newMsgs));
         }
         return;
       }
       bridge.clearAll();
       bridge.setMessages(newMsgs, visibleStartIndex: visibleStartIndex);
       if (!isGenerating) {
-        bridge.setLastMessage(_lastUserId(newMsgs));
+        bridge.setLastMessage(lastUserMessageId(newMsgs));
       }
       return;
     }
@@ -123,7 +123,7 @@ class ChatMessageSync {
         bridge.clearAll();
         bridge.setMessages(newMsgs, visibleStartIndex: visibleStartIndex);
         if (!isGenerating) {
-          bridge.setLastMessage(_lastUserId(newMsgs));
+          bridge.setLastMessage(lastUserMessageId(newMsgs));
         }
         return;
       }
@@ -160,7 +160,7 @@ class ChatMessageSync {
     // `updateMessage`. The previous dispatcher call relied on a
     // changing isGenerating flag, which does not move on edit.
     if (anyUpdated && !isGenerating) {
-      bridge.setLastMessage(_lastUserId(newMsgs));
+      bridge.setLastMessage(lastUserMessageId(newMsgs));
     }
   }
 }
@@ -169,7 +169,7 @@ class ChatMessageSync {
 /// null if the list contains no user messages). The WebView needs
 /// this id to inject the Regenerate button under the last user
 /// message — the renderer only sets `data-is-last` for char messages.
-String? _lastUserId(List<ChatMessage> msgs) {
+String? lastUserMessageId(List<ChatMessage> msgs) {
   for (int i = msgs.length - 1; i >= 0; i--) {
     if (msgs[i].role == 'user') return msgs[i].id;
   }
