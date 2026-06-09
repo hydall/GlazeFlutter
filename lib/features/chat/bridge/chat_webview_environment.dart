@@ -10,6 +10,8 @@ import 'chat_webview_settings.dart';
 WebViewEnvironment? _chatWebViewEnvironment;
 HttpServer? _chatWebViewAssetServer;
 WebUri? _chatWebViewAssetBaseUrl;
+HttpServer? _chatWebViewLocalFileServer;
+WebUri? _chatWebViewLocalFileBaseUrl;
 
 /// Shared WebView2 environment for Windows chat/headless WebViews.
 ///
@@ -52,13 +54,10 @@ String? chatWebViewResolveLocalFileUrl(String? source) {
     return source;
   }
 
-  final androidUrl = _androidLocalFileUrl(filePath);
-  if (androidUrl != null) return androidUrl;
+  final fileBase = _localFileServingBaseUrl();
+  if (fileBase == null) return source;
 
-  final baseUrl = _chatWebViewAssetBaseUrl;
-  if (baseUrl == null) return source;
-
-  final url = baseUrl.uriValue.replace(
+  final url = fileBase.uriValue.replace(
     path: '/__glaze_file__',
     queryParameters: {'path': filePath},
   );
@@ -69,6 +68,7 @@ Future<void> initChatWebViewEnvironment() async {
   if (kIsWeb) return;
   if (defaultTargetPlatform == TargetPlatform.android) {
     setChatWebViewAndroidFileRoot(await getAppDataDir());
+    await _startChatWebViewLocalFileServer();
     return;
   }
   if (defaultTargetPlatform != TargetPlatform.windows) return;
@@ -85,6 +85,9 @@ Future<void> initChatWebViewEnvironment() async {
   } catch (_) {}
 }
 
+WebUri? _localFileServingBaseUrl() =>
+    _chatWebViewLocalFileBaseUrl ?? _chatWebViewAssetBaseUrl;
+
 Future<void> _startChatWebViewAssetServer() async {
   if (_chatWebViewAssetServer != null) return;
 
@@ -97,6 +100,33 @@ Future<void> _startChatWebViewAssetServer() async {
   _chatWebViewAssetServer = server;
   _chatWebViewAssetBaseUrl = WebUri('http://127.0.0.1:${server.port}/');
   unawaited(_serveChatWebViewAssets(server, assetDir));
+}
+
+/// Loopback server for Glaze user files on Android. Bundled chat assets keep
+/// using [WebViewAssetLoader]; only avatars / generated images go through here.
+Future<void> _startChatWebViewLocalFileServer() async {
+  if (_chatWebViewLocalFileServer != null) return;
+
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  _chatWebViewLocalFileServer = server;
+  _chatWebViewLocalFileBaseUrl = WebUri('http://127.0.0.1:${server.port}/');
+  unawaited(_serveChatWebViewLocalFiles(server));
+}
+
+Future<void> _serveChatWebViewLocalFiles(HttpServer server) async {
+  await for (final request in server) {
+    try {
+      if (request.uri.path != '/__glaze_file__') {
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+        continue;
+      }
+      await _serveGlazeDataFile(request);
+    } catch (_) {
+      request.response.statusCode = HttpStatus.internalServerError;
+      await request.response.close();
+    }
+  }
 }
 
 Directory _chatWebViewAssetDirectory() {
@@ -163,23 +193,6 @@ Future<void> _serveGlazeDataFile(HttpRequest request) async {
   request.response.headers.contentType = _contentTypeFor(file.path);
   await request.response.addStream(file.openRead());
   await request.response.close();
-}
-
-String? _androidLocalFileUrl(String path) {
-  if (!chatWebViewUsesAndroidAssetLoader()) return null;
-  final root = chatWebViewAndroidFileRoot;
-  if (root == null || root.isEmpty) return null;
-
-  final rootDir = _normalizeAndroidPath(root);
-  final rootPrefix = rootDir.endsWith('/') ? rootDir : '$rootDir/';
-  final filePath = _normalizeAndroidPath(path);
-  if (!filePath.startsWith(rootPrefix)) return null;
-
-  final relativePath = filePath.substring(rootPrefix.length).split('/');
-  return Uri.https(
-    kChatWebViewAndroidAssetDomain,
-    '$kChatWebViewAndroidFilePath${relativePath.join('/')}',
-  ).toString();
 }
 
 String _normalizeAndroidPath(String path) => path.replaceAll('\\', '/');
@@ -259,4 +272,9 @@ ContentType _contentTypeFor(String path) {
     return ContentType('image', 'jpeg');
   }
   return ContentType.binary;
+}
+
+@visibleForTesting
+void setChatWebViewLocalFileBaseUrlForTesting(WebUri? baseUrl) {
+  _chatWebViewLocalFileBaseUrl = baseUrl;
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:glaze_flutter/features/chat/bridge/chat_webview_environment.dart';
@@ -45,6 +46,8 @@ void main() {
   group('chat WebView Android asset loader', () {
     tearDown(() {
       debugDefaultTargetPlatformOverride = null;
+      setChatWebViewLocalFileBaseUrlForTesting(null);
+      setChatWebViewAndroidFileRoot('');
     });
 
     test('loads bundled chat assets over HTTPS on Android', () {
@@ -62,16 +65,27 @@ void main() {
       );
     });
 
-    test('maps local Glaze files to the Android asset loader origin', () {
+    test('allows loopback image URLs via mixed content compatibility mode', () {
       debugDefaultTargetPlatformOverride = TargetPlatform.android;
-      setChatWebViewAndroidFileRoot('/data/user/0/com.hydall.glaze/Glaze');
 
       expect(
-        chatWebViewResolveLocalFileUrl(
-          '/data/user/0/com.hydall.glaze/Glaze/avatars/char 1.png',
-        ),
-        'https://$kChatWebViewAndroidAssetDomain/glaze-files/avatars/char%201.png',
+        chatWebViewMixedContentMode(),
+        MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE,
       );
+    });
+
+    test('maps Android Glaze files to loopback HTTP URLs', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      setChatWebViewAndroidFileRoot('/data/user/0/com.hydall.glaze/Glaze');
+      setChatWebViewLocalFileBaseUrlForTesting(
+        WebUri('http://127.0.0.1:42424/'),
+      );
+
+      final resolved = chatWebViewResolveLocalFileUrl(
+        '/data/user/0/com.hydall.glaze/Glaze/avatars/char.png',
+      );
+      expect(resolved, startsWith('http://127.0.0.1:42424/__glaze_file__?path='));
+      expect(resolved, contains('avatars'));
       expect(
         chatWebViewResolveLocalFileUrl('/data/user/0/com.other/app/avatar.png'),
         '/data/user/0/com.other/app/avatar.png',
@@ -85,6 +99,10 @@ void main() {
       expect(chatWebViewAndroidAssetUrl(), isNull);
       expect(chatWebViewInitialFile(), 'assets/chat_webview/index.html');
       expect(chatWebViewInitialUrlRequest(), isNull);
+      expect(
+        chatWebViewMixedContentMode(),
+        MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
+      );
     });
   });
 }
