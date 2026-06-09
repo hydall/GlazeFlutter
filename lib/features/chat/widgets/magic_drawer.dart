@@ -648,31 +648,34 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       type: Platform.isIOS ? FileType.any : FileType.custom,
       allowedExtensions: Platform.isIOS ? null : ['jsonl', 'json'],
       allowMultiple: false,
-      withData: true,
+      withData: false,
     );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
     final filePath = file.path;
     try {
-      int count;
+      ChatImportSaveResult saveResult;
       if (file.bytes != null) {
         final importResult = importChatFromJsonlString(
           utf8.decode(file.bytes!),
         );
-        count = await ref
+        saveResult = await ref
             .read(chatActionsServiceProvider)
             .importChatFromResult(widget.charId, importResult);
       } else if (filePath != null) {
-        count = await ref
+        saveResult = await ref
             .read(chatActionsServiceProvider)
             .importChat(widget.charId, filePath);
       } else {
         return;
       }
       if (!mounted) return;
-      if (count > 0) {
+      final count = saveResult.count;
+      final sessionIndex = saveResult.sessionIndex;
+      if (count > 0 && sessionIndex != null) {
         // Pop the sessions sheet if import succeeds
         Navigator.of(context).pop();
+        context.go('/chat/${widget.charId}?session=$sessionIndex');
       }
       GlazeToast.show(
         context,

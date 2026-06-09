@@ -287,28 +287,30 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
       type: Platform.isIOS ? FileType.any : FileType.custom,
       allowedExtensions: Platform.isIOS ? null : ['jsonl', 'json'],
       allowMultiple: false,
-      withData: true,
+      withData: false,
     );
     if (result == null || result.files.isEmpty) return;
     final file = result.files.first;
     final filePath = file.path;
     try {
-      int count;
+      ChatImportSaveResult saveResult;
       if (file.bytes != null) {
         final importResult = importChatFromJsonlString(
           utf8.decode(file.bytes!),
         );
-        count = await ref.read(chatActionsServiceProvider)
+        saveResult = await ref.read(chatActionsServiceProvider)
             .importChatFromResult(charId, importResult);
       } else if (filePath != null) {
-        count = await ref.read(chatActionsServiceProvider)
+        saveResult = await ref.read(chatActionsServiceProvider)
             .importChat(charId, filePath);
       } else {
         return;
       }
       if (!mounted) return;
-      if (count > 0) {
-        _closeSheetAndNavigate('/chat/$charId');
+      final count = saveResult.count;
+      final sessionIndex = saveResult.sessionIndex;
+      if (count > 0 && sessionIndex != null) {
+        _closeSheetAndNavigate('/chat/$charId?session=$sessionIndex');
       }
       GlazeToast.show(
         context,

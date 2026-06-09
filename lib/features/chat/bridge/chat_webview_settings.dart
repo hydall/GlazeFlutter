@@ -9,6 +9,18 @@ const String kChatWebViewAndroidAssetDomain = 'appassets.androidplatform.net';
 const String kChatWebViewAndroidAssetUrl =
     'https://$kChatWebViewAndroidAssetDomain/assets/flutter_assets/assets/chat_webview/index.html';
 
+/// HTTPS path for local user files that the Android chat WebView may render
+/// inside HTML, such as avatars, backgrounds, and generated images.
+const String kChatWebViewAndroidFilePath = '/glaze-files/';
+
+String? _chatWebViewAndroidFileRoot;
+
+String? get chatWebViewAndroidFileRoot => _chatWebViewAndroidFileRoot;
+
+void setChatWebViewAndroidFileRoot(String root) {
+  _chatWebViewAndroidFileRoot = root;
+}
+
 /// Value for [InAppWebViewSettings.transparentBackground].
 ///
 /// On Windows, `flutter_inappwebview_windows` 0.6.x inverts this flag in native
@@ -46,8 +58,16 @@ String? chatWebViewAndroidAssetUrl() {
 /// Android [WebViewAssetLoader] for bundled chat assets, or `null` elsewhere.
 WebViewAssetLoader? chatWebViewAssetLoader() {
   if (!chatWebViewUsesAndroidAssetLoader()) return null;
+  final fileRoot = _chatWebViewAndroidFileRoot;
   return WebViewAssetLoader(
-    pathHandlers: [AssetsPathHandler(path: '/assets/')],
+    pathHandlers: [
+      AssetsPathHandler(path: '/assets/'),
+      if (fileRoot != null)
+        InternalStoragePathHandler(
+          path: kChatWebViewAndroidFilePath,
+          directory: fileRoot,
+        ),
+    ],
   );
 }
 
