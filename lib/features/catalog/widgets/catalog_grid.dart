@@ -1,21 +1,146 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../chat/bridge/chat_webview_environment.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
 import '../services/cf_challenge_service.dart';
+import '../services/janitor_webview_proxy.dart';
 import '../services/chub_provider.dart';
 import '../services/datacat_provider.dart';
 import '../services/janitor_provider.dart';
 import 'catalog_card.dart';
 import 'catalog_controls.dart';
 import 'catalog_detail_launcher.dart';
+import 'janitor_login_sheet.dart';
+
+/// Persisted flag so the JanitorAI login info sheet is shown at most once ever.
+const _janitorInfoShownKey = 'janitor_login_info_shown';
+
+/// In-memory guard so the (async) check fires at most once per app session,
+/// regardless of how many times the catalog state updates.
+bool _janitorInfoCheckStarted = false;
+
+/// On the first successful JanitorAI catalog load, offer the user to sign in so
+/// the full (authenticated) character set is available. Shown once per install,
+/// and skipped entirely for users who are already logged in.
+Future<void> _maybeShowJanitorLoginInfo(
+  BuildContext context,
+  WidgetRef ref,
+) async {
+  if (_janitorInfoCheckStarted) return;
+  _janitorInfoCheckStarted = true;
+
+  final prefs = await SharedPreferences.getInstance();
+  if (prefs.getBool(_janitorInfoShownKey) ?? false) return;
+
+  final loggedIn = await JanitorWebViewProxy.instance.isLoggedIn();
+  // Mark as shown regardless so it never reappears.
+  await prefs.setBool(_janitorInfoShownKey, true);
+  if (loggedIn || !context.mounted) return;
+
+  await GlazeBottomSheet.show<void>(
+    context,
+    // Cannot be dragged or tapped-out to dismiss; the content widget also blocks
+    // the back button for the first 5s so it isn't closed by accident.
+    locked: true,
+    isDismissible: false,
+    child: _JanitorLoginInfoContent(
+      onLogin: () async {
+        Navigator.of(context, rootNavigator: true).pop();
+        await showJanitorLoginSheet(context);
+        if (context.mounted) {
+          await ref.read(catalogProvider.notifier).search(reset: true);
+        }
+      },
+    ),
+  );
+}
+
+/// Body of the JanitorAI login info sheet. Stays locked (back button blocked,
+/// login button disabled with a countdown) for [_lockSeconds] so it can't be
+/// dismissed accidentally right as it appears.
+class _JanitorLoginInfoContent extends StatefulWidget {
+  final Future<void> Function() onLogin;
+
+  const _JanitorLoginInfoContent({required this.onLogin});
+
+  @override
+  State<_JanitorLoginInfoContent> createState() =>
+      _JanitorLoginInfoContentState();
+}
+
+class _JanitorLoginInfoContentState extends State<_JanitorLoginInfoContent> {
+  static const _lockSeconds = 5;
+  int _remaining = _lockSeconds;
+  Timer? _timer;
+
+  bool get _locked => _remaining > 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) return;
+      setState(() {
+        _remaining--;
+        if (_remaining <= 0) t.cancel();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = 'janitor_login_button'.tr();
+    return PopScope(
+      canPop: !_locked,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          children: [
+            Icon(
+              Icons.person_outline_rounded,
+              size: 64,
+              color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'janitor_login_info_desc'.tr(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                color: context.cs.onSurface,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _locked ? null : () => widget.onLogin(),
+                child: Text(_locked ? '$label ($_remaining)' : label),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class CatalogGrid extends ConsumerWidget {
   final double topPadding;
@@ -33,6 +158,15 @@ class CatalogGrid extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(catalogProvider);
     final notifier = ref.read(catalogProvider.notifier);
+
+    ref.listen<CatalogState>(catalogProvider, (prev, next) {
+      if (next.activeProvider == CatalogProvider.janitor &&
+          !next.loading &&
+          next.error == null &&
+          next.results.isNotEmpty) {
+        _maybeShowJanitorLoginInfo(context, ref);
+      }
+    });
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
@@ -61,6 +195,8 @@ class CatalogGrid extends ConsumerWidget {
             SliverToBoxAdapter(
               child: _ActiveTagsRow(state: state, notifier: notifier),
             ),
+          if (state.activeProvider == CatalogProvider.janitor)
+            const SliverToBoxAdapter(child: _JanitorProxyLifecycle()),
           if (state.activeProvider == CatalogProvider.janitor)
             SliverToBoxAdapter(
               child: ValueListenableBuilder<bool>(
@@ -246,41 +382,73 @@ class _CfChallengeWebViewState extends State<_CfChallengeWebView> {
   }
 
   void _onCreated(InAppWebViewController controller) async {
+    debugPrint('[CF] WebView created');
+
+    // Read and store the native WebView UA before any CF interaction.
     try {
       final ua = await controller.evaluateJavascript(source: 'navigator.userAgent');
       if (ua is String && ua.isNotEmpty) {
         CfChallengeService.instance.setWebViewUA(ua);
+        debugPrint('[CF] WebView UA: $ua');
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[CF] UA read error: $e');
+    }
 
-    // Delete any stale cf_clearance so the poll doesn't immediately detect it
-    // and "solve" the challenge with an expired cookie.
+    // Wipe the entire WebView cookie store. Targeted deletions fail because
+    // cf_clearance uses Domain=.janitorai.com and all attribute-matching tricks
+    // leave the cookie intact. A clean store forces CF to issue a fresh cookie
+    // bound to the current UA when we navigate to janitorai.com below.
     try {
-      await CookieManager.instance().deleteCookie(
-        url: WebUri('https://janitorai.com'),
-        name: 'cf_clearance',
-      );
-    } catch (_) {}
+      final before = await CookieManager.instance()
+          .getCookies(url: WebUri('https://janitorai.com'));
+      debugPrint('[CF] Cookies before wipe: ${before.map((c) => c.name).join(', ')}');
+      await CookieManager.instance().deleteAllCookies();
+      final after = await CookieManager.instance()
+          .getCookies(url: WebUri('https://janitorai.com'));
+      debugPrint('[CF] Cookies after wipe: ${after.map((c) => c.name).join(', ')} (${after.length} left)');
+    } catch (e) {
+      debugPrint('[CF] Cookie wipe error: $e');
+    }
 
+    // Navigate to janitorai.com now that the cookie store is clean.
+    // The WebView was started at about:blank to prevent a race where the page
+    // fires onLoadStart before we could delete the stale cf_clearance.
+    debugPrint('[CF] Navigating to janitorai.com with clean cookie store');
+    await controller.loadUrl(
+      urlRequest: URLRequest(url: WebUri('https://janitorai.com')),
+    );
+
+    int pollCount = 0;
     _poll = Timer.periodic(const Duration(milliseconds: 500), (_) async {
       if (!mounted) return;
+      pollCount++;
       try {
         final cookies = await CookieManager.instance()
             .getCookies(url: WebUri('https://janitorai.com'));
+        final names = cookies.map((c) => c.name).join(', ');
+        if (pollCount % 6 == 1) {
+          debugPrint('[CF] Poll #$pollCount cookies: $names');
+        }
         final cf = cookies.where((c) => c.name == 'cf_clearance').firstOrNull;
         final value = cf?.value?.toString();
         if (value != null && value.isNotEmpty) {
+          debugPrint('[CF] cf_clearance found on poll #$pollCount: ${value.substring(0, value.length.clamp(0, 40))}...');
           _poll?.cancel();
           CfChallengeService.instance.completeChallengeWith(value);
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[CF] Poll error: $e');
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     return InAppWebView(
-      initialUrlRequest: URLRequest(url: WebUri('https://janitorai.com')),
+      // Start at about:blank so _onCreated can wipe stale cookies before
+      // the CF challenge request goes out (races with initialUrlRequest).
+      initialUrlRequest: URLRequest(url: WebUri('about:blank')),
       initialSettings: InAppWebViewSettings(
         javaScriptEnabled: true,
         domStorageEnabled: true,
@@ -293,8 +461,80 @@ class _CfChallengeWebViewState extends State<_CfChallengeWebView> {
           ? chatWebViewEnvironment
           : null,
       onWebViewCreated: _onCreated,
+      onLoadStart: (controller, url) {
+        debugPrint('[CF] onLoadStart: $url');
+      },
+      onLoadStop: (controller, url) async {
+        debugPrint('[CF] onLoadStop: $url');
+        try {
+          final cookies = await CookieManager.instance()
+              .getCookies(url: WebUri('https://janitorai.com'));
+          debugPrint('[CF] Cookies at onLoadStop: ${cookies.map((c) => c.name).join(', ')}');
+        } catch (_) {}
+      },
+      onReceivedHttpError: (controller, request, response) {
+        debugPrint('[CF] HTTP error ${response.statusCode} on ${request.url}');
+      },
+      onReceivedError: (controller, request, error) {
+        debugPrint('[CF] Load error: ${error.description} on ${request.url}');
+      },
     );
   }
+}
+
+/// Non-visual widget whose lifetime mirrors the JanitorAI catalog being the
+/// foreground view. It is mounted only while JanitorAI is the active provider,
+/// and uses [TickerMode] (disabled by the shell's `FadeBranchContainer` for
+/// background bottom-nav branches) plus app lifecycle to tell the
+/// [JanitorWebViewProxy] when to keep its offscreen WebView alive vs. tear it
+/// down. The WebView never lingers in the background.
+class _JanitorProxyLifecycle extends StatefulWidget {
+  const _JanitorProxyLifecycle();
+
+  @override
+  State<_JanitorProxyLifecycle> createState() => _JanitorProxyLifecycleState();
+}
+
+class _JanitorProxyLifecycleState extends State<_JanitorProxyLifecycle>
+    with WidgetsBindingObserver {
+  bool _appResumed = true;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Registers a dependency on TickerMode → didChangeDependencies re-fires when
+    // the branch goes off/on screen.
+    TickerMode.valuesOf(context);
+    _sync();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appResumed = state == AppLifecycleState.resumed;
+    _sync();
+  }
+
+  void _sync() {
+    final visible =
+        mounted && TickerMode.valuesOf(context).enabled && _appResumed;
+    JanitorWebViewProxy.instance.setActive(visible);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    JanitorWebViewProxy.instance.setActive(false);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class _ActiveTagsRow extends StatelessWidget {

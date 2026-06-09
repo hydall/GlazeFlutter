@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+void _cfLog(String msg) => debugPrint('[CF] $msg');
+
 const _cookieKey = 'gz_cf_clearance_janitor';
 const _expiryKey = 'gz_cf_expiry_janitor';
 const _uaKey = 'gz_cf_ua_janitor';
@@ -54,15 +56,24 @@ class CfChallengeService {
   /// Signals the UI to show the challenge WebView and waits until
   /// [completeChallengeWith] is called. Concurrent callers share the same wait.
   Future<String?> solve() async {
-    if (_pending != null) return _pending!.future;
+    if (_pending != null) {
+      _cfLog('solve() — reusing existing pending challenge');
+      return _pending!.future;
+    }
+    _cfLog('solve() — starting new challenge');
     final c = Completer<String?>();
     _pending = c;
     isPending.value = true;
     try {
-      return await c.future.timeout(
+      final result = await c.future.timeout(
         const Duration(seconds: 90),
-        onTimeout: () => null,
+        onTimeout: () {
+          _cfLog('solve() — TIMEOUT after 90s');
+          return null;
+        },
       );
+      _cfLog('solve() — completed, cookie=${result != null ? 'present' : 'null'}');
+      return result;
     } finally {
       isPending.value = false;
       _pending = null;
@@ -71,19 +82,25 @@ class CfChallengeService {
 
   /// Called by the catalog WebView widget when `cf_clearance` is found.
   void completeChallengeWith(String? cookie) {
-    if (_pending == null || _pending!.isCompleted) return;
+    if (_pending == null || _pending!.isCompleted) {
+      _cfLog('completeChallengeWith() — no pending challenge, ignoring');
+      return;
+    }
+    _cfLog('completeChallengeWith() — cookie=${cookie != null ? 'present' : 'null'}');
     if (cookie != null) unawaited(_persist(cookie));
     _pending!.complete(cookie);
   }
 
   /// Drops the cached cookie so the next request triggers a fresh challenge.
+  /// Does NOT clear [_savedUA] — the WebView UA is an environment property
+  /// that survives cookie invalidation and must stay consistent with the
+  /// cf_clearance cookie that will be issued by the next challenge.
   void invalidate() {
+    _cfLog('invalidate() called');
     _cached = null;
-    _savedUA = null;
     SharedPreferences.getInstance().then((p) {
       p.remove(_cookieKey);
       p.remove(_expiryKey);
-      p.remove(_uaKey);
     });
   }
 

@@ -135,6 +135,7 @@ class GlazeBottomSheet {
     BottomSheetInput? input,
     Widget? child,
     bool locked = false,
+    bool isDismissible = true,
   }) {
     return showModalBottomSheet<T>(
       context: context,
@@ -143,6 +144,7 @@ class GlazeBottomSheet {
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black54,
       enableDrag: !locked,
+      isDismissible: isDismissible,
       isScrollControlled: true,
       builder: (_) => _GlazeBottomSheetContent(
         title: title,

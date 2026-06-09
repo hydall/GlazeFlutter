@@ -1,7 +1,8 @@
-import 'package:dio/dio.dart';
+import 'dart:convert';
 
-import 'catalog_http.dart';
-import 'cf_challenge_service.dart';
+import 'package:flutter/foundation.dart';
+
+import 'janitor_webview_proxy.dart';
 import '../catalog_models.dart';
 
 const _hampterUrl = 'https://janitorai.com/hampter/characters';
@@ -75,10 +76,7 @@ Future<List<CatalogTag>> fetchJanitorTags() async {
   if (_tagsFetched) return _cachedJanitorTags;
   try {
     const tagsUrl = 'https://janitorai.com/hampter/tags';
-    final data = await _janitorFetch(
-      tagsUrl,
-      (h) => catalogGetList(tagsUrl, h),
-    );
+    final data = (await _janitorFetch(tagsUrl) as List).cast<dynamic>();
     if (data.isNotEmpty) {
       _cachedJanitorTags = data
           .map((t) => CatalogTag(
@@ -108,44 +106,13 @@ Future<List<CatalogTag>> fetchJanitorTags() async {
   return _cachedJanitorTags;
 }
 
-Map<String, String> _buildJanitorHeaders(String? cfCookie) => {
-      'User-Agent': CfChallengeService.instance.activeUA ?? cfBrowserUA,
-      'Accept': 'application/json, text/plain, */*',
-      'Accept-Language': 'en-US,en;q=0.9',
-      'Origin': 'https://janitorai.com',
-      'Referer': 'https://janitorai.com/',
-      'sec-fetch-dest': 'empty',
-      'sec-fetch-mode': 'cors',
-      'sec-fetch-site': 'same-origin',
-      if (cfCookie != null) 'Cookie': 'cf_clearance=$cfCookie',
-    };
-
-/// Runs [request] with a cached CF cookie. On 403/503 solves the CF
-/// challenge silently and retries once.
-Future<T> _janitorFetch<T>(
-  String url,
-  Future<T> Function(Map<String, String> headers) request,
-) async {
-  final cookie = await CfChallengeService.instance.getCookie();
-  try {
-    return await request(_buildJanitorHeaders(cookie));
-  } catch (e) {
-    if (_isCfError(e)) {
-      CfChallengeService.instance.invalidate();
-      final newCookie = await CfChallengeService.instance.solve();
-      return request(_buildJanitorHeaders(newCookie));
-    }
-    rethrow;
-  }
-}
-
-bool _isCfError(Object e) {
-  if (e is DioException) {
-    final code = e.response?.statusCode;
-    return code == 403 || code == 503;
-  }
-  final s = e.toString();
-  return s.contains('HTTP 403') || s.contains('HTTP 503');
+/// Fetches [url] from inside the janitor WebView session and decodes the JSON
+/// body. The WebView proxy transparently solves the Cloudflare Turnstile
+/// challenge (see [JanitorWebViewProxy] for why Dio can't be used here).
+Future<dynamic> _janitorFetch(String url) async {
+  debugPrint('[CF] janitorFetch: ${url.length > 80 ? url.substring(0, 80) : url}');
+  final body = await JanitorWebViewProxy.instance.fetch(url);
+  return jsonDecode(body);
 }
 
 Future<CatalogSearchResult> janitorSearch({
@@ -177,12 +144,7 @@ Future<CatalogSearchResult> janitorSearch({
   }
 
   final searchUrl = '$_hampterUrl?$params';
-  dynamic data;
-  try {
-    data = await _janitorFetch(searchUrl, (h) => catalogGet(searchUrl, h));
-  } catch (_) {
-    data = await _janitorFetch(searchUrl, (h) => catalogGetList(searchUrl, h));
-  }
+  final data = await _janitorFetch(searchUrl);
 
   List<dynamic> hits;
   if (data is List) {
@@ -199,7 +161,7 @@ Future<CatalogSearchResult> janitorSearch({
 
 Future<DownloadedCharacter> janitorFetchCharacter(String id) async {
   final charUrl = '$_hampterUrl/$id';
-  final data = await _janitorFetch(charUrl, (h) => catalogGet(charUrl, h));
+  final data = await _janitorFetch(charUrl) as Map<String, dynamic>;
   return _convertToGlaze(data);
 }
 

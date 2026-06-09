@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/widgets/glaze_scaffold.dart' show GlazeAppBar;
 import '../../shared/widgets/menu_group.dart';
 import '../backup/backup_screen.dart';
+import '../catalog/widgets/janitor_login_sheet.dart';
 import '../cloud_sync/widgets/sync_sheet.dart';
 import '../dev/menu_group_demo_screen.dart';
 
@@ -69,6 +71,11 @@ class MenuScreen extends ConsumerWidget {
                         isScrollControlled: true,
                         builder: (_) => const SyncSheet(),
                       ),
+                    ),
+                    MenuItem(
+                      icon: Icons.person_outline_rounded,
+                      label: 'janitor_login_menu'.tr(),
+                      onTap: () => showJanitorLoginSheet(context),
                     ),
                   ],
                 ),
