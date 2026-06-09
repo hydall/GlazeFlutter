@@ -1,8 +1,10 @@
+import 'package:dio/dio.dart';
+
 import 'catalog_http.dart';
+import 'cf_challenge_service.dart';
 import '../catalog_models.dart';
 
 const _hampterUrl = 'https://janitorai.com/hampter/characters';
-const _baseUrl = 'https://janitorai.com';
 const _imageBase = 'https://ella.janitorai.com/bot-avatars/';
 
 const _fallbackTagMap = <int, String>{
@@ -72,9 +74,10 @@ List<CatalogTag> getCachedJanitorTags() => _cachedJanitorTags;
 Future<List<CatalogTag>> fetchJanitorTags() async {
   if (_tagsFetched) return _cachedJanitorTags;
   try {
-    final data = await catalogGetList(
-      'https://janitorai.com/hampter/tags',
-      _janitorHeaders,
+    const tagsUrl = 'https://janitorai.com/hampter/tags';
+    final data = await _janitorFetch(
+      tagsUrl,
+      (h) => catalogGetList(tagsUrl, h),
     );
     if (data.isNotEmpty) {
       _cachedJanitorTags = data
@@ -105,10 +108,45 @@ Future<List<CatalogTag>> fetchJanitorTags() async {
   return _cachedJanitorTags;
 }
 
-const _janitorHeaders = {
-  'Origin': 'https://janitorai.com',
-  'Referer': 'https://janitorai.com/',
-};
+Map<String, String> _buildJanitorHeaders(String? cfCookie) => {
+      'User-Agent': CfChallengeService.instance.activeUA ?? cfBrowserUA,
+      'Accept': 'application/json, text/plain, */*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Origin': 'https://janitorai.com',
+      'Referer': 'https://janitorai.com/',
+      'sec-fetch-dest': 'empty',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-site': 'same-origin',
+      if (cfCookie != null) 'Cookie': 'cf_clearance=$cfCookie',
+    };
+
+/// Runs [request] with a cached CF cookie. On 403/503 solves the CF
+/// challenge silently and retries once.
+Future<T> _janitorFetch<T>(
+  String url,
+  Future<T> Function(Map<String, String> headers) request,
+) async {
+  final cookie = await CfChallengeService.instance.getCookie();
+  try {
+    return await request(_buildJanitorHeaders(cookie));
+  } catch (e) {
+    if (_isCfError(e)) {
+      CfChallengeService.instance.invalidate();
+      final newCookie = await CfChallengeService.instance.solve();
+      return request(_buildJanitorHeaders(newCookie));
+    }
+    rethrow;
+  }
+}
+
+bool _isCfError(Object e) {
+  if (e is DioException) {
+    final code = e.response?.statusCode;
+    return code == 403 || code == 503;
+  }
+  final s = e.toString();
+  return s.contains('HTTP 403') || s.contains('HTTP 503');
+}
 
 Future<CatalogSearchResult> janitorSearch({
   String query = '',
@@ -138,17 +176,12 @@ Future<CatalogSearchResult> janitorSearch({
     params.write('&custom_tags[]=${Uri.encodeComponent(tagName)}');
   }
 
+  final searchUrl = '$_hampterUrl?$params';
   dynamic data;
   try {
-    data = await catalogGet(
-      '$_hampterUrl?$params',
-      _janitorHeaders,
-    );
+    data = await _janitorFetch(searchUrl, (h) => catalogGet(searchUrl, h));
   } catch (_) {
-    data = await catalogGetList(
-      '$_hampterUrl?$params',
-      _janitorHeaders,
-    );
+    data = await _janitorFetch(searchUrl, (h) => catalogGetList(searchUrl, h));
   }
 
   List<dynamic> hits;
@@ -165,14 +198,8 @@ Future<CatalogSearchResult> janitorSearch({
 }
 
 Future<DownloadedCharacter> janitorFetchCharacter(String id) async {
-  final data = await catalogGet(
-    '$_hampterUrl/$id',
-    {
-      'Accept': 'application/json, text/plain, */*',
-      'Origin': _baseUrl,
-      'Referer': '$_baseUrl/',
-    },
-  );
+  final charUrl = '$_hampterUrl/$id';
+  final data = await _janitorFetch(charUrl, (h) => catalogGet(charUrl, h));
   return _convertToGlaze(data);
 }
 

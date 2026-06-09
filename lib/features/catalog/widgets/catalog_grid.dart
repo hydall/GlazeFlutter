@@ -1,9 +1,15 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/theme/app_colors.dart';
+import '../../chat/bridge/chat_webview_environment.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
+import '../services/cf_challenge_service.dart';
 import '../services/chub_provider.dart';
 import '../services/datacat_provider.dart';
 import '../services/janitor_provider.dart';
@@ -54,6 +60,19 @@ class CatalogGrid extends ConsumerWidget {
           if (state.filters.tagIds.isNotEmpty || state.filters.tagNames.isNotEmpty)
             SliverToBoxAdapter(
               child: _ActiveTagsRow(state: state, notifier: notifier),
+            ),
+          if (state.activeProvider == CatalogProvider.janitor)
+            SliverToBoxAdapter(
+              child: ValueListenableBuilder<bool>(
+                valueListenable: CfChallengeService.instance.isPending,
+                builder: (context, pending, _) {
+                  if (!pending) return const SizedBox.shrink();
+                  return SizedBox(
+                    height: MediaQuery.of(context).size.height * 0.72,
+                    child: const _CfChallengeWebView(),
+                  );
+                },
+              ),
             ),
           if (state.error != null)
             SliverToBoxAdapter(
@@ -206,6 +225,74 @@ class CatalogGrid extends ConsumerWidget {
       useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (_) => CatalogDetailLauncher(item: item, provider: provider),
+    );
+  }
+}
+
+class _CfChallengeWebView extends StatefulWidget {
+  const _CfChallengeWebView();
+
+  @override
+  State<_CfChallengeWebView> createState() => _CfChallengeWebViewState();
+}
+
+class _CfChallengeWebViewState extends State<_CfChallengeWebView> {
+  Timer? _poll;
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  void _onCreated(InAppWebViewController controller) async {
+    try {
+      final ua = await controller.evaluateJavascript(source: 'navigator.userAgent');
+      if (ua is String && ua.isNotEmpty) {
+        CfChallengeService.instance.setWebViewUA(ua);
+      }
+    } catch (_) {}
+
+    // Delete any stale cf_clearance so the poll doesn't immediately detect it
+    // and "solve" the challenge with an expired cookie.
+    try {
+      await CookieManager.instance().deleteCookie(
+        url: WebUri('https://janitorai.com'),
+        name: 'cf_clearance',
+      );
+    } catch (_) {}
+
+    _poll = Timer.periodic(const Duration(milliseconds: 500), (_) async {
+      if (!mounted) return;
+      try {
+        final cookies = await CookieManager.instance()
+            .getCookies(url: WebUri('https://janitorai.com'));
+        final cf = cookies.where((c) => c.name == 'cf_clearance').firstOrNull;
+        final value = cf?.value?.toString();
+        if (value != null && value.isNotEmpty) {
+          _poll?.cancel();
+          CfChallengeService.instance.completeChallengeWith(value);
+        }
+      } catch (_) {}
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InAppWebView(
+      initialUrlRequest: URLRequest(url: WebUri('https://janitorai.com')),
+      initialSettings: InAppWebViewSettings(
+        javaScriptEnabled: true,
+        domStorageEnabled: true,
+        cacheEnabled: true,
+        thirdPartyCookiesEnabled: true,
+        isInspectable: false,
+        useHybridComposition: true,
+      ),
+      webViewEnvironment: defaultTargetPlatform == TargetPlatform.windows
+          ? chatWebViewEnvironment
+          : null,
+      onWebViewCreated: _onCreated,
     );
   }
 }
