@@ -158,7 +158,7 @@ class ChatBridgeController {
           path.startsWith('file://')) {
         url = resolveLocalFileUrl(path) ?? path;
       } else {
-        url = resolveLocalFileUrl(path) ?? 'file:///${path.replaceAll('\\', '/')}';
+        url = resolveLocalFileUrl(path) ?? Uri.file(path).toString();
       }
     }
     if (isChar) {
