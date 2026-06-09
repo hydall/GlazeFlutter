@@ -594,29 +594,6 @@ export class Bridge {
     container.style.paddingTop = px + 'px';
   }
 
-  setHeaderOverlay(topPx, heightPx) {
-    const el = document.getElementById('header-blur-overlay');
-    if (!el) return;
-    if (heightPx > 0) {
-      document.documentElement.style.setProperty('--header-overlay-top', topPx + 'px');
-      document.documentElement.style.setProperty('--header-overlay-height', heightPx + 'px');
-      el.style.display = 'block';
-    } else {
-      el.style.display = 'none';
-    }
-  }
-
-  setInputOverlay(heightPx) {
-    const el = document.getElementById('input-blur-overlay');
-    if (!el) return;
-    if (heightPx > 0) {
-      document.documentElement.style.setProperty('--input-overlay-height', heightPx + 'px');
-      el.style.display = 'block';
-    } else {
-      el.style.display = 'none';
-    }
-  }
-
   applyLayout(layout) {
     const normalized = this._normalizeLayout(layout);
     const container = document.getElementById('chat-container') || document.body;

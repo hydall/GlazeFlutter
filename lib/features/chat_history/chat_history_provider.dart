@@ -139,5 +139,23 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
     final updatedVars = Map<String, String>.from(session.sessionVars);
     updatedVars['sessionName'] = newName;
     await chatRepo.put(session.copyWith(sessionVars: updatedVars));
+    state = state.whenData(
+      (sessions) => [
+        for (final item in sessions)
+          item.sessionId == sessionId
+              ? ChatSessionInfo(
+                  sessionId: item.sessionId,
+                  characterId: item.characterId,
+                  characterName: item.characterName,
+                  avatarPath: item.avatarPath,
+                  lastMessage: item.lastMessage,
+                  lastMessageTime: item.lastMessageTime,
+                  messageCount: item.messageCount,
+                  sessionIndex: item.sessionIndex,
+                  sessionName: newName,
+                )
+              : item,
+      ],
+    );
   }
 }

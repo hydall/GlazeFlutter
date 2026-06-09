@@ -22,8 +22,15 @@ void showMessageContextMenu({
 }) {
   final notifier = ref.read(chatProvider(charId).notifier);
 
+  // User messages are never the "active generation target" — the streaming
+  // placeholder is a separate assistant section in the webview that does not
+  // appear in `widget.state.messages`. Without this, sending a new message
+  // would replace the user message's menu with only "Stop Generating".
+  final isActivelyGenerating = isGenerating && isLast && !isUser;
+  final isTypingTarget = isTyping && !isUser;
+
   final items = <BottomSheetItem>[
-    if (isTyping)
+    if (isTypingTarget)
       BottomSheetItem(
         icon: Icons.stop_circle,
         iconColor: Colors.orange,
@@ -34,7 +41,7 @@ void showMessageContextMenu({
         },
       )
     else ...[
-      if (!(isGenerating && isLast))
+      if (!isActivelyGenerating)
         BottomSheetItem(
           icon: Icons.copy,
           label: 'Copy',
@@ -43,7 +50,7 @@ void showMessageContextMenu({
             Navigator.of(context, rootNavigator: true).pop();
           },
         ),
-      if (!isError && !(isGenerating && isLast))
+      if (!isError && !isActivelyGenerating)
         BottomSheetItem(
           icon: Icons.edit,
           label: 'Edit',
@@ -61,7 +68,7 @@ void showMessageContextMenu({
             notifier.regenerateLastAssistant();
           },
         ),
-      if (isGenerating && isLast)
+      if (isActivelyGenerating)
         BottomSheetItem(
           icon: Icons.stop_circle,
           iconColor: Colors.orange,
@@ -71,7 +78,7 @@ void showMessageContextMenu({
             notifier.abortGeneration();
           },
         ),
-      if (!isError && !(isGenerating && isLast))
+      if (!isError && !isActivelyGenerating)
         BottomSheetItem(
           icon: Icons.call_split,
           label: 'Branch',

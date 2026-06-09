@@ -46,13 +46,6 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final bool isGeneratingImage;
   final double bottomInset;
   final double topInset;
-
-  /// Geometry for the WebView's in-content blur strips that sit behind the
-  /// Flutter chat header / input pills. Needed because Flutter's
-  /// BackdropFilter cannot blur platform-view (WebView) content.
-  final double headerOverlayTop;
-  final double headerOverlayHeight;
-  final double inputOverlayHeight;
   final String? searchQuery;
   final int searchCurrentIndex;
   final String? chatLayout;
@@ -105,9 +98,6 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.isGeneratingImage = false,
     this.bottomInset = 0,
     this.topInset = 0,
-    this.headerOverlayTop = 0,
-    this.headerOverlayHeight = 0,
-    this.inputOverlayHeight = 0,
     this.searchQuery,
     this.searchCurrentIndex = 0,
     this.chatLayout,
@@ -255,9 +245,6 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         memoryDrafts: widget.memoryDrafts,
         bottomInset: widget.bottomInset,
         topInset: widget.topInset,
-        headerOverlayTop: widget.headerOverlayTop,
-        headerOverlayHeight: widget.headerOverlayHeight,
-        inputOverlayHeight: widget.inputOverlayHeight,
         searchQuery: widget.searchQuery,
         searchCurrentIndex: widget.searchCurrentIndex,
         isSelectionMode: widget.isSelectionMode,
@@ -451,9 +438,6 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       bgNoiseIntensity: w.bgNoiseIntensity,
       bottomInset: w.bottomInset,
       topInset: w.topInset,
-      headerOverlayTop: w.headerOverlayTop,
-      headerOverlayHeight: w.headerOverlayHeight,
-      inputOverlayHeight: w.inputOverlayHeight,
       searchQuery: w.searchQuery,
       searchCurrentIndex: w.searchCurrentIndex,
       chatLayout: w.chatLayout,

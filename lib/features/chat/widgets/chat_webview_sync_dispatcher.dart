@@ -102,7 +102,6 @@ class ChatWebViewSyncDispatcher {
     _maybeApplyMessageSettings(bridge: bridge, old: old, current: current);
     _maybeApplySearch(bridge: bridge, old: old, current: current);
     _maybeApplyInsets(bridge: bridge, old: old, current: current);
-    _maybeApplyOverlays(bridge: bridge, old: old, current: current);
 
     _maybeApplyGeneratingState(
       bridge: bridge,
@@ -298,23 +297,6 @@ class ChatWebViewSyncDispatcher {
     }
   }
 
-  void _maybeApplyOverlays({
-    required ChatBridgeController bridge,
-    required ChatWebViewWidgetFields old,
-    required ChatWebViewWidgetFields current,
-  }) {
-    if (current.headerOverlayTop != old.headerOverlayTop ||
-        current.headerOverlayHeight != old.headerOverlayHeight) {
-      bridge.setHeaderOverlay(
-        current.headerOverlayTop,
-        current.headerOverlayHeight,
-      );
-    }
-    if (current.inputOverlayHeight != old.inputOverlayHeight) {
-      bridge.setInputOverlay(current.inputOverlayHeight);
-    }
-  }
-
   void _maybeApplyGeneratingState({
     required ChatBridgeController bridge,
     required ChatWebViewWidgetFields old,
@@ -398,9 +380,6 @@ class ChatWebViewWidgetFields {
     required this.bgNoiseIntensity,
     required this.bottomInset,
     required this.topInset,
-    required this.headerOverlayTop,
-    required this.headerOverlayHeight,
-    required this.inputOverlayHeight,
     required this.searchQuery,
     required this.searchCurrentIndex,
     required this.chatLayout,
@@ -442,9 +421,6 @@ class ChatWebViewWidgetFields {
   final double bgNoiseIntensity;
   final double bottomInset;
   final double topInset;
-  final double headerOverlayTop;
-  final double headerOverlayHeight;
-  final double inputOverlayHeight;
   final String? searchQuery;
   final int searchCurrentIndex;
   final String? chatLayout;

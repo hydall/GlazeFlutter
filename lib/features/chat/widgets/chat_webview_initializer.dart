@@ -41,9 +41,6 @@ class ChatWebViewInitInput {
     required this.memoryDrafts,
     required this.bottomInset,
     required this.topInset,
-    required this.headerOverlayTop,
-    required this.headerOverlayHeight,
-    required this.inputOverlayHeight,
     required this.searchQuery,
     required this.searchCurrentIndex,
     required this.isSelectionMode,
@@ -77,9 +74,6 @@ class ChatWebViewInitInput {
   final List<dynamic> memoryDrafts;
   final double bottomInset;
   final double topInset;
-  final double headerOverlayTop;
-  final double headerOverlayHeight;
-  final double inputOverlayHeight;
   final String? searchQuery;
   final int searchCurrentIndex;
   final bool isSelectionMode;
@@ -168,11 +162,6 @@ class ChatWebViewInitializer {
     if (input.topInset > 0) {
       await bridge.setTopPadding(input.topInset);
     }
-    await bridge.setHeaderOverlay(
-      input.headerOverlayTop,
-      input.headerOverlayHeight,
-    );
-    await bridge.setInputOverlay(input.inputOverlayHeight);
     if (input.searchQuery != null && input.searchQuery!.isNotEmpty) {
       await bridge.setSearch(
         query: input.searchQuery!,

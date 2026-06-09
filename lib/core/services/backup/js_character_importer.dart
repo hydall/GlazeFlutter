@@ -36,6 +36,7 @@ class JsCharacterImporter extends BackupHelpers {
       } else {
         avatarPath = avatar;
       }
+      await imageStorage.ensureThumbnailForAvatarPath(avatarPath);
 
       await db.into(db.characters).insertOnConflictUpdate(
             CharactersCompanion.insert(
@@ -94,6 +95,7 @@ class JsCharacterImporter extends BackupHelpers {
       } else {
         avatarPath = avatar;
       }
+      await imageStorage.ensureThumbnailForAvatarPath(avatarPath);
 
       await db.into(db.personas).insertOnConflictUpdate(
             PersonasCompanion.insert(

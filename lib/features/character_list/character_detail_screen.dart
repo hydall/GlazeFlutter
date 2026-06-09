@@ -277,7 +277,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
     }
 
     final route = result == 'new'
-        ? '/chat/$cId?new=1'
+        ? (sessions.isEmpty ? '/chat/$cId' : '/chat/$cId?new=1')
         : '/chat/$cId?session=${result.substring('session:'.length)}';
     Navigator.of(context, rootNavigator: true).pop<String>(route);
   }

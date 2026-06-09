@@ -10,6 +10,7 @@ import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
 
 import '../../shared/utils/time_formatter.dart';
+import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../core/state/character_provider.dart' show avatarVersionProvider;
@@ -79,8 +80,11 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                     top: topPad,
                     bottom: ref.watch(navHeightProvider) + 20,
                   ),
-                  itemCount: filtered.length,
-                  itemBuilder: (_, i) => _SessionTile(info: filtered[i]),
+                  itemCount: filtered.length + 1,
+                  itemBuilder: (_, i) {
+                    if (i == 0) return _buildCountHeader(filtered.length);
+                    return _SessionTile(info: filtered[i - 1]);
+                  },
                 );
               },
             ),
@@ -136,9 +140,10 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
         top: topPad,
         bottom: ref.watch(navHeightProvider) + 20,
       ),
-      itemCount: sortedGroups.length,
+      itemCount: sortedGroups.length + 1,
       itemBuilder: (_, i) {
-        final entry = sortedGroups[i];
+        if (i == 0) return _buildCountHeader(sessions.length);
+        final entry = sortedGroups[i - 1];
         final charId = entry.key;
         final group = [...entry.value]
           ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
@@ -157,6 +162,19 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildCountHeader(int count) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
+      child: Text(
+        '$count chat${count == 1 ? '' : 's'}',
+        style: TextStyle(
+          fontSize: 11,
+          color: context.cs.onSurfaceVariant,
+        ),
+      ),
     );
   }
 
@@ -313,13 +331,33 @@ class _ChatHistoryGroupSectionState extends State<_ChatHistoryGroupSection>
               child: SlideTransition(
                 position: _slideAnimation,
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (final session in widget.sessions)
-                        _SessionTile(info: session, isGrouped: true),
-                    ],
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: GlassSurface(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.1),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (int i = 0; i < widget.sessions.length; i++) ...[
+                          if (i > 0)
+                            Divider(
+                              height: 1,
+                              thickness: 0.5,
+                              color: Colors.white.withValues(alpha: 0.08),
+                              indent: 12,
+                              endIndent: 12,
+                            ),
+                          _SessionTile(
+                            info: widget.sessions[i],
+                            isGrouped: true,
+                            isFirst: i == 0,
+                            isLast: i == widget.sessions.length - 1,
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -431,8 +469,15 @@ class _ChatSearchDelegate extends SearchDelegate<String> {
 class _SessionTile extends ConsumerWidget {
   final ChatSessionInfo info;
   final bool isGrouped;
+  final bool isFirst;
+  final bool isLast;
 
-  const _SessionTile({required this.info, this.isGrouped = false});
+  const _SessionTile({
+    required this.info,
+    this.isGrouped = false,
+    this.isFirst = true,
+    this.isLast = true,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -473,7 +518,7 @@ class _SessionTile extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      _buildTime(context),
+                      _buildChip(context),
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -509,21 +554,24 @@ class _SessionTile extends ConsumerWidget {
   }
 
   Widget _buildGroupedTile(BuildContext context, WidgetRef ref) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+    final topRadius = isFirst ? const Radius.circular(12) : Radius.zero;
+    final bottomRadius = isLast ? const Radius.circular(12) : Radius.zero;
+    final br = BorderRadius.only(
+      topLeft: topRadius,
+      topRight: topRadius,
+      bottomLeft: bottomRadius,
+      bottomRight: bottomRadius,
+    );
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
         onTap: () => context.go(
           '/chat/${info.characterId}?session=${info.sessionIndex}',
         ),
         onLongPress: () => _showSessionActions(context, ref),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
+        borderRadius: br,
+        child: Padding(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.02),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            borderRadius: BorderRadius.circular(12),
-          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -545,35 +593,7 @@ class _SessionTile extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.description_outlined,
-                          size: 12,
-                          color: context.cs.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${info.messageCount} messages${info.lastMessageTime > 0 ? ' · ${_formatTime()}' : ''}',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: context.cs.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _buildChip(context),
                 ],
               ),
               const SizedBox(height: 4),
@@ -615,6 +635,7 @@ class _SessionTile extends ConsumerWidget {
             ref
                 .read(chatHistoryProvider.notifier)
                 .renameSession(info.sessionId, val.trim());
+            ref.invalidate(chatProvider(info.characterId));
           }
         },
       ),
@@ -718,13 +739,32 @@ class _SessionTile extends ConsumerWidget {
     ),
   );
 
-  Widget _buildTime(BuildContext context) {
-    final text = _formatTime();
-    if (text.isEmpty) return const SizedBox.shrink();
-
-    return Text(
-      text,
-      style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+  Widget _buildChip(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.mail_outline,
+            size: 12,
+            color: context.cs.onSurfaceVariant,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '${info.messageCount} messages${info.lastMessageTime > 0 ? ' · ${_formatTime()}' : ''}',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

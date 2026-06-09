@@ -54,7 +54,8 @@ class ChatRepo implements SyncChatStore {
     for (int i = 0; i < a.length; i++) {
       if (a[i].sessionId != b[i].sessionId ||
           a[i].updatedAt != b[i].updatedAt ||
-          a[i].messageCount != b[i].messageCount) {
+          a[i].messageCount != b[i].messageCount ||
+          a[i].sessionName != b[i].sessionName) {
         return false;
       }
     }

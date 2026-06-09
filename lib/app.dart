@@ -2,11 +2,16 @@ import 'dart:async';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:glaze_flutter/core/llm/prompt_worker.dart';
+import 'package:glaze_flutter/core/llm/tokenizer.dart';
 import 'core/navigation/router.dart';
+import 'core/services/deep_link_service.dart';
 import 'core/services/generation_notification_service.dart';
+import 'features/chat/bridge/chat_webview_environment.dart';
 import 'core/state/active_selection_provider.dart';
 import 'core/state/lorebook_provider.dart';
 import 'core/services/preset_seeder.dart';
@@ -20,6 +25,7 @@ import 'shared/theme/app_theme.dart';
 import 'shared/theme/theme_provider.dart';
 
 import 'features/chat/widgets/chat_webview_preload.dart';
+import 'shared/widgets/app_launch_splash.dart';
 import 'shared/widgets/glaze_toast.dart' show toastOverlayKey;
 
 class GlazeApp extends ConsumerStatefulWidget {
@@ -37,6 +43,8 @@ class GlazeApp extends ConsumerStatefulWidget {
 class _GlazeAppState extends ConsumerState<GlazeApp>
     with WidgetsBindingObserver {
   StreamSubscription<NotificationNavigationData>? _navSub;
+  bool _startupReady = const bool.fromEnvironment('FLUTTER_TEST');
+  bool _startupHooksAttached = false;
 
   @override
   void initState() {
@@ -47,11 +55,8 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
     loadLorebookActivations(ref);
     loadLorebookSettings(ref);
     seedDefaultPresets(ref);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      checkAndShowOnboarding(context);
-      _listenNotificationNavigation();
-      _handleColdStartNotification();
-    });
+    if (_startupReady) return;
+    unawaited(_initializeStartup());
   }
 
   @override
@@ -63,6 +68,7 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_startupReady) return;
     GenerationNotificationService.instance.updateLifecycleState(state);
     if (state == AppLifecycleState.resumed) {
       final service = ref.read(syncServiceProvider).value;
@@ -70,6 +76,32 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
         ref.read(syncStatusProvider.notifier).state = service.status;
       }
     }
+  }
+
+  Future<void> _initializeStartup() async {
+    try {
+      await dotenv.load(fileName: '.env');
+      await preloadO200kBase();
+      await PromptWorker.ensureInitialized();
+      await initChatWebViewEnvironment();
+      await GenerationNotificationService.instance.init();
+      await DeepLinkService.instance.init();
+    } finally {
+      if (!mounted) return;
+      setState(() => _startupReady = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _attachStartupHooks();
+      });
+    }
+  }
+
+  void _attachStartupHooks() {
+    if (_startupHooksAttached) return;
+    _startupHooksAttached = true;
+    checkAndShowOnboarding(context);
+    _listenNotificationNavigation();
+    _handleColdStartNotification();
   }
 
   void _listenNotificationNavigation() {
@@ -116,12 +148,17 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
       localizationsDelegates: context.localizationDelegates,
       supportedLocales: context.supportedLocales,
       locale: context.locale,
-      builder: (context, child) => ChatWebViewPreloader(
-        child: Overlay(
-          key: toastOverlayKey,
-          initialEntries: [OverlayEntry(builder: (_) => child!)],
-        ),
-      ),
+      builder: (context, child) {
+        final appChild = _startupReady
+            ? ChatWebViewPreloader(
+                child: Overlay(
+                  key: toastOverlayKey,
+                  initialEntries: [OverlayEntry(builder: (_) => child!)],
+                ),
+              )
+            : const SizedBox.expand();
+        return AppLaunchSplash(isReady: _startupReady, child: appChild);
+      },
     );
   }
 }

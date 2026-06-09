@@ -2,14 +2,8 @@ import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'app.dart';
-import 'package:glaze_flutter/core/llm/tokenizer.dart';
-import 'package:glaze_flutter/core/llm/prompt_worker.dart';
-import 'core/services/generation_notification_service.dart';
-import 'core/services/deep_link_service.dart';
-import 'features/chat/bridge/chat_webview_environment.dart';
 
 final appRestartKey = GlobalKey();
 
@@ -20,12 +14,6 @@ Future<void> main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  await dotenv.load(fileName: '.env');
-  await preloadO200kBase();
-  await PromptWorker.ensureInitialized();
-  await initChatWebViewEnvironment();
-  await GenerationNotificationService.instance.init();
-  await DeepLinkService.instance.init();
   runApp(
     EasyLocalization(
       supportedLocales: const [Locale('en'), Locale('ru')],

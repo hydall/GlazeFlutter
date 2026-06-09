@@ -177,8 +177,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
 
     final character = ref.watch(characterByIdProvider(charId));
     final title = character?.name ?? 'Chat';
-    final sessionName = chatState?.session != null
-        ? 'Session #${chatState!.session!.sessionIndex + 1}'
+    final session = chatState?.session;
+    final customSessionName = session?.sessionVars['sessionName']?.trim();
+    final sessionName = session != null
+        ? (customSessionName != null && customSessionName.isNotEmpty
+              ? customSessionName
+              : 'Session #${session.sessionIndex + 1}')
         : 'status_connecting'.tr();
     final sessionIndex = chatState?.session?.sessionIndex ?? 0;
 
@@ -642,9 +646,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     regenTargetId: widget.state.regenTargetId,
                     bottomInset: messageListBottom,
                     topInset: messageListTop,
-                    headerOverlayTop: MediaQuery.paddingOf(context).top + 10,
-                    headerOverlayHeight: 56,
-                    inputOverlayHeight: messageListBottom,
                     charName: character?.name,
                     charColor: character?.color,
                     personaName: effectivePersona?.name,
@@ -963,33 +964,29 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     offset: _showScrollToBottom
                         ? Offset.zero
                         : const Offset(0, 0.2),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: _scrollToBottom,
-                        borderRadius: BorderRadius.circular(24),
-                        child: Ink(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: context.cs.surface.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(22),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.08),
+                    child: GestureDetector(
+                      onTap: _scrollToBottom,
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: context.cs.surface.withValues(alpha: 0.9),
+                          border: Border.all(
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.22),
+                              blurRadius: 18,
+                              offset: const Offset(0, 8),
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.22),
-                                blurRadius: 18,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.keyboard_arrow_down_rounded,
-                            color: context.cs.primary,
-                            size: 26,
-                          ),
+                          ],
+                        ),
+                        child: Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          color: context.cs.primary,
+                          size: 26,
                         ),
                       ),
                     ),

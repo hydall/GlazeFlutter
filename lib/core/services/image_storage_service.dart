@@ -65,6 +65,27 @@ class ImageStorageService implements SyncImageStore {
     return path;
   }
 
+  Future<String?> ensureThumbnailForAvatarPath(String? avatarPath) async {
+    if (avatarPath == null || avatarPath.isEmpty) return null;
+    final resolvedPath = absolutePath(avatarPath) ?? avatarPath;
+    final avatarFile = File(resolvedPath);
+    if (!await avatarFile.exists()) return null;
+
+    final bytes = await avatarFile.readAsBytes();
+    final thumbnail = _resizeImage(bytes, 512);
+    if (thumbnail == null) return null;
+
+    final dir = Directory(p.join(baseDir, 'thumbnails'));
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
+
+    final name = p.basenameWithoutExtension(resolvedPath);
+    final path = p.join(dir.path, '$name.jpg');
+    await File(path).writeAsBytes(thumbnail);
+    return path;
+  }
+
   Future<void> deleteAvatar(String characterId) async {
     final avatarPath = p.join(baseDir, 'avatars', '$characterId.png');
     final file = File(avatarPath);

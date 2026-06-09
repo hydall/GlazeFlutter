@@ -1303,48 +1303,6 @@
 }
 .sel-btn:hover { background: rgba(255, 255, 255, 0.12); }
 
-/* ============================================================
- * Header / input blur overlays
- *
- * Flutter pills (chat header / chat input bar) live above the WebView
- * and cannot blur the chat content through `BackdropFilter` (platform-view
- * limitation). These two fixed strips do the blur inside the WebView, sized
- * and positioned by Flutter via setHeaderOverlay/setInputOverlay. The
- * Flutter pills sit on top and provide their own tint/border/noise.
- * ============================================================ */
-.blur-overlay {
-  position: fixed;
-  pointer-events: none;
-  z-index: 50;
-  /* A non-transparent background (even at 1% alpha) is required on some
-   * WebView engines (notably Android WebView and WebView2) for backdrop-filter
-   * to actually trigger a composited layer. `will-change` reinforces this. */
-  background-color: rgba(var(--ui-bg-rgb, 30, 30, 30), 0.01);
-  backdrop-filter: blur(var(--element-blur, 12px));
-  -webkit-backdrop-filter: blur(var(--element-blur, 12px));
-  will-change: backdrop-filter;
-  display: none;
-}
-#header-blur-overlay {
-  top: var(--header-overlay-top, 0px);
-  left: 16px;
-  right: 16px;
-  height: var(--header-overlay-height, 0px);
-  border-radius: var(--header-overlay-radius, 20px);
-}
-#input-blur-overlay {
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: var(--input-overlay-height, 0px);
-  border-top-left-radius: var(--input-overlay-radius, 0px);
-  border-top-right-radius: var(--input-overlay-radius, 0px);
-}
-.battery-saver .blur-overlay {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
 .message-section.selected .msg-body,
 .message-section.selected .glaze-message {
   user-select: text;

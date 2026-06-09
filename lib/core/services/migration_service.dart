@@ -88,6 +88,7 @@ class MigrationService {
           final id = json['id'] as String? ?? _generateId();
           avatarPath = await _imageStorage.saveAvatarFromDataUrl(id, avatar);
         }
+        await _imageStorage.ensureThumbnailForAvatarPath(avatarPath);
 
         final char = Character(
           id: json['id'] as String? ?? _generateId(),
@@ -127,6 +128,7 @@ class MigrationService {
           final id = json['id'] as String? ?? _generateId();
           avatarPath = await _imageStorage.saveAvatarFromDataUrl(id, avatar);
         }
+        await _imageStorage.ensureThumbnailForAvatarPath(avatarPath);
 
         final persona = Persona(
           id: json['id'] as String? ?? _generateId(),
