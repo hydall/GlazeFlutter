@@ -28,8 +28,9 @@ class GenerationNotificationService {
   static const _generationChannelName = 'Generation';
   static const _messageChannelId = 'glaze_message';
   static const _messageChannelName = 'New Messages';
-  static const _iosAudioChannel =
-      MethodChannel('com.hydall.glaze/background_audio');
+  static const _iosAudioChannel = MethodChannel(
+    'com.hydall.glaze/background_audio',
+  );
 
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
@@ -47,8 +48,7 @@ class GenerationNotificationService {
   Stream<NotificationNavigationData> get navigationStream =>
       _navigationController.stream;
 
-  bool get _isMobile =>
-      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+  bool get _isMobile => !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
   /// Stable notification ID in range 1..2147483646, mirrors Vue stableIdFromString.
   int _stableId(String str) {
@@ -61,8 +61,9 @@ class GenerationNotificationService {
   }
 
   Future<void> init() async {
-    const androidSettings =
-        AndroidInitializationSettings('@drawable/ic_stat_icon_config_sample');
+    const androidSettings = AndroidInitializationSettings(
+      '@drawable/ic_stat_icon_config_sample',
+    );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -84,60 +85,65 @@ class GenerationNotificationService {
       return;
     }
 
-    if (!kIsWeb && Platform.isAndroid) {
-      final androidPlugin =
-          _notifications.resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>();
-      if (androidPlugin != null) {
-        await androidPlugin.createNotificationChannel(
-          const AndroidNotificationChannel(
-            _messageChannelId,
-            _messageChannelName,
-            description: 'Notifications for new chat messages',
-            importance: Importance.high,
+    try {
+      if (!kIsWeb && Platform.isAndroid) {
+        final androidPlugin = _notifications
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >();
+        if (androidPlugin != null) {
+          await androidPlugin.createNotificationChannel(
+            const AndroidNotificationChannel(
+              _messageChannelId,
+              _messageChannelName,
+              description: 'Notifications for new chat messages',
+              importance: Importance.high,
+            ),
+          );
+          await androidPlugin.requestNotificationsPermission();
+        }
+      } else if (!kIsWeb && Platform.isIOS) {
+        final iosPlugin = _notifications
+            .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin
+            >();
+        await iosPlugin?.requestPermissions(
+          alert: true,
+          badge: true,
+          sound: true,
+        );
+      }
+
+      if (_isMobile) {
+        FlutterForegroundTask.init(
+          androidNotificationOptions: AndroidNotificationOptions(
+            channelId: _generationChannelId,
+            channelName: _generationChannelName,
+            channelDescription: 'Shown while generating a response',
+            channelImportance: NotificationChannelImportance.LOW,
+            priority: NotificationPriority.LOW,
+          ),
+          iosNotificationOptions: const IOSNotificationOptions(
+            showNotification: false,
+            playSound: false,
+          ),
+          foregroundTaskOptions: ForegroundTaskOptions(
+            eventAction: ForegroundTaskEventAction.nothing(),
+            allowWakeLock: true,
           ),
         );
-        await androidPlugin.requestNotificationsPermission();
       }
-    } else if (!kIsWeb && Platform.isIOS) {
-      final iosPlugin = _notifications.resolvePlatformSpecificImplementation<
-          IOSFlutterLocalNotificationsPlugin>();
-      await iosPlugin?.requestPermissions(
-        alert: true,
-        badge: true,
-        sound: true,
-      );
-    }
 
-    if (_isMobile) {
-      FlutterForegroundTask.init(
-        androidNotificationOptions: AndroidNotificationOptions(
-          channelId: _generationChannelId,
-          channelName: _generationChannelName,
-          channelDescription: 'Shown while generating a response',
-          channelImportance: NotificationChannelImportance.LOW,
-          priority: NotificationPriority.LOW,
-        ),
-        iosNotificationOptions: const IOSNotificationOptions(
-          showNotification: false,
-          playSound: false,
-        ),
-        foregroundTaskOptions: ForegroundTaskOptions(
-          eventAction: ForegroundTaskEventAction.nothing(),
-          allowWakeLock: true,
-        ),
-      );
-    }
-
-    // Restore pending data when app is cold-launched from a notification tap.
-    try {
-      final launchDetails =
-          await _notifications.getNotificationAppLaunchDetails();
+      // Restore pending data when app is cold-launched from a notification tap.
+      final launchDetails = await _notifications
+          .getNotificationAppLaunchDetails();
       if (launchDetails?.didNotificationLaunchApp == true) {
         final payload = launchDetails!.notificationResponse?.payload;
         if (payload != null) _pendingNotificationData = _parsePayload(payload);
       }
-    } catch (_) {}
+    } catch (e, st) {
+      debugPrint('NOTIF: platform init failed: $e\n$st');
+    }
   }
 
   void updateLifecycleState(AppLifecycleState state) {
