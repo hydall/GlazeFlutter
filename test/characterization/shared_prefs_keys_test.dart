@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:glaze_flutter/features/settings/app_settings_provider.dart';
@@ -31,8 +32,7 @@ void main() {
         switch (entry.value) {
           // ignore: type_literal_in_constant_pattern
           case bool:
-            if (entry.key == 'enterToSend' ||
-                entry.key == 'showOurPicks') {
+            if (entry.key == 'enterToSend' || entry.key == 'showOurPicks') {
               expect(
                 _getBoolDefault(defaults, entry.key),
                 isTrue,
@@ -79,13 +79,26 @@ void main() {
       expect(expectedKeys.length, 13);
     });
 
-    test('dialogGrouping key in SharedPrefs is "dialogGrouping" not "groupDialogs"', () {
-      SharedPreferences.setMockInitialValues({'dialogGrouping': true});
-      SharedPreferences.getInstance().then((prefs) {
-        expect(prefs.getBool('dialogGrouping'), isTrue);
-        expect(prefs.containsKey('groupDialogs'), isFalse);
-      });
+    test('unsupported saved language falls back to English', () async {
+      SharedPreferences.setMockInitialValues({'language': 'es'});
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final settings = await container.read(appSettingsProvider.future);
+
+      expect(settings.language, 'en');
     });
+
+    test(
+      'dialogGrouping key in SharedPrefs is "dialogGrouping" not "groupDialogs"',
+      () {
+        SharedPreferences.setMockInitialValues({'dialogGrouping': true});
+        SharedPreferences.getInstance().then((prefs) {
+          expect(prefs.getBool('dialogGrouping'), isTrue);
+          expect(prefs.containsKey('groupDialogs'), isFalse);
+        });
+      },
+    );
   });
 
   group('ActiveSelection SharedPrefs keys (Phase 1.2 characterization)', () {
@@ -96,35 +109,41 @@ void main() {
     });
 
     test('activePersonaId key is "activePersonaId"', () async {
-      SharedPreferences.setMockInitialValues({'activePersonaId': 'persona_456'});
+      SharedPreferences.setMockInitialValues({
+        'activePersonaId': 'persona_456',
+      });
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('activePersonaId'), 'persona_456');
     });
 
     test('globalVars key stores JSON-encoded Map<String, String>', () async {
       final vars = {'key1': 'value1', 'key2': 'value2'};
-      SharedPreferences.setMockInitialValues({
-        'globalVars': jsonEncode(vars),
-      });
+      SharedPreferences.setMockInitialValues({'globalVars': jsonEncode(vars)});
       final prefs = await SharedPreferences.getInstance();
-      final decoded = jsonDecode(prefs.getString('globalVars')!) as Map<String, dynamic>;
+      final decoded =
+          jsonDecode(prefs.getString('globalVars')!) as Map<String, dynamic>;
       expect(decoded['key1'], 'value1');
       expect(decoded['key2'], 'value2');
     });
 
-    test('personaConnections key stores JSON-encoded PersonaConnections', () async {
-      final conns = PersonaConnections(
-        character: {'char1': 'persona1'},
-        chat: {'session1': 'persona2'},
-      );
-      SharedPreferences.setMockInitialValues({
-        'personaConnections': jsonEncode(conns.toJson()),
-      });
-      final prefs = await SharedPreferences.getInstance();
-      final decoded = jsonDecode(prefs.getString('personaConnections')!) as Map<String, dynamic>;
-      expect(decoded['character'], isA<Map<String, dynamic>>());
-      expect(decoded['chat'], isA<Map<String, dynamic>>());
-    });
+    test(
+      'personaConnections key stores JSON-encoded PersonaConnections',
+      () async {
+        final conns = PersonaConnections(
+          character: {'char1': 'persona1'},
+          chat: {'session1': 'persona2'},
+        );
+        SharedPreferences.setMockInitialValues({
+          'personaConnections': jsonEncode(conns.toJson()),
+        });
+        final prefs = await SharedPreferences.getInstance();
+        final decoded =
+            jsonDecode(prefs.getString('personaConnections')!)
+                as Map<String, dynamic>;
+        expect(decoded['character'], isA<Map<String, dynamic>>());
+        expect(decoded['chat'], isA<Map<String, dynamic>>());
+      },
+    );
   });
 
   group('SharedPrefs key consistency (Phase 1.2 characterization)', () {
@@ -190,16 +209,27 @@ void main() {
 
 bool _getBoolDefault(AppSettings s, String key) {
   switch (key) {
-    case 'enterToSend': return s.enterToSend;
-    case 'hideMessageId': return s.hideMessageId;
-    case 'hideGenerationTime': return s.hideGenerationTime;
-    case 'hideTokenCount': return s.hideTokenCount;
-    case 'dialogGrouping': return s.groupDialogs;
-    case 'batterySaver': return s.batterySaver;
-    case 'hideTooltips': return s.hideTooltips;
-    case 'disableSwipeRegeneration': return s.disableSwipeRegeneration;
-    case 'virtualKeyboardSend': return s.virtualKeyboardSend;
-    case 'showOurPicks': return s.showOurPicks;
-    default: return false;
+    case 'enterToSend':
+      return s.enterToSend;
+    case 'hideMessageId':
+      return s.hideMessageId;
+    case 'hideGenerationTime':
+      return s.hideGenerationTime;
+    case 'hideTokenCount':
+      return s.hideTokenCount;
+    case 'dialogGrouping':
+      return s.groupDialogs;
+    case 'batterySaver':
+      return s.batterySaver;
+    case 'hideTooltips':
+      return s.hideTooltips;
+    case 'disableSwipeRegeneration':
+      return s.disableSwipeRegeneration;
+    case 'virtualKeyboardSend':
+      return s.virtualKeyboardSend;
+    case 'showOurPicks':
+      return s.showOurPicks;
+    default:
+      return false;
   }
 }

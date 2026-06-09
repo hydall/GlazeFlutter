@@ -93,7 +93,9 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
     ref.listen<AsyncValue<AppSettings>>(appSettingsProvider, (prev, next) {
       final lang = next.value?.language;
       if (lang != null && lang != prev?.value?.language) {
-        context.setLocale(Locale(lang));
+        context.setLocale(
+          Locale(supportedAppLanguages.contains(lang) ? lang : 'en'),
+        );
       }
     });
 
