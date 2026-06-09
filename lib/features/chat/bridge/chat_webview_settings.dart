@@ -9,10 +9,6 @@ const String kChatWebViewAndroidAssetDomain = 'appassets.androidplatform.net';
 const String kChatWebViewAndroidAssetUrl =
     'https://$kChatWebViewAndroidAssetDomain/assets/flutter_assets/assets/chat_webview/index.html';
 
-/// HTTPS path for local user files that the Android chat WebView may render
-/// inside HTML, such as avatars, backgrounds, and generated images.
-const String kChatWebViewAndroidFilePath = '/glaze-files/';
-
 String? _chatWebViewAndroidFileRoot;
 
 String? get chatWebViewAndroidFileRoot => _chatWebViewAndroidFileRoot;
@@ -58,17 +54,21 @@ String? chatWebViewAndroidAssetUrl() {
 /// Android [WebViewAssetLoader] for bundled chat assets, or `null` elsewhere.
 WebViewAssetLoader? chatWebViewAssetLoader() {
   if (!chatWebViewUsesAndroidAssetLoader()) return null;
-  final fileRoot = _chatWebViewAndroidFileRoot;
+  // Bundled chat assets only. Local Glaze files are served by the loopback
+  // HTTP server started in [initChatWebViewEnvironment] — not
+  // [InternalStoragePathHandler], which crashes on 6.1.5 (#1980 / #2451).
   return WebViewAssetLoader(
-    pathHandlers: [
-      AssetsPathHandler(path: '/assets/'),
-      if (fileRoot != null)
-        InternalStoragePathHandler(
-          path: kChatWebViewAndroidFilePath,
-          directory: fileRoot,
-        ),
-    ],
+    pathHandlers: [AssetsPathHandler(path: '/assets/')],
   );
+}
+
+/// Android chat HTML loads over HTTPS (asset loader) while local images are
+/// served from `http://127.0.0.1` — allow compatible mixed content (images).
+MixedContentMode chatWebViewMixedContentMode() {
+  if (chatWebViewUsesAndroidAssetLoader()) {
+    return MixedContentMode.MIXED_CONTENT_COMPATIBILITY_MODE;
+  }
+  return MixedContentMode.MIXED_CONTENT_NEVER_ALLOW;
 }
 
 /// Shared [InAppWebViewSettings] for the chat WebView and its preloader.
@@ -86,7 +86,7 @@ InAppWebViewSettings chatWebViewInAppSettings({bool isInspectable = true}) {
     allowContentAccess: true,
     allowFileAccessFromFileURLs: chatWebViewAllowFileAccessFromFileUrls(),
     allowUniversalAccessFromFileURLs: false,
-    mixedContentMode: MixedContentMode.MIXED_CONTENT_NEVER_ALLOW,
+    mixedContentMode: chatWebViewMixedContentMode(),
     webViewAssetLoader: chatWebViewAssetLoader(),
   );
 }

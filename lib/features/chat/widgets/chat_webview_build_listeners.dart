@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
@@ -16,6 +15,7 @@ import '../bridge/chat_bridge_controller.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
 import '../editing_message_provider.dart';
+import 'chat_message_sync.dart';
 import 'chat_webview_sync_dispatcher.dart';
 
 /// Wires the `build()`-side `ref.listen` plumbing for the chat
@@ -94,11 +94,19 @@ class ChatWebViewBuildListeners {
       final b = bridge;
       if (b == null || !ready()) return;
       if (prev != null && prev != next) {
-        b.stopEdit(prev);
-        final oldMsg = messages.where((m) => m.id == prev).firstOrNull;
-        if (oldMsg != null) {
-          b.updateMessage(oldMsg);
-        }
+        // Await stopEdit before re-injecting Regenerate. The old path
+        // also called updateMessage() without awaiting stopEdit; that
+        // raced in the JS update batcher, cleared footer controls while
+        // `editing` was still set, and left the last-user Regenerate
+        // missing on save/cancel. Message content sync runs separately
+        // when editMessage updates the provider.
+        unawaited(() async {
+          await b.stopEdit(prev);
+          final lastUserId = lastUserMessageId(messages);
+          if (lastUserId != null && lastUserId == prev) {
+            await b.setLastMessage(lastUserId);
+          }
+        }());
       }
       if (next != null) {
         b.startEdit(next);
