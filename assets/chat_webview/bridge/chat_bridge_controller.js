@@ -7,6 +7,7 @@ import { EditController } from './edit_controller.js';
 import { SwipeGestureHandler } from './swipe_gesture_handler.js';
 import { InteractionDispatch } from './interaction_dispatch.js';
 import { PanelHost } from './panel_host.js';
+import { ICON } from '../renderer/icon_library.js';
 
 export class Bridge {
   constructor(renderer, virtualList) {

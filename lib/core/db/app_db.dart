@@ -112,11 +112,31 @@ class AppDatabase extends _$AppDatabase {
         );
       }
       if (from < 20) {
-        await m.createTable(extensionPresets);
-        await m.createTable(infoBlocks);
+        // Guard: early builds may have already created these tables under a
+        // different schema version. createTable without IF NOT EXISTS raises
+        // "table ... already exists" and aborts the migration. Check the
+        // sqlite_master catalog before creating.
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('extension_presets')) {
+          await m.createTable(extensionPresets);
+        }
+        if (!tableNames.contains('info_blocks')) {
+          await m.createTable(infoBlocks);
+        }
       }
       if (from < 21) {
-        await m.addColumn(apiConfigs, apiConfigs.cacheControlTtl);
+        // Guard: same root cause as the column guards below — early builds
+        // may have already added cache_control_ttl under a different version.
+        final cols = await customSelect(
+          'PRAGMA table_info("api_configs")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('cache_control_ttl')) {
+          await m.addColumn(apiConfigs, apiConfigs.cacheControlTtl);
+        }
       }
       if (from < 22) {
         // Guard: only add columns if the table existed before v20.
@@ -142,12 +162,39 @@ class AppDatabase extends _$AppDatabase {
         }
       }
       if (from < 23) {
-        await m.addColumn(apiConfigs, apiConfigs.protocol);
+        // Guard: early `feat/freezed-3x-migration` builds may have already
+        // added `protocol` under a different schema version. Without the
+        // existence check Drift's `addColumn` raises "duplicate column name:
+        // protocol" on upgrade, which aborts the whole migration and bricks
+        // DB open (and everything downstream, including the chat WebView).
+        final cols = await customSelect(
+          'PRAGMA table_info("api_configs")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('protocol')) {
+          await m.addColumn(apiConfigs, apiConfigs.protocol);
+        }
       }
       if (from < 24) {
-        await m.addColumn(apiConfigs, apiConfigs.topK);
-        await m.addColumn(apiConfigs, apiConfigs.frequencyPenalty);
-        await m.addColumn(apiConfigs, apiConfigs.presencePenalty);
+        // Guard each column: early builds may have added these under a
+        // different schema version (same root cause as the protocol guard
+        // above). The unguarded addColumn would raise "duplicate column name"
+        // and abort the migration. The `from < 27` block below also guards
+        // these, but that branch only runs when upgrading from < 27 — this
+        // branch must be self-consistent on its own.
+        final cols = await customSelect(
+          'PRAGMA table_info("api_configs")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('top_k')) {
+          await m.addColumn(apiConfigs, apiConfigs.topK);
+        }
+        if (!colNames.contains('frequency_penalty')) {
+          await m.addColumn(apiConfigs, apiConfigs.frequencyPenalty);
+        }
+        if (!colNames.contains('presence_penalty')) {
+          await m.addColumn(apiConfigs, apiConfigs.presencePenalty);
+        }
         await customStatement(
           'UPDATE api_configs SET top_k = 0 WHERE top_k IS NULL',
         );
