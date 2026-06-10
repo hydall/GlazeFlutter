@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/services/backup/backup_cancel.dart';
+import 'package:glaze_flutter/core/services/backup/flutter_backup_importer.dart';
 import 'package:glaze_flutter/core/services/backup/js_api_config_importer.dart';
 import 'package:glaze_flutter/core/services/backup/js_lorebook_importer.dart';
 import 'package:glaze_flutter/core/services/backup/st_backup_importer.dart';
@@ -851,6 +852,127 @@ void main() {
       expect(token.isCancelled, isTrue);
       expect(() => token.check(), throwsA(isA<ImportCancelledException>()));
       expect(checks, 2);
+    });
+  });
+
+  group('FlutterBackupImporter _restorePreferences', () {
+    /// Builds a minimal valid v3 .glz ZIP archive in memory with an optional
+    /// [preferences] map written as preferences.json.
+    Archive _buildGlzArchive({Map<String, dynamic>? preferences}) {
+      final archive = Archive();
+
+      // manifest.json
+      final manifest = jsonEncode({
+        '_isGlazeBackup': true,
+        'schemaVersion': 3,
+        '_glazeVersion': 3,
+        'exportedAt': '2026-06-10T00:00:00.000Z',
+        '_source': 'flutter',
+      });
+      archive.addFile(ArchiveFile.bytes(
+        'manifest.json',
+        utf8.encode(manifest),
+      ));
+
+      // preferences.json (optional)
+      if (preferences != null) {
+        archive.addFile(ArchiveFile.bytes(
+          'preferences.json',
+          utf8.encode(jsonEncode(preferences)),
+        ));
+      }
+
+      return archive;
+    }
+
+    /// Writes [archive] to a temp file, runs the importer, returns the path.
+    Future<String> _writeAndImport(
+      Archive archive,
+      AppDatabase db,
+      ImageStorageService imageStorage,
+    ) async {
+      final bytes = ZipEncoder().encode(archive)!;
+      final path =
+          '${Directory.systemTemp.path}/glz_prefs_test_${DateTime.now().microsecondsSinceEpoch}.glz';
+      File(path).writeAsBytesSync(bytes);
+      try {
+        await FlutterBackupImporter(db, imageStorage).importFromZipFile(path);
+      } finally {
+        try {
+          File(path).deleteSync();
+        } catch (_) {}
+      }
+      return path;
+    }
+
+    test('restores all supported types from preferences.json', () async {
+      final prefs = {
+        'theme_presets': '[{"id":"p1"}]',
+        'theme_active_preset': 'p1',
+        'theme_accent': '7996CE',
+        'activePresetId': 'preset-42',
+        'enterToSend': true,
+        'someInt': 42,
+        'someDouble': 3.14,
+        'stringList': ['a', 'b', 'c'],
+      };
+
+      await _writeAndImport(
+        _buildGlzArchive(preferences: prefs),
+        db,
+        imageStorage,
+      );
+
+      final sp = await SharedPreferences.getInstance();
+      expect(sp.getString('theme_presets'), equals('[{"id":"p1"}]'));
+      expect(sp.getString('theme_active_preset'), equals('p1'));
+      expect(sp.getString('theme_accent'), equals('7996CE'));
+      expect(sp.getString('activePresetId'), equals('preset-42'));
+      expect(sp.getBool('enterToSend'), isTrue);
+      expect(sp.getInt('someInt'), equals(42));
+      expect(sp.getDouble('someDouble'), closeTo(3.14, 0.001));
+      expect(sp.getStringList('stringList'), equals(['a', 'b', 'c']));
+    });
+
+    test('silently skips missing preferences.json (v2 backups)', () async {
+      // Archive has no preferences.json — should not throw.
+      await expectLater(
+        _writeAndImport(
+          _buildGlzArchive(),
+          db,
+          imageStorage,
+        ),
+        completes,
+      );
+    });
+
+    test('does not crash on malformed preferences.json', () async {
+      final archive = _buildGlzArchive();
+      archive.addFile(ArchiveFile.bytes(
+        'preferences.json',
+        utf8.encode('this is not json {{{'),
+      ));
+
+      await expectLater(
+        _writeAndImport(archive, db, imageStorage),
+        completes,
+      );
+    });
+
+    test('overwrites existing prefs with values from backup', () async {
+      final sp = await SharedPreferences.getInstance();
+      await sp.setString('theme_active_preset', 'old-preset');
+
+      await _writeAndImport(
+        _buildGlzArchive(preferences: {'theme_active_preset': 'new-preset'}),
+        db,
+        imageStorage,
+      );
+
+      expect(
+        (await SharedPreferences.getInstance()).getString('theme_active_preset'),
+        equals('new-preset'),
+      );
     });
   });
 
