@@ -46,14 +46,8 @@ class OpenAiChatTransport implements ChatTransport {
   static String buildChatUrl(String endpoint) {
     final base = normalizeEndpoint(endpoint);
     if (base.isEmpty) return '';
-    if (base.toLowerCase().endsWith('/chat/completions') ||
-        base.toLowerCase().endsWith('/v1/chat/completions')) {
-      return base;
-    }
-    if (base.endsWith('/v1')) {
-      return '$base/chat/completions';
-    }
-    return '$base/v1/chat/completions';
+    if (base.toLowerCase().endsWith('/chat/completions')) return base;
+    return '$base/chat/completions';
   }
 
   @override

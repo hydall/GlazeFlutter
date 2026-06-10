@@ -345,6 +345,8 @@
     "confirm_import_chats": "Merge chats from JSON? Existing dialogs with same names will be overwritten.",
     "msg_block_managed_by": "This prompt is managed by element",
     "chat_history_anchor_hint": "This block marks where chat messages are inserted into the prompt. Drag it to reorder. Depth blocks (Author's Note, Summary) are injected inside it at their specified depth. You can also use {{summary}} and {{lorebooks}} macros in any block's content to inject those at arbitrary positions.",
+    "error_oops": "Oops!",
+    "error_label": "Error",
     "error_context_limit": "Context Limit Exceeded",
     "msg_context_limit": "Prompt preset exceeds context limit. Please increase Context Size or reduce prompt length.",
     "context_limit_glossary_hint": "Learn more:",

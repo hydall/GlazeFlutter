@@ -8,6 +8,7 @@ import '../../../core/llm/prompt_payload_builder.dart';
 import '../../../core/llm/stream_accumulator.dart';
 import '../../../core/llm/transport/chat_transport_request.dart';
 import '../../../core/llm/transport/transport_factory.dart';
+import '../../../core/utils/error_format.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/state/active_selection_provider.dart';
@@ -276,14 +277,14 @@ class StreamGenerationService {
             );
           } else if (regenTargetId != null && saveSession != null) {
             finalState = _writer.writeRegenError(
-              errorText: error.toString(),
+              errorText: formatError(error),
               saveSession: saveSession,
               regenTargetId: regenTargetId,
               visibleStartIndex: vsi,
             );
           } else {
             finalState = _writer.writeError(
-              errorText: error.toString(),
+              errorText: formatError(error),
               currentSession: session,
               visibleStartIndex: vsi,
             );
@@ -307,14 +308,14 @@ class StreamGenerationService {
       }
       if (regenTargetId != null && saveSession != null) {
         return _writer.writeRegenError(
-          errorText: e.toString(),
+          errorText: formatError(e),
           saveSession: saveSession,
           regenTargetId: regenTargetId,
           visibleStartIndex: vsi,
         );
       }
       return _writer.writeError(
-        errorText: e.toString(),
+        errorText: formatError(e),
         currentSession: session,
         visibleStartIndex: vsi,
       );

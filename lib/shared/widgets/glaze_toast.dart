@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/utils/error_format.dart';
 import '../../features/settings/app_settings_provider.dart';
 
 final toastOverlayKey = GlobalKey<OverlayState>();
@@ -102,7 +103,7 @@ class GlazeToast {
   }
 
   static void error(BuildContext context, String prefix, Object err) {
-    final text = '$prefix$err';
+    final text = '$prefix${formatError(err)}';
     show(
       context,
       text,
@@ -113,7 +114,7 @@ class GlazeToast {
   }
 
   static void errorWithCopy(BuildContext context, String prefix, Object err) {
-    final text = '$prefix$err';
+    final text = '$prefix${formatError(err)}';
     show(
       context,
       text,

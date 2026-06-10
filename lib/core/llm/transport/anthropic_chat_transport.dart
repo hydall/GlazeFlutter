@@ -39,7 +39,6 @@ class AnthropicBuiltRequest {
 ///   the last system part and a message at depth=2 with `ephemeral` cache.
 /// - SSE events: `content_block_delta` → text/reasoning; `message_stop` → done.
 class AnthropicChatTransport implements ChatTransport {
-  static const String _defaultEndpoint = 'https://api.anthropic.com';
   static const String _apiVersion = '2023-06-01';
 
   /// Default cache breakpoint depth when user enables `cacheControlTtl` but
@@ -63,16 +62,13 @@ class AnthropicChatTransport implements ChatTransport {
 
   static String buildMessagesUrl(String endpoint) {
     var base = endpoint.trim();
-    if (base.isEmpty) base = _defaultEndpoint;
+    if (base.isEmpty) return '';
     if (!base.startsWith(RegExp(r'https?://'))) base = 'https://$base';
     while (base.endsWith('/')) {
       base = base.substring(0, base.length - 1);
     }
-    final lower = base.toLowerCase();
-    if (lower.endsWith('/v1/messages')) return base;
-    if (lower.endsWith('/messages')) return base;
-    if (lower.endsWith('/v1')) return '$base/messages';
-    return '$base/v1/messages';
+    if (base.toLowerCase().endsWith('/messages')) return base;
+    return '$base/messages';
   }
 
   @override
@@ -474,14 +470,12 @@ class AnthropicChatTransport implements ChatTransport {
     required String endpoint,
     required String apiKey,
   }) async {
-    if (apiKey.isEmpty) return const [];
+    if (apiKey.isEmpty || endpoint.trim().isEmpty) return const [];
     var base = endpoint.trim();
-    if (base.isEmpty) base = _defaultEndpoint;
     if (!base.startsWith(RegExp(r'https?://'))) base = 'https://$base';
     while (base.endsWith('/')) {
       base = base.substring(0, base.length - 1);
     }
-    if (!base.toLowerCase().endsWith('/v1')) base = '$base/v1';
     try {
       final response = await _dio.get<Map<String, dynamic>>(
         '$base/models',

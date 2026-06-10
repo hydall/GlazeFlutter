@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/services/onboarding_service.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../core/state/dev_mode_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/widgets/glaze_scaffold.dart' show GlazeAppBar;
@@ -89,6 +90,30 @@ class MenuScreen extends ConsumerWidget {
                         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                           builder: (_) => const MenuGroupDemoScreen(),
                         )),
+                      ),
+                      MenuItem(
+                        icon: Icons.warning_amber_rounded,
+                        label: 'Test Error Dialog',
+                        onTap: () => GlazeErrorDialog.show(
+                          context,
+                          Exception(
+                            'HTTP 401: Invalid API key\n\n'
+                            'The request was rejected by the remote server. '
+                            'Please verify that your API key is correct and has '
+                            'not expired. Keys can be revoked from the provider '
+                            'dashboard at any time without notice.\n\n'
+                            'Endpoint:  https://api.openai.com/v1/chat/completions\n'
+                            'Model:     gpt-4o\n'
+                            'Status:    401 Unauthorized\n'
+                            'Request:   POST /v1/chat/completions\n'
+                            'Trace-ID:  req_abc123def456ghi789\n\n'
+                            '{"error":{"message":"Incorrect API key provided: '
+                            'sk-proj-...xXxX. You can find your API key at '
+                            'https://platform.openai.com/account/api-keys.",'
+                            '"type":"invalid_request_error","param":null,'
+                            '"code":"invalid_api_key"}}',
+                          ),
+                        ),
                       ),
                     ],
                   ),

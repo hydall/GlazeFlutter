@@ -40,8 +40,6 @@ class GeminiBuiltRequest {
 ///   `calculateGoogleBudgetTokens`. `includeThoughts: true` so the response
 ///   stream interleaves thinking parts.
 class GeminiChatTransport implements ChatTransport {
-  static const String _defaultEndpoint =
-      'https://generativelanguage.googleapis.com';
   static const String _apiVersion = 'v1beta';
 
   static const List<Map<String, String>> _safetyAllOff = [
@@ -66,7 +64,7 @@ class GeminiChatTransport implements ChatTransport {
 
   static String _normaliseBase(String endpoint) {
     var base = endpoint.trim();
-    if (base.isEmpty) base = _defaultEndpoint;
+    if (base.isEmpty) return '';
     if (!base.startsWith(RegExp(r'https?://'))) base = 'https://$base';
     while (base.endsWith('/')) {
       base = base.substring(0, base.length - 1);
@@ -395,7 +393,7 @@ class GeminiChatTransport implements ChatTransport {
     required String endpoint,
     required String apiKey,
   }) async {
-    if (apiKey.isEmpty) return const [];
+    if (apiKey.isEmpty || endpoint.trim().isEmpty) return const [];
     final base = _normaliseBase(endpoint);
     try {
       final response = await _dio.get<Map<String, dynamic>>(
