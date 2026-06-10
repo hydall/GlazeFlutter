@@ -1056,6 +1056,21 @@
 }
 
 /* ============================================================
+ * Message flash highlight — used when navigating to a specific
+ * message (e.g. tapping a "new message" notification). Mirrors
+ * Vue's transient `search-highlight` class on the message row.
+ * ============================================================ */
+.message-section.message-flash-highlight {
+  animation: glaze-msg-flash 2s ease;
+  border-radius: 12px;
+}
+@keyframes glaze-msg-flash {
+  0% { background-color: rgba(var(--primary-rgb, 121, 150, 206), 0); }
+  12% { background-color: rgba(var(--primary-rgb, 121, 150, 206), 0.3); }
+  100% { background-color: rgba(var(--primary-rgb, 121, 150, 206), 0); }
+}
+
+/* ============================================================
  * Bubble layout (default)
  * ============================================================ */
 .message-section.layout-bubble {

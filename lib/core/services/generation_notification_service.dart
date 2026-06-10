@@ -4,7 +4,8 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart'
+    hide NotificationVisibility;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../utils/platform_paths.dart';
@@ -99,7 +100,10 @@ class GenerationNotificationService {
               _messageChannelId,
               _messageChannelName,
               description: 'Notifications for new chat messages',
+              // Mirror Vue sc_message_channel: importance High (sound + heads-up)
+              // with vibration enabled.
               importance: Importance.high,
+              enableVibration: true,
             ),
           );
           await androidPlugin.requestNotificationsPermission();
@@ -121,9 +125,12 @@ class GenerationNotificationService {
           androidNotificationOptions: AndroidNotificationOptions(
             channelId: _generationChannelId,
             channelName: _generationChannelName,
-            channelDescription: 'Shown while generating a response',
-            channelImportance: NotificationChannelImportance.LOW,
-            priority: NotificationPriority.LOW,
+            channelDescription: 'Shows when the app is generating text',
+            // Mirror Vue: Importance.Min + silent so the ongoing generation
+            // notice never makes a sound or heads-up popup.
+            channelImportance: NotificationChannelImportance.MIN,
+            priority: NotificationPriority.MIN,
+            onlyAlertOnce: true,
           ),
           iosNotificationOptions: const IOSNotificationOptions(
             showNotification: false,
@@ -255,6 +262,11 @@ class GenerationNotificationService {
             icon: '@drawable/new_message',
             autoCancel: true,
             groupKey: charId,
+            // Mirror Vue: messaging content type + public lock-screen
+            // visibility + vibration.
+            category: AndroidNotificationCategory.message,
+            visibility: NotificationVisibility.public,
+            enableVibration: true,
           ),
           iOS: const DarwinNotificationDetails(
             presentAlert: true,
@@ -317,6 +329,9 @@ class GenerationNotificationService {
     try {
       if (!await FlutterForegroundTask.isRunningService) {
         await FlutterForegroundTask.startService(
+          // Must match android:foregroundServiceType="dataSync" in the manifest
+          // (mirrors Vue's dataSync foreground service for background generation).
+          serviceTypes: const [ForegroundServiceTypes.dataSync],
           notificationTitle: notificationTitle,
           notificationText: notificationText,
           notificationIcon: const NotificationIcon(

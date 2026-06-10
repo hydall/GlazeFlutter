@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <application
@@ -41,11 +41,7 @@
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:exported="false"
             android:stopWithTask="true"
-            android:foregroundServiceType="specialUse">
-            <property
-                android:name="com.pravera.flutter_foreground_task.FOREGROUND_SERVICE_SPECIAL_USE"
-                android:value="AI response generation" />
-        </service>
+            android:foregroundServiceType="dataSync" />
         <meta-data
             android:name="com.hydall.glaze.ic_generation"
             android:resource="@drawable/ic_stat_icon_config_sample" />

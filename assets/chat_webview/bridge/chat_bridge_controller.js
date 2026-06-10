@@ -525,7 +525,7 @@ export class Bridge {
       this._sendToFlutter('onScrollToBottomVisibility', [false]);
     });
   }
-  scrollToMessage(messageId) { this.virtualList.scrollToMessage(messageId); }
+  scrollToMessage(messageId, highlight = false) { this.virtualList.scrollToMessage(messageId, highlight); }
 
   setSearch(query, activeIndex) { this.renderer.setSearch(query, activeIndex); }
 

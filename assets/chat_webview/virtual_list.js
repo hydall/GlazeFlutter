@@ -182,7 +182,7 @@ class VirtualList {
     requestAnimationFrame(() => { this._isUserScroll = true; });
   }
 
-  scrollToMessage(messageId) {
+  scrollToMessage(messageId, highlight = false) {
     const idx = this.messageOrder.indexOf(messageId);
     if (idx < 0) return;
 
@@ -194,6 +194,12 @@ class VirtualList {
         this._isUserScroll = false;
         el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         requestAnimationFrame(() => { this._isUserScroll = true; });
+        if (highlight) {
+          el.classList.remove('message-flash-highlight');
+          void el.offsetWidth;
+          el.classList.add('message-flash-highlight');
+          setTimeout(() => el.classList.remove('message-flash-highlight'), 2000);
+        }
       }
     });
   }

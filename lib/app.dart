@@ -140,7 +140,7 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
     _navSub = GenerationNotificationService.instance.navigationStream.listen((
       data,
     ) {
-      if (mounted) context.push('/chat/${data.charId}');
+      if (mounted) _openChatFromNotification(data);
     });
   }
 
@@ -148,8 +148,19 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
     final data = GenerationNotificationService.instance
         .consumePendingNotificationData();
     if (data != null && mounted) {
-      context.push('/chat/${data.charId}');
+      _openChatFromNotification(data);
     }
+  }
+
+  /// Opens the chat for a tapped notification, carrying the target message id
+  /// so the chat can scroll to and flash it (mirrors Vue's openChat msgId).
+  void _openChatFromNotification(NotificationNavigationData data) {
+    final msgId = data.msgId;
+    final uri = Uri(
+      path: '/chat/${data.charId}',
+      queryParameters: (msgId != null && msgId.isNotEmpty) ? {'msg': msgId} : null,
+    );
+    context.push(uri.toString());
   }
 
   @override

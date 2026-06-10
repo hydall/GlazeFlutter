@@ -240,10 +240,15 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
                       final sessionIdx = int.tryParse(
                           state.uri.queryParameters['session'] ?? '');
                       final isNew = state.uri.queryParameters['new'] == '1';
+                      final targetMsgId = state.uri.queryParameters['msg'];
                       return ChatScreen(
                         charId: charId,
                         initialSessionIndex: sessionIdx,
                         forceNewSession: isNew,
+                        targetMessageId:
+                            (targetMsgId != null && targetMsgId.isNotEmpty)
+                                ? targetMsgId
+                                : null,
                       );
                     },
                   ),

@@ -70,11 +70,17 @@ class ChatScreen extends ConsumerStatefulWidget {
   final String charId;
   final int? initialSessionIndex;
   final bool forceNewSession;
+
+  /// When set (e.g. opening from a "new message" notification tap), the chat
+  /// scrolls to and briefly flashes this message once the WebView is ready.
+  final String? targetMessageId;
+
   const ChatScreen({
     super.key,
     required this.charId,
     this.initialSessionIndex,
     this.forceNewSession = false,
+    this.targetMessageId,
   });
 
   @override
@@ -337,6 +343,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                     onScrollDirection: _onScrollDirection,
                     virtualKeyboardSend: virtualKeyboardSend,
                     enterToSend: enterToSend,
+                    targetMessageId: widget.targetMessageId,
                   ),
                   if (awaitingTargetSession)
                     const Positioned.fill(
@@ -363,6 +370,7 @@ class _ChatBody extends ConsumerStatefulWidget {
   final ValueChanged<ScrollDirection>? onScrollDirection;
   final bool virtualKeyboardSend;
   final bool enterToSend;
+  final String? targetMessageId;
 
   const _ChatBody({
     required this.charId,
@@ -373,6 +381,7 @@ class _ChatBody extends ConsumerStatefulWidget {
     this.onScrollDirection,
     this.virtualKeyboardSend = false,
     this.enterToSend = true,
+    this.targetMessageId,
   });
 
   @override
@@ -391,6 +400,31 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkHeight());
+    final targetId = widget.targetMessageId;
+    if (targetId != null && targetId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_scrollToTargetMessage(targetId)),
+      );
+    }
+  }
+
+  /// Waits for the keep-alive WebView to finish initializing, then scrolls to
+  /// and flashes the message that a tapped notification points at. Mirrors
+  /// Vue's openChat(msgId) → scrollToAnchor + search-highlight behaviour.
+  Future<void> _scrollToTargetMessage(String messageId) async {
+    for (var i = 0; i < 100; i++) {
+      if (!mounted) return;
+      final st = _webViewStateKey.currentState;
+      if (st != null && st.isReady) {
+        // Let the initializer's opening scroll-to-bottom settle before
+        // retargeting, otherwise the two scrolls fight each other.
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        if (!mounted) return;
+        await st.scrollToMessage(messageId, highlight: true);
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
   }
 
   void _checkHeight() {

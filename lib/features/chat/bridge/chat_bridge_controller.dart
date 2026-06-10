@@ -451,7 +451,8 @@ class ChatBridgeController {
   Future<void> setLastMessage(String? id) => messages.setLastMessage(id);
   Future<void> clearAll() => messages.clearAll();
   Future<void> scrollToBottom() => messages.scrollToBottom();
-  Future<void> scrollToMessage(String id) => messages.scrollToMessage(id);
+  Future<void> scrollToMessage(String id, {bool highlight = false}) =>
+      messages.scrollToMessage(id, highlight: highlight);
 
   // Theme
   Future<void> setBackgroundNoise(double opacity, double intensity) =>

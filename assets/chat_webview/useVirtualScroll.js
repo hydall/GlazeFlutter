@@ -345,9 +345,25 @@ class UseVirtualScroll {
         setTimeout(() => { this.isProgrammaticScrolling = false; }, 150);
     }
 
-    scrollToMessage(id) {
+    scrollToMessage(id, highlight = false) {
         const item = this.itemMap.get(id);
-        if (item) this.scrollToIndex(item.index, 'smooth');
+        if (!item) return;
+        this.scrollToIndex(item.index, 'smooth');
+        // Mirror Vue: briefly flash the message the user navigated to (e.g.
+        // from a tapped "new message" notification). Wait for scrollToIndex to
+        // (re)render the row so the element exists before flashing it.
+        if (highlight) setTimeout(() => this.flashMessage(id), 400);
+    }
+
+    flashMessage(id) {
+        const item = this.itemMap.get(id);
+        const el = item && item.el;
+        if (!el) return;
+        el.classList.remove('message-flash-highlight');
+        // Force reflow so re-adding the class restarts the animation.
+        void el.offsetWidth;
+        el.classList.add('message-flash-highlight');
+        setTimeout(() => el.classList.remove('message-flash-highlight'), 2000);
     }
 
     scrollToIndex(index, behavior = 'auto') {

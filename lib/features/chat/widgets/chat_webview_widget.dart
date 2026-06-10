@@ -663,16 +663,21 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     await _bridge?.applyTheme(_buildThemeMap());
   }
 
+  /// True once the WebView's JS bridge has fully initialized and the chat is
+  /// rendered. Callers wanting to drive the view (e.g. scroll-to-message from a
+  /// notification tap) should gate on this.
+  bool get isReady => _ready;
+
   Future<void> scrollToBottom() {
     final b = _bridge;
     if (b == null) return Future.value();
     return b.scrollToBottom();
   }
 
-  Future<void> scrollToMessage(String id) {
+  Future<void> scrollToMessage(String id, {bool highlight = false}) {
     final b = _bridge;
     if (b == null) return Future.value();
-    return b.scrollToMessage(id);
+    return b.scrollToMessage(id, highlight: highlight);
   }
 
   Future<void> setSearch(String q, int i) {
