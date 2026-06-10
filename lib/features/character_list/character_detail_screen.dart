@@ -310,13 +310,21 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
       if (!mounted) return;
       final count = saveResult.count;
       final sessionIndex = saveResult.sessionIndex;
-      if (count > 0 && sessionIndex != null) {
-        _closeSheetAndNavigate('/chat/$charId?session=$sessionIndex');
-      }
       GlazeToast.show(
         context,
         count == 0 ? 'no_results'.tr() : 'import_success'.tr(),
       );
+      if (count > 0 && sessionIndex != null) {
+        // The inner "Open chat" sheet was already popped (with the value
+        // 'import') before _importChat ran, so only the outer
+        // CharacterDetailScreen modal remains. Pop it once, returning the chat
+        // route so the launcher (_showDetailSheet) navigates via context.go.
+        // Using _closeSheetAndNavigate here popped twice — the first pop closed
+        // the modal with a null result, so the launcher never navigated and the
+        // chat opened as a blank dark screen.
+        Navigator.of(context, rootNavigator: true)
+            .pop<String>('/chat/$charId?session=$sessionIndex');
+      }
     } catch (e) {
       if (mounted) GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
     }
