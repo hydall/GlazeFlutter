@@ -62,6 +62,9 @@ class FlutterBackupImporter extends BackupHelpers {
     final manifestJson =
         jsonDecode(utf8.decode(manifestEntry.readBytes()!)) as Map<String, dynamic>;
     final schemaVersion = manifestJson['schemaVersion'] as int? ?? 0;
+    // Minimum supported schemaVersion is 2 (initial ZIP format).
+    // v3 added extension_presets and info_blocks — older backups simply won't
+    // have those JSONL files, leaving the tables empty after import (fine).
     if (schemaVersion < 2) {
       throw const FormatException(
           'Glaze backup schema is too old. Please re-export from the source app.');

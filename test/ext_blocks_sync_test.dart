@@ -13,7 +13,6 @@ import 'package:glaze_flutter/core/models/persona.dart';
 import 'package:glaze_flutter/core/models/preset.dart';
 import 'package:glaze_flutter/core/utils/sync_deletion_tracker.dart';
 import 'package:glaze_flutter/features/cloud_sync/cloud_adapter.dart';
-import 'package:glaze_flutter/features/cloud_sync/services/sync_conflict.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_engine.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_manifest.dart';
 import 'package:glaze_flutter/features/cloud_sync/sync_models.dart';

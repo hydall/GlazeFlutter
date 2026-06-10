@@ -18,10 +18,10 @@ import '../services/character_importer.dart';
 import '../services/image_storage_service.dart';
 import '../services/migration_service.dart';
 
-AppDatabase? _dbInstance;
-
 final appDbProvider = Provider<AppDatabase>((ref) {
-  return _dbInstance ??= AppDatabase();
+  final db = AppDatabase();
+  ref.onDispose(db.close);
+  return db;
 });
 
 final imageStorageProvider = FutureProvider<ImageStorageService>((ref) async {

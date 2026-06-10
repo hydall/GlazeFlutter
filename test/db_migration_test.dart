@@ -67,14 +67,16 @@ void main() {
       expect(names, contains('picks_hash'));
     });
 
-    test('26 after import', () async {
+    test('current schema version after import', () async {
       final importer = JsBackupImporter(db, imageStorage);
       await importer.import(_minimalBackup(), onProgress: (_) {});
 
       final result = await db.customSelect('PRAGMA user_version').get();
       final version = result.first.read<int>('user_version');
 
-      expect(version, 26);
+      // user_version matches the Drift schema version (app_db.dart schemaVersion).
+      // Update this constant whenever a new migration step is added.
+      expect(version, 28);
     });
   });
 }
