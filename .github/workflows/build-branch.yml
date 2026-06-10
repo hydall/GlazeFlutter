@@ -9,7 +9,35 @@ on:
         default: ''
 
 jobs:
+  # ── shared metadata ────────────────────────────────────────────────────────
+  metadata:
+    runs-on: ubuntu-latest
+    outputs:
+      version:    ${{ steps.meta.outputs.version }}
+      build_date: ${{ steps.meta.outputs.build_date }}
+      build_fruit: ${{ steps.meta.outputs.build_fruit }}
+      file_slug:  ${{ steps.meta.outputs.file_slug }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
+
+      - name: Compute metadata
+        id: meta
+        run: |
+          VERSION=$(grep '^version:' pubspec.yaml | awk '{print $2}' | sed 's/+.*//' | sed 's/-.*//')
+          BUILD_DATE=$(date -u '+%d/%m/%Y %H:%M')
+          FRUITS=(Apple Apricot Avocado Banana Blueberry Cherry Coconut Fig Grape Guava Kiwi Lemon Lime Lychee Mango Melon Nectarine Orange Papaya Peach Pear Pineapple Plum Pomelo Raspberry Strawberry Tangerine Watermelon)
+          BUILD_FRUIT=${FRUITS[$RANDOM % ${#FRUITS[@]}]}
+          FILE_SLUG="G-$(date -u '+%d%m%Y-%H%M')-$BUILD_FRUIT"
+          echo "version=$VERSION"       >> $GITHUB_OUTPUT
+          echo "build_date=$BUILD_DATE" >> $GITHUB_OUTPUT
+          echo "build_fruit=$BUILD_FRUIT" >> $GITHUB_OUTPUT
+          echo "file_slug=$FILE_SLUG"   >> $GITHUB_OUTPUT
+
+  # ── android ────────────────────────────────────────────────────────────────
   build-android:
+    needs: metadata
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,18 +92,24 @@ jobs:
           KEYSTORE_PASSWORD: android
           KEY_ALIAS: debug-key
           KEY_PASSWORD: android
-        run: flutter build apk --release --no-pub --target-platform android-arm64
+        run: >
+          flutter build apk --release --no-pub --target-platform android-arm64
+          "--dart-define=APP_VERSION=${{ needs.metadata.outputs.version }}"
+          "--dart-define=BUILD_DATE=${{ needs.metadata.outputs.build_date }}"
+          "--dart-define=BUILD_FRUIT=${{ needs.metadata.outputs.build_fruit }}"
 
       - name: Rename APK
-        run: mv build/app/outputs/flutter-apk/app-release.apk build/app/outputs/flutter-apk/Glaze-release.apk || true
+        run: mv build/app/outputs/flutter-apk/app-release.apk "build/app/outputs/flutter-apk/${{ needs.metadata.outputs.file_slug }}.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Glaze-release-APK
-          path: build/app/outputs/flutter-apk/*.apk
+          path: "build/app/outputs/flutter-apk/${{ needs.metadata.outputs.file_slug }}.apk"
 
+  # ── windows ────────────────────────────────────────────────────────────────
   build-windows:
+    needs: metadata
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -110,7 +144,11 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Build Windows (release)
-        run: flutter build windows --release --no-pub
+        run: >
+          flutter build windows --release --no-pub
+          "--dart-define=APP_VERSION=${{ needs.metadata.outputs.version }}"
+          "--dart-define=BUILD_DATE=${{ needs.metadata.outputs.build_date }}"
+          "--dart-define=BUILD_FRUIT=${{ needs.metadata.outputs.build_fruit }}"
 
       - name: Upload Windows
         uses: actions/upload-artifact@v4
@@ -119,7 +157,9 @@ jobs:
           path: build/windows/x64/runner/Release/**
           include-hidden-files: true
 
+  # ── ios ────────────────────────────────────────────────────────────────────
   build-ios:
+    needs: metadata
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -168,7 +208,10 @@ jobs:
       - name: Build iOS (release, no signing) — DIAGNOSTIC
         run: |
           set -x
-          flutter build ios --release --no-codesign --no-pub
+          flutter build ios --release --no-codesign --no-pub \
+            "--dart-define=APP_VERSION=${{ needs.metadata.outputs.version }}" \
+            "--dart-define=BUILD_DATE=${{ needs.metadata.outputs.build_date }}" \
+            "--dart-define=BUILD_FRUIT=${{ needs.metadata.outputs.build_fruit }}"
           echo "=== AFTER flutter build ios ==="
           find build/ios -type f -name "*.app" -o -name "*.ipa" 2>/dev/null | head -20 || true
           ls -laR build/ios/iphoneos 2>/dev/null | tail -30 || true
@@ -178,11 +221,9 @@ jobs:
         run: |
           set -x
           mkdir -p Payload
-          # Try the common location first
           if [ -d "build/ios/iphoneos" ]; then
             cp -r build/ios/iphoneos/*.app Payload/ 2>/dev/null || true
           fi
-          # Fallbacks in case structure changed
           find build -type d -name "*.app" 2>/dev/null | head -5 | while read app; do
             echo "Found app at: $app"
             cp -r "$app" Payload/ 2>/dev/null || true
@@ -190,13 +231,60 @@ jobs:
           echo "=== Payload contents before zip ==="
           find Payload -type f | head -30
           ls -la Payload
-          zip -r Glaze-release.ipa Payload || (echo "zip failed, contents:"; find . -name "*.app" 2>/dev/null | head -10)
+          zip -r "${{ needs.metadata.outputs.file_slug }}.ipa" Payload || (echo "zip failed, contents:"; find . -name "*.app" 2>/dev/null | head -10)
           echo "=== Final artifact check ==="
           ls -la *.ipa 2>/dev/null || true
-          find . -name "*.ipa" 2>/dev/null | head -5
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: Glaze-release-iOS
-          path: Glaze-release.ipa
+          path: "${{ needs.metadata.outputs.file_slug }}.ipa"
+
+  # ── telegram notify ────────────────────────────────────────────────────────
+  notify:
+    needs: [metadata, build-android, build-ios]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: Glaze-release-APK
+          path: artifacts/
+
+      - name: Download IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: Glaze-release-iOS
+          path: artifacts/
+
+      - name: Send to Telegram
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
+          VERSION:      ${{ needs.metadata.outputs.version }}
+          BUILD_DATE:   ${{ needs.metadata.outputs.build_date }}
+          BUILD_FRUIT:  ${{ needs.metadata.outputs.build_fruit }}
+          FILE_SLUG:    ${{ needs.metadata.outputs.file_slug }}
+        run: |
+          # Text message
+          MSG_ID=$(curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg cid  "$TG_CHAT_ID" \
+              --arg text "$(printf 'Новый дев-билд:\n\n%s\n%s\n%s' "$VERSION" "$BUILD_DATE" "$BUILD_FRUIT")" \
+              '{chat_id: $cid, text: $text}')" \
+            | jq -r '.result.message_id')
+
+          # IPA
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" \
+            -F "chat_id=${TG_CHAT_ID}" \
+            -F "reply_to_message_id=${MSG_ID}" \
+            -F "document=@artifacts/${FILE_SLUG}.ipa"
+
+          # APK
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" \
+            -F "chat_id=${TG_CHAT_ID}" \
+            -F "reply_to_message_id=${MSG_ID}" \
+            -F "document=@artifacts/${FILE_SLUG}.apk"

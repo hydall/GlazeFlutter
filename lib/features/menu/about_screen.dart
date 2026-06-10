@@ -7,6 +7,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/constants/app_version.dart';
 import '../../core/state/dev_mode_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -17,7 +18,6 @@ import '../settings/app_settings_provider.dart';
 class AboutScreen extends ConsumerWidget {
   const AboutScreen({super.key});
 
-  static const _version = '0.1.0+1';
   static const _tagline =
       'AI roleplay chat client.\nLocal, novice-friendly, open-source.';
 
@@ -107,7 +107,7 @@ class _HeroCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      'v${AboutScreen._version}',
+                      'v$appVersion',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -116,6 +116,25 @@ class _HeroCard extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (buildDate.isNotEmpty || buildFruit.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    if (buildDate.isNotEmpty)
+                      Text(
+                        buildDate,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.55),
+                        ),
+                      ),
+                    if (buildFruit.isNotEmpty)
+                      Text(
+                        buildFruit,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: cs.onSurfaceVariant.withValues(alpha: 0.55),
+                        ),
+                      ),
+                  ],
                   const SizedBox(height: 16),
                   Text(
                     AboutScreen._tagline,
