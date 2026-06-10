@@ -9,6 +9,24 @@ export class EditController {
     const section = document.querySelector(`[data-message-id="${messageId}"]`);
     if (!section) return;
 
+    // If the section is already in editing state (e.g. a rapid cancel
+    // followed immediately by another startEdit, or Dart sent startEdit
+    // twice), restore it first so that originalHtml is captured from
+    // the rendered content, not from the textarea.
+    if (section.classList.contains('editing')) {
+      const prevBody = section.querySelector('.msg-body');
+      if (prevBody && prevBody.dataset.originalHtml !== undefined) {
+        prevBody.innerHTML = prevBody.dataset.originalHtml;
+        delete prevBody.dataset.originalHtml;
+      }
+      const prevFooter = section.querySelector('.msg-footer');
+      if (prevFooter && prevFooter.dataset.originalHtml !== undefined) {
+        prevFooter.innerHTML = prevFooter.dataset.originalHtml;
+        delete prevFooter.dataset.originalHtml;
+      }
+      section.classList.remove('editing');
+    }
+
     const scrollPos = scrollTopFn();
     section.classList.add('editing');
 
@@ -90,11 +108,26 @@ export class EditController {
     if (!section) return;
     section.classList.remove('editing');
 
+    // Do NOT restore from originalHtml — innerHTML does not serialise shadow
+    // roots, so the snapshot captured in startEdit() is always empty for
+    // shadow-DOM-hosted content.  Instead, re-render the body from the
+    // authoritative rawText / reasoning stored on the section dataset.
+    // This works for both Cancel (rawText unchanged) and Save (Dart updates
+    // rawText via updateMessage before calling stopEdit).
     const body = section.querySelector('.msg-body');
-    if (body && body.dataset.originalHtml !== undefined) {
-      body.innerHTML = body.dataset.originalHtml;
-      delete body.dataset.originalHtml;
+    if (body) {
+      delete body.dataset.originalHtml;   // discard stale snapshot
+      if (window.bridge?.renderer) {
+        const isUser = section.classList.contains('user');
+        window.bridge.renderer.updateMessageContent(
+          section,
+          section.dataset.rawText || '',
+          section.dataset.reasoning || null,
+          isUser, false, false,
+        );
+      }
     }
+
     const footer = section.querySelector('.msg-footer');
     if (footer && footer.dataset.originalHtml !== undefined) {
       footer.innerHTML = footer.dataset.originalHtml;

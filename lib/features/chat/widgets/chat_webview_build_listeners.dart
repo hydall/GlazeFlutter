@@ -100,10 +100,15 @@ class ChatWebViewBuildListeners {
         // `editing` was still set, and left the last-user Regenerate
         // missing on save/cancel. Message content sync runs separately
         // when editMessage updates the provider.
+        //
+        // Always call setLastMessage after stopEdit regardless of which
+        // message was edited — stopEdit restores the original footer HTML,
+        // which clears the Regenerate button injected by setLastMessage.
+        // Without this, swiping to regenerate stops working after any edit.
         unawaited(() async {
           await b.stopEdit(prev);
           final lastUserId = lastUserMessageId(messages);
-          if (lastUserId != null && lastUserId == prev) {
+          if (lastUserId != null) {
             await b.setLastMessage(lastUserId);
           }
         }());
