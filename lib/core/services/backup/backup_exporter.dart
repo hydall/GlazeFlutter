@@ -10,7 +10,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../db/app_db.dart';
 import '../file_export_service.dart';
 import '../image_storage_service.dart';class BackupExporter {
-  static const int _schemaVersion = 2;
+  // Schema version history:
+  //   2 — initial v2 ZIP format (characters, chats, presets, api_configs,
+  //         personas, lorebooks, embeddings, chat_summaries, memory_book_rows)
+  //   3 — added extension_presets and info_blocks tables
+  static const int _schemaVersion = 3;
 
   final AppDatabase _db;
   final ImageStorageService _imageStorage;

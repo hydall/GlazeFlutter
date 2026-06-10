@@ -141,6 +141,8 @@ class TavoBackupImporter {
         'embeddings',
         'chat_summaries',
         'memory_book_rows',
+        'extension_presets',
+        'info_blocks',
       ];
       for (final table in tables) {
         try {
