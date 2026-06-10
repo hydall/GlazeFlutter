@@ -93,7 +93,7 @@ class SyncManifestEntry {
 class SyncManifest {
   /// Bump when hash/canonicalization changes so push can skip re-uploading
   /// existing cloud files and refresh manifest only.
-  static const int currentVersion = 3;
+  static const int currentVersion = 4;
 
   final int version;
   final String deviceId;
@@ -170,6 +170,12 @@ String cloudPath(String type, String id) {
       return '$cloudBase/chats/$id.json';
     case 'memory_book':
       return '$cloudBase/memory_books/$id.json';
+    case 'extension_preset':
+      return '$cloudBase/extension_presets/$id.json';
+    case 'extensions_settings':
+      return '$cloudBase/extensions_settings.json';
+    case 'info_block':
+      return '$cloudBase/info_blocks/$id.json';
     case 'lorebooks':
       return '$cloudBase/lorebooks.json';
     case 'api_presets':

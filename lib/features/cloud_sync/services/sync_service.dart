@@ -25,6 +25,9 @@ class SyncService {
   final SyncEmbeddingStore _embeddingRepo;
   final SyncImageStore _imageStorage;
   final SyncThemePresetStore _themePresetRepo;
+  final SyncExtensionPresetStore _extensionPresetRepo;
+  final SyncExtensionsSettingsStore _extensionsSettingsStore;
+  final SyncInfoBlockStore _infoBlockStore;
 
   SyncProvider _provider = SyncProvider.dropbox;
   SyncStatus _status = SyncStatus.idle;
@@ -80,6 +83,9 @@ class SyncService {
     required this._embeddingRepo,
     required this._imageStorage,
     required this._themePresetRepo,
+    required this._extensionPresetRepo,
+    required this._extensionsSettingsStore,
+    required this._infoBlockStore,
   });
 
   CloudAdapter get _adapter {
@@ -100,6 +106,9 @@ class SyncService {
         memoryBookRepo: _memoryBookRepo,
         lorebookRepo: _lorebookRepo,
         themePresetRepo: _themePresetRepo,
+        extensionPresetRepo: _extensionPresetRepo,
+        extensionsSettingsStore: _extensionsSettingsStore,
+        infoBlockStore: _infoBlockStore,
         imageStore: _imageStorage,
       );
 
@@ -116,6 +125,9 @@ class SyncService {
         _embeddingRepo,
         _imageStorage,
         _themePresetRepo,
+        _extensionPresetRepo,
+        _extensionsSettingsStore,
+        _infoBlockStore,
       );
 
   Future<void> init() async {

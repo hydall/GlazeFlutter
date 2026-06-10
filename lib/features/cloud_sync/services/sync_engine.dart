@@ -20,6 +20,9 @@ import '../../../core/models/preset.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../sync_repo_interfaces.dart';
 import '../../../core/state/lorebook_provider.dart' show saveLorebookActivations;
+import '../../../features/extensions/models/extension_preset.dart';
+import '../../../features/extensions/models/extensions_settings.dart';
+import '../../../features/extensions/models/info_block.dart';
 
 class SyncProgress {
   final int current;
@@ -42,6 +45,9 @@ class SyncEngine {
   final SyncEmbeddingStore _embeddingRepo;
   final SyncImageStore _imageStorage;
   final SyncThemePresetStore _themePresetRepo;
+  final SyncExtensionPresetStore _extensionPresetRepo;
+  final SyncExtensionsSettingsStore _extensionsSettingsStore;
+  final SyncInfoBlockStore _infoBlockStore;
   final SyncQueue _queue = SyncQueue();
   bool _includeApiKeys = false;
 
@@ -58,6 +64,9 @@ class SyncEngine {
     this._embeddingRepo,
     this._imageStorage,
     this._themePresetRepo,
+    this._extensionPresetRepo,
+    this._extensionsSettingsStore,
+    this._infoBlockStore,
   );
 
   Future<void> pushEntities({
@@ -70,6 +79,8 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/personas');
     await _adapter.ensureFolder('$cloudBase/chats');
     await _adapter.ensureFolder('$cloudBase/memory_books');
+    await _adapter.ensureFolder('$cloudBase/extension_presets');
+    await _adapter.ensureFolder('$cloudBase/info_blocks');
 
     final localManifest = await _manifestBuilder.buildLocalManifest();
     SyncManifest? cloudManifest;
@@ -604,12 +615,62 @@ class SyncEngine {
         case 'ui_themes':
           final all = await _themePresetRepo.getAll();
           return {'__singleton': true, 'items': all.map((t) => t.toJson()).toList()};
+        case 'extension_preset':
+          final ep = await _extensionPresetRepo.getById(id);
+          if (ep == null) return null;
+          return ep.toJson();
+        case 'extensions_settings':
+          final s = await _extensionsSettingsStore.get();
+          return {'__singleton': true, 'settings': s.toJson()};
+        case 'info_block':
+          // id == sessionId for info_block entries
+          final blocks = await _infoBlockStore.getBySessionId(id);
+          if (blocks.isEmpty) return null;
+          return {
+            '__infoBlocks': true,
+            'items': blocks.map((b) => _normalizeInfoBlockForSync(b)).toList(),
+          };
         default:
           return null;
       }
     } catch (_) {
       return null;
     }
+  }
+
+  /// Normalizes an InfoBlock for cloud storage:
+  /// - imageGen blocks: replaces [IMG:RESULT:/path|json] with [IMG:GEN:json]
+  ///   so images can be regenerated on pull without storing device-local paths.
+  /// - All other block types: stored as-is.
+  Map<String, dynamic> _normalizeInfoBlockForSync(InfoBlock block) {
+    final json = block.toJson();
+    if (block.blockType != 'imageGen') return json;
+    final normalized = Map<String, dynamic>.from(json);
+    normalized['content'] = _normalizeImageGenContent(block.content);
+    return normalized;
+  }
+
+  /// Replaces [IMG:RESULT:/abs/path|json] → [IMG:GEN:json]
+  /// and [IMG:ERROR:...] → [IMG:GEN] so that pulled blocks can be regenerated.
+  String _normalizeImageGenContent(String content) {
+    // Replace [IMG:RESULT:/path|{"prompt":"..."}] → [IMG:GEN:{"prompt":"..."}]
+    // Replace [IMG:RESULT:/path] (no json) → [IMG:GEN]
+    var result = content.replaceAllMapped(
+      ImgGenPatterns.imgResultRegex,
+      (m) {
+        final payload = m.group(1) ?? '';
+        // payload is "/abs/path" or "/abs/path|{json}"
+        final pipeIdx = payload.indexOf('|');
+        if (pipeIdx >= 0) {
+          final instruction = payload.substring(pipeIdx + 1);
+          return '[IMG:GEN:$instruction]';
+        }
+        return '[IMG:GEN]';
+      },
+    );
+    // Replace any remaining [IMG:ERROR:...] → [IMG:GEN]
+    result = result.replaceAll(ImgGenPatterns.imgErrorStripRegex, '[IMG:GEN]');
+    return result;
   }
 
   Future<void> _applyCloudEntity(String type, String id, Map<String, dynamic> data) async {
@@ -644,8 +705,42 @@ class SyncEngine {
         case 'ui_themes':
           await _applyUiThemes(data);
           break;
+        case 'extension_preset':
+          await _extensionPresetRepo.put(ExtensionPreset.fromJson(data));
+          break;
+        case 'extensions_settings':
+          final settingsJson = data['settings'] as Map<String, dynamic>?;
+          if (settingsJson != null) {
+            await _extensionsSettingsStore.put(
+              ExtensionsSettings.fromJson(settingsJson),
+            );
+          }
+          break;
+        case 'info_block':
+          await _applyCloudInfoBlocks(id, data);
+          break;
       }
     } catch (_) {}
+  }
+
+  Future<void> _applyCloudInfoBlocks(
+    String sessionId,
+    Map<String, dynamic> data,
+  ) async {
+    final List<Map<String, dynamic>> items;
+    if (data['__infoBlocks'] == true) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else if (data.containsKey('items')) {
+      items = (data['items'] as List).cast<Map<String, dynamic>>();
+    } else {
+      return;
+    }
+
+    // Replace existing blocks for this session with the cloud version.
+    await _infoBlockStore.deleteBySessionId(sessionId);
+    for (final item in items) {
+      await _infoBlockStore.insert(InfoBlock.fromJson(item));
+    }
   }
 
   /// avatarPath and gallery hold device-local paths; never apply cloud values
@@ -885,6 +980,14 @@ class SyncEngine {
         case 'ui_themes':
           await _themePresetRepo.putAll([]);
           break;
+        case 'extension_preset':
+          await _extensionPresetRepo.delete(id);
+          break;
+        case 'info_block':
+          // id == sessionId for info_block entries
+          await _infoBlockStore.deleteBySessionId(id);
+          break;
+        // extensions_settings has no meaningful "delete" — it's always present.
       }
     } catch (_) {}
   }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/state/db_provider.dart';
 import '../../../shared/theme/theme_preset_storage.dart';
+import 'adapters/ext_blocks_sync_stores.dart';
 import 'services/sync_conflict.dart';
 import 'services/sync_engine.dart';
 import 'services/sync_service.dart';
@@ -26,6 +27,13 @@ final syncServiceProvider = FutureProvider<SyncService>((ref) async {
     embeddingRepo: ref.watch(embeddingRepoProvider),
     imageStorage: imageStorage,
     themePresetRepo: themeStorage,
+    extensionPresetRepo: ExtensionPresetSyncStore(
+      ref.watch(extensionPresetsRepoProvider),
+    ),
+    extensionsSettingsStore: ExtensionsSettingsSyncStore(),
+    infoBlockStore: InfoBlockSyncStore(
+      ref.watch(infoBlocksRepoProvider),
+    ),
   );
   await service.init();
 
