@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/legacy.dart';
 
 import '../../../core/db/repositories/extension_presets_repository.dart';
 import '../../../core/state/db_provider.dart';
+import '../../../core/utils/sync_deletion_tracker.dart';
 import '../models/extension_preset.dart';
 
 final extensionPresetsProvider =
@@ -47,6 +48,7 @@ class ExtensionPresetsNotifier extends StateNotifier<List<ExtensionPreset>> {
 
   Future<void> delete(String id) async {
     await _repo.deletePreset(id);
+    await SyncDeletionTracker.record('extension_preset', id);
     state = state.where((p) => p.id != id).toList();
   }
 

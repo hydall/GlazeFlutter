@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../app_db.dart';
 import '../tables.dart';
+import '../../../core/utils/sync_deletion_tracker.dart';
 import '../../../features/extensions/models/block_run_status.dart';
 import '../../../features/extensions/models/info_block.dart';
 
@@ -82,10 +83,20 @@ class InfoBlocksRepository extends DatabaseAccessor<AppDatabase>
     return rows.map(_rowToModel).toList();
   }
 
+  /// Returns all distinct sessionIds that have at least one info block.
+  Future<List<String>> getAllSessionIds() async {
+    final rows = await customSelect(
+      'SELECT DISTINCT session_id FROM info_blocks',
+      readsFrom: {infoBlocks},
+    ).get();
+    return rows.map((r) => r.read<String>('session_id')).toList();
+  }
+
   Future<void> deleteBySessionId(String sessionId) async {
     await (delete(infoBlocks)
           ..where((tbl) => tbl.sessionId.equals(sessionId)))
         .go();
+    await SyncDeletionTracker.record('info_block', sessionId);
   }
 
   Future<void> deleteInfoBlock(String id) async {

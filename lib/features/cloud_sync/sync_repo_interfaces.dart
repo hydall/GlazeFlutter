@@ -7,6 +7,9 @@ import '../../core/models/lorebook.dart';
 import '../../core/models/memory_book.dart';
 import '../../core/models/persona.dart';
 import '../../core/models/preset.dart';
+import '../extensions/models/extension_preset.dart';
+import '../extensions/models/extensions_settings.dart';
+import '../extensions/models/info_block.dart';
 import '../../shared/theme/theme_preset.dart';
 import 'sync_models.dart';
 
@@ -72,6 +75,25 @@ abstract class SyncImageStore {
   String? absolutePath(String? relativePath);
   Future<String> saveBytes(
       Uint8List bytes, String subfolder, String filename, String ext);
+}
+
+abstract class SyncExtensionPresetStore {
+  Future<List<ExtensionPreset>> getAll();
+  Future<ExtensionPreset?> getById(String id);
+  Future<void> put(ExtensionPreset p);
+  Future<void> delete(String id);
+}
+
+abstract class SyncExtensionsSettingsStore {
+  Future<ExtensionsSettings> get();
+  Future<void> put(ExtensionsSettings s);
+}
+
+abstract class SyncInfoBlockStore {
+  Future<List<String>> getAllSessionIds();
+  Future<List<InfoBlock>> getBySessionId(String sessionId);
+  Future<void> deleteBySessionId(String sessionId);
+  Future<void> insert(InfoBlock block);
 }
 
 abstract class SyncManifestProvider {

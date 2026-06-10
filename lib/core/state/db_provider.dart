@@ -11,6 +11,8 @@ import '../db/repositories/lorebook_repo.dart';
 import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/summary_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
+import '../db/repositories/extension_presets_repository.dart';
+import '../db/repositories/info_blocks_repository.dart';
 import '../models/memory_book.dart';
 import '../services/character_importer.dart';
 import '../services/image_storage_service.dart';
@@ -86,4 +88,12 @@ final memoryBookRepoProvider = Provider<MemoryBookRepo>((ref) {
 final memoryBookProvider = FutureProvider.family<MemoryBook?, String>((ref, sessionId) async {
   final repo = ref.watch(memoryBookRepoProvider);
   return repo.getBySessionId(sessionId);
+});
+
+final extensionPresetsRepoProvider = Provider<ExtensionPresetsRepository>((ref) {
+  return ExtensionPresetsRepository(ref.watch(appDbProvider));
+});
+
+final infoBlocksRepoProvider = Provider<InfoBlocksRepository>((ref) {
+  return InfoBlocksRepository(ref.watch(appDbProvider));
 });

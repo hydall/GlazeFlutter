@@ -17,6 +17,9 @@ class SyncManifestBuilder implements SyncManifestProvider {
   final SyncMemoryBookStore _memoryBookRepo;
   final SyncLorebookStore _lorebookRepo;
   final SyncThemePresetStore _themePresetRepo;
+  final SyncExtensionPresetStore _extensionPresetRepo;
+  final SyncExtensionsSettingsStore _extensionsSettingsStore;
+  final SyncInfoBlockStore _infoBlockStore;
   final SyncImageStore? _imageStore;
 
   static const _manifestKey = 'gz_sync_manifest_v2';
@@ -32,6 +35,9 @@ class SyncManifestBuilder implements SyncManifestProvider {
     required this._memoryBookRepo,
     required this._lorebookRepo,
     required this._themePresetRepo,
+    required this._extensionPresetRepo,
+    required this._extensionsSettingsStore,
+    required this._infoBlockStore,
     this._imageStore,
   });
 
@@ -107,6 +113,29 @@ class SyncManifestBuilder implements SyncManifestProvider {
       );
     }
 
+    final extensionPresets = await _extensionPresetRepo.getAll();
+    for (final ep in extensionPresets) {
+      final json = ep.toJson();
+      final hash = SyncSerialization.computeSyncHash(json);
+      final key = entryKey('extension_preset', ep.id);
+      final prevEntry = previous.entries[key];
+      final cloudEntry = cloudManifest?.entries[key];
+      final updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+
+      entries[key] = SyncManifestEntry(
+        type: 'extension_preset',
+        id: ep.id,
+        path: cloudPath('extension_preset', ep.id),
+        updatedAt: updatedAt,
+        hash: hash,
+      );
+    }
+
     final sessions = await _chatRepo.getAllSessionMetadata();
     for (final s in sessions) {
       final hash = SyncSerialization.computeChatMetadataHash(s);
@@ -149,6 +178,32 @@ class SyncManifestBuilder implements SyncManifestProvider {
         type: 'memory_book',
         id: mb.sessionId,
         path: cloudPath('memory_book', mb.sessionId),
+        updatedAt: updatedAt,
+        hash: hash,
+      );
+    }
+
+    final infoBlockSessionIds = await _infoBlockStore.getAllSessionIds();
+    for (final sessionId in infoBlockSessionIds) {
+      final blocks = await _infoBlockStore.getBySessionId(sessionId);
+      if (blocks.isEmpty) continue;
+      final hash = SyncSerialization.computeSyncHash(
+        blocks.map((b) => b.toJson()).toList(),
+      );
+      final key = entryKey('info_block', sessionId);
+      final prevEntry = previous.entries[key];
+      final cloudEntry = cloudManifest?.entries[key];
+      final updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
+
+      entries[key] = SyncManifestEntry(
+        type: 'info_block',
+        id: sessionId,
+        path: cloudPath('info_block', sessionId),
         updatedAt: updatedAt,
         hash: hash,
       );
@@ -268,6 +323,31 @@ class SyncManifestBuilder implements SyncManifestProvider {
               cloudEntry: cloudEntry,
               now: now,
             );
+
+      entries[key] = SyncManifestEntry(
+        type: type,
+        id: type,
+        path: cloudPath(type, type),
+        updatedAt: updatedAt,
+        hash: hash,
+      );
+    }
+
+    // extensions_settings is a Map singleton (not a list), handled separately.
+    {
+      const type = 'extensions_settings';
+      final settings = await _extensionsSettingsStore.get();
+      final settingsJson = settings.toJson();
+      final hash = SyncSerialization.computeSyncHash(settingsJson);
+      final key = entryKey(type, type);
+      final prevEntry = previous.entries[key];
+      final cloudEntry = cloudManifest?.entries[key];
+      final updatedAt = _resolveUpdatedAt(
+        hash: hash,
+        prevEntry: prevEntry,
+        cloudEntry: cloudEntry,
+        now: now,
+      );
 
       entries[key] = SyncManifestEntry(
         type: type,

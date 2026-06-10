@@ -19,6 +19,9 @@ import 'package:glaze_flutter/features/cloud_sync/services/sync_manifest.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_serialization.dart';
 import 'package:glaze_flutter/features/cloud_sync/sync_models.dart';
 import 'package:glaze_flutter/features/cloud_sync/sync_repo_interfaces.dart';
+import 'package:glaze_flutter/features/extensions/models/extension_preset.dart';
+import 'package:glaze_flutter/features/extensions/models/extensions_settings.dart';
+import 'package:glaze_flutter/features/extensions/models/info_block.dart';
 
 // ─── In-memory fakes ────────────────────────────────────────────────
 
@@ -195,6 +198,30 @@ class FakeEmbeddingStore implements SyncEmbeddingStore {
   }
 }
 
+class FakeExtensionPresetStore implements SyncExtensionPresetStore {
+  final Map<String, ExtensionPreset> data = {};
+  @override Future<List<ExtensionPreset>> getAll() async => data.values.toList();
+  @override Future<ExtensionPreset?> getById(String id) async => data[id];
+  @override Future<void> put(ExtensionPreset p) async { data[p.id] = p; }
+  @override Future<void> delete(String id) async { data.remove(id); }
+}
+
+class FakeExtensionsSettingsStore implements SyncExtensionsSettingsStore {
+  ExtensionsSettings _value = const ExtensionsSettings();
+  @override Future<ExtensionsSettings> get() async => _value;
+  @override Future<void> put(ExtensionsSettings s) async { _value = s; }
+}
+
+class FakeInfoBlockStore implements SyncInfoBlockStore {
+  final Map<String, List<InfoBlock>> data = {};
+  @override Future<List<String>> getAllSessionIds() async => data.keys.toList();
+  @override Future<List<InfoBlock>> getBySessionId(String sid) async => data[sid] ?? [];
+  @override Future<void> deleteBySessionId(String sid) async { data.remove(sid); }
+  @override Future<void> insert(InfoBlock block) async {
+    data.putIfAbsent(block.sessionId, () => []).add(block);
+  }
+}
+
 class FakeImageStore implements SyncImageStore {
   final Map<String, Uint8List> saved = {};
 
@@ -295,6 +322,9 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     required SyncMemoryBookStore memoryBookRepo,
     required SyncLorebookStore lorebookRepo,
     required SyncThemePresetStore themePresetRepo,
+    SyncExtensionPresetStore? extensionPresetRepo,
+    SyncExtensionsSettingsStore? extensionsSettingsStore,
+    SyncInfoBlockStore? infoBlockStore,
   }) : _builder = SyncManifestBuilder(
           characterRepo: characterRepo,
           chatRepo: chatRepo,
@@ -304,6 +334,9 @@ class InMemoryManifestProvider implements SyncManifestProvider {
           memoryBookRepo: memoryBookRepo,
           lorebookRepo: lorebookRepo,
           themePresetRepo: themePresetRepo,
+          extensionPresetRepo: extensionPresetRepo ?? FakeExtensionPresetStore(),
+          extensionsSettingsStore: extensionsSettingsStore ?? FakeExtensionsSettingsStore(),
+          infoBlockStore: infoBlockStore ?? FakeInfoBlockStore(),
         );
 
   @override
@@ -399,6 +432,9 @@ class SyncWorld {
         embeddings,
         images,
         uiThemes,
+        FakeExtensionPresetStore(),
+        FakeExtensionsSettingsStore(),
+        FakeInfoBlockStore(),
       );
 }
 
