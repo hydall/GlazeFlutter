@@ -6,6 +6,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/state/active_selection_provider.dart';
+import '../../core/utils/platform_paths.dart';
 import '../../core/state/db_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../personas/persona_list_provider.dart';
@@ -210,7 +211,7 @@ class _HeroCard extends StatelessWidget {
                 Positioned.fill(
                   child: avatarPath != null && avatarPath!.isNotEmpty
                       ? Image.file(
-                          File(avatarPath!),
+                          File(resolveGlazeFilePath(avatarPath!)!),
                           key: ValueKey(avatarPath),
                           fit: BoxFit.cover,
                           errorBuilder: (_, _, _) =>

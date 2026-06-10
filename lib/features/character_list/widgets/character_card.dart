@@ -15,6 +15,7 @@ import '../../../core/services/character_exporter.dart';
 import '../../../core/services/file_export_service.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
+import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
@@ -227,7 +228,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
       final mq = MediaQuery.of(context);
       final cacheW = (mq.size.width * mq.devicePixelRatio / 2).ceil();
       return Image.file(
-        File(character.avatarPath!),
+        File(resolveGlazeFilePath(character.avatarPath!)!),
         fit: BoxFit.cover,
         cacheWidth: cacheW,
         filterQuality: FilterQuality.high,
@@ -378,8 +379,8 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
       if (format == 'png') {
         Uint8List? avatarBytes;
         if (character.avatarPath != null &&
-            File(character.avatarPath!).existsSync()) {
-          avatarBytes = await File(character.avatarPath!).readAsBytes();
+            File(resolveGlazeFilePath(character.avatarPath!)!).existsSync()) {
+          avatarBytes = await File(resolveGlazeFilePath(character.avatarPath!)!).readAsBytes();
         } else {
           avatarBytes = generatePlaceholderAvatar(character.name);
         }
@@ -403,8 +404,8 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
       } else if (format == 'zip') {
         Uint8List avatarBytes;
         if (character.avatarPath != null &&
-            File(character.avatarPath!).existsSync()) {
-          avatarBytes = await File(character.avatarPath!).readAsBytes();
+            File(resolveGlazeFilePath(character.avatarPath!)!).existsSync()) {
+          avatarBytes = await File(resolveGlazeFilePath(character.avatarPath!)!).readAsBytes();
         } else {
           avatarBytes = generatePlaceholderAvatar(character.name);
         }

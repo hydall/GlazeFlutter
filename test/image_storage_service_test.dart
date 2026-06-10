@@ -143,6 +143,63 @@ void main() {
     expect(thumbPath, isNotNull);
     expect(await File(thumbPath!).exists(), isTrue);
   });
+
+  group('absolutePath rebasing (iOS sandbox UUID change)', () {
+    test('relative path is joined onto baseDir', () {
+      // Compare path-equivalently (separator-agnostic).
+      expect(
+        p.equals(
+          service.absolutePath('avatars/x.png')!,
+          p.join(tmpDir.path, 'avatars', 'x.png'),
+        ),
+        isTrue,
+      );
+    });
+
+    test('existing absolute path is returned unchanged (Android/Windows)',
+        () async {
+      // Save a real avatar so the absolute path exists, then confirm
+      // absolutePath returns it verbatim — no rebasing when the file is valid.
+      final png = makePng(80, 80);
+      final abs = await service.saveAvatar('valid', png);
+      expect(File(abs).isAbsolute, isTrue);
+      expect(File(abs).existsSync(), isTrue);
+      expect(service.absolutePath(abs), equals(abs));
+    });
+
+    test('stale absolute path under /Glaze/ is rebased onto current baseDir',
+        () async {
+      // Simulate an iOS path persisted under an OLD container UUID. The file
+      // does not exist at that absolute location, but the same sub-path
+      // exists under the current baseDir → should rebase.
+      //
+      // The rebasing only triggers when the input is recognised as absolute.
+      // On the Windows test host a unix path like /var/... is NOT absolute,
+      // so gate this assertion to POSIX hosts (where iOS-style paths apply).
+      final png = makePng(80, 80);
+      await service.saveAvatar('moved', png); // creates avatars/moved.png
+
+      const stale =
+          '/var/mobile/Containers/Data/Application/OLD-UUID/Documents/Glaze/avatars/moved.png';
+      final resolved = service.absolutePath(stale)!;
+      if (File(stale).isAbsolute) {
+        expect(
+          p.equals(resolved, p.join(tmpDir.path, 'avatars', 'moved.png')),
+          isTrue,
+          reason: 'stale /Glaze/ path should rebase onto current baseDir',
+        );
+        expect(File(resolved).existsSync(), isTrue);
+      } else {
+        // Non-absolute on this host → treated as relative, joined onto base.
+        expect(resolved, contains('moved.png'));
+      }
+    });
+
+    test('empty and null are passed through', () {
+      expect(service.absolutePath(''), equals(''));
+      expect(service.absolutePath(null), isNull);
+    });
+  });
 }
 
 String base64Encode(Uint8List bytes) {

@@ -7,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../utils/platform_paths.dart';
+
 class NotificationNavigationData {
   final String charId;
   final String? sessionId;
@@ -229,11 +231,12 @@ class GenerationNotificationService {
     try {
       final notifId = _stableId(charId);
       final payload = _buildPayload(charId, sessionId, msgId);
+      final resolvedAvatar = resolveGlazeFilePath(avatarPath);
 
       final NotificationDetails details;
       if (Platform.isAndroid) {
-        final personIcon = avatarPath != null && File(avatarPath).existsSync()
-            ? BitmapFilePathAndroidIcon(avatarPath)
+        final personIcon = resolvedAvatar != null && File(resolvedAvatar).existsSync()
+            ? BitmapFilePathAndroidIcon(resolvedAvatar)
             : null;
         final person = Person(name: title, icon: personIcon);
         final messagingStyle = MessagingStyleInformation(
@@ -260,8 +263,8 @@ class GenerationNotificationService {
           ),
         );
       } else {
-        final attachments = avatarPath != null && File(avatarPath).existsSync()
-            ? [DarwinNotificationAttachment(avatarPath)]
+        final attachments = resolvedAvatar != null && File(resolvedAvatar).existsSync()
+            ? [DarwinNotificationAttachment(resolvedAvatar)]
             : <DarwinNotificationAttachment>[];
         details = NotificationDetails(
           iOS: DarwinNotificationDetails(

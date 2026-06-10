@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:easy_localization/easy_localization.dart';
 
 import '../../core/models/persona.dart';
+import '../../core/utils/platform_paths.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/db_provider.dart';
 import 'persona_connections_sheet.dart';
@@ -129,7 +130,7 @@ class _PersonaTile extends ConsumerWidget {
           radius: 24,
           backgroundColor: context.cs.primary.withValues(alpha: 0.18),
           backgroundImage: persona.avatarPath != null
-              ? FileImage(File(persona.avatarPath!))
+              ? FileImage(File(resolveGlazeFilePath(persona.avatarPath!)!))
               : null,
           child: persona.avatarPath == null
               ? Text(

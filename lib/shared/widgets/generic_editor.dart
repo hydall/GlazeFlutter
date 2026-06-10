@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import '../../core/utils/platform_paths.dart';
 import '../theme/app_colors.dart';
 import 'glaze_bottom_sheet.dart';
 import 'menu_group.dart';
@@ -474,7 +475,7 @@ class _GenericEditorState extends State<GenericEditor> {
                 child: Container(
                   color: context.cs.surfaceContainerHighest,
                   child: avatarPath != null && avatarPath.isNotEmpty
-                      ? Image.file(File(avatarPath), fit: BoxFit.cover)
+                      ? Image.file(File(resolveGlazeFilePath(avatarPath)!), fit: BoxFit.cover)
                       : Container(
                           decoration: BoxDecoration(
                             gradient: LinearGradient(

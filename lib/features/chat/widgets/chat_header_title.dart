@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import '../../../core/models/character.dart';
+import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
 
 class ChatHeaderTitle extends StatelessWidget {
@@ -32,7 +33,7 @@ class ChatHeaderTitle extends StatelessWidget {
     if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
       avatar = CircleAvatar(
         radius: 17,
-        backgroundImage: FileImage(File(character.avatarPath!)),
+        backgroundImage: FileImage(File(resolveGlazeFilePath(character.avatarPath!)!)),
         onBackgroundImageError: (_, _) {},
         backgroundColor: avatarColor.withValues(alpha: 0.2),
         child: const SizedBox.shrink(),

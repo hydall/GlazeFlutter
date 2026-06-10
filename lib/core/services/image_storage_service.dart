@@ -121,8 +121,36 @@ class ImageStorageService implements SyncImageStore {
   @override
   String? absolutePath(String? relativePath) {
     if (relativePath == null) return null;
-    if (File(relativePath).isAbsolute) return relativePath;
-    return p.join(baseDir, relativePath);
+    if (relativePath.isEmpty) return relativePath;
+    if (!File(relativePath).isAbsolute) {
+      return p.join(baseDir, relativePath);
+    }
+    // The path is absolute. On iOS the app sandbox container UUID changes on
+    // every reinstall/OS update, so an absolute path persisted by an older
+    // build (e.g. .../Application/<OLD_UUID>/Documents/Glaze/avatars/x.png)
+    // no longer exists under the current container. The files themselves are
+    // preserved under the *new* container, so rebase any absolute path that
+    // lives under a "Glaze" data root onto the current [baseDir].
+    final rebased = _rebaseOntoBaseDir(relativePath);
+    return rebased ?? relativePath;
+  }
+
+  /// If [absPath] points inside a Glaze data directory from a stale sandbox
+  /// container, return the equivalent path under the current [baseDir].
+  /// Returns null when the path can't be rebased (not under a Glaze root) or
+  /// already resolves correctly.
+  String? _rebaseOntoBaseDir(String absPath) {
+    if (File(absPath).existsSync()) return absPath; // already valid
+
+    final normalized = absPath.replaceAll('\\', '/');
+    // Find the last "/Glaze/" segment — everything after it is the stable
+    // sub-path (avatars/<id>.png, gallery/..., etc.).
+    const marker = '/Glaze/';
+    final idx = normalized.lastIndexOf(marker);
+    if (idx < 0) return null;
+    final suffix = normalized.substring(idx + marker.length);
+    if (suffix.isEmpty) return null;
+    return p.join(baseDir, suffix);
   }
 
   Uint8List? _resizeImage(Uint8List imageBytes, int maxDimension) {
