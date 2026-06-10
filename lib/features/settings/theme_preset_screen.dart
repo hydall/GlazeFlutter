@@ -431,8 +431,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       _applyPreset(preset);
     }
     if (!mounted) return;
-    await Navigator.push(
-      context,
+    await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute<void>(builder: (_) => const ThemeEditorScreen()),
     );
   }
@@ -445,8 +444,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
     await ref.read(themeProvider.notifier).importPreset(preset);
     await ref.read(themeProvider.notifier).applyPreset(preset);
     if (!mounted) return;
-    await Navigator.push(
-      context,
+    await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute<void>(builder: (_) => const ThemeEditorScreen()),
     );
   }

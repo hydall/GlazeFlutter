@@ -1,3 +1,4 @@
+import 'package:app_settings/app_settings.dart' as sys_settings;
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -83,11 +84,9 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             MenuItem(
               icon: Icons.notifications_none_outlined,
               label: 'menu_notifications'.tr(),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('settings_notifications_not_implemented'.tr())),
-                );
-              },
+              onTap: () => sys_settings.AppSettings.openAppSettings(
+                type: sys_settings.AppSettingsType.notification,
+              ),
             ),
             MenuItem(
               icon: Icons.settings_outlined,
@@ -244,7 +243,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                 iconColor:
                     mode == current ? context.cs.primary : context.cs.onSurfaceVariant,
                 onTap: () {
-                  Navigator.pop(context);
+                  Navigator.of(context, rootNavigator: true).pop();
                   ref.read(themeProvider.notifier).setMode(mode);
                 },
               ))
@@ -265,7 +264,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           iconColor:
               s.language == 'en' ? context.cs.primary : context.cs.onSurfaceVariant,
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             ref.read(appSettingsProvider.notifier).save(s.copyWith(language: 'en'));
           },
         ),
@@ -277,7 +276,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
           iconColor:
               s.language == 'ru' ? context.cs.primary : context.cs.onSurfaceVariant,
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             ref.read(appSettingsProvider.notifier).save(s.copyWith(language: 'ru'));
           },
         ),
@@ -301,7 +300,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               ? context.cs.primary
               : context.cs.onSurfaceVariant,
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             ref
                 .read(themeProvider.notifier)
                 .updatePreset(preset.copyWith(chatLayout: 'default'));
@@ -316,7 +315,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
               ? context.cs.primary
               : context.cs.onSurfaceVariant,
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             ref
                 .read(themeProvider.notifier)
                 .updatePreset(preset.copyWith(chatLayout: 'bubble'));

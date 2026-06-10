@@ -117,9 +117,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       final path = await service.exportBackup();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${'msg_saved_to'.tr()} $path')),
-        );
+        GlazeToast.show(context, '${'msg_saved_to'.tr()} $path');
       }
     } catch (e) {
       if (mounted) {
