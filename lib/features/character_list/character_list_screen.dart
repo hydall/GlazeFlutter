@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:easy_localization/easy_localization.dart';
@@ -7,11 +8,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'package:go_router/go_router.dart';
-import 'package:path/path.dart' as p;
 
 import '../../core/db/repositories/character_repo.dart';
 import '../../core/models/character.dart';
-import '../../core/utils/platform_paths.dart';
 import '../../core/services/character_book_converter.dart';
 import '../../core/services/character_importer.dart';
 import '../../core/state/character_provider.dart';
@@ -23,6 +22,7 @@ import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/glaze_toast.dart';
+import '../catalog/catalog_provider.dart';
 import '../catalog/widgets/widgets.dart';
 import '../character_gallery/gallery_provider.dart';
 import '../picks/widgets/picks_grid.dart';
@@ -45,6 +45,73 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   String _picksTitle = 'Our Picks';
   bool _picksCanGoBack = false;
   VoidCallback? _picksGoBackFn;
+
+  // Inline header search (mirrors the Vue header: the loupe swaps the title for
+  // an input field that filters the current view in place — My Characters
+  // locally, Discover via the shared catalogProvider query).
+  final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  bool _searchExpanded = false;
+  Timer? _catalogDebounce;
+
+  @override
+  void dispose() {
+    _catalogDebounce?.cancel();
+    _searchCtrl.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  void _openSearch() {
+    setState(() => _searchExpanded = true);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _searchFocus.requestFocus(),
+    );
+  }
+
+  void _closeSearch() {
+    _catalogDebounce?.cancel();
+    _searchCtrl.clear();
+    setState(() {
+      _searchExpanded = false;
+      _searchQuery = '';
+    });
+    // Reset the catalog query so the Discover grid returns to its default feed.
+    if (ref.read(catalogProvider).query.isNotEmpty) {
+      final notifier = ref.read(catalogProvider.notifier);
+      notifier.setQuery('');
+      notifier.search(reset: true);
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    if (_tabIndex == 1) {
+      // Discover: debounce the provider query (same 400ms as the Vue header).
+      _catalogDebounce?.cancel();
+      _catalogDebounce = Timer(const Duration(milliseconds: 400), () {
+        final notifier = ref.read(catalogProvider.notifier);
+        notifier.setQuery(value.trim());
+        notifier.search(reset: true);
+      });
+    } else {
+      // My Characters: local filter, live.
+      setState(() => _searchQuery = value);
+    }
+  }
+
+  /// Re-applies the current search text to whichever tab just became active, so
+  /// switching tabs mid-search keeps results consistent.
+  void _applySearchForActiveTab() {
+    final text = _searchCtrl.text;
+    if (_tabIndex == 1) {
+      _catalogDebounce?.cancel();
+      final notifier = ref.read(catalogProvider.notifier);
+      notifier.setQuery(text.trim());
+      notifier.search(reset: true);
+    } else {
+      _searchQuery = text;
+    }
+  }
 
   CharacterSortField get _sortField => switch (_sortBy) {
     SortType.name => CharacterSortField.name,
@@ -125,7 +192,12 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                     child: GlazeAppBar(
-                      title: _tabIndex == 2 ? _picksTitle : 'Characters',
+                      title: (_searchExpanded && _tabIndex != 2)
+                          ? null
+                          : (_tabIndex == 2 ? _picksTitle : 'Characters'),
+                      titleWidget: (_searchExpanded && _tabIndex != 2)
+                          ? _buildSearchField(context)
+                          : null,
                       showBack: _tabIndex == 2,
                       onBack: _tabIndex == 2
                           ? (_picksCanGoBack && _picksGoBackFn != null
@@ -139,20 +211,16 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                                 width: 44,
                                 height: 44,
                                 child: IconButton(
-                                  icon: const Icon(
-                                    Icons.search_rounded,
+                                  icon: Icon(
+                                    _searchExpanded
+                                        ? Icons.close_rounded
+                                        : Icons.search_rounded,
                                     size: 22,
                                   ),
                                   color: context.cs.primary,
-                                  onPressed: () async {
-                                    final query = await showSearch<String>(
-                                      context: context,
-                                      delegate: _CharacterSearchDelegate(ref),
-                                    );
-                                    if (query != null) {
-                                      setState(() => _searchQuery = query);
-                                    }
-                                  },
+                                  onPressed: _searchExpanded
+                                      ? _closeSearch
+                                      : _openSearch,
                                 ),
                               ),
                             ],
@@ -308,6 +376,27 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     );
   }
 
+  Widget _buildSearchField(BuildContext context) {
+    return TextField(
+      controller: _searchCtrl,
+      focusNode: _searchFocus,
+      autofocus: true,
+      onChanged: _onSearchChanged,
+      textInputAction: TextInputAction.search,
+      cursorColor: context.cs.primary,
+      style: TextStyle(color: context.cs.onSurface, fontSize: 16),
+      decoration: InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+        hintText: _tabIndex == 1 ? 'Search catalog' : 'Search characters',
+        hintStyle: TextStyle(
+          color: context.cs.onSurfaceVariant,
+          fontSize: 16,
+        ),
+      ),
+    );
+  }
+
   Widget _buildTabBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
@@ -317,7 +406,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
           GlazeTabItem(label: 'Discover', icon: Icons.public_rounded),
         ],
         activeIndex: _tabIndex == 2 ? 0 : _tabIndex,
-        onChanged: (i) => setState(() => _tabIndex = i),
+        onChanged: (i) => setState(() {
+          _tabIndex = i;
+          if (_searchExpanded) _applySearchForActiveTab();
+        }),
       ),
     );
   }
@@ -535,87 +627,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
   }
 }
 
-class _CharacterSearchDelegate extends SearchDelegate<String> {
-  final WidgetRef ref;
-  _CharacterSearchDelegate(this.ref);
-
-  @override
-  ThemeData appBarTheme(BuildContext context) => Theme.of(
-    context,
-  ).copyWith(appBarTheme: AppBarTheme(backgroundColor: context.cs.surface));
-
-  @override
-  List<Widget> buildActions(BuildContext context) => [
-    IconButton(icon: const Icon(Icons.clear), onPressed: () => query = ''),
-  ];
-
-  @override
-  Widget buildLeading(BuildContext context) => IconButton(
-    icon: const Icon(Icons.arrow_back),
-    onPressed: () => close(context, ''),
-  );
-
-  @override
-  Widget buildResults(BuildContext context) => _buildList(context);
-
-  @override
-  Widget buildSuggestions(BuildContext context) => _buildList(context);
-
-  Widget _buildList(BuildContext context) {
-    final chars = ref.read(charactersProvider).value ?? [];
-    final q = query.toLowerCase();
-    final filtered =
-        chars.where((c) => c.fav || c.name.toLowerCase().contains(q)).toList()
-          ..sort((a, b) {
-            if (a.fav != b.fav) return a.fav ? -1 : 1;
-            return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-          });
-
-    if (filtered.isEmpty) {
-      return Center(
-        child: Text(
-          'No characters found',
-          style: TextStyle(color: context.cs.onSurfaceVariant),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: filtered.length,
-      itemBuilder: (ctx, i) {
-        final c = filtered[i];
-        return ListTile(
-          leading: CircleAvatar(
-            backgroundColor: context.cs.primary.withValues(alpha: 0.15),
-            backgroundImage: c.avatarPath != null
-                ? FileImage(File(_thumbOrAvatar(c.avatarPath!)))
-                : null,
-            child: c.avatarPath == null
-                ? Text(
-                    c.name[0].toUpperCase(),
-                    style: TextStyle(color: context.cs.primary),
-                  )
-                : null,
-          ),
-          title: Text(c.name, style: TextStyle(color: context.cs.onSurface)),
-          subtitle: c.description != null
-              ? Text(
-                  c.description!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: context.cs.onSurfaceVariant,
-                    fontSize: 12,
-                  ),
-                )
-              : null,
-          onTap: () => close(ctx, c.name),
-        );
-      },
-    );
-  }
-}
-
 class _AddButton extends StatelessWidget {
   final VoidCallback onTap;
   const _AddButton({required this.onTap});
@@ -659,12 +670,3 @@ class _AddButton extends StatelessWidget {
 }
 
 enum _ImportSource { gallery, files }
-
-String _thumbOrAvatar(String avatarPath) {
-  final resolved = resolveGlazeFilePath(avatarPath) ?? avatarPath;
-  final name = p.basenameWithoutExtension(resolved);
-  final dir = p.dirname(p.dirname(resolved));
-  final thumb = p.join(dir, 'thumbnails', '$name.jpg');
-  if (File(thumb).existsSync()) return thumb;
-  return resolved;
-}

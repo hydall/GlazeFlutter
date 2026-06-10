@@ -17,7 +17,7 @@ import '../services/janitor_webview_proxy.dart';
 import '../services/chub_provider.dart';
 import '../services/datacat_provider.dart';
 import '../services/janitor_provider.dart';
-import 'catalog_card.dart';
+import 'catalog_card_grid.dart';
 import 'catalog_controls.dart';
 import 'catalog_detail_launcher.dart';
 import 'janitor_login_sheet.dart';
@@ -257,61 +257,11 @@ class CatalogGrid extends ConsumerWidget {
               ),
             )
           else
-            SliverPadding(
+            CatalogCardGridSliver(
+              items: state.results,
               padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
-              sliver: SliverLayoutBuilder(
-                builder: (context, constraints) {
-                  final crossAxisCount = (constraints.crossAxisExtent / 212).ceil().clamp(1, 10);
-                  final rowCount = (state.results.length / crossAxisCount).ceil();
-
-                  return SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (_, i) {
-                        final startIndex = i * crossAxisCount;
-                        final rowItems = state.results.skip(startIndex).take(crossAxisCount).toList();
-
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: IntrinsicHeight(
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: List.generate(crossAxisCount, (colIndex) {
-                              if (colIndex < rowItems.length) {
-                                return Expanded(
-                                  child: Padding(
-                                    padding: EdgeInsets.only(
-                                      right: colIndex < crossAxisCount - 1 ? 12 : 0,
-                                    ),
-                                    child: CatalogCard(
-                                      item: rowItems[colIndex],
-                                      onTap: () => _openDetail(
-                                        context,
-                                        rowItems[colIndex],
-                                        state.activeProvider,
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              } else {
-                                return Expanded(
-                                  child: Padding(
-                                    padding: EdgeInsets.only(
-                                      right: colIndex < crossAxisCount - 1 ? 12 : 0,
-                                    ),
-                                    child: const SizedBox.shrink(),
-                                  ),
-                                );
-                              }
-                            }),
-                          ),
-                        ),
-                      );
-                    },
-                      childCount: rowCount,
-                    ),
-                  );
-                },
-              ),
+              onTap: (item) =>
+                  _openDetail(context, item, state.activeProvider),
             ),
           if (state.loading)
             SliverToBoxAdapter(
