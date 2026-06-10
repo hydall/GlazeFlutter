@@ -291,8 +291,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error: $e')),
             data: (state) {
+              // The index comparison only gates the INITIAL navigation to a
+              // requested session (deep link / history open). Once that initial
+              // session has been applied (`_sessionApplied`), in-chat switches
+              // like branchSession produce a session with a *different*
+              // sessionIndex than `initialSessionIndex` — comparing against it
+              // forever would leave the spinner stuck after branching until an
+              // app restart. After the initial apply, only `_sessionSwitchPending`
+              // gates the spinner.
               final awaitingTargetSession = _sessionSwitchPending ||
-                  (widget.initialSessionIndex != null &&
+                  (!_sessionApplied &&
+                      widget.initialSessionIndex != null &&
                       state.session?.sessionIndex !=
                           widget.initialSessionIndex);
               if (awaitingTargetSession) {
