@@ -198,6 +198,7 @@ class ChatBridgeController {
   void Function(bool visible)? onScrollToBottomVisibility;
   void Function(String url)? onLinkClick;
   void Function(String url)? onImageClick;
+  void Function(String src)? onImgDownload;
   void Function(String id, bool isUser, bool isSystem, String content)? onMessageContext;
   void Function(String id, String direction)? onSwipe;
   void Function(String id, int direction)? onChangeGreeting;
@@ -308,6 +309,7 @@ class ChatBridgeController {
     switch (name) {
       case 'onLinkClick': onLinkClick?.call(s);
       case 'onImageClick': onImageClick?.call(s);
+      case 'onImgDownload': onImgDownload?.call(s);
       case 'onRegenerate': onRegenerate?.call(s);
       case 'onEditCancel': onEditCancel?.call(s);
       case 'onMemoryClick': onMemoryClick?.call(s);

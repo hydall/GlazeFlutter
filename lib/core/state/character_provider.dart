@@ -8,6 +8,7 @@ import '../db/repositories/character_repo.dart';
 import '../models/character.dart';
 import '../models/lorebook.dart';
 import '../utils/sync_deletion_tracker.dart';
+import '../utils/platform_paths.dart';
 import 'db_provider.dart';
 import 'lorebook_provider.dart';
 
@@ -265,10 +266,12 @@ class CharactersNotifier extends AsyncNotifier<List<Character>> {
   Future<void> _cleanupFiles(Character character) async {
     try {
       if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
-        final avatar = File(character.avatarPath!);
+        final resolved =
+            resolveGlazeFilePath(character.avatarPath!) ?? character.avatarPath!;
+        final avatar = File(resolved);
         if (await avatar.exists()) await avatar.delete();
-        final name = p.basenameWithoutExtension(character.avatarPath!);
-        final dir = p.dirname(p.dirname(character.avatarPath!));
+        final name = p.basenameWithoutExtension(resolved);
+        final dir = p.dirname(p.dirname(resolved));
         final thumb = File(p.join(dir, 'thumbnails', '$name.jpg'));
         if (await thumb.exists()) await thumb.delete();
       }

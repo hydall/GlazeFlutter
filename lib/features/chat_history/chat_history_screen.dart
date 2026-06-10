@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:go_router/go_router.dart';
 
 import '../../core/utils/html_to_markdown.dart';
+import '../../core/utils/platform_paths.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
 
@@ -952,9 +953,10 @@ class _GroupHeader extends ConsumerWidget {
 }
 
 String _thumbOrAvatar(String avatarPath) {
-  final name = p.basenameWithoutExtension(avatarPath);
-  final dir = p.dirname(p.dirname(avatarPath));
+  final resolved = resolveGlazeFilePath(avatarPath) ?? avatarPath;
+  final name = p.basenameWithoutExtension(resolved);
+  final dir = p.dirname(p.dirname(resolved));
   final thumb = p.join(dir, 'thumbnails', '$name.jpg');
   if (File(thumb).existsSync()) return thumb;
-  return avatarPath;
+  return resolved;
 }

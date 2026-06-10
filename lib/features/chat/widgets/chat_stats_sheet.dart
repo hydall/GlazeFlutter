@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/state/character_provider.dart';
+import '../../../core/utils/platform_paths.dart';
 import '../../../core/state/chat_session_ops_provider.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import '../../../core/models/character.dart';
@@ -453,7 +454,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                   clipBehavior: Clip.antiAlias,
                   child: selectedChar?.avatarPath != null
                       ? Image.file(
-                          File(selectedChar!.avatarPath!),
+                          File(resolveGlazeFilePath(selectedChar!.avatarPath!)!),
                           fit: BoxFit.cover,
                           errorBuilder: (context, error, stackTrace) => _buildInitials(charName),
                         )
@@ -536,7 +537,7 @@ class _ChatStatsSheetState extends ConsumerState<ChatStatsSheet> {
                             clipBehavior: Clip.antiAlias,
                             child: char.avatarPath != null
                                 ? Image.file(
-                                    File(char.avatarPath!),
+                                    File(resolveGlazeFilePath(char.avatarPath!)!),
                                     fit: BoxFit.cover,
                                     errorBuilder: (context, error, stackTrace) =>
                                         _buildInitials(char.name),

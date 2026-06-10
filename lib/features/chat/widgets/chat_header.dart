@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/models/character.dart';
 
 import '../../../core/state/character_provider.dart' show avatarVersionProvider;
+import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../../../shared/theme/theme_provider.dart';
@@ -48,7 +49,7 @@ class ChatHeader extends ConsumerWidget {
     if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
       avatar = CircleAvatar(
         radius: 17,
-        backgroundImage: FileImage(File(character.avatarPath!)),
+        backgroundImage: FileImage(File(resolveGlazeFilePath(character.avatarPath!)!)),
         onBackgroundImageError: (_, _) {},
         backgroundColor: avatarColor.withValues(alpha: 0.2),
         child: const SizedBox.shrink(),

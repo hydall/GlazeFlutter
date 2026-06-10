@@ -56,6 +56,7 @@ const Map<String, HandlerSpec> bridgeHandlers = {
   'onScrollToBottomVisibility': HandlerSpec(HandlerKind.boolArg),
   'onLinkClick': HandlerSpec(HandlerKind.stringArg),
   'onImageClick': HandlerSpec(HandlerKind.stringArg),
+  'onImgDownload': HandlerSpec(HandlerKind.stringArg),
   // Message actions
   'onMessageContext': HandlerSpec(HandlerKind.jsonObject),
   'onSwipe': HandlerSpec(HandlerKind.jsonObject),

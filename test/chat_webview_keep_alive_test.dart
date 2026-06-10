@@ -105,4 +105,48 @@ void main() {
       );
     });
   });
+
+  group('chat WebView iOS loopback bundle server', () {
+    tearDown(() {
+      debugDefaultTargetPlatformOverride = null;
+      setChatWebViewAssetBaseUrlForTesting(null);
+      setChatWebViewLocalFileBaseUrlForTesting(null);
+    });
+
+    test('reuses the preload keepAlive on iOS', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+
+      expect(chatWebViewKeepAliveForPlatform(), same(chatWebViewKeepAlive));
+    });
+
+    test('keeps universal file URL reads disabled on iOS', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+
+      // iOS serves assets over loopback HTTP, so it never needs file:// reads.
+      expect(chatWebViewAllowFileAccessFromFileUrls(), isFalse);
+      expect(chatWebViewUsesAndroidAssetLoader(), isFalse);
+    });
+
+    test('falls back to bundled file:// before the bundle server starts', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+
+      // No asset base URL yet (init not run): the WebView loads the bundled
+      // index.html via initialFile so the page is never blank.
+      expect(chatWebViewInitialFile(), 'assets/chat_webview/index.html');
+      expect(chatWebViewInitialUrlRequest(), isNull);
+    });
+
+    test('loads index.html over loopback once the bundle server is up', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      setChatWebViewAssetBaseUrlForTesting(WebUri('http://127.0.0.1:51234/'));
+
+      // initialFile is suppressed; the page loads from the http origin so ES
+      // module imports resolve (the root cause of the blank iOS WebView).
+      expect(chatWebViewInitialFile(), isNull);
+      expect(
+        chatWebViewInitialUrlRequest()?.url.toString(),
+        'http://127.0.0.1:51234/index.html',
+      );
+    });
+  });
 }

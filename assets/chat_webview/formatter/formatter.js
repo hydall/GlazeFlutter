@@ -359,7 +359,7 @@ export class Formatter {
         const instrRaw = block.instruction || '';
         const encInstr = encodeURIComponent(instrRaw);
         console.log('[FORMATTER] IMG:RESULT render, path=', block.path.substring(0, 80), 'instruction=', instrRaw.substring(0, 80));
-        return `<div class="img-result-frame img-result-wrapper"><img src="${src}" class="img-result" loading="lazy" data-action="image-click" data-src="${src}"><button class="img-regen-btn" data-action="img-regen" data-instruction="${encInstr}" title="Regenerate image">↻</button></div>`;
+        return `<div class="img-result-frame img-result-wrapper"><img src="${src}" class="img-result" loading="lazy" data-action="image-click" data-src="${src}"><button class="img-download-btn" data-action="img-download" data-src="${src}" title="Save image">⤓</button><button class="img-regen-btn" data-action="img-regen" data-instruction="${encInstr}" title="Regenerate image">↻</button></div>`;
       }
       if (block.type === 'gen') {
         return `<div class="img-gen-frame"><div class="img-gen-spinner"></div><span class="img-gen-label">Generating image...</span><button class="img-gen-stop-btn" data-action="img-stop" title="Stop image generation">⏹</button></div>`;

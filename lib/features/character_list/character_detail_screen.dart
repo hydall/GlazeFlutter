@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/character.dart';
 import '../../core/services/chat_import_export.dart';
 import '../../core/utils/html_to_markdown.dart';
+import '../../core/utils/platform_paths.dart';
 import '../../core/state/character_provider.dart';
 import '../../core/state/chat_session_ops_provider.dart';
 import '../../features/chat/chat_actions_service.dart';
@@ -517,7 +518,7 @@ class _HeroSection extends StatelessWidget {
           if (previewAvatarUrl != null && previewAvatarUrl!.isNotEmpty) {
             provider = CachedNetworkImageProvider(previewAvatarUrl!);
           } else if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
-            provider = FileImage(File(character.avatarPath!));
+            provider = FileImage(File(resolveGlazeFilePath(character.avatarPath!)!));
           }
           if (provider != null) {
             ImageViewer.show(
@@ -594,7 +595,7 @@ class _HeroSection extends StatelessWidget {
     }
     if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
       return Image.file(
-        File(character.avatarPath!),
+        File(resolveGlazeFilePath(character.avatarPath!)!),
         fit: BoxFit.cover,
         alignment: Alignment.topCenter,
         errorBuilder: (_, _, _) => _HeroPlaceholder(name: character.name),

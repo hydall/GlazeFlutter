@@ -46,7 +46,7 @@ Only run one-shot, non-interactive commands:
 - `flutter test` (non-watch, one-shot)
 - `dart run build_runner build` when required
 
-(Fall back to the full `& "Z:\Glaze project\flutter\bin\flutter.bat"` path if `flutter` is not on PATH.)
+(Fall back to the full `& "Z:\GlazeProject\flutter\bin\flutter.bat"` path if `flutter` is not on PATH.)
 
 If you need to verify runtime behavior or hot-reload changes, ask the user to run `flutter run -d <platform>` (or `flutter run -d chrome`) in a separate terminal and report back. The agent cannot drive or observe a live Flutter session.
 

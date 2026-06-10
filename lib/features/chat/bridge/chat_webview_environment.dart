@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
 import '../../../core/utils/platform_paths.dart';
@@ -47,9 +48,13 @@ String? chatWebViewResolveLocalFileUrl(String? source) {
 
   final path = _sourceToFilePath(source);
   if (path == null) return source;
+  // iOS reinstalls/OS updates change the sandbox container UUID, so a path
+  // persisted by an older build points at a directory that no longer exists.
+  // Rebase it onto the current Glaze data root before serving.
+  final healed = Platform.isIOS ? (resolveGlazeFilePath(path) ?? path) : path;
   final filePath = chatWebViewUsesAndroidAssetLoader()
-      ? path
-      : File(path).absolute.path;
+      ? healed
+      : File(healed).absolute.path;
   if (!_isInsideGlazeData(filePath)) {
     return source;
   }
@@ -69,6 +74,17 @@ Future<void> initChatWebViewEnvironment() async {
   if (defaultTargetPlatform == TargetPlatform.android) {
     setChatWebViewAndroidFileRoot(await getAppDataDir());
     await _startChatWebViewLocalFileServer();
+    return;
+  }
+  if (defaultTargetPlatform == TargetPlatform.iOS) {
+    // WKWebView loads `file://` index.html on an opaque origin, where ES
+    // module imports of sibling files fail and local avatar/image files have
+    // no http(s) URL to load from. Serve bundled chat assets and Glaze data
+    // files over a loopback HTTP server so the page gets a real origin —
+    // mirrors the Windows path, but assets come from `rootBundle` (the iOS
+    // app bundle layout differs from the Windows `data/flutter_assets` tree).
+    await getAppDataDir();
+    await _startChatWebViewBundleServer();
     return;
   }
   if (defaultTargetPlatform != TargetPlatform.windows) return;
@@ -111,6 +127,58 @@ Future<void> _startChatWebViewLocalFileServer() async {
   _chatWebViewLocalFileServer = server;
   _chatWebViewLocalFileBaseUrl = WebUri('http://127.0.0.1:${server.port}/');
   unawaited(_serveChatWebViewLocalFiles(server));
+}
+
+/// Loopback server for iOS: serves bundled chat assets from [rootBundle] and
+/// Glaze data files (avatars/generated images) from a `?path=` query, all over
+/// one http origin so WKWebView can load ES modules and local images.
+Future<void> _startChatWebViewBundleServer() async {
+  if (_chatWebViewAssetServer != null) return;
+
+  final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+  _chatWebViewAssetServer = server;
+  _chatWebViewAssetBaseUrl = WebUri('http://127.0.0.1:${server.port}/');
+  unawaited(_serveChatWebViewBundleAssets(server));
+}
+
+Future<void> _serveChatWebViewBundleAssets(HttpServer server) async {
+  await for (final request in server) {
+    try {
+      if (request.uri.path == '/__glaze_file__') {
+        await _serveGlazeDataFile(request);
+        continue;
+      }
+
+      final path = _safeAssetPath(request.uri.path);
+      if (path == null) {
+        request.response.statusCode = HttpStatus.forbidden;
+        await request.response.close();
+        continue;
+      }
+
+      // Asset keys always use forward slashes regardless of platform.
+      final assetKey =
+          'assets/chat_webview/${path.replaceAll(Platform.pathSeparator, '/')}';
+      ByteData data;
+      try {
+        data = await rootBundle.load(assetKey);
+      } catch (_) {
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+        continue;
+      }
+
+      request.response.headers.contentType = _contentTypeFor(path);
+      request.response.add(data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      ));
+      await request.response.close();
+    } catch (_) {
+      request.response.statusCode = HttpStatus.internalServerError;
+      await request.response.close();
+    }
+  }
 }
 
 Future<void> _serveChatWebViewLocalFiles(HttpServer server) async {
@@ -236,6 +304,10 @@ Directory _glazeDataDirectory() {
     final root = chatWebViewAndroidFileRoot;
     if (root != null && root.isNotEmpty) return Directory(root);
   }
+  if (Platform.isIOS) {
+    final root = cachedAppDataDir;
+    if (root != null && root.isNotEmpty) return Directory(root);
+  }
   if (Platform.isWindows) {
     final appData = Platform.environment['APPDATA'];
     if (appData != null && appData.isNotEmpty) {
@@ -277,4 +349,9 @@ ContentType _contentTypeFor(String path) {
 @visibleForTesting
 void setChatWebViewLocalFileBaseUrlForTesting(WebUri? baseUrl) {
   _chatWebViewLocalFileBaseUrl = baseUrl;
+}
+
+@visibleForTesting
+void setChatWebViewAssetBaseUrlForTesting(WebUri? baseUrl) {
+  _chatWebViewAssetBaseUrl = baseUrl;
 }

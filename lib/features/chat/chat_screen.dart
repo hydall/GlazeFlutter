@@ -3,12 +3,18 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
+import 'package:dio/dio.dart';
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
+// ignore: depend_on_referenced_packages
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import '../../core/utils/platform_paths.dart';
 import 'editing_message_provider.dart';
 
 import '../../core/state/character_provider.dart';
@@ -291,8 +297,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Error: $e')),
             data: (state) {
+              // The index comparison only gates the INITIAL navigation to a
+              // requested session (deep link / history open). Once that initial
+              // session has been applied (`_sessionApplied`), in-chat switches
+              // like branchSession produce a session with a *different*
+              // sessionIndex than `initialSessionIndex` — comparing against it
+              // forever would leave the spinner stuck after branching until an
+              // app restart. After the initial apply, only `_sessionSwitchPending`
+              // gates the spinner.
               final awaitingTargetSession = _sessionSwitchPending ||
-                  (widget.initialSessionIndex != null &&
+                  (!_sessionApplied &&
+                      widget.initialSessionIndex != null &&
                       state.session?.sessionIndex !=
                           widget.initialSessionIndex);
               if (awaitingTargetSession) {
@@ -393,6 +408,63 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       provider = FileImage(File(path));
     }
     ImageViewer.show(context, imageProvider: provider);
+  }
+
+  /// Saves/shares a generated image. The native share sheet on iOS/Android
+  /// exposes "Save Image"/"Save to Photos", which is the supported way to get
+  /// the image into the gallery without a dedicated gallery-saver dependency.
+  Future<void> _downloadImage(String src) async {
+    try {
+      Uint8List bytes;
+      String ext = 'png';
+      if (src.startsWith('data:')) {
+        final commaIdx = src.indexOf(',');
+        if (commaIdx == -1) return;
+        bytes = base64Decode(src.substring(commaIdx + 1));
+        final header = src.substring(0, commaIdx).toLowerCase();
+        if (header.contains('jpeg') || header.contains('jpg')) ext = 'jpg';
+      } else if (src.startsWith('http://') || src.startsWith('https://')) {
+        final resp = await Dio().get<List<int>>(
+          src,
+          options: Options(responseType: ResponseType.bytes),
+        );
+        bytes = Uint8List.fromList(resp.data ?? const []);
+        if (src.toLowerCase().contains('.jpg') ||
+            src.toLowerCase().contains('.jpeg')) {
+          ext = 'jpg';
+        }
+      } else {
+        final path = src
+            .replaceFirst('file:///', '/')
+            .replaceFirst('file://', '');
+        final resolved = resolveGlazeFilePath(path) ?? path;
+        final file = File(resolved);
+        if (!await file.exists()) return;
+        bytes = await file.readAsBytes();
+        final lower = resolved.toLowerCase();
+        if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) ext = 'jpg';
+      }
+      if (bytes.isEmpty) return;
+
+      final tmpDir = await getTemporaryDirectory();
+      final tmpFile = File(p.join(
+        tmpDir.path,
+        'glaze_image_${DateTime.now().millisecondsSinceEpoch}.$ext',
+      ));
+      await tmpFile.writeAsBytes(bytes);
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(tmpFile.path)],
+          // Required on iPad so the share popover has an anchor rect.
+          sharePositionOrigin: const Rect.fromLTWH(0, 0, 1, 1),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        GlazeToast.error(context, 'settings_err_failed'.tr(), e);
+      }
+    }
   }
 
   void _showTriggeredItemsSheet(
@@ -862,6 +934,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                             .read(chatProvider(widget.charId).notifier)
                             .cancelImageGeneration();
                       },
+                      onImgDownload: _downloadImage,
                     ),
                     scrollActions: ScrollCallbacks(
                       onHeaderScroll: (hidden) {

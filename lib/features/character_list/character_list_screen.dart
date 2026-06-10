@@ -11,6 +11,7 @@ import 'package:path/path.dart' as p;
 
 import '../../core/db/repositories/character_repo.dart';
 import '../../core/models/character.dart';
+import '../../core/utils/platform_paths.dart';
 import '../../core/services/character_book_converter.dart';
 import '../../core/services/character_importer.dart';
 import '../../core/state/character_provider.dart';
@@ -660,9 +661,10 @@ class _AddButton extends StatelessWidget {
 enum _ImportSource { gallery, files }
 
 String _thumbOrAvatar(String avatarPath) {
-  final name = p.basenameWithoutExtension(avatarPath);
-  final dir = p.dirname(p.dirname(avatarPath));
+  final resolved = resolveGlazeFilePath(avatarPath) ?? avatarPath;
+  final name = p.basenameWithoutExtension(resolved);
+  final dir = p.dirname(p.dirname(resolved));
   final thumb = p.join(dir, 'thumbnails', '$name.jpg');
   if (File(thumb).existsSync()) return thumb;
-  return avatarPath;
+  return resolved;
 }

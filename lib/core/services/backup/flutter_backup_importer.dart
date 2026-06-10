@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../db/app_db.dart';
 import '../image_storage_service.dart';
@@ -129,6 +130,53 @@ class FlutterBackupImporter extends BackupHelpers {
     onProgress?.call('Restoring gallery...');
     _cancel.check();
     await _restoreGalleryFromZip(galleryFiles);
+
+    onProgress?.call('Restoring settings...');
+    await _restorePreferences(archive);
+  }
+
+  /// Restores all SharedPreferences from [preferences.json] inside the ZIP.
+  /// Keys are written as-is; missing file is silently ignored (v1 legacy or
+  /// older backups that pre-date the preferences export).
+  Future<void> _restorePreferences(Archive archive) async {
+    final matches = archive.files
+        .where((f) => f.isFile && f.name == 'preferences.json')
+        .toList();
+    if (matches.isEmpty) return;
+
+    final bytes = matches.first.readBytes();
+    if (bytes == null || bytes.isEmpty) return;
+
+    Map<String, dynamic> map;
+    try {
+      map = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+    } catch (_) {
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    for (final entry in map.entries) {
+      final key = entry.key;
+      final value = entry.value;
+      try {
+        if (value is bool) {
+          await prefs.setBool(key, value);
+        } else if (value is int) {
+          await prefs.setInt(key, value);
+        } else if (value is double) {
+          await prefs.setDouble(key, value);
+        } else if (value is String) {
+          await prefs.setString(key, value);
+        } else if (value is List) {
+          await prefs.setStringList(
+            key,
+            value.map((e) => e.toString()).toList(),
+          );
+        }
+      } catch (_) {
+        // Skip individual keys that fail (e.g. type mismatch from older schema).
+      }
+    }
   }
 
   Future<void> _importTableFromJsonl(

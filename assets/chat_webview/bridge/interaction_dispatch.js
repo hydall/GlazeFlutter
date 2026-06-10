@@ -17,7 +17,12 @@ export class InteractionDispatch {
       return;
     }
 
-    const actionEl = e.target.closest('[data-action]');
+    // Use composedPath() so clicks that originate inside a Shadow DOM
+    // (message content — img-regen / img-retry / img-find / img-stop and the
+    // result <img> live in the shadow root) are still matched. e.target is
+    // retargeted to the shadow host at the document level, so
+    // e.target.closest('[data-action]') never sees those buttons.
+    const actionEl = this._closestActionInPath(e);
     if (actionEl) {
       const action = actionEl.dataset.action;
       const handler = this._actionMap[action];
@@ -104,6 +109,20 @@ export class InteractionDispatch {
     bridge._selectionManager.hideSelectionBar();
   }
 
+  // Returns the first element with a [data-action] attribute along the
+  // event's composed path (pierces Shadow DOM boundaries), or null.
+  _closestActionInPath(e) {
+    const path = (e.composedPath && e.composedPath()) || [];
+    for (const node of path) {
+      if (node && node.nodeType === 1 && node.dataset && node.dataset.action) {
+        return node;
+      }
+    }
+    return e.target && e.target.closest
+        ? e.target.closest('[data-action]')
+        : null;
+  }
+
   _extractImgInstruction(el, path) {
     const sec = path.find(e => e.dataset?.messageId);
     const messageId = sec ? sec.dataset.messageId : '';
@@ -181,6 +200,14 @@ export class InteractionDispatch {
         bridge._sendToFlutter('onImgRegen', [instr, messageId]);
       },
       'img-stop': (e, el) => bridge._sendToFlutter('onImgCancel', []),
+      'image-click': (e, el) => {
+        const src = el.dataset.src || (el.tagName === 'IMG' ? el.src : '');
+        if (src) bridge._sendToFlutter('onImageClick', [src]);
+      },
+      'img-download': (e, el) => {
+        const src = el.dataset.src || '';
+        if (src) bridge._sendToFlutter('onImgDownload', [src]);
+      },
     };
   }
 }
