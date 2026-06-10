@@ -85,6 +85,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
     with SingleTickerProviderStateMixin {
   bool _sessionApplied = false;
   bool _sessionSwitchPending = false;
+  // True once `_ChatBody` (and the keep-alive WebView) has been rendered at
+  // least once. After that, an in-chat session switch overlays a spinner
+  // instead of destroying the body, so the WebView is never recreated.
+  bool _everBuiltBody = false;
   bool _isHeaderHidden = false;
   late final ChatDrawerController _drawerCtrl;
   late final ChatSearchDelegate _search;
@@ -310,18 +314,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                       widget.initialSessionIndex != null &&
                       state.session?.sessionIndex !=
                           widget.initialSessionIndex);
-              if (awaitingTargetSession) {
+              // Only replace the body with a full-screen spinner on the very
+              // first open, when the WebView hasn't been built yet. For an
+              // in-chat switch (e.g. after importing a chat, which re-navigates
+              // to /chat/<id>?session=N) the keep-alive WebView is already
+              // mounted; destroying and recreating `_ChatBody` here would not
+              // re-run WebView init reliably and left a grey, unresponsive page
+              // until restart. Keep the body mounted and overlay the spinner so
+              // the WebView's own `_applySessionSwitch` handles the transition.
+              if (awaitingTargetSession && !_everBuiltBody) {
                 return const Center(child: CircularProgressIndicator());
               }
-              return _ChatBody(
-                charId: charId,
-                state: state,
-                drawerCtrl: _drawerCtrl,
-                search: _search,
-                keyboardHeight: keyboardHeight,
-                onScrollDirection: _onScrollDirection,
-                virtualKeyboardSend: virtualKeyboardSend,
-                enterToSend: enterToSend,
+              _everBuiltBody = true;
+              return Stack(
+                children: [
+                  _ChatBody(
+                    charId: charId,
+                    state: state,
+                    drawerCtrl: _drawerCtrl,
+                    search: _search,
+                    keyboardHeight: keyboardHeight,
+                    onScrollDirection: _onScrollDirection,
+                    virtualKeyboardSend: virtualKeyboardSend,
+                    enterToSend: enterToSend,
+                  ),
+                  if (awaitingTargetSession)
+                    const Positioned.fill(
+                      child: IgnorePointer(
+                        child: Center(child: CircularProgressIndicator()),
+                      ),
+                    ),
+                ],
               );
             },
           ),

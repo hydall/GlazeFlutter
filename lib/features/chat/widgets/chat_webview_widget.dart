@@ -146,6 +146,34 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   @override
   bool get wantKeepAlive => true;
 
+  @override
+  void initState() {
+    super.initState();
+    // Keep-alive re-attach safety net: when the chat body is rebuilt (e.g. a
+    // full-screen spinner during an import-driven session switch destroys and
+    // recreates this widget), the underlying native WebView is reused by the
+    // keep-alive instance and is already loaded. In that case the surface's
+    // `onLoadStop` does not fire again, so init would never run and the WebView
+    // shows a grey, unresponsive page until the app restarts. Schedule an init
+    // kick once the bridge is wired; `_initWebView()` is idempotent
+    // (`_initFuture ??=`), so it is a no-op if the surface already started it.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _kickInitWhenReady());
+  }
+
+  /// Polls for the bridge (set by the surface's `onWebViewCreated`) and runs
+  /// the idempotent init once it exists. Bounded so it can never spin forever.
+  Future<void> _kickInitWhenReady() async {
+    for (var i = 0; i < 50; i++) {
+      if (!mounted) return;
+      if (_ready || _initFuture != null) return;
+      if (_bridge != null) {
+        unawaited(_initWebView());
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
   ChatWebViewPanelRefresher _panelRefresher() => ChatWebViewPanelRefresher(
     ref: ref,
     bridge: _bridge,
