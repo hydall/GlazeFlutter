@@ -60,8 +60,7 @@ jobs:
               | sed 's/^/• /')
             if [ "$COUNT" -gt 10 ]; then
               EXTRA=$((COUNT - 10))
-              COMMITS_TEXT="${FORMATTED}
-+${EXTRA} коммитов"
+              COMMITS_TEXT=$(printf '%s\n+%d коммитов' "$FORMATTED" "$EXTRA")
             else
               COMMITS_TEXT="$FORMATTED"
             fi
