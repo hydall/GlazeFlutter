@@ -21,12 +21,31 @@ class RoutmyImageProvider {
     CancelToken? cancelToken,
   }) async {
     final isChatModel = model.startsWith('google/');
-    final endpoint = isChatModel ? '/v1/chat/completions' : '/v1/images/generations';
+    final hasRefs = referenceImages != null && referenceImages.isNotEmpty;
+    // For non-chat (OpenAI-style) models, reference images are only honored by
+    // the edits endpoint (/v1/images/edits with an `images` array). The plain
+    // /v1/images/generations endpoint ignores reference input, so route to
+    // edits whenever references are present. See https://docs.rout.my/api/images
+    final endpoint = isChatModel
+        ? '/v1/chat/completions'
+        : (hasRefs ? '/v1/images/edits' : '/v1/images/generations');
     final fullUrl = '$baseUrl$endpoint';
     debugPrint('ROUTMY: url=$fullUrl model=$model apiKey=${apiKey.length > 8 ? "${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}" : "SHORT"} refs=${referenceImages?.length ?? 0}');
 
     if (isChatModel) {
       return _generateChat(
+        apiKey: apiKey,
+        model: model,
+        prompt: prompt,
+        aspectRatio: aspectRatio,
+        imageSize: imageSize,
+        quality: quality,
+        referenceImages: referenceImages,
+        cancelToken: cancelToken,
+      );
+    }
+    if (hasRefs) {
+      return _editImages(
         apiKey: apiKey,
         model: model,
         prompt: prompt,
@@ -44,7 +63,7 @@ class RoutmyImageProvider {
       aspectRatio: aspectRatio,
       imageSize: imageSize,
       quality: quality,
-      referenceImages: referenceImages,
+      referenceImages: null,
       cancelToken: cancelToken,
     );
   }
@@ -72,33 +91,75 @@ class RoutmyImageProvider {
       },
     };
 
-    if (referenceImages != null && referenceImages.isNotEmpty) {
-      body['image'] = referenceImages.first;
-    }
+    final b64 = await _http.postAndExtractBase64(
+      url: url,
+      apiKey: apiKey,
+      body: body,
+      cancelToken: cancelToken,
+      extractBase64: _extractImageBase64,
+    );
+    return ImageGenHttp.base64ToBytes(b64);
+  }
+
+  /// OpenAI-style image edits (`/v1/images/edits`) — the only generations-style
+  /// route on rout.my that accepts reference images, as an `images` array of
+  /// `{image_url: <data-url|https-url>}`. See https://docs.rout.my/api/images
+  Future<Uint8List> _editImages({
+    required String apiKey,
+    required String model,
+    required String prompt,
+    required String aspectRatio,
+    required String imageSize,
+    required String quality,
+    required List<String> referenceImages,
+    CancelToken? cancelToken,
+  }) async {
+    final url = '$baseUrl/v1/images/edits';
+
+    final images = referenceImages
+        .where((s) => s.isNotEmpty)
+        .map((s) => {'image_url': s})
+        .toList();
+
+    final body = <String, dynamic>{
+      'model': model,
+      'prompt': prompt,
+      'n': 1,
+      'images': images,
+      'image_config': {
+        'aspect_ratio': aspectRatio,
+        'image_size': imageSize,
+        if (quality.isNotEmpty) 'quality': quality,
+      },
+    };
 
     final b64 = await _http.postAndExtractBase64(
       url: url,
       apiKey: apiKey,
       body: body,
       cancelToken: cancelToken,
-      extractBase64: (json) {
-        final data = json['data'] as List?;
-        if (data == null || data.isEmpty) throw Exception('No image data in response');
-        final imageObj = data.first as Map<String, dynamic>;
-        final b64 = imageObj['b64_json'] as String?;
-        if (b64 != null && b64.isNotEmpty) return b64;
-        final imgUrl = imageObj['url'] as String?;
-        if (imgUrl != null && imgUrl.startsWith('data:')) {
-          final commaIdx = imgUrl.indexOf(',');
-          if (commaIdx != -1) return imgUrl.substring(commaIdx + 1);
-        }
-        if (imgUrl != null) {
-          throw Exception('URL response — need to download');
-        }
-        throw Exception('No image in response');
-      },
+      extractBase64: _extractImageBase64,
     );
     return ImageGenHttp.base64ToBytes(b64);
+  }
+
+  String _extractImageBase64(Map<String, dynamic> json) {
+    final data = json['data'] as List?;
+    if (data == null || data.isEmpty) {
+      throw Exception('No image data in response');
+    }
+    final imageObj = data.first as Map<String, dynamic>;
+    final b64 = imageObj['b64_json'] as String?;
+    if (b64 != null && b64.isNotEmpty) return b64;
+    final imgUrl = imageObj['url'] as String?;
+    if (imgUrl != null && imgUrl.startsWith('data:')) {
+      final commaIdx = imgUrl.indexOf(',');
+      if (commaIdx != -1) return imgUrl.substring(commaIdx + 1);
+    }
+    if (imgUrl != null) {
+      throw Exception('URL response — need to download');
+    }
+    throw Exception('No image in response');
   }
 
   Future<Uint8List> _generateChat({

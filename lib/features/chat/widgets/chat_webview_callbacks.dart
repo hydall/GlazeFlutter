@@ -123,6 +123,10 @@ class ChatWebViewCallbacks {
     imageGenActions.onImgCancel?.call();
   }
 
+  void onImgDownload(String src) {
+    imageGenActions.onImgDownload?.call(src);
+  }
+
   void onStop() {
     miscActions.onStop?.call();
   }

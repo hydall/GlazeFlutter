@@ -56,12 +56,14 @@ class ImageGenCallbacks {
   final ImgActionCallback? onImgFind;
   final ImgActionCallback? onImgRegen;
   final ImgVoidCallback? onImgCancel;
+  final ImageClickCallback? onImgDownload;
 
   const ImageGenCallbacks({
     this.onImgRetry,
     this.onImgFind,
     this.onImgRegen,
     this.onImgCancel,
+    this.onImgDownload,
   });
 }
 

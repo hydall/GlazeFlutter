@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/constants/image_gen_patterns.dart';
 import '../../../core/services/image_storage_service.dart';
+import '../../../core/utils/platform_paths.dart';
 import '../../../core/models/character.dart';
 import '../../../core/models/persona.dart';
 import 'naistera_image_provider.dart';
@@ -380,6 +381,14 @@ class ImageGenService {
       if (settings.ruRoutmySendUserAvatar && persona?.avatarPath != null) {
         refs.add({'name': persona!.name, 'image': _fileToBase64(persona.avatarPath!)});
       }
+      // ruRoutmy is the same RoutMy provider on a regional mirror, so it
+      // reuses the RoutMy user-reference list. Without this loop, user
+      // references were silently dropped for ruRoutmy.
+      for (final ref in settings.routmyAdditionalRefs) {
+        if (ref.matchMode == 'always' || promptLower.contains(ref.name.toLowerCase())) {
+          refs.add({'name': ref.name, 'image': _extractBase64FromDataUrl(ref.imageData)});
+        }
+      }
     }
 
     if (settings.imageContextEnabled && recentImageContexts != null) {
@@ -398,7 +407,8 @@ class ImageGenService {
 
   String _fileToBase64(String path) {
     try {
-      final file = File(path);
+      final resolved = resolveGlazeFilePath(path) ?? path;
+      final file = File(resolved);
       if (!file.existsSync()) return '';
       return base64Encode(file.readAsBytesSync());
     } catch (_) {

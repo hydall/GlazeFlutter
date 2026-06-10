@@ -181,6 +181,7 @@ class ChatWebViewSurface extends ConsumerWidget {
                 bridge.onEditCancel = callbacks.onEditCancel;
                 bridge.onEditFocusChange = callbacks.onEditFocusChange;
                 bridge.onImageClick = callbacks.onImageClick;
+                bridge.onImgDownload = callbacks.onImgDownload;
                 bridge.onGuidedSwipe = callbacks.onGuidedSwipe;
                 bridge.onMemoryClick = callbacks.onMemoryClick;
                 bridge.onToggleHidden = callbacks.onToggleHidden;
