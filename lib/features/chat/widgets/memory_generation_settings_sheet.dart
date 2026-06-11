@@ -518,6 +518,11 @@ class _MemoryGenerationSettingsSheetState
         SegmentedButton<String>(
           segments: const [
             ButtonSegment(
+              value: 'legacy',
+              label: Text('Legacy'),
+              icon: Icon(Icons.restore_rounded),
+            ),
+            ButtonSegment(
               value: 'fast',
               label: Text('Fast'),
               icon: Icon(Icons.bolt_rounded),
@@ -539,7 +544,9 @@ class _MemoryGenerationSettingsSheetState
         ),
         const SizedBox(height: 6),
         Text(
-          _memoryMode == 'balanced'
+          _memoryMode == 'legacy'
+              ? 'Emergency rollback: old Memory Book scoring/top-N selector. Keeps the current injection format.'
+              : _memoryMode == 'balanced'
               ? 'Deterministic selector plus local catalog/heuristics. No external classifier call.'
               : _memoryMode == 'deep'
               ? 'Deep mode configuration only for now. Sidecar reranking remains read-only and is not called until the next implementation step.'
@@ -1223,6 +1230,7 @@ String _migrateInjectionTarget(String raw) {
 
 String _normalizeMemoryMode(String raw) {
   if (raw == 'deep') return 'deep';
+  if (raw == 'legacy') return 'legacy';
   return raw == 'balanced' ? 'balanced' : 'fast';
 }
 

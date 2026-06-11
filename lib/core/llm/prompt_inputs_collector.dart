@@ -120,6 +120,7 @@ class PromptInputsCollector {
       globalRegexes: _ref.read(globalRegexProvider).value ?? [],
       memoryEntries: memoryEntries,
       memoryEnabled: memorySettings.enabled,
+      memoryMode: memorySettings.memoryMode,
       memoryMaxInjected: memorySettings.maxInjectedEntries,
       memoryKeyMatchMode: memorySettings.keyMatchMode,
       memoryInjectionTarget: memorySettings.injectionTarget,

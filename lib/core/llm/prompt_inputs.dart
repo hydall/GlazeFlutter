@@ -34,6 +34,7 @@ class PromptInputs {
   // Memory injection raw data (keyword matching only, no vector search)
   final List<MemoryEntry> memoryEntries;
   final bool memoryEnabled;
+  final String memoryMode;
   final int memoryMaxInjected;
   final String memoryKeyMatchMode;
   final String memoryInjectionTarget;
@@ -75,6 +76,7 @@ class PromptInputs {
     this.vectorEntries = const [],
     this.memoryEntries = const [],
     this.memoryEnabled = true,
+    this.memoryMode = 'fast',
     this.memoryMaxInjected = 7,
     this.memoryKeyMatchMode = 'glaze',
     this.memoryInjectionTarget = 'hard_block',
@@ -116,6 +118,7 @@ class PromptInputs {
     'vectorEntries': vectorEntries.map((e) => e.toJson()).toList(),
     'memoryEntries': memoryEntries.map((e) => e.toJson()).toList(),
     'memoryEnabled': memoryEnabled,
+    'memoryMode': memoryMode,
     'memoryMaxInjected': memoryMaxInjected,
     'memoryKeyMatchMode': memoryKeyMatchMode,
     'memoryInjectionTarget': _migrateInjectionTarget(memoryInjectionTarget),
@@ -180,6 +183,7 @@ class PromptInputs {
         .map((e) => MemoryEntry.fromJson(e as Map<String, dynamic>))
         .toList(),
     memoryEnabled: json['memoryEnabled'] as bool? ?? true,
+    memoryMode: json['memoryMode'] as String? ?? 'fast',
     memoryMaxInjected: json['memoryMaxInjected'] as int? ?? 7,
     memoryKeyMatchMode: json['memoryKeyMatchMode'] as String? ?? 'glaze',
     memoryInjectionTarget: _migrateInjectionTarget(

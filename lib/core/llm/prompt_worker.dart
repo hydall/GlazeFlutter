@@ -319,7 +319,7 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
         .map((m) => m.content)
         .join('\n')
         .toLowerCase();
-    final keywordMatched = <String, Set<String>>{};
+    final keywordMatched = <String, List<String>>{};
     for (final entry in inputs.memoryEntries) {
       if (entry.status != 'active' || entry.content.trim().isEmpty) continue;
       final matched = <String>{};
@@ -336,7 +336,7 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
           if (scanText.contains(lowerKey)) matched.add(key);
         }
       }
-      if (matched.isNotEmpty) keywordMatched[entry.id] = matched;
+      if (matched.isNotEmpty) keywordMatched[entry.id] = matched.toList();
     }
 
     final budget = MemoryInjectionBudget.composeBudget(
@@ -344,12 +344,16 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
           ? inputs.memoryContextBudgetTokens
           : null,
       percent: inputs.memoryMaxInjectionBudgetPercent,
-      absoluteCap: inputs.memoryMaxInjectedTokens,
+      absoluteCap: inputs.memoryMode == 'legacy'
+          ? null
+          : inputs.memoryMaxInjectedTokens,
     );
 
     memorySelection = MemorySelector.select(
       MemorySelectionInput(
+        selectionMode: inputs.memoryMode == 'legacy' ? 'legacy' : 'v2',
         entries: inputs.memoryEntries,
+        keywordMatchedTerms: keywordMatched,
         maxInjectionTokens: budget,
         maxInjectedEntries: inputs.memoryMaxInjected,
         diversityAware: inputs.memoryDiversityAware,
@@ -365,10 +369,6 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
       ),
     );
 
-    // Apply keyword score on top of the base score from MemorySelector by
-    // adding a marker matched-keys set (the selector itself only knows
-    // the count, not which keys hit). This keeps the legacy diagnostic
-    // shape without inventing a second selector.
     final topEntries = memorySelection.entries;
 
     if (topEntries.isNotEmpty) {

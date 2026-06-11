@@ -166,6 +166,11 @@ class MemoryInjectionService {
     if (activeEntries.isEmpty) return finish(const MemorySelection(), noBudget);
 
     final vectorScores = <String, double>{};
+    final keywordMatchedTerms = _keywordMatches(
+      activeEntries,
+      _selectorScanText(book.settings, history, currentText),
+      book.settings.keyMatchMode,
+    );
     final catalogMatches = book.settings.memoryMode == 'balanced'
         ? await _catalogMatches(book, activeEntries, history, currentText)
         : const _CatalogMatchResult();
@@ -198,13 +203,17 @@ class MemoryInjectionService {
     final budget = MemoryInjectionBudget.describeBudget(
       contextBudgetTokens: contextBudgetTokens,
       percent: book.settings.maxInjectionBudgetPercent,
-      absoluteCap: book.settings.maxInjectedTokens,
+      absoluteCap: book.settings.memoryMode == 'legacy'
+          ? null
+          : book.settings.maxInjectedTokens,
     );
 
     final selection = MemorySelector.select(
       MemorySelectionInput(
+        selectionMode: book.settings.memoryMode == 'legacy' ? 'legacy' : 'v2',
         entries: activeEntries,
         vectorScores: vectorScores,
+        keywordMatchedTerms: keywordMatchedTerms,
         catalogScores: catalogMatches.scores,
         catalogMatchedTerms: catalogMatches.termsByEntryId,
         visibleMessageIds: visibleMessageIds,
@@ -366,13 +375,15 @@ class MemoryInjectionService {
 
       if (candidates.isEmpty) return {};
 
-      final queryText = RetrievalQueryBuilder.build(
-        currentText: currentText,
-        history: history,
-        includeAssistant: settings.queryIncludeAssistant,
-        recentTurns: settings.queryRecentTurns,
-        maxChars: settings.queryMaxChars,
-      );
+      final queryText = settings.memoryMode == 'legacy'
+          ? _legacyVectorQuery(history, currentText)
+          : RetrievalQueryBuilder.build(
+              currentText: currentText,
+              history: history,
+              includeAssistant: settings.queryIncludeAssistant,
+              recentTurns: settings.queryRecentTurns,
+              maxChars: settings.queryMaxChars,
+            );
       if (queryText.isEmpty) return {};
       if (shouldAbort?.call() == true) return {};
 
@@ -463,6 +474,68 @@ class MemoryInjectionService {
     } catch (_) {
       return const _CatalogMatchResult();
     }
+  }
+
+  static String _legacyVectorQuery(
+    List<ChatMessage> history,
+    String currentText,
+  ) {
+    final parts = <String>[];
+    if (currentText.trim().isNotEmpty) parts.add(currentText.trim());
+    var chars = parts.fold<int>(0, (sum, part) => sum + part.length);
+    for (int i = history.length - 1; i >= 0; i--) {
+      final msg = history[i];
+      if (msg.isHidden || msg.isTyping || msg.role != 'user') continue;
+      final text = msg.content.trim();
+      if (text.isEmpty || text == currentText.trim()) continue;
+      if (chars + text.length > 1500) break;
+      parts.add(text);
+      chars += text.length;
+    }
+    return parts.join('\n').trim();
+  }
+
+  static String _selectorScanText(
+    MemoryBookSettings settings,
+    List<ChatMessage> history,
+    String currentText,
+  ) {
+    if (settings.memoryMode == 'legacy') {
+      return _legacyVectorQuery(history, currentText).toLowerCase();
+    }
+    return RetrievalQueryBuilder.build(
+      currentText: currentText,
+      history: history,
+      includeAssistant: settings.queryIncludeAssistant,
+      recentTurns: settings.queryRecentTurns,
+      maxChars: settings.queryMaxChars,
+    ).toLowerCase();
+  }
+
+  static Map<String, List<String>> _keywordMatches(
+    List<MemoryEntry> entries,
+    String scanText,
+    String keyMatchMode,
+  ) {
+    if (scanText.isEmpty) return const {};
+    final matchedByEntry = <String, List<String>>{};
+    for (final entry in entries) {
+      final matched = <String>[];
+      for (final key in entry.keys) {
+        if (key.trim().isEmpty) continue;
+        final lowerKey = key.toLowerCase();
+        final hit = switch (keyMatchMode) {
+          'glaze' => memoryKeyMatchesGlaze(lowerKey, scanText),
+          'both' =>
+            scanText.contains(lowerKey) ||
+                memoryKeyMatchesGlaze(lowerKey, scanText),
+          _ => scanText.contains(lowerKey),
+        };
+        if (hit) matched.add(key);
+      }
+      if (matched.isNotEmpty) matchedByEntry[entry.id] = matched;
+    }
+    return matchedByEntry;
   }
 
   static List<String> _matchedCatalogTerms(

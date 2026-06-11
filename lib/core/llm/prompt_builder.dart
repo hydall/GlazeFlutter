@@ -1123,6 +1123,7 @@ MemorySelection _refilterMemorySelection(
   MemorySelection previous, {
   required Set<String> visibleMessageIds,
 }) {
+  if (previous.selectionMode == 'legacy') return previous;
   if (visibleMessageIds.isEmpty) return previous;
   final needsRefilter = previous.allScores.any(
     (s) =>
@@ -1133,7 +1134,12 @@ MemorySelection _refilterMemorySelection(
   if (!needsRefilter) return previous;
   return MemorySelector.select(
     MemorySelectionInput(
+      selectionMode: previous.selectionMode,
       entries: previous.allScores.map((s) => s.entry).toList(),
+      keywordMatchedTerms: {
+        for (final score in previous.allScores)
+          if (score.matchedKeys.isNotEmpty) score.entry.id: score.matchedKeys,
+      },
       visibleMessageIds: visibleMessageIds,
       maxInjectionTokens: previous.budgetTokens,
       maxInjectedEntries: previous.entryCap > 0

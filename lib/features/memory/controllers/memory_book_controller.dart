@@ -101,7 +101,12 @@ class MemoryBookController {
   String get settingsSummary {
     if (_book == null) return '';
     final s = globalSettings;
-    final mode = s.memoryMode == 'balanced' ? 'Balanced' : 'Fast';
+    final mode = switch (s.memoryMode) {
+      'balanced' => 'Balanced',
+      'deep' => 'Deep',
+      'legacy' => 'Legacy',
+      _ => 'Fast',
+    };
     final interval = s.autoCreateInterval;
     final autoCreate = s.autoCreateEnabled ? 'Auto ON' : 'Auto OFF';
     final autoGen = s.autoGenerateEnabled ? 'Auto-gen' : 'Manual';

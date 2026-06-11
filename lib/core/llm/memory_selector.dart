@@ -35,6 +35,7 @@ class MemoryCandidateScore {
 
 /// Aggregated result of [MemorySelector.select].
 class MemorySelection {
+  final String selectionMode;
   final List<MemoryEntry> entries;
   final List<MemoryCandidateScore> allScores;
   final int totalTokens;
@@ -44,6 +45,7 @@ class MemorySelection {
   final int excludedBySourceWindow;
 
   const MemorySelection({
+    this.selectionMode = 'v2',
     this.entries = const [],
     this.allScores = const [],
     this.totalTokens = 0,
@@ -58,10 +60,12 @@ class MemorySelection {
 /// optional so the same selector works in the isolate (no vector API) and
 /// in the async injection service (with vector search).
 class MemorySelectionInput {
+  final String selectionMode;
   final List<MemoryEntry> entries;
   final Map<String, double> vectorScores;
   final Map<String, double> catalogScores;
   final Map<String, List<String>> catalogMatchedTerms;
+  final Map<String, List<String>> keywordMatchedTerms;
   final Set<String> visibleMessageIds;
   final int? maxInjectionTokens;
   final int maxInjectedEntries;
@@ -78,10 +82,12 @@ class MemorySelectionInput {
   final int now;
 
   const MemorySelectionInput({
+    this.selectionMode = 'v2',
     required this.entries,
     this.vectorScores = const {},
     this.catalogScores = const {},
     this.catalogMatchedTerms = const {},
+    this.keywordMatchedTerms = const {},
     this.visibleMessageIds = const {},
     this.maxInjectionTokens,
     this.maxInjectedEntries = 7,
@@ -107,6 +113,7 @@ class MemorySelectionInput {
     int? maxInjectionTokens,
     int maxInjectedEntries = 7,
   }) => MemorySelectionInput(
+    selectionMode: 'legacy',
     entries: entries,
     vectorScores: vectorScores,
     visibleMessageIds: visibleMessageIds,
@@ -140,10 +147,12 @@ class MemorySelector {
     final costFn = tokenCounter ?? tokenCost;
 
     final visibleSet = input.visibleMessageIds;
+    final legacyMode = input.selectionMode == 'legacy';
 
     final scored = <MemoryCandidateScore>[];
     for (final entry in entries) {
-      if (input.sourceWindowExclusion &&
+      if (!legacyMode &&
+          input.sourceWindowExclusion &&
           entry.messageIds.isNotEmpty &&
           entry.messageIds.any(visibleSet.contains)) {
         scored.add(
@@ -156,11 +165,27 @@ class MemorySelector {
         );
         continue;
       }
-      final matched = _matchedKeys(entry, visibleSet);
+      final matched = _matchedKeys(entry, input.keywordMatchedTerms);
+      if (legacyMode) {
+        final vector = (input.vectorScores[entry.id] ?? 0) * 5.0;
+        final keyword = matched.isEmpty ? 0.0 : input.keywordWeight;
+        final messageSource = entry.messageIds.isNotEmpty ? 2.0 : 0.0;
+        final contentLength = entry.content.trim().length > 20 ? 1.0 : 0.0;
+        scored.add(
+          MemoryCandidateScore(
+            entry: entry,
+            score: keyword + vector + messageSource + contentLength,
+            keywordScore: keyword,
+            vectorScore: vector,
+            matchedKeys: matched,
+          ),
+        );
+        continue;
+      }
+      final vector = (input.vectorScores[entry.id] ?? 0) * input.vectorWeight;
       final keyword = matched.isEmpty
           ? 0.0
           : input.keywordWeight * _keywordBoost(matched, entry.keys.length);
-      final vector = (input.vectorScores[entry.id] ?? 0) * input.vectorWeight;
       final catalog = input.catalogScores[entry.id] ?? 0;
       final recency = input.recencyBoost
           ? _recencyBoost(
@@ -220,7 +245,7 @@ class MemorySelector {
       }
       picked.add(c);
       usedTokens += cost;
-      if (input.diversityAware) {
+      if (!legacyMode && input.diversityAware) {
         _accumulateDiversityTokens(c.entry, seenTokens);
         final penalty = _diversityPenaltyFor(
           c.entry,
@@ -253,6 +278,7 @@ class MemorySelector {
     }
 
     return MemorySelection(
+      selectionMode: legacyMode ? 'legacy' : 'v2',
       entries: picked.map((p) => p.entry).toList(growable: false),
       allScores: scored,
       totalTokens: usedTokens,
@@ -300,11 +326,11 @@ class MemorySelector {
     return (matched.length / t).clamp(0.0, 1.0);
   }
 
-  static List<String> _matchedKeys(MemoryEntry entry, Set<String> _) {
-    // Real matching happens upstream in the keyword stage. The selector
-    // accepts the precomputed set; the entry itself carries keys for
-    // diagnostics, and the count is used for normalization.
-    return entry.keys;
+  static List<String> _matchedKeys(
+    MemoryEntry entry,
+    Map<String, List<String>> keywordMatchedTerms,
+  ) {
+    return keywordMatchedTerms[entry.id] ?? const [];
   }
 
   static void _accumulateDiversityTokens(MemoryEntry entry, Set<String> sink) {

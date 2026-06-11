@@ -13,19 +13,18 @@ MemoryEntry _entry({
   String arc = '',
   double importance = 0,
   bool temporallyBlind = false,
-}) =>
-    MemoryEntry(
-      id: id,
-      title: title,
-      keys: keys,
-      content: content,
-      messageIds: messageIds,
-      createdAt: createdAt,
-      arc: arc,
-      importance: importance,
-      temporallyBlind: temporallyBlind,
-      status: 'active',
-    );
+}) => MemoryEntry(
+  id: id,
+  title: title,
+  keys: keys,
+  content: content,
+  messageIds: messageIds,
+  createdAt: createdAt,
+  arc: arc,
+  importance: importance,
+  temporallyBlind: temporallyBlind,
+  status: 'active',
+);
 
 void main() {
   group('MemorySelector: source-window exclusion', () {
@@ -47,12 +46,14 @@ void main() {
           createdAt: 2000,
         ),
       ];
-      final result = MemorySelector.select(MemorySelectionInput(
-        entries: entries,
-        visibleMessageIds: const {'m1', 'm2'},
-        maxInjectedEntries: 5,
-        sourceWindowExclusion: true,
-      ));
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          visibleMessageIds: const {'m1', 'm2'},
+          maxInjectedEntries: 5,
+          sourceWindowExclusion: true,
+        ),
+      );
       expect(result.entries.map((e) => e.id), ['b']);
       expect(result.excludedBySourceWindow, 1);
       final a = result.allScores.firstWhere((s) => s.entry.id == 'a');
@@ -60,29 +61,30 @@ void main() {
       expect(a.exclusionReason, 'source_visible_in_prompt');
     });
 
-    test('sourceWindowExclusion: false keeps all candidates even when overlap', () {
-      final entries = [
-        _entry(
-          id: 'a',
-          content: 'episode',
-          messageIds: const ['m1'],
-          createdAt: 1,
-        ),
-        _entry(
-          id: 'b',
-          content: 'episode',
-          createdAt: 2,
-        ),
-      ];
-      final result = MemorySelector.select(MemorySelectionInput(
-        entries: entries,
-        visibleMessageIds: const {'m1'},
-        maxInjectedEntries: 5,
-        sourceWindowExclusion: false,
-      ));
-      expect(result.entries.length, 2);
-      expect(result.excludedBySourceWindow, 0);
-    });
+    test(
+      'sourceWindowExclusion: false keeps all candidates even when overlap',
+      () {
+        final entries = [
+          _entry(
+            id: 'a',
+            content: 'episode',
+            messageIds: const ['m1'],
+            createdAt: 1,
+          ),
+          _entry(id: 'b', content: 'episode', createdAt: 2),
+        ];
+        final result = MemorySelector.select(
+          MemorySelectionInput(
+            entries: entries,
+            visibleMessageIds: const {'m1'},
+            maxInjectedEntries: 5,
+            sourceWindowExclusion: false,
+          ),
+        );
+        expect(result.entries.length, 2);
+        expect(result.excludedBySourceWindow, 0);
+      },
+    );
   });
 
   group('MemorySelector: first-entry budget fallback (INV-PS4)', () {
@@ -91,16 +93,17 @@ void main() {
         _entry(id: 'huge', content: 'a ' * 500, createdAt: 1),
         _entry(id: 'tiny', content: 'tiny', createdAt: 2),
       ];
-      final result = MemorySelector.select(MemorySelectionInput(
-        entries: entries,
-        maxInjectionTokens: 10,
-        maxInjectedEntries: 5,
-        // Force equal scoring so the sort uses tiebreaker.
-        keywordWeight: 0,
-        vectorWeight: 0,
-        recencyBoost: false,
-        importanceBoost: false,
-      ));
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          maxInjectionTokens: 10,
+          maxInjectedEntries: 5,
+          // Force equal scoring so the sort uses tiebreaker.
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+        ),
+      );
       expect(result.entries.length, 1);
       expect(result.entries.first.id, 'huge');
       expect(result.budgetTrimmed, isTrue);
@@ -111,16 +114,17 @@ void main() {
         5,
         (i) => _entry(id: 'e$i', content: 'word ' * 6, createdAt: i + 1),
       );
-      final result = MemorySelector.select(MemorySelectionInput(
-        entries: entries,
-        maxInjectionTokens: 25,
-        maxInjectedEntries: 5,
-        keywordWeight: 0,
-        vectorWeight: 0,
-        recencyBoost: false,
-        importanceBoost: false,
-        diversityAware: false,
-      ));
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          maxInjectionTokens: 25,
+          maxInjectedEntries: 5,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+        ),
+      );
       // Should keep head entries (newest, higher id) until budget hits.
       expect(result.entries.length, lessThan(5));
       expect(result.budgetTrimmed, isTrue);
@@ -144,17 +148,19 @@ void main() {
           createdAt: i + 1,
         ),
       );
-      final result = MemorySelector.select(MemorySelectionInput(
-        entries: entries,
-        maxInjectedEntries: 4,
-        maxInjectionTokens: 100,
-        keywordWeight: 0,
-        vectorWeight: 0,
-        recencyBoost: false,
-        importanceBoost: false,
-        diversityAware: true,
-        diversityPenalty: 0.9,
-      ));
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          maxInjectedEntries: 4,
+          maxInjectionTokens: 100,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: true,
+          diversityPenalty: 0.9,
+        ),
+      );
       // 4 entries with identical token sets; after the first pick the
       // remaining 3 are reranked 0.9 lower. Since their base score is
       // 0.5 (baseline only), they end up at -0.4 — picked but with
@@ -180,15 +186,17 @@ void main() {
           createdAt: i + 1,
         ),
       );
-      final result = MemorySelector.select(MemorySelectionInput(
-        entries: entries,
-        maxInjectedEntries: 3,
-        keywordWeight: 0,
-        vectorWeight: 0,
-        recencyBoost: false,
-        importanceBoost: false,
-        diversityAware: false,
-      ));
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          maxInjectedEntries: 3,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+        ),
+      );
       expect(result.entries.length, 3);
     });
   });
@@ -199,24 +207,28 @@ void main() {
         _entry(id: 'a', content: 'word ' * 4, createdAt: 1),
         _entry(id: 'b', content: 'word ' * 4, createdAt: 2),
       ];
-      final r1 = MemorySelector.select(MemorySelectionInput(
-        entries: entries,
-        maxInjectedEntries: 2,
-        keywordWeight: 0,
-        vectorWeight: 0,
-        recencyBoost: false,
-        importanceBoost: false,
-        diversityAware: false,
-      ));
-      final r2 = MemorySelector.select(MemorySelectionInput(
-        entries: entries,
-        maxInjectedEntries: 2,
-        keywordWeight: 0,
-        vectorWeight: 0,
-        recencyBoost: false,
-        importanceBoost: false,
-        diversityAware: false,
-      ));
+      final r1 = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          maxInjectedEntries: 2,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+        ),
+      );
+      final r2 = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          maxInjectedEntries: 2,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+        ),
+      );
       expect(
         r1.entries.map((e) => e.id).toList(),
         r2.entries.map((e) => e.id).toList(),
@@ -232,25 +244,25 @@ void main() {
           createdAt: now - 30 * 86400000,
           temporallyBlind: true,
         ),
-        _entry(
-          id: 'old',
-          content: 'word ' * 4,
-          createdAt: now - 30 * 86400000,
-        ),
+        _entry(id: 'old', content: 'word ' * 4, createdAt: now - 30 * 86400000),
       ];
-      final result = MemorySelector.select(MemorySelectionInput(
-        entries: entries,
-        nowMillis: now,
-        maxInjectedEntries: 2,
-        keywordWeight: 0,
-        vectorWeight: 0,
-        importanceBoost: false,
-        diversityAware: false,
-      ));
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          nowMillis: now,
+          maxInjectedEntries: 2,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          importanceBoost: false,
+          diversityAware: false,
+        ),
+      );
       // The non-blind old entry has recency boost (small but non-zero).
       // The blind entry has 0 boost. Without the keyword/vector/importance
       // contributions, the blind entry's total score is only the baseline.
-      final blind = result.allScores.firstWhere((s) => s.entry.id == 'old_blind');
+      final blind = result.allScores.firstWhere(
+        (s) => s.entry.id == 'old_blind',
+      );
       final nonBlind = result.allScores.firstWhere((s) => s.entry.id == 'old');
       expect(blind.recencyScore, 0.0);
       expect(nonBlind.recencyScore, greaterThan(0.0));
@@ -269,12 +281,117 @@ void main() {
           createdAt: 3,
         ),
       ];
-      final result = MemorySelector.select(MemorySelectionInput(
-        entries: entries,
-        visibleMessageIds: const {'m1'},
-        maxInjectedEntries: 5,
-      ));
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          visibleMessageIds: const {'m1'},
+          maxInjectedEntries: 5,
+        ),
+      );
       expect(result.allScores, hasLength(3));
+    });
+  });
+
+  group('MemorySelector: legacy mode', () {
+    test('uses old messageIds and content-length score boosts', () {
+      final entries = [
+        _entry(
+          id: 'legacy_source',
+          content: 'old sourced memory about a bridge',
+          keys: const ['bridge'],
+          messageIds: const ['m1'],
+          createdAt: 1,
+        ),
+        _entry(
+          id: 'newer_plain',
+          content: 'newer plain memory about nothing',
+          createdAt: 999,
+        ),
+      ];
+
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          selectionMode: 'legacy',
+          entries: entries,
+          keywordMatchedTerms: const {
+            'legacy_source': ['bridge'],
+          },
+          maxInjectedEntries: 1,
+          vectorWeight: 0,
+          recencyBoost: true,
+          importanceBoost: true,
+        ),
+      );
+
+      expect(result.entries.single.id, 'legacy_source');
+      final score = result.allScores.firstWhere(
+        (s) => s.entry.id == 'legacy_source',
+      );
+      expect(score.score, 9.0);
+      expect(score.recencyScore, 0.0);
+      expect(score.importanceScore, 0.0);
+    });
+
+    test('does not treat every entry key as a keyword match', () {
+      final entries = [
+        _entry(
+          id: 'with_key_only',
+          keys: const ['bridge'],
+          content: 'plain memory with an unmatched key',
+        ),
+      ];
+
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          selectionMode: 'legacy',
+          entries: entries,
+          maxInjectedEntries: 1,
+        ),
+      );
+
+      final score = result.allScores.single;
+      expect(score.keywordScore, 0.0);
+      expect(score.score, 1.0);
+    });
+
+    test('does not apply source-window exclusion or diversity penalties', () {
+      final entries = [
+        _entry(
+          id: 'visible',
+          title: 'Bridge collapse',
+          keys: const ['bridge'],
+          content: 'visible sourced memory about a bridge',
+          messageIds: const ['m1'],
+          createdAt: 1,
+        ),
+        _entry(
+          id: 'duplicate',
+          title: 'Bridge collapse',
+          keys: const ['bridge'],
+          content: 'duplicate sourced memory about a bridge',
+          messageIds: const ['m2'],
+          createdAt: 2,
+        ),
+      ];
+
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          selectionMode: 'legacy',
+          entries: entries,
+          visibleMessageIds: const {'m1'},
+          maxInjectedEntries: 2,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          diversityAware: true,
+          diversityPenalty: 1,
+          sourceWindowExclusion: true,
+        ),
+      );
+
+      expect(result.entries.map((e) => e.id), ['duplicate', 'visible']);
+      expect(result.excludedBySourceWindow, 0);
+      expect(result.selectionMode, 'legacy');
+      expect(result.allScores.every((s) => s.diversityPenalty == 0), isTrue);
     });
   });
 }
