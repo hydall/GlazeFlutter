@@ -29,6 +29,7 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
       sessionId: sessionId,
       settings: MemoryBookSettings(
         enabled: global.enabled,
+        memoryMode: global.memoryMode,
         autoCreateEnabled: global.autoCreateEnabled,
         autoGenerateEnabled: global.autoGenerateEnabled,
         maxInjectedEntries: global.maxInjectedEntries,

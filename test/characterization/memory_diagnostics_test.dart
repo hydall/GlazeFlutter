@@ -124,6 +124,7 @@ void main() {
 
         final json = diagnostics.toJson();
         expect(json['selectedTokens'], 12);
+        expect(json['memoryMode'], 'fast');
         expect(json['missingContextSuspected'], isFalse);
         expect(json['missingContextReasons'], isEmpty);
         expect(json['reliableCandidateFound'], isFalse);
@@ -166,6 +167,7 @@ void main() {
           selection,
           budget: const MemoryBudgetBreakdown(source: 'none'),
           currentText: 'Do you remember what happened before?',
+          memoryMode: 'balanced',
         );
 
         expect(selection.entries, isEmpty);
@@ -188,6 +190,7 @@ void main() {
         selection,
         budget: const MemoryBudgetBreakdown(source: 'none'),
         currentText: 'Where were we last time?',
+        memoryMode: 'balanced',
       );
 
       expect(selection.entries, isEmpty);
@@ -231,6 +234,7 @@ void main() {
       final diagnostics = MemoryDiagnostics.fromSelection(
         selection,
         budget: const MemoryBudgetBreakdown(source: 'none'),
+        memoryMode: 'balanced',
       );
 
       expect(diagnostics.reliableCandidateFound, isFalse);

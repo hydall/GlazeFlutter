@@ -13,6 +13,7 @@ part 'memory_settings_provider.g.dart';
 abstract class MemoryGlobalSettings with _$MemoryGlobalSettings {
   const factory MemoryGlobalSettings({
     @Default(true) bool enabled,
+    @Default('fast') String memoryMode,
     @Default(true) bool autoCreateEnabled,
     @Default(false) bool autoGenerateEnabled,
     @Default(7) int maxInjectedEntries,

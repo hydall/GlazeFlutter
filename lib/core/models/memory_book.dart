@@ -62,6 +62,7 @@ abstract class MemoryEntry with _$MemoryEntry {
 abstract class MemoryBookSettings with _$MemoryBookSettings {
   const factory MemoryBookSettings({
     @Default(true) bool enabled,
+    @Default('fast') String memoryMode,
     @Default(true) bool autoCreateEnabled,
     @Default(false) bool autoGenerateEnabled,
     @Default(7) int maxInjectedEntries,

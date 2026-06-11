@@ -53,6 +53,7 @@ class MemoryBookController {
     final g = globalSettings;
     return MemoryBookSettings(
       enabled: g.enabled,
+      memoryMode: g.memoryMode,
       autoCreateEnabled: g.autoCreateEnabled,
       autoGenerateEnabled: g.autoGenerateEnabled,
       maxInjectedEntries: g.maxInjectedEntries,
@@ -87,6 +88,7 @@ class MemoryBookController {
   String get settingsSummary {
     if (_book == null) return '';
     final s = globalSettings;
+    final mode = s.memoryMode == 'balanced' ? 'Balanced' : 'Fast';
     final interval = s.autoCreateInterval;
     final autoCreate = s.autoCreateEnabled ? 'Auto ON' : 'Auto OFF';
     final autoGen = s.autoGenerateEnabled ? 'Auto-gen' : 'Manual';
@@ -102,7 +104,7 @@ class MemoryBookController {
         (s.generationMaxTokens != null && s.generationMaxTokens! > 0)
         ? '${s.generationMaxTokens} out'
         : 'Auto out';
-    return '$interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries entries • $memoryBudget';
+    return '$mode • $interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries entries • $memoryBudget';
   }
 
   String get searchModelLabel {
@@ -396,6 +398,7 @@ class MemoryBookController {
     final currentGlobal = globalSettings;
     final newGlobal = MemoryGlobalSettings(
       enabled: newSettings.enabled,
+      memoryMode: newSettings.memoryMode,
       autoCreateEnabled: newSettings.autoCreateEnabled,
       autoGenerateEnabled: newSettings.autoGenerateEnabled,
       maxInjectedEntries: newSettings.maxInjectedEntries,

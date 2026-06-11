@@ -115,6 +115,7 @@ class MemoryInjectionService {
     Set<String> visibleMessageIds = const {},
   }) async {
     final sw = Stopwatch()..start();
+    var memoryMode = 'fast';
     MemoryCandidateBuildResult finish(
       MemorySelection selection,
       MemoryBudgetBreakdown budget,
@@ -127,6 +128,7 @@ class MemoryInjectionService {
           budget: budget,
           latencyMs: sw.elapsedMilliseconds,
           currentText: currentText,
+          memoryMode: memoryMode,
         ),
       );
     }
@@ -144,6 +146,7 @@ class MemoryInjectionService {
       debugPrint('[mem] no memory book found');
       return finish(const MemorySelection(), noBudget);
     }
+    memoryMode = book.settings.memoryMode;
     debugPrint('[mem] memory book loaded, entries=${book.entries.length}');
 
     final gs = _ref.read(memoryGlobalSettingsProvider);
@@ -159,12 +162,9 @@ class MemoryInjectionService {
     if (activeEntries.isEmpty) return finish(const MemorySelection(), noBudget);
 
     final vectorScores = <String, double>{};
-    final catalogMatches = await _catalogMatches(
-      book,
-      activeEntries,
-      history,
-      currentText,
-    );
+    final catalogMatches = book.settings.memoryMode == 'balanced'
+        ? await _catalogMatches(book, activeEntries, history, currentText)
+        : const _CatalogMatchResult();
     if (shouldAbort?.call() == true) {
       return finish(const MemorySelection(), noBudget);
     }

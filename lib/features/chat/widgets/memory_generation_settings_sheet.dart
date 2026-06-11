@@ -27,6 +27,7 @@ class MemoryGenerationSettingsSheet extends ConsumerStatefulWidget {
 class _MemoryGenerationSettingsSheetState
     extends ConsumerState<MemoryGenerationSettingsSheet> {
   late bool _enabled;
+  late String _memoryMode;
   late bool _autoCreate;
   late bool _autoGenerate;
   late int _maxInjected;
@@ -65,6 +66,7 @@ class _MemoryGenerationSettingsSheetState
     super.initState();
     final s = widget.settings;
     _enabled = s.enabled;
+    _memoryMode = _normalizeMemoryMode(s.memoryMode);
     _autoCreate = s.autoCreateEnabled;
     _autoGenerate = s.autoGenerateEnabled;
     _maxInjected = s.maxInjectedEntries;
@@ -136,6 +138,7 @@ class _MemoryGenerationSettingsSheetState
     final tokens = int.tryParse(_maxTokensCtrl.text);
     final settings = widget.settings.copyWith(
       enabled: _enabled,
+      memoryMode: _memoryMode,
       autoCreateEnabled: _autoCreate,
       autoGenerateEnabled: _autoGenerate,
       maxInjectedEntries: _maxInjected,
@@ -186,6 +189,8 @@ class _MemoryGenerationSettingsSheetState
             _enabled,
             (v) => setState(() => _enabled = v),
           ),
+          _memoryModeSelector(),
+          const SizedBox(height: 12),
           _switchTile(
             'memory_books_summary_auto_on'.tr(),
             _autoCreate,
@@ -448,6 +453,39 @@ class _MemoryGenerationSettingsSheetState
           ),
         ],
       ),
+    );
+  }
+
+  Widget _memoryModeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('Memory mode'),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(
+              value: 'fast',
+              label: Text('Fast'),
+              icon: Icon(Icons.bolt_rounded),
+            ),
+            ButtonSegment(
+              value: 'balanced',
+              label: Text('Balanced'),
+              icon: Icon(Icons.tune_rounded),
+            ),
+          ],
+          selected: {_memoryMode},
+          onSelectionChanged: (s) => setState(() => _memoryMode = s.first),
+          style: ButtonStyle(visualDensity: VisualDensity.compact),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _memoryMode == 'balanced'
+              ? 'Deterministic selector plus local catalog/heuristics. No external classifier call.'
+              : 'Deterministic selector only. Fastest and most predictable.',
+          style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
+        ),
+      ],
     );
   }
 
@@ -865,6 +903,7 @@ class _MemoryGenerationSettingsSheetState
       await notifier.save(
         MemoryGlobalSettings(
           enabled: current.enabled,
+          memoryMode: current.memoryMode,
           autoCreateEnabled: current.autoCreateEnabled,
           autoGenerateEnabled: current.autoGenerateEnabled,
           maxInjectedEntries: current.maxInjectedEntries,
@@ -977,4 +1016,8 @@ String _migrateInjectionTarget(String raw) {
   if (raw == 'summary_block') return 'hard_block';
   if (raw == 'summary_macro') return 'macro';
   return raw;
+}
+
+String _normalizeMemoryMode(String raw) {
+  return raw == 'balanced' ? 'balanced' : 'fast';
 }

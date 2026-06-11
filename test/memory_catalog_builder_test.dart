@@ -147,6 +147,7 @@ void main() {
       const book = MemoryBook(
         id: 'book1',
         sessionId: 'session1',
+        settings: MemoryBookSettings(memoryMode: 'balanced'),
         entries: [
           MemoryEntry(
             id: 'mem1',
@@ -207,4 +208,50 @@ void main() {
       );
     },
   );
+
+  test('fast mode skips catalog-assisted scoring', () async {
+    final db = AppDatabase.forTesting(NativeDatabase.memory());
+    final container = ProviderContainer(
+      overrides: [appDbProvider.overrideWithValue(db)],
+    );
+    addTearDown(container.dispose);
+    addTearDown(db.close);
+
+    const book = MemoryBook(
+      id: 'book1',
+      sessionId: 'session_fast',
+      settings: MemoryBookSettings(memoryMode: 'fast'),
+      entries: [
+        MemoryEntry(
+          id: 'mem1',
+          title: 'Bridge collapse',
+          keys: ['bridge'],
+          content: 'FULL MEMORY: The bridge collapsed.',
+          status: 'active',
+        ),
+      ],
+    );
+    await container.read(memoryBookRepoProvider).put(book);
+    await container.read(memoryCatalogRepoProvider).rebuildForMemoryBook(book);
+
+    final result = await container
+        .read(memoryInjectionServiceProvider)
+        .buildInjection(
+          sessionId: 'session_fast',
+          historyText: '',
+          messageCount: 1,
+          currentText: 'bridge',
+          history: const [
+            ChatMessageForSearch(role: 'user', content: 'bridge'),
+          ],
+          contextBudgetTokens: 10000,
+        );
+
+    expect(result.memoryDiagnostics!.memoryMode, 'fast');
+    expect(result.memoryDiagnostics!.candidates.single.catalogScore, 0);
+    expect(
+      result.memoryDiagnostics!.candidates.single.catalogMatchedTerms,
+      isEmpty,
+    );
+  });
 }

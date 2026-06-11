@@ -71,6 +71,7 @@ class MemoryDiagnostics {
   final bool missingContextSuspected;
   final List<String> missingContextReasons;
   final bool reliableCandidateFound;
+  final String memoryMode;
   final int selectedCount;
   final int skippedCount;
   final int totalCandidates;
@@ -86,6 +87,7 @@ class MemoryDiagnostics {
     required this.missingContextSuspected,
     required this.missingContextReasons,
     required this.reliableCandidateFound,
+    this.memoryMode = 'fast',
     required this.selectedCount,
     required this.skippedCount,
     required this.totalCandidates,
@@ -102,6 +104,7 @@ class MemoryDiagnostics {
     int Function(MemoryCandidateScore score)? tokenCounter,
     int latencyMs = 0,
     String currentText = '',
+    String memoryMode = 'fast',
   }) {
     final selectedIds = selection.entries.map((e) => e.id).toSet();
     final costs = <String, int>{};
@@ -142,7 +145,9 @@ class MemoryDiagnostics {
           );
         })
         .toList(growable: false);
-    final missingContext = _missingContextSignals(selection, currentText);
+    final missingContext = memoryMode == 'balanced'
+        ? _missingContextSignals(selection, currentText)
+        : const <String>[];
 
     return MemoryDiagnostics(
       selectedEntryIds: selection.entries
@@ -152,6 +157,7 @@ class MemoryDiagnostics {
       missingContextSuspected: missingContext.isNotEmpty,
       missingContextReasons: missingContext,
       reliableCandidateFound: _reliableCandidateFound(selection),
+      memoryMode: memoryMode,
       selectedCount: selectedIds.length,
       skippedCount: candidates.length - selectedIds.length,
       totalCandidates: candidates.length,
@@ -167,6 +173,7 @@ class MemoryDiagnostics {
 
   Map<String, dynamic> toJson() => {
     'selectedEntryIds': selectedEntryIds,
+    'memoryMode': memoryMode,
     'missingContextSuspected': missingContextSuspected,
     'missingContextReasons': missingContextReasons,
     'reliableCandidateFound': reliableCandidateFound,

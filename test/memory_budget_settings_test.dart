@@ -23,6 +23,7 @@ void main() {
             const MemoryGlobalSettings(
               maxInjectedTokens: 6000,
               memoryBudgetPreset: 'medium',
+              memoryMode: 'balanced',
             ),
           );
 
@@ -33,6 +34,7 @@ void main() {
 
       expect(json['maxInjectedTokens'], 6000);
       expect(json['memoryBudgetPreset'], 'medium');
+      expect(json['memoryMode'], 'balanced');
     },
   );
 
@@ -53,6 +55,7 @@ void main() {
       final settings = container.read(memoryGlobalSettingsProvider);
       expect(settings.maxInjectedTokens, isNull);
       expect(settings.memoryBudgetPreset, 'auto');
+      expect(settings.memoryMode, 'fast');
     },
   );
 
@@ -108,6 +111,7 @@ void main() {
         .save(
           const MemoryGlobalSettings(
             diversityAware: false,
+            memoryMode: 'balanced',
             recencyBoost: false,
             importanceWeight: 1.5,
             sourceWindowExclusion: false,
@@ -121,6 +125,7 @@ void main() {
     final book = await repo.ensureForSession('session_advanced');
 
     expect(book.settings.diversityAware, false);
+    expect(book.settings.memoryMode, 'balanced');
     expect(book.settings.recencyBoost, false);
     expect(book.settings.importanceWeight, 1.5);
     expect(book.settings.sourceWindowExclusion, false);
@@ -142,6 +147,7 @@ void main() {
     await repo.updateSettings(
       'session_update',
       const MemoryBookSettings(
+        memoryMode: 'balanced',
         diversityAware: false,
         queryIncludeAssistant: false,
         queryRecentTurns: 5,
@@ -151,6 +157,7 @@ void main() {
 
     final updated = await repo.getBySessionId('session_update');
     expect(updated!.settings.diversityAware, false);
+    expect(updated.settings.memoryMode, 'balanced');
     expect(updated.settings.queryIncludeAssistant, false);
     expect(updated.settings.queryRecentTurns, 5);
     expect(updated.settings.queryMaxChars, 1250);
