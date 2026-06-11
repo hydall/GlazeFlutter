@@ -89,6 +89,7 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(true) bool importanceBoost,
     @Default(0.5) double importanceWeight,
     @Default(true) bool sourceWindowExclusion,
+    @Default(false) bool factualContinuityGuardEnabled,
     @Default(true) bool queryIncludeAssistant,
     @Default(6) int queryRecentTurns,
     @Default(1500) int queryMaxChars,

@@ -116,6 +116,7 @@ class MemoryInjectionService {
   }) async {
     final sw = Stopwatch()..start();
     var memoryMode = 'fast';
+    var memorySettings = const MemoryBookSettings();
     MemoryCandidateBuildResult finish(
       MemorySelection selection,
       MemoryBudgetBreakdown budget,
@@ -129,6 +130,8 @@ class MemoryInjectionService {
           latencyMs: sw.elapsedMilliseconds,
           currentText: currentText,
           memoryMode: memoryMode,
+          factualContinuityGuardEnabled:
+              memorySettings.factualContinuityGuardEnabled,
         ),
       );
     }
@@ -147,6 +150,7 @@ class MemoryInjectionService {
       return finish(const MemorySelection(), noBudget);
     }
     memoryMode = book.settings.memoryMode;
+    memorySettings = book.settings;
     debugPrint('[mem] memory book loaded, entries=${book.entries.length}');
 
     final gs = _ref.read(memoryGlobalSettingsProvider);

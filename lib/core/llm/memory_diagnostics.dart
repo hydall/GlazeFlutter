@@ -71,6 +71,8 @@ class MemoryDiagnostics {
   final bool missingContextSuspected;
   final List<String> missingContextReasons;
   final bool reliableCandidateFound;
+  final bool factualContinuityGuardEnabled;
+  final bool factualContinuityGuardActive;
   final String memoryMode;
   final int selectedCount;
   final int skippedCount;
@@ -87,6 +89,8 @@ class MemoryDiagnostics {
     required this.missingContextSuspected,
     required this.missingContextReasons,
     required this.reliableCandidateFound,
+    this.factualContinuityGuardEnabled = false,
+    this.factualContinuityGuardActive = false,
     this.memoryMode = 'fast',
     required this.selectedCount,
     required this.skippedCount,
@@ -105,6 +109,7 @@ class MemoryDiagnostics {
     int latencyMs = 0,
     String currentText = '',
     String memoryMode = 'fast',
+    bool factualContinuityGuardEnabled = false,
   }) {
     final selectedIds = selection.entries.map((e) => e.id).toSet();
     final costs = <String, int>{};
@@ -157,6 +162,9 @@ class MemoryDiagnostics {
       missingContextSuspected: missingContext.isNotEmpty,
       missingContextReasons: missingContext,
       reliableCandidateFound: _reliableCandidateFound(selection),
+      factualContinuityGuardEnabled: factualContinuityGuardEnabled,
+      factualContinuityGuardActive:
+          factualContinuityGuardEnabled && missingContext.isNotEmpty,
       memoryMode: memoryMode,
       selectedCount: selectedIds.length,
       skippedCount: candidates.length - selectedIds.length,
@@ -177,6 +185,8 @@ class MemoryDiagnostics {
     'missingContextSuspected': missingContextSuspected,
     'missingContextReasons': missingContextReasons,
     'reliableCandidateFound': reliableCandidateFound,
+    'factualContinuityGuardEnabled': factualContinuityGuardEnabled,
+    'factualContinuityGuardActive': factualContinuityGuardActive,
     'selectedCount': selectedCount,
     'skippedCount': skippedCount,
     'totalCandidates': totalCandidates,

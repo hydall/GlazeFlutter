@@ -75,6 +75,7 @@ void main() {
             importanceBoost: false,
             importanceWeight: 1.25,
             sourceWindowExclusion: false,
+            factualContinuityGuardEnabled: true,
             queryIncludeAssistant: false,
             queryRecentTurns: 4,
             queryMaxChars: 750,
@@ -92,6 +93,7 @@ void main() {
     expect(json['importanceBoost'], false);
     expect(json['importanceWeight'], 1.25);
     expect(json['sourceWindowExclusion'], false);
+    expect(json['factualContinuityGuardEnabled'], true);
     expect(json['queryIncludeAssistant'], false);
     expect(json['queryRecentTurns'], 4);
     expect(json['queryMaxChars'], 750);
@@ -115,6 +117,7 @@ void main() {
             recencyBoost: false,
             importanceWeight: 1.5,
             sourceWindowExclusion: false,
+            factualContinuityGuardEnabled: true,
             queryIncludeAssistant: false,
             queryRecentTurns: 3,
             queryMaxChars: 900,
@@ -129,6 +132,7 @@ void main() {
     expect(book.settings.recencyBoost, false);
     expect(book.settings.importanceWeight, 1.5);
     expect(book.settings.sourceWindowExclusion, false);
+    expect(book.settings.factualContinuityGuardEnabled, true);
     expect(book.settings.queryIncludeAssistant, false);
     expect(book.settings.queryRecentTurns, 3);
     expect(book.settings.queryMaxChars, 900);
@@ -149,6 +153,7 @@ void main() {
       const MemoryBookSettings(
         memoryMode: 'balanced',
         diversityAware: false,
+        factualContinuityGuardEnabled: true,
         queryIncludeAssistant: false,
         queryRecentTurns: 5,
         queryMaxChars: 1250,
@@ -158,6 +163,7 @@ void main() {
     final updated = await repo.getBySessionId('session_update');
     expect(updated!.settings.diversityAware, false);
     expect(updated.settings.memoryMode, 'balanced');
+    expect(updated.settings.factualContinuityGuardEnabled, true);
     expect(updated.settings.queryIncludeAssistant, false);
     expect(updated.settings.queryRecentTurns, 5);
     expect(updated.settings.queryMaxChars, 1250);

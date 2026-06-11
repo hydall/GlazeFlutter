@@ -909,7 +909,8 @@ PromptResult _assembleMessages({
         refiltered,
         summaryExcerpt: payload.summaryContent,
       );
-      final hasMemoryBlock = messages.any((m) => m.blockId == 'memory') ||
+      final hasMemoryBlock =
+          messages.any((m) => m.blockId == 'memory') ||
           appendedEntries.any((b) => b.id == 'memory');
       if (!hasMemoryBlock) {
         _injectMemoryBlock(messages, attributionBlocks, rebuilt.content);
@@ -924,6 +925,28 @@ PromptResult _assembleMessages({
         vectorLoreTokens: vectorLoreTokens,
         memoryContent: rebuilt.content,
         memoryMacroContent: rebuilt.macroContent,
+        visibleMessageIds: breakdown.visibleMessageIds,
+      );
+    } else if (refiltered.entries.isEmpty &&
+        _shouldInjectFactualContinuityGuard(payload)) {
+      const guard =
+          'Factual continuity note: The latest user message may refer to older context, but no reliable Memory Book entry was selected. Do not invent specific past events; ask for clarification or answer only from visible chat context.';
+      final hasMemoryBlock =
+          messages.any((m) => m.blockId == 'memory') ||
+          appendedEntries.any((b) => b.id == 'memory');
+      if (!hasMemoryBlock) {
+        _injectMemoryBlock(messages, attributionBlocks, guard);
+      }
+      breakdown = _recomputeBreakdownWithMemory(
+        calculator: calculator,
+        baseBreakdown: breakdown,
+        attributionBlocks: attributionBlocks,
+        historyMessages: historyOnly,
+        lorebookReserveTokens: lorebookReserve,
+        macroTokens: macroTokens,
+        vectorLoreTokens: vectorLoreTokens,
+        memoryContent: guard,
+        memoryMacroContent: '',
         visibleMessageIds: breakdown.visibleMessageIds,
       );
     }
@@ -1020,6 +1043,14 @@ PromptResult _assembleMessages({
   );
 }
 
+bool _shouldInjectFactualContinuityGuard(PromptPayload payload) {
+  final diagnostics = payload.memoryCoverage['diagnostics'];
+  if (diagnostics is! Map) return false;
+  final active = diagnostics['factualContinuityGuardActive'] == true;
+  final reliable = diagnostics['reliableCandidateFound'] == true;
+  return active && !reliable;
+}
+
 void _injectMemoryBlock(
   List<PromptMessage> messages,
   List<StaticBlock> attributionBlocks,
@@ -1093,21 +1124,25 @@ MemorySelection _refilterMemorySelection(
   required Set<String> visibleMessageIds,
 }) {
   if (visibleMessageIds.isEmpty) return previous;
-  final needsRefilter = previous.allScores.any((s) =>
-      !s.excludedBySourceWindow &&
-      s.entry.messageIds.isNotEmpty &&
-      s.entry.messageIds.any(visibleMessageIds.contains));
+  final needsRefilter = previous.allScores.any(
+    (s) =>
+        !s.excludedBySourceWindow &&
+        s.entry.messageIds.isNotEmpty &&
+        s.entry.messageIds.any(visibleMessageIds.contains),
+  );
   if (!needsRefilter) return previous;
-  return MemorySelector.select(MemorySelectionInput(
-    entries: previous.allScores.map((s) => s.entry).toList(),
-    visibleMessageIds: visibleMessageIds,
-    maxInjectionTokens: previous.budgetTokens,
-    maxInjectedEntries: previous.entryCap > 0
-        ? previous.entryCap
-        : previous.entries.length,
-    sourceWindowExclusion: true,
-    diversityAware: false,
-  ));
+  return MemorySelector.select(
+    MemorySelectionInput(
+      entries: previous.allScores.map((s) => s.entry).toList(),
+      visibleMessageIds: visibleMessageIds,
+      maxInjectionTokens: previous.budgetTokens,
+      maxInjectedEntries: previous.entryCap > 0
+          ? previous.entryCap
+          : previous.entries.length,
+      sourceWindowExclusion: true,
+      diversityAware: false,
+    ),
+  );
 }
 
 _RebuiltMemoryContent _buildMemoryContentFromSelection(
@@ -1152,12 +1187,14 @@ TokenBreakdown _recomputeBreakdownWithMemory({
       .where((b) => b.id != 'memory')
       .toList(growable: false);
   final memoryTokens = estimateTokens(memoryContent);
-  return calculator.calculate(
-    staticBlocks: filteredBlocks,
-    historyMessages: historyMessages,
-    lorebookReserveTokens: lorebookReserveTokens,
-    macroTokens: macroTokens,
-    memoryTokens: memoryTokens,
-    vectorLoreTokens: vectorLoreTokens,
-  ).copyWithVisible(visibleMessageIds);
+  return calculator
+      .calculate(
+        staticBlocks: filteredBlocks,
+        historyMessages: historyMessages,
+        lorebookReserveTokens: lorebookReserveTokens,
+        macroTokens: macroTokens,
+        memoryTokens: memoryTokens,
+        vectorLoreTokens: vectorLoreTokens,
+      )
+      .copyWithVisible(visibleMessageIds);
 }

@@ -55,6 +55,7 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         importanceBoost: global.importanceBoost,
         importanceWeight: global.importanceWeight,
         sourceWindowExclusion: global.sourceWindowExclusion,
+        factualContinuityGuardEnabled: global.factualContinuityGuardEnabled,
         queryIncludeAssistant: global.queryIncludeAssistant,
         queryRecentTurns: global.queryRecentTurns,
         queryMaxChars: global.queryMaxChars,

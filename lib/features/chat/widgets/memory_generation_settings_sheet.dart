@@ -50,6 +50,7 @@ class _MemoryGenerationSettingsSheetState
   late bool _importanceBoost;
   late double _importanceWeight;
   late bool _sourceWindowExclusion;
+  late bool _factualContinuityGuardEnabled;
   late bool _queryIncludeAssistant;
   late int _queryRecentTurns;
   late int _queryMaxChars;
@@ -98,6 +99,7 @@ class _MemoryGenerationSettingsSheetState
     _importanceBoost = s.importanceBoost;
     _importanceWeight = s.importanceWeight;
     _sourceWindowExclusion = s.sourceWindowExclusion;
+    _factualContinuityGuardEnabled = s.factualContinuityGuardEnabled;
     _queryIncludeAssistant = s.queryIncludeAssistant;
     _queryRecentTurns = s.queryRecentTurns;
     _queryMaxChars = s.queryMaxChars;
@@ -164,6 +166,7 @@ class _MemoryGenerationSettingsSheetState
       importanceBoost: _importanceBoost,
       importanceWeight: _importanceWeight,
       sourceWindowExclusion: _sourceWindowExclusion,
+      factualContinuityGuardEnabled: _factualContinuityGuardEnabled,
       queryIncludeAssistant: _queryIncludeAssistant,
       queryRecentTurns: _queryRecentTurns,
       queryMaxChars: _queryMaxChars,
@@ -430,6 +433,13 @@ class _MemoryGenerationSettingsSheetState
             'Exclude sources already visible',
             _sourceWindowExclusion,
             (v) => setState(() => _sourceWindowExclusion = v),
+          ),
+          _switchTile(
+            'Factual-continuity guard',
+            _factualContinuityGuardEnabled,
+            (v) => setState(() => _factualContinuityGuardEnabled = v),
+            subtitle:
+                'Opt-in: when Balanced suspects missing context but finds no reliable memory, add a short anti-hallucination guard to the prompt.',
           ),
           _switchTile(
             'Include assistant turns in vector query',
@@ -932,6 +942,7 @@ class _MemoryGenerationSettingsSheetState
           importanceBoost: current.importanceBoost,
           importanceWeight: current.importanceWeight,
           sourceWindowExclusion: current.sourceWindowExclusion,
+          factualContinuityGuardEnabled: current.factualContinuityGuardEnabled,
           queryIncludeAssistant: current.queryIncludeAssistant,
           queryRecentTurns: current.queryRecentTurns,
           queryMaxChars: current.queryMaxChars,

@@ -128,6 +128,7 @@ void main() {
         expect(json['missingContextSuspected'], isFalse);
         expect(json['missingContextReasons'], isEmpty);
         expect(json['reliableCandidateFound'], isFalse);
+        expect(json['factualContinuityGuardActive'], isFalse);
         expect(json['budget'], containsPair('source', 'percent'));
         final candidates = json['candidates'] as List<dynamic>;
         final visible = candidates.cast<Map<String, dynamic>>().firstWhere(
@@ -168,11 +169,14 @@ void main() {
           budget: const MemoryBudgetBreakdown(source: 'none'),
           currentText: 'Do you remember what happened before?',
           memoryMode: 'balanced',
+          factualContinuityGuardEnabled: true,
         );
 
         expect(selection.entries, isEmpty);
         expect(diagnostics.reliableCandidateFound, isFalse);
         expect(diagnostics.missingContextSuspected, isTrue);
+        expect(diagnostics.factualContinuityGuardEnabled, isTrue);
+        expect(diagnostics.factualContinuityGuardActive, isTrue);
         expect(
           diagnostics.missingContextReasons,
           containsAll([

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:glaze_flutter/core/llm/prompt_builder.dart';
+import 'package:glaze_flutter/core/llm/memory_selector.dart';
 import 'package:glaze_flutter/core/models/api_config.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
@@ -83,4 +84,56 @@ void main() {
       expect(result.messages[1].isDepth, isTrue);
     },
   );
+
+  test('factual-continuity guard is opt-in and prompt-only', () {
+    PromptPayload payload({required bool guardActive}) => PromptPayload(
+      character: Character(id: 'c1', name: 'Alice'),
+      preset: const Preset(
+        id: 'p1',
+        name: 'Prompt',
+        blocks: [
+          PresetBlock(
+            id: 'chat_history',
+            name: 'History',
+            role: 'system',
+            content: '',
+          ),
+        ],
+      ),
+      history: const [
+        ChatMessage(id: 'm1', role: 'user', content: 'Do you remember?'),
+      ],
+      apiConfig: const ApiConfig(
+        id: 'api',
+        name: 'API',
+        contextSize: 10000,
+        maxTokens: 100,
+      ),
+      memorySelection: const MemorySelection(),
+      memoryCoverage: {
+        'diagnostics': {
+          'missingContextSuspected': true,
+          'reliableCandidateFound': false,
+          'factualContinuityGuardActive': guardActive,
+        },
+      },
+    );
+
+    final defaultResult = buildPrompt(payload(guardActive: false));
+    expect(
+      defaultResult.messages.any(
+        (message) => message.content.contains('Factual continuity note'),
+      ),
+      isFalse,
+    );
+
+    final guardedResult = buildPrompt(payload(guardActive: true));
+    expect(
+      guardedResult.messages.any(
+        (message) => message.content.contains('Factual continuity note'),
+      ),
+      isTrue,
+    );
+    expect(guardedResult.messages.where((m) => m.isHistory), hasLength(1));
+  });
 }
