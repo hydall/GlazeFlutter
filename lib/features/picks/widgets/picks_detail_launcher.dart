@@ -129,7 +129,14 @@ class _PicksDetailLauncherState extends ConsumerState<PicksDetailLauncher> {
           result.characterBookData!,
           characterWithHash.id,
         );
+        debugPrint(
+          '[character_import] picks saving_lorebook id=${converted.id} '
+          'name=${converted.name} entries=${converted.entries.length} '
+          'character=${characterWithHash.id}',
+        );
         await ref.read(lorebooksProvider.notifier).put(converted);
+      } else {
+        debugPrint('[character_import] picks no_lorebook character=${characterWithHash.id}');
       }
 
       if (mounted) {

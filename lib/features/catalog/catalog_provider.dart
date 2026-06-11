@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -291,7 +291,18 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
     if (charData.characterBook is Map) {
       final book = Map<String, dynamic>.from(charData.characterBook as Map);
-      await lorebookRepo.put(convertCharacterBook(book, id));
+      final lorebook = convertCharacterBook(book, id);
+      debugPrint(
+        '[character_import] catalog saving_lorebook id=${lorebook.id} '
+        'name=${lorebook.name} entries=${lorebook.entries.length} '
+        'character=$id',
+      );
+      await lorebookRepo.put(lorebook);
+    } else {
+      debugPrint(
+        '[character_import] catalog no_lorebook character=$id '
+        'book_type=${charData.characterBook.runtimeType}',
+      );
     }
 
     return id;

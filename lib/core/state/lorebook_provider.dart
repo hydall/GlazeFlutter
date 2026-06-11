@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -107,6 +108,11 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
   Future<void> put(Lorebook lorebook) async {
     final repo = ref.read(lorebookRepoProvider);
     await repo.put(lorebook);
+    debugPrint(
+      '[lorebook_provider] put id=${lorebook.id} name=${lorebook.name} '
+      'entries=${lorebook.entries.length} scope=${lorebook.activationScope} '
+      'target=${lorebook.activationTargetId}',
+    );
     _syncActivationToPrefs(lorebook);
     ref.invalidateSelf();
   }
@@ -141,6 +147,10 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
       ref.read(lorebookActivationsProvider.notifier).state = updated;
       final prefs = ref.read(sharedPreferencesProvider).value;
       await saveLorebookActivations(updated, prefs);
+      debugPrint(
+        '[lorebook_provider] activation_synced lorebook=${lorebook.id} '
+        'scope=$scope target=$targetId ids=${map[targetId]}',
+      );
     }
   }
 
