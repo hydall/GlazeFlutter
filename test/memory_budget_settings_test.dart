@@ -76,6 +76,12 @@ void main() {
             importanceWeight: 1.25,
             sourceWindowExclusion: false,
             factualContinuityGuardEnabled: true,
+            classifierEnabled: true,
+            classifierSource: 'custom',
+            classifierModel: 'classifier-mini',
+            classifierEndpoint: 'https://classifier.example/v1',
+            classifierApiKey: 'classifier-key',
+            classifierTimeoutMs: 3500,
             queryIncludeAssistant: false,
             queryRecentTurns: 4,
             queryMaxChars: 750,
@@ -94,6 +100,12 @@ void main() {
     expect(json['importanceWeight'], 1.25);
     expect(json['sourceWindowExclusion'], false);
     expect(json['factualContinuityGuardEnabled'], true);
+    expect(json['classifierEnabled'], true);
+    expect(json['classifierSource'], 'custom');
+    expect(json['classifierModel'], 'classifier-mini');
+    expect(json['classifierEndpoint'], 'https://classifier.example/v1');
+    expect(json['classifierApiKey'], 'classifier-key');
+    expect(json['classifierTimeoutMs'], 3500);
     expect(json['queryIncludeAssistant'], false);
     expect(json['queryRecentTurns'], 4);
     expect(json['queryMaxChars'], 750);
@@ -118,6 +130,9 @@ void main() {
             importanceWeight: 1.5,
             sourceWindowExclusion: false,
             factualContinuityGuardEnabled: true,
+            classifierEnabled: true,
+            classifierModel: 'classifier-mini',
+            classifierTimeoutMs: 3500,
             queryIncludeAssistant: false,
             queryRecentTurns: 3,
             queryMaxChars: 900,
@@ -133,6 +148,9 @@ void main() {
     expect(book.settings.importanceWeight, 1.5);
     expect(book.settings.sourceWindowExclusion, false);
     expect(book.settings.factualContinuityGuardEnabled, true);
+    expect(book.settings.classifierEnabled, true);
+    expect(book.settings.classifierModel, 'classifier-mini');
+    expect(book.settings.classifierTimeoutMs, 3500);
     expect(book.settings.queryIncludeAssistant, false);
     expect(book.settings.queryRecentTurns, 3);
     expect(book.settings.queryMaxChars, 900);
@@ -154,6 +172,10 @@ void main() {
         memoryMode: 'balanced',
         diversityAware: false,
         factualContinuityGuardEnabled: true,
+        classifierEnabled: true,
+        classifierSource: 'current',
+        classifierModel: 'classifier-mini',
+        classifierTimeoutMs: 3000,
         queryIncludeAssistant: false,
         queryRecentTurns: 5,
         queryMaxChars: 1250,
@@ -164,6 +186,10 @@ void main() {
     expect(updated!.settings.diversityAware, false);
     expect(updated.settings.memoryMode, 'balanced');
     expect(updated.settings.factualContinuityGuardEnabled, true);
+    expect(updated.settings.classifierEnabled, true);
+    expect(updated.settings.classifierSource, 'current');
+    expect(updated.settings.classifierModel, 'classifier-mini');
+    expect(updated.settings.classifierTimeoutMs, 3000);
     expect(updated.settings.queryIncludeAssistant, false);
     expect(updated.settings.queryRecentTurns, 5);
     expect(updated.settings.queryMaxChars, 1250);

@@ -51,6 +51,9 @@ class _MemoryGenerationSettingsSheetState
   late double _importanceWeight;
   late bool _sourceWindowExclusion;
   late bool _factualContinuityGuardEnabled;
+  late bool _classifierEnabled;
+  late String _classifierSource;
+  late int _classifierTimeoutMs;
   late bool _queryIncludeAssistant;
   late int _queryRecentTurns;
   late int _queryMaxChars;
@@ -61,6 +64,9 @@ class _MemoryGenerationSettingsSheetState
   late final TextEditingController _temperatureCtrl;
   late final TextEditingController _maxTokensCtrl;
   late final TextEditingController _memoryBudgetCtrl;
+  late final TextEditingController _classifierModelCtrl;
+  late final TextEditingController _classifierEndpointCtrl;
+  late final TextEditingController _classifierApiKeyCtrl;
 
   @override
   void initState() {
@@ -100,6 +106,9 @@ class _MemoryGenerationSettingsSheetState
     _importanceWeight = s.importanceWeight;
     _sourceWindowExclusion = s.sourceWindowExclusion;
     _factualContinuityGuardEnabled = s.factualContinuityGuardEnabled;
+    _classifierEnabled = s.classifierEnabled;
+    _classifierSource = _normalizeClassifierSource(s.classifierSource);
+    _classifierTimeoutMs = s.classifierTimeoutMs.clamp(500, 10000);
     _queryIncludeAssistant = s.queryIncludeAssistant;
     _queryRecentTurns = s.queryRecentTurns;
     _queryMaxChars = s.queryMaxChars;
@@ -107,6 +116,9 @@ class _MemoryGenerationSettingsSheetState
     _generationModelCtrl = TextEditingController(text: s.generationModel);
     _generationEndpointCtrl = TextEditingController(text: s.generationEndpoint);
     _generationApiKeyCtrl = TextEditingController(text: s.generationApiKey);
+    _classifierModelCtrl = TextEditingController(text: s.classifierModel);
+    _classifierEndpointCtrl = TextEditingController(text: s.classifierEndpoint);
+    _classifierApiKeyCtrl = TextEditingController(text: s.classifierApiKey);
     _temperatureCtrl = TextEditingController(
       text: s.generationTemperature != null && s.generationTemperature! > 0
           ? s.generationTemperature!.round().toString()
@@ -127,6 +139,9 @@ class _MemoryGenerationSettingsSheetState
     _temperatureCtrl.dispose();
     _maxTokensCtrl.dispose();
     _memoryBudgetCtrl.dispose();
+    _classifierModelCtrl.dispose();
+    _classifierEndpointCtrl.dispose();
+    _classifierApiKeyCtrl.dispose();
     super.dispose();
   }
 
@@ -167,6 +182,12 @@ class _MemoryGenerationSettingsSheetState
       importanceWeight: _importanceWeight,
       sourceWindowExclusion: _sourceWindowExclusion,
       factualContinuityGuardEnabled: _factualContinuityGuardEnabled,
+      classifierEnabled: _classifierEnabled,
+      classifierSource: _classifierSource,
+      classifierModel: _classifierModelCtrl.text,
+      classifierEndpoint: _classifierEndpointCtrl.text,
+      classifierApiKey: _classifierApiKeyCtrl.text,
+      classifierTimeoutMs: _classifierTimeoutMs,
       queryIncludeAssistant: _queryIncludeAssistant,
       queryRecentTurns: _queryRecentTurns,
       queryMaxChars: _queryMaxChars,
@@ -441,6 +462,7 @@ class _MemoryGenerationSettingsSheetState
             subtitle:
                 'Opt-in: when Balanced suspects missing context but finds no reliable memory, add a short anti-hallucination guard to the prompt.',
           ),
+          _classifierSettings(),
           _switchTile(
             'Include assistant turns in vector query',
             _queryIncludeAssistant,
@@ -495,6 +517,71 @@ class _MemoryGenerationSettingsSheetState
               : 'Deterministic selector only. Fastest and most predictable.',
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
+      ],
+    );
+  }
+
+  Widget _classifierSettings() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _switchTile(
+          'Needs-memory classifier',
+          _classifierEnabled,
+          (v) => setState(() => _classifierEnabled = v),
+          subtitle:
+              'Optional external model call in future Balanced/Deep modes. Disabled by default; this commit only saves configuration.',
+        ),
+        if (_classifierEnabled) ...[
+          Text(
+            'External-call disclosure: enabling the classifier may send recent chat context to the selected model before generation. Commit 12 stores settings only; no classifier request is made yet.',
+            style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'current', label: Text('Current API')),
+              ButtonSegment(value: 'custom', label: Text('Custom')),
+            ],
+            selected: {_classifierSource},
+            onSelectionChanged: (s) =>
+                setState(() => _classifierSource = s.first),
+            style: ButtonStyle(visualDensity: VisualDensity.compact),
+          ),
+          const SizedBox(height: 8),
+          if (_classifierSource == 'custom') ...[
+            _labeledField(
+              'settings_embedding_endpoint'.tr(),
+              _classifierEndpointCtrl,
+              hint: 'https://...',
+            ),
+            const SizedBox(height: 8),
+          ],
+          _labeledField(
+            'Classifier model',
+            _classifierModelCtrl,
+            hint: _classifierSource == 'custom'
+                ? 'gpt-4o-mini'
+                : 'Leave blank for current LLM model',
+          ),
+          if (_classifierSource == 'custom') ...[
+            const SizedBox(height: 8),
+            _labeledField(
+              'label_embedding_key'.tr(),
+              _classifierApiKeyCtrl,
+              hint: 'sk-...',
+              obscure: true,
+            ),
+          ],
+          _numberField(
+            'Classifier timeout ms',
+            _classifierTimeoutMs,
+            (v) => setState(() => _classifierTimeoutMs = v),
+            min: 500,
+            max: 10000,
+            step: 500,
+          ),
+        ],
       ],
     );
   }
@@ -943,6 +1030,12 @@ class _MemoryGenerationSettingsSheetState
           importanceWeight: current.importanceWeight,
           sourceWindowExclusion: current.sourceWindowExclusion,
           factualContinuityGuardEnabled: current.factualContinuityGuardEnabled,
+          classifierEnabled: current.classifierEnabled,
+          classifierSource: current.classifierSource,
+          classifierModel: current.classifierModel,
+          classifierEndpoint: current.classifierEndpoint,
+          classifierApiKey: current.classifierApiKey,
+          classifierTimeoutMs: current.classifierTimeoutMs,
           queryIncludeAssistant: current.queryIncludeAssistant,
           queryRecentTurns: current.queryRecentTurns,
           queryMaxChars: current.queryMaxChars,
@@ -1031,4 +1124,8 @@ String _migrateInjectionTarget(String raw) {
 
 String _normalizeMemoryMode(String raw) {
   return raw == 'balanced' ? 'balanced' : 'fast';
+}
+
+String _normalizeClassifierSource(String raw) {
+  return raw == 'custom' ? 'custom' : 'current';
 }
