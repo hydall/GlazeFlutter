@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/services/character_book_converter.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import 'catalog_models.dart';
@@ -288,32 +289,9 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
       avatarPath: avatarPath,
     );
 
-    if (charData.characterBook != null && charData.characterBook is Map) {
-      final book = charData.characterBook as Map<String, dynamic>;
-      final entries = (book['entries'] as Map<String, dynamic>?) ?? {};
-      for (final entry in entries.values) {
-        if (entry is Map<String, dynamic>) {
-          await lorebookRepo.createEntryFromCatalog(
-            characterId: id,
-            keys: (entry['keys'] as List?)?.cast<String>() ?? [],
-            content: (entry['content'] ?? '') as String,
-            extensions: (entry['extensions'] as Map<String, dynamic>?) ?? {},
-            enabled: entry['enabled'] as bool? ?? true,
-            insertionOrder:
-                (entry['insertion_order'] ?? entry['position'] ?? 0) as int,
-            caseSensitive: entry['case_sensitive'] as bool? ?? false,
-            name: (entry['name'] ?? '') as String,
-            priority: (entry['priority'] ?? 0) as int,
-            id: (entry['id'] ?? 0) as int,
-            comment: (entry['comment'] ?? '') as String,
-            selective: entry['selective'] as bool? ?? false,
-            secondaryKeys:
-                (entry['secondary_keys'] as List?)?.cast<String>() ?? [],
-            constant: entry['constant'] as bool? ?? false,
-            order: (entry['order'] ?? 0) as int,
-          );
-        }
-      }
+    if (charData.characterBook is Map) {
+      final book = Map<String, dynamic>.from(charData.characterBook as Map);
+      await lorebookRepo.put(convertCharacterBook(book, id));
     }
 
     return id;

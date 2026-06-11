@@ -7,6 +7,7 @@ import 'package:glaze_flutter/core/db/repositories/character_repo.dart';
 import 'package:glaze_flutter/core/db/repositories/lorebook_repo.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/lorebook.dart';
+import 'package:glaze_flutter/core/services/character_book_converter.dart';
 
 AppDatabase _testDb() => AppDatabase.forTesting(NativeDatabase.memory());
 
@@ -136,6 +137,33 @@ void main() {
 
       lb = await repo.getById('char1');
       expect(lb!.entries.length, 2);
+    });
+
+    test('convertCharacterBook handles list and map entries', () {
+      final listBook = convertCharacterBook({
+        'name': 'List Book',
+        'entries': [
+          {
+            'keys': ['alpha'],
+            'content': 'List entry.',
+          },
+        ],
+      }, 'char1');
+
+      final mapBook = convertCharacterBook({
+        'name': 'Map Book',
+        'entries': {
+          '0': {
+            'keys': ['beta'],
+            'content': 'Map entry.',
+          },
+        },
+      }, 'char2');
+
+      expect(listBook.entries, hasLength(1));
+      expect(listBook.entries.first.keys, equals(['alpha']));
+      expect(mapBook.entries, hasLength(1));
+      expect(mapBook.entries.first.keys, equals(['beta']));
     });
 
     test('settings round-trip through put/getAll', () async {

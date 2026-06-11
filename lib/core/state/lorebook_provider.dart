@@ -107,6 +107,7 @@ class LorebooksNotifier extends AsyncNotifier<List<Lorebook>> {
   Future<void> put(Lorebook lorebook) async {
     final repo = ref.read(lorebookRepoProvider);
     await repo.put(lorebook);
+    _syncActivationToPrefs(lorebook);
     ref.invalidateSelf();
   }
 

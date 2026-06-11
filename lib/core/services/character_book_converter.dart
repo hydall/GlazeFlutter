@@ -4,11 +4,13 @@ Lorebook convertCharacterBook(
   Map<String, dynamic> bookData,
   String characterId,
 ) {
-  final rawEntries = bookData['entries'] as List<dynamic>? ?? [];
+  final rawEntries = _normalizeEntries(bookData['entries']);
   final entries = <LorebookEntry>[];
 
   for (int i = 0; i < rawEntries.length; i++) {
-    final e = rawEntries[i] as Map<String, dynamic>;
+    final rawEntry = rawEntries[i];
+    if (rawEntry is! Map) continue;
+    final e = Map<String, dynamic>.from(rawEntry);
     final keys = (e['keys'] as List<dynamic>?)
             ?.map((k) => k.toString())
             .toList() ??
@@ -47,6 +49,12 @@ Lorebook convertCharacterBook(
     activationTargetId: characterId,
     entries: entries,
   );
+}
+
+List<dynamic> _normalizeEntries(dynamic entries) {
+  if (entries is List) return entries;
+  if (entries is Map) return entries.values.toList();
+  return const [];
 }
 
 String _mapPosition(int? pos) {
