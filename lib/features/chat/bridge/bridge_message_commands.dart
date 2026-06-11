@@ -113,11 +113,13 @@ class MessageBridgeCommands {
   Future<void> updateMessage(
     ChatMessage message, {
     bool isStreamingUpdate = false,
+    bool isLast = false,
   }) async {
     final map = ChatMessageMapper.toMap(
       message,
       _host.mapperContext,
       isStreamingUpdate: isStreamingUpdate,
+      isLast: isLast,
       displayRegexes: _host.displayRegexes,
       character: _host.regexCharacter,
       persona: _host.regexPersona,

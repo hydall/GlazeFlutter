@@ -385,6 +385,15 @@ export class Bridge {
     if (msg.swipeTotal !== undefined) section.dataset.swipeTotal = String(msg.swipeTotal);
     if (msg.greetingTotal !== undefined) section.dataset.greetingTotal = String(msg.greetingTotal);
 
+    // Restore data-is-last on char sections after generation ends.
+    // setLastMessage(null) clears this flag at generation start; without
+    // re-applying it here, the swipe gesture handler sees isLast=false and
+    // blocks the left-swipe-to-regenerate gesture on subsequent swipes.
+    if (msg.isLast !== undefined && !section.classList.contains('user')) {
+      if (msg.isLast) section.dataset.isLast = 'true';
+      else delete section.dataset.isLast;
+    }
+
     this._syncMessageControls(section, msg);
 
     this.renderer.updateMessageMeta(section, msg);

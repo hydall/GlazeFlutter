@@ -116,7 +116,20 @@ class ChatWebViewSyncDispatcher {
             .where((m) => m.id == finishedRegenId)
             .firstOrNull;
         if (finalMsg != null) {
-          bridge.updateMessage(finalMsg);
+          // Pass isLast:true so _executeUpdateMessage restores data-is-last
+          // on the char section. setLastMessage(null) clears it at generation
+          // start; without this the swipe gesture handler sees isLast=false
+          // and blocks subsequent left-swipe-to-regenerate gestures.
+          bridge.updateMessage(finalMsg, isLast: true);
+        }
+      } else {
+        // Fresh generation (no regenTargetId): restore data-is-last on the
+        // last char message so subsequent swipe-to-regenerate still works.
+        final lastCharMsg = newMessages.lastWhereOrNull(
+          (m) => m.role == 'assistant' || m.role == 'character',
+        );
+        if (lastCharMsg != null) {
+          bridge.updateMessage(lastCharMsg, isLast: true);
         }
       }
       if (!state.regenStreamingSent) {
