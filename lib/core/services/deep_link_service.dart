@@ -9,18 +9,22 @@ class DeepLinkService {
 
   final Map<String, Completer<Uri>> _pendingOAuth = {};
   final Map<String, Uri> _earlyCallbacks = {};
-  late final AppLinks _appLinks;
+  AppLinks? _appLinks;
   StreamSubscription<Uri>? _subscription;
 
   Future<void> init() async {
+    // Guard against repeated init (widget tests pump the app multiple
+    // times, and `_appLinks` is a process-wide singleton). The first
+    // init wins; later calls are no-ops.
+    if (_appLinks != null) return;
     _appLinks = AppLinks();
 
     try {
-      final initialLink = await _appLinks.getInitialLink();
+      final initialLink = await _appLinks!.getInitialLink();
       if (initialLink != null) _handleDeepLink(initialLink);
     } catch (_) {}
 
-    _subscription = _appLinks.uriLinkStream.listen(
+    _subscription = _appLinks!.uriLinkStream.listen(
       _handleDeepLink,
       onError: (Object e) => debugPrint('DeepLinkService: error: $e'),
     );

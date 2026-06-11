@@ -14,8 +14,9 @@ class _FakeInfoBlockReader implements InfoBlockReader {
   @override
   Future<List<InfoBlock>> getByMessageId(
     String sessionId,
-    String messageId,
-  ) async {
+    String messageId, {
+    int swipeId = 0,
+  }) async {
     return _byMessageId[messageId] ?? const [];
   }
 }

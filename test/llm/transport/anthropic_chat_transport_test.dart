@@ -39,14 +39,16 @@ ChatTransportRequest _req({
 
 void main() {
   group('buildMessagesUrl', () {
-    test('default endpoint → /v1/messages', () {
+    // Endpoints are normalised without auto-inserting /v1/ (the user is
+    // responsible for the path). See commit aaa3425 "endpoints normalization".
+    test('default endpoint → /messages', () {
       expect(
         AnthropicChatTransport.buildMessagesUrl('https://api.anthropic.com'),
-        'https://api.anthropic.com/v1/messages',
+        'https://api.anthropic.com/messages',
       );
     });
 
-    test('endpoint with /v1 suffix preserved', () {
+    test('endpoint with /v1 suffix is preserved', () {
       expect(
         AnthropicChatTransport.buildMessagesUrl('https://proxy.example/v1'),
         'https://proxy.example/v1/messages',
@@ -62,17 +64,21 @@ void main() {
       );
     });
 
-    test('empty endpoint falls back to anthropic default', () {
-      expect(
-        AnthropicChatTransport.buildMessagesUrl(''),
-        'https://api.anthropic.com/v1/messages',
-      );
+    test('empty endpoint falls back to empty (caller resolves default)', () {
+      expect(AnthropicChatTransport.buildMessagesUrl(''), '');
     });
 
     test('schemeless endpoint gets https prefix', () {
       expect(
         AnthropicChatTransport.buildMessagesUrl('proxy.example.com'),
-        'https://proxy.example.com/v1/messages',
+        'https://proxy.example.com/messages',
+      );
+    });
+
+    test('trailing slash is stripped before appending /messages', () {
+      expect(
+        AnthropicChatTransport.buildMessagesUrl('https://api.anthropic.com/'),
+        'https://api.anthropic.com/messages',
       );
     });
   });
