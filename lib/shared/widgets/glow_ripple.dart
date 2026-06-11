@@ -12,6 +12,7 @@ class _GlowRipplePainter extends CustomPainter {
     required this.scale,
     required this.opacity,
     required this.color,
+    required this.intensity,
   });
 
   final Offset center;
@@ -19,6 +20,7 @@ class _GlowRipplePainter extends CustomPainter {
   final double scale;
   final double opacity;
   final Color color;
+  final double intensity;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -32,7 +34,7 @@ class _GlowRipplePainter extends CustomPainter {
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
         ..shader = RadialGradient(
           colors: [
-            color.withValues(alpha: 0.15 * opacity),
+            color.withValues(alpha: intensity * opacity),
             color.withValues(alpha: 0.0),
           ],
           stops: const [0.0, 0.7],
@@ -42,7 +44,10 @@ class _GlowRipplePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_GlowRipplePainter old) =>
-      old.scale != scale || old.opacity != opacity || old.center != center;
+      old.scale != scale ||
+      old.opacity != opacity ||
+      old.center != center ||
+      old.intensity != intensity;
 }
 
 // ─── Shared animation mixin ───────────────────────────────────────────────────
@@ -64,17 +69,25 @@ mixin _GlowRippleMixin<T extends StatefulWidget>
   Offset rippleTapPos = Offset.zero;
   Size rippleSize = Size.zero;
 
-  Widget buildRippleOverlay(Color color, Widget child) {
+  Widget buildRippleOverlay(
+    Color color,
+    Widget child, {
+    double radiusFactor = 1.0,
+    double intensity = 0.15,
+  }) {
     return AnimatedBuilder(
       animation: rippleCtrl,
       builder: (context, inner) => CustomPaint(
         painter: rippleCtrl.value > 0
             ? _GlowRipplePainter(
                 center: rippleTapPos,
-                maxRadius: math.max(rippleSize.width, rippleSize.height),
+                maxRadius:
+                    math.max(rippleSize.width, rippleSize.height) *
+                    radiusFactor,
                 scale: rippleScale.value,
                 opacity: rippleOpacity.value,
                 color: color,
+                intensity: intensity,
               )
             : null,
         child: inner,
@@ -151,10 +164,23 @@ class _GlowInkWellState extends State<GlowInkWell>
 /// Uses [Listener] (non-blocking) to detect touches, so it is safe to wrap
 /// a row of interactive buttons (e.g. the glass nav bar).
 class GlowRippleOverlay extends StatefulWidget {
-  const GlowRippleOverlay({super.key, required this.child, this.glowColor});
+  const GlowRippleOverlay({
+    super.key,
+    required this.child,
+    this.glowColor,
+    this.radiusFactor = 1.0,
+    this.intensity = 0.15,
+  });
 
   final Widget child;
   final Color? glowColor;
+
+  /// Scales the ripple's maximum radius (1.0 = full child extent). Lower values
+  /// keep the glow tighter around the tap point.
+  final double radiusFactor;
+
+  /// Peak alpha of the glow at its center. Higher values read as more vivid.
+  final double intensity;
 
   @override
   State<GlowRippleOverlay> createState() => _GlowRippleOverlayState();
@@ -180,7 +206,12 @@ class _GlowRippleOverlayState extends State<GlowRippleOverlay>
           widget.child,
           Positioned.fill(
             child: IgnorePointer(
-              child: buildRippleOverlay(color, const SizedBox.expand()),
+              child: buildRippleOverlay(
+                color,
+                const SizedBox.expand(),
+                radiusFactor: widget.radiusFactor,
+                intensity: widget.intensity,
+              ),
             ),
           ),
         ],

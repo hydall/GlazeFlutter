@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
+import '../shell/shell_header_provider.dart';
 import '../theme/app_colors.dart';
 import 'glass_surface.dart';
 import 'glaze_background.dart';
@@ -23,6 +24,17 @@ class GlazeScaffold extends StatelessWidget {
   final bool hideHeader;
   final bool showBackground;
 
+  /// When true, this scaffold does not draw its own floating header. Instead it
+  /// publishes its title/actions/back into the shell's persistent header (see
+  /// [shellHeaderProvider]) and reserves the same vertical space. Only set this
+  /// for screens that live inside a shell branch (sub-routes of a bottom-nav
+  /// tab); standalone pushed routes keep their own header.
+  final bool useShellHeader;
+
+  /// The shell branch (bottom-nav tab) this screen belongs to. Required when
+  /// [useShellHeader] is true.
+  final int? headerBranchIndex;
+
   const GlazeScaffold({
     super.key,
     this.title,
@@ -35,6 +47,8 @@ class GlazeScaffold extends StatelessWidget {
     this.resizeToAvoidBottomInset = true,
     this.hideHeader = false,
     this.showBackground = true,
+    this.useShellHeader = false,
+    this.headerBranchIndex,
   });
 
   @override
@@ -67,6 +81,19 @@ class GlazeScaffold extends StatelessWidget {
       ),
     );
 
+    // When delegating to the shell's persistent header, reserve the same space
+    // the local header would occupy but draw nothing — the shell paints the
+    // header on top.
+    final headerSlot = useShellHeader
+        ? const SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: SizedBox(height: 56),
+            ),
+          )
+        : animatedHeader;
+
     final scaffold = PopScope(
       canPop: !showBack,
       onPopInvokedWithResult: (didPop, _) {
@@ -80,12 +107,12 @@ class GlazeScaffold extends StatelessWidget {
             ? Stack(
                 children: [
                   Positioned.fill(child: body),
-                  Positioned(top: 0, left: 0, right: 0, child: animatedHeader),
+                  Positioned(top: 0, left: 0, right: 0, child: headerSlot),
                 ],
               )
             : Column(
                 children: [
-                  animatedHeader,
+                  headerSlot,
                   Expanded(
                     child: MediaQuery.removePadding(
                       context: context,
@@ -98,12 +125,78 @@ class GlazeScaffold extends StatelessWidget {
       ),
     );
 
-    return showBackground
+    final withBackground = showBackground
         ? GlazeBackground(
             child: scaffold,
           )
         : scaffold;
+
+    if (!useShellHeader) return withBackground;
+
+    return _ShellHeaderPublisher(
+      branchIndex: headerBranchIndex ?? 0,
+      config: ShellHeaderConfig(
+        title: title,
+        titleWidget: titleWidget,
+        actions: actions,
+        showBack: showBack,
+        onBack: backHandler,
+      ),
+      child: withBackground,
+    );
   }
+}
+
+/// Publishes a [ShellHeaderConfig] into [shellHeaderProvider] for as long as it
+/// is mounted, re-publishing when the config changes. Used by [GlazeScaffold]
+/// in `useShellHeader` mode. Mutations are deferred past the build phase.
+class _ShellHeaderPublisher extends ConsumerStatefulWidget {
+  final int branchIndex;
+  final ShellHeaderConfig config;
+  final Widget child;
+
+  const _ShellHeaderPublisher({
+    required this.branchIndex,
+    required this.config,
+    required this.child,
+  });
+
+  @override
+  ConsumerState<_ShellHeaderPublisher> createState() =>
+      _ShellHeaderPublisherState();
+}
+
+class _ShellHeaderPublisherState extends ConsumerState<_ShellHeaderPublisher> {
+  // Cached so it can be used safely in [dispose].
+  ShellHeaderRegistry? _registry;
+
+  void _publish() {
+    if (!mounted) return;
+    _registry?.publish(this, widget.branchIndex, widget.config);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _registry = ref.read(shellHeaderProvider.notifier);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _publish());
+  }
+
+  @override
+  void didUpdateWidget(covariant _ShellHeaderPublisher oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _publish());
+  }
+
+  @override
+  void dispose() {
+    final registry = _registry;
+    WidgetsBinding.instance.addPostFrameCallback((_) => registry?.remove(this));
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// Standalone floating glassmorphic app bar — use this directly when you

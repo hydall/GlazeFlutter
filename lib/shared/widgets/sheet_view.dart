@@ -2,8 +2,10 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../theme/app_colors.dart';
 import '../shell/nav_height_provider.dart';
+import '../shell/shell_header_provider.dart';
 import '../../features/settings/app_settings_provider.dart';
 import 'package:soft_edge_blur/soft_edge_blur.dart';
 import 'glaze_background.dart';
@@ -104,6 +106,13 @@ class _SheetViewState extends ConsumerState<SheetView>
   /// fullscreen page: no drag handle, no resize, no drag-down dismiss.
   bool _inModalSheet = true;
 
+  /// Branch whose persistent shell header this sheet is currently suppressing
+  /// (only when presented as a fullscreen route, not a modal bottom sheet).
+  int? _suppressedBranch;
+
+  /// Cached so it can be used safely in [dispose].
+  ShellHeaderRegistry? _headerRegistry;
+
   bool _keyboardOpen = false;
   bool _wasExpandedBeforeKeyboard = false;
 
@@ -181,6 +190,7 @@ class _SheetViewState extends ConsumerState<SheetView>
   void didChangeDependencies() {
     super.didChangeDependencies();
     _inModalSheet = ModalRoute.of(context) is ModalBottomSheetRoute;
+    _syncHeaderSuppression();
     if (!_heightInit) {
       _currentHeight = (widget.startExpanded || !_inModalSheet)
           ? _full(context)
@@ -190,8 +200,37 @@ class _SheetViewState extends ConsumerState<SheetView>
     }
   }
 
+  /// When presented as a fullscreen route (not a modal bottom sheet), this
+  /// sheet draws its own header, so it suppresses the shell's persistent header
+  /// for the branch it lives in. A modal bottom sheet leaves the host screen's
+  /// header visible behind it and must not suppress.
+  void _syncHeaderSuppression() {
+    final branch = _inModalSheet
+        ? null
+        : shellBranchForLocation(
+            GoRouterState.of(context).uri.toString(),
+          );
+    if (branch == _suppressedBranch) return;
+    _headerRegistry ??= ref.read(shellHeaderProvider.notifier);
+    final notifier = _headerRegistry!;
+    _suppressedBranch = branch;
+    // Deferred: didChangeDependencies runs during the build phase, where
+    // modifying a provider is forbidden.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (branch == null) {
+        notifier.remove(this);
+      } else if (mounted && _suppressedBranch == branch) {
+        notifier.publish(this, branch, const ShellHeaderConfig(hidden: true));
+      }
+    });
+  }
+
   @override
   void dispose() {
+    final registry = _headerRegistry;
+    if (registry != null && _suppressedBranch != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => registry.remove(this));
+    }
     _anim?.removeListener(_onTick);
     _ctrl.dispose();
     _fallbackScrollController.dispose();

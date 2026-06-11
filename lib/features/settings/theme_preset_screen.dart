@@ -38,6 +38,8 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
 
     return GlazeScaffold(
       title: 'Themes',
+      useShellHeader: true,
+      headerBranchIndex: 3,
       onBack: () => Navigator.pop(context),
       body: Stack(
         children: [

@@ -35,6 +35,8 @@ class AboutScreen extends ConsumerWidget {
 
     return GlazeScaffold(
       title: 'About',
+      useShellHeader: true,
+      headerBranchIndex: 3,
       extendBodyBehindHeader: true,
       onBack: () => context.go('/menu'),
       showBackground: false,
@@ -99,23 +101,7 @@ class _HeroCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: cs.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'v$appVersion',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: cs.primary,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
+                  const _VersionBadge(),
                   if (buildDate.isNotEmpty || buildFruit.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     if (buildDate.isNotEmpty)
@@ -215,35 +201,91 @@ class _CommunitySection extends StatelessWidget {
   }
 }
 
-class _AuthorsSection extends ConsumerWidget {
+class _AuthorsSection extends StatelessWidget {
   const _AuthorsSection();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     return MenuGroup(
       header: 'Authors',
       headerIcon: Icons.code_rounded,
-      items: [
+      items: const [
         _AuthorTile(
           name: 'hydall',
           role: 'Project Lead, UX/UI Designer, Programmer',
           initial: 'H',
-          accentColor: const Color(0xFF7996CE),
+          accentColor: Color(0xFF7996CE),
           imageAsset: 'assets/hydall.jpg',
-          onDevUnlock: () {
-            if (ref.read(devModeProvider)) return;
-            ref.read(devModeProvider.notifier).state = true;
-            GlazeToast.show(context, 'Режим отладки включён');
-          },
         ),
         _AuthorTile(
           name: 'danvitv',
           role: 'Backend Architect, Programmer',
           initial: 'D',
-          accentColor: const Color(0xFF79CE96),
+          accentColor: Color(0xFF79CE96),
           imageAsset: 'assets/danvitv.png',
         ),
       ],
+    );
+  }
+}
+
+/// Version chip. Tapping it 7 times toggles developer mode and remembers the
+/// new state. Replaces the old hidden tap target on the author tile.
+class _VersionBadge extends ConsumerStatefulWidget {
+  const _VersionBadge();
+
+  @override
+  ConsumerState<_VersionBadge> createState() => _VersionBadgeState();
+}
+
+class _VersionBadgeState extends ConsumerState<_VersionBadge> {
+  int _taps = 0;
+  Timer? _resetTimer;
+
+  @override
+  void dispose() {
+    _resetTimer?.cancel();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    _resetTimer?.cancel();
+    _taps++;
+    if (_taps >= 7) {
+      _taps = 0;
+      final enabled = !ref.read(devModeProvider);
+      ref.read(devModeProvider.notifier).set(enabled);
+      GlazeToast.show(
+        context,
+        enabled ? 'Режим разработчика включён' : 'Режим разработчика выключен',
+      );
+    } else {
+      _resetTimer = Timer(const Duration(seconds: 3), () => _taps = 0);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = context.cs;
+    return GestureDetector(
+      onTap: _handleTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+        decoration: BoxDecoration(
+          color: cs.primary.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          'v$appVersion',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: cs.primary,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -391,13 +433,12 @@ class _LinkTileState extends State<_LinkTile> {
   }
 }
 
-class _AuthorTile extends StatefulWidget {
+class _AuthorTile extends StatelessWidget {
   final String name;
   final String role;
   final String initial;
   final Color accentColor;
   final String? imageAsset;
-  final VoidCallback? onDevUnlock;
 
   const _AuthorTile({
     required this.name,
@@ -405,110 +446,79 @@ class _AuthorTile extends StatefulWidget {
     required this.initial,
     required this.accentColor,
     this.imageAsset,
-    this.onDevUnlock,
   });
-
-  @override
-  State<_AuthorTile> createState() => _AuthorTileState();
-}
-
-class _AuthorTileState extends State<_AuthorTile> {
-  int _taps = 0;
-  Timer? _resetTimer;
-
-  @override
-  void dispose() {
-    _resetTimer?.cancel();
-    super.dispose();
-  }
-
-  void _handleTap() {
-    if (widget.onDevUnlock == null) return;
-    _resetTimer?.cancel();
-    _taps++;
-    if (_taps >= 10) {
-      _taps = 0;
-      widget.onDevUnlock!();
-    } else {
-      _resetTimer = Timer(const Duration(seconds: 5), () => _taps = 0);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
     final cs = context.cs;
-    return GestureDetector(
-      onTap: widget.onDevUnlock != null ? _handleTap : null,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-        child: Row(
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                gradient: widget.imageAsset == null
-                    ? LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          widget.accentColor,
-                          widget.accentColor.withValues(alpha: 0.6),
-                        ],
-                      )
-                    : null,
-                image: widget.imageAsset != null
-                    ? DecorationImage(
-                        image: AssetImage(widget.imageAsset!),
-                        fit: BoxFit.cover,
-                      )
-                    : null,
-                borderRadius: BorderRadius.circular(10),
-                border: widget.imageAsset != null
-                    ? Border.all(
-                        color: widget.accentColor.withValues(alpha: 0.4),
-                      )
-                    : null,
-              ),
-              alignment: Alignment.center,
-              child: widget.imageAsset != null
-                  ? null
-                  : Text(
-                      widget.initial,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      child: Row(
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              gradient: imageAsset == null
+                  ? LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        accentColor,
+                        accentColor.withValues(alpha: 0.6),
+                      ],
+                    )
+                  : null,
+              image: imageAsset != null
+                  ? DecorationImage(
+                      image: AssetImage(imageAsset!),
+                      fit: BoxFit.cover,
+                    )
+                  : null,
+              borderRadius: BorderRadius.circular(10),
+              border: imageAsset != null
+                  ? Border.all(
+                      color: accentColor.withValues(alpha: 0.4),
+                    )
+                  : null,
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.name,
-                    style: TextStyle(
-                      color: cs.onSurface,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+            alignment: Alignment.center,
+            child: imageAsset != null
+                ? null
+                : Text(
+                    initial,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    widget.role,
-                    style: TextStyle(
-                      color: cs.onSurfaceVariant.withValues(alpha: 0.7),
-                      fontSize: 12,
-                    ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: TextStyle(
+                    color: cs.onSurface,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  role,
+                  style: TextStyle(
+                    color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

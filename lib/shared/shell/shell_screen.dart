@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../widgets/glass_nav_bar.dart';
 import '../widgets/glaze_background.dart';
+import '../widgets/glaze_scaffold.dart' show GlazeAppBar;
 import '../widgets/glaze_toast.dart';
+import 'shell_header_provider.dart';
 
 class ShellScreen extends StatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -72,9 +75,21 @@ class _ShellScreenState extends State<ShellScreen>
         child: Scaffold(
           extendBody: true,
           backgroundColor: Colors.transparent,
-          body: FadeTransition(
-            opacity: _fade,
-            child: widget.navigationShell,
+          body: Stack(
+            children: [
+              Positioned.fill(
+                child: FadeTransition(
+                  opacity: _fade,
+                  child: widget.navigationShell,
+                ),
+              ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: _PersistentHeader(branchIndex: currentIndex),
+              ),
+            ],
           ),
           bottomNavigationBar: showNavBar
               ? GlassNavBar(
@@ -87,6 +102,53 @@ class _ShellScreenState extends State<ShellScreen>
               : null,
         ),
       ),
+    );
+  }
+}
+
+/// The shell's single persistent header. Stays mounted across tab switches and
+/// pushed sub-screens; only its content cross-fades, driven by whichever screen
+/// of [branchIndex] currently owns the header (see [shellHeaderProvider]).
+class _PersistentHeader extends ConsumerWidget {
+  final int branchIndex;
+  const _PersistentHeader({required this.branchIndex});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final entry = ref.watch(
+      shellHeaderProvider.select((e) => resolveShellHeader(e, branchIndex)),
+    );
+
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 220),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeOutCubic,
+      transitionBuilder: (child, animation) =>
+          FadeTransition(opacity: animation, child: child),
+      child: entry == null || entry.config.hidden
+          ? const SizedBox.shrink(key: ValueKey('shell-header-empty'))
+          : KeyedSubtree(
+              key: ObjectKey(entry.key),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      GlazeAppBar(
+                        title: entry.config.title,
+                        titleWidget: entry.config.titleWidget,
+                        actions: entry.config.actions,
+                        showBack: entry.config.showBack,
+                        onBack: entry.config.onBack,
+                      ),
+                      if (entry.config.below != null) entry.config.below!,
+                    ],
+                  ),
+                ),
+              ),
+            ),
     );
   }
 }
@@ -168,30 +230,31 @@ class _FadeBranchContainerState extends State<FadeBranchContainer>
   Widget _buildBranch(int i, Widget child, double t, bool animating) {
     final isCurrent = i == _displayIndex;
     final isPrevious = i == _previousIndex && _previousIndex != _displayIndex;
+    final involved = isCurrent || isPrevious;
 
-    // Keep all branches in the tree (state preservation) but only paint
-    // those involved in the current cross-fade.
-    if (!isCurrent && !isPrevious) {
-      return Offstage(
-        offstage: true,
-        child: TickerMode(enabled: false, child: child),
-      );
-    }
+    final opacity = isCurrent ? t : (isPrevious ? (1.0 - t) : 0.0);
 
-    final opacity = isCurrent ? t : (1.0 - t);
+    // Detach the branch (state is preserved by the shell) when it is not part
+    // of the active cross-fade, or once the outgoing branch's fade-out has
+    // fully settled. Detaching only after the animation completes — from an
+    // already-faded state — avoids a one-frame full-opacity blink of native
+    // platform views (the chat WebView) that snapping to Offstage mid-fade
+    // produced.
+    final offstage = !involved || (isPrevious && !animating);
 
-    // Hide platform-view-heavy branches once fade-out is nearly complete
-    // to prevent native WebView from flashing through Opacity(0).
-    if (isPrevious && opacity < 0.01) {
-      return Offstage(
-        offstage: true,
-        child: TickerMode(enabled: false, child: child),
-      );
-    }
-
+    // A single, stable widget structure for every state (only the booleans
+    // change) so the InAppWebView element is never re-parented as a branch
+    // moves between idle / fading / detached — re-parenting re-attaches the
+    // native surface and flashes a stale frame.
     return IgnorePointer(
       ignoring: !isCurrent || animating,
-      child: Opacity(opacity: opacity, child: child),
+      child: Offstage(
+        offstage: offstage,
+        child: TickerMode(
+          enabled: involved,
+          child: Opacity(opacity: opacity, child: child),
+        ),
+      ),
     );
   }
 }

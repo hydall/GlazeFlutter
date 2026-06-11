@@ -7,18 +7,30 @@ import '../../core/services/onboarding_service.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../core/state/dev_mode_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
-import '../../shared/widgets/glaze_scaffold.dart' show GlazeAppBar;
+import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/widgets/menu_group.dart';
 import '../backup/backup_screen.dart';
 import '../catalog/widgets/janitor_login_sheet.dart';
 import '../cloud_sync/widgets/sync_sheet.dart';
 import '../dev/menu_group_demo_screen.dart';
 
-class MenuScreen extends ConsumerWidget {
+class MenuScreen extends ConsumerStatefulWidget {
   const MenuScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MenuScreen> createState() => _MenuScreenState();
+}
+
+class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
+  @override
+  int get headerBranchIndex => 3;
+
+  @override
+  ShellHeaderConfig buildShellHeader() =>
+      const ShellHeaderConfig(title: 'Menu');
+
+  @override
+  Widget build(BuildContext context) {
     final navHeight = ref.watch(navHeightProvider);
     final topPad = MediaQuery.of(context).padding.top + 66.0;
     return Scaffold(
@@ -84,6 +96,13 @@ class MenuScreen extends ConsumerWidget {
                   MenuGroup(
                     header: 'Dev',
                     items: [
+                      MenuSwitchItem(
+                        label: 'Hide build date watermark',
+                        value: ref.watch(hideBuildWatermarkProvider),
+                        onChanged: (v) => ref
+                            .read(hideBuildWatermarkProvider.notifier)
+                            .set(v),
+                      ),
                       MenuItem(
                         icon: Icons.widgets_outlined,
                         label: 'MenuGroup Demo',
@@ -134,18 +153,6 @@ class MenuScreen extends ConsumerWidget {
                 ),
               ],
             ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: const GlazeAppBar(title: 'Menu'),
-              ),
-            ),
-          ),
         ],
       ),
     );

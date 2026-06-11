@@ -26,6 +26,7 @@ import 'shared/theme/theme_provider.dart';
 
 import 'features/chat/widgets/chat_webview_preload.dart';
 import 'shared/widgets/app_launch_splash.dart';
+import 'shared/widgets/build_watermark.dart';
 import 'shared/widgets/glaze_toast.dart' show toastOverlayKey;
 
 class GlazeApp extends ConsumerStatefulWidget {
@@ -211,7 +212,15 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
                 ),
               )
             : const SizedBox.expand();
-        return AppLaunchSplash(isReady: _startupReady, child: appChild);
+        return AppLaunchSplash(
+          isReady: _startupReady,
+          child: Stack(
+            children: [
+              Positioned.fill(child: appChild),
+              const BuildWatermark(),
+            ],
+          ),
+        );
       },
     );
   }

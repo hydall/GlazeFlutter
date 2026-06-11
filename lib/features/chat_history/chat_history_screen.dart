@@ -8,10 +8,12 @@ import 'package:go_router/go_router.dart';
 import '../../core/utils/html_to_markdown.dart';
 import '../../core/utils/platform_paths.dart';
 import '../../shared/shell/nav_height_provider.dart';
+import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
 
 import '../../shared/utils/time_formatter.dart';
 import '../../shared/widgets/glass_surface.dart';
+import '../../shared/widgets/glow_ripple.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../core/state/character_provider.dart' show avatarVersionProvider;
@@ -27,27 +29,96 @@ class ChatHistoryScreen extends ConsumerStatefulWidget {
   ConsumerState<ChatHistoryScreen> createState() => _ChatHistoryScreenState();
 }
 
-class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
+class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen>
+    with ShellHeaderMixin {
   String _searchQuery = '';
   final Set<String> _expandedCharIds = {};
+
+  // Inline header search (mirrors My Characters: the loupe swaps the title for
+  // an input field that filters the current list in place — live, local).
+  final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  bool _searchExpanded = false;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
+
+  @override
+  int get headerBranchIndex => 0;
+
+  @override
+  ShellHeaderConfig buildShellHeader() => ShellHeaderConfig(
+    title: _searchExpanded ? null : 'Chats',
+    titleWidget: _searchExpanded ? _buildSearchField(context) : null,
+    actions: [
+      SizedBox(
+        width: 44,
+        height: 44,
+        child: IconButton(
+          icon: Icon(
+            _searchExpanded ? Icons.close_rounded : Icons.search_rounded,
+            size: 22,
+          ),
+          color: context.cs.primary,
+          onPressed: _searchExpanded ? _closeSearch : _openSearch,
+        ),
+      ),
+    ],
+  );
+
+  void _openSearch() {
+    setState(() => _searchExpanded = true);
+    refreshShellHeader();
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _searchFocus.requestFocus(),
+    );
+  }
+
+  void _closeSearch() {
+    _searchCtrl.clear();
+    setState(() {
+      _searchExpanded = false;
+      _searchQuery = '';
+    });
+    refreshShellHeader();
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() => _searchQuery = value);
+  }
+
+  Widget _buildSearchField(BuildContext context) {
+    return TextField(
+      controller: _searchCtrl,
+      focusNode: _searchFocus,
+      autofocus: true,
+      onChanged: _onSearchChanged,
+      textInputAction: TextInputAction.search,
+      cursorColor: context.cs.primary,
+      style: TextStyle(color: context.cs.onSurface, fontSize: 16),
+      decoration: InputDecoration(
+        isDense: true,
+        border: InputBorder.none,
+        hintText: 'Search chats',
+        hintStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 16),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final sessionsAsync = ref.watch(chatHistoryProvider);
     final settingsAsync = ref.watch(appSettingsProvider);
 
-    final topPad =
-        MediaQuery.of(context).padding.top +
-        66.0 +
-        16.0 +
-        (_searchQuery.isNotEmpty ? 32.0 : 0.0);
+    final topPad = MediaQuery.of(context).padding.top + 66.0 + 16.0;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: sessionsAsync.when(
+      body: sessionsAsync.when(
               loading: () => Center(
                 child: CircularProgressIndicator(color: context.cs.primary),
               ),
@@ -73,28 +144,41 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
                 }
 
                 if (settings.groupDialogs) {
-                  return _buildGroupedList(filtered, topPad);
+                  return _withRipple(
+                    _buildGroupedList(filtered, topPad),
+                    settings.batterySaver,
+                  );
                 }
 
-                return ListView.builder(
-                  padding: EdgeInsets.only(
-                    top: topPad,
-                    bottom: ref.watch(navHeightProvider) + 20,
+                return _withRipple(
+                  ListView.builder(
+                    padding: EdgeInsets.only(
+                      top: topPad,
+                      bottom: ref.watch(navHeightProvider) + 20,
+                    ),
+                    itemCount: filtered.length + 1,
+                    itemBuilder: (_, i) {
+                      if (i == 0) return _buildCountHeader(filtered.length);
+                      return _SessionTile(info: filtered[i - 1]);
+                    },
                   ),
-                  itemCount: filtered.length + 1,
-                  itemBuilder: (_, i) {
-                    if (i == 0) return _buildCountHeader(filtered.length);
-                    return _SessionTile(info: filtered[i - 1]);
-                  },
+                  settings.batterySaver,
                 );
               },
             ),
-          ),
-          _buildAppBar(topPad),
-        ],
-      ),
     );
   }
+
+  // Full-list glow ripple (mirrors the glass nav bar): a tap glows across the
+  // whole list instead of each tile carrying its own ink splash. Skipped under
+  // battery saver, same as the nav bar.
+  Widget _withRipple(Widget list, bool batterySaver) => batterySaver
+      ? list
+      : GlowRippleOverlay(
+          radiusFactor: 0.18,
+          intensity: 0.32,
+          child: list,
+        );
 
   Widget _buildEmptyState() {
     return Center(
@@ -179,68 +263,6 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen> {
     );
   }
 
-  Widget _buildAppBar(double topPad) {
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: GlazeAppBar(
-                title: 'Chats',
-                actions: [
-                  SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: IconButton(
-                      icon: const Icon(Icons.search_rounded, size: 22),
-                      color: context.cs.primary,
-                      onPressed: () async {
-                        final query = await showSearch<String>(
-                          context: context,
-                          delegate: _ChatSearchDelegate(ref),
-                        );
-                        if (query != null) setState(() => _searchQuery = query);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_searchQuery.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-              child: Row(
-                children: [
-                  Text(
-                    'Filter: "$_searchQuery"',
-                    style: TextStyle(
-                      color: context.cs.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () => setState(() => _searchQuery = ''),
-                    child: Icon(
-                      Icons.close,
-                      size: 16,
-                      color: context.cs.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ChatHistoryGroupSection extends StatefulWidget {
@@ -353,8 +375,6 @@ class _ChatHistoryGroupSectionState extends State<_ChatHistoryGroupSection>
                           _SessionTile(
                             info: widget.sessions[i],
                             isGrouped: true,
-                            isFirst: i == 0,
-                            isLast: i == widget.sessions.length - 1,
                           ),
                         ],
                       ],
@@ -370,114 +390,13 @@ class _ChatHistoryGroupSectionState extends State<_ChatHistoryGroupSection>
   }
 }
 
-class _ChatSearchDelegate extends SearchDelegate<String> {
-  final WidgetRef ref;
-  _ChatSearchDelegate(this.ref);
-
-  @override
-  ThemeData appBarTheme(BuildContext context) => Theme.of(
-    context,
-  ).copyWith(appBarTheme: AppBarTheme(backgroundColor: context.cs.surface));
-
-  @override
-  List<Widget> buildActions(BuildContext context) => [
-    IconButton(icon: const Icon(Icons.clear), onPressed: () => query = ''),
-  ];
-
-  @override
-  Widget buildLeading(BuildContext context) => IconButton(
-    icon: const Icon(Icons.arrow_back),
-    onPressed: () => close(context, ''),
-  );
-
-  @override
-  Widget buildResults(BuildContext context) => _buildList(context);
-
-  @override
-  Widget buildSuggestions(BuildContext context) => _buildList(context);
-
-  Widget _buildList(BuildContext context) {
-    final sessions = ref.read(chatHistoryProvider).value ?? [];
-    final q = query.toLowerCase();
-    final filtered = sessions
-        .where(
-          (s) =>
-              s.characterName.toLowerCase().contains(q) ||
-              (s.sessionName?.toLowerCase().contains(q) ?? false) ||
-              s.lastMessage.toLowerCase().contains(q),
-        )
-        .toList();
-
-    if (filtered.isEmpty) {
-      return Center(
-        child: Text(
-          'No chats found',
-          style: TextStyle(color: context.cs.onSurfaceVariant),
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: filtered.length,
-      itemBuilder: (ctx, i) {
-        final s = filtered[i];
-        return ListTile(
-          leading: s.avatarPath != null && s.avatarPath!.isNotEmpty
-              ? ClipOval(
-                  child: SizedBox.square(
-                    dimension: 40,
-                    child: Image.file(
-                      File(_thumbOrAvatar(s.avatarPath!)),
-                      fit: BoxFit.cover,
-                      errorBuilder: (ctx, e, st) => CircleAvatar(
-                        backgroundColor: context.cs.primary,
-                        child: Text(
-                          s.characterName.isNotEmpty
-                              ? s.characterName[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(color: Colors.black),
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-              : CircleAvatar(
-                  backgroundColor: context.cs.primary,
-                  child: Text(
-                    s.characterName.isNotEmpty
-                        ? s.characterName[0].toUpperCase()
-                        : '?',
-                    style: const TextStyle(color: Colors.black),
-                  ),
-                ),
-          title: Text(
-            s.characterName,
-            style: TextStyle(color: context.cs.onSurface),
-          ),
-          subtitle: Text(
-            stripHtml(s.lastMessage).replaceAll('\n', ' '),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
-          ),
-          onTap: () => close(ctx, s.characterName),
-        );
-      },
-    );
-  }
-}
-
 class _SessionTile extends ConsumerWidget {
   final ChatSessionInfo info;
   final bool isGrouped;
-  final bool isFirst;
-  final bool isLast;
 
   const _SessionTile({
     required this.info,
     this.isGrouped = false,
-    this.isFirst = true,
-    this.isLast = true,
   });
 
   @override
@@ -486,7 +405,8 @@ class _SessionTile extends ConsumerWidget {
       return _buildGroupedTile(context, ref);
     }
 
-    return InkWell(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () =>
           context.go('/chat/${info.characterId}?session=${info.sessionIndex}'),
       onLongPress: () => _showSessionActions(context, ref),
@@ -555,60 +475,49 @@ class _SessionTile extends ConsumerWidget {
   }
 
   Widget _buildGroupedTile(BuildContext context, WidgetRef ref) {
-    final topRadius = isFirst ? const Radius.circular(12) : Radius.zero;
-    final bottomRadius = isLast ? const Radius.circular(12) : Radius.zero;
-    final br = BorderRadius.only(
-      topLeft: topRadius,
-      topRight: topRadius,
-      bottomLeft: bottomRadius,
-      bottomRight: bottomRadius,
-    );
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => context.go(
-          '/chat/${info.characterId}?session=${info.sessionIndex}',
-        ),
-        onLongPress: () => _showSessionActions(context, ref),
-        borderRadius: br,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      info.sessionName?.isNotEmpty == true
-                          ? info.sessionName!
-                          : 'Session #${info.sessionIndex + 1}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 15,
-                        color: context.cs.onSurface,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => context.go(
+        '/chat/${info.characterId}?session=${info.sessionIndex}',
+      ),
+      onLongPress: () => _showSessionActions(context, ref),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    info.sessionName?.isNotEmpty == true
+                        ? info.sessionName!
+                        : 'Session #${info.sessionIndex + 1}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: context.cs.onSurface,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: 8),
-                  _buildChip(context),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                stripHtml(info.lastMessage).replaceAll('\n', ' '),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: context.cs.onSurfaceVariant,
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                const SizedBox(width: 8),
+                _buildChip(context),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              stripHtml(info.lastMessage).replaceAll('\n', ' '),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.cs.onSurfaceVariant,
               ),
-            ],
-          ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );
@@ -784,7 +693,8 @@ class _GroupHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final latest = sessions.first;
-    return InkWell(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: onTap,
       onLongPress: () => _showGroupActions(context, ref, latest),
       child: Container(

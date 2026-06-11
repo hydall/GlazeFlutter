@@ -6,8 +6,8 @@ import '../../../core/services/api_connection_tester.dart';
 import '../../../core/llm/lorebook_providers.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../core/state/shared_prefs_provider.dart';
+import '../../../shared/shell/shell_header_provider.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 
 class EmbeddingSettingsScreen extends ConsumerStatefulWidget {
@@ -19,7 +19,17 @@ class EmbeddingSettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _EmbeddingSettingsScreenState
-    extends ConsumerState<EmbeddingSettingsScreen> {
+    extends ConsumerState<EmbeddingSettingsScreen> with ShellHeaderMixin {
+  @override
+  int get headerBranchIndex => 2;
+
+  @override
+  ShellHeaderConfig buildShellHeader() => ShellHeaderConfig(
+    title: 'Embedding Settings',
+    showBack: true,
+    onBack: () => context.go('/tools'),
+  );
+
   late TextEditingController _endpointCtrl;
   late TextEditingController _apiKeyCtrl;
   late TextEditingController _modelCtrl;
@@ -113,14 +123,11 @@ class _EmbeddingSettingsScreenState
       backgroundColor: context.cs.surface,
       body: Column(
         children: [
-          SafeArea(
+          const SafeArea(
             bottom: false,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-              child: GlazeAppBar(
-                title: 'Embedding Settings',
-                leading: BackButton(onPressed: () => context.go('/tools')),
-              ),
+              padding: EdgeInsets.fromLTRB(16, 10, 16, 0),
+              child: SizedBox(height: 56),
             ),
           ),
           Expanded(

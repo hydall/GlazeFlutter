@@ -11,8 +11,8 @@ import '../../core/state/db_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../personas/persona_list_provider.dart';
 import '../presets/preset_list_provider.dart';
+import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
-import '../../shared/widgets/glaze_scaffold.dart' show GlazeAppBar;
 import '../../shared/widgets/glass_surface.dart';
 
 class PersonaInfo {
@@ -79,11 +79,24 @@ Widget _svgPath(
   colorFilter: ColorFilter.mode(fill, BlendMode.srcIn),
 );
 
-class ToolsScreen extends ConsumerWidget {
+class ToolsScreen extends ConsumerStatefulWidget {
   const ToolsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ToolsScreen> createState() => _ToolsScreenState();
+}
+
+class _ToolsScreenState extends ConsumerState<ToolsScreen>
+    with ShellHeaderMixin {
+  @override
+  int get headerBranchIndex => 2;
+
+  @override
+  ShellHeaderConfig buildShellHeader() =>
+      const ShellHeaderConfig(title: 'Tools');
+
+  @override
+  Widget build(BuildContext context) {
     final bottomPad = ref.watch(navHeightProvider) + 20;
     final personaInfo = ref.watch(_activePersonaInfoProvider);
     final resolvedAvatar = ref.watch(_resolvedPersonaAvatarPathProvider).value;
@@ -153,18 +166,6 @@ class ToolsScreen extends ConsumerWidget {
                 ],
               ),
             ],
-          ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: SafeArea(
-              bottom: false,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                child: const GlazeAppBar(title: 'Tools'),
-              ),
-            ),
           ),
         ],
       ),

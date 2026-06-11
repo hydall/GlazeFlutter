@@ -1,0 +1,51 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/constants/app_version.dart';
+import '../../core/state/dev_mode_provider.dart';
+
+/// Persistent build-date watermark pinned to the bottom-right of the screen.
+///
+/// Visible by default; can be hidden from the Dev settings via
+/// [hideBuildWatermarkProvider]. Must be placed as a direct child of a [Stack].
+class BuildWatermark extends ConsumerWidget {
+  const BuildWatermark({super.key});
+
+  String get _label {
+    if (buildDate.isNotEmpty) return buildDate;
+    // Fallback for local/dev builds where BUILD_DATE wasn't injected.
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(now.day)}/${two(now.month)}/${now.year} (dev)';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(hideBuildWatermarkProvider)) {
+      return const SizedBox.shrink();
+    }
+    final cs = Theme.of(context).colorScheme;
+    return Positioned(
+      right: 0,
+      bottom: 0,
+      child: IgnorePointer(
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 6, bottom: 4),
+            child: Text(
+              _label,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 9,
+                height: 1.0,
+                letterSpacing: 0.2,
+                fontWeight: FontWeight.w500,
+                color: cs.onSurface.withValues(alpha: 0.3),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

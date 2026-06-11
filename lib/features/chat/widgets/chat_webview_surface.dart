@@ -80,51 +80,56 @@ class ChatWebViewSurface extends ConsumerWidget {
   /// has not run init yet.
   final Future<void> Function() onInitWebView;
 
+  /// The chat's own background — surface color, optional bg image, and dim.
+  /// Rendered both *behind* the transparent WebView (so there's no white flash
+  /// and `backdrop-filter` has something to sample) and, during a session
+  /// switch, *over* the WebView as an opaque cover so the kept-alive native
+  /// surface can't flash the previous session's content while the new one is
+  /// being pushed in.
+  Widget _background(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ColoredBox(color: Theme.of(context).colorScheme.surface),
+        // Decoded bytes (same as GlazeBackground) because preset.bgImage is a
+        // base64 data URI, not a file path.
+        if (bgImageBytes != null) ...[
+          Opacity(
+            opacity: bgOpacity,
+            child: bgBlur > 0
+                ? ImageFiltered(
+                    imageFilter: ui.ImageFilter.blur(
+                      sigmaX: bgBlur,
+                      sigmaY: bgBlur,
+                      tileMode: TileMode.clamp,
+                    ),
+                    child: Image.memory(
+                      bgImageBytes!,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                    ),
+                  )
+                : Image.memory(
+                    bgImageBytes!,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                  ),
+          ),
+          if (bgDim > 0)
+            Container(color: Colors.black.withValues(alpha: bgDim)),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final webViewEnvironment = chatWebViewEnvironment;
     return Stack(
       children: [
-        // Theme surface color — always visible behind the transparent WebView
-        // so there's no white flash when no bg image is set.
+        // Background behind the transparent WebView.
+        Positioned.fill(child: _background(context)),
         Positioned.fill(
-          child: ColoredBox(color: Theme.of(context).colorScheme.surface),
-        ),
-        // Background image rendered in Flutter so it shows through the
-        // transparent WebView. Uses decoded bytes (same as GlazeBackground)
-        // because preset.bgImage is a base64 data URI, not a file path.
-        if (bgImageBytes != null) ...[
-          Positioned.fill(
-            child: Opacity(
-              opacity: bgOpacity,
-              child: bgBlur > 0
-                  ? ImageFiltered(
-                      imageFilter: ui.ImageFilter.blur(
-                        sigmaX: bgBlur,
-                        sigmaY: bgBlur,
-                        tileMode: TileMode.clamp,
-                      ),
-                      child: Image.memory(
-                        bgImageBytes!,
-                        fit: BoxFit.cover,
-                        gaplessPlayback: true,
-                      ),
-                    )
-                  : Image.memory(
-                      bgImageBytes!,
-                      fit: BoxFit.cover,
-                      gaplessPlayback: true,
-                    ),
-            ),
-          ),
-          if (bgDim > 0)
-            Positioned.fill(
-              child: Container(color: Colors.black.withValues(alpha: bgDim)),
-            ),
-        ],
-        AnimatedOpacity(
-          opacity: sessionSwitching ? 0.45 : 1.0,
-          duration: const Duration(milliseconds: 200),
           child: IgnorePointer(
             ignoring: sessionSwitching,
             child: InAppWebView(
@@ -226,6 +231,14 @@ class ChatWebViewSurface extends ConsumerWidget {
             ),
           ),
         ),
+        // Opaque cover over the WebView while a new session is being pushed in.
+        // Hides the kept-alive native surface's previous-session content (which
+        // it composites for a frame on re-attach) behind the chat's own
+        // background, so switching shows an empty chat rather than a stale flash.
+        if (sessionSwitching)
+          Positioned.fill(
+            child: IgnorePointer(child: _background(context)),
+          ),
         if (sessionSwitching)
           const Center(child: CircularProgressIndicator(strokeWidth: 3)),
         if (bottomInset > 0)

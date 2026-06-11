@@ -586,6 +586,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       ready: _ready,
     );
     if (result.sessionSwitched) {
+      // Raise the cover synchronously (build runs right after didUpdateWidget)
+      // so the very first frame of the new session hides the kept-alive native
+      // surface's stale content, instead of waiting for the async switch below
+      // to flip it a frame or two later.
+      _sessionSwitching = true;
       if (!_ready) {
         _deferredSwitchFrom = oldWidget;
       } else {

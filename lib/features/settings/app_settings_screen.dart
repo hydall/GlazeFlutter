@@ -28,6 +28,8 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
 
     return GlazeScaffold(
       title: _currentScreen == 'main' ? 'section_settings'.tr() : 'menu_interface_settings'.tr(),
+      useShellHeader: true,
+      headerBranchIndex: 3,
       onBack: () {
         if (_currentScreen == 'interface') {
           setState(() => _currentScreen = 'main');

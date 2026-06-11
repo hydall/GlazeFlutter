@@ -17,9 +17,9 @@ import '../../core/state/character_provider.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
+import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
-import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../catalog/catalog_provider.dart';
@@ -37,7 +37,8 @@ class CharacterListScreen extends ConsumerStatefulWidget {
       _CharacterListScreenState();
 }
 
-class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
+class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
+    with ShellHeaderMixin {
   SortType _sortBy = SortType.date;
   SortDir _sortDir = SortDir.desc;
   int _tabIndex = 0;
@@ -62,8 +63,50 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
     super.dispose();
   }
 
+  @override
+  int get headerBranchIndex => 1;
+
+  @override
+  ShellHeaderConfig buildShellHeader() {
+    final inSearch = _searchExpanded && _tabIndex != 2;
+    return ShellHeaderConfig(
+      title: inSearch
+          ? null
+          : (_tabIndex == 2 ? _picksTitle : 'Characters'),
+      titleWidget: inSearch ? _buildSearchField(context) : null,
+      showBack: _tabIndex == 2,
+      onBack: _tabIndex == 2
+          ? (_picksCanGoBack && _picksGoBackFn != null
+                ? _picksGoBackFn
+                : () {
+                    setState(() => _tabIndex = 0);
+                    refreshShellHeader();
+                  })
+          : null,
+      actions: _tabIndex == 2
+          ? null
+          : [
+              SizedBox(
+                width: 44,
+                height: 44,
+                child: IconButton(
+                  icon: Icon(
+                    _searchExpanded
+                        ? Icons.close_rounded
+                        : Icons.search_rounded,
+                    size: 22,
+                  ),
+                  color: context.cs.primary,
+                  onPressed: _searchExpanded ? _closeSearch : _openSearch,
+                ),
+              ),
+            ],
+    );
+  }
+
   void _openSearch() {
     setState(() => _searchExpanded = true);
+    refreshShellHeader();
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _searchFocus.requestFocus(),
     );
@@ -76,6 +119,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
       _searchExpanded = false;
       _searchQuery = '';
     });
+    refreshShellHeader();
     // Reset the catalog query so the Discover grid returns to its default feed.
     if (ref.read(catalogProvider).query.isNotEmpty) {
       final notifier = ref.read(catalogProvider.notifier);
@@ -166,6 +210,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                               _picksCanGoBack = canGoBack;
                               _picksGoBackFn = goBackFn;
                             });
+                            refreshShellHeader();
                           },
                     )
                   : _tabIndex == 1
@@ -179,55 +224,6 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
                       key: const ValueKey('my_characters'),
                       child: _buildMyCharacters(context, topPad, navHeight),
                     ),
-            ),
-          ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: Column(
-              children: [
-                SafeArea(
-                  bottom: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                    child: GlazeAppBar(
-                      title: (_searchExpanded && _tabIndex != 2)
-                          ? null
-                          : (_tabIndex == 2 ? _picksTitle : 'Characters'),
-                      titleWidget: (_searchExpanded && _tabIndex != 2)
-                          ? _buildSearchField(context)
-                          : null,
-                      showBack: _tabIndex == 2,
-                      onBack: _tabIndex == 2
-                          ? (_picksCanGoBack && _picksGoBackFn != null
-                                ? _picksGoBackFn
-                                : () => setState(() => _tabIndex = 0))
-                          : null,
-                      actions: _tabIndex == 2
-                          ? null
-                          : [
-                              SizedBox(
-                                width: 44,
-                                height: 44,
-                                child: IconButton(
-                                  icon: Icon(
-                                    _searchExpanded
-                                        ? Icons.close_rounded
-                                        : Icons.search_rounded,
-                                    size: 22,
-                                  ),
-                                  color: context.cs.primary,
-                                  onPressed: _searchExpanded
-                                      ? _closeSearch
-                                      : _openSearch,
-                                ),
-                              ),
-                            ],
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
           if (_tabIndex == 0)
@@ -299,7 +295,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
             bottomPadding: navHeight + 20,
             tabBar: _buildTabBar(),
             showOurPicksCard: showOurPicks,
-            onOurPicksTap: () => setState(() => _tabIndex = 2),
+            onOurPicksTap: () {
+              setState(() => _tabIndex = 2);
+              refreshShellHeader();
+            },
             onOurPicksHide: () {
               final s = ref.read(appSettingsProvider).value;
               if (s != null) {
@@ -406,10 +405,13 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
           GlazeTabItem(label: 'Discover', icon: Icons.public_rounded),
         ],
         activeIndex: _tabIndex == 2 ? 0 : _tabIndex,
-        onChanged: (i) => setState(() {
-          _tabIndex = i;
-          if (_searchExpanded) _applySearchForActiveTab();
-        }),
+        onChanged: (i) {
+          setState(() {
+            _tabIndex = i;
+            if (_searchExpanded) _applySearchForActiveTab();
+          });
+          refreshShellHeader();
+        },
       ),
     );
   }
