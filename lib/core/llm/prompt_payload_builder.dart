@@ -163,7 +163,7 @@ class PromptPayloadBuilder {
             ).timeout(const Duration(seconds: 15))
           : Future<List<LorebookEntry>>.value(const []);
 
-      final memoryFuture = memoryService.buildCandidates(
+      final memoryFuture = memoryService.buildCandidatesWithDiagnostics(
         sessionId: session.id,
         history: session.messages,
         currentText: currentText,
@@ -176,24 +176,26 @@ class PromptPayloadBuilder {
       throwIfAborted();
       final results = await Future.wait([memoryFuture, lorebookFuture]);
       throwIfAborted();
-      final memorySelection = results[0] as MemorySelection;
+      final memoryResult = results[0] as MemoryCandidateBuildResult;
+      final memorySelection = memoryResult.selection;
       vectorEntries = results[1] as List<LorebookEntry>;
       throwIfAborted();
       debugPrint(
         '[payload] memory candidates done, picked=${memorySelection.entries.length}, total=${memorySelection.allScores.length}, excludedByWindow=${memorySelection.excludedBySourceWindow}',
       );
 
+      memoryCoverage = {
+        'entryIds': memorySelection.entries.map((e) => e.id).toList(),
+        'needsRebuild': false,
+        'stale': false,
+        'injected': false,
+        'candidatesTotal': memorySelection.allScores.length,
+        'excludedBySourceWindow': memorySelection.excludedBySourceWindow,
+        'budgetTokens': memorySelection.budgetTokens,
+        'budgetTrimmed': memorySelection.budgetTrimmed,
+        'diagnostics': memoryResult.diagnostics.toJson(),
+      };
       if (memorySelection.entries.isNotEmpty) {
-        memoryCoverage = {
-          'entryIds': memorySelection.entries.map((e) => e.id).toList(),
-          'needsRebuild': false,
-          'stale': false,
-          'injected': false,
-          'candidatesTotal': memorySelection.allScores.length,
-          'excludedBySourceWindow': memorySelection.excludedBySourceWindow,
-          'budgetTokens': memorySelection.budgetTokens,
-          'budgetTrimmed': memorySelection.budgetTrimmed,
-        };
         triggeredMemories = memorySelection.entries
             .map(
               (e) => TriggeredEntry(

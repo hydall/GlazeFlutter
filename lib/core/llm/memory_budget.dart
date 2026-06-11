@@ -35,14 +35,47 @@ class MemoryInjectionBudget {
     required double percent,
     required int? absoluteCap,
   }) {
+    return describeBudget(
+      contextBudgetTokens: contextBudgetTokens,
+      percent: percent,
+      absoluteCap: absoluteCap,
+    ).effectiveTokens;
+  }
+
+  /// Describes how the effective memory budget was derived for diagnostics.
+  static MemoryBudgetBreakdown describeBudget({
+    required int? contextBudgetTokens,
+    required double percent,
+    required int? absoluteCap,
+  }) {
     final percentBudget = maxInjectionTokens(
       contextBudgetTokens: contextBudgetTokens,
       percent: percent,
     );
-    if (percentBudget == null && absoluteCap == null) return null;
-    if (percentBudget == null) return absoluteCap;
-    if (absoluteCap == null) return percentBudget;
-    return percentBudget < absoluteCap ? percentBudget : absoluteCap;
+    if (percentBudget == null && absoluteCap == null) {
+      return const MemoryBudgetBreakdown(source: 'none');
+    }
+    if (percentBudget == null) {
+      return MemoryBudgetBreakdown(
+        effectiveTokens: absoluteCap,
+        absoluteTokens: absoluteCap,
+        source: 'absolute',
+      );
+    }
+    if (absoluteCap == null) {
+      return MemoryBudgetBreakdown(
+        effectiveTokens: percentBudget,
+        percentTokens: percentBudget,
+        source: 'percent',
+      );
+    }
+    final effective = percentBudget < absoluteCap ? percentBudget : absoluteCap;
+    return MemoryBudgetBreakdown(
+      effectiveTokens: effective,
+      percentTokens: percentBudget,
+      absoluteTokens: absoluteCap,
+      source: effective == percentBudget ? 'percent_min' : 'absolute_min',
+    );
   }
 
   /// Trims [entries] (already sorted by score, descending) so that the
@@ -67,4 +100,25 @@ class MemoryInjectionBudget {
     }
     return kept;
   }
+}
+
+class MemoryBudgetBreakdown {
+  final int? effectiveTokens;
+  final int? percentTokens;
+  final int? absoluteTokens;
+  final String source;
+
+  const MemoryBudgetBreakdown({
+    this.effectiveTokens,
+    this.percentTokens,
+    this.absoluteTokens,
+    required this.source,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'effectiveTokens': effectiveTokens,
+    'percentTokens': percentTokens,
+    'absoluteTokens': absoluteTokens,
+    'source': source,
+  };
 }

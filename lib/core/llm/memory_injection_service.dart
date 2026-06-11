@@ -15,6 +15,7 @@ import '../state/memory_settings_provider.dart';
 import 'embedding_service.dart';
 import 'embedding_types.dart';
 import 'memory_budget.dart';
+import 'memory_diagnostics.dart';
 import 'memory_embedding_service.dart';
 import 'memory_selector.dart';
 import 'retrieval_query_builder.dart';
@@ -29,6 +30,7 @@ class MemoryInjectionResult {
   final int? maxInjectionTokens;
   final bool budgetTrimmed;
   final List<MemoryCandidateScore> diagnostics;
+  final MemoryDiagnostics? memoryDiagnostics;
   final int excludedBySourceWindow;
   final int candidatesTotal;
 
@@ -41,8 +43,19 @@ class MemoryInjectionResult {
     this.maxInjectionTokens,
     this.budgetTrimmed = false,
     this.diagnostics = const [],
+    this.memoryDiagnostics,
     this.excludedBySourceWindow = 0,
     this.candidatesTotal = 0,
+  });
+}
+
+class MemoryCandidateBuildResult {
+  final MemorySelection selection;
+  final MemoryDiagnostics diagnostics;
+
+  const MemoryCandidateBuildResult({
+    required this.selection,
+    required this.diagnostics,
   });
 }
 
@@ -52,7 +65,12 @@ class MemoryInjectionService {
   final EmbeddingService _embeddingService;
   final Ref _ref;
 
-  MemoryInjectionService(this._repo, this._embeddingRepo, this._embeddingService, this._ref);
+  MemoryInjectionService(
+    this._repo,
+    this._embeddingRepo,
+    this._embeddingService,
+    this._ref,
+  );
 
   /// Build injection candidates + diagnostics. Returns the raw selection
   /// (with source-window exclusion applied) plus all scored candidates
@@ -69,27 +87,71 @@ class MemoryInjectionService {
     int? contextBudgetTokens,
     Set<String> visibleMessageIds = const {},
   }) async {
-    if (shouldAbort?.call() == true) return const MemorySelection();
+    final result = await buildCandidatesWithDiagnostics(
+      sessionId: sessionId,
+      history: history,
+      currentText: currentText,
+      embeddingConfig: embeddingConfig,
+      shouldAbort: shouldAbort,
+      cancelToken: cancelToken,
+      contextBudgetTokens: contextBudgetTokens,
+      visibleMessageIds: visibleMessageIds,
+    );
+    return result.selection;
+  }
+
+  Future<MemoryCandidateBuildResult> buildCandidatesWithDiagnostics({
+    required String sessionId,
+    required List<ChatMessage> history,
+    required String currentText,
+    EmbeddingConfig? embeddingConfig,
+    bool Function()? shouldAbort,
+    CancelToken? cancelToken,
+    int? contextBudgetTokens,
+    Set<String> visibleMessageIds = const {},
+  }) async {
+    final sw = Stopwatch()..start();
+    MemoryCandidateBuildResult finish(
+      MemorySelection selection,
+      MemoryBudgetBreakdown budget,
+    ) {
+      sw.stop();
+      return MemoryCandidateBuildResult(
+        selection: selection,
+        diagnostics: MemoryDiagnostics.fromSelection(
+          selection,
+          budget: budget,
+          latencyMs: sw.elapsedMilliseconds,
+        ),
+      );
+    }
+
+    const noBudget = MemoryBudgetBreakdown(source: 'none');
+    if (shouldAbort?.call() == true) {
+      return finish(const MemorySelection(), noBudget);
+    }
     debugPrint('[mem] buildCandidates: reading memory book...');
     final book = await _repo.getBySessionId(sessionId);
-    if (shouldAbort?.call() == true) return const MemorySelection();
+    if (shouldAbort?.call() == true) {
+      return finish(const MemorySelection(), noBudget);
+    }
     if (book == null) {
       debugPrint('[mem] no memory book found');
-      return const MemorySelection();
+      return finish(const MemorySelection(), noBudget);
     }
     debugPrint('[mem] memory book loaded, entries=${book.entries.length}');
 
     final gs = _ref.read(memoryGlobalSettingsProvider);
     if (!gs.enabled) {
       debugPrint('[mem] memory disabled globally');
-      return const MemorySelection();
+      return finish(const MemorySelection(), noBudget);
     }
 
     final activeEntries = book.entries
         .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
         .toList();
     debugPrint('[mem] active entries: ${activeEntries.length}');
-    if (activeEntries.isEmpty) return const MemorySelection();
+    if (activeEntries.isEmpty) return finish(const MemorySelection(), noBudget);
 
     final vectorScores = <String, double>{};
     if (gs.vectorSearchEnabled &&
@@ -97,15 +159,17 @@ class MemoryInjectionService {
         embeddingConfig.endpoint.isNotEmpty &&
         history.isNotEmpty) {
       debugPrint('[mem] starting vector search...');
-      vectorScores.addAll(await _vectorSearchMemory(
-        activeEntries,
-        history,
-        currentText,
-        embeddingConfig,
-        gs,
-        shouldAbort: shouldAbort,
-        cancelToken: cancelToken,
-      ));
+      vectorScores.addAll(
+        await _vectorSearchMemory(
+          activeEntries,
+          history,
+          currentText,
+          embeddingConfig,
+          gs,
+          shouldAbort: shouldAbort,
+          cancelToken: cancelToken,
+        ),
+      );
       debugPrint('[mem] vector search done, scores=${vectorScores.length}');
     } else {
       debugPrint(
@@ -113,26 +177,29 @@ class MemoryInjectionService {
       );
     }
 
-    final budget = MemoryInjectionBudget.composeBudget(
+    final budget = MemoryInjectionBudget.describeBudget(
       contextBudgetTokens: contextBudgetTokens,
       percent: book.settings.maxInjectionBudgetPercent,
       absoluteCap: book.settings.maxInjectedTokens,
     );
 
-    return MemorySelector.select(MemorySelectionInput(
-      entries: activeEntries,
-      vectorScores: vectorScores,
-      visibleMessageIds: visibleMessageIds,
-      maxInjectionTokens: budget,
-      maxInjectedEntries: book.settings.maxInjectedEntries,
-      diversityAware: book.settings.diversityAware,
-      diversityPenalty: book.settings.diversityPenalty,
-      recencyBoost: book.settings.recencyBoost,
-      recencyHalfLifeDays: book.settings.recencyHalfLifeDays,
-      importanceBoost: book.settings.importanceBoost,
-      importanceWeight: book.settings.importanceWeight,
-      sourceWindowExclusion: book.settings.sourceWindowExclusion,
-    ));
+    final selection = MemorySelector.select(
+      MemorySelectionInput(
+        entries: activeEntries,
+        vectorScores: vectorScores,
+        visibleMessageIds: visibleMessageIds,
+        maxInjectionTokens: budget.effectiveTokens,
+        maxInjectedEntries: book.settings.maxInjectedEntries,
+        diversityAware: book.settings.diversityAware,
+        diversityPenalty: book.settings.diversityPenalty,
+        recencyBoost: book.settings.recencyBoost,
+        recencyHalfLifeDays: book.settings.recencyHalfLifeDays,
+        importanceBoost: book.settings.importanceBoost,
+        importanceWeight: book.settings.importanceWeight,
+        sourceWindowExclusion: book.settings.sourceWindowExclusion,
+      ),
+    );
+    return finish(selection, budget);
   }
 
   /// Backwards-compatible facade for callers that still expect an
@@ -151,15 +218,11 @@ class MemoryInjectionService {
     Set<String> visibleMessageIds = const {},
   }) async {
     final chatHistory = (history ?? const [])
-        .map((m) => ChatMessage(
-              id: '',
-              role: m.role,
-              content: m.content,
-            ))
+        .map((m) => ChatMessage(id: '', role: m.role, content: m.content))
         .toList();
     final gs = _ref.read(memoryGlobalSettingsProvider);
 
-    final selection = await buildCandidates(
+    final candidateResult = await buildCandidatesWithDiagnostics(
       sessionId: sessionId,
       history: chatHistory,
       currentText: currentText ?? '',
@@ -169,10 +232,12 @@ class MemoryInjectionService {
       contextBudgetTokens: contextBudgetTokens,
       visibleMessageIds: visibleMessageIds,
     );
+    final selection = candidateResult.selection;
 
     if (selection.entries.isEmpty) {
       return MemoryInjectionResult(
         diagnostics: selection.allScores,
+        memoryDiagnostics: candidateResult.diagnostics,
         excludedBySourceWindow: selection.excludedBySourceWindow,
         candidatesTotal: selection.allScores.length,
         maxInjectionTokens: selection.budgetTokens,
@@ -195,8 +260,9 @@ class MemoryInjectionService {
       contentParts.add('- $title: ${entry.content.trim()}');
     }
 
-    final injectionTarget =
-        gs.injectionTarget == 'macro' ? 'macro' : 'hard_block';
+    final injectionTarget = gs.injectionTarget == 'macro'
+        ? 'macro'
+        : 'hard_block';
 
     return MemoryInjectionResult(
       entries: selection.entries,
@@ -207,6 +273,7 @@ class MemoryInjectionService {
       maxInjectionTokens: maxInjectionTokens,
       budgetTrimmed: selection.budgetTrimmed,
       diagnostics: selection.allScores,
+      memoryDiagnostics: candidateResult.diagnostics,
       excludedBySourceWindow: selection.excludedBySourceWindow,
       candidatesTotal: selection.allScores.length,
     );
@@ -217,13 +284,16 @@ class MemoryInjectionService {
     List<ChatMessage> history,
     String currentText,
     EmbeddingConfig config,
-    MemoryGlobalSettings settings,
-    {bool Function()? shouldAbort, CancelToken? cancelToken}
-  ) async {
+    MemoryGlobalSettings settings, {
+    bool Function()? shouldAbort,
+    CancelToken? cancelToken,
+  }) async {
     try {
       if (shouldAbort?.call() == true) return {};
       debugPrint('[mem-vec] reading embeddings from DB...');
-      final embeddingRows = await _embeddingRepo.getBySourceType('memory_entry');
+      final embeddingRows = await _embeddingRepo.getBySourceType(
+        'memory_entry',
+      );
       if (shouldAbort?.call() == true) return {};
       final embeddingMap = <String, EmbeddingRow>{};
       for (final row in embeddingRows) {
@@ -234,7 +304,9 @@ class MemoryInjectionService {
       final candidates = <VectorCandidate>[];
       for (int i = 0; i < entries.length; i++) {
         final entry = entries[i];
-        debugPrint('[mem-vec] processing entry ${i + 1}/${entries.length}: id=${entry.id}');
+        debugPrint(
+          '[mem-vec] processing entry ${i + 1}/${entries.length}: id=${entry.id}',
+        );
         final row = embeddingMap[entry.id];
         if (shouldAbort?.call() == true) return {};
         if (row == null || !_embeddingRepo.hasUsableVectors(row)) {
@@ -257,14 +329,18 @@ class MemoryInjectionService {
           continue;
         }
 
-        candidates.add(VectorCandidate(
-          id: entry.id,
-          vectors: vectors.map((v) => VectorChunk(text: '', vector: v)).toList(),
-          metadata: {
-            'hints': _embeddingRepo.decodeHints(row) ?? [],
-          },
-        ));
-        debugPrint('[mem-vec]   added candidate with ${vectors.length} vectors');
+        candidates.add(
+          VectorCandidate(
+            id: entry.id,
+            vectors: vectors
+                .map((v) => VectorChunk(text: '', vector: v))
+                .toList(),
+            metadata: {'hints': _embeddingRepo.decodeHints(row) ?? []},
+          ),
+        );
+        debugPrint(
+          '[mem-vec]   added candidate with ${vectors.length} vectors',
+        );
       }
       debugPrint('[mem-vec] valid candidates: ${candidates.length}');
 
@@ -280,19 +356,31 @@ class MemoryInjectionService {
       if (queryText.isEmpty) return {};
       if (shouldAbort?.call() == true) return {};
 
-      debugPrint('[mem-vec] calling embedding API (endpoint=${config.endpoint})...');
-      final queryChunks = await _embeddingService.getEmbeddingsWithChunks(
-        [queryText],
-        config,
-        cancelToken: cancelToken,
-      )
+      debugPrint(
+        '[mem-vec] calling embedding API (endpoint=${config.endpoint})...',
+      );
+      final queryChunks = await _embeddingService
+          .getEmbeddingsWithChunks(
+            [queryText],
+            config,
+            cancelToken: cancelToken,
+          )
           .timeout(const Duration(seconds: 15), onTimeout: () => []);
       if (cancelToken?.isCancelled == true) return {};
-      debugPrint('[mem-vec] embedding API returned ${queryChunks.length} chunks');
+      debugPrint(
+        '[mem-vec] embedding API returned ${queryChunks.length} chunks',
+      );
       if (queryChunks.isEmpty) return {};
 
-      final queryVecChunks = queryChunks.map((c) => VectorChunk(text: c.text, vector: c.vector)).toList();
-      final results = findTopKMulti(queryVecChunks, candidates, candidates.length, 0);
+      final queryVecChunks = queryChunks
+          .map((c) => VectorChunk(text: c.text, vector: c.vector))
+          .toList();
+      final results = findTopKMulti(
+        queryVecChunks,
+        candidates,
+        candidates.length,
+        0,
+      );
 
       final threshold = settings.vectorThreshold;
       final topK = settings.maxInjectedEntries.clamp(1, 50);
