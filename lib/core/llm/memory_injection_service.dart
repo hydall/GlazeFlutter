@@ -9,6 +9,7 @@ import '../db/app_db.dart';
 import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
 import 'tokenizer.dart';
+import '../models/chat_message.dart';
 import '../models/memory_book.dart';
 import '../state/db_provider.dart';
 import '../state/memory_settings_provider.dart';
@@ -17,6 +18,8 @@ import 'glaze_matcher.dart';
 import 'embedding_types.dart';
 import 'memory_budget.dart';
 import 'memory_embedding_service.dart';
+import 'memory_selector.dart';
+import 'retrieval_query_builder.dart';
 import 'vector_math.dart';
 
 class MemoryInjectionResult {
@@ -27,6 +30,9 @@ class MemoryInjectionResult {
   final int totalTokens;
   final int? maxInjectionTokens;
   final bool budgetTrimmed;
+  final List<MemoryCandidateScore> diagnostics;
+  final int excludedBySourceWindow;
+  final int candidatesTotal;
 
   const MemoryInjectionResult({
     this.entries = const [],
@@ -36,6 +42,9 @@ class MemoryInjectionResult {
     this.totalTokens = 0,
     this.maxInjectionTokens,
     this.budgetTrimmed = false,
+    this.diagnostics = const [],
+    this.excludedBySourceWindow = 0,
+    this.candidatesTotal = 0,
   });
 }
 
@@ -47,6 +56,114 @@ class MemoryInjectionService {
 
   MemoryInjectionService(this._repo, this._embeddingRepo, this._embeddingService, this._ref);
 
+  /// Build injection candidates + diagnostics. Returns the raw selection
+  /// (with source-window exclusion applied) plus all scored candidates
+  /// for visibility. The caller is responsible for token-budget
+  /// re-finalization if the prompt-window cutoff is known after this
+  /// call (see [finalizeWithVisibleWindow]).
+  Future<MemorySelection> buildCandidates({
+    required String sessionId,
+    required List<ChatMessage> history,
+    required String currentText,
+    EmbeddingConfig? embeddingConfig,
+    bool Function()? shouldAbort,
+    CancelToken? cancelToken,
+    int? contextBudgetTokens,
+    Set<String> visibleMessageIds = const {},
+  }) async {
+    if (shouldAbort?.call() == true) return const MemorySelection();
+    debugPrint('[mem] buildCandidates: reading memory book...');
+    final book = await _repo.getBySessionId(sessionId);
+    if (shouldAbort?.call() == true) return const MemorySelection();
+    if (book == null) {
+      debugPrint('[mem] no memory book found');
+      return const MemorySelection();
+    }
+    debugPrint('[mem] memory book loaded, entries=${book.entries.length}');
+
+    final gs = _ref.read(memoryGlobalSettingsProvider);
+    if (!gs.enabled) {
+      debugPrint('[mem] memory disabled globally');
+      return const MemorySelection();
+    }
+
+    final activeEntries = book.entries
+        .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
+        .toList();
+    debugPrint('[mem] active entries: ${activeEntries.length}');
+    if (activeEntries.isEmpty) return const MemorySelection();
+
+    final vectorScores = <String, double>{};
+    if (gs.vectorSearchEnabled &&
+        embeddingConfig != null &&
+        embeddingConfig.endpoint.isNotEmpty &&
+        history.isNotEmpty) {
+      debugPrint('[mem] starting vector search...');
+      vectorScores.addAll(await _vectorSearchMemory(
+        activeEntries,
+        history,
+        currentText,
+        embeddingConfig,
+        gs,
+        shouldAbort: shouldAbort,
+        cancelToken: cancelToken,
+      ));
+      debugPrint('[mem] vector search done, scores=${vectorScores.length}');
+    } else {
+      debugPrint(
+        '[mem] vector search skipped (enabled=${gs.vectorSearchEnabled}, endpoint=${embeddingConfig?.endpoint.isNotEmpty ?? false}, history=${history.isNotEmpty})',
+      );
+    }
+
+    final budget = MemoryInjectionBudget.composeBudget(
+      contextBudgetTokens: contextBudgetTokens,
+      percent: book.settings.maxInjectionBudgetPercent,
+      absoluteCap: book.settings.maxInjectedTokens,
+    );
+
+    return MemorySelector.select(MemorySelectionInput(
+      entries: activeEntries,
+      vectorScores: vectorScores,
+      visibleMessageIds: visibleMessageIds,
+      maxInjectionTokens: budget,
+      maxInjectedEntries: book.settings.maxInjectedEntries,
+      diversityAware: book.settings.diversityAware,
+      diversityPenalty: book.settings.diversityPenalty,
+      recencyBoost: book.settings.recencyBoost,
+      recencyHalfLifeDays: book.settings.recencyHalfLifeDays,
+      importanceBoost: book.settings.importanceBoost,
+      importanceWeight: book.settings.importanceWeight,
+      sourceWindowExclusion: book.settings.sourceWindowExclusion,
+    ));
+  }
+
+  /// Re-finalize a [MemorySelection] against a known visible-window set
+  /// when the cutoff is computed later in the pipeline. Preserves the
+  /// previous selection if no source-window exclusions are triggered.
+  MemorySelection finalizeWithVisibleWindow({
+    required MemorySelection previous,
+    required Set<String> visibleMessageIds,
+    required int? maxInjectionTokens,
+    required int maxInjectedEntries,
+  }) {
+    if (visibleMessageIds.isEmpty) return previous;
+    final needsRefilter = previous.allScores.any((s) =>
+        !s.excludedBySourceWindow &&
+        s.entry.messageIds.isNotEmpty &&
+        s.entry.messageIds.any(visibleMessageIds.contains));
+    if (!needsRefilter) return previous;
+    final refiltered = MemorySelector.select(MemorySelectionInput(
+      entries: previous.allScores.map((s) => s.entry).toList(),
+      visibleMessageIds: visibleMessageIds,
+      maxInjectionTokens: maxInjectionTokens,
+      maxInjectedEntries: maxInjectedEntries,
+      sourceWindowExclusion: true,
+    ));
+    return refiltered;
+  }
+
+  /// Backwards-compatible facade for callers that still expect an
+  /// assembled injection payload in one shot (tokenizer sheet, etc.).
   Future<MemoryInjectionResult> buildInjection({
     required String sessionId,
     required String historyText,
@@ -58,95 +175,43 @@ class MemoryInjectionService {
     bool Function()? shouldAbort,
     CancelToken? cancelToken,
     int? contextBudgetTokens,
+    Set<String> visibleMessageIds = const {},
   }) async {
-    if (shouldAbort?.call() == true) return const MemoryInjectionResult();
-    debugPrint('[mem] buildInjection: reading memory book...');
+    final chatHistory = (history ?? const [])
+        .map((m) => ChatMessage(
+              id: '',
+              role: m.role,
+              content: m.content,
+            ))
+        .toList();
     final book = await _repo.getBySessionId(sessionId);
-    if (shouldAbort?.call() == true) return const MemoryInjectionResult();
-    if (book == null) { debugPrint('[mem] no memory book found'); return const MemoryInjectionResult(); }
-    debugPrint('[mem] memory book loaded, entries=${book.entries.length}');
-
     final gs = _ref.read(memoryGlobalSettingsProvider);
-    if (!gs.enabled) { debugPrint('[mem] memory disabled globally'); return const MemoryInjectionResult(); }
+    final maxInjectedEntries =
+        book?.settings.maxInjectedEntries ?? gs.maxInjectedEntries;
 
-    final activeEntries = book.entries
-        .where((e) => (e.status == 'active') && e.content.trim().isNotEmpty)
-        .toList();
-    debugPrint('[mem] active entries: ${activeEntries.length}');
-
-    if (activeEntries.isEmpty) return const MemoryInjectionResult();
-
-    final scanText = historyText.toLowerCase();
-    final keywordMatched = <String>{};
-
-    for (final entry in activeEntries) {
-      for (final key in entry.keys) {
-        if (key.isEmpty) continue;
-        if (gs.keyMatchMode == 'glaze') {
-          if (_glazeMatch(key, scanText)) keywordMatched.add(entry.id);
-        } else if (gs.keyMatchMode == 'both') {
-          if (scanText.contains(key.toLowerCase()) || _glazeMatch(key, scanText)) {
-            keywordMatched.add(entry.id);
-          }
-        } else {
-          if (scanText.contains(key.toLowerCase())) keywordMatched.add(entry.id);
-        }
-      }
-    }
-    debugPrint('[mem] keyword matched: ${keywordMatched.length}');
-
-    final vectorScores = <String, double>{};
-    if (gs.vectorSearchEnabled && embeddingConfig != null && embeddingConfig.endpoint.isNotEmpty && history != null) {
-      debugPrint('[mem] starting vector search...');
-      vectorScores.addAll(await _vectorSearchMemory(
-        activeEntries,
-        history,
-        currentText ?? '',
-        embeddingConfig,
-        gs,
-        shouldAbort: shouldAbort,
-        cancelToken: cancelToken,
-      ));
-      debugPrint('[mem] vector search done, scores=${vectorScores.length}');
-    } else {
-      debugPrint('[mem] vector search skipped (enabled=${gs.vectorSearchEnabled}, endpoint=${embeddingConfig?.endpoint.isNotEmpty ?? false}, history=${history != null})');
-    }
-
-    final scoredEntries = activeEntries.map((entry) {
-      var score = 0.0;
-      if (keywordMatched.contains(entry.id)) score += 6;
-      if (vectorScores.containsKey(entry.id)) score += (vectorScores[entry.id]! * 5);
-      if (entry.messageIds.isNotEmpty) score += 2;
-      score += entry.content.length > 20 ? 1 : 0;
-      return (entry: entry, score: score);
-    }).toList()
-      ..sort((a, b) => b.score.compareTo(a.score));
-
-    final topEntries = scoredEntries
-        .where((item) => item.score > 0)
-        .take(gs.maxInjectedEntries)
-        .map((item) => item.entry)
-        .toList();
-
-    if (topEntries.isEmpty) return const MemoryInjectionResult();
-
-    final maxInjectionTokens = MemoryInjectionBudget.maxInjectionTokens(
+    final selection = await buildCandidates(
+      sessionId: sessionId,
+      history: chatHistory,
+      currentText: currentText ?? '',
+      embeddingConfig: embeddingConfig,
+      shouldAbort: shouldAbort,
+      cancelToken: cancelToken,
       contextBudgetTokens: contextBudgetTokens,
-      percent: book.settings.maxInjectionBudgetPercent,
+      visibleMessageIds: visibleMessageIds,
     );
 
-    final trimmedEntries = maxInjectionTokens == null
-        ? topEntries
-        : MemoryInjectionBudget.trimByTokenBudget(topEntries, maxInjectionTokens);
+    if (selection.entries.isEmpty) {
+      return MemoryInjectionResult(
+        diagnostics: selection.allScores,
+        excludedBySourceWindow: selection.excludedBySourceWindow,
+        candidatesTotal: selection.allScores.length,
+        maxInjectionTokens: selection.budgetTokens,
+      );
+    }
 
-    if (trimmedEntries.isEmpty) return const MemoryInjectionResult();
-
-    final totalTokens = trimmedEntries.fold<int>(
-      0,
-      (sum, e) => sum + estimateTokens(e.content),
-    );
-
-    final macroContent = trimmedEntries
+    final maxInjectionTokens = selection.budgetTokens;
+    final totalTokens = selection.totalTokens;
+    final macroContent = selection.entries
         .map((e) => e.content.trim())
         .join('\n\n');
 
@@ -155,7 +220,7 @@ class MemoryInjectionService {
       contentParts.add('Summary excerpt:\n$summaryExcerpt');
     }
     contentParts.add('Memory context:');
-    for (final entry in trimmedEntries) {
+    for (final entry in selection.entries) {
       final title = entry.title.isNotEmpty ? entry.title : 'Memory';
       contentParts.add('- $title: ${entry.content.trim()}');
     }
@@ -164,19 +229,22 @@ class MemoryInjectionService {
         gs.injectionTarget == 'macro' ? 'macro' : 'hard_block';
 
     return MemoryInjectionResult(
-      entries: trimmedEntries,
+      entries: selection.entries,
       content: contentParts.join('\n\n'),
       injectionTarget: injectionTarget,
       macroContent: macroContent,
       totalTokens: totalTokens,
       maxInjectionTokens: maxInjectionTokens,
-      budgetTrimmed: trimmedEntries.length < topEntries.length,
+      budgetTrimmed: selection.budgetTrimmed,
+      diagnostics: selection.allScores,
+      excludedBySourceWindow: selection.excludedBySourceWindow,
+      candidatesTotal: selection.allScores.length,
     );
   }
 
   Future<Map<String, double>> _vectorSearchMemory(
     List<MemoryEntry> entries,
-    List<ChatMessageForSearch> history,
+    List<ChatMessage> history,
     String currentText,
     EmbeddingConfig config,
     MemoryGlobalSettings settings,
@@ -232,16 +300,13 @@ class MemoryInjectionService {
 
       if (candidates.isEmpty) return {};
 
-      final userMessages = history.where((m) => m.role == 'user').toList().reversed;
-      final maxChars = (config.maxChunkTokens * 2).clamp(0, 1024) * 4;
-      final buffer = StringBuffer();
-      buffer.write(currentText);
-      for (final msg in userMessages) {
-        final toAdd = '\n${msg.content}';
-        if (buffer.length + toAdd.length > maxChars.clamp(0, 6000)) break;
-        buffer.write(toAdd);
-      }
-      final queryText = buffer.toString().trim();
+      final queryText = RetrievalQueryBuilder.build(
+        currentText: currentText,
+        history: history,
+        includeAssistant: true,
+        recentTurns: 6,
+        maxChars: 1500,
+      );
       if (queryText.isEmpty) return {};
       if (shouldAbort?.call() == true) return {};
 

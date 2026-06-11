@@ -15,6 +15,7 @@ import 'prompt_block_resolver.dart';
 import 'fallback_prompt_builder.dart';
 import 'regex_service.dart';
 import 'tokenizer.dart';
+import 'memory_selector.dart';
 
 class RuntimePromptBlock {
   final String id;
@@ -88,6 +89,7 @@ class PromptPayload {
   final List<ScannedEntry>? preScannedEntries;
   final List<TriggeredEntry> triggeredMemories;
   final List<RuntimePromptBlock> runtimePromptBlocks;
+  final MemorySelection? memorySelection;
 
   const PromptPayload({
     required this.character,
@@ -116,6 +118,7 @@ class PromptPayload {
     this.preScannedEntries,
     this.triggeredMemories = const [],
     this.runtimePromptBlocks = const [],
+    this.memorySelection,
   });
 }
 

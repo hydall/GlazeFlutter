@@ -88,6 +88,11 @@ class ContextCalculator {
       vectorLoreTokens: vectorLoreTokens,
       fixedTotal: fixedTotal,
       remaining: remaining,
+      visibleMessageIds: trimmedHistory
+          .map((m) => m.sourceMessageId)
+          .whereType<String>()
+          .where((id) => id.isNotEmpty)
+          .toSet(),
     );
   }
 
@@ -143,6 +148,7 @@ class TokenBreakdown {
   final int vectorLoreTokens;
   final int fixedTotal;
   final int remaining;
+  final Set<String> visibleMessageIds;
 
   const TokenBreakdown({
     required this.sourceTokens,
@@ -158,6 +164,7 @@ class TokenBreakdown {
     this.vectorLoreTokens = 0,
     this.fixedTotal = 0,
     this.remaining = 0,
+    this.visibleMessageIds = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -174,6 +181,7 @@ class TokenBreakdown {
     'vectorLoreTokens': vectorLoreTokens,
     'fixedTotal': fixedTotal,
     'remaining': remaining,
+    'visibleMessageIds': visibleMessageIds.toList(),
   };
 
   factory TokenBreakdown.fromJson(Map<String, dynamic> json) => TokenBreakdown(
@@ -190,6 +198,9 @@ class TokenBreakdown {
     vectorLoreTokens: json['vectorLoreTokens'] as int? ?? 0,
     fixedTotal: json['fixedTotal'] as int? ?? 0,
     remaining: json['remaining'] as int? ?? 0,
+    visibleMessageIds: (json['visibleMessageIds'] as List? ?? const [])
+        .whereType<String>()
+        .toSet(),
   );
 
   int get lorebookTotal => (sourceTokens['lorebook'] ?? 0) + (macroTokens['lorebooks'] ?? 0) + vectorLoreTokens;

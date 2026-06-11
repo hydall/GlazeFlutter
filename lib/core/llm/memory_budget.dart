@@ -24,6 +24,27 @@ class MemoryInjectionBudget {
     return (contextBudgetTokens * percent).floor();
   }
 
+  /// Compose the percent-derived budget with an optional absolute cap.
+  ///
+  /// Behaviour:
+  /// - If both are set, the smaller wins: `min(percentBudget, maxInjectedTokens)`.
+  /// - If only one is set, that one is returned.
+  /// - If neither is set, returns null (caller treats as no cap).
+  static int? composeBudget({
+    required int? contextBudgetTokens,
+    required double percent,
+    required int? absoluteCap,
+  }) {
+    final percentBudget = maxInjectionTokens(
+      contextBudgetTokens: contextBudgetTokens,
+      percent: percent,
+    );
+    if (percentBudget == null && absoluteCap == null) return null;
+    if (percentBudget == null) return absoluteCap;
+    if (absoluteCap == null) return percentBudget;
+    return percentBudget < absoluteCap ? percentBudget : absoluteCap;
+  }
+
   /// Trims [entries] (already sorted by score, descending) so that the
   /// running total of `estimateTokens(entry.content)` does not exceed
   /// [budget]. Entries are removed from the tail (lowest score) first.
