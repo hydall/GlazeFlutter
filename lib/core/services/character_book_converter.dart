@@ -28,7 +28,7 @@ Lorebook convertCharacterBook(
       content: (e['content'] as String?) ?? '',
       enabled: e['enabled'] as bool? ?? true,
       constant: e['constant'] as bool? ?? false,
-      position: _mapPosition(e['position'] as int?),
+      position: _mapPosition(e['position']),
       order: e['insertion_order'] as int? ?? e['order'] as int? ?? 100,
       scanDepth: e['scan_depth'] as int?,
       caseSensitive: e['case_sensitive'] as bool?,
@@ -57,7 +57,31 @@ List<dynamic> _normalizeEntries(dynamic entries) {
   return const [];
 }
 
-String _mapPosition(int? pos) {
+String _mapPosition(Object? pos) {
+  if (pos is String) {
+    switch (pos) {
+      case 'before_char':
+      case 'before_character':
+      case 'worldInfoBefore':
+        return 'worldInfoBefore';
+      case 'after_char':
+      case 'after_character':
+      case 'worldInfoAfter':
+        return 'worldInfoAfter';
+      case 'at_depth':
+      case 'lorebooksMacro':
+        return 'lorebooksMacro';
+      default:
+        return 'worldInfoAfter';
+    }
+  }
+  if (pos is num) {
+    return _mapPositionInt(pos.toInt());
+  }
+  return 'worldInfoAfter';
+}
+
+String _mapPositionInt(int pos) {
   switch (pos) {
     case 0:
       return 'worldInfoBefore';

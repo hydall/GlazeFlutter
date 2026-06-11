@@ -166,6 +166,33 @@ void main() {
       expect(mapBook.entries.first.keys, equals(['beta']));
     });
 
+    test('convertCharacterBook handles string positions', () {
+      final book = convertCharacterBook({
+        'name': 'String Position Book',
+        'entries': [
+          {
+            'keys': ['alpha'],
+            'content': 'Before character.',
+            'position': 'before_char',
+          },
+          {
+            'keys': ['beta'],
+            'content': 'After character.',
+            'position': 'after_char',
+          },
+          {
+            'keys': ['gamma'],
+            'content': 'At depth.',
+            'position': 'at_depth',
+          },
+        ],
+      }, 'char1');
+
+      expect(book.entries[0].position, equals('worldInfoBefore'));
+      expect(book.entries[1].position, equals('worldInfoAfter'));
+      expect(book.entries[2].position, equals('lorebooksMacro'));
+    });
+
     test('settings round-trip through put/getAll', () async {
       final lb = Lorebook(
         id: 'lb_settings',
