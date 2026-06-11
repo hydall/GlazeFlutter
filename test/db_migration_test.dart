@@ -76,7 +76,27 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 28);
+      expect(version, 29);
+    });
+
+    test('memory catalog table exists in current schema', () async {
+      final rows = await db
+          .customSelect("PRAGMA table_info('memory_catalog_rows')")
+          .get();
+      final names = rows.map((c) => c.read<String>('name')).toSet();
+
+      expect(names, contains('chat_session_id'));
+      expect(names, contains('memory_entry_id'));
+      expect(names, contains('entry_revision'));
+      expect(names, contains('source_hash'));
+      expect(names, contains('entities_json'));
+      expect(names, contains('locations_json'));
+      expect(names, contains('topics_json'));
+      expect(names, contains('message_range_start'));
+      expect(names, contains('message_range_end'));
+      expect(names, contains('token_count'));
+      expect(names, contains('abstract_text'));
+      expect(names, contains('stale'));
     });
   });
 }

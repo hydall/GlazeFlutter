@@ -1,4 +1,4 @@
-﻿import 'dart:io';
+import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -20,6 +20,7 @@ part 'app_db.g.dart';
     Embeddings,
     ChatSummaries,
     MemoryBookRows,
+    MemoryCatalogRows,
     ExtensionPresets,
     InfoBlocks,
   ],
@@ -30,7 +31,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 28;
+  int get schemaVersion => 29;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -274,6 +275,15 @@ class AppDatabase extends _$AppDatabase {
         await customStatement(
           'UPDATE info_blocks SET swipe_id = 0 WHERE swipe_id IS NULL',
         );
+      }
+      if (from < 29) {
+        final tables = await customSelect(
+          "SELECT name FROM sqlite_master WHERE type = 'table'",
+        ).get();
+        final tableNames = tables.map((r) => r.read<String>('name')).toSet();
+        if (!tableNames.contains('memory_catalog_rows')) {
+          await m.createTable(memoryCatalogRows);
+        }
       }
     },
   );

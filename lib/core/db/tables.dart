@@ -74,6 +74,42 @@ class MemoryBookRows extends Table {
   Set<Column> get primaryKey => {sessionId};
 }
 
+@DataClassName('MemoryCatalogRow')
+@TableIndex(
+  name: 'idx_memory_catalog_session_entry',
+  columns: {#chatSessionId, #memoryEntryId},
+)
+@TableIndex(name: 'idx_memory_catalog_stale', columns: {#stale})
+class MemoryCatalogRows extends Table {
+  @override
+  String get tableName => 'memory_catalog_rows';
+
+  TextColumn get id => text()();
+  TextColumn get chatSessionId => text()();
+  TextColumn get memoryEntryId => text()();
+  TextColumn get entryRevision => text().withDefault(const Constant(''))();
+  TextColumn get sourceHash => text().withDefault(const Constant(''))();
+  TextColumn get title => text().withDefault(const Constant(''))();
+  TextColumn get keysJson => text().withDefault(const Constant('[]'))();
+  TextColumn get entitiesJson => text().withDefault(const Constant('[]'))();
+  TextColumn get locationsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get topicsJson => text().withDefault(const Constant('[]'))();
+  IntColumn get messageRangeStart => integer().nullable()();
+  IntColumn get messageRangeEnd => integer().nullable()();
+  RealColumn get importance => real().withDefault(const Constant(0.0))();
+  BoolColumn get temporallyBlind =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get tokenCount => integer().withDefault(const Constant(0))();
+  TextColumn get abstractText => text().withDefault(const Constant(''))();
+  TextColumn get status => text().withDefault(const Constant('active'))();
+  BoolColumn get stale => boolean().withDefault(const Constant(false))();
+  IntColumn get createdAt => integer().withDefault(const Constant(0))();
+  IntColumn get updatedAt => integer().withDefault(const Constant(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DataClassName('PresetRow')
 class Presets extends Table {
   @override
@@ -233,7 +269,10 @@ class ExtensionPresets extends Table {
 @DataClassName('InfoBlockRow')
 @TableIndex(name: 'idx_info_blocks_session_id', columns: {#sessionId})
 @TableIndex(name: 'idx_info_blocks_message_id', columns: {#messageId})
-@TableIndex(name: 'idx_info_blocks_message_swipe', columns: {#messageId, #swipeId})
+@TableIndex(
+  name: 'idx_info_blocks_message_swipe',
+  columns: {#messageId, #swipeId},
+)
 class InfoBlocks extends Table {
   @override
   String get tableName => 'info_blocks';
