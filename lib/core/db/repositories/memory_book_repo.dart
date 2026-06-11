@@ -29,9 +29,12 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
       sessionId: sessionId,
       settings: MemoryBookSettings(
         enabled: global.enabled,
+        memoryMode: global.memoryMode,
         autoCreateEnabled: global.autoCreateEnabled,
         autoGenerateEnabled: global.autoGenerateEnabled,
         maxInjectedEntries: global.maxInjectedEntries,
+        maxInjectedTokens: global.maxInjectedTokens,
+        memoryBudgetPreset: global.memoryBudgetPreset,
         autoCreateInterval: global.autoCreateInterval,
         useDelayedAutomation: global.useDelayedAutomation,
         injectionTarget: global.injectionTarget,
@@ -45,6 +48,29 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         generationTemperature: global.generationTemperature,
         generationMaxTokens: global.generationMaxTokens,
         promptPreset: global.promptPreset,
+        diversityAware: global.diversityAware,
+        diversityPenalty: global.diversityPenalty,
+        recencyBoost: global.recencyBoost,
+        recencyHalfLifeDays: global.recencyHalfLifeDays,
+        importanceBoost: global.importanceBoost,
+        importanceWeight: global.importanceWeight,
+        sourceWindowExclusion: global.sourceWindowExclusion,
+        factualContinuityGuardEnabled: global.factualContinuityGuardEnabled,
+        classifierEnabled: global.classifierEnabled,
+        classifierSource: global.classifierSource,
+        classifierModel: global.classifierModel,
+        classifierEndpoint: global.classifierEndpoint,
+        classifierApiKey: global.classifierApiKey,
+        classifierTimeoutMs: global.classifierTimeoutMs,
+        sidecarEnabled: global.sidecarEnabled,
+        sidecarSource: global.sidecarSource,
+        sidecarModel: global.sidecarModel,
+        sidecarEndpoint: global.sidecarEndpoint,
+        sidecarApiKey: global.sidecarApiKey,
+        sidecarTimeoutMs: global.sidecarTimeoutMs,
+        queryIncludeAssistant: global.queryIncludeAssistant,
+        queryRecentTurns: global.queryRecentTurns,
+        queryMaxChars: global.queryMaxChars,
       ),
     );
     await put(book);
@@ -62,13 +88,25 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     return into(memoryBookRows).insertOnConflictUpdate(
       MemoryBookRowsCompanion.insert(
         sessionId: book.sessionId,
-        entriesJson: Value(jsonEncode(
-            book.entries.map((e) => e.toJson()).toList())),
-        pendingDraftsJson: Value(jsonEncode(
-            book.pendingDrafts.map((d) => d.toJson()).toList())),
+        entriesJson: Value(
+          jsonEncode(book.entries.map((e) => e.toJson()).toList()),
+        ),
+        pendingDraftsJson: Value(
+          jsonEncode(book.pendingDrafts.map((d) => d.toJson()).toList()),
+        ),
         settingsJson: Value(jsonEncode(book.settings.toJson())),
-        lastProcessedMessageCount:
-            Value(book.lastProcessedMessageCount),
+        lastProcessedMessageCount: Value(book.lastProcessedMessageCount),
+        updatedAt: Value(currentTimestampSeconds()),
+      ),
+    );
+  }
+
+  Future<void> updateSettings(String sessionId, MemoryBookSettings settings) {
+    return (update(
+      memoryBookRows,
+    )..where((t) => t.sessionId.equals(sessionId))).write(
+      MemoryBookRowsCompanion(
+        settingsJson: Value(jsonEncode(settings.toJson())),
         updatedAt: Value(currentTimestampSeconds()),
       ),
     );
@@ -76,16 +114,16 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
 
   @override
   Future<void> deleteBySessionId(String sessionId) {
-    return (delete(memoryBookRows)
-          ..where((t) => t.sessionId.equals(sessionId)))
-        .go();
+    return (delete(
+      memoryBookRows,
+    )..where((t) => t.sessionId.equals(sessionId))).go();
   }
 
   @override
   Future<MemoryBook?> getBySessionId(String sessionId) async {
-    final row = await (select(memoryBookRows)
-          ..where((t) => t.sessionId.equals(sessionId)))
-        .getSingleOrNull();
+    final row = await (select(
+      memoryBookRows,
+    )..where((t) => t.sessionId.equals(sessionId))).getSingleOrNull();
     if (row == null) return null;
     return _rowToModel(row);
   }
@@ -94,7 +132,9 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     List<MemoryEntry> entries;
     try {
       final list = jsonDecode(row.entriesJson) as List<dynamic>;
-      entries = list.map((e) => MemoryEntry.fromJson(e as Map<String, dynamic>)).toList();
+      entries = list
+          .map((e) => MemoryEntry.fromJson(e as Map<String, dynamic>))
+          .toList();
     } catch (_) {
       entries = [];
     }
@@ -102,7 +142,9 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     List<MemoryDraft> pendingDrafts;
     try {
       final list = jsonDecode(row.pendingDraftsJson) as List<dynamic>;
-      pendingDrafts = list.map((e) => MemoryDraft.fromJson(e as Map<String, dynamic>)).toList();
+      pendingDrafts = list
+          .map((e) => MemoryDraft.fromJson(e as Map<String, dynamic>))
+          .toList();
     } catch (_) {
       pendingDrafts = [];
     }
@@ -110,7 +152,8 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
     MemoryBookSettings settings;
     try {
       settings = MemoryBookSettings.fromJson(
-          jsonDecode(row.settingsJson) as Map<String, dynamic>);
+        jsonDecode(row.settingsJson) as Map<String, dynamic>,
+      );
     } catch (_) {
       settings = const MemoryBookSettings();
     }

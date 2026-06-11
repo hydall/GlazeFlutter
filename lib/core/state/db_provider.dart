@@ -11,6 +11,7 @@ import '../db/repositories/lorebook_repo.dart';
 import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/summary_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
+import '../db/repositories/memory_catalog_repo.dart';
 import '../db/repositories/extension_presets_repository.dart';
 import '../db/repositories/info_blocks_repository.dart';
 import '../models/memory_book.dart';
@@ -28,7 +29,9 @@ final imageStorageProvider = FutureProvider<ImageStorageService>((ref) async {
   return await ImageStorageService.create();
 });
 
-final characterImporterProvider = FutureProvider<CharacterImporter>((ref) async {
+final characterImporterProvider = FutureProvider<CharacterImporter>((
+  ref,
+) async {
   final imageStorage = await ref.watch(imageStorageProvider.future);
   return CharacterImporter(imageStorage);
 });
@@ -85,12 +88,21 @@ final memoryBookRepoProvider = Provider<MemoryBookRepo>((ref) {
   return MemoryBookRepo(ref.watch(appDbProvider), ref);
 });
 
-final memoryBookProvider = FutureProvider.family<MemoryBook?, String>((ref, sessionId) async {
+final memoryCatalogRepoProvider = Provider<MemoryCatalogRepo>((ref) {
+  return MemoryCatalogRepo(ref.watch(appDbProvider));
+});
+
+final memoryBookProvider = FutureProvider.family<MemoryBook?, String>((
+  ref,
+  sessionId,
+) async {
   final repo = ref.watch(memoryBookRepoProvider);
   return repo.getBySessionId(sessionId);
 });
 
-final extensionPresetsRepoProvider = Provider<ExtensionPresetsRepository>((ref) {
+final extensionPresetsRepoProvider = Provider<ExtensionPresetsRepository>((
+  ref,
+) {
   return ExtensionPresetsRepository(ref.watch(appDbProvider));
 });
 

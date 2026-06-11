@@ -23,6 +23,9 @@ Future<void> initLocalizationOnce() async {
 /// process GoRouter's async redirect evaluation and EasyLocalization's
 /// rootBundle Future. Without runAsync, GoRouter's StatefulShellRoute
 /// never builds its first route in the test process.
+///
+/// The test app passes `skipStartup: true`, so startup hooks are not run here;
+/// we only pump enough frames for the initial splash animation and router work.
 Future<void> pumpGlazeApp(
   WidgetTester tester, {
   required ProviderContainer container,
@@ -40,7 +43,11 @@ Future<void> pumpGlazeApp(
     for (var i = 0; i < 3; i++) {
       await tester.pump(Duration.zero);
     }
-    await tester.pump(const Duration(milliseconds: 400));
+    // Splash → content animation runs 1200ms via AnimationController.
+    // pumpAndSettle would loop on NoiseOverlay.toImage, so we use a
+    // single big pump and a final tick to flush pending frames.
+    await tester.pump(const Duration(milliseconds: 1500));
+    await tester.pump(const Duration(milliseconds: 100));
   });
 }
 
@@ -63,6 +70,6 @@ Widget _buildApp(ProviderContainer container, VoidCallback? restart) =>
         supportedLocales: const [Locale('en'), Locale('ru')],
         path: 'assets/translations',
         fallbackLocale: const Locale('en'),
-        child: GlazeApp(restart: restart),
+        child: GlazeApp(restart: restart, skipStartup: true),
       ),
     );

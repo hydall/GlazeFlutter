@@ -14,6 +14,8 @@ import 'context_calculator.dart';
 import 'glaze_matcher.dart';
 import 'history_assembler.dart';
 import 'lorebook_scanner.dart';
+import 'memory_budget.dart';
+import 'memory_selector.dart';
 import 'prompt_builder.dart';
 import 'prompt_inputs.dart';
 import 'tokenizer.dart';
@@ -301,60 +303,73 @@ void _isolateEntryPoint(List<dynamic> args) {
 }
 
 /// Builds a complete prompt from raw inputs in the isolate.
-/// Performs memory keyword injection, lorebook scanning, and prompt assembly.
 PromptResult _buildFromInputs(PromptInputs inputs) {
-  // 1. Memory keyword injection (no vector search in isolate)
+  // 1. Memory injection (no vector search in isolate)
   String? memoryContent;
   String? memoryMacroContent;
   String memoryInjectionTarget = inputs.memoryInjectionTarget;
   List<TriggeredEntry> triggeredMemories = [];
+  MemorySelection? memorySelection;
 
   if (inputs.memoryEnabled && inputs.memoryEntries.isNotEmpty) {
-    final historyText = inputs.history
+    final visibleHistory = inputs.history
         .where((m) => !m.isHidden && !m.isTyping)
+        .toList();
+    final scanText = visibleHistory
         .map((m) => m.content)
-        .join('\n');
-    final scanText = historyText.toLowerCase();
-    final keywordMatched = <String>{};
-
+        .join('\n')
+        .toLowerCase();
+    final keywordMatched = <String, List<String>>{};
     for (final entry in inputs.memoryEntries) {
       if (entry.status != 'active' || entry.content.trim().isEmpty) continue;
-
+      final matched = <String>{};
       for (final key in entry.keys) {
         if (key.isEmpty) continue;
+        final lowerKey = key.toLowerCase();
         if (inputs.memoryKeyMatchMode == 'glaze') {
-          if (_glazeMatch(key, scanText)) keywordMatched.add(entry.id);
+          if (_glazeMatch(lowerKey, scanText)) matched.add(key);
         } else if (inputs.memoryKeyMatchMode == 'both') {
-          if (scanText.contains(key.toLowerCase()) ||
-              _glazeMatch(key, scanText)) {
-            keywordMatched.add(entry.id);
+          if (scanText.contains(lowerKey) || _glazeMatch(lowerKey, scanText)) {
+            matched.add(key);
           }
         } else {
-          if (scanText.contains(key.toLowerCase())) {
-            keywordMatched.add(entry.id);
-          }
+          if (scanText.contains(lowerKey)) matched.add(key);
         }
       }
+      if (matched.isNotEmpty) keywordMatched[entry.id] = matched.toList();
     }
 
-    final scoredEntries =
-        inputs.memoryEntries
-            .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
-            .map((entry) {
-              var score = 0.0;
-              if (keywordMatched.contains(entry.id)) score += 6;
-              if (entry.messageIds.isNotEmpty) score += 2;
-              score += entry.content.length > 20 ? 1 : 0;
-              return (entry: entry, score: score);
-            })
-            .toList()
-          ..sort((a, b) => b.score.compareTo(a.score));
+    final budget = MemoryInjectionBudget.composeBudget(
+      contextBudgetTokens: inputs.memoryContextBudgetTokens > 0
+          ? inputs.memoryContextBudgetTokens
+          : null,
+      percent: inputs.memoryMaxInjectionBudgetPercent,
+      absoluteCap: inputs.memoryMode == 'legacy'
+          ? null
+          : inputs.memoryMaxInjectedTokens,
+    );
 
-    final topEntries = scoredEntries
-        .where((item) => item.score > 0)
-        .take(inputs.memoryMaxInjected)
-        .map((item) => item.entry)
-        .toList();
+    memorySelection = MemorySelector.select(
+      MemorySelectionInput(
+        selectionMode: inputs.memoryMode == 'legacy' ? 'legacy' : 'v2',
+        entries: inputs.memoryEntries,
+        keywordMatchedTerms: keywordMatched,
+        maxInjectionTokens: budget,
+        maxInjectedEntries: inputs.memoryMaxInjected,
+        diversityAware: inputs.memoryDiversityAware,
+        diversityPenalty: inputs.memoryDiversityPenalty,
+        recencyBoost: inputs.memoryRecencyBoost,
+        recencyHalfLifeDays: inputs.memoryRecencyHalfLifeDays,
+        importanceBoost: inputs.memoryImportanceBoost,
+        importanceWeight: inputs.memoryImportanceWeight,
+        sourceWindowExclusion: inputs.memorySourceWindowExclusion,
+        nowMillis: inputs.memoryNowMillis > 0
+            ? inputs.memoryNowMillis
+            : DateTime.now().millisecondsSinceEpoch,
+      ),
+    );
+
+    final topEntries = memorySelection.entries;
 
     if (topEntries.isNotEmpty) {
       final macroContent = topEntries.map((e) => e.content.trim()).join('\n\n');
@@ -407,6 +422,7 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
     memoryInjectionTarget: memoryInjectionTarget,
     triggeredMemories: triggeredMemories,
     runtimePromptBlocks: inputs.runtimePromptBlocks,
+    memorySelection: memorySelection,
   );
 
   // 3. Build prompt (lorebook scanning happens inside buildPrompt)

@@ -858,7 +858,7 @@ void main() {
   group('FlutterBackupImporter _restorePreferences', () {
     /// Builds a minimal valid v3 .glz ZIP archive in memory with an optional
     /// [preferences] map written as preferences.json.
-    Archive _buildGlzArchive({Map<String, dynamic>? preferences}) {
+    Archive buildGlzArchive({Map<String, dynamic>? preferences}) {
       final archive = Archive();
 
       // manifest.json
@@ -886,12 +886,12 @@ void main() {
     }
 
     /// Writes [archive] to a temp file, runs the importer, returns the path.
-    Future<String> _writeAndImport(
+    Future<String> writeAndImport(
       Archive archive,
       AppDatabase db,
       ImageStorageService imageStorage,
     ) async {
-      final bytes = ZipEncoder().encode(archive)!;
+      final bytes = ZipEncoder().encode(archive);
       final path =
           '${Directory.systemTemp.path}/glz_prefs_test_${DateTime.now().microsecondsSinceEpoch}.glz';
       File(path).writeAsBytesSync(bytes);
@@ -917,8 +917,8 @@ void main() {
         'stringList': ['a', 'b', 'c'],
       };
 
-      await _writeAndImport(
-        _buildGlzArchive(preferences: prefs),
+      await writeAndImport(
+        buildGlzArchive(preferences: prefs),
         db,
         imageStorage,
       );
@@ -937,8 +937,8 @@ void main() {
     test('silently skips missing preferences.json (v2 backups)', () async {
       // Archive has no preferences.json — should not throw.
       await expectLater(
-        _writeAndImport(
-          _buildGlzArchive(),
+        writeAndImport(
+          buildGlzArchive(),
           db,
           imageStorage,
         ),
@@ -947,14 +947,14 @@ void main() {
     });
 
     test('does not crash on malformed preferences.json', () async {
-      final archive = _buildGlzArchive();
+      final archive = buildGlzArchive();
       archive.addFile(ArchiveFile.bytes(
         'preferences.json',
         utf8.encode('this is not json {{{'),
       ));
 
       await expectLater(
-        _writeAndImport(archive, db, imageStorage),
+        writeAndImport(archive, db, imageStorage),
         completes,
       );
     });
@@ -963,8 +963,8 @@ void main() {
       final sp = await SharedPreferences.getInstance();
       await sp.setString('theme_active_preset', 'old-preset');
 
-      await _writeAndImport(
-        _buildGlzArchive(preferences: {'theme_active_preset': 'new-preset'}),
+      await writeAndImport(
+        buildGlzArchive(preferences: {'theme_active_preset': 'new-preset'}),
         db,
         imageStorage,
       );

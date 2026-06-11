@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/character.dart';
@@ -68,6 +68,7 @@ class CharacterImporter {
     }
 
     final data = _normalizeCharacterData(rawData);
+    _logCharacterBook('png', data);
     final character = await _saveCharacterWithAvatar(data, pngBytes);
     return CharacterImportResult(
         character: character, hadAvatar: true,
@@ -78,6 +79,7 @@ class CharacterImporter {
     final jsonString = utf8.decode(jsonBytes);
     final rawJson = jsonDecode(jsonString) as Map<String, dynamic>;
     final data = _normalizeCharacterData(rawJson);
+    _logCharacterBook('json', data);
 
     Uint8List? avatarBytes;
     final avatarSrc = data['avatar'] as String?;
@@ -114,6 +116,7 @@ class CharacterImporter {
 
     final rawJson = jsonDecode(cardJsonContent) as Map<String, dynamic>;
     final data = _normalizeCharacterData(rawJson);
+    _logCharacterBook('charx', data);
 
     Uint8List? avatarBytes;
     final assets = data['assets'] as List<dynamic>?;
@@ -201,6 +204,29 @@ class CharacterImporter {
       return Map<String, dynamic>.from(json);
     }
     throw FormatException('Unknown character data format');
+  }
+
+  void _logCharacterBook(String source, Map<String, dynamic> data) {
+    final book = data['character_book'];
+    if (book == null) {
+      debugPrint('[character_import] source=$source name=${data['name']} character_book=null');
+      return;
+    }
+    if (book is! Map) {
+      debugPrint('[character_import] source=$source name=${data['name']} character_book_type=${book.runtimeType}');
+      return;
+    }
+    final entries = book['entries'];
+    final entryCount = entries is List
+        ? entries.length
+        : entries is Map
+            ? entries.length
+            : 0;
+    debugPrint(
+      '[character_import] source=$source name=${data['name']} '
+      'book_name=${book['name']} entries_type=${entries.runtimeType} '
+      'entries=$entryCount',
+    );
   }
 
   Future<Character> _saveCharacterWithAvatar(

@@ -28,10 +28,8 @@ abstract class MemoryDraft with _$MemoryDraft {
 
 @freezed
 abstract class MessageRange with _$MessageRange {
-  const factory MessageRange({
-    required int start,
-    required int end,
-  }) = _MessageRange;
+  const factory MessageRange({required int start, required int end}) =
+      _MessageRange;
 
   factory MessageRange.fromJson(Map<String, dynamic> json) =>
       _$MessageRangeFromJson(json);
@@ -48,20 +46,29 @@ abstract class MemoryEntry with _$MemoryEntry {
     @Default(false) bool vectorSearch,
     @Default([]) List<String> messageIds,
     int? createdAt,
+    MessageRange? messageRange,
+    @Default(0) double importance,
+    @Default(false) bool temporallyBlind,
+    @Default('') String arc,
+    @Default('curated') String kind,
+    @Default('') String sourceHash,
   }) = _MemoryEntry;
 
   factory MemoryEntry.fromJson(Map<String, dynamic> json) =>
-      _$MemoryEntryFromJson(json);
+      _$MemoryEntryFromJson(_migrateEntryInPlace(json));
 }
 
 @freezed
 abstract class MemoryBookSettings with _$MemoryBookSettings {
   const factory MemoryBookSettings({
     @Default(true) bool enabled,
+    @Default('fast') String memoryMode,
     @Default(true) bool autoCreateEnabled,
     @Default(false) bool autoGenerateEnabled,
     @Default(7) int maxInjectedEntries,
     @Default(0.35) double maxInjectionBudgetPercent,
+    int? maxInjectedTokens,
+    @Default('auto') String memoryBudgetPreset,
     @Default(15) int autoCreateInterval,
     @Default(true) bool useDelayedAutomation,
     @Default('hard_block') String injectionTarget,
@@ -75,6 +82,29 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(null) double? generationTemperature,
     @Default(null) int? generationMaxTokens,
     @Default('detailed_beats') String promptPreset,
+    @Default(true) bool diversityAware,
+    @Default(0.15) double diversityPenalty,
+    @Default(true) bool recencyBoost,
+    @Default(0.5) double recencyHalfLifeDays,
+    @Default(true) bool importanceBoost,
+    @Default(0.5) double importanceWeight,
+    @Default(true) bool sourceWindowExclusion,
+    @Default(false) bool factualContinuityGuardEnabled,
+    @Default(false) bool classifierEnabled,
+    @Default('current') String classifierSource,
+    @Default('') String classifierModel,
+    @Default('') String classifierEndpoint,
+    @Default('') String classifierApiKey,
+    @Default(2500) int classifierTimeoutMs,
+    @Default(false) bool sidecarEnabled,
+    @Default('current') String sidecarSource,
+    @Default('') String sidecarModel,
+    @Default('') String sidecarEndpoint,
+    @Default('') String sidecarApiKey,
+    @Default(4000) int sidecarTimeoutMs,
+    @Default(true) bool queryIncludeAssistant,
+    @Default(6) int queryRecentTurns,
+    @Default(1500) int queryMaxChars,
   }) = _MemoryBookSettings;
 
   factory MemoryBookSettings.fromJson(Map<String, dynamic> json) =>
@@ -94,6 +124,31 @@ Map<String, dynamic> _migrateInjectionTargetInPlace(Map<String, dynamic> json) {
     return {...json, 'injectionTarget': 'macro'};
   }
   return json;
+}
+
+/// Coerces new optional fields into safe defaults when reading older JSON
+/// payloads written before the v2 selector schema.
+Map<String, dynamic> _migrateEntryInPlace(Map<String, dynamic> json) {
+  var out = json;
+  if (out['messageRange'] != null && out['messageRange'] is! Map) {
+    out = {...out, 'messageRange': null};
+  }
+  if (out['importance'] is! num) {
+    out = {...out, 'importance': 0.0};
+  }
+  if (out['temporallyBlind'] is! bool) {
+    out = {...out, 'temporallyBlind': false};
+  }
+  if (out['arc'] is! String) {
+    out = {...out, 'arc': ''};
+  }
+  if (out['kind'] is! String) {
+    out = {...out, 'kind': 'curated'};
+  }
+  if (out['sourceHash'] is! String) {
+    out = {...out, 'sourceHash': ''};
+  }
+  return out;
 }
 
 @freezed

@@ -30,7 +30,14 @@ import 'shared/widgets/glaze_toast.dart' show toastOverlayKey;
 
 class GlazeApp extends ConsumerStatefulWidget {
   final VoidCallback? restart;
-  const GlazeApp({super.key, this.restart});
+
+  /// When true, skips the async startup hook chain (tokenizer download,
+  /// prompt worker init, notifications, deep links) and renders the app
+  /// shell immediately. Used by widget tests that need the route tree
+  /// without waiting for network-bound initialization.
+  final bool skipStartup;
+
+  const GlazeApp({super.key, this.restart, this.skipStartup = false});
 
   static VoidCallback? _restart;
 
@@ -43,12 +50,14 @@ class GlazeApp extends ConsumerStatefulWidget {
 class _GlazeAppState extends ConsumerState<GlazeApp>
     with WidgetsBindingObserver {
   StreamSubscription<NotificationNavigationData>? _navSub;
-  bool _startupReady = const bool.fromEnvironment('FLUTTER_TEST');
+  late bool _startupReady;
   bool _startupHooksAttached = false;
 
   @override
   void initState() {
     super.initState();
+    _startupReady =
+        widget.skipStartup || const bool.fromEnvironment('FLUTTER_TEST');
     GlazeApp._restart = widget.restart;
     WidgetsBinding.instance.addObserver(this);
     loadActiveSelections(ref);

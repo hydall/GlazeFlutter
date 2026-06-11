@@ -40,6 +40,9 @@ class SavedMessageWriter {
     String? regenTargetId,
     int visibleStartIndex = 0,
   }) {
+    final persistedMemoryCoverage = stripEphemeralMemoryCoverage(
+      memoryCoverage,
+    );
     List<String> swipes;
     int swipeId;
 
@@ -87,7 +90,9 @@ class SavedMessageWriter {
           visibleStartIndex: visibleStartIndex,
         );
       }
-      final idx = currentSession.messages.indexWhere((m) => m.id == regenTargetId);
+      final idx = currentSession.messages.indexWhere(
+        (m) => m.id == regenTargetId,
+      );
       if (idx >= 0) {
         final updated = currentSession.messages[idx].copyWith(
           content: text,
@@ -101,7 +106,7 @@ class SavedMessageWriter {
           swipeId: swipeId,
           swipesMeta: swipesMeta,
           swipeDirection: 'right',
-          memoryCoverage: memoryCoverage,
+          memoryCoverage: persistedMemoryCoverage,
           triggeredLorebooks: triggeredLorebooks,
           triggeredMemories: triggeredMemories,
         );
@@ -141,7 +146,7 @@ class SavedMessageWriter {
       swipes: swipes,
       swipeId: swipeId,
       swipesMeta: swipesMeta,
-      memoryCoverage: memoryCoverage,
+      memoryCoverage: persistedMemoryCoverage,
       triggeredLorebooks: triggeredLorebooks,
       triggeredMemories: triggeredMemories,
     );
@@ -158,6 +163,17 @@ class SavedMessageWriter {
       lastRawResponse: rawResponse,
       visibleStartIndex: visibleStartIndex,
     );
+  }
+
+  static Map<String, dynamic> stripEphemeralMemoryCoverage(
+    Map<String, dynamic> coverage,
+  ) {
+    if (coverage.isEmpty || !coverage.containsKey('diagnostics')) {
+      return coverage;
+    }
+    final out = Map<String, dynamic>.from(coverage);
+    out.remove('diagnostics');
+    return out;
   }
 
   /// Error path (non-regen): append an error message. Does NOT write
@@ -184,7 +200,10 @@ class SavedMessageWriter {
       messages: finalMessages,
       updatedAt: currentTimestampSeconds(),
     );
-    return ChatState(session: finalSession, visibleStartIndex: visibleStartIndex);
+    return ChatState(
+      session: finalSession,
+      visibleStartIndex: visibleStartIndex,
+    );
   }
 
   /// Error path (regen): replace the swipe at [regenTargetId] with the
@@ -204,8 +223,9 @@ class SavedMessageWriter {
       );
     }
     final original = saveSession.messages[idx];
-    final errorSwipes =
-        original.swipes.isNotEmpty ? [...original.swipes] : [original.content];
+    final errorSwipes = original.swipes.isNotEmpty
+        ? [...original.swipes]
+        : [original.content];
     errorSwipes.add(errorText);
     final errorSwipesMeta = original.swipesMeta.isNotEmpty
         ? [...original.swipesMeta, <String, dynamic>{}]
@@ -213,9 +233,9 @@ class SavedMessageWriter {
             <String, dynamic>{
               'genTime': original.genTime,
               'reasoning': original.reasoning,
-              'tokens': original.tokens
+              'tokens': original.tokens,
             },
-            <String, dynamic>{}
+            <String, dynamic>{},
           ];
     final updated = original.copyWith(
       content: errorText,

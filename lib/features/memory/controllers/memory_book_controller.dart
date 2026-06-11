@@ -40,9 +40,7 @@ class MemoryBookController {
       _ref.read(memoryGlobalSettingsProvider);
 
   Future<void> load() async {
-    _book = await _ref
-        .read(memoryBookOpsProvider)
-        .ensureForSession(_sessionId);
+    _book = await _ref.read(memoryBookOpsProvider).ensureForSession(_sessionId);
     _loading = false;
   }
 
@@ -55,9 +53,12 @@ class MemoryBookController {
     final g = globalSettings;
     return MemoryBookSettings(
       enabled: g.enabled,
+      memoryMode: g.memoryMode,
       autoCreateEnabled: g.autoCreateEnabled,
       autoGenerateEnabled: g.autoGenerateEnabled,
       maxInjectedEntries: g.maxInjectedEntries,
+      maxInjectedTokens: g.maxInjectedTokens,
+      memoryBudgetPreset: g.memoryBudgetPreset,
       autoCreateInterval: g.autoCreateInterval,
       useDelayedAutomation: g.useDelayedAutomation,
       injectionTarget: g.injectionTarget,
@@ -71,27 +72,57 @@ class MemoryBookController {
       generationTemperature: g.generationTemperature,
       generationMaxTokens: g.generationMaxTokens,
       promptPreset: g.promptPreset,
+      diversityAware: g.diversityAware,
+      diversityPenalty: g.diversityPenalty,
+      recencyBoost: g.recencyBoost,
+      recencyHalfLifeDays: g.recencyHalfLifeDays,
+      importanceBoost: g.importanceBoost,
+      importanceWeight: g.importanceWeight,
+      sourceWindowExclusion: g.sourceWindowExclusion,
+      factualContinuityGuardEnabled: g.factualContinuityGuardEnabled,
+      classifierEnabled: g.classifierEnabled,
+      classifierSource: g.classifierSource,
+      classifierModel: g.classifierModel,
+      classifierEndpoint: g.classifierEndpoint,
+      classifierApiKey: g.classifierApiKey,
+      classifierTimeoutMs: g.classifierTimeoutMs,
+      sidecarEnabled: g.sidecarEnabled,
+      sidecarSource: g.sidecarSource,
+      sidecarModel: g.sidecarModel,
+      sidecarEndpoint: g.sidecarEndpoint,
+      sidecarApiKey: g.sidecarApiKey,
+      sidecarTimeoutMs: g.sidecarTimeoutMs,
+      queryIncludeAssistant: g.queryIncludeAssistant,
+      queryRecentTurns: g.queryRecentTurns,
+      queryMaxChars: g.queryMaxChars,
     );
   }
 
   String get settingsSummary {
     if (_book == null) return '';
     final s = globalSettings;
+    final mode = switch (s.memoryMode) {
+      'balanced' => 'Balanced',
+      'deep' => 'Deep',
+      'legacy' => 'Legacy',
+      _ => 'Fast',
+    };
     final interval = s.autoCreateInterval;
     final autoCreate = s.autoCreateEnabled ? 'Auto ON' : 'Auto OFF';
     final autoGen = s.autoGenerateEnabled ? 'Auto-gen' : 'Manual';
     final delayed = s.useDelayedAutomation ? 'Delayed' : 'Immediate';
-    final target = s.injectionTarget == 'macro'
-        ? '{{memory}}'
-        : 'Hard Block';
+    final target = s.injectionTarget == 'macro' ? '{{memory}}' : 'Hard Block';
     final vectorThreshold = s.vectorThreshold.toStringAsFixed(2);
     final maxEntries = s.maxInjectedEntries;
+    final memoryBudget = s.maxInjectedTokens == null
+        ? 'Auto memory budget'
+        : '${s.maxInjectedTokens} memory tokens';
     final batchSize = s.batchSize;
-    final outTokens = (s.generationMaxTokens != null &&
-            s.generationMaxTokens! > 0)
+    final outTokens =
+        (s.generationMaxTokens != null && s.generationMaxTokens! > 0)
         ? '${s.generationMaxTokens} out'
         : 'Auto out';
-    return '$interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries in prompt';
+    return '$mode • $interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries entries • $memoryBudget';
   }
 
   String get searchModelLabel {
@@ -118,7 +149,9 @@ class MemoryBookController {
     if (session == null) return null;
 
     final messages = session.messages
-        .where((m) => !m.isTyping && (m.role == 'user' || m.role == 'assistant'))
+        .where(
+          (m) => !m.isTyping && (m.role == 'user' || m.role == 'assistant'),
+        )
         .toList();
     if (messages.isEmpty) {
       return 'No stable messages to scan';
@@ -157,19 +190,22 @@ class MemoryBookController {
       final lastIdx = messages.indexOf(segment.last);
 
       final alreadyExists = _book!.pendingDrafts.any(
-          (d) => d.messageIds.toSet().containsAll(segmentIds.toSet()));
+        (d) => d.messageIds.toSet().containsAll(segmentIds.toSet()),
+      );
       if (alreadyExists) continue;
 
-      newDrafts.add(MemoryDraft(
-        id: 'draft_${DateTime.now().millisecondsSinceEpoch}_${i}_${_generateId()}',
-        title: '${firstIdx + 1}-${lastIdx + 1}',
-        messageIds: segmentIds,
-        messageRange: MessageRange(start: firstIdx + 1, end: lastIdx + 1),
-        status: 'pending_generation',
-        source: 'scan_chat',
-        createdAt: DateTime.now().millisecondsSinceEpoch,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      ));
+      newDrafts.add(
+        MemoryDraft(
+          id: 'draft_${DateTime.now().millisecondsSinceEpoch}_${i}_${_generateId()}',
+          title: '${firstIdx + 1}-${lastIdx + 1}',
+          messageIds: segmentIds,
+          messageRange: MessageRange(start: firstIdx + 1, end: lastIdx + 1),
+          status: 'pending_generation',
+          source: 'scan_chat',
+          createdAt: DateTime.now().millisecondsSinceEpoch,
+          updatedAt: DateTime.now().millisecondsSinceEpoch,
+        ),
+      );
     }
 
     if (newDrafts.isEmpty) {
@@ -186,15 +222,22 @@ class MemoryBookController {
   void generateAllPending() {
     if (_book == null) return;
     final needsGen = _book!.pendingDrafts
-        .where((d) =>
-            d.content.isEmpty &&
-            (d.status == 'pending_generation' ||
-                d.status == 'needs_regeneration') &&
-            _generatingDrafts[d.id] != true)
+        .where(
+          (d) =>
+              d.content.isEmpty &&
+              (d.status == 'pending_generation' ||
+                  d.status == 'needs_regeneration') &&
+              _generatingDrafts[d.id] != true,
+        )
         .toList();
 
     for (final draft in needsGen) {
-      generateDraft(draft.id, onStart: () {}, onComplete: () {}, onError: (e) {});
+      generateDraft(
+        draft.id,
+        onStart: () {},
+        onComplete: () {},
+        onError: (e) {},
+      );
     }
   }
 
@@ -208,11 +251,12 @@ class MemoryBookController {
     if (_book == null || _generatingDrafts[draftId] == true) return;
     final chatState = _ref.read(chatProvider(_charId));
     if (chatState.value?.isGenerating == true) {
-      onError('Chat generation is active — wait for it to finish before generating a memory draft');
+      onError(
+        'Chat generation is active — wait for it to finish before generating a memory draft',
+      );
       return;
     }
-    final draftIndex =
-        _book!.pendingDrafts.indexWhere((d) => d.id == draftId);
+    final draftIndex = _book!.pendingDrafts.indexWhere((d) => d.id == draftId);
     if (draftIndex < 0) return;
 
     final session = chatState.value?.session;
@@ -227,8 +271,9 @@ class MemoryBookController {
       return;
     }
 
-    final historyText =
-        draftMessages.map((m) => '${m.role}: ${m.content}').join('\n\n');
+    final historyText = draftMessages
+        .map((m) => '${m.role}: ${m.content}')
+        .join('\n\n');
     final cancelToken = CancelToken();
     _cancelTokens[draftId] = cancelToken;
 
@@ -290,25 +335,30 @@ class MemoryBookController {
   }) async {
     if (_book == null) return;
     final needsGen = _book!.pendingDrafts
-        .where((d) =>
-            d.content.isEmpty &&
-            (d.status == 'pending_generation' ||
-                d.status == 'needs_regeneration') &&
-            _generatingDrafts[d.id] != true)
+        .where(
+          (d) =>
+              d.content.isEmpty &&
+              (d.status == 'pending_generation' ||
+                  d.status == 'needs_regeneration') &&
+              _generatingDrafts[d.id] != true,
+        )
         .toList();
     final batchSize = globalSettings.batchSize;
     final toGenerate = needsGen.take(batchSize).toList();
 
     for (final draft in toGenerate) {
-      await generateDraft(draft.id,
-          onStart: onStart, onComplete: onComplete, onError: onError);
+      await generateDraft(
+        draft.id,
+        onStart: onStart,
+        onComplete: onComplete,
+        onError: onError,
+      );
     }
   }
 
   Future<void> approveDraft(String draftId) async {
     if (_book == null) return;
-    final draftIndex =
-        _book!.pendingDrafts.indexWhere((d) => d.id == draftId);
+    final draftIndex = _book!.pendingDrafts.indexWhere((d) => d.id == draftId);
     if (draftIndex < 0) return;
     final draft = _book!.pendingDrafts[draftIndex];
     if (draft.content.isEmpty) return;
@@ -326,8 +376,9 @@ class MemoryBookController {
 
     _book = _book!.copyWith(
       entries: [..._book!.entries, entry],
-      pendingDrafts:
-          _book!.pendingDrafts.where((d) => d.id != draftId).toList(),
+      pendingDrafts: _book!.pendingDrafts
+          .where((d) => d.id != draftId)
+          .toList(),
     );
     await save();
     await _autoIndexEntry(entry);
@@ -336,8 +387,9 @@ class MemoryBookController {
   Future<void> deleteDraft(String draftId) async {
     if (_book == null) return;
     _book = _book!.copyWith(
-      pendingDrafts:
-          _book!.pendingDrafts.where((d) => d.id != draftId).toList(),
+      pendingDrafts: _book!.pendingDrafts
+          .where((d) => d.id != draftId)
+          .toList(),
     );
     await save();
   }
@@ -358,13 +410,18 @@ class MemoryBookController {
   }
 
   Future<MemoryGlobalSettings?> updateSettings(
-      MemoryBookSettings newSettings, double vectorThreshold) async {
+    MemoryBookSettings newSettings,
+    double vectorThreshold,
+  ) async {
     final currentGlobal = globalSettings;
     final newGlobal = MemoryGlobalSettings(
       enabled: newSettings.enabled,
+      memoryMode: newSettings.memoryMode,
       autoCreateEnabled: newSettings.autoCreateEnabled,
       autoGenerateEnabled: newSettings.autoGenerateEnabled,
       maxInjectedEntries: newSettings.maxInjectedEntries,
+      maxInjectedTokens: newSettings.maxInjectedTokens,
+      memoryBudgetPreset: newSettings.memoryBudgetPreset,
       autoCreateInterval: newSettings.autoCreateInterval,
       useDelayedAutomation: newSettings.useDelayedAutomation,
       injectionTarget: newSettings.injectionTarget,
@@ -382,9 +439,38 @@ class MemoryBookController {
       generationTemperature: newSettings.generationTemperature,
       generationMaxTokens: newSettings.generationMaxTokens,
       promptPreset: newSettings.promptPreset,
+      diversityAware: newSettings.diversityAware,
+      diversityPenalty: newSettings.diversityPenalty,
+      recencyBoost: newSettings.recencyBoost,
+      recencyHalfLifeDays: newSettings.recencyHalfLifeDays,
+      importanceBoost: newSettings.importanceBoost,
+      importanceWeight: newSettings.importanceWeight,
+      sourceWindowExclusion: newSettings.sourceWindowExclusion,
+      factualContinuityGuardEnabled: newSettings.factualContinuityGuardEnabled,
+      classifierEnabled: newSettings.classifierEnabled,
+      classifierSource: newSettings.classifierSource,
+      classifierModel: newSettings.classifierModel,
+      classifierEndpoint: newSettings.classifierEndpoint,
+      classifierApiKey: newSettings.classifierApiKey,
+      classifierTimeoutMs: newSettings.classifierTimeoutMs,
+      sidecarEnabled: newSettings.sidecarEnabled,
+      sidecarSource: newSettings.sidecarSource,
+      sidecarModel: newSettings.sidecarModel,
+      sidecarEndpoint: newSettings.sidecarEndpoint,
+      sidecarApiKey: newSettings.sidecarApiKey,
+      sidecarTimeoutMs: newSettings.sidecarTimeoutMs,
+      queryIncludeAssistant: newSettings.queryIncludeAssistant,
+      queryRecentTurns: newSettings.queryRecentTurns,
+      queryMaxChars: newSettings.queryMaxChars,
       customPrompts: currentGlobal.customPrompts,
     );
     await _ref.read(memoryGlobalSettingsProvider.notifier).save(newGlobal);
+    if (_book != null) {
+      _book = _book!.copyWith(settings: newSettings);
+      await _ref
+          .read(memoryBookOpsProvider)
+          .updateSettings(_sessionId, newSettings);
+    }
     return newGlobal;
   }
 
@@ -405,8 +491,9 @@ class MemoryBookController {
         charId: _charId,
         sessionId: _sessionId,
         config: config,
-        embeddingTarget:
-            globalSettings.vectorSearchEnabled ? 'content' : 'content',
+        embeddingTarget: globalSettings.vectorSearchEnabled
+            ? 'content'
+            : 'content',
       );
       return 'Indexed: ${result.indexed}, Skipped: ${result.skipped}, Failed: ${result.failed}';
     } catch (e) {
@@ -422,7 +509,9 @@ class MemoryBookController {
     final config = _ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) return;
     try {
-      await _ref.read(memoryEmbeddingServiceProvider).indexMemoryEntry(
+      await _ref
+          .read(memoryEmbeddingServiceProvider)
+          .indexMemoryEntry(
             entry,
             charId: _charId,
             sessionId: _sessionId,
@@ -488,15 +577,18 @@ class MemoryBookController {
       nextVector = false;
       nextMode = 'plain';
     }
-    await _ref.read(memoryGlobalSettingsProvider.notifier).save(
-          s.copyWith(
-              vectorSearchEnabled: nextVector, keyMatchMode: nextMode),
+    await _ref
+        .read(memoryGlobalSettingsProvider.notifier)
+        .save(
+          s.copyWith(vectorSearchEnabled: nextVector, keyMatchMode: nextMode),
         );
   }
 
   void _startGenElapsedTimer() {
     _genElapsedTimer ??= Timer.periodic(
-        const Duration(milliseconds: 200), (_) {});
+      const Duration(milliseconds: 200),
+      (_) {},
+    );
   }
 
   void _stopGenElapsedTimer() {
@@ -522,11 +614,13 @@ class MemoryBookController {
   List<MemoryDraft> get draftsNeedingGeneration {
     if (_book == null) return [];
     return _book!.pendingDrafts
-        .where((d) =>
-            d.content.isEmpty &&
-            (d.status == 'pending_generation' ||
-                d.status == 'needs_regeneration') &&
-            _generatingDrafts[d.id] != true)
+        .where(
+          (d) =>
+              d.content.isEmpty &&
+              (d.status == 'pending_generation' ||
+                  d.status == 'needs_regeneration') &&
+              _generatingDrafts[d.id] != true,
+        )
         .toList();
   }
 

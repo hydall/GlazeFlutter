@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/sse_client.dart';
+import '../../../core/llm/memory_budget.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../core/services/memory_prompt_presets.dart';
 import '../../../core/state/memory_settings_provider.dart';
@@ -19,14 +20,19 @@ class MemoryGenerationSettingsSheet extends ConsumerStatefulWidget {
   const MemoryGenerationSettingsSheet({super.key, required this.settings});
 
   @override
-  ConsumerState<MemoryGenerationSettingsSheet> createState() => _MemoryGenerationSettingsSheetState();
+  ConsumerState<MemoryGenerationSettingsSheet> createState() =>
+      _MemoryGenerationSettingsSheetState();
 }
 
-class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGenerationSettingsSheet> {
+class _MemoryGenerationSettingsSheetState
+    extends ConsumerState<MemoryGenerationSettingsSheet> {
   late bool _enabled;
+  late String _memoryMode;
   late bool _autoCreate;
   late bool _autoGenerate;
   late int _maxInjected;
+  late String _memoryBudgetPreset;
+  late int? _maxInjectedTokens;
   late int _autoCreateInterval;
   late int _batchSize;
   late bool _useDelayedAutomation;
@@ -36,21 +42,58 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
   late String _keyMatchMode;
   late bool _vectorSearchEnabled;
   late double _vectorThreshold;
+  late bool _advancedSelectorOpen;
+  late bool _diversityAware;
+  late double _diversityPenalty;
+  late bool _recencyBoost;
+  late double _recencyHalfLifeDays;
+  late bool _importanceBoost;
+  late double _importanceWeight;
+  late bool _sourceWindowExclusion;
+  late bool _factualContinuityGuardEnabled;
+  late bool _classifierEnabled;
+  late String _classifierSource;
+  late int _classifierTimeoutMs;
+  late bool _sidecarEnabled;
+  late String _sidecarSource;
+  late int _sidecarTimeoutMs;
+  late bool _queryIncludeAssistant;
+  late int _queryRecentTurns;
+  late int _queryMaxChars;
 
   late final TextEditingController _generationModelCtrl;
   late final TextEditingController _generationEndpointCtrl;
   late final TextEditingController _generationApiKeyCtrl;
   late final TextEditingController _temperatureCtrl;
   late final TextEditingController _maxTokensCtrl;
+  late final TextEditingController _memoryBudgetCtrl;
+  late final TextEditingController _classifierModelCtrl;
+  late final TextEditingController _classifierEndpointCtrl;
+  late final TextEditingController _classifierApiKeyCtrl;
+  late final TextEditingController _sidecarModelCtrl;
+  late final TextEditingController _sidecarEndpointCtrl;
+  late final TextEditingController _sidecarApiKeyCtrl;
 
   @override
   void initState() {
     super.initState();
     final s = widget.settings;
     _enabled = s.enabled;
+    _memoryMode = _normalizeMemoryMode(s.memoryMode);
     _autoCreate = s.autoCreateEnabled;
     _autoGenerate = s.autoGenerateEnabled;
     _maxInjected = s.maxInjectedEntries;
+    _memoryBudgetPreset = _normalizeMemoryBudgetPreset(
+      s.memoryBudgetPreset,
+      s.maxInjectedTokens,
+    );
+    _maxInjectedTokens = _memoryBudgetTokensForPreset(
+      _memoryBudgetPreset,
+      s.maxInjectedTokens,
+    );
+    _memoryBudgetCtrl = TextEditingController(
+      text: (_maxInjectedTokens ?? 6000).toString(),
+    );
     _autoCreateInterval = s.autoCreateInterval;
     _batchSize = s.batchSize;
     _useDelayedAutomation = s.useDelayedAutomation;
@@ -60,12 +103,44 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
     _keyMatchMode = s.keyMatchMode;
     _vectorSearchEnabled = s.vectorSearchEnabled;
     _vectorThreshold = ref.read(memoryGlobalSettingsProvider).vectorThreshold;
+    _advancedSelectorOpen = false;
+    _diversityAware = s.diversityAware;
+    _diversityPenalty = s.diversityPenalty;
+    _recencyBoost = s.recencyBoost;
+    _recencyHalfLifeDays = s.recencyHalfLifeDays;
+    _importanceBoost = s.importanceBoost;
+    _importanceWeight = s.importanceWeight;
+    _sourceWindowExclusion = s.sourceWindowExclusion;
+    _factualContinuityGuardEnabled = s.factualContinuityGuardEnabled;
+    _classifierEnabled = s.classifierEnabled;
+    _classifierSource = _normalizeClassifierSource(s.classifierSource);
+    _classifierTimeoutMs = s.classifierTimeoutMs.clamp(500, 10000);
+    _sidecarEnabled = s.sidecarEnabled;
+    _sidecarSource = _normalizeClassifierSource(s.sidecarSource);
+    _sidecarTimeoutMs = s.sidecarTimeoutMs.clamp(500, 15000);
+    _queryIncludeAssistant = s.queryIncludeAssistant;
+    _queryRecentTurns = s.queryRecentTurns;
+    _queryMaxChars = s.queryMaxChars;
 
     _generationModelCtrl = TextEditingController(text: s.generationModel);
     _generationEndpointCtrl = TextEditingController(text: s.generationEndpoint);
     _generationApiKeyCtrl = TextEditingController(text: s.generationApiKey);
-    _temperatureCtrl = TextEditingController(text: s.generationTemperature != null && s.generationTemperature! > 0 ? s.generationTemperature!.round().toString() : '');
-    _maxTokensCtrl = TextEditingController(text: s.generationMaxTokens != null && s.generationMaxTokens! > 0 ? s.generationMaxTokens.toString() : '');
+    _classifierModelCtrl = TextEditingController(text: s.classifierModel);
+    _classifierEndpointCtrl = TextEditingController(text: s.classifierEndpoint);
+    _classifierApiKeyCtrl = TextEditingController(text: s.classifierApiKey);
+    _sidecarModelCtrl = TextEditingController(text: s.sidecarModel);
+    _sidecarEndpointCtrl = TextEditingController(text: s.sidecarEndpoint);
+    _sidecarApiKeyCtrl = TextEditingController(text: s.sidecarApiKey);
+    _temperatureCtrl = TextEditingController(
+      text: s.generationTemperature != null && s.generationTemperature! > 0
+          ? s.generationTemperature!.round().toString()
+          : '',
+    );
+    _maxTokensCtrl = TextEditingController(
+      text: s.generationMaxTokens != null && s.generationMaxTokens! > 0
+          ? s.generationMaxTokens.toString()
+          : '',
+    );
   }
 
   @override
@@ -75,20 +150,32 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
     _generationApiKeyCtrl.dispose();
     _temperatureCtrl.dispose();
     _maxTokensCtrl.dispose();
+    _memoryBudgetCtrl.dispose();
+    _classifierModelCtrl.dispose();
+    _classifierEndpointCtrl.dispose();
+    _classifierApiKeyCtrl.dispose();
+    _sidecarModelCtrl.dispose();
+    _sidecarEndpointCtrl.dispose();
+    _sidecarApiKeyCtrl.dispose();
     super.dispose();
   }
 
   List<MemoryPromptPreset> get _customPrompts =>
-      MemoryPromptPreset.fromJsonList(ref.read(memoryGlobalSettingsProvider).customPrompts);
+      MemoryPromptPreset.fromJsonList(
+        ref.read(memoryGlobalSettingsProvider).customPrompts,
+      );
 
   void _save() {
     final temp = int.tryParse(_temperatureCtrl.text);
     final tokens = int.tryParse(_maxTokensCtrl.text);
     final settings = widget.settings.copyWith(
       enabled: _enabled,
+      memoryMode: _memoryMode,
       autoCreateEnabled: _autoCreate,
       autoGenerateEnabled: _autoGenerate,
       maxInjectedEntries: _maxInjected,
+      maxInjectedTokens: _maxInjectedTokens,
+      memoryBudgetPreset: _memoryBudgetPreset,
       autoCreateInterval: _autoCreateInterval,
       batchSize: _batchSize,
       useDelayedAutomation: _useDelayedAutomation,
@@ -102,6 +189,29 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
       promptPreset: _promptPreset,
       keyMatchMode: _keyMatchMode,
       vectorSearchEnabled: _vectorSearchEnabled,
+      diversityAware: _diversityAware,
+      diversityPenalty: _diversityPenalty,
+      recencyBoost: _recencyBoost,
+      recencyHalfLifeDays: _recencyHalfLifeDays,
+      importanceBoost: _importanceBoost,
+      importanceWeight: _importanceWeight,
+      sourceWindowExclusion: _sourceWindowExclusion,
+      factualContinuityGuardEnabled: _factualContinuityGuardEnabled,
+      classifierEnabled: _classifierEnabled,
+      classifierSource: _classifierSource,
+      classifierModel: _classifierModelCtrl.text,
+      classifierEndpoint: _classifierEndpointCtrl.text,
+      classifierApiKey: _classifierApiKeyCtrl.text,
+      classifierTimeoutMs: _classifierTimeoutMs,
+      sidecarEnabled: _sidecarEnabled,
+      sidecarSource: _sidecarSource,
+      sidecarModel: _sidecarModelCtrl.text,
+      sidecarEndpoint: _sidecarEndpointCtrl.text,
+      sidecarApiKey: _sidecarApiKeyCtrl.text,
+      sidecarTimeoutMs: _sidecarTimeoutMs,
+      queryIncludeAssistant: _queryIncludeAssistant,
+      queryRecentTurns: _queryRecentTurns,
+      queryMaxChars: _queryMaxChars,
     );
     Navigator.pop(
       context,
@@ -119,18 +229,59 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _switchTile('label_enabled'.tr(), _enabled, (v) => setState(() => _enabled = v)),
-          _switchTile('memory_books_summary_auto_on'.tr(), _autoCreate, (v) => setState(() => _autoCreate = v),
-              subtitle: 'memory_books_summary_auto_text'.tr()),
-          _switchTile('memory_books_summary_auto_on'.tr(), _autoGenerate, (v) => setState(() => _autoGenerate = v),
-              subtitle: 'memory_books_summary_auto_text'.tr()),
+          _switchTile(
+            'label_enabled'.tr(),
+            _enabled,
+            (v) => setState(() => _enabled = v),
+          ),
+          _memoryModeSelector(),
+          const SizedBox(height: 12),
+          _switchTile(
+            'memory_books_summary_auto_on'.tr(),
+            _autoCreate,
+            (v) => setState(() => _autoCreate = v),
+            subtitle: 'memory_books_summary_auto_text'.tr(),
+          ),
+          _switchTile(
+            'memory_books_summary_auto_on'.tr(),
+            _autoGenerate,
+            (v) => setState(() => _autoGenerate = v),
+            subtitle: 'memory_books_summary_auto_text'.tr(),
+          ),
           if (_autoCreate) ...[
-            _switchTile('memory_books_summary_delayed'.tr(), _useDelayedAutomation, (v) => setState(() => _useDelayedAutomation = v),
-                subtitle: 'memory_books_summary_delayed'.tr()),
-            _numberField('memory_books_summary_msgs'.tr(), _autoCreateInterval, (v) => setState(() => _autoCreateInterval = v), min: 1, max: 200),
+            _switchTile(
+              'memory_books_summary_delayed'.tr(),
+              _useDelayedAutomation,
+              (v) => setState(() => _useDelayedAutomation = v),
+              subtitle: 'memory_books_summary_delayed'.tr(),
+            ),
+            _numberField(
+              'memory_books_summary_msgs'.tr(),
+              _autoCreateInterval,
+              (v) => setState(() => _autoCreateInterval = v),
+              min: 1,
+              max: 200,
+            ),
           ],
-          _numberField('memory_books_summary_batch'.tr(), _batchSize, (v) => setState(() => _batchSize = v), min: 1, max: 50),
-          _numberField('memory_books_summary_in_prompt'.tr(), _maxInjected, (v) => setState(() => _maxInjected = v), min: 1, max: 20),
+          _numberField(
+            'memory_books_summary_batch'.tr(),
+            _batchSize,
+            (v) => setState(() => _batchSize = v),
+            min: 1,
+            max: 50,
+          ),
+          _numberField(
+            'memory_books_summary_in_prompt'.tr(),
+            _maxInjected,
+            (v) => setState(() => _maxInjected = v),
+            min: 1,
+            max: 20,
+          ),
+          const SizedBox(height: 12),
+          _sectionLabel('Memory budget'),
+          _memoryBudgetSelector(),
+          const SizedBox(height: 8),
+          _effectiveBudgetHint(),
           const SizedBox(height: 12),
           _sectionLabel('label_embedding_target'.tr()),
           SegmentedButton<String>(
@@ -139,7 +290,8 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
               ButtonSegment(value: 'macro', label: Text('{{memory}}')),
             ],
             selected: {_injectionTarget},
-            onSelectionChanged: (s) => setState(() => _injectionTarget = s.first),
+            onSelectionChanged: (s) =>
+                setState(() => _injectionTarget = s.first),
             style: ButtonStyle(visualDensity: VisualDensity.compact),
           ),
           const SizedBox(height: 12),
@@ -147,25 +299,60 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
           _promptPresetSelector(),
           const SizedBox(height: 12),
           _sectionLabel('tab_api'.tr()),
-          _switchTile('settings_use_llm_api'.tr(), _generationSource != 'custom', (v) => setState(() => _generationSource = v ? 'current' : 'custom'),
-              subtitle: 'settings_use_llm_api_desc'.tr()),
+          _switchTile(
+            'settings_use_llm_api'.tr(),
+            _generationSource != 'custom',
+            (v) => setState(() => _generationSource = v ? 'current' : 'custom'),
+            subtitle: 'settings_use_llm_api_desc'.tr(),
+          ),
           if (_generationSource == 'custom') ...[
             const SizedBox(height: 8),
-            _labeledField('settings_embedding_endpoint'.tr(), _generationEndpointCtrl, hint: 'https://...'),
+            _labeledField(
+              'settings_embedding_endpoint'.tr(),
+              _generationEndpointCtrl,
+              hint: 'https://...',
+            ),
             const SizedBox(height: 8),
-            _modelField(_generationModelCtrl, hint: 'gpt-4o-mini', isCustom: true),
+            _modelField(
+              _generationModelCtrl,
+              hint: 'gpt-4o-mini',
+              isCustom: true,
+            ),
             const SizedBox(height: 8),
-            _labeledField('label_embedding_key'.tr(), _generationApiKeyCtrl, hint: 'sk-...', obscure: true),
+            _labeledField(
+              'label_embedding_key'.tr(),
+              _generationApiKeyCtrl,
+              hint: 'sk-...',
+              obscure: true,
+            ),
           ] else ...[
             const SizedBox(height: 8),
-            _modelField(_generationModelCtrl, hint: 'Leave blank for current LLM model', isCustom: false),
+            _modelField(
+              _generationModelCtrl,
+              hint: 'Leave blank for current LLM model',
+              isCustom: false,
+            ),
           ],
           const SizedBox(height: 8),
-          _labeledField('label_temperature'.tr(), _temperatureCtrl, hint: '0 = use API default', inputType: TextInputType.number),
-          _labeledField('label_max_tokens'.tr(), _maxTokensCtrl, hint: '0 = auto (recommended 2000-4000)', inputType: TextInputType.number),
+          _labeledField(
+            'label_temperature'.tr(),
+            _temperatureCtrl,
+            hint: '0 = use API default',
+            inputType: TextInputType.number,
+          ),
+          _labeledField(
+            'label_max_tokens'.tr(),
+            _maxTokensCtrl,
+            hint: '0 = auto (recommended 2000-4000)',
+            inputType: TextInputType.number,
+          ),
           const SizedBox(height: 12),
           _sectionLabel('search'.tr()),
-          _switchTile('label_vector_search'.tr(), _vectorSearchEnabled, (v) => setState(() => _vectorSearchEnabled = v)),
+          _switchTile(
+            'label_vector_search'.tr(),
+            _vectorSearchEnabled,
+            (v) => setState(() => _vectorSearchEnabled = v),
+          ),
           if (_vectorSearchEnabled) ...[
             const SizedBox(height: 8),
             _sliderField(
@@ -185,18 +372,27 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
                 ButtonSegment(value: 'both', label: Text('Both')),
               ],
               selected: {_keyMatchMode},
-              onSelectionChanged: (s) => setState(() => _keyMatchMode = s.first),
+              onSelectionChanged: (s) =>
+                  setState(() => _keyMatchMode = s.first),
               style: ButtonStyle(visualDensity: VisualDensity.compact),
             ),
           ],
+          const SizedBox(height: 12),
+          _advancedSelectorSettings(),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              TextButton(onPressed: () => Navigator.pop(context), child: Text('btn_cancel'.tr())),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: Text('btn_cancel'.tr()),
+              ),
               const SizedBox(width: 8),
               FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: context.cs.primary, foregroundColor: Colors.black),
+                style: FilledButton.styleFrom(
+                  backgroundColor: context.cs.primary,
+                  foregroundColor: Colors.black,
+                ),
                 onPressed: _save,
                 child: Text('btn_save'.tr()),
               ),
@@ -207,10 +403,309 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
     );
   }
 
-  Widget _switchTile(String label, bool value, ValueChanged<bool> onChanged, {String? subtitle}) {
+  Widget _advancedSelectorSettings() {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        key: const Key('memory_advanced_selector_settings'),
+        initiallyExpanded: _advancedSelectorOpen,
+        onExpansionChanged: (value) =>
+            setState(() => _advancedSelectorOpen = value),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        title: Text(
+          'Advanced selector tuning',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: context.cs.onSurfaceVariant,
+          ),
+        ),
+        subtitle: Text(
+          'Diversity, recency, importance, source-window exclusion, and query shape.',
+          style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
+        ),
+        children: [
+          _switchTile(
+            'Diversity-aware selection',
+            _diversityAware,
+            (v) => setState(() => _diversityAware = v),
+          ),
+          if (_diversityAware)
+            _sliderField(
+              label: 'Diversity penalty',
+              value: _diversityPenalty,
+              min: 0,
+              max: 1,
+              divisions: 20,
+              display: _diversityPenalty.toStringAsFixed(2),
+              onChanged: (v) => setState(() => _diversityPenalty = v),
+            ),
+          _switchTile(
+            'Recency boost',
+            _recencyBoost,
+            (v) => setState(() => _recencyBoost = v),
+          ),
+          if (_recencyBoost)
+            _sliderField(
+              label: 'Recency half-life days',
+              value: _recencyHalfLifeDays,
+              min: 0.1,
+              max: 30,
+              divisions: 299,
+              display: _recencyHalfLifeDays.toStringAsFixed(1),
+              onChanged: (v) => setState(() => _recencyHalfLifeDays = v),
+            ),
+          _switchTile(
+            'Importance boost',
+            _importanceBoost,
+            (v) => setState(() => _importanceBoost = v),
+          ),
+          if (_importanceBoost)
+            _sliderField(
+              label: 'Importance weight',
+              value: _importanceWeight,
+              min: 0,
+              max: 2,
+              divisions: 40,
+              display: _importanceWeight.toStringAsFixed(2),
+              onChanged: (v) => setState(() => _importanceWeight = v),
+            ),
+          _switchTile(
+            'Exclude sources already visible',
+            _sourceWindowExclusion,
+            (v) => setState(() => _sourceWindowExclusion = v),
+          ),
+          _switchTile(
+            'Factual-continuity guard',
+            _factualContinuityGuardEnabled,
+            (v) => setState(() => _factualContinuityGuardEnabled = v),
+            subtitle:
+                'Opt-in: when Balanced suspects missing context but finds no reliable memory, add a short anti-hallucination guard to the prompt.',
+          ),
+          _classifierSettings(),
+          _sidecarSettings(),
+          _switchTile(
+            'Include assistant turns in vector query',
+            _queryIncludeAssistant,
+            (v) => setState(() => _queryIncludeAssistant = v),
+          ),
+          _numberField(
+            'Query recent turns',
+            _queryRecentTurns,
+            (v) => setState(() => _queryRecentTurns = v),
+            min: 1,
+            max: 20,
+          ),
+          _numberField(
+            'Query max chars',
+            _queryMaxChars,
+            (v) => setState(() => _queryMaxChars = v),
+            min: 500,
+            max: 5000,
+            step: 250,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _memoryModeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('Memory mode'),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(
+              value: 'legacy',
+              label: Text('Legacy'),
+              icon: Icon(Icons.restore_rounded),
+            ),
+            ButtonSegment(
+              value: 'fast',
+              label: Text('Fast'),
+              icon: Icon(Icons.bolt_rounded),
+            ),
+            ButtonSegment(
+              value: 'balanced',
+              label: Text('Balanced'),
+              icon: Icon(Icons.tune_rounded),
+            ),
+            ButtonSegment(
+              value: 'deep',
+              label: Text('Deep'),
+              icon: Icon(Icons.manage_search_rounded),
+            ),
+          ],
+          selected: {_memoryMode},
+          onSelectionChanged: (s) => setState(() => _memoryMode = s.first),
+          style: ButtonStyle(visualDensity: VisualDensity.compact),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _memoryMode == 'legacy'
+              ? 'Emergency rollback: old Memory Book scoring/top-N selector. Keeps the current injection format.'
+              : _memoryMode == 'balanced'
+              ? 'Deterministic selector plus local catalog/heuristics. No external classifier call.'
+              : _memoryMode == 'deep'
+              ? 'Deep mode configuration only for now. Sidecar reranking remains read-only and is not called until the next implementation step.'
+              : 'Deterministic selector only. Fastest and most predictable.',
+          style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+
+  Widget _classifierSettings() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _switchTile(
+          'Needs-memory classifier',
+          _classifierEnabled,
+          (v) => setState(() => _classifierEnabled = v),
+          subtitle:
+              'Optional external model call in future Balanced/Deep modes. Disabled by default; this commit only saves configuration.',
+        ),
+        if (_classifierEnabled) ...[
+          Text(
+            'External-call disclosure: enabling the classifier may send recent chat context to the selected model before generation. Commit 12 stores settings only; no classifier request is made yet.',
+            style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'current', label: Text('Current API')),
+              ButtonSegment(value: 'custom', label: Text('Custom')),
+            ],
+            selected: {_classifierSource},
+            onSelectionChanged: (s) =>
+                setState(() => _classifierSource = s.first),
+            style: ButtonStyle(visualDensity: VisualDensity.compact),
+          ),
+          const SizedBox(height: 8),
+          if (_classifierSource == 'custom') ...[
+            _labeledField(
+              'settings_embedding_endpoint'.tr(),
+              _classifierEndpointCtrl,
+              hint: 'https://...',
+            ),
+            const SizedBox(height: 8),
+          ],
+          _labeledField(
+            'Classifier model',
+            _classifierModelCtrl,
+            hint: _classifierSource == 'custom'
+                ? 'gpt-4o-mini'
+                : 'Leave blank for current LLM model',
+          ),
+          if (_classifierSource == 'custom') ...[
+            const SizedBox(height: 8),
+            _labeledField(
+              'label_embedding_key'.tr(),
+              _classifierApiKeyCtrl,
+              hint: 'sk-...',
+              obscure: true,
+            ),
+          ],
+          _numberField(
+            'Classifier timeout ms',
+            _classifierTimeoutMs,
+            (v) => setState(() => _classifierTimeoutMs = v),
+            min: 500,
+            max: 10000,
+            step: 500,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _sidecarSettings() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _switchTile(
+          'Deep sidecar reranker',
+          _sidecarEnabled,
+          (v) => setState(() => _sidecarEnabled = v),
+          subtitle:
+              'Optional external model for future Deep mode reranking. Read-only configuration; no sidecar call is made in this commit.',
+        ),
+        if (_sidecarEnabled) ...[
+          Text(
+            'Cost/latency disclosure: sidecar reranking may add another model request before generation. It must not write, edit, or delete memories.',
+            style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'current', label: Text('Current API')),
+              ButtonSegment(value: 'custom', label: Text('Custom')),
+            ],
+            selected: {_sidecarSource},
+            onSelectionChanged: (s) => setState(() => _sidecarSource = s.first),
+            style: ButtonStyle(visualDensity: VisualDensity.compact),
+          ),
+          const SizedBox(height: 8),
+          if (_sidecarSource == 'custom') ...[
+            _labeledField(
+              'settings_embedding_endpoint'.tr(),
+              _sidecarEndpointCtrl,
+              hint: 'https://...',
+            ),
+            const SizedBox(height: 8),
+          ],
+          _labeledField(
+            'Sidecar model',
+            _sidecarModelCtrl,
+            hint: _sidecarSource == 'custom'
+                ? 'gpt-4o-mini'
+                : 'Leave blank for current LLM model',
+          ),
+          if (_sidecarSource == 'custom') ...[
+            const SizedBox(height: 8),
+            _labeledField(
+              'label_embedding_key'.tr(),
+              _sidecarApiKeyCtrl,
+              hint: 'sk-...',
+              obscure: true,
+            ),
+          ],
+          _numberField(
+            'Sidecar timeout ms',
+            _sidecarTimeoutMs,
+            (v) => setState(() => _sidecarTimeoutMs = v),
+            min: 500,
+            max: 15000,
+            step: 500,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _switchTile(
+    String label,
+    bool value,
+    ValueChanged<bool> onChanged, {
+    String? subtitle,
+  }) {
     return SwitchListTile(
-      title: Text(label, style: TextStyle(fontSize: 14, color: context.cs.onSurface)),
-      subtitle: subtitle != null ? Text(subtitle, style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant)) : null,
+      title: Text(
+        label,
+        style: TextStyle(fontSize: 14, color: context.cs.onSurface),
+      ),
+      subtitle: subtitle != null
+          ? Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 11,
+                color: context.cs.onSurfaceVariant,
+              ),
+            )
+          : null,
       value: value,
       onChanged: onChanged,
       dense: true,
@@ -219,15 +714,35 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
     );
   }
 
-  Widget _numberField(String label, int value, ValueChanged<int> onChanged, {int min = 0, int max = 99999}) {
+  Widget _numberField(
+    String label,
+    int value,
+    ValueChanged<int> onChanged, {
+    int min = 0,
+    int max = 99999,
+    int step = 1,
+  }) {
+    final normalized = min + (((value - min) / step).round() * step);
+    final clamped = normalized.clamp(min, max);
     return Row(
       children: [
-        Expanded(child: Text(label, style: TextStyle(fontSize: 13, color: context.cs.onSurface))),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(fontSize: 13, color: context.cs.onSurface),
+          ),
+        ),
         SizedBox(
           width: 80,
           child: DropdownButton<int>(
-            value: value.clamp(min, max),
-            items: List.generate(max - min + 1, (i) => DropdownMenuItem(value: min + i, child: Text('${min + i}'))),
+            value: clamped,
+            items: List.generate(
+              ((max - min) ~/ step) + 1,
+              (i) => DropdownMenuItem(
+                value: min + (i * step),
+                child: Text('${min + (i * step)}'),
+              ),
+            ),
             onChanged: (v) => onChanged(v ?? value),
             underline: const SizedBox.shrink(),
             style: TextStyle(fontSize: 14, color: context.cs.primary),
@@ -237,43 +752,194 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
     );
   }
 
-  Widget _labeledField(String label, TextEditingController controller, {String? hint, bool obscure = false, TextInputType? inputType}) {
+  Widget _labeledField(
+    String label,
+    TextEditingController controller, {
+    String? hint,
+    bool obscure = false,
+    TextInputType? inputType,
+  }) {
     return TextField(
       controller: controller,
       obscureText: obscure,
       keyboardType: inputType,
-      inputFormatters: inputType == TextInputType.number ? [FilteringTextInputFormatter.digitsOnly] : null,
+      inputFormatters: inputType == TextInputType.number
+          ? [FilteringTextInputFormatter.digitsOnly]
+          : null,
       style: TextStyle(color: context.cs.onSurface, fontSize: 14),
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
         hintText: hint,
-        hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.4)),
+        hintStyle: TextStyle(
+          color: context.cs.onSurfaceVariant.withValues(alpha: 0.4),
+        ),
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.05),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
     );
   }
 
-  Widget _modelField(TextEditingController controller, {String? hint, required bool isCustom}) {
+  Widget _memoryBudgetSelector() {
+    return SegmentedButton<String>(
+      segments: const [
+        ButtonSegment(value: 'auto', label: Text('Auto')),
+        ButtonSegment(value: 'small', label: Text('Small')),
+        ButtonSegment(value: 'medium', label: Text('Medium')),
+        ButtonSegment(value: 'large', label: Text('Large')),
+        ButtonSegment(value: 'custom', label: Text('Custom')),
+      ],
+      selected: {_memoryBudgetPreset},
+      onSelectionChanged: (selected) {
+        final preset = selected.first;
+        setState(() {
+          _memoryBudgetPreset = preset;
+          _maxInjectedTokens = _memoryBudgetTokensForPreset(
+            preset,
+            _maxInjectedTokens,
+          );
+          if (_maxInjectedTokens != null) {
+            _memoryBudgetCtrl.text = _maxInjectedTokens.toString();
+          }
+        });
+      },
+      style: ButtonStyle(visualDensity: VisualDensity.compact),
+    );
+  }
+
+  Widget _effectiveBudgetHint() {
+    final breakdown = MemoryInjectionBudget.describeBudget(
+      contextBudgetTokens: 32000,
+      percent: widget.settings.maxInjectionBudgetPercent,
+      absoluteCap: _maxInjectedTokens,
+    );
+    final percentTokens = breakdown.percentTokens;
+    final absoluteTokens = breakdown.absoluteTokens;
+    final effectiveTokens = breakdown.effectiveTokens;
+    final text = absoluteTokens == null
+        ? 'At 32k context: uses ${_formatTokens(percentTokens)} from the percent budget.'
+        : 'At 32k context: min(${_formatTokens(percentTokens)}, ${_formatTokens(absoluteTokens)}) = ${_formatTokens(effectiveTokens)}. Entries cap stays $_maxInjected.';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_memoryBudgetPreset == 'custom')
+          TextField(
+            key: const Key('memory_custom_token_budget_field'),
+            controller: _memoryBudgetCtrl,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            onChanged: (value) {
+              final parsed = int.tryParse(value);
+              setState(() {
+                _maxInjectedTokens = parsed != null && parsed > 0
+                    ? parsed
+                    : null;
+              });
+            },
+            style: TextStyle(color: context.cs.onSurface, fontSize: 14),
+            decoration: InputDecoration(
+              labelText: 'Max injected memory tokens',
+              hintText: '6000',
+              labelStyle: TextStyle(
+                color: context.cs.onSurfaceVariant,
+                fontSize: 12,
+              ),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: 0.05),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 10,
+              ),
+            ),
+          ),
+        if (_memoryBudgetPreset == 'custom') const SizedBox(height: 8),
+        Text(
+          text,
+          style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+
+  String _normalizeMemoryBudgetPreset(String preset, int? tokens) {
+    if (preset == 'small' ||
+        preset == 'medium' ||
+        preset == 'large' ||
+        preset == 'custom') {
+      return preset;
+    }
+    return tokens == null ? 'auto' : 'custom';
+  }
+
+  int? _memoryBudgetTokensForPreset(String preset, int? currentCustom) {
+    switch (preset) {
+      case 'auto':
+        return null;
+      case 'small':
+        return 3000;
+      case 'medium':
+        return 6000;
+      case 'large':
+        return 10000;
+      case 'custom':
+        return currentCustom ?? 6000;
+      default:
+        return null;
+    }
+  }
+
+  String _formatTokens(int? tokens) {
+    if (tokens == null) return 'unlimited';
+    return '$tokens tokens';
+  }
+
+  Widget _modelField(
+    TextEditingController controller, {
+    String? hint,
+    required bool isCustom,
+  }) {
     return TextField(
       controller: controller,
       style: TextStyle(color: context.cs.onSurface, fontSize: 14),
       decoration: InputDecoration(
-        labelText: isCustom ? 'label_model'.tr() : "${'label_model'.tr()} (${'hint_optional'.tr()})",
+        labelText: isCustom
+            ? 'label_model'.tr()
+            : "${'label_model'.tr()} (${'hint_optional'.tr()})",
         labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12),
         hintText: hint,
-        hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withValues(alpha: 0.4)),
+        hintStyle: TextStyle(
+          color: context.cs.onSurfaceVariant.withValues(alpha: 0.4),
+        ),
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.05),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
         suffixIcon: IconButton(
           icon: _fetchingModels
-              ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: context.cs.primary))
-              : Icon(Icons.download_rounded, size: 20, color: context.cs.onSurfaceVariant),
+              ? SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: context.cs.primary,
+                  ),
+                )
+              : Icon(
+                  Icons.download_rounded,
+                  size: 20,
+                  color: context.cs.onSurfaceVariant,
+                ),
           tooltip: 'memory_books_loading_models'.tr(),
           onPressed: _fetchingModels ? null : _fetchAndPickModel,
         ),
@@ -301,25 +967,40 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
         apiKey = config.apiKey;
       }
       if (endpoint.isEmpty) {
-        if (mounted) GlazeToast.show(context, 'settings_err_fill_endpoint'.tr());
+        if (mounted) {
+          GlazeToast.show(context, 'settings_err_fill_endpoint'.tr());
+        }
         return;
       }
-      final models = await SseClient().fetchModels(endpoint: endpoint, apiKey: apiKey);
+      final models = await SseClient().fetchModels(
+        endpoint: endpoint,
+        apiKey: apiKey,
+      );
       if (models.isEmpty) {
         if (mounted) GlazeToast.show(context, 'settings_err_no_models'.tr());
         return;
       }
       if (!mounted) return;
-      final ids = models.map((m) => m['id'] as String?).where((id) => id != null).cast<String>().toList()..sort();
+      final ids =
+          models
+              .map((m) => m['id'] as String?)
+              .where((id) => id != null)
+              .cast<String>()
+              .toList()
+            ..sort();
       final selected = await GlazeBottomSheet.show<String>(
         context,
         title: 'settings_select_model'.tr(),
-        items: ids.map((id) => BottomSheetItem(
-          label: id,
-          icon: id == _generationModelCtrl.text ? Icons.check : null,
-          iconColor: context.cs.primary,
-          onTap: () => Navigator.pop(context, id),
-        )).toList(),
+        items: ids
+            .map(
+              (id) => BottomSheetItem(
+                label: id,
+                icon: id == _generationModelCtrl.text ? Icons.check : null,
+                iconColor: context.cs.primary,
+                onTap: () => Navigator.pop(context, id),
+              ),
+            )
+            .toList(),
       );
       if (selected != null) {
         _generationModelCtrl.text = selected;
@@ -341,24 +1022,28 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
               context,
               title: 'regex_script_settings'.tr(),
               items: [
-                ...MemoryPromptPresets.builtIn.map((p) => BottomSheetItem(
-                  label: p.label,
-                  icon: p.key == _promptPreset ? Icons.check : null,
-                  iconColor: context.cs.primary,
-                  onTap: () => Navigator.pop(context, p.key),
-                )),
+                ...MemoryPromptPresets.builtIn.map(
+                  (p) => BottomSheetItem(
+                    label: p.label,
+                    icon: p.key == _promptPreset ? Icons.check : null,
+                    iconColor: context.cs.primary,
+                    onTap: () => Navigator.pop(context, p.key),
+                  ),
+                ),
                 if (custom.isNotEmpty)
                   BottomSheetItem(
                     label: '── Custom ──',
                     centered: true,
                     onTap: () {},
                   ),
-                ...custom.map((p) => BottomSheetItem(
-                  label: p.label,
-                  icon: p.key == _promptPreset ? Icons.check : null,
-                  iconColor: context.cs.primary,
-                  onTap: () => Navigator.pop(context, p.key),
-                )),
+                ...custom.map(
+                  (p) => BottomSheetItem(
+                    label: p.label,
+                    icon: p.key == _promptPreset ? Icons.check : null,
+                    iconColor: context.cs.primary,
+                    onTap: () => Navigator.pop(context, p.key),
+                  ),
+                ),
               ],
             );
             if (result != null) setState(() => _promptPreset = result);
@@ -372,8 +1057,15 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(MemoryPromptPresets.label(_promptPreset, custom), style: TextStyle(fontSize: 13, color: context.cs.onSurface)),
-                Icon(Icons.arrow_drop_down, size: 20, color: context.cs.onSurfaceVariant),
+                Text(
+                  MemoryPromptPresets.label(_promptPreset, custom),
+                  style: TextStyle(fontSize: 13, color: context.cs.onSurface),
+                ),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: 20,
+                  color: context.cs.onSurfaceVariant,
+                ),
               ],
             ),
           ),
@@ -400,36 +1092,62 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
     final result = await GlazeBottomSheet.show<List<MemoryPromptPreset>>(
       context,
       title: "${'theme_custom_font_size'.tr()} ${'label_preset_prompts'.tr()}",
-      child: CustomPromptManagerSheet(
-        customPrompts: custom,
-        onChanged: (_) {},
-      ),
+      child: CustomPromptManagerSheet(customPrompts: custom, onChanged: (_) {}),
     );
     if (result != null) {
       final notifier = ref.read(memoryGlobalSettingsProvider.notifier);
       final current = ref.read(memoryGlobalSettingsProvider);
-      await notifier.save(MemoryGlobalSettings(
-        enabled: current.enabled,
-        autoCreateEnabled: current.autoCreateEnabled,
-        autoGenerateEnabled: current.autoGenerateEnabled,
-        maxInjectedEntries: current.maxInjectedEntries,
-        autoCreateInterval: current.autoCreateInterval,
-        useDelayedAutomation: current.useDelayedAutomation,
-        injectionTarget: current.injectionTarget,
-        batchSize: current.batchSize,
-        parallelJobs: current.parallelJobs,
-        vectorSearchEnabled: current.vectorSearchEnabled,
-        keyMatchMode: current.keyMatchMode,
-        generationSource: current.generationSource,
-        generationModel: current.generationModel,
-        generationUseCurrentModelOverride: current.generationUseCurrentModelOverride,
-        generationEndpoint: current.generationEndpoint,
-        generationApiKey: current.generationApiKey,
-        generationTemperature: current.generationTemperature,
-        generationMaxTokens: current.generationMaxTokens,
-        promptPreset: current.promptPreset,
-        customPrompts: MemoryPromptPreset.toJsonList(result),
-      ));
+      await notifier.save(
+        MemoryGlobalSettings(
+          enabled: current.enabled,
+          memoryMode: current.memoryMode,
+          autoCreateEnabled: current.autoCreateEnabled,
+          autoGenerateEnabled: current.autoGenerateEnabled,
+          maxInjectedEntries: current.maxInjectedEntries,
+          maxInjectedTokens: current.maxInjectedTokens,
+          memoryBudgetPreset: current.memoryBudgetPreset,
+          autoCreateInterval: current.autoCreateInterval,
+          useDelayedAutomation: current.useDelayedAutomation,
+          injectionTarget: current.injectionTarget,
+          batchSize: current.batchSize,
+          parallelJobs: current.parallelJobs,
+          vectorSearchEnabled: current.vectorSearchEnabled,
+          keyMatchMode: current.keyMatchMode,
+          generationSource: current.generationSource,
+          generationModel: current.generationModel,
+          generationUseCurrentModelOverride:
+              current.generationUseCurrentModelOverride,
+          generationEndpoint: current.generationEndpoint,
+          generationApiKey: current.generationApiKey,
+          generationTemperature: current.generationTemperature,
+          generationMaxTokens: current.generationMaxTokens,
+          promptPreset: current.promptPreset,
+          diversityAware: current.diversityAware,
+          diversityPenalty: current.diversityPenalty,
+          recencyBoost: current.recencyBoost,
+          recencyHalfLifeDays: current.recencyHalfLifeDays,
+          importanceBoost: current.importanceBoost,
+          importanceWeight: current.importanceWeight,
+          sourceWindowExclusion: current.sourceWindowExclusion,
+          factualContinuityGuardEnabled: current.factualContinuityGuardEnabled,
+          classifierEnabled: current.classifierEnabled,
+          classifierSource: current.classifierSource,
+          classifierModel: current.classifierModel,
+          classifierEndpoint: current.classifierEndpoint,
+          classifierApiKey: current.classifierApiKey,
+          classifierTimeoutMs: current.classifierTimeoutMs,
+          sidecarEnabled: current.sidecarEnabled,
+          sidecarSource: current.sidecarSource,
+          sidecarModel: current.sidecarModel,
+          sidecarEndpoint: current.sidecarEndpoint,
+          sidecarApiKey: current.sidecarApiKey,
+          sidecarTimeoutMs: current.sidecarTimeoutMs,
+          queryIncludeAssistant: current.queryIncludeAssistant,
+          queryRecentTurns: current.queryRecentTurns,
+          queryMaxChars: current.queryMaxChars,
+          customPrompts: MemoryPromptPreset.toJsonList(result),
+        ),
+      );
       setState(() {});
     }
   }
@@ -437,7 +1155,14 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
   Widget _sectionLabel(String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: context.cs.onSurfaceVariant,
+        ),
+      ),
     );
   }
 
@@ -463,7 +1188,10 @@ class _MemoryGenerationSettingsSheetState extends ConsumerState<MemoryGeneration
             ),
             Text(
               display,
-              style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.cs.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -498,4 +1226,14 @@ String _migrateInjectionTarget(String raw) {
   if (raw == 'summary_block') return 'hard_block';
   if (raw == 'summary_macro') return 'macro';
   return raw;
+}
+
+String _normalizeMemoryMode(String raw) {
+  if (raw == 'deep') return 'deep';
+  if (raw == 'legacy') return 'legacy';
+  return raw == 'balanced' ? 'balanced' : 'fast';
+}
+
+String _normalizeClassifierSource(String raw) {
+  return raw == 'custom' ? 'custom' : 'current';
 }

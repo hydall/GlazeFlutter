@@ -15,6 +15,7 @@ typedef ExtBlocksPanelVisibilityKey = ({
   String sessionId,
   String messageId,
   bool isLastAssistant,
+  bool isGreeting,
   int swipeId,
 });
 
@@ -38,8 +39,12 @@ class ExtBlocksPanelBuilder {
     required int swipeId,
     required bool isAssistant,
     required bool isLastAssistant,
+    bool isGreeting = false,
   }) {
     if (!isAssistant || !extensionsActive(ref)) return false;
+    // Never show the panel on greeting/first_mes messages that have no stored
+    // blocks yet — they were not produced by the user's generation flow.
+    if (isGreeting) return false;
     final blocks = build(
       ref,
       sessionId: sessionId,
@@ -128,6 +133,7 @@ final extBlocksPanelVisibleProvider =
       swipeId: key.swipeId,
       isAssistant: true,
       isLastAssistant: key.isLastAssistant,
+      isGreeting: key.isGreeting,
     );
   },
 );

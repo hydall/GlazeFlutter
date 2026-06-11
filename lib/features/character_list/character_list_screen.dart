@@ -534,7 +534,14 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
             r.characterBookData!,
             r.character.id,
           );
+          debugPrint(
+            '[character_import] gallery saving_lorebook id=${lorebook.id} '
+            'name=${lorebook.name} entries=${lorebook.entries.length} '
+            'character=${r.character.id}',
+          );
           await ref.read(lorebooksProvider.notifier).put(lorebook);
+        } else {
+          debugPrint('[character_import] gallery no_lorebook character=${r.character.id}');
         }
         if (r.galleryImages != null) {
           for (final img in r.galleryImages!) {
@@ -597,7 +604,14 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen> {
             r.characterBookData!,
             r.character.id,
           );
+          debugPrint(
+            '[character_import] files saving_lorebook id=${lorebook.id} '
+            'name=${lorebook.name} entries=${lorebook.entries.length} '
+            'character=${r.character.id}',
+          );
           await ref.read(lorebooksProvider.notifier).put(lorebook);
+        } else {
+          debugPrint('[character_import] files no_lorebook character=${r.character.id}');
         }
         if (r.galleryImages != null) {
           for (final img in r.galleryImages!) {

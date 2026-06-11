@@ -30,7 +30,7 @@ class PresetListScreen extends ConsumerStatefulWidget {
 class _PresetListScreenState extends ConsumerState<PresetListScreen> {
   Preset? _editingPreset;
   bool _isCreating = false;
-  final _editorKey = GlobalKey<PresetEditorBodyState>();
+  GlobalKey<PresetEditorBodyState> _editorKey = GlobalKey<PresetEditorBodyState>();
 
   bool get _inEditor => _isCreating || _editingPreset != null;
 
@@ -38,6 +38,9 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
     setState(() {
       _editingPreset = preset;
       _isCreating = preset == null;
+      // Recreate the editor key so PresetEditorBody's initState fires
+      // and picks up the new preset's blocks instead of the old ones.
+      _editorKey = GlobalKey<PresetEditorBodyState>();
     });
   }
 

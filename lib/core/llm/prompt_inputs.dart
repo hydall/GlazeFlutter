@@ -34,9 +34,25 @@ class PromptInputs {
   // Memory injection raw data (keyword matching only, no vector search)
   final List<MemoryEntry> memoryEntries;
   final bool memoryEnabled;
+  final String memoryMode;
   final int memoryMaxInjected;
   final String memoryKeyMatchMode;
   final String memoryInjectionTarget;
+  // v2 selector knobs (see MemorySelector / MemoryBookSettings).
+  final int? memoryMaxInjectedTokens;
+  final double memoryMaxInjectionBudgetPercent;
+  final bool memoryDiversityAware;
+  final double memoryDiversityPenalty;
+  final bool memoryRecencyBoost;
+  final double memoryRecencyHalfLifeDays;
+  final bool memoryImportanceBoost;
+  final double memoryImportanceWeight;
+  final bool memorySourceWindowExclusion;
+  final bool memoryQueryIncludeAssistant;
+  final int memoryQueryRecentTurns;
+  final int memoryQueryMaxChars;
+  final int memoryNowMillis;
+  final int memoryContextBudgetTokens;
   final List<RuntimePromptBlock> runtimePromptBlocks;
 
   const PromptInputs({
@@ -60,9 +76,24 @@ class PromptInputs {
     this.vectorEntries = const [],
     this.memoryEntries = const [],
     this.memoryEnabled = true,
+    this.memoryMode = 'fast',
     this.memoryMaxInjected = 7,
     this.memoryKeyMatchMode = 'glaze',
     this.memoryInjectionTarget = 'hard_block',
+    this.memoryMaxInjectedTokens,
+    this.memoryMaxInjectionBudgetPercent = 0.35,
+    this.memoryDiversityAware = true,
+    this.memoryDiversityPenalty = 0.15,
+    this.memoryRecencyBoost = true,
+    this.memoryRecencyHalfLifeDays = 0.5,
+    this.memoryImportanceBoost = true,
+    this.memoryImportanceWeight = 0.5,
+    this.memorySourceWindowExclusion = true,
+    this.memoryQueryIncludeAssistant = true,
+    this.memoryQueryRecentTurns = 6,
+    this.memoryQueryMaxChars = 1500,
+    this.memoryNowMillis = 0,
+    this.memoryContextBudgetTokens = 0,
     this.runtimePromptBlocks = const [],
   });
 
@@ -87,9 +118,24 @@ class PromptInputs {
     'vectorEntries': vectorEntries.map((e) => e.toJson()).toList(),
     'memoryEntries': memoryEntries.map((e) => e.toJson()).toList(),
     'memoryEnabled': memoryEnabled,
+    'memoryMode': memoryMode,
     'memoryMaxInjected': memoryMaxInjected,
     'memoryKeyMatchMode': memoryKeyMatchMode,
-    'memoryInjectionTarget': memoryInjectionTarget,
+    'memoryInjectionTarget': _migrateInjectionTarget(memoryInjectionTarget),
+    'memoryMaxInjectedTokens': memoryMaxInjectedTokens,
+    'memoryMaxInjectionBudgetPercent': memoryMaxInjectionBudgetPercent,
+    'memoryDiversityAware': memoryDiversityAware,
+    'memoryDiversityPenalty': memoryDiversityPenalty,
+    'memoryRecencyBoost': memoryRecencyBoost,
+    'memoryRecencyHalfLifeDays': memoryRecencyHalfLifeDays,
+    'memoryImportanceBoost': memoryImportanceBoost,
+    'memoryImportanceWeight': memoryImportanceWeight,
+    'memorySourceWindowExclusion': memorySourceWindowExclusion,
+    'memoryQueryIncludeAssistant': memoryQueryIncludeAssistant,
+    'memoryQueryRecentTurns': memoryQueryRecentTurns,
+    'memoryQueryMaxChars': memoryQueryMaxChars,
+    'memoryNowMillis': memoryNowMillis,
+    'memoryContextBudgetTokens': memoryContextBudgetTokens,
     'runtimePromptBlocks': runtimePromptBlocks
         .map((block) => block.toJson())
         .toList(),
@@ -137,11 +183,32 @@ class PromptInputs {
         .map((e) => MemoryEntry.fromJson(e as Map<String, dynamic>))
         .toList(),
     memoryEnabled: json['memoryEnabled'] as bool? ?? true,
+    memoryMode: json['memoryMode'] as String? ?? 'fast',
     memoryMaxInjected: json['memoryMaxInjected'] as int? ?? 7,
     memoryKeyMatchMode: json['memoryKeyMatchMode'] as String? ?? 'glaze',
     memoryInjectionTarget: _migrateInjectionTarget(
       json['memoryInjectionTarget'] as String?,
     ),
+    memoryMaxInjectedTokens: json['memoryMaxInjectedTokens'] as int?,
+    memoryMaxInjectionBudgetPercent:
+        (json['memoryMaxInjectionBudgetPercent'] as num?)?.toDouble() ?? 0.35,
+    memoryDiversityAware: json['memoryDiversityAware'] as bool? ?? true,
+    memoryDiversityPenalty:
+        (json['memoryDiversityPenalty'] as num?)?.toDouble() ?? 0.15,
+    memoryRecencyBoost: json['memoryRecencyBoost'] as bool? ?? true,
+    memoryRecencyHalfLifeDays:
+        (json['memoryRecencyHalfLifeDays'] as num?)?.toDouble() ?? 0.5,
+    memoryImportanceBoost: json['memoryImportanceBoost'] as bool? ?? true,
+    memoryImportanceWeight:
+        (json['memoryImportanceWeight'] as num?)?.toDouble() ?? 0.5,
+    memorySourceWindowExclusion:
+        json['memorySourceWindowExclusion'] as bool? ?? true,
+    memoryQueryIncludeAssistant:
+        json['memoryQueryIncludeAssistant'] as bool? ?? true,
+    memoryQueryRecentTurns: json['memoryQueryRecentTurns'] as int? ?? 6,
+    memoryQueryMaxChars: json['memoryQueryMaxChars'] as int? ?? 1500,
+    memoryNowMillis: json['memoryNowMillis'] as int? ?? 0,
+    memoryContextBudgetTokens: json['memoryContextBudgetTokens'] as int? ?? 0,
     runtimePromptBlocks: (json['runtimePromptBlocks'] as List? ?? [])
         .map(
           (block) => RuntimePromptBlock.fromJson(block as Map<String, dynamic>),

@@ -4,11 +4,13 @@ Lorebook convertCharacterBook(
   Map<String, dynamic> bookData,
   String characterId,
 ) {
-  final rawEntries = bookData['entries'] as List<dynamic>? ?? [];
+  final rawEntries = _normalizeEntries(bookData['entries']);
   final entries = <LorebookEntry>[];
 
   for (int i = 0; i < rawEntries.length; i++) {
-    final e = rawEntries[i] as Map<String, dynamic>;
+    final rawEntry = rawEntries[i];
+    if (rawEntry is! Map) continue;
+    final e = Map<String, dynamic>.from(rawEntry);
     final keys = (e['keys'] as List<dynamic>?)
             ?.map((k) => k.toString())
             .toList() ??
@@ -26,7 +28,7 @@ Lorebook convertCharacterBook(
       content: (e['content'] as String?) ?? '',
       enabled: e['enabled'] as bool? ?? true,
       constant: e['constant'] as bool? ?? false,
-      position: _mapPosition(e['position'] as int?),
+      position: _mapPosition(e['position']),
       order: e['insertion_order'] as int? ?? e['order'] as int? ?? 100,
       scanDepth: e['scan_depth'] as int?,
       caseSensitive: e['case_sensitive'] as bool?,
@@ -49,7 +51,37 @@ Lorebook convertCharacterBook(
   );
 }
 
-String _mapPosition(int? pos) {
+List<dynamic> _normalizeEntries(dynamic entries) {
+  if (entries is List) return entries;
+  if (entries is Map) return entries.values.toList();
+  return const [];
+}
+
+String _mapPosition(Object? pos) {
+  if (pos is String) {
+    switch (pos) {
+      case 'before_char':
+      case 'before_character':
+      case 'worldInfoBefore':
+        return 'worldInfoBefore';
+      case 'after_char':
+      case 'after_character':
+      case 'worldInfoAfter':
+        return 'worldInfoAfter';
+      case 'at_depth':
+      case 'lorebooksMacro':
+        return 'lorebooksMacro';
+      default:
+        return 'worldInfoAfter';
+    }
+  }
+  if (pos is num) {
+    return _mapPositionInt(pos.toInt());
+  }
+  return 'worldInfoAfter';
+}
+
+String _mapPositionInt(int pos) {
   switch (pos) {
     case 0:
       return 'worldInfoBefore';

@@ -75,10 +75,29 @@ abstract class Preset with _$Preset {
       _$PresetFromJson(_normalizePreset(json));
 }
 
+/// Canonical ids that always represent system (non-editable) blocks.
+const _staticBlockIds = <String>{
+  'worldInfoBefore',
+  'worldInfoAfter',
+  'char_card',
+  'char_personality',
+  'user_persona',
+  'scenario',
+  'example_dialogue',
+  'chat_history',
+  'summary',
+  'authors_note',
+  'guided_generation',
+};
+
 Map<String, dynamic> _normalizeBlock(Map<String, dynamic> json) {
   final n = Map<String, dynamic>.from(json);
   n['enabled'] = _coerceBool(n['enabled'], true);
-  n['isStatic'] = _coerceBool(n['isStatic'], false);
+  // Auto-promote known system block ids to isStatic=true so existing presets
+  // created before this field was introduced are handled correctly.
+  final id = n['id'] as String?;
+  final alreadyStatic = _coerceBool(n['isStatic'], false);
+  n['isStatic'] = alreadyStatic || (id != null && _staticBlockIds.contains(id));
   n['isStashed'] = _coerceBool(n['isStashed'], false);
   n['appendToLastMessage'] = _coerceBool(n['appendToLastMessage'], false);
   n['depth'] = _coerceInt(n['depth']);

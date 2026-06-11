@@ -37,9 +37,11 @@ import 'controllers/chat_message_selection_controller.dart';
 import 'chat_search_delegate.dart';
 import 'chat_state.dart';
 import 'state/chat_body_selectors.dart';
+import 'state/memory_activity_provider.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_input_bar.dart';
 import 'widgets/magic_drawer.dart';
+import 'widgets/memory_activity_card.dart';
 import 'widgets/quick_replies_panel.dart';
 import 'widgets/chat_webview_widget.dart';
 import 'widgets/webview_callbacks.dart';
@@ -315,7 +317,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
               // forever would leave the spinner stuck after branching until an
               // app restart. After the initial apply, only `_sessionSwitchPending`
               // gates the spinner.
-              final awaitingTargetSession = _sessionSwitchPending ||
+              final awaitingTargetSession =
+                  _sessionSwitchPending ||
                   (!_sessionApplied &&
                       widget.initialSessionIndex != null &&
                       state.session?.sessionIndex !=
@@ -394,6 +397,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   final _selectionCtrl = ChatMessageSelectionController();
   bool _showScrollToBottom = false;
+  bool _showMemoryActivity = false;
   final GlobalKey<ChatWebViewWidgetState> _webViewStateKey = GlobalKey();
 
   @override
@@ -504,10 +508,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       if (bytes.isEmpty) return;
 
       final tmpDir = await getTemporaryDirectory();
-      final tmpFile = File(p.join(
-        tmpDir.path,
-        'glaze_image_${DateTime.now().millisecondsSinceEpoch}.$ext',
-      ));
+      final tmpFile = File(
+        p.join(
+          tmpDir.path,
+          'glaze_image_${DateTime.now().millisecondsSinceEpoch}.$ext',
+        ),
+      );
       await tmpFile.writeAsBytes(bytes);
 
       await SharePlus.instance.share(
@@ -656,6 +662,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   Widget build(BuildContext context) {
     final isEditingMessage =
         ref.watch(editingMessageIdProvider(widget.charId)) != null;
+    final memoryActivity = ref.watch(lastMemoryActivityProvider(widget.charId));
     ref.listen<String?>(editingMessageIdProvider(widget.charId), (prev, next) {
       if (next != null) {
         if (widget.drawerCtrl.inputFocus.hasFocus) {
@@ -1153,6 +1160,21 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                   batterySaver &&
                                   widget.drawerCtrl.isDrawerAnimating,
                             ),
+                    ),
+                  if (memoryActivity != null && memoryActivity.hasDiagnostics)
+                    Positioned(
+                      left: 12,
+                      right: 12,
+                      bottom: animatedBottomPanelInset + _inputBarHeight + 8,
+                      child: MemoryActivityCard(
+                        activity: memoryActivity,
+                        expanded: _showMemoryActivity,
+                        onToggle: () {
+                          setState(() {
+                            _showMemoryActivity = !_showMemoryActivity;
+                          });
+                        },
+                      ),
                     ),
                   Positioned(
                     left: 0,
