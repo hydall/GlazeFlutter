@@ -47,6 +47,7 @@ class PromptInputs {
   final bool memoryImportanceBoost;
   final double memoryImportanceWeight;
   final bool memorySourceWindowExclusion;
+  final bool memoryQueryIncludeAssistant;
   final int memoryQueryRecentTurns;
   final int memoryQueryMaxChars;
   final int memoryNowMillis;
@@ -86,6 +87,7 @@ class PromptInputs {
     this.memoryImportanceBoost = true,
     this.memoryImportanceWeight = 0.5,
     this.memorySourceWindowExclusion = true,
+    this.memoryQueryIncludeAssistant = true,
     this.memoryQueryRecentTurns = 6,
     this.memoryQueryMaxChars = 1500,
     this.memoryNowMillis = 0,
@@ -126,6 +128,7 @@ class PromptInputs {
     'memoryImportanceBoost': memoryImportanceBoost,
     'memoryImportanceWeight': memoryImportanceWeight,
     'memorySourceWindowExclusion': memorySourceWindowExclusion,
+    'memoryQueryIncludeAssistant': memoryQueryIncludeAssistant,
     'memoryQueryRecentTurns': memoryQueryRecentTurns,
     'memoryQueryMaxChars': memoryQueryMaxChars,
     'memoryNowMillis': memoryNowMillis,
@@ -196,11 +199,12 @@ class PromptInputs {
         (json['memoryImportanceWeight'] as num?)?.toDouble() ?? 0.5,
     memorySourceWindowExclusion:
         json['memorySourceWindowExclusion'] as bool? ?? true,
+    memoryQueryIncludeAssistant:
+        json['memoryQueryIncludeAssistant'] as bool? ?? true,
     memoryQueryRecentTurns: json['memoryQueryRecentTurns'] as int? ?? 6,
     memoryQueryMaxChars: json['memoryQueryMaxChars'] as int? ?? 1500,
     memoryNowMillis: json['memoryNowMillis'] as int? ?? 0,
-    memoryContextBudgetTokens:
-        json['memoryContextBudgetTokens'] as int? ?? 0,
+    memoryContextBudgetTokens: json['memoryContextBudgetTokens'] as int? ?? 0,
     runtimePromptBlocks: (json['runtimePromptBlocks'] as List? ?? [])
         .map(
           (block) => RuntimePromptBlock.fromJson(block as Map<String, dynamic>),

@@ -315,7 +315,10 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
     final visibleHistory = inputs.history
         .where((m) => !m.isHidden && !m.isTyping)
         .toList();
-    final scanText = visibleHistory.map((m) => m.content).join('\n').toLowerCase();
+    final scanText = visibleHistory
+        .map((m) => m.content)
+        .join('\n')
+        .toLowerCase();
     final keywordMatched = <String, Set<String>>{};
     for (final entry in inputs.memoryEntries) {
       if (entry.status != 'active' || entry.content.trim().isEmpty) continue;
@@ -369,11 +372,9 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
     final topEntries = memorySelection.entries;
 
     if (topEntries.isNotEmpty) {
-      final macroContent =
-          topEntries.map((e) => e.content.trim()).join('\n\n');
+      final macroContent = topEntries.map((e) => e.content.trim()).join('\n\n');
       final contentParts = <String>[];
-      if (inputs.summaryContent != null &&
-          inputs.summaryContent!.isNotEmpty) {
+      if (inputs.summaryContent != null && inputs.summaryContent!.isNotEmpty) {
         contentParts.add('Summary excerpt:\n${inputs.summaryContent}');
       }
       contentParts.add('Memory context:');

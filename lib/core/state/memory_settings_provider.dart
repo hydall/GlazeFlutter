@@ -34,6 +34,16 @@ abstract class MemoryGlobalSettings with _$MemoryGlobalSettings {
     double? generationTemperature,
     int? generationMaxTokens,
     @Default('detailed_beats') String promptPreset,
+    @Default(true) bool diversityAware,
+    @Default(0.15) double diversityPenalty,
+    @Default(true) bool recencyBoost,
+    @Default(0.5) double recencyHalfLifeDays,
+    @Default(true) bool importanceBoost,
+    @Default(0.5) double importanceWeight,
+    @Default(true) bool sourceWindowExclusion,
+    @Default(true) bool queryIncludeAssistant,
+    @Default(6) int queryRecentTurns,
+    @Default(1500) int queryMaxChars,
     @Default([]) List<Map<String, dynamic>> customPrompts,
   }) = _MemoryGlobalSettings;
 

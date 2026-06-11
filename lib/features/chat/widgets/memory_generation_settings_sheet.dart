@@ -41,6 +41,17 @@ class _MemoryGenerationSettingsSheetState
   late String _keyMatchMode;
   late bool _vectorSearchEnabled;
   late double _vectorThreshold;
+  late bool _advancedSelectorOpen;
+  late bool _diversityAware;
+  late double _diversityPenalty;
+  late bool _recencyBoost;
+  late double _recencyHalfLifeDays;
+  late bool _importanceBoost;
+  late double _importanceWeight;
+  late bool _sourceWindowExclusion;
+  late bool _queryIncludeAssistant;
+  late int _queryRecentTurns;
+  late int _queryMaxChars;
 
   late final TextEditingController _generationModelCtrl;
   late final TextEditingController _generationEndpointCtrl;
@@ -77,6 +88,17 @@ class _MemoryGenerationSettingsSheetState
     _keyMatchMode = s.keyMatchMode;
     _vectorSearchEnabled = s.vectorSearchEnabled;
     _vectorThreshold = ref.read(memoryGlobalSettingsProvider).vectorThreshold;
+    _advancedSelectorOpen = false;
+    _diversityAware = s.diversityAware;
+    _diversityPenalty = s.diversityPenalty;
+    _recencyBoost = s.recencyBoost;
+    _recencyHalfLifeDays = s.recencyHalfLifeDays;
+    _importanceBoost = s.importanceBoost;
+    _importanceWeight = s.importanceWeight;
+    _sourceWindowExclusion = s.sourceWindowExclusion;
+    _queryIncludeAssistant = s.queryIncludeAssistant;
+    _queryRecentTurns = s.queryRecentTurns;
+    _queryMaxChars = s.queryMaxChars;
 
     _generationModelCtrl = TextEditingController(text: s.generationModel);
     _generationEndpointCtrl = TextEditingController(text: s.generationEndpoint);
@@ -132,6 +154,16 @@ class _MemoryGenerationSettingsSheetState
       promptPreset: _promptPreset,
       keyMatchMode: _keyMatchMode,
       vectorSearchEnabled: _vectorSearchEnabled,
+      diversityAware: _diversityAware,
+      diversityPenalty: _diversityPenalty,
+      recencyBoost: _recencyBoost,
+      recencyHalfLifeDays: _recencyHalfLifeDays,
+      importanceBoost: _importanceBoost,
+      importanceWeight: _importanceWeight,
+      sourceWindowExclusion: _sourceWindowExclusion,
+      queryIncludeAssistant: _queryIncludeAssistant,
+      queryRecentTurns: _queryRecentTurns,
+      queryMaxChars: _queryMaxChars,
     );
     Navigator.pop(
       context,
@@ -295,6 +327,8 @@ class _MemoryGenerationSettingsSheetState
               style: ButtonStyle(visualDensity: VisualDensity.compact),
             ),
           ],
+          const SizedBox(height: 12),
+          _advancedSelectorSettings(),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -313,6 +347,104 @@ class _MemoryGenerationSettingsSheetState
                 child: Text('btn_save'.tr()),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _advancedSelectorSettings() {
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        key: const Key('memory_advanced_selector_settings'),
+        initiallyExpanded: _advancedSelectorOpen,
+        onExpansionChanged: (value) =>
+            setState(() => _advancedSelectorOpen = value),
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        title: Text(
+          'Advanced selector tuning',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: context.cs.onSurfaceVariant,
+          ),
+        ),
+        subtitle: Text(
+          'Diversity, recency, importance, source-window exclusion, and query shape.',
+          style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
+        ),
+        children: [
+          _switchTile(
+            'Diversity-aware selection',
+            _diversityAware,
+            (v) => setState(() => _diversityAware = v),
+          ),
+          if (_diversityAware)
+            _sliderField(
+              label: 'Diversity penalty',
+              value: _diversityPenalty,
+              min: 0,
+              max: 1,
+              divisions: 20,
+              display: _diversityPenalty.toStringAsFixed(2),
+              onChanged: (v) => setState(() => _diversityPenalty = v),
+            ),
+          _switchTile(
+            'Recency boost',
+            _recencyBoost,
+            (v) => setState(() => _recencyBoost = v),
+          ),
+          if (_recencyBoost)
+            _sliderField(
+              label: 'Recency half-life days',
+              value: _recencyHalfLifeDays,
+              min: 0.1,
+              max: 30,
+              divisions: 299,
+              display: _recencyHalfLifeDays.toStringAsFixed(1),
+              onChanged: (v) => setState(() => _recencyHalfLifeDays = v),
+            ),
+          _switchTile(
+            'Importance boost',
+            _importanceBoost,
+            (v) => setState(() => _importanceBoost = v),
+          ),
+          if (_importanceBoost)
+            _sliderField(
+              label: 'Importance weight',
+              value: _importanceWeight,
+              min: 0,
+              max: 2,
+              divisions: 40,
+              display: _importanceWeight.toStringAsFixed(2),
+              onChanged: (v) => setState(() => _importanceWeight = v),
+            ),
+          _switchTile(
+            'Exclude sources already visible',
+            _sourceWindowExclusion,
+            (v) => setState(() => _sourceWindowExclusion = v),
+          ),
+          _switchTile(
+            'Include assistant turns in vector query',
+            _queryIncludeAssistant,
+            (v) => setState(() => _queryIncludeAssistant = v),
+          ),
+          _numberField(
+            'Query recent turns',
+            _queryRecentTurns,
+            (v) => setState(() => _queryRecentTurns = v),
+            min: 1,
+            max: 20,
+          ),
+          _numberField(
+            'Query max chars',
+            _queryMaxChars,
+            (v) => setState(() => _queryMaxChars = v),
+            min: 500,
+            max: 5000,
+            step: 250,
           ),
         ],
       ),
@@ -353,7 +485,10 @@ class _MemoryGenerationSettingsSheetState
     ValueChanged<int> onChanged, {
     int min = 0,
     int max = 99999,
+    int step = 1,
   }) {
+    final normalized = min + (((value - min) / step).round() * step);
+    final clamped = normalized.clamp(min, max);
     return Row(
       children: [
         Expanded(
@@ -365,11 +500,13 @@ class _MemoryGenerationSettingsSheetState
         SizedBox(
           width: 80,
           child: DropdownButton<int>(
-            value: value.clamp(min, max),
+            value: clamped,
             items: List.generate(
-              max - min + 1,
-              (i) =>
-                  DropdownMenuItem(value: min + i, child: Text('${min + i}')),
+              ((max - min) ~/ step) + 1,
+              (i) => DropdownMenuItem(
+                value: min + (i * step),
+                child: Text('${min + (i * step)}'),
+              ),
             ),
             onChanged: (v) => onChanged(v ?? value),
             underline: const SizedBox.shrink(),
@@ -749,6 +886,16 @@ class _MemoryGenerationSettingsSheetState
           generationTemperature: current.generationTemperature,
           generationMaxTokens: current.generationMaxTokens,
           promptPreset: current.promptPreset,
+          diversityAware: current.diversityAware,
+          diversityPenalty: current.diversityPenalty,
+          recencyBoost: current.recencyBoost,
+          recencyHalfLifeDays: current.recencyHalfLifeDays,
+          importanceBoost: current.importanceBoost,
+          importanceWeight: current.importanceWeight,
+          sourceWindowExclusion: current.sourceWindowExclusion,
+          queryIncludeAssistant: current.queryIncludeAssistant,
+          queryRecentTurns: current.queryRecentTurns,
+          queryMaxChars: current.queryMaxChars,
           customPrompts: MemoryPromptPreset.toJsonList(result),
         ),
       );

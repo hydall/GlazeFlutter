@@ -349,9 +349,9 @@ class MemoryInjectionService {
       final queryText = RetrievalQueryBuilder.build(
         currentText: currentText,
         history: history,
-        includeAssistant: true,
-        recentTurns: 6,
-        maxChars: 1500,
+        includeAssistant: settings.queryIncludeAssistant,
+        recentTurns: settings.queryRecentTurns,
+        maxChars: settings.queryMaxChars,
       );
       if (queryText.isEmpty) return {};
       if (shouldAbort?.call() == true) return {};

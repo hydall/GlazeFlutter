@@ -15,6 +15,13 @@ class _MemoryBookOps {
     await ref.read(memoryBookRepoProvider).put(book);
   }
 
+  Future<void> updateSettings(
+    String sessionId,
+    MemoryBookSettings settings,
+  ) async {
+    await ref.read(memoryBookRepoProvider).updateSettings(sessionId, settings);
+  }
+
   Future<void> deleteEmbeddingEntry(String entryId) async {
     await ref.read(embeddingRepoProvider).deleteByEntryId(entryId);
   }

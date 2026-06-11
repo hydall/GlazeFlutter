@@ -135,6 +135,8 @@ class PromptInputsCollector {
       memoryImportanceWeight: memoryBook?.settings.importanceWeight ?? 0.5,
       memorySourceWindowExclusion:
           memoryBook?.settings.sourceWindowExclusion ?? true,
+      memoryQueryIncludeAssistant:
+          memoryBook?.settings.queryIncludeAssistant ?? true,
       memoryQueryRecentTurns: memoryBook?.settings.queryRecentTurns ?? 6,
       memoryQueryMaxChars: memoryBook?.settings.queryMaxChars ?? 1500,
       memoryNowMillis: DateTime.now().millisecondsSinceEpoch,

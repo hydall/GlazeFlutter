@@ -71,6 +71,16 @@ class MemoryBookController {
       generationTemperature: g.generationTemperature,
       generationMaxTokens: g.generationMaxTokens,
       promptPreset: g.promptPreset,
+      diversityAware: g.diversityAware,
+      diversityPenalty: g.diversityPenalty,
+      recencyBoost: g.recencyBoost,
+      recencyHalfLifeDays: g.recencyHalfLifeDays,
+      importanceBoost: g.importanceBoost,
+      importanceWeight: g.importanceWeight,
+      sourceWindowExclusion: g.sourceWindowExclusion,
+      queryIncludeAssistant: g.queryIncludeAssistant,
+      queryRecentTurns: g.queryRecentTurns,
+      queryMaxChars: g.queryMaxChars,
     );
   }
 
@@ -408,9 +418,25 @@ class MemoryBookController {
       generationTemperature: newSettings.generationTemperature,
       generationMaxTokens: newSettings.generationMaxTokens,
       promptPreset: newSettings.promptPreset,
+      diversityAware: newSettings.diversityAware,
+      diversityPenalty: newSettings.diversityPenalty,
+      recencyBoost: newSettings.recencyBoost,
+      recencyHalfLifeDays: newSettings.recencyHalfLifeDays,
+      importanceBoost: newSettings.importanceBoost,
+      importanceWeight: newSettings.importanceWeight,
+      sourceWindowExclusion: newSettings.sourceWindowExclusion,
+      queryIncludeAssistant: newSettings.queryIncludeAssistant,
+      queryRecentTurns: newSettings.queryRecentTurns,
+      queryMaxChars: newSettings.queryMaxChars,
       customPrompts: currentGlobal.customPrompts,
     );
     await _ref.read(memoryGlobalSettingsProvider.notifier).save(newGlobal);
+    if (_book != null) {
+      _book = _book!.copyWith(settings: newSettings);
+      await _ref
+          .read(memoryBookOpsProvider)
+          .updateSettings(_sessionId, newSettings);
+    }
     return newGlobal;
   }
 
