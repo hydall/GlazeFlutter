@@ -68,6 +68,9 @@ class MemoryCandidateDiagnostics {
 class MemoryDiagnostics {
   final List<String> selectedEntryIds;
   final List<MemoryCandidateDiagnostics> candidates;
+  final bool missingContextSuspected;
+  final List<String> missingContextReasons;
+  final bool reliableCandidateFound;
   final int selectedCount;
   final int skippedCount;
   final int totalCandidates;
@@ -80,6 +83,9 @@ class MemoryDiagnostics {
   const MemoryDiagnostics({
     required this.selectedEntryIds,
     required this.candidates,
+    required this.missingContextSuspected,
+    required this.missingContextReasons,
+    required this.reliableCandidateFound,
     required this.selectedCount,
     required this.skippedCount,
     required this.totalCandidates,
@@ -95,6 +101,7 @@ class MemoryDiagnostics {
     required MemoryBudgetBreakdown budget,
     int Function(MemoryCandidateScore score)? tokenCounter,
     int latencyMs = 0,
+    String currentText = '',
   }) {
     final selectedIds = selection.entries.map((e) => e.id).toSet();
     final costs = <String, int>{};
@@ -135,12 +142,16 @@ class MemoryDiagnostics {
           );
         })
         .toList(growable: false);
+    final missingContext = _missingContextSignals(selection, currentText);
 
     return MemoryDiagnostics(
       selectedEntryIds: selection.entries
           .map((e) => e.id)
           .toList(growable: false),
       candidates: candidates,
+      missingContextSuspected: missingContext.isNotEmpty,
+      missingContextReasons: missingContext,
+      reliableCandidateFound: _reliableCandidateFound(selection),
       selectedCount: selectedIds.length,
       skippedCount: candidates.length - selectedIds.length,
       totalCandidates: candidates.length,
@@ -156,6 +167,9 @@ class MemoryDiagnostics {
 
   Map<String, dynamic> toJson() => {
     'selectedEntryIds': selectedEntryIds,
+    'missingContextSuspected': missingContextSuspected,
+    'missingContextReasons': missingContextReasons,
+    'reliableCandidateFound': reliableCandidateFound,
     'selectedCount': selectedCount,
     'skippedCount': skippedCount,
     'totalCandidates': totalCandidates,
@@ -188,6 +202,64 @@ class MemoryDiagnostics {
       return 'entry_cap';
     }
     return 'not_selected';
+  }
+
+  static List<String> _missingContextSignals(
+    MemorySelection selection,
+    String currentText,
+  ) {
+    final reasons = <String>[];
+    final text = currentText.toLowerCase();
+    final referencesOldContext = RegExp(
+      r'\b(remember|earlier|before|last time|again|that time|promise|promised|where were we|what happened)\b',
+    ).hasMatch(text);
+    final reliable = _reliableCandidateFound(selection);
+
+    if (referencesOldContext && !reliable) {
+      reasons.add('old_context_reference_without_reliable_candidate');
+    }
+    if (selection.entries.isEmpty && selection.allScores.isEmpty) {
+      reasons.add('empty_retrieval');
+    }
+    if (referencesOldContext && selection.allScores.isNotEmpty && !reliable) {
+      reasons.add('weak_retrieval');
+    }
+    if (_hasConflictingTopCandidates(selection)) {
+      reasons.add('conflicting_top_candidates');
+    }
+    return reasons;
+  }
+
+  static bool _reliableCandidateFound(MemorySelection selection) {
+    if (selection.entries.isEmpty) return false;
+    final selectedIds = selection.entries.map((entry) => entry.id).toSet();
+    return selection.allScores.any(
+      (score) => selectedIds.contains(score.entry.id) && score.score >= 1.25,
+    );
+  }
+
+  static bool _hasConflictingTopCandidates(MemorySelection selection) {
+    final scored = selection.allScores
+        .where((score) => !score.excludedBySourceWindow && score.score >= 1.0)
+        .toList(growable: false);
+    if (scored.length < 2) return false;
+    scored.sort((a, b) => b.score.compareTo(a.score));
+    final first = scored[0];
+    final second = scored[1];
+    if ((first.score - second.score).abs() > 0.2) return false;
+    final firstTokens = _identityTokens(first.entry);
+    final secondTokens = _identityTokens(second.entry);
+    if (firstTokens.isEmpty || secondTokens.isEmpty) return false;
+    return firstTokens.intersection(secondTokens).isEmpty;
+  }
+
+  static Set<String> _identityTokens(MemoryEntry entry) {
+    final words = [
+      entry.title,
+      ...entry.keys,
+      entry.arc,
+    ].expand((raw) => raw.toLowerCase().split(RegExp(r'[\s,.;:()]+')));
+    return words.where((word) => word.length >= 3).toSet();
   }
 
   static String _formatMessageRange(MessageRange? range) {

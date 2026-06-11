@@ -117,11 +117,16 @@ void main() {
         expect(diagnostics.selectedEntryIds, ['picked']);
         expect(diagnostics.selectedCount, 1);
         expect(diagnostics.skippedCount, 1);
+        expect(diagnostics.reliableCandidateFound, isFalse);
+        expect(diagnostics.missingContextSuspected, isFalse);
         expect(diagnostics.excludedBySourceWindow, 1);
         expect(diagnostics.latencyMs, 7);
 
         final json = diagnostics.toJson();
         expect(json['selectedTokens'], 12);
+        expect(json['missingContextSuspected'], isFalse);
+        expect(json['missingContextReasons'], isEmpty);
+        expect(json['reliableCandidateFound'], isFalse);
         expect(json['budget'], containsPair('source', 'percent'));
         final candidates = json['candidates'] as List<dynamic>;
         final visible = candidates.cast<Map<String, dynamic>>().firstWhere(
@@ -134,6 +139,106 @@ void main() {
         expect(visible['kind'], 'episode');
       },
     );
+
+    test(
+      'marks old-context references suspicious without injecting random memory',
+      () {
+        final selection = MemorySelector.select(
+          MemorySelectionInput(
+            entries: [
+              _entry(
+                id: 'weak',
+                title: 'Unrelated note',
+                content: 'tiny',
+                keys: const [],
+              ),
+            ],
+            maxInjectedEntries: 0,
+            keywordWeight: 0,
+            vectorWeight: 0,
+            recencyBoost: false,
+            importanceBoost: false,
+            diversityAware: false,
+          ),
+        );
+
+        final diagnostics = MemoryDiagnostics.fromSelection(
+          selection,
+          budget: const MemoryBudgetBreakdown(source: 'none'),
+          currentText: 'Do you remember what happened before?',
+        );
+
+        expect(selection.entries, isEmpty);
+        expect(diagnostics.reliableCandidateFound, isFalse);
+        expect(diagnostics.missingContextSuspected, isTrue);
+        expect(
+          diagnostics.missingContextReasons,
+          containsAll([
+            'old_context_reference_without_reliable_candidate',
+            'weak_retrieval',
+          ]),
+        );
+      },
+    );
+
+    test('marks empty retrieval suspicious but keeps selection empty', () {
+      const selection = MemorySelection();
+
+      final diagnostics = MemoryDiagnostics.fromSelection(
+        selection,
+        budget: const MemoryBudgetBreakdown(source: 'none'),
+        currentText: 'Where were we last time?',
+      );
+
+      expect(selection.entries, isEmpty);
+      expect(diagnostics.missingContextSuspected, isTrue);
+      expect(
+        diagnostics.missingContextReasons,
+        containsAll([
+          'old_context_reference_without_reliable_candidate',
+          'empty_retrieval',
+        ]),
+      );
+    });
+
+    test('marks conflicting top candidates in diagnostics', () {
+      final selection = MemorySelector.select(
+        MemorySelectionInput(
+          entries: [
+            _entry(
+              id: 'a',
+              title: 'Bridge promise',
+              content: 'bridge memory ' * 8,
+              keys: const ['bridge'],
+            ),
+            _entry(
+              id: 'b',
+              title: 'Tavern debt',
+              content: 'tavern memory ' * 8,
+              keys: const ['tavern'],
+            ),
+          ],
+          maxInjectedEntries: 2,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+          catalogScores: const {'a': 0.7, 'b': 0.7},
+        ),
+      );
+
+      final diagnostics = MemoryDiagnostics.fromSelection(
+        selection,
+        budget: const MemoryBudgetBreakdown(source: 'none'),
+      );
+
+      expect(diagnostics.reliableCandidateFound, isFalse);
+      expect(
+        diagnostics.missingContextReasons,
+        contains('conflicting_top_candidates'),
+      );
+    });
 
     test(
       'marks scored candidates skipped after the selected tail is budget trimmed',

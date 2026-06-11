@@ -126,6 +126,7 @@ class MemoryInjectionService {
           selection,
           budget: budget,
           latencyMs: sw.elapsedMilliseconds,
+          currentText: currentText,
         ),
       );
     }
