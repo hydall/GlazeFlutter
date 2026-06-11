@@ -15,6 +15,7 @@ import '../../../core/state/active_selection_provider.dart';
 import '../chat_provider.dart';
 import '../chat_state.dart';
 import '../state/cached_token_breakdown.dart';
+import '../state/memory_activity_provider.dart';
 import 'saved_message_writer.dart';
 
 class StreamGenerationService {
@@ -149,6 +150,7 @@ class StreamGenerationService {
       final transport = pickChatTransport(apiConfig.protocol);
       ChatState? finalState;
       final coverage = payload.memoryCoverage;
+      final memoryDiagnostics = coverage['diagnostics'];
       final triggeredLorebooks = promptResult.triggeredLorebooks;
       final triggeredMemories = promptResult.triggeredMemories;
 
@@ -262,6 +264,21 @@ class StreamGenerationService {
             regenTargetId: regenTargetId,
             visibleStartIndex: vsi,
           );
+          if (memoryDiagnostics is Map<String, dynamic> &&
+              finalState?.session != null) {
+            final messageId = _lastAssistantId(
+              finalState!.session!,
+              regenTargetId,
+            );
+            _ref
+                .read(lastMemoryActivityProvider(_charId).notifier)
+                .state = MemoryActivityState(
+              sessionId: finalState!.session!.id,
+              messageId: messageId,
+              diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
+              updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
+            );
+          }
         },
         onError: (error) {
           final isCancelled =
@@ -332,5 +349,16 @@ class StreamGenerationService {
     if (_lastRequestsBySession.length > 64) {
       _lastRequestsBySession.remove(_lastRequestsBySession.keys.first);
     }
+  }
+
+  static String? _lastAssistantId(ChatSession session, String? regenTargetId) {
+    if (regenTargetId != null &&
+        session.messages.any((m) => m.id == regenTargetId)) {
+      return regenTargetId;
+    }
+    for (final message in session.messages.reversed) {
+      if (message.role == 'assistant') return message.id;
+    }
+    return null;
   }
 }
