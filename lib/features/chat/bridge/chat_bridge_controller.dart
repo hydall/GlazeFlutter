@@ -443,8 +443,8 @@ class ChatBridgeController {
       messages.appendMessages(m, startIndex: startIndex);
   Future<void> prependMessages(List<ChatMessage> m, {int visibleStartIndex = 0}) =>
       messages.prependMessages(m, visibleStartIndex: visibleStartIndex);
-  Future<void> updateMessage(ChatMessage m, {bool isStreamingUpdate = false}) =>
-      messages.updateMessage(m, isStreamingUpdate: isStreamingUpdate);
+  Future<void> updateMessage(ChatMessage m, {bool isStreamingUpdate = false, bool isLast = false}) =>
+      messages.updateMessage(m, isStreamingUpdate: isStreamingUpdate, isLast: isLast);
   Future<void> updateMessageContent(String id, String text, bool isUser) =>
       messages.updateMessageContent(id, text, isUser);
   Future<void> removeMessage(String id) => messages.removeMessage(id);
