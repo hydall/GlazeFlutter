@@ -46,107 +46,150 @@ Preset parseSillyTavernPreset(Map<String, dynamic> json, String fileName) {
   final regexes = <PresetRegex>[];
 
   final promptsList = json['prompts'] as List<dynamic>? ?? [];
-  final promptsById = <String, Map<String, dynamic>>{};
-  for (final p in promptsList) {
-    final id = (p as Map<String, dynamic>)['identifier'] as String?;
-    if (id != null) promptsById[id] = p;
-  }
 
-  List<Map<String, dynamic>> orderList = [];
-  if (json['prompt_order'] is List) {
-    final promptOrder = json['prompt_order'] as List<dynamic>;
-    Map<String, dynamic>? preferredOrder;
-    for (final o in promptOrder) {
-      if (o is! Map<String, dynamic>) continue;
-      final cid = o['character_id'];
-      if (cid == 100001 && (o['order'] as List?)?.isNotEmpty == true) {
-        preferredOrder = o;
-        break;
+  // Detect format: Glaze export uses name/role/content/insertion_mode without
+  // `identifier`. SillyTavern native uses `identifier` + `prompt_order`.
+  final hasIdentifiers = promptsList.any(
+    (p) => (p as Map<String, dynamic>)['identifier'] != null,
+  );
+
+  if (!hasIdentifiers && promptsList.isNotEmpty) {
+    // ── Glaze-export format ────────────────────────────────────────────────
+    for (final p in promptsList) {
+      final pm = p as Map<String, dynamic>;
+      final blockName = (pm['name'] as String?) ?? '';
+      final normalizedId = _normalizeImportedBlockId(blockName, blockName);
+      final isMandatory = _mandatoryBlockIds.contains(normalizedId);
+      final isEnabled = pm['enabled'] as bool? ?? true;
+
+      final rawMode = pm['insertion_mode'] as String?;
+      final String insertionMode;
+      final int? depth;
+      if (rawMode == 'depth') {
+        insertionMode = 'depth';
+        final d = pm['depth'];
+        depth = d is num ? d.toInt() : 4;
+      } else {
+        insertionMode = rawMode ?? 'relative';
+        depth = null;
+      }
+
+      blocks.add(PresetBlock(
+        id: isMandatory ? normalizedId : generateId(),
+        name: blockName,
+        role: (pm['role'] as String?) ?? 'system',
+        content: isMandatory ? '' : ((pm['content'] as String?) ?? ''),
+        enabled: isEnabled,
+        insertionMode: insertionMode,
+        depth: depth,
+        isStashed: pm['isStashed'] as bool? ?? false,
+        appendToLastMessage: pm['appendToLastMessage'] as bool? ?? false,
+      ));
+    }
+  } else {
+    // ── SillyTavern-native format (identifier + prompt_order) ─────────────
+    final promptsById = <String, Map<String, dynamic>>{};
+    for (final p in promptsList) {
+      final id = (p as Map<String, dynamic>)['identifier'] as String?;
+      if (id != null) promptsById[id] = p;
+    }
+
+    List<Map<String, dynamic>> orderList = [];
+    if (json['prompt_order'] is List) {
+      final promptOrder = json['prompt_order'] as List<dynamic>;
+      Map<String, dynamic>? preferredOrder;
+      for (final o in promptOrder) {
+        if (o is! Map<String, dynamic>) continue;
+        final cid = o['character_id'];
+        if (cid == 100001 && (o['order'] as List?)?.isNotEmpty == true) {
+          preferredOrder = o;
+          break;
+        }
+      }
+      Map<String, dynamic> bestOrder = preferredOrder ?? promptOrder.fold<Map<String, dynamic>?>(
+        null,
+        (prev, current) {
+          if (current is! Map<String, dynamic>) return prev;
+          final prevLen = (prev?['order'] as List?)?.length ?? 0;
+          final currentLen = (current['order'] as List?)?.length ?? 0;
+          return currentLen > prevLen ? current : prev;
+        },
+      ) ?? {};
+      final order = bestOrder['order'] as List<dynamic>? ?? [];
+      for (final item in order) {
+        if (item is Map<String, dynamic>) orderList.add(item);
       }
     }
-    Map<String, dynamic> bestOrder = preferredOrder ?? promptOrder.fold<Map<String, dynamic>?>(
-      null,
-      (prev, current) {
-        if (current is! Map<String, dynamic>) return prev;
-        final prevLen = (prev?['order'] as List?)?.length ?? 0;
-        final currentLen = (current['order'] as List?)?.length ?? 0;
-        return currentLen > prevLen ? current : prev;
-      },
-    ) ?? {};
-    final order = bestOrder['order'] as List<dynamic>? ?? [];
-    for (final item in order) {
-      if (item is Map<String, dynamic>) orderList.add(item);
-    }
-  }
 
-  if (orderList.isEmpty) {
-    orderList = promptsList.map((p) {
+    if (orderList.isEmpty) {
+      orderList = promptsList.map((p) {
+        final pm = p as Map<String, dynamic>;
+        return {'identifier': pm['identifier'], 'enabled': pm['enabled'] ?? true};
+      }).toList().cast<Map<String, dynamic>>();
+    }
+
+    final usedIdentifiers = <String>{};
+
+    for (final item in orderList) {
+      final identifier = item['identifier'] as String?;
+      if (identifier == null) continue;
+      final p = promptsById[identifier];
+      if (p == null) continue;
+
+      usedIdentifiers.add(identifier);
+
+      final blockName = (p['name'] as String?) ?? identifier;
+      final normalizedId = _normalizeImportedBlockId(identifier, blockName);
+      final isMandatory = _mandatoryBlockIds.contains(normalizedId);
+      final isEnabled = item['enabled'] as bool? ?? p['enabled'] as bool? ?? true;
+
+      String insertionMode;
+      int? depth;
+      if (normalizedId == 'chat_history') {
+        insertionMode = 'relative';
+      } else if (p['injection_position'] == 1) {
+        insertionMode = 'depth';
+        depth = p['injection_depth'] as int? ?? 4;
+      } else {
+        insertionMode = 'relative';
+      }
+
+      blocks.add(PresetBlock(
+        id: normalizedId,
+        name: blockName,
+        role: (p['role'] as String?) ?? 'system',
+        content: isMandatory ? '' : ((p['content'] as String?) ?? ''),
+        enabled: isEnabled,
+        insertionMode: insertionMode,
+        depth: depth,
+      ));
+    }
+
+    for (final p in promptsList) {
       final pm = p as Map<String, dynamic>;
-      return {'identifier': pm['identifier'], 'enabled': pm['enabled'] ?? true};
-    }).toList().cast<Map<String, dynamic>>();
-  }
+      final identifier = pm['identifier'] as String?;
+      if (identifier == null || usedIdentifiers.contains(identifier)) continue;
+      usedIdentifiers.add(identifier);
 
-  final usedIdentifiers = <String>{};
+      final blockName = (pm['name'] as String?) ?? identifier;
+      final normalizedId = _normalizeImportedBlockId(identifier, blockName);
+      final isMandatory = _mandatoryBlockIds.contains(normalizedId);
 
-  for (final item in orderList) {
-    final identifier = item['identifier'] as String?;
-    if (identifier == null) continue;
-    final p = promptsById[identifier];
-    if (p == null) continue;
+      final blockJson = Map<String, dynamic>.from(pm);
+      blockJson['id'] = normalizedId;
+      blockJson['name'] = blockName;
+      blockJson['role'] = pm['role'] ?? 'system';
+      blockJson['content'] = isMandatory ? '' : (pm['content'] ?? '');
 
-    usedIdentifiers.add(identifier);
+      if (pm['injection_position'] == 1) {
+        blockJson['insertionMode'] = 'depth';
+        blockJson['depth'] = pm['injection_depth'] is num ? (pm['injection_depth'] as num).toInt() : 4;
+      } else {
+        blockJson['insertionMode'] = 'relative';
+      }
 
-    final blockName = (p['name'] as String?) ?? identifier;
-    final normalizedId = _normalizeImportedBlockId(identifier, blockName);
-    final isMandatory = _mandatoryBlockIds.contains(normalizedId);
-    final isEnabled = item['enabled'] as bool? ?? p['enabled'] as bool? ?? true;
-
-    String insertionMode;
-    int? depth;
-    if (normalizedId == 'chat_history') {
-      insertionMode = 'relative';
-    } else if (p['injection_position'] == 1) {
-      insertionMode = 'depth';
-      depth = p['injection_depth'] as int? ?? 4;
-    } else {
-      insertionMode = 'relative';
+      blocks.add(PresetBlock.fromJson(blockJson));
     }
-
-    blocks.add(PresetBlock(
-      id: normalizedId,
-      name: blockName,
-      role: (p['role'] as String?) ?? 'system',
-      content: isMandatory ? '' : ((p['content'] as String?) ?? ''),
-      enabled: isEnabled,
-      insertionMode: insertionMode,
-      depth: depth,
-    ));
-  }
-
-  for (final p in promptsList) {
-    final pm = p as Map<String, dynamic>;
-    final identifier = pm['identifier'] as String?;
-    if (identifier == null || usedIdentifiers.contains(identifier)) continue;
-    usedIdentifiers.add(identifier);
-
-    final blockName = (pm['name'] as String?) ?? identifier;
-    final normalizedId = _normalizeImportedBlockId(identifier, blockName);
-    final isMandatory = _mandatoryBlockIds.contains(normalizedId);
-
-    final blockJson = Map<String, dynamic>.from(pm);
-    blockJson['id'] = normalizedId;
-    blockJson['name'] = blockName;
-    blockJson['role'] = pm['role'] ?? 'system';
-    blockJson['content'] = isMandatory ? '' : (pm['content'] ?? '');
-
-    if (pm['injection_position'] == 1) {
-      blockJson['insertionMode'] = 'depth';
-      blockJson['depth'] = pm['injection_depth'] is num ? (pm['injection_depth'] as num).toInt() : 4;
-    } else {
-      blockJson['insertionMode'] = 'relative';
-    }
-
-    blocks.add(PresetBlock.fromJson(blockJson));
   }
 
   final stRegexes = json['regexes'] as List<dynamic>?;

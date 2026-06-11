@@ -8,6 +8,7 @@ import 'package:glaze_flutter/core/db/repositories/lorebook_repo.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/lorebook.dart';
 import 'package:glaze_flutter/core/services/character_book_converter.dart';
+import 'package:glaze_flutter/core/import/silly_tavern_preset_parser.dart';
 
 AppDatabase _testDb() => AppDatabase.forTesting(NativeDatabase.memory());
 
@@ -413,6 +414,127 @@ void main() {
       final secondEmit = await stream.first;
       expect(secondEmit.length, 1);
       expect(secondEmit.first.name, equals('Alice'));
+    });
+  });
+
+  group('parseSillyTavernPreset', () {
+    test('imports Glaze-export format (no identifier) correctly', () {
+      final json = <String, dynamic>{
+        'name': 'lucid_loom_v3_4_reminder',
+        'prompts': [
+          {
+            'name': 'Global Think Trigger',
+            'role': 'system',
+            'content': 'Think first.',
+            'enabled': false,
+            'insertion_mode': 'relative',
+            'depth': 4,
+          },
+          {
+            'name': 'Core Instructions',
+            'role': 'system',
+            'content': 'You are Lumia.',
+            'enabled': true,
+            'insertion_mode': 'depth',
+            'depth': 2,
+          },
+        ],
+      };
+
+      final preset = parseSillyTavernPreset(json, 'lucid_loom_v3_4_reminder.json');
+
+      expect(preset.name, equals('lucid_loom_v3_4_reminder'));
+
+      // Custom blocks should be present
+      final customBlocks = preset.blocks.where((b) => !{
+        'chat_history', 'char_card', 'char_personality', 'user_persona',
+        'example_dialogue', 'worldInfoBefore', 'worldInfoAfter', 'scenario',
+        'main', 'summary', 'authors_note', 'guided_generation',
+      }.contains(b.id)).toList();
+
+      expect(customBlocks.length, equals(2));
+
+      final block0 = customBlocks[0];
+      expect(block0.name, equals('Global Think Trigger'));
+      expect(block0.enabled, isFalse);
+      expect(block0.insertionMode, equals('relative'));
+      expect(block0.content, equals('Think first.'));
+
+      final block1 = customBlocks[1];
+      expect(block1.name, equals('Core Instructions'));
+      expect(block1.enabled, isTrue);
+      expect(block1.insertionMode, equals('depth'));
+      expect(block1.depth, equals(2));
+      expect(block1.content, equals('You are Lumia.'));
+    });
+
+    test('Glaze format: mandatory block names get normalized ids and empty content', () {
+      final json = <String, dynamic>{
+        'name': 'test_preset',
+        'prompts': [
+          {
+            'name': 'Character Card',
+            'role': 'system',
+            'content': 'should be cleared',
+            'enabled': true,
+            'insertion_mode': 'relative',
+          },
+          {
+            'name': 'My Custom Block',
+            'role': 'system',
+            'content': 'keep this',
+            'enabled': true,
+            'insertion_mode': 'relative',
+          },
+        ],
+      };
+
+      final preset = parseSillyTavernPreset(json, 'test.json');
+      final charCard = preset.blocks.firstWhere((b) => b.id == 'char_card');
+      expect(charCard.content, equals(''));
+
+      final custom = preset.blocks.firstWhere((b) => b.name == 'My Custom Block');
+      expect(custom.content, equals('keep this'));
+    });
+
+    test('SillyTavern native format (with identifier) still works', () {
+      final json = <String, dynamic>{
+        'name': 'st_preset',
+        'prompts': [
+          {
+            'identifier': 'main',
+            'name': 'Main Prompt',
+            'role': 'system',
+            'content': 'Write the reply.',
+            'enabled': true,
+          },
+          {
+            'identifier': 'myblock',
+            'name': 'My Block',
+            'role': 'system',
+            'content': 'Custom content.',
+            'enabled': true,
+            'injection_position': 1,
+            'injection_depth': 3,
+          },
+        ],
+        'prompt_order': [
+          {
+            'character_id': 100001,
+            'order': [
+              {'identifier': 'main', 'enabled': true},
+              {'identifier': 'myblock', 'enabled': true},
+            ],
+          },
+        ],
+      };
+
+      final preset = parseSillyTavernPreset(json, 'st_preset.json');
+      expect(preset.name, equals('st_preset'));
+
+      final myblock = preset.blocks.firstWhere((b) => b.id == 'myblock');
+      expect(myblock.insertionMode, equals('depth'));
+      expect(myblock.depth, equals(3));
     });
   });
 }
