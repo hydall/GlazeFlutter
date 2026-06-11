@@ -5,6 +5,7 @@ import '../../core/llm/tokenizer.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../core/state/db_provider.dart';
+import '../../shared/widgets/glaze_toast.dart';
 
 class ChatMessageService {
   final Ref _ref;
@@ -243,6 +244,11 @@ class ChatMessageService {
     );
     _ref.read(chatRepoProvider).put(updated).catchError((Object e) {
       debugPrint('[ChatMessageService] failed to persist session: $e');
+      GlazeToast.showWithoutContext(
+        'Failed to save changes: $e',
+        isError: true,
+        duration: 5000,
+      );
     });
     return updated;
   }

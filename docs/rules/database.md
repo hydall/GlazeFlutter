@@ -64,7 +64,7 @@ All schema changes go in `AppDatabase.migration` in `app_db.dart`.
 Bump the schema version and add a `from → to` migration step.
 Never modify existing column types without a migration.
 
-Current version: **27**
+Current version: **28**
 
 Migration history:
 - v18: added `characters.picksHash`
@@ -73,10 +73,11 @@ Migration history:
 - v21: added `api_configs.cacheControlTtl` (Anthropic prompt cache control: 'off' | '5min' | '1h')
 - v22: added `info_blocks.status` TEXT DEFAULT `'done'` + `info_blocks.order_` INTEGER DEFAULT 0 (block execution order + run status for ext blocks redesign)
 - v23: added `api_configs.protocol` TEXT DEFAULT `'openai'` — wire protocol selector (openai / anthropic / gemini / openrouter). Drives `ChatTransport` factory routing
-- v24: added `api_configs.cacheBreakpointMode` TEXT DEFAULT `'depth'` — Anthropic/OpenRouter prompt cache marker placement (`depth` / `stable_prefix`)
-- v25: added `api_configs.sessionIdMode` TEXT DEFAULT `'openrouter'` — controls when `session_id` is sent for provider sticky routing
-- v27: backfill `api_configs` columns missing from partial migrations (`top_k`, penalties, cache/session modes)
-- v28: added `info_blocks.swipe_id` INTEGER DEFAULT 0 + backfill `NULL` swipe ids (scopes ext blocks per message swipe)
+- v24: added `api_configs.topK` INTEGER DEFAULT 0, `api_configs.frequencyPenalty` REAL DEFAULT 0, `api_configs.presencePenalty` REAL DEFAULT 0
+- v25: added `api_configs.cacheBreakpointMode` TEXT DEFAULT `'depth'` — Anthropic/OpenRouter prompt cache marker placement (`depth` / `stable_prefix`); `api_configs.sessionIdMode` TEXT DEFAULT `'openrouter'` — controls when `session_id` is sent for provider sticky routing
+- v26: version bump only — no schema change (guards added to v20–v25 migration blocks)
+- v27: added `info_blocks.swipe_id` INTEGER DEFAULT 0 (scopes ext blocks per message swipe); backfill `api_configs` columns missing from partial migrations (`top_k`, penalties, cache/session modes)
+- v28: data migration — `UPDATE info_blocks SET swipe_id = 0 WHERE swipe_id IS NULL` (backfill for rows that survived v27 with NULL)
 
 ---
 
