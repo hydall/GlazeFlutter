@@ -10,10 +10,12 @@ class MemoryCandidateDiagnostics {
   final double score;
   final double keywordScore;
   final double vectorScore;
+  final double catalogScore;
   final double recencyScore;
   final double importanceScore;
   final double diversityPenalty;
   final List<String> matchedKeys;
+  final List<String> catalogMatchedTerms;
   final String reason;
   final List<String> messageIds;
   final String messageRange;
@@ -28,10 +30,12 @@ class MemoryCandidateDiagnostics {
     required this.score,
     required this.keywordScore,
     required this.vectorScore,
+    required this.catalogScore,
     required this.recencyScore,
     required this.importanceScore,
     required this.diversityPenalty,
     required this.matchedKeys,
+    required this.catalogMatchedTerms,
     required this.reason,
     required this.messageIds,
     required this.messageRange,
@@ -47,10 +51,12 @@ class MemoryCandidateDiagnostics {
     'score': score,
     'keywordScore': keywordScore,
     'vectorScore': vectorScore,
+    'catalogScore': catalogScore,
     'recencyScore': recencyScore,
     'importanceScore': importanceScore,
     'diversityPenalty': diversityPenalty,
     'matchedKeys': matchedKeys,
+    'catalogMatchedTerms': catalogMatchedTerms,
     'reason': reason,
     'messageIds': messageIds,
     'messageRange': messageRange,
@@ -115,10 +121,12 @@ class MemoryDiagnostics {
             score: score.score,
             keywordScore: score.keywordScore,
             vectorScore: score.vectorScore,
+            catalogScore: score.catalogScore,
             recencyScore: score.recencyScore,
             importanceScore: score.importanceScore,
             diversityPenalty: score.diversityPenalty,
             matchedKeys: score.matchedKeys,
+            catalogMatchedTerms: score.catalogMatchedTerms,
             reason: _reasonFor(score, selected, selection),
             messageIds: score.entry.messageIds,
             messageRange: _formatMessageRange(score.entry.messageRange),

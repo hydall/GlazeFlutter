@@ -1,11 +1,15 @@
 import 'dart:convert';
 
 import 'package:drift/native.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:glaze_flutter/core/db/app_db.dart';
 import 'package:glaze_flutter/core/db/repositories/memory_catalog_repo.dart';
+import 'package:glaze_flutter/core/llm/embedding_types.dart';
 import 'package:glaze_flutter/core/llm/memory_catalog_builder.dart';
+import 'package:glaze_flutter/core/llm/memory_injection_service.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
+import 'package:glaze_flutter/core/state/db_provider.dart';
 
 void main() {
   test('builder creates deterministic catalog row from memory entry', () {
@@ -129,4 +133,78 @@ void main() {
     expect(secondRows.first.entryRevision, isNot(oldRevision));
     expect(secondRows[1].status, 'disabled');
   });
+
+  test(
+    'catalog-assisted retrieval selects full memory entry content only',
+    () async {
+      final db = AppDatabase.forTesting(NativeDatabase.memory());
+      final container = ProviderContainer(
+        overrides: [appDbProvider.overrideWithValue(db)],
+      );
+      addTearDown(container.dispose);
+      addTearDown(db.close);
+
+      const book = MemoryBook(
+        id: 'book1',
+        sessionId: 'session1',
+        entries: [
+          MemoryEntry(
+            id: 'mem1',
+            title: 'Bridge collapse',
+            keys: ['bridge', 'sable'],
+            content:
+                'FULL MEMORY: Sable promised to meet at the broken bridge.',
+            status: 'active',
+          ),
+          MemoryEntry(
+            id: 'mem2',
+            title: 'Unrelated tavern',
+            keys: ['tavern'],
+            content: 'FULL MEMORY: The tavern had blue curtains.',
+            status: 'active',
+          ),
+        ],
+      );
+      await container.read(memoryBookRepoProvider).put(book);
+      await container
+          .read(memoryCatalogRepoProvider)
+          .rebuildForMemoryBook(book);
+      await container
+          .read(memoryCatalogRepoProvider)
+          .updateAbstractText(
+            sessionId: 'session1',
+            memoryEntryId: 'mem1',
+            abstractText: 'CATALOG ABSTRACT ONLY: do not inject this wording.',
+          );
+
+      final result = await container
+          .read(memoryInjectionServiceProvider)
+          .buildInjection(
+            sessionId: 'session1',
+            historyText: '',
+            messageCount: 1,
+            currentText: 'Do you remember Sable and the bridge?',
+            history: const [
+              ChatMessageForSearch(
+                role: 'user',
+                content: 'Do you remember Sable and the bridge?',
+              ),
+            ],
+            contextBudgetTokens: 10000,
+          );
+
+      expect(result.entries.first.id, 'mem1');
+      expect(result.content, contains('FULL MEMORY: Sable promised'));
+      expect(result.content, isNot(contains('CATALOG ABSTRACT ONLY')));
+      expect(result.content, isNot(contains('Sable and the bridge?')));
+      expect(
+        result.memoryDiagnostics!.candidates.first.catalogScore,
+        greaterThan(0),
+      );
+      expect(
+        result.memoryDiagnostics!.candidates.first.catalogMatchedTerms,
+        containsAll(['bridge', 'sable']),
+      );
+    },
+  );
 }

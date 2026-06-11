@@ -23,6 +23,19 @@ class MemoryCatalogRepo {
     )..where((row) => row.chatSessionId.equals(sessionId))).go();
   }
 
+  Future<void> updateAbstractText({
+    required String sessionId,
+    required String memoryEntryId,
+    required String abstractText,
+  }) {
+    return (db.update(db.memoryCatalogRows)..where(
+          (row) =>
+              row.chatSessionId.equals(sessionId) &
+              row.memoryEntryId.equals(memoryEntryId),
+        ))
+        .write(MemoryCatalogRowsCompanion(abstractText: Value(abstractText)));
+  }
+
   Future<List<MemoryCatalogRow>> rebuildForMemoryBook(MemoryBook book) async {
     final now = currentTimestampSeconds();
     final rows = MemoryCatalogBuilder.build(book, nowSeconds: now);

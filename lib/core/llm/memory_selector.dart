@@ -10,8 +10,10 @@ class MemoryCandidateScore {
   final double vectorScore;
   final double recencyScore;
   final double importanceScore;
+  final double catalogScore;
   final double diversityPenalty;
   final List<String> matchedKeys;
+  final List<String> catalogMatchedTerms;
   final bool excludedBySourceWindow;
   final String? exclusionReason;
 
@@ -22,8 +24,10 @@ class MemoryCandidateScore {
     this.vectorScore = 0,
     this.recencyScore = 0,
     this.importanceScore = 0,
+    this.catalogScore = 0,
     this.diversityPenalty = 0,
     this.matchedKeys = const [],
+    this.catalogMatchedTerms = const [],
     this.excludedBySourceWindow = false,
     this.exclusionReason,
   });
@@ -56,6 +60,8 @@ class MemorySelection {
 class MemorySelectionInput {
   final List<MemoryEntry> entries;
   final Map<String, double> vectorScores;
+  final Map<String, double> catalogScores;
+  final Map<String, List<String>> catalogMatchedTerms;
   final Set<String> visibleMessageIds;
   final int? maxInjectionTokens;
   final int maxInjectedEntries;
@@ -74,6 +80,8 @@ class MemorySelectionInput {
   const MemorySelectionInput({
     required this.entries,
     this.vectorScores = const {},
+    this.catalogScores = const {},
+    this.catalogMatchedTerms = const {},
     this.visibleMessageIds = const {},
     this.maxInjectionTokens,
     this.maxInjectedEntries = 7,
@@ -98,14 +106,13 @@ class MemorySelectionInput {
     Set<String> visibleMessageIds = const {},
     int? maxInjectionTokens,
     int maxInjectedEntries = 7,
-  }) =>
-      MemorySelectionInput(
-        entries: entries,
-        vectorScores: vectorScores,
-        visibleMessageIds: visibleMessageIds,
-        maxInjectionTokens: maxInjectionTokens,
-        maxInjectedEntries: maxInjectedEntries,
-      );
+  }) => MemorySelectionInput(
+    entries: entries,
+    vectorScores: vectorScores,
+    visibleMessageIds: visibleMessageIds,
+    maxInjectionTokens: maxInjectionTokens,
+    maxInjectedEntries: maxInjectedEntries,
+  );
 }
 
 /// Pure selector. No I/O, no DB, no embeddings. Deterministic, testable.
@@ -139,12 +146,14 @@ class MemorySelector {
       if (input.sourceWindowExclusion &&
           entry.messageIds.isNotEmpty &&
           entry.messageIds.any(visibleSet.contains)) {
-        scored.add(MemoryCandidateScore(
-          entry: entry,
-          score: 0,
-          excludedBySourceWindow: true,
-          exclusionReason: 'source_visible_in_prompt',
-        ));
+        scored.add(
+          MemoryCandidateScore(
+            entry: entry,
+            score: 0,
+            excludedBySourceWindow: true,
+            exclusionReason: 'source_visible_in_prompt',
+          ),
+        );
         continue;
       }
       final matched = _matchedKeys(entry, visibleSet);
@@ -152,24 +161,34 @@ class MemorySelector {
           ? 0.0
           : input.keywordWeight * _keywordBoost(matched, entry.keys.length);
       final vector = (input.vectorScores[entry.id] ?? 0) * input.vectorWeight;
+      final catalog = input.catalogScores[entry.id] ?? 0;
       final recency = input.recencyBoost
-          ? _recencyBoost(entry.createdAt, nowMillis,
-              input.recencyHalfLifeDays, entry.temporallyBlind)
+          ? _recencyBoost(
+              entry.createdAt,
+              nowMillis,
+              input.recencyHalfLifeDays,
+              entry.temporallyBlind,
+            )
           : 0.0;
       final importance = input.importanceBoost
           ? (entry.importance.clamp(0, 1)) * input.importanceWeight
           : 0.0;
       final baseline = entry.content.trim().length > 20 ? 0.5 : 0.0;
-      final score = keyword + vector + recency + importance + baseline;
-      scored.add(MemoryCandidateScore(
-        entry: entry,
-        score: score,
-        keywordScore: keyword,
-        vectorScore: vector,
-        recencyScore: recency,
-        importanceScore: importance,
-        matchedKeys: matched,
-      ));
+      final score =
+          keyword + vector + catalog + recency + importance + baseline;
+      scored.add(
+        MemoryCandidateScore(
+          entry: entry,
+          score: score,
+          keywordScore: keyword,
+          vectorScore: vector,
+          catalogScore: catalog,
+          recencyScore: recency,
+          importanceScore: importance,
+          matchedKeys: matched,
+          catalogMatchedTerms: input.catalogMatchedTerms[entry.id] ?? const [],
+        ),
+      );
     }
 
     scored.sort((a, b) {
@@ -193,9 +212,8 @@ class MemorySelector {
       if (c.excludedBySourceWindow) continue;
       if (picked.length >= cap) break;
       final cost = costFn(c.entry);
-      final wouldOverflow = budget != null &&
-          usedTokens + cost > budget &&
-          picked.isNotEmpty;
+      final wouldOverflow =
+          budget != null && usedTokens + cost > budget && picked.isNotEmpty;
       if (wouldOverflow) {
         trimmedByBudget = true;
         break;
@@ -216,10 +234,12 @@ class MemorySelector {
           score: c.score - penalty,
           keywordScore: c.keywordScore,
           vectorScore: c.vectorScore,
+          catalogScore: c.catalogScore,
           recencyScore: c.recencyScore,
           importanceScore: c.importanceScore,
           diversityPenalty: penalty,
           matchedKeys: c.matchedKeys,
+          catalogMatchedTerms: c.catalogMatchedTerms,
         );
         picked[picked.length - 1] = reranked;
         // Also stamp the reranked score into allScores so the diagnostic
@@ -239,18 +259,16 @@ class MemorySelector {
       budgetTokens: budget,
       entryCap: cap,
       budgetTrimmed: trimmedByBudget,
-      excludedBySourceWindow:
-          scored.where((s) => s.excludedBySourceWindow).length,
+      excludedBySourceWindow: scored
+          .where((s) => s.excludedBySourceWindow)
+          .length,
     );
   }
 
   /// Default keyword matcher: case-insensitive substring across the
   /// entries' own keys. Used by the isolate path where the scan text
   /// is not precomputed.
-  static List<String> defaultKeywordMatch(
-    MemoryEntry entry,
-    String scanText,
-  ) {
+  static List<String> defaultKeywordMatch(MemoryEntry entry, String scanText) {
     final text = scanText.toLowerCase();
     final matched = <String>[];
     for (final key in entry.keys) {
@@ -289,10 +307,7 @@ class MemorySelector {
     return entry.keys;
   }
 
-  static void _accumulateDiversityTokens(
-    MemoryEntry entry,
-    Set<String> sink,
-  ) {
+  static void _accumulateDiversityTokens(MemoryEntry entry, Set<String> sink) {
     for (final token in _entryTokens(entry)) {
       sink.add(token);
     }
@@ -318,7 +333,9 @@ class MemorySelector {
   static Set<String> _entryTokens(MemoryEntry e) {
     final tokens = <String>{};
     final titleWords = e.title.toLowerCase().split(RegExp(r'[\s,.;:()]+'));
-    final keyWords = e.keys.expand((k) => k.toLowerCase().split(RegExp(r'[\s,.;:()]+')));
+    final keyWords = e.keys.expand(
+      (k) => k.toLowerCase().split(RegExp(r'[\s,.;:()]+')),
+    );
     final arcWords = e.arc.toLowerCase().split(RegExp(r'[\s,.;:()]+'));
     for (final w in [...titleWords, ...keyWords, ...arcWords]) {
       if (w.length >= 3) tokens.add(w);
@@ -330,5 +347,10 @@ class MemorySelector {
 /// Re-exports the glaze whole-word matcher for callers that want the
 /// same key matching behavior the legacy code used in the async path.
 bool memoryKeyMatchesGlaze(String key, String scanText) {
-  return glazeCheckMatch(key, scanText.toLowerCase(), false, WholeWordMode.glaze);
+  return glazeCheckMatch(
+    key,
+    scanText.toLowerCase(),
+    false,
+    WholeWordMode.glaze,
+  );
 }

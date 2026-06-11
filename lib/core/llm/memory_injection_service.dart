@@ -8,12 +8,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../db/app_db.dart';
 import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
+import '../db/repositories/memory_catalog_repo.dart';
 import '../models/chat_message.dart';
 import '../models/memory_book.dart';
 import '../state/db_provider.dart';
 import '../state/memory_settings_provider.dart';
 import 'embedding_service.dart';
 import 'embedding_types.dart';
+import 'memory_catalog_builder.dart';
 import 'memory_budget.dart';
 import 'memory_diagnostics.dart';
 import 'memory_embedding_service.dart';
@@ -62,12 +64,14 @@ class MemoryCandidateBuildResult {
 class MemoryInjectionService {
   final MemoryBookRepo _repo;
   final EmbeddingRepo _embeddingRepo;
+  final MemoryCatalogRepo _catalogRepo;
   final EmbeddingService _embeddingService;
   final Ref _ref;
 
   MemoryInjectionService(
     this._repo,
     this._embeddingRepo,
+    this._catalogRepo,
     this._embeddingService,
     this._ref,
   );
@@ -154,6 +158,15 @@ class MemoryInjectionService {
     if (activeEntries.isEmpty) return finish(const MemorySelection(), noBudget);
 
     final vectorScores = <String, double>{};
+    final catalogMatches = await _catalogMatches(
+      book,
+      activeEntries,
+      history,
+      currentText,
+    );
+    if (shouldAbort?.call() == true) {
+      return finish(const MemorySelection(), noBudget);
+    }
     if (gs.vectorSearchEnabled &&
         embeddingConfig != null &&
         embeddingConfig.endpoint.isNotEmpty &&
@@ -187,6 +200,8 @@ class MemoryInjectionService {
       MemorySelectionInput(
         entries: activeEntries,
         vectorScores: vectorScores,
+        catalogScores: catalogMatches.scores,
+        catalogMatchedTerms: catalogMatches.termsByEntryId,
         visibleMessageIds: visibleMessageIds,
         maxInjectionTokens: budget.effectiveTokens,
         maxInjectedEntries: book.settings.maxInjectedEntries,
@@ -394,12 +409,102 @@ class MemoryInjectionService {
       return {};
     }
   }
+
+  Future<_CatalogMatchResult> _catalogMatches(
+    MemoryBook book,
+    List<MemoryEntry> activeEntries,
+    List<ChatMessage> history,
+    String currentText,
+  ) async {
+    try {
+      var rows = await _catalogRepo.getBySessionId(book.sessionId);
+      final activeIds = activeEntries.map((entry) => entry.id).toSet();
+      final usableRows = rows
+          .where(
+            (row) =>
+                activeIds.contains(row.memoryEntryId) &&
+                row.status == 'active' &&
+                !row.stale,
+          )
+          .toList(growable: false);
+      if (usableRows.length != activeEntries.length) {
+        rows = await _catalogRepo.rebuildForMemoryBook(book);
+      }
+
+      final scanText = RetrievalQueryBuilder.build(
+        currentText: currentText,
+        history: history,
+        includeAssistant: book.settings.queryIncludeAssistant,
+        recentTurns: book.settings.queryRecentTurns,
+        maxChars: book.settings.queryMaxChars,
+      ).toLowerCase();
+      if (scanText.isEmpty) return const _CatalogMatchResult();
+
+      final activeMap = {for (final entry in activeEntries) entry.id: entry};
+      final scores = <String, double>{};
+      final termsByEntryId = <String, List<String>>{};
+      for (final row in rows) {
+        final entry = activeMap[row.memoryEntryId];
+        if (entry == null || row.status != 'active' || row.stale) continue;
+        final matched = _matchedCatalogTerms(row, scanText);
+        if (matched.isEmpty) continue;
+        termsByEntryId[row.memoryEntryId] = matched;
+        scores[row.memoryEntryId] = _catalogScore(matched, row);
+      }
+      return _CatalogMatchResult(
+        scores: scores,
+        termsByEntryId: termsByEntryId,
+      );
+    } catch (_) {
+      return const _CatalogMatchResult();
+    }
+  }
+
+  static List<String> _matchedCatalogTerms(
+    MemoryCatalogRow row,
+    String scanText,
+  ) {
+    final terms = <String>{
+      ...row.keys,
+      ...row.entities,
+      ...row.locations,
+      ...row.topics,
+      row.title,
+    };
+    final matched = <String>[];
+    for (final raw in terms) {
+      final term = raw.trim().toLowerCase();
+      if (term.length < 3) continue;
+      if (scanText.contains(term)) matched.add(raw.trim());
+    }
+    matched.sort();
+    return matched;
+  }
+
+  static double _catalogScore(List<String> matched, MemoryCatalogRow row) {
+    final tokenFactor = row.tokenCount <= 0
+        ? 1.0
+        : 1.0 / (1.0 + row.tokenCount / 8000);
+    final importance = row.importance.clamp(0, 1) * 0.5;
+    return (matched.length.clamp(1, 6) * 0.75 + importance) * tokenFactor;
+  }
+}
+
+class _CatalogMatchResult {
+  final Map<String, double> scores;
+  final Map<String, List<String>> termsByEntryId;
+
+  const _CatalogMatchResult({
+    this.scores = const {},
+    this.termsByEntryId = const {},
+  });
 }
 
 final memoryInjectionServiceProvider = Provider<MemoryInjectionService>((ref) {
   return MemoryInjectionService(
     ref.watch(memoryBookRepoProvider),
     ref.watch(embeddingRepoProvider),
+    ref.watch(memoryCatalogRepoProvider),
     EmbeddingService(),
     ref,
   );
