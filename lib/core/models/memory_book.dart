@@ -28,10 +28,8 @@ abstract class MemoryDraft with _$MemoryDraft {
 
 @freezed
 abstract class MessageRange with _$MessageRange {
-  const factory MessageRange({
-    required int start,
-    required int end,
-  }) = _MessageRange;
+  const factory MessageRange({required int start, required int end}) =
+      _MessageRange;
 
   factory MessageRange.fromJson(Map<String, dynamic> json) =>
       _$MessageRangeFromJson(json);
@@ -69,6 +67,7 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(7) int maxInjectedEntries,
     @Default(0.35) double maxInjectionBudgetPercent,
     int? maxInjectedTokens,
+    @Default('auto') String memoryBudgetPreset,
     @Default(15) int autoCreateInterval,
     @Default(true) bool useDelayedAutomation,
     @Default('hard_block') String injectionTarget,

@@ -16,6 +16,8 @@ abstract class MemoryGlobalSettings with _$MemoryGlobalSettings {
     @Default(true) bool autoCreateEnabled,
     @Default(false) bool autoGenerateEnabled,
     @Default(7) int maxInjectedEntries,
+    int? maxInjectedTokens,
+    @Default('auto') String memoryBudgetPreset,
     @Default(15) int autoCreateInterval,
     @Default(true) bool useDelayedAutomation,
     @Default('hard_block') String injectionTarget,

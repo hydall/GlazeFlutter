@@ -34,6 +34,8 @@ class SyncSerialization {
     'autoGenerateEnabled',
     'maxInjectedEntries',
     'maxInjectionBudgetPercent',
+    'maxInjectedTokens',
+    'memoryBudgetPreset',
     'autoCreateInterval',
     'useDelayedAutomation',
     'injectionTarget',
@@ -81,14 +83,12 @@ class SyncSerialization {
 
   static String computeApiPresetsHash(Iterable<Map<String, dynamic>> items) {
     return computeSyncHash(
-      items
-          .map((item) {
-            final copy = Map<String, dynamic>.from(item);
-            copy['apiKey'] = '';
-            copy['embeddingApiKey'] = '';
-            return copy;
-          })
-          .toList(),
+      items.map((item) {
+        final copy = Map<String, dynamic>.from(item);
+        copy['apiKey'] = '';
+        copy['embeddingApiKey'] = '';
+        return copy;
+      }).toList(),
     );
   }
 
@@ -130,7 +130,9 @@ class SyncSerialization {
       final raw = await adapter.download(entry.path);
       if (raw.isEmpty) return null;
       if (raw.length > maxSyncPayloadBytes) {
-        throw Exception('Payload exceeds ${maxSyncPayloadBytes ~/ 1024 ~/ 1024}MB limit');
+        throw Exception(
+          'Payload exceeds ${maxSyncPayloadBytes ~/ 1024 ~/ 1024}MB limit',
+        );
       }
       return jsonDecode(raw) as Map<String, dynamic>;
     } catch (_) {

@@ -169,10 +169,7 @@ void main() {
     });
 
     test('zero budget keeps only the first entry (inv-ps4 fallback)', () {
-      final entries = [
-        entry(1, 'alpha'),
-        entry(2, 'beta'),
-      ];
+      final entries = [entry(1, 'alpha'), entry(2, 'beta')];
       final result = MemoryInjectionBudget.trimByTokenBudget(entries, 0);
       expect(result, hasLength(1));
       expect(result.first.id, 'e1');
@@ -184,6 +181,15 @@ void main() {
       const settings = MemoryBookSettings();
       expect(settings.maxInjectionBudgetPercent, 0.35);
     });
+
+    test(
+      'MemoryBookSettings token budget defaults to auto percent-only mode',
+      () {
+        const settings = MemoryBookSettings();
+        expect(settings.maxInjectedTokens, isNull);
+        expect(settings.memoryBudgetPreset, 'auto');
+      },
+    );
   });
 
   group('composeBudget: percent + absolute cap interaction', () {

@@ -58,9 +58,7 @@ void main() {
     });
 
     test('new value macro is preserved', () {
-      final result = MemoryBookSettings.fromJson({
-        'injectionTarget': 'macro',
-      });
+      final result = MemoryBookSettings.fromJson({'injectionTarget': 'macro'});
       expect(result.injectionTarget, 'macro');
     });
 
@@ -74,6 +72,16 @@ void main() {
       final json = original.toJson();
       final restored = MemoryBookSettings.fromJson(json);
       expect(restored.injectionTarget, 'hard_block');
+    });
+
+    test('maxInjectedTokens and memoryBudgetPreset round-trip', () {
+      const original = MemoryBookSettings(
+        maxInjectedTokens: 6000,
+        memoryBudgetPreset: 'medium',
+      );
+      final restored = MemoryBookSettings.fromJson(original.toJson());
+      expect(restored.maxInjectedTokens, 6000);
+      expect(restored.memoryBudgetPreset, 'medium');
     });
   });
 
@@ -116,6 +124,16 @@ void main() {
       final json = original.toJson();
       final restored = MemoryGlobalSettings.fromJson(json);
       expect(restored.injectionTarget, 'macro');
+    });
+
+    test('maxInjectedTokens and memoryBudgetPreset round-trip', () {
+      const original = MemoryGlobalSettings(
+        maxInjectedTokens: 10000,
+        memoryBudgetPreset: 'large',
+      );
+      final restored = MemoryGlobalSettings.fromJson(original.toJson());
+      expect(restored.maxInjectedTokens, 10000);
+      expect(restored.memoryBudgetPreset, 'large');
     });
   });
 }
