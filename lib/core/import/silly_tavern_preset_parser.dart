@@ -24,15 +24,29 @@ const _mandatoryBlockIds = <String>{
 };
 
 const _blockNameToId = <String, String>{
+  // Chat history
   'Chat History': 'chat_history',
+  // Character card
   'charDescription': 'char_card',
   'Character Description': 'char_card',
+  'Character Card': 'char_card',
+  // Character personality
   'charPersonality': 'char_personality',
   'Character Personality': 'char_personality',
+  // User persona
   'personaDescription': 'user_persona',
   'User Persona': 'user_persona',
+  // Dialogue examples
   'dialogueExamples': 'example_dialogue',
   'Dialogue Examples': 'example_dialogue',
+  // World info
+  'World Info Before': 'worldInfoBefore',
+  'World Info After': 'worldInfoAfter',
+  // Scenario
+  'Scenario': 'scenario',
+  // Main / nsfw
+  'Main Prompt': 'main',
+  'nsfw': 'nsfw',
 };
 
 String _normalizeImportedBlockId(String rawId, String name) {
