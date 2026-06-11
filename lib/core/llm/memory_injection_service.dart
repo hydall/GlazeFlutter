@@ -8,13 +8,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../db/app_db.dart';
 import '../db/repositories/embedding_repo.dart';
 import '../db/repositories/memory_book_repo.dart';
-import 'tokenizer.dart';
 import '../models/chat_message.dart';
 import '../models/memory_book.dart';
 import '../state/db_provider.dart';
 import '../state/memory_settings_provider.dart';
 import 'embedding_service.dart';
-import 'glaze_matcher.dart';
 import 'embedding_types.dart';
 import 'memory_budget.dart';
 import 'memory_embedding_service.dart';
@@ -137,31 +135,6 @@ class MemoryInjectionService {
     ));
   }
 
-  /// Re-finalize a [MemorySelection] against a known visible-window set
-  /// when the cutoff is computed later in the pipeline. Preserves the
-  /// previous selection if no source-window exclusions are triggered.
-  MemorySelection finalizeWithVisibleWindow({
-    required MemorySelection previous,
-    required Set<String> visibleMessageIds,
-    required int? maxInjectionTokens,
-    required int maxInjectedEntries,
-  }) {
-    if (visibleMessageIds.isEmpty) return previous;
-    final needsRefilter = previous.allScores.any((s) =>
-        !s.excludedBySourceWindow &&
-        s.entry.messageIds.isNotEmpty &&
-        s.entry.messageIds.any(visibleMessageIds.contains));
-    if (!needsRefilter) return previous;
-    final refiltered = MemorySelector.select(MemorySelectionInput(
-      entries: previous.allScores.map((s) => s.entry).toList(),
-      visibleMessageIds: visibleMessageIds,
-      maxInjectionTokens: maxInjectionTokens,
-      maxInjectedEntries: maxInjectedEntries,
-      sourceWindowExclusion: true,
-    ));
-    return refiltered;
-  }
-
   /// Backwards-compatible facade for callers that still expect an
   /// assembled injection payload in one shot (tokenizer sheet, etc.).
   Future<MemoryInjectionResult> buildInjection({
@@ -184,10 +157,7 @@ class MemoryInjectionService {
               content: m.content,
             ))
         .toList();
-    final book = await _repo.getBySessionId(sessionId);
     final gs = _ref.read(memoryGlobalSettingsProvider);
-    final maxInjectedEntries =
-        book?.settings.maxInjectedEntries ?? gs.maxInjectedEntries;
 
     final selection = await buildCandidates(
       sessionId: sessionId,
@@ -335,10 +305,6 @@ class MemoryInjectionService {
     } catch (_) {
       return {};
     }
-  }
-
-  bool _glazeMatch(String key, String text) {
-    return glazeCheckMatch(key, text.toLowerCase(), false, WholeWordMode.glaze);
   }
 }
 

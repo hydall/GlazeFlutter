@@ -209,6 +209,28 @@ class TokenBreakdown {
       ? (historyTokens / historyBudget * 100).clamp(0, 100)
       : 0;
 
+  /// Returns a copy with the visible message ids replaced. Used by
+  /// [buildPrompt] to keep the recomputed breakdown consistent with
+  /// the post-cutoff state after the deferred memory refilter.
+  TokenBreakdown copyWithVisible(Set<String> visibleMessageIds) {
+    return TokenBreakdown(
+      sourceTokens: sourceTokens,
+      macroTokens: macroTokens,
+      staticTotal: staticTotal,
+      historyBudget: historyBudget,
+      historyTokens: historyTokens,
+      totalTokens: totalTokens,
+      cutoffIndex: cutoffIndex,
+      trimmedHistory: trimmedHistory,
+      lorebookReserveTokens: lorebookReserveTokens,
+      memoryTokens: memoryTokens,
+      vectorLoreTokens: vectorLoreTokens,
+      fixedTotal: fixedTotal,
+      remaining: remaining,
+      visibleMessageIds: visibleMessageIds,
+    );
+  }
+
   /// Preset row in the tokenizer. Same as [sourceTokens]['preset']: external
   /// injections are already blanked in `contentForAccounting` (see INV-PS5).
   int get presetNetTokens => sourceTokens['preset'] ?? 0;

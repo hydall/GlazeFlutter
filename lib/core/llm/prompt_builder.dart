@@ -835,7 +835,20 @@ PromptResult _assembleMessages({
     );
   }
 
-  if (payload.memoryContent != null && payload.memoryContent!.isNotEmpty) {
+  // Memory block injection.
+  // - payload.memoryContent set, payload.memorySelection == null:
+  //     legacy path — inject hard block before cutoff. Source-window
+  //     exclusion has already been applied (or wasn't requested) by
+  //     whichever upstream producer assembled the content.
+  // - payload.memorySelection set:
+  //     defer injection until after the cutoff is known, then refilter
+  //     against the visible window. The block is injected as a deferred
+  //     marker so attributionBlocks and the message list stay consistent.
+  final hasDeferredMemorySelection = payload.memorySelection != null;
+
+  if (!hasDeferredMemorySelection &&
+      payload.memoryContent != null &&
+      payload.memoryContent!.isNotEmpty) {
     if (payload.memoryInjectionTarget == 'hard_block') {
       // Skip the hard block if the preset already handles memory via
       // {{memory}} macro or via an explicit `id: 'memory'` block.
@@ -873,13 +886,48 @@ PromptResult _assembleMessages({
   );
   final historyOnly = messages.where((m) => m.isHistory).toList();
 
-  final breakdown = calculator.calculate(
+  var breakdown = calculator.calculate(
     staticBlocks: attributionBlocks,
     historyMessages: historyOnly,
     lorebookReserveTokens: lorebookReserve,
     macroTokens: macroTokens,
     vectorLoreTokens: vectorLoreTokens,
   );
+
+  // Deferred memory finalization: refilter the v2 selection against the
+  // visible window now that the cutoff is known, then inject the hard
+  // block and update the breakdown with the post-cutoff memory cost.
+  if (hasDeferredMemorySelection && payload.memorySelection != null) {
+    final selection = payload.memorySelection!;
+    final refiltered = _refilterMemorySelection(
+      selection,
+      visibleMessageIds: breakdown.visibleMessageIds,
+    );
+    if (refiltered.entries.isNotEmpty &&
+        payload.memoryInjectionTarget == 'hard_block') {
+      final rebuilt = _buildMemoryContentFromSelection(
+        refiltered,
+        summaryExcerpt: payload.summaryContent,
+      );
+      final hasMemoryBlock = messages.any((m) => m.blockId == 'memory') ||
+          appendedEntries.any((b) => b.id == 'memory');
+      if (!hasMemoryBlock) {
+        _injectMemoryBlock(messages, attributionBlocks, rebuilt.content);
+      }
+      breakdown = _recomputeBreakdownWithMemory(
+        calculator: calculator,
+        baseBreakdown: breakdown,
+        attributionBlocks: attributionBlocks,
+        historyMessages: historyOnly,
+        lorebookReserveTokens: lorebookReserve,
+        macroTokens: macroTokens,
+        vectorLoreTokens: vectorLoreTokens,
+        memoryContent: rebuilt.content,
+        memoryMacroContent: rebuilt.macroContent,
+        visibleMessageIds: breakdown.visibleMessageIds,
+      );
+    }
+  }
 
   final finalMessages = <PromptMessage>[];
   var historySeen = 0;
@@ -1027,4 +1075,89 @@ void applyAppendToLastMessage(
     isHistory: true,
     blockName: '${original.blockName ?? 'Last user'} + $blockNames',
   );
+}
+
+class _RebuiltMemoryContent {
+  final String content;
+  final String macroContent;
+  const _RebuiltMemoryContent(this.content, this.macroContent);
+}
+
+/// Refilter a [MemorySelection] against the visible-window message ids
+/// returned by [TokenBreakdown]. Re-runs the selector with the new
+/// exclusion set so anything whose `messageIds` overlaps the visible
+/// history is dropped. Preserves the existing budget/cap unless the
+/// selection carried them via [MemorySelection.budgetTokens]/entryCap.
+MemorySelection _refilterMemorySelection(
+  MemorySelection previous, {
+  required Set<String> visibleMessageIds,
+}) {
+  if (visibleMessageIds.isEmpty) return previous;
+  final needsRefilter = previous.allScores.any((s) =>
+      !s.excludedBySourceWindow &&
+      s.entry.messageIds.isNotEmpty &&
+      s.entry.messageIds.any(visibleMessageIds.contains));
+  if (!needsRefilter) return previous;
+  return MemorySelector.select(MemorySelectionInput(
+    entries: previous.allScores.map((s) => s.entry).toList(),
+    visibleMessageIds: visibleMessageIds,
+    maxInjectionTokens: previous.budgetTokens,
+    maxInjectedEntries: previous.entryCap > 0
+        ? previous.entryCap
+        : previous.entries.length,
+    sourceWindowExclusion: true,
+    diversityAware: false,
+  ));
+}
+
+_RebuiltMemoryContent _buildMemoryContentFromSelection(
+  MemorySelection selection, {
+  String? summaryExcerpt,
+}) {
+  final macro = selection.entries
+      .map((e) => e.content.trim())
+      .where((s) => s.isNotEmpty)
+      .join('\n\n');
+  final parts = <String>[];
+  if (summaryExcerpt != null && summaryExcerpt.isNotEmpty) {
+    parts.add('Summary excerpt:\n$summaryExcerpt');
+  }
+  parts.add('Memory context:');
+  for (final entry in selection.entries) {
+    final title = entry.title.isNotEmpty ? entry.title : 'Memory';
+    parts.add('- $title: ${entry.content.trim()}');
+  }
+  return _RebuiltMemoryContent(parts.join('\n\n'), macro);
+}
+
+/// Recompute a [TokenBreakdown] after the memory block is finalized so
+/// `memoryTokens` / `historyBudget` / `totalTokens` / `visibleMessageIds`
+/// all reflect the post-cutoff state.
+TokenBreakdown _recomputeBreakdownWithMemory({
+  required ContextCalculator calculator,
+  required TokenBreakdown baseBreakdown,
+  required List<StaticBlock> attributionBlocks,
+  required List<PromptMessage> historyMessages,
+  required int lorebookReserveTokens,
+  required Map<String, int> macroTokens,
+  required int vectorLoreTokens,
+  required String memoryContent,
+  required String memoryMacroContent,
+  required Set<String> visibleMessageIds,
+}) {
+  // Strip the memory block from attributionBlocks — ContextCalculator
+  // would double-count the content otherwise (we pass it explicitly as
+  // memoryTokens below).
+  final filteredBlocks = attributionBlocks
+      .where((b) => b.id != 'memory')
+      .toList(growable: false);
+  final memoryTokens = estimateTokens(memoryContent);
+  return calculator.calculate(
+    staticBlocks: filteredBlocks,
+    historyMessages: historyMessages,
+    lorebookReserveTokens: lorebookReserveTokens,
+    macroTokens: macroTokens,
+    memoryTokens: memoryTokens,
+    vectorLoreTokens: vectorLoreTokens,
+  ).copyWithVisible(visibleMessageIds);
 }

@@ -185,4 +185,29 @@ void main() {
       expect(settings.maxInjectionBudgetPercent, 0.35);
     });
   });
+
+  group('composeBudget: percent + absolute cap interaction', () {
+    test('min(percentBudget, absoluteCap) when both are set', () {
+      // 32k * 0.35 = 11200; cap 6000 -> 6000
+      expect(
+        MemoryInjectionBudget.composeBudget(
+          contextBudgetTokens: 32000,
+          percent: 0.35,
+          absoluteCap: 6000,
+        ),
+        6000,
+      );
+    });
+
+    test('legacy: null absoluteCap returns percent budget only', () {
+      expect(
+        MemoryInjectionBudget.composeBudget(
+          contextBudgetTokens: 32000,
+          percent: 0.35,
+          absoluteCap: null,
+        ),
+        11200,
+      );
+    });
+  });
 }

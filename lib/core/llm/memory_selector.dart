@@ -133,14 +133,12 @@ class MemorySelector {
     final costFn = tokenCounter ?? tokenCost;
 
     final visibleSet = input.visibleMessageIds;
-    final entryIds = {for (final e in entries) e.id};
-    final visibleFiltered = visibleSet.where(entryIds.contains).toSet();
 
     final scored = <MemoryCandidateScore>[];
     for (final entry in entries) {
       if (input.sourceWindowExclusion &&
           entry.messageIds.isNotEmpty &&
-          entry.messageIds.any(visibleFiltered.contains)) {
+          entry.messageIds.any(visibleSet.contains)) {
         scored.add(MemoryCandidateScore(
           entry: entry,
           score: 0,
@@ -224,6 +222,13 @@ class MemorySelector {
           matchedKeys: c.matchedKeys,
         );
         picked[picked.length - 1] = reranked;
+        // Also stamp the reranked score into allScores so the diagnostic
+        // surface reflects what was actually injected, not the pre-penalty
+        // ranking score. Excluded entries keep their original 0.
+        final idx = scored.indexWhere((s) => identical(s.entry, c.entry));
+        if (idx >= 0) {
+          scored[idx] = reranked;
+        }
       }
     }
 

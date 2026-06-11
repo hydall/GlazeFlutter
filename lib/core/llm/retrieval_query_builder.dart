@@ -34,8 +34,11 @@ class RetrievalQueryBuilder {
     void append(String chunk) {
       if (chunk.isEmpty) return;
       if (used + chunk.length > maxChars) return;
-      buffer
-        ..write(used == 0 ? chunk : '\n$chunk');
+      if (used == 0) {
+        buffer.write(chunk);
+      } else {
+        buffer.write('\n$chunk');
+      }
       used += chunk.length + (used == 0 ? 0 : 1);
     }
 
@@ -58,6 +61,10 @@ class RetrievalQueryBuilder {
         if (turns >= recentTurns) break;
         final msg = history[i];
         if (msg.isHidden || msg.isTyping) continue;
+        // When includeAssistant is false, restrict the recent window to
+        // user turns only — the assistant was already a noisy signal in
+        // the current build's vector search.
+        if (!includeAssistant && msg.role != 'user') continue;
         if (msg.role != 'user' && msg.role != 'assistant') continue;
         if (msg.content.trim().isEmpty) continue;
         append(msg.content.trim());

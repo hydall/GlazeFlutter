@@ -123,6 +123,22 @@ class PromptInputsCollector {
       memoryMaxInjected: memorySettings.maxInjectedEntries,
       memoryKeyMatchMode: memorySettings.keyMatchMode,
       memoryInjectionTarget: memorySettings.injectionTarget,
+      memoryMaxInjectedTokens: memoryBook?.settings.maxInjectedTokens,
+      memoryMaxInjectionBudgetPercent:
+          memoryBook?.settings.maxInjectionBudgetPercent ?? 0.35,
+      memoryDiversityAware: memoryBook?.settings.diversityAware ?? true,
+      memoryDiversityPenalty: memoryBook?.settings.diversityPenalty ?? 0.15,
+      memoryRecencyBoost: memoryBook?.settings.recencyBoost ?? true,
+      memoryRecencyHalfLifeDays:
+          memoryBook?.settings.recencyHalfLifeDays ?? 0.5,
+      memoryImportanceBoost: memoryBook?.settings.importanceBoost ?? true,
+      memoryImportanceWeight: memoryBook?.settings.importanceWeight ?? 0.5,
+      memorySourceWindowExclusion:
+          memoryBook?.settings.sourceWindowExclusion ?? true,
+      memoryQueryRecentTurns: memoryBook?.settings.queryRecentTurns ?? 6,
+      memoryQueryMaxChars: memoryBook?.settings.queryMaxChars ?? 1500,
+      memoryNowMillis: DateTime.now().millisecondsSinceEpoch,
+      memoryContextBudgetTokens: chatApi.contextSize,
       runtimePromptBlocks: runtimePromptBlocks,
     );
   }

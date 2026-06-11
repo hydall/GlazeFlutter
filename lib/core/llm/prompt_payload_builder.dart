@@ -17,6 +17,7 @@ import '../state/lorebook_provider.dart';
 import 'embedding_types.dart';
 import 'lorebook_providers.dart';
 import 'memory_injection_service.dart';
+import 'memory_selector.dart';
 import '../../features/extensions/services/ext_blocks_prompt_injection.dart';
 import '../../features/extensions/services/runtime_prompt_injection_service.dart';
 import 'prompt_builder.dart';
@@ -108,15 +109,13 @@ class PromptPayloadBuilder {
     final lorebookActivations = _ref.read(lorebookActivationsProvider);
 
     String? summaryContent;
-    String? memoryContent;
-    String? memoryMacroContent;
-    String memoryInjectionTarget = 'hard_block';
     Map<String, dynamic> memoryCoverage = {};
     List<TriggeredEntry> triggeredMemories = [];
     List<RuntimePromptBlock> runtimePromptBlocks = const [];
     List<ChatMessage> history = session?.messages ?? [];
     Map<String, String> sessionVars = session?.sessionVars ?? {};
     List<LorebookEntry> vectorEntries = [];
+    MemorySelection? memorySelection;
 
     if (session != null) {
       debugPrint('[payload] injecting ext blocks into history...');
@@ -144,22 +143,19 @@ class PromptPayloadBuilder {
 
       debugPrint('[payload] building memory injection...');
       final memoryService = _ref.read(memoryInjectionServiceProvider);
-      final historyText = session.historyText;
       final embeddingConfig = _ref.read(embeddingConfigProvider);
-      final memoryHistory = session.messages
-          .where((m) => !m.isHidden && !m.isTyping)
-          .map((m) => ChatMessageForSearch(role: m.role, content: m.content))
-          .toList();
+      final currentText = session.messages.lastOrNull?.content ?? '';
 
-      // Run memory injection and lorebook vector search in parallel. They
-      // hit different data sources and are independent; sequential execution
-      // doubles wall-clock time when the embedding endpoint is slow.
-      // Guard with shouldAbort before/after each; the second guard is
-      // necessary to avoid stale writes after a quick abort.
+      // Run memory candidate collection and lorebook vector search in
+      // parallel. They hit different data sources and are independent;
+      // sequential execution doubles wall-clock time when the embedding
+      // endpoint is slow. The final memory refilter against the visible
+      // window happens later inside buildPrompt (see
+      // docs/INVARIANTS.md §5.5).
       final lorebookFuture = (!skipVectorSearch)
           ? _runVectorSearch(
               session.messages,
-              session.messages.lastOrNull?.content ?? '',
+              currentText,
               character.world,
               character,
               chatId: session.id,
@@ -167,13 +163,10 @@ class PromptPayloadBuilder {
             ).timeout(const Duration(seconds: 15))
           : Future<List<LorebookEntry>>.value(const []);
 
-      final memoryFuture = memoryService.buildInjection(
+      final memoryFuture = memoryService.buildCandidates(
         sessionId: session.id,
-        historyText: historyText,
-        messageCount: session.messages.length,
-        summaryExcerpt: summaryContent,
-        history: memoryHistory,
-        currentText: session.messages.lastOrNull?.content ?? '',
+        history: session.messages,
+        currentText: currentText,
         embeddingConfig: embeddingConfig,
         shouldAbort: shouldAbort,
         cancelToken: cancelToken,
@@ -183,27 +176,25 @@ class PromptPayloadBuilder {
       throwIfAborted();
       final results = await Future.wait([memoryFuture, lorebookFuture]);
       throwIfAborted();
-      final memoryResult = results[0] as MemoryInjectionResult;
+      final memorySelection = results[0] as MemorySelection;
       vectorEntries = results[1] as List<LorebookEntry>;
       throwIfAborted();
       debugPrint(
-        '[payload] memory injection complete, entries=${memoryResult.entries.length}',
+        '[payload] memory candidates done, picked=${memorySelection.entries.length}, total=${memorySelection.allScores.length}, excludedByWindow=${memorySelection.excludedBySourceWindow}',
       );
-      memoryContent = memoryResult.content.isNotEmpty
-          ? memoryResult.content
-          : null;
-      memoryMacroContent = memoryResult.macroContent.isNotEmpty
-          ? memoryResult.macroContent
-          : null;
-      memoryInjectionTarget = memoryResult.injectionTarget;
-      if (memoryResult.entries.isNotEmpty) {
+
+      if (memorySelection.entries.isNotEmpty) {
         memoryCoverage = {
-          'entryIds': memoryResult.entries.map((e) => e.id).toList(),
+          'entryIds': memorySelection.entries.map((e) => e.id).toList(),
           'needsRebuild': false,
           'stale': false,
-          'injected': memoryContent != null,
+          'injected': false,
+          'candidatesTotal': memorySelection.allScores.length,
+          'excludedBySourceWindow': memorySelection.excludedBySourceWindow,
+          'budgetTokens': memorySelection.budgetTokens,
+          'budgetTrimmed': memorySelection.budgetTrimmed,
         };
-        triggeredMemories = memoryResult.entries
+        triggeredMemories = memorySelection.entries
             .map(
               (e) => TriggeredEntry(
                 id: e.id,
@@ -235,9 +226,9 @@ class PromptPayloadBuilder {
       lorebookActivations: lorebookActivations,
       vectorEntries: vectorEntries,
       summaryContent: summaryContent,
-      memoryContent: memoryContent,
-      memoryMacroContent: memoryMacroContent,
-      memoryInjectionTarget: memoryInjectionTarget,
+      memoryContent: null,
+      memoryMacroContent: null,
+      memoryInjectionTarget: 'hard_block',
       memoryCoverage: memoryCoverage,
       guidanceText: guidanceText,
       authorsNote: session?.authorsNote,
@@ -247,6 +238,7 @@ class PromptPayloadBuilder {
       globalRegexes: _ref.read(globalRegexProvider).value ?? [],
       triggeredMemories: triggeredMemories,
       runtimePromptBlocks: runtimePromptBlocks,
+      memorySelection: memorySelection,
     );
   }
 
