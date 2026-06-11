@@ -82,6 +82,12 @@ void main() {
             classifierEndpoint: 'https://classifier.example/v1',
             classifierApiKey: 'classifier-key',
             classifierTimeoutMs: 3500,
+            sidecarEnabled: true,
+            sidecarSource: 'custom',
+            sidecarModel: 'sidecar-mini',
+            sidecarEndpoint: 'https://sidecar.example/v1',
+            sidecarApiKey: 'sidecar-key',
+            sidecarTimeoutMs: 4500,
             queryIncludeAssistant: false,
             queryRecentTurns: 4,
             queryMaxChars: 750,
@@ -106,6 +112,12 @@ void main() {
     expect(json['classifierEndpoint'], 'https://classifier.example/v1');
     expect(json['classifierApiKey'], 'classifier-key');
     expect(json['classifierTimeoutMs'], 3500);
+    expect(json['sidecarEnabled'], true);
+    expect(json['sidecarSource'], 'custom');
+    expect(json['sidecarModel'], 'sidecar-mini');
+    expect(json['sidecarEndpoint'], 'https://sidecar.example/v1');
+    expect(json['sidecarApiKey'], 'sidecar-key');
+    expect(json['sidecarTimeoutMs'], 4500);
     expect(json['queryIncludeAssistant'], false);
     expect(json['queryRecentTurns'], 4);
     expect(json['queryMaxChars'], 750);
@@ -133,6 +145,9 @@ void main() {
             classifierEnabled: true,
             classifierModel: 'classifier-mini',
             classifierTimeoutMs: 3500,
+            sidecarEnabled: true,
+            sidecarModel: 'sidecar-mini',
+            sidecarTimeoutMs: 4500,
             queryIncludeAssistant: false,
             queryRecentTurns: 3,
             queryMaxChars: 900,
@@ -151,6 +166,9 @@ void main() {
     expect(book.settings.classifierEnabled, true);
     expect(book.settings.classifierModel, 'classifier-mini');
     expect(book.settings.classifierTimeoutMs, 3500);
+    expect(book.settings.sidecarEnabled, true);
+    expect(book.settings.sidecarModel, 'sidecar-mini');
+    expect(book.settings.sidecarTimeoutMs, 4500);
     expect(book.settings.queryIncludeAssistant, false);
     expect(book.settings.queryRecentTurns, 3);
     expect(book.settings.queryMaxChars, 900);
@@ -176,6 +194,10 @@ void main() {
         classifierSource: 'current',
         classifierModel: 'classifier-mini',
         classifierTimeoutMs: 3000,
+        sidecarEnabled: true,
+        sidecarSource: 'current',
+        sidecarModel: 'sidecar-mini',
+        sidecarTimeoutMs: 5000,
         queryIncludeAssistant: false,
         queryRecentTurns: 5,
         queryMaxChars: 1250,
@@ -190,6 +212,10 @@ void main() {
     expect(updated.settings.classifierSource, 'current');
     expect(updated.settings.classifierModel, 'classifier-mini');
     expect(updated.settings.classifierTimeoutMs, 3000);
+    expect(updated.settings.sidecarEnabled, true);
+    expect(updated.settings.sidecarSource, 'current');
+    expect(updated.settings.sidecarModel, 'sidecar-mini');
+    expect(updated.settings.sidecarTimeoutMs, 5000);
     expect(updated.settings.queryIncludeAssistant, false);
     expect(updated.settings.queryRecentTurns, 5);
     expect(updated.settings.queryMaxChars, 1250);

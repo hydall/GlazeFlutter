@@ -54,6 +54,9 @@ class _MemoryGenerationSettingsSheetState
   late bool _classifierEnabled;
   late String _classifierSource;
   late int _classifierTimeoutMs;
+  late bool _sidecarEnabled;
+  late String _sidecarSource;
+  late int _sidecarTimeoutMs;
   late bool _queryIncludeAssistant;
   late int _queryRecentTurns;
   late int _queryMaxChars;
@@ -67,6 +70,9 @@ class _MemoryGenerationSettingsSheetState
   late final TextEditingController _classifierModelCtrl;
   late final TextEditingController _classifierEndpointCtrl;
   late final TextEditingController _classifierApiKeyCtrl;
+  late final TextEditingController _sidecarModelCtrl;
+  late final TextEditingController _sidecarEndpointCtrl;
+  late final TextEditingController _sidecarApiKeyCtrl;
 
   @override
   void initState() {
@@ -109,6 +115,9 @@ class _MemoryGenerationSettingsSheetState
     _classifierEnabled = s.classifierEnabled;
     _classifierSource = _normalizeClassifierSource(s.classifierSource);
     _classifierTimeoutMs = s.classifierTimeoutMs.clamp(500, 10000);
+    _sidecarEnabled = s.sidecarEnabled;
+    _sidecarSource = _normalizeClassifierSource(s.sidecarSource);
+    _sidecarTimeoutMs = s.sidecarTimeoutMs.clamp(500, 15000);
     _queryIncludeAssistant = s.queryIncludeAssistant;
     _queryRecentTurns = s.queryRecentTurns;
     _queryMaxChars = s.queryMaxChars;
@@ -119,6 +128,9 @@ class _MemoryGenerationSettingsSheetState
     _classifierModelCtrl = TextEditingController(text: s.classifierModel);
     _classifierEndpointCtrl = TextEditingController(text: s.classifierEndpoint);
     _classifierApiKeyCtrl = TextEditingController(text: s.classifierApiKey);
+    _sidecarModelCtrl = TextEditingController(text: s.sidecarModel);
+    _sidecarEndpointCtrl = TextEditingController(text: s.sidecarEndpoint);
+    _sidecarApiKeyCtrl = TextEditingController(text: s.sidecarApiKey);
     _temperatureCtrl = TextEditingController(
       text: s.generationTemperature != null && s.generationTemperature! > 0
           ? s.generationTemperature!.round().toString()
@@ -142,6 +154,9 @@ class _MemoryGenerationSettingsSheetState
     _classifierModelCtrl.dispose();
     _classifierEndpointCtrl.dispose();
     _classifierApiKeyCtrl.dispose();
+    _sidecarModelCtrl.dispose();
+    _sidecarEndpointCtrl.dispose();
+    _sidecarApiKeyCtrl.dispose();
     super.dispose();
   }
 
@@ -188,6 +203,12 @@ class _MemoryGenerationSettingsSheetState
       classifierEndpoint: _classifierEndpointCtrl.text,
       classifierApiKey: _classifierApiKeyCtrl.text,
       classifierTimeoutMs: _classifierTimeoutMs,
+      sidecarEnabled: _sidecarEnabled,
+      sidecarSource: _sidecarSource,
+      sidecarModel: _sidecarModelCtrl.text,
+      sidecarEndpoint: _sidecarEndpointCtrl.text,
+      sidecarApiKey: _sidecarApiKeyCtrl.text,
+      sidecarTimeoutMs: _sidecarTimeoutMs,
       queryIncludeAssistant: _queryIncludeAssistant,
       queryRecentTurns: _queryRecentTurns,
       queryMaxChars: _queryMaxChars,
@@ -463,6 +484,7 @@ class _MemoryGenerationSettingsSheetState
                 'Opt-in: when Balanced suspects missing context but finds no reliable memory, add a short anti-hallucination guard to the prompt.',
           ),
           _classifierSettings(),
+          _sidecarSettings(),
           _switchTile(
             'Include assistant turns in vector query',
             _queryIncludeAssistant,
@@ -505,6 +527,11 @@ class _MemoryGenerationSettingsSheetState
               label: Text('Balanced'),
               icon: Icon(Icons.tune_rounded),
             ),
+            ButtonSegment(
+              value: 'deep',
+              label: Text('Deep'),
+              icon: Icon(Icons.manage_search_rounded),
+            ),
           ],
           selected: {_memoryMode},
           onSelectionChanged: (s) => setState(() => _memoryMode = s.first),
@@ -514,6 +541,8 @@ class _MemoryGenerationSettingsSheetState
         Text(
           _memoryMode == 'balanced'
               ? 'Deterministic selector plus local catalog/heuristics. No external classifier call.'
+              : _memoryMode == 'deep'
+              ? 'Deep mode configuration only for now. Sidecar reranking remains read-only and is not called until the next implementation step.'
               : 'Deterministic selector only. Fastest and most predictable.',
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
@@ -579,6 +608,70 @@ class _MemoryGenerationSettingsSheetState
             (v) => setState(() => _classifierTimeoutMs = v),
             min: 500,
             max: 10000,
+            step: 500,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _sidecarSettings() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _switchTile(
+          'Deep sidecar reranker',
+          _sidecarEnabled,
+          (v) => setState(() => _sidecarEnabled = v),
+          subtitle:
+              'Optional external model for future Deep mode reranking. Read-only configuration; no sidecar call is made in this commit.',
+        ),
+        if (_sidecarEnabled) ...[
+          Text(
+            'Cost/latency disclosure: sidecar reranking may add another model request before generation. It must not write, edit, or delete memories.',
+            style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
+          ),
+          const SizedBox(height: 8),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'current', label: Text('Current API')),
+              ButtonSegment(value: 'custom', label: Text('Custom')),
+            ],
+            selected: {_sidecarSource},
+            onSelectionChanged: (s) => setState(() => _sidecarSource = s.first),
+            style: ButtonStyle(visualDensity: VisualDensity.compact),
+          ),
+          const SizedBox(height: 8),
+          if (_sidecarSource == 'custom') ...[
+            _labeledField(
+              'settings_embedding_endpoint'.tr(),
+              _sidecarEndpointCtrl,
+              hint: 'https://...',
+            ),
+            const SizedBox(height: 8),
+          ],
+          _labeledField(
+            'Sidecar model',
+            _sidecarModelCtrl,
+            hint: _sidecarSource == 'custom'
+                ? 'gpt-4o-mini'
+                : 'Leave blank for current LLM model',
+          ),
+          if (_sidecarSource == 'custom') ...[
+            const SizedBox(height: 8),
+            _labeledField(
+              'label_embedding_key'.tr(),
+              _sidecarApiKeyCtrl,
+              hint: 'sk-...',
+              obscure: true,
+            ),
+          ],
+          _numberField(
+            'Sidecar timeout ms',
+            _sidecarTimeoutMs,
+            (v) => setState(() => _sidecarTimeoutMs = v),
+            min: 500,
+            max: 15000,
             step: 500,
           ),
         ],
@@ -1036,6 +1129,12 @@ class _MemoryGenerationSettingsSheetState
           classifierEndpoint: current.classifierEndpoint,
           classifierApiKey: current.classifierApiKey,
           classifierTimeoutMs: current.classifierTimeoutMs,
+          sidecarEnabled: current.sidecarEnabled,
+          sidecarSource: current.sidecarSource,
+          sidecarModel: current.sidecarModel,
+          sidecarEndpoint: current.sidecarEndpoint,
+          sidecarApiKey: current.sidecarApiKey,
+          sidecarTimeoutMs: current.sidecarTimeoutMs,
           queryIncludeAssistant: current.queryIncludeAssistant,
           queryRecentTurns: current.queryRecentTurns,
           queryMaxChars: current.queryMaxChars,
@@ -1123,6 +1222,7 @@ String _migrateInjectionTarget(String raw) {
 }
 
 String _normalizeMemoryMode(String raw) {
+  if (raw == 'deep') return 'deep';
   return raw == 'balanced' ? 'balanced' : 'fast';
 }
 
