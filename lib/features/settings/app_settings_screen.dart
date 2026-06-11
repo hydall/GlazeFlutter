@@ -1,9 +1,9 @@
-import 'package:app_settings/app_settings.dart' as sys_settings;
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/platform/system_settings.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/theme_provider.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
@@ -84,9 +84,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
             MenuItem(
               icon: Icons.notifications_none_outlined,
               label: 'menu_notifications'.tr(),
-              onTap: () => sys_settings.AppSettings.openAppSettings(
-                type: sys_settings.AppSettingsType.notification,
-              ),
+              onTap: SystemSettings.openNotificationSettings,
             ),
             MenuItem(
               icon: Icons.settings_outlined,
