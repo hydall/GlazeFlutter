@@ -52,7 +52,9 @@ class ChatMessageSync {
     if (oldIds.isEmpty) {
       bridge.setMessages(newMsgs, visibleStartIndex: visibleStartIndex);
       if (!isGenerating) {
-        bridge.setLastMessage(lastUserMessageId(newMsgs));
+        bridge.setLastMessage(
+          lastUserMessageId(newMsgs) ?? newMsgs.lastOrNull?.id,
+        );
       }
       return;
     }
@@ -103,14 +105,18 @@ class ChatMessageSync {
           bridge.removeMessage(oldIds[i]);
         }
         if (!isGenerating) {
-          bridge.setLastMessage(lastUserMessageId(newMsgs));
+          bridge.setLastMessage(
+            lastUserMessageId(newMsgs) ?? newMsgs.lastOrNull?.id,
+          );
         }
         return;
       }
       bridge.clearAll();
       bridge.setMessages(newMsgs, visibleStartIndex: visibleStartIndex);
       if (!isGenerating) {
-        bridge.setLastMessage(lastUserMessageId(newMsgs));
+        bridge.setLastMessage(
+          lastUserMessageId(newMsgs) ?? newMsgs.lastOrNull?.id,
+        );
       }
       return;
     }
@@ -123,7 +129,9 @@ class ChatMessageSync {
         bridge.clearAll();
         bridge.setMessages(newMsgs, visibleStartIndex: visibleStartIndex);
         if (!isGenerating) {
-          bridge.setLastMessage(lastUserMessageId(newMsgs));
+          bridge.setLastMessage(
+            lastUserMessageId(newMsgs) ?? newMsgs.lastOrNull?.id,
+          );
         }
         return;
       }
@@ -160,20 +168,28 @@ class ChatMessageSync {
     // `updateMessage`. The previous dispatcher call relied on a
     // changing isGenerating flag, which does not move on edit.
     if (anyUpdated && !isGenerating) {
-      bridge.setLastMessage(lastUserMessageId(newMsgs));
+      bridge.setLastMessage(
+        lastUserMessageId(newMsgs) ?? newMsgs.lastOrNull?.id,
+      );
     }
   }
 }
 
-/// Returns the id of the last user-authored message in [msgs] (or
-/// null if the list contains no user messages). The WebView needs
-/// this id to inject the Regenerate button under the last user
-/// message — the renderer only sets `data-is-last` for char messages.
+/// Returns the id of the last message in [msgs] **only when it is a
+/// user message** (otherwise `null`). The WebView needs this id to
+/// inject the Regenerate button under the last user message — but the
+/// button must appear *only* when that user message is genuinely the
+/// last message in the chat (no char reply after it), mirroring the
+/// reference UI (`ChatMessage.vue`: `role === 'user' && isLast`).
+///
+/// Returning a non-trailing user id here is a bug: `setLastMessage`
+/// would move `data-is-last` off the trailing char message (breaking
+/// swipe-to-regenerate) and show a stray Regenerate button under the
+/// second-to-last user message. Callers fall back to the actual last
+/// id (char) so the char section keeps its `data-is-last` flag.
 String? lastUserMessageId(List<ChatMessage> msgs) {
-  for (int i = msgs.length - 1; i >= 0; i--) {
-    if (msgs[i].role == 'user') return msgs[i].id;
-  }
-  return null;
+  final last = msgs.lastOrNull;
+  return last != null && last.role == 'user' ? last.id : null;
 }
 
 /// Returns `true` when both [a] and [b] contain the same object
