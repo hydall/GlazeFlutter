@@ -13,6 +13,15 @@ class ChatWebViewThemeInput {
     required this.chatFontSize,
     required this.chatLayout,
     required this.bgDim,
+    required this.uiFontWeight,
+    required this.userMessageFontWeight,
+    required this.charMessageFontWeight,
+    required this.userBubbleRadius,
+    required this.charBubbleRadius,
+    required this.showUserAvatar,
+    required this.showCharAvatar,
+    required this.showUserName,
+    required this.showCharName,
   });
 
   final double elementOpacity;
@@ -20,6 +29,15 @@ class ChatWebViewThemeInput {
   final double chatFontSize;
   final String? chatLayout;
   final double bgDim;
+  final int uiFontWeight;
+  final int userMessageFontWeight;
+  final int charMessageFontWeight;
+  final double userBubbleRadius;
+  final double charBubbleRadius;
+  final bool showUserAvatar;
+  final bool showCharAvatar;
+  final bool showUserName;
+  final bool showCharName;
 }
 
 /// Builds the `Map<String, String>` that [ChatBridgeController.applyTheme]
@@ -62,6 +80,15 @@ class ChatWebViewThemeBuilder {
       'chat-font-size': '${input.chatFontSize}px',
       'chat-layout': input.chatLayout ?? 'default',
       'bg-dim': input.bgDim.clamp(0.0, 1.0).toStringAsFixed(2),
+      'ui-font-weight': '${input.uiFontWeight.clamp(100, 900)}',
+      'user-font-weight': '${input.userMessageFontWeight.clamp(100, 900)}',
+      'char-font-weight': '${input.charMessageFontWeight.clamp(100, 900)}',
+      'user-bubble-radius': '${input.userBubbleRadius.clamp(0.0, 48.0)}px',
+      'char-bubble-radius': '${input.charBubbleRadius.clamp(0.0, 48.0)}px',
+      'show-user-avatar': input.showUserAvatar ? '1' : '0',
+      'show-char-avatar': input.showCharAvatar ? '1' : '0',
+      'show-user-name': input.showUserName ? '1' : '0',
+      'show-char-name': input.showCharName ? '1' : '0',
     };
   }
 

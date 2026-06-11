@@ -81,6 +81,19 @@ class ThemeNotifier extends StateNotifier<ThemeSettings> {
     state = state.copyWith(presets: presets);
   }
 
+  Future<ThemePreset?> importPresetFromFile(
+    String path, {
+    bool apply = true,
+  }) async {
+    final preset = await _storage?.importFromFile(path);
+    if (preset == null) return null;
+    await importPreset(preset);
+    if (apply) {
+      await this.applyPreset(preset);
+    }
+    return preset;
+  }
+
   Future<void> deletePreset(String id) async {
     await _storage?.removePreset(id);
     final presets = await _storage?.loadAll() ?? state.presets;

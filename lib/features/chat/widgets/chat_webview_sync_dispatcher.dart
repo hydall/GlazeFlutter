@@ -401,6 +401,15 @@ class ChatWebViewWidgetFields {
     required this.themeSyncKey,
     required this.elementOpacity,
     required this.elementBlur,
+    required this.uiFontWeight,
+    required this.userMessageFontWeight,
+    required this.charMessageFontWeight,
+    required this.userBubbleRadius,
+    required this.charBubbleRadius,
+    required this.showUserAvatar,
+    required this.showCharAvatar,
+    required this.showUserName,
+    required this.showCharName,
     required this.chatFontName,
     required this.chatFontDataUrl,
     required this.chatFontSize,
@@ -442,6 +451,15 @@ class ChatWebViewWidgetFields {
   final String? themeSyncKey;
   final double elementOpacity;
   final double elementBlur;
+  final int uiFontWeight;
+  final int userMessageFontWeight;
+  final int charMessageFontWeight;
+  final double userBubbleRadius;
+  final double charBubbleRadius;
+  final bool showUserAvatar;
+  final bool showCharAvatar;
+  final bool showUserName;
+  final bool showCharName;
   final String? chatFontName;
   final String? chatFontDataUrl;
   final double chatFontSize;

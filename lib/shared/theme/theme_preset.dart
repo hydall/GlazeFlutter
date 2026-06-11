@@ -28,8 +28,11 @@ abstract class ThemePreset with _$ThemePreset {
     String? userItalicColor,
     String? charItalicColor,
     @Default('system') dynamic uiFontSize,
+    @Default(400) int uiFontWeight,
     @Default(0) double uiLetterSpacing,
     @Default('system') dynamic chatFontSize,
+    @Default(400) int userMessageFontWeight,
+    @Default(400) int charMessageFontWeight,
     @Default(0) double chatLetterSpacing,
     String? customFont,
     String? customFontName,
@@ -44,6 +47,12 @@ abstract class ThemePreset with _$ThemePreset {
     @Default(1) double borderWidth,
     String? borderColor,
     @Default(0.1) double borderOpacity,
+    @Default(18) double userBubbleRadius,
+    @Default(18) double charBubbleRadius,
+    @Default(true) bool showUserAvatar,
+    @Default(true) bool showCharAvatar,
+    @Default(true) bool showUserName,
+    @Default(true) bool showCharName,
     @Default(0.03) double noiseOpacity,
     @Default(0.8) double noiseIntensity,
     @Default(0.03) double bgNoiseOpacity,
@@ -71,6 +80,11 @@ extension ThemePresetX on ThemePreset {
   Color? get uiTextParsed => _parseNullableHex(uiTextColor);
   Color? get uiTextGrayParsed => _parseNullableHex(uiTextGrayColor);
   Color? get borderParsed => _parseNullableHex(borderColor);
+  FontWeight get uiFontWeightValue => _fontWeightFromInt(uiFontWeight);
+  FontWeight get userMessageFontWeightValue =>
+      _fontWeightFromInt(userMessageFontWeight);
+  FontWeight get charMessageFontWeightValue =>
+      _fontWeightFromInt(charMessageFontWeight);
 
   double get chatFontSizeValue {
     final v = chatFontSize;
@@ -103,4 +117,20 @@ Color _parseHex(String hex) {
 Color? _parseNullableHex(String? hex) {
   if (hex == null || hex.isEmpty) return null;
   return _parseHex(hex);
+}
+
+FontWeight _fontWeightFromInt(int value) {
+  const weights = <int, FontWeight>{
+    100: FontWeight.w100,
+    200: FontWeight.w200,
+    300: FontWeight.w300,
+    400: FontWeight.w400,
+    500: FontWeight.w500,
+    600: FontWeight.w600,
+    700: FontWeight.w700,
+    800: FontWeight.w800,
+    900: FontWeight.w900,
+  };
+  final normalized = (value ~/ 100) * 100;
+  return weights[normalized.clamp(100, 900)] ?? FontWeight.w400;
 }

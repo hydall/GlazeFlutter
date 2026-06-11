@@ -13,8 +13,10 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/menu_group.dart';
 import 'theme_preview.dart';
+import 'widgets/chat_layout_picker.dart';
 
 // ─── Palette (mirrors Glaze JS PRESET_COLORS / PRESET_UI_COLORS) ──────────────
 
@@ -79,9 +81,7 @@ Future<void> _pickCustomFont(
     }
   } catch (e) {
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load font: $e')),
-      );
+      GlazeToast.error(context, 'Failed to load font: ', e);
     }
   }
 }
@@ -295,6 +295,17 @@ class _GeneralTab extends StatelessWidget {
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(uiLetterSpacing: v)),
             ),
+            _SliderRow(
+              label: 'Font Weight',
+              value: preset.uiFontWeight.toDouble(),
+              min: 100,
+              max: 900,
+              divisions: 8,
+              unit: '',
+              onChanged: (v) => onUpdate(
+                (p) => p.copyWith(uiFontWeight: _weightFromSlider(v)),
+              ),
+            ),
           ],
         ),
         MenuGroup(
@@ -490,6 +501,13 @@ class _ChatTabState extends State<_ChatTab> {
           ),
         ),
         Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: _LayoutPickerRow(
+            value: widget.preset.chatLayout,
+            onTap: () => _showLayoutPicker(context),
+          ),
+        ),
+        Padding(
           padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
           child: GlazeTabBar(
             tabs: const [
@@ -510,6 +528,15 @@ class _ChatTabState extends State<_ChatTab> {
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _showLayoutPicker(BuildContext context) {
+    return showChatLayoutPicker(
+      context,
+      current: widget.preset.chatLayout,
+      onSelect: (layout) =>
+          widget.onUpdate((p) => p.copyWith(chatLayout: layout)),
     );
   }
 }
@@ -568,6 +595,28 @@ class _ChatFontTab extends StatelessWidget {
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(chatLetterSpacing: v)),
             ),
+            _SliderRow(
+              label: 'User Weight',
+              value: preset.userMessageFontWeight.toDouble(),
+              min: 100,
+              max: 900,
+              divisions: 8,
+              unit: '',
+              onChanged: (v) => onUpdate(
+                (p) => p.copyWith(userMessageFontWeight: _weightFromSlider(v)),
+              ),
+            ),
+            _SliderRow(
+              label: 'Char Weight',
+              value: preset.charMessageFontWeight.toDouble(),
+              min: 100,
+              max: 900,
+              divisions: 8,
+              unit: '',
+              onChanged: (v) => onUpdate(
+                (p) => p.copyWith(charMessageFontWeight: _weightFromSlider(v)),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 8),
@@ -622,7 +671,56 @@ class _ChatColorsTab extends StatelessWidget {
                 onChanged: (v) =>
                     onUpdate((p) => p.copyWith(charBubbleColor: v)),
               ),
+              _SliderRow(
+                label: 'User Radius',
+                value: preset.userBubbleRadius,
+                min: 0,
+                max: 36,
+                divisions: 36,
+                unit: 'px',
+                onChanged: (v) =>
+                    onUpdate((p) => p.copyWith(userBubbleRadius: v)),
+              ),
+              _SliderRow(
+                label: 'Char Radius',
+                value: preset.charBubbleRadius,
+                min: 0,
+                max: 36,
+                divisions: 36,
+                unit: 'px',
+                onChanged: (v) =>
+                    onUpdate((p) => p.copyWith(charBubbleRadius: v)),
+              ),
             ],
+          ],
+        ),
+        MenuGroup(
+          header: 'Identity',
+          items: [
+            _SwitchRow(
+              label: 'User Avatar',
+              value: preset.showUserAvatar,
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(showUserAvatar: v)),
+            ),
+            _SwitchRow(
+              label: 'Char Avatar',
+              value: preset.showCharAvatar,
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(showCharAvatar: v)),
+            ),
+            _SwitchRow(
+              label: 'User Name',
+              value: preset.showUserName,
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(showUserName: v)),
+            ),
+            _SwitchRow(
+              label: 'Char Name',
+              value: preset.showCharName,
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(showCharName: v)),
+            ),
           ],
         ),
         MenuGroup(
@@ -762,6 +860,107 @@ class _SliderRow extends StatelessWidget {
   }
 }
 
+class _SwitchRow extends StatelessWidget {
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _SwitchRow({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 15,
+                color: context.cs.onSurfaceVariant,
+                fontWeight: FontWeight.w400,
+              ),
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LayoutPickerRow extends StatelessWidget {
+  final String value;
+  final VoidCallback onTap;
+
+  const _LayoutPickerRow({
+    required this.value,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isBubble = value == 'bubble';
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Ink(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: context.cs.surfaceContainerHighest.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: context.cs.outlineVariant),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isBubble ? Icons.chat_bubble_outline : Icons.view_stream_outlined,
+                size: 18,
+                color: context.cs.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Chat Layout',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: context.cs.onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      isBubble ? 'Bubble' : 'Default',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: context.cs.onSurfaceVariant),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // ─── Font size row (System / Custom toggle + slider) ─────────────────────────
 
 class _FontSizeRow extends StatelessWidget {
@@ -834,6 +1033,10 @@ class _FontSizeRow extends StatelessWidget {
       ],
     );
   }
+}
+
+int _weightFromSlider(double value) {
+  return (((value / 100).round()) * 100).clamp(100, 900);
 }
 
 // ─── Font mode row ───────────────────────────────────────────────────────────
@@ -1021,9 +1224,7 @@ class _BgImageRow extends StatelessWidget {
       onUpdate((p) => p.copyWith(bgImage: dataUri));
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load image: $e')),
-        );
+        GlazeToast.error(context, 'Failed to load image: ', e);
       }
     }
   }

@@ -587,6 +587,14 @@ export class Bridge {
       }
       document.documentElement.style.setProperty(`--${key}`, value);
     }
+
+    const toggleClass = (className, enabled) => {
+      container.classList.toggle(className, !!enabled);
+    };
+    toggleClass('hide-user-avatar', theme['show-user-avatar'] === '0');
+    toggleClass('hide-char-avatar', theme['show-char-avatar'] === '0');
+    toggleClass('hide-user-name', theme['show-user-name'] === '0');
+    toggleClass('hide-char-name', theme['show-char-name'] === '0');
   }
 
   setBottomPadding(px) {

@@ -11,6 +11,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/help_tip.dart';
 import '../../shared/widgets/sheet_view.dart';
+import '../../shared/widgets/glaze_toast.dart';
 import 'preset_list_provider.dart';
 
 class PresetConnectionsSheet extends ConsumerStatefulWidget {
@@ -144,8 +145,10 @@ class _PresetConnectionsSheetState
     final available = chars.where((c) => !existingIds.contains(c.id)).toList();
     if (available.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("${'header_characters'.tr()}: ${'preset_selected'.tr()}")));
+        GlazeToast.show(
+          context,
+          "${'header_characters'.tr()}: ${'preset_selected'.tr()}",
+        );
       }
       return;
     }
@@ -177,8 +180,7 @@ class _PresetConnectionsSheetState
     final available = sessions.where((s) => !existingIds.contains(s.id)).toList();
     if (available.isEmpty) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('no_sessions'.tr())));
+        GlazeToast.show(context, 'no_sessions'.tr());
       }
       return;
     }

@@ -13,6 +13,7 @@ TextTheme _applySafe(TextTheme theme, {
   required Color displayColor,
   required double fontSizeFactor,
   required double letterSpacingDelta,
+  required FontWeight fontWeight,
 }) {
   TextStyle? scale(TextStyle? s) {
     if (s == null) return null;
@@ -20,6 +21,7 @@ TextTheme _applySafe(TextTheme theme, {
       color: s.color ?? bodyColor,
       fontSize: s.fontSize != null ? s.fontSize! * fontSizeFactor : null,
       letterSpacing: (s.letterSpacing ?? 0) + letterSpacingDelta,
+      fontWeight: fontWeight,
     );
   }
 
@@ -145,6 +147,7 @@ class AppTheme {
     final effectiveFont = fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
+    final uiWeight = preset.uiFontWeightValue;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 15.0 : 1.0;
     final glazeColors = GlazeColors.fromPreset(preset, isDark: true);
     final btnBg = _ensureButtonContrast(
@@ -247,6 +250,7 @@ class AppTheme {
         displayColor: colorScheme.onSurface,
         fontSizeFactor: scaleFactor,
         letterSpacingDelta: uiSpacing,
+        fontWeight: uiWeight,
       ),
       extensions: [
         glazeColors,
@@ -272,6 +276,7 @@ class AppTheme {
     final effectiveFont = fontFamily;
     final uiSize = preset.uiFontSizeValue;
     final uiSpacing = preset.uiLetterSpacing;
+    final uiWeight = preset.uiFontWeightValue;
     final scaleFactor = preset.uiFontSize is num ? uiSize / 15.0 : 1.0;
     final glazeColors = GlazeColors.fromPreset(preset, isDark: false);
     final btnBg = _ensureButtonContrast(
@@ -374,6 +379,7 @@ class AppTheme {
         displayColor: colorScheme.onSurface,
         fontSizeFactor: scaleFactor,
         letterSpacingDelta: uiSpacing,
+        fontWeight: uiWeight,
       ),
       extensions: [
         glazeColors,

@@ -148,9 +148,12 @@ class _PreviewChatScene extends StatelessWidget {
             _PreviewStandardMessage(
               character: character,
               isUser: false,
+              showAvatar: preset.showCharAvatar,
+              showName: preset.showCharName,
               metaColor: cs.onSurfaceVariant,
               italicColor: colors.charItalic ?? cs.onSurface,
               quoteColor: colors.charQuote ?? cs.primary,
+              fontWeight: preset.charMessageFontWeightValue,
               text: 'Rei watches in silence, waiting for an answer.',
               quoted: '"Lost?"',
               index: 1,
@@ -163,9 +166,12 @@ class _PreviewChatScene extends StatelessWidget {
                 color: preset.accentColor,
               ),
               isUser: true,
+              showAvatar: preset.showUserAvatar,
+              showName: preset.showUserName,
               metaColor: cs.onSurfaceVariant,
               italicColor: colors.userItalic ?? cs.onSurface,
               quoteColor: colors.userQuote ?? cs.primary,
+              fontWeight: preset.userMessageFontWeightValue,
               text: 'I lean against the wall.',
               quoted: '"Not lost. Just looking."',
               index: 2,
@@ -180,6 +186,8 @@ class _PreviewChatScene extends StatelessWidget {
                 textColor: charText,
                 italicColor: colors.charItalic,
                 quoteColor: colors.charQuote ?? cs.primary,
+                radius: preset.charBubbleRadius,
+                fontWeight: preset.charMessageFontWeightValue,
                 text: 'Rei watches in silence, waiting for an answer.',
                 quoted: '"Lost?"',
               ),
@@ -192,6 +200,8 @@ class _PreviewChatScene extends StatelessWidget {
                 textColor: userText,
                 italicColor: colors.userItalic,
                 quoteColor: colors.userQuote ?? cs.primary,
+                radius: preset.userBubbleRadius,
+                fontWeight: preset.userMessageFontWeightValue,
                 text: 'I lean against the wall.',
                 quoted: '"Not lost. Just looking."',
               ),
@@ -240,9 +250,12 @@ class _PreviewDateSeparator extends StatelessWidget {
 class _PreviewStandardMessage extends StatelessWidget {
   final Character character;
   final bool isUser;
+  final bool showAvatar;
+  final bool showName;
   final Color metaColor;
   final Color italicColor;
   final Color quoteColor;
+  final FontWeight fontWeight;
   final String text;
   final String? quoted;
   final int index;
@@ -251,9 +264,12 @@ class _PreviewStandardMessage extends StatelessWidget {
   const _PreviewStandardMessage({
     required this.character,
     required this.isUser,
+    required this.showAvatar,
+    required this.showName,
     required this.metaColor,
     required this.italicColor,
     required this.quoteColor,
+    required this.fontWeight,
     required this.text,
     required this.quoted,
     required this.index,
@@ -273,28 +289,30 @@ class _PreviewStandardMessage extends StatelessWidget {
         children: [
           Row(
             children: [
-              CircleAvatar(
-                radius: 12,
-                backgroundColor: avatarBg,
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+              if (showAvatar)
+                CircleAvatar(
+                  radius: 12,
+                  backgroundColor: avatarBg,
+                  child: Text(
+                    initial,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                character.name,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: metaColor,
+              if (showAvatar) const SizedBox(width: 8),
+              if (showName)
+                Text(
+                  character.name,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: metaColor,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
+              if (showName) const SizedBox(width: 6),
               Text(
                 '#$index',
                 style: TextStyle(
@@ -320,6 +338,7 @@ class _PreviewStandardMessage extends StatelessWidget {
                 height: 1.4,
                 fontStyle: FontStyle.italic,
                 color: italicColor,
+                fontWeight: fontWeight,
               ),
               children: [
                 TextSpan(text: text),
@@ -351,6 +370,8 @@ class _PreviewBubble extends StatelessWidget {
   final Color textColor;
   final Color? italicColor;
   final Color quoteColor;
+  final double radius;
+  final FontWeight fontWeight;
   final String text;
   final String? quoted;
 
@@ -360,6 +381,8 @@ class _PreviewBubble extends StatelessWidget {
     required this.textColor,
     required this.italicColor,
     required this.quoteColor,
+    required this.radius,
+    required this.fontWeight,
     required this.text,
     required this.quoted,
   });
@@ -373,7 +396,7 @@ class _PreviewBubble extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radius),
           border: Border.all(
             color: context.cs.outline.withValues(alpha: 0.35),
           ),
@@ -385,6 +408,7 @@ class _PreviewBubble extends StatelessWidget {
               height: 1.4,
               fontStyle: FontStyle.italic,
               color: italicColor ?? textColor,
+              fontWeight: fontWeight,
             ),
             children: [
               TextSpan(text: text),

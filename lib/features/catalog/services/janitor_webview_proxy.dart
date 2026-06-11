@@ -190,6 +190,25 @@ class JanitorWebViewProxy {
     }
   }
 
+  /// Returns true if a JanitorAI account token is detectable from [controller]'s
+  /// page (shared cookie jar / `localStorage`). The login sheet uses this to
+  /// confirm the session was actually persisted before it auto-closes — the
+  /// sheet's visible WebView shares the same storage as this headless proxy, so
+  /// a token visible here will be visible to catalog requests too.
+  static Future<bool> hasSessionToken(InAppWebViewController controller) async {
+    try {
+      final res = await controller
+          .callAsyncJavaScript(
+            functionBody: '$_findTokenJs return __glazeFindToken() != null;',
+          )
+          .timeout(const Duration(seconds: 8));
+      return res?.value == true;
+    } catch (e) {
+      _log('hasSessionToken error: $e');
+      return false;
+    }
+  }
+
   /// Clears the JanitorAI account session (cookies + DOM storage) and reloads
   /// the offscreen page so subsequent requests are anonymous again.
   Future<void> logout() async {

@@ -204,9 +204,7 @@ class _GalleryTile extends ConsumerWidget {
                   await ref.read(galleryServiceProvider.future);
               await service.setAsAvatar(entry.characterId, entry.id);
               if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('import_success'.tr())),
-                );
+                GlazeToast.show(context, 'import_success'.tr());
               }
             } catch (e) {
               if (context.mounted) {
@@ -294,9 +292,7 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
                     await ref.read(galleryServiceProvider.future);
                 await service.setAsAvatar(entry.characterId, entry.id);
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('import_success'.tr())),
-                  );
+                  GlazeToast.show(context, 'import_success'.tr());
                 }
               } catch (e) {
                 if (context.mounted) {

@@ -7,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/file_export_service.dart';
 import '../../../shared/theme/theme_preset.dart';
-import '../../../shared/theme/theme_preset_storage.dart';
 import '../../../shared/theme/theme_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glass_surface.dart';
@@ -24,24 +23,12 @@ class ThemePresetScreen extends ConsumerStatefulWidget {
 }
 
 class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
-  ThemePresetStorage? _storage;
-
   // Decoded bg-image bytes keyed by `preset.id`, paired with the bgImage's
   // hash so edits invalidate the cache. Reusing the same `Uint8List` instance
   // across rebuilds keeps `MemoryImage` cached in the global ImageCache and
   // prevents the flicker that happens when the preset list rebuilds (e.g.
   // after applying a preset).
   final Map<String, ({int hash, Uint8List? bytes})> _bgBytesCache = {};
-
-  @override
-  void initState() {
-    super.initState();
-    _initStorage();
-  }
-
-  Future<void> _initStorage() async {
-    _storage = await ThemePresetStorage.create();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -453,36 +440,36 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['json'],
-      dialogTitle: 'Import Theme',
-      withData: true,
-    );
+        allowedExtensions: ['json', 'thm'],
+        dialogTitle: 'Import Theme',
+        withData: true,
+      );
       if (result == null || result.files.isEmpty) return;
 
       final file = result.files.first;
       if (file.path == null) return;
 
-      final preset = await _storage?.importFromFile(file.path!);
+      final preset = await ref
+          .read(themeProvider.notifier)
+          .importPresetFromFile(file.path!);
       if (preset == null) return;
-      await ref.read(themeProvider.notifier).importPreset(preset);
-      _applyPreset(preset);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Theme "${preset.name}" imported')),
-        );
+        GlazeToast.show(context, 'Theme "${preset.name}" imported');
       }
     } on FormatException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Invalid theme file: ${e.message}')),
+        GlazeToast.show(
+          context,
+          'Invalid theme file: ${e.message}',
+          isError: true,
+          position: ToastPosition.top,
+          duration: 4000,
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to import: $e')),
-        );
+        GlazeToast.error(context, 'Failed to import: ', e);
       }
     }
   }

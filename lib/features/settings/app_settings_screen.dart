@@ -10,6 +10,7 @@ import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/menu_group.dart';
 import 'app_settings_provider.dart';
+import 'widgets/chat_layout_picker.dart';
 
 class AppSettingsScreen extends ConsumerStatefulWidget {
   const AppSettingsScreen({super.key});
@@ -284,42 +285,12 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
 
   void _showLayoutPicker(BuildContext context, WidgetRef ref) {
     final preset = ref.read(themeProvider).activePreset;
-    final current = preset.chatLayout;
-    GlazeBottomSheet.show<void>(
+    showChatLayoutPicker(
       context,
-      title: 'menu_chat_layout'.tr(),
-      items: [
-        BottomSheetItem(
-          label: 'layout_default'.tr(),
-          icon: current == 'default'
-              ? Icons.radio_button_checked
-              : Icons.radio_button_off,
-          iconColor: current == 'default'
-              ? context.cs.primary
-              : context.cs.onSurfaceVariant,
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            ref
-                .read(themeProvider.notifier)
-                .updatePreset(preset.copyWith(chatLayout: 'default'));
-          },
-        ),
-        BottomSheetItem(
-          label: 'layout_bubble'.tr(),
-          icon: current == 'bubble'
-              ? Icons.radio_button_checked
-              : Icons.radio_button_off,
-          iconColor: current == 'bubble'
-              ? context.cs.primary
-              : context.cs.onSurfaceVariant,
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            ref
-                .read(themeProvider.notifier)
-                .updatePreset(preset.copyWith(chatLayout: 'bubble'));
-          },
-        ),
-      ],
+      current: preset.chatLayout,
+      onSelect: (layout) => ref
+          .read(themeProvider.notifier)
+          .updatePreset(preset.copyWith(chatLayout: layout)),
     );
   }
 }

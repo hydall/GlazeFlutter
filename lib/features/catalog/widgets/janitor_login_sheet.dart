@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -38,6 +39,10 @@ class _JanitorLoginSheetState extends State<JanitorLoginSheet> {
   InAppWebViewController? _controller;
   bool _busy = false;
 
+  /// Guards against re-entrant close attempts: once a successful login lands we
+  /// pop exactly once, even if several navigation callbacks fire in a row.
+  bool _closing = false;
+
   Future<void> _logout() async {
     setState(() => _busy = true);
     await JanitorWebViewProxy.instance.logout();
@@ -45,6 +50,24 @@ class _JanitorLoginSheetState extends State<JanitorLoginSheet> {
       urlRequest: URLRequest(url: WebUri(JanitorLoginSheet._loginUrl)),
     );
     if (mounted) setState(() => _busy = false);
+  }
+
+  /// Called on every navigation. JanitorAI redirects away from `/login` (to the
+  /// site root) once sign-in succeeds — and the screenshot's success toast lands
+  /// on that root page. So whenever we leave the login page for a janitorai.com
+  /// URL we verify a session token was actually persisted (creds saved) and, if
+  /// so, auto-close the sheet. The token check also prevents false closes when
+  /// the user merely navigates to e.g. the sign-up page.
+  Future<void> _maybeFinishLogin(WebUri? url) async {
+    if (_closing || url == null) return;
+    if (!url.host.endsWith('janitorai.com')) return;
+    if (url.path.startsWith('/login')) return;
+    final controller = _controller;
+    if (controller == null) return;
+    final loggedIn = await JanitorWebViewProxy.hasSessionToken(controller);
+    if (!loggedIn || _closing || !mounted) return;
+    _closing = true;
+    Navigator.of(context).pop();
   }
 
   @override
@@ -91,6 +114,12 @@ class _JanitorLoginSheetState extends State<JanitorLoginSheet> {
                 ),
               },
               onWebViewCreated: (c) => _controller = c,
+              // Full page loads / redirects (e.g. the post-login bounce to the
+              // site root) — confirm the session and close on success.
+              onLoadStop: (_, url) => _maybeFinishLogin(url),
+              // JanitorAI is a SPA: a successful login can route client-side
+              // without a full reload, so watch history pushes too.
+              onUpdateVisitedHistory: (_, url, _) => _maybeFinishLogin(url),
             ),
           ),
         ],
@@ -123,7 +152,7 @@ class _Header extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              'JanitorAI',
+              'janitor_auth_title'.tr(),
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -144,7 +173,7 @@ class _Header extends StatelessWidget {
             TextButton(
               onPressed: onLogout,
               child: Text(
-                'Выйти',
+                'janitor_auth_logout'.tr(),
                 style: TextStyle(color: context.cs.error),
               ),
             ),

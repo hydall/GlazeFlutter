@@ -54,6 +54,15 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final String? themeSyncKey;
   final double elementOpacity;
   final double elementBlur;
+  final int uiFontWeight;
+  final int userMessageFontWeight;
+  final int charMessageFontWeight;
+  final double userBubbleRadius;
+  final double charBubbleRadius;
+  final bool showUserAvatar;
+  final bool showCharAvatar;
+  final bool showUserName;
+  final bool showCharName;
   final int greetingTotal;
   final String? chatFontName;
   final String? chatFontDataUrl;
@@ -104,6 +113,15 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.themeSyncKey,
     this.elementOpacity = 0.8,
     this.elementBlur = 12,
+    this.uiFontWeight = 400,
+    this.userMessageFontWeight = 400,
+    this.charMessageFontWeight = 400,
+    this.userBubbleRadius = 18,
+    this.charBubbleRadius = 18,
+    this.showUserAvatar = true,
+    this.showCharAvatar = true,
+    this.showUserName = true,
+    this.showCharName = true,
     this.greetingTotal = 0,
     this.chatFontName,
     this.chatFontDataUrl,
@@ -508,6 +526,15 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       themeSyncKey: w.themeSyncKey,
       elementOpacity: w.elementOpacity,
       elementBlur: w.elementBlur,
+      uiFontWeight: w.uiFontWeight,
+      userMessageFontWeight: w.userMessageFontWeight,
+      charMessageFontWeight: w.charMessageFontWeight,
+      userBubbleRadius: w.userBubbleRadius,
+      charBubbleRadius: w.charBubbleRadius,
+      showUserAvatar: w.showUserAvatar,
+      showCharAvatar: w.showCharAvatar,
+      showUserName: w.showUserName,
+      showCharName: w.showCharName,
       chatFontName: w.chatFontName,
       chatFontDataUrl: w.chatFontDataUrl,
       chatFontSize: w.chatFontSize,
@@ -655,6 +682,15 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         chatFontSize: widget.chatFontSize,
         chatLayout: widget.chatLayout,
         bgDim: widget.bgDim,
+        uiFontWeight: widget.uiFontWeight,
+        userMessageFontWeight: widget.userMessageFontWeight,
+        charMessageFontWeight: widget.charMessageFontWeight,
+        userBubbleRadius: widget.userBubbleRadius,
+        charBubbleRadius: widget.charBubbleRadius,
+        showUserAvatar: widget.showUserAvatar,
+        showCharAvatar: widget.showCharAvatar,
+        showUserName: widget.showUserName,
+        showCharName: widget.showCharName,
       ),
     );
   }
