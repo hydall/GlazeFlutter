@@ -104,6 +104,8 @@ class ChatInputBar extends ConsumerStatefulWidget {
 }
 
 class _ChatInputBarState extends ConsumerState<ChatInputBar> {
+  static const double _keyboardDismissDragThreshold = 28;
+
   late final TextEditingController _controller;
   final _guidanceController = TextEditingController();
   bool _guidanceMode = false;
@@ -111,6 +113,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final _internalFocusNode = FocusNode();
   Uint8List? _attachedImageBytes;
   String? _attachedImageDataUrl;
+  double _verticalDragDistance = 0;
 
   @override
   void initState() {
@@ -201,6 +204,28 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   }
 
   FocusNode get _effectiveFocusNode => widget.focusNode ?? _internalFocusNode;
+
+  void _resetVerticalDrag() {
+    _verticalDragDistance = 0;
+  }
+
+  void _handleVerticalDragUpdate(DragUpdateDetails details) {
+    final delta = details.primaryDelta ?? 0;
+    if (delta <= 0) {
+      _verticalDragDistance = 0;
+      return;
+    }
+    _verticalDragDistance += delta;
+  }
+
+  void _handleVerticalDragEnd(BuildContext context) {
+    final keyboardVisible = MediaQuery.viewInsetsOf(context).bottom > 0;
+    if (keyboardVisible &&
+        _verticalDragDistance >= _keyboardDismissDragThreshold) {
+      FocusManager.instance.primaryFocus?.unfocus();
+    }
+    _resetVerticalDrag();
+  }
 
   void _handleSend() {
     final text = _controller.text;
@@ -364,196 +389,204 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         _attachedImageDataUrl != null;
     final isGenerating = widget.isGenerating || widget.isGeneratingImage;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_attachedImageBytes != null) ...[
-            _AttachedImagePreview(
-              imageBytes: _attachedImageBytes!,
-              onClear: _clearImage,
-              border: uiBorder,
-            ),
-            const SizedBox(height: 8),
-          ],
-          if (_guidanceMode) ...[
-            Container(
-              constraints: const BoxConstraints(minHeight: 44),
-              decoration: BoxDecoration(
-                color: Colors.orange.withValues(alpha: 0.08),
-                border: Border.all(
-                  color: Colors.orange.withValues(alpha: 0.3),
-                  width: preset.borderWidth.clamp(1.0, double.infinity),
-                ),
-                borderRadius: BorderRadius.circular(16),
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onVerticalDragStart: (_) => _resetVerticalDrag(),
+      onVerticalDragUpdate: _handleVerticalDragUpdate,
+      onVerticalDragEnd: (_) => _handleVerticalDragEnd(context),
+      onVerticalDragCancel: _resetVerticalDrag,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_attachedImageBytes != null) ...[
+              _AttachedImagePreview(
+                imageBytes: _attachedImageBytes!,
+                onClear: _clearImage,
+                border: uiBorder,
               ),
-              child: TextField(
-                controller: _guidanceController,
-                readOnly: widget.isEditingMessage,
-                canRequestFocus: !widget.isEditingMessage,
-                enableInteractiveSelection: !widget.isEditingMessage,
-                showCursor: !widget.isEditingMessage,
-                maxLines: 3,
-                minLines: 1,
-                textCapitalization: TextCapitalization.sentences,
-                keyboardType: TextInputType.multiline,
-                textInputAction: TextInputAction.newline,
-                style: TextStyle(
-                  fontSize: 14 * scale,
-                  color: Colors.orange,
-                  letterSpacing: letterSpacing,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'Guidance instructions...',
-                  hintStyle: TextStyle(
-                    color: Colors.orange.withValues(alpha: 0.5),
-                    fontSize: 14 * scale,
-                    letterSpacing: letterSpacing,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.tips_and_updates_outlined,
-                    color: Colors.orange.withValues(alpha: 0.7),
-                    size: 20,
-                  ),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  filled: false,
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-          ],
-          Material(
-            color: Colors.transparent,
-            elevation: 0,
-            borderRadius: BorderRadius.circular(28),
-            child: GlassSurface(
-              borderRadius: BorderRadius.circular(28),
-              tint: context.cs.surface,
-              border: _guidanceMode
-                  ? Border.all(
-                      color: Colors.orange.withValues(alpha: 0.3),
-                      width: preset.borderWidth.clamp(1.0, double.infinity),
-                    )
-                  : uiBorder,
-              child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 56),
-              child: TextField(
-                controller: _controller,
-                focusNode: _effectiveFocusNode,
-                readOnly: widget.isEditingMessage,
-                canRequestFocus: !widget.isEditingMessage,
-                enableInteractiveSelection: !widget.isEditingMessage,
-                showCursor: !widget.isEditingMessage,
-                maxLines: 5,
-                minLines: 1,
-                textCapitalization: TextCapitalization.sentences,
-                textInputAction: widget.virtualKeyboardSend
-                    ? TextInputAction.send
-                    : TextInputAction.newline,
-                onSubmitted: widget.virtualKeyboardSend
-                    ? (_) => _handleSend()
-                    : null,
-                style: TextStyle(
-                  fontSize: 16 * scale,
-                  color: textColor,
-                  letterSpacing: letterSpacing,
-                ),
-                decoration: InputDecoration(
-                  hintText: _guidanceMode
-                      ? 'Message with guidance...'
-                      : 'Type a message...',
-                  hintStyle: TextStyle(
-                    color: secondaryColor,
-                    fontSize: 16 * scale,
-                    letterSpacing: letterSpacing,
-                  ),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 16,
-                  ),
-                  filled: false,
-                ),
-              ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _CircleBtn(
-                    icon: Icons.auto_awesome,
-                    onTap: widget.onMagicDrawer,
-                    color: widget.isDrawerOpen ? Colors.amber : null,
-                    batterySaver: widget.batterySaver,
-                  ),
-                  const SizedBox(width: 8),
-                  _CircleBtn(
-                    icon: Icons.attach_file,
-                    onTap: _pickImage,
-                    batterySaver: widget.batterySaver,
-                  ),
-                  const SizedBox(width: 8),
-                  _CircleBtn(
-                    icon: Icons.fullscreen,
-                    onTap: widget.onFullScreen,
-                    batterySaver: widget.batterySaver,
-                  ),
-                  const SizedBox(width: 8),
-                  _CircleBtn(
-                    icon: Icons.north_east,
-                    onTap: () => setState(() {
-                      _guidanceMode = !_guidanceMode;
-                      if (!_guidanceMode) _guidanceController.clear();
-                    }),
-                    color: _guidanceMode ? Colors.orange : null,
-                    batterySaver: widget.batterySaver,
-                  ),
-                  const SizedBox(width: 8),
-                  _CircleBtn(
-                    icon: Icons.keyboard_double_arrow_right,
-                    onTap: widget.onQuickReplies,
-                    color: widget.isQuickRepliesOpen ? Colors.amber : null,
-                    batterySaver: widget.batterySaver,
-                  ),
-                ],
-              ),
-              _SendBtn(
-                icon: isGenerating
-                    ? Icons.stop_rounded
-                    : hasContent
-                        ? (_guidanceMode && _controller.text.trim().isEmpty
-                            ? Icons.check_rounded
-                            : Icons.send_rounded)
-                        : Icons.account_circle_rounded,
-                batterySaver: widget.batterySaver,
-                onTap: () {
-                  if (isGenerating) {
-                    widget.onStop?.call();
-                  } else if (hasContent) {
-                    _handleSend();
-                  } else {
-                    widget.onImpersonate?.call();
-                  }
-                },
-              ),
+              const SizedBox(height: 8),
             ],
-          ),
-        ],
+            if (_guidanceMode) ...[
+              Container(
+                constraints: const BoxConstraints(minHeight: 44),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withValues(alpha: 0.08),
+                  border: Border.all(
+                    color: Colors.orange.withValues(alpha: 0.3),
+                    width: preset.borderWidth.clamp(1.0, double.infinity),
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: TextField(
+                  controller: _guidanceController,
+                  readOnly: widget.isEditingMessage,
+                  canRequestFocus: !widget.isEditingMessage,
+                  enableInteractiveSelection: !widget.isEditingMessage,
+                  showCursor: !widget.isEditingMessage,
+                  maxLines: 3,
+                  minLines: 1,
+                  textCapitalization: TextCapitalization.sentences,
+                  keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
+                  style: TextStyle(
+                    fontSize: 14 * scale,
+                    color: Colors.orange,
+                    letterSpacing: letterSpacing,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Guidance instructions...',
+                    hintStyle: TextStyle(
+                      color: Colors.orange.withValues(alpha: 0.5),
+                      fontSize: 14 * scale,
+                      letterSpacing: letterSpacing,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.tips_and_updates_outlined,
+                      color: Colors.orange.withValues(alpha: 0.7),
+                      size: 20,
+                    ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    filled: false,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
+            Material(
+              color: Colors.transparent,
+              elevation: 0,
+              borderRadius: BorderRadius.circular(28),
+              child: GlassSurface(
+                borderRadius: BorderRadius.circular(28),
+                tint: context.cs.surface,
+                border: _guidanceMode
+                    ? Border.all(
+                        color: Colors.orange.withValues(alpha: 0.3),
+                        width: preset.borderWidth.clamp(1.0, double.infinity),
+                      )
+                    : uiBorder,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 56),
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _effectiveFocusNode,
+                    readOnly: widget.isEditingMessage,
+                    canRequestFocus: !widget.isEditingMessage,
+                    enableInteractiveSelection: !widget.isEditingMessage,
+                    showCursor: !widget.isEditingMessage,
+                    maxLines: 5,
+                    minLines: 1,
+                    textCapitalization: TextCapitalization.sentences,
+                    textInputAction: widget.virtualKeyboardSend
+                        ? TextInputAction.send
+                        : TextInputAction.newline,
+                    onSubmitted: widget.virtualKeyboardSend
+                        ? (_) => _handleSend()
+                        : null,
+                    style: TextStyle(
+                      fontSize: 16 * scale,
+                      color: textColor,
+                      letterSpacing: letterSpacing,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: _guidanceMode
+                          ? 'Message with guidance...'
+                          : 'Type a message...',
+                      hintStyle: TextStyle(
+                        color: secondaryColor,
+                        fontSize: 16 * scale,
+                        letterSpacing: letterSpacing,
+                      ),
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 16,
+                      ),
+                      filled: false,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _CircleBtn(
+                      icon: Icons.auto_awesome,
+                      onTap: widget.onMagicDrawer,
+                      color: widget.isDrawerOpen ? Colors.amber : null,
+                      batterySaver: widget.batterySaver,
+                    ),
+                    const SizedBox(width: 8),
+                    _CircleBtn(
+                      icon: Icons.attach_file,
+                      onTap: _pickImage,
+                      batterySaver: widget.batterySaver,
+                    ),
+                    const SizedBox(width: 8),
+                    _CircleBtn(
+                      icon: Icons.fullscreen,
+                      onTap: widget.onFullScreen,
+                      batterySaver: widget.batterySaver,
+                    ),
+                    const SizedBox(width: 8),
+                    _CircleBtn(
+                      icon: Icons.north_east,
+                      onTap: () => setState(() {
+                        _guidanceMode = !_guidanceMode;
+                        if (!_guidanceMode) _guidanceController.clear();
+                      }),
+                      color: _guidanceMode ? Colors.orange : null,
+                      batterySaver: widget.batterySaver,
+                    ),
+                    const SizedBox(width: 8),
+                    _CircleBtn(
+                      icon: Icons.keyboard_double_arrow_right,
+                      onTap: widget.onQuickReplies,
+                      color: widget.isQuickRepliesOpen ? Colors.amber : null,
+                      batterySaver: widget.batterySaver,
+                    ),
+                  ],
+                ),
+                _SendBtn(
+                  icon: isGenerating
+                      ? Icons.stop_rounded
+                      : hasContent
+                            ? (_guidanceMode &&
+                                      _controller.text.trim().isEmpty
+                                  ? Icons.check_rounded
+                                  : Icons.send_rounded)
+                            : Icons.account_circle_rounded,
+                  batterySaver: widget.batterySaver,
+                  onTap: () {
+                    if (isGenerating) {
+                      widget.onStop?.call();
+                    } else if (hasContent) {
+                      _handleSend();
+                    } else {
+                      widget.onImpersonate?.call();
+                    }
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

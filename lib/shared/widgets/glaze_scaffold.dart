@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -54,6 +55,11 @@ class GlazeScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final backHandler = onBack ?? () => Navigator.of(context).maybePop();
+    final isIosLikeTargetPlatform =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS);
+    final navigatorCanPop = Navigator.of(context).canPop();
 
     final header = SafeArea(
       bottom: false,
@@ -95,7 +101,7 @@ class GlazeScaffold extends StatelessWidget {
         : animatedHeader;
 
     final scaffold = PopScope(
-      canPop: !showBack,
+      canPop: isIosLikeTargetPlatform ? navigatorCanPop : !showBack,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         backHandler();

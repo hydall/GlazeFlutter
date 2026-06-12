@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -55,6 +57,10 @@ class _ShellScreenState extends State<ShellScreen>
   Widget build(BuildContext context) {
     final currentIndex = widget.navigationShell.currentIndex;
     final location = GoRouterState.of(context).uri.toString();
+    final isIosLikeTargetPlatform =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS);
     final hideNavBarRoutes = <String>{
       '/menu/about',
     };
@@ -64,12 +70,13 @@ class _ShellScreenState extends State<ShellScreen>
         canPop: false,
         onPopInvokedWithResult: (didPop, result) {
           if (didPop) return;
+          if (isIosLikeTargetPlatform) return;
           final now = DateTime.now().millisecondsSinceEpoch;
           if (now - _lastBackPress < 2000) {
             SystemNavigator.pop();
           } else {
             _lastBackPress = now;
-            GlazeToast.show(context, 'Press again to exit');
+            GlazeToast.show(context, 'nav_press_again_to_exit'.tr());
           }
         },
         child: Scaffold(

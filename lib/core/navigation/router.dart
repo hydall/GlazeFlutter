@@ -1,3 +1,5 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -40,6 +42,20 @@ CustomTransitionPage<void> _overlayPage({
     child: child,
     transitionsBuilder: (_, _, _, child) => child,
   );
+}
+
+Page<void> _adaptivePage({
+  required GoRouterState state,
+  required Widget child,
+}) {
+  final isIosLikeTargetPlatform =
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS);
+  if (isIosLikeTargetPlatform) {
+    return CupertinoPage<void>(key: state.pageKey, child: child);
+  }
+  return _overlayPage(state: state, child: child);
 }
 
 /// Constructs a [GoRouter] with the given [navigatorKey].
@@ -90,42 +106,42 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
               routes: [
                 GoRoute(
                   path: 'api',
-                  pageBuilder: (_, state) => _overlayPage(
+                  pageBuilder: (_, state) => _adaptivePage(
                     state: state,
                     child: const ApiSettingsScreen(startExpanded: true),
                   ),
                 ),
                 GoRoute(
                   path: 'personas',
-                  pageBuilder: (_, state) => _overlayPage(
+                  pageBuilder: (_, state) => _adaptivePage(
                     state: state,
                     child: const PersonaListScreen(startExpanded: true),
                   ),
                 ),
                 GoRoute(
                   path: 'presets',
-                  pageBuilder: (_, state) => _overlayPage(
+                  pageBuilder: (_, state) => _adaptivePage(
                     state: state,
                     child: const PresetListScreen(startExpanded: true),
                   ),
                 ),
                 GoRoute(
                   path: 'regex',
-                  pageBuilder: (_, state) => _overlayPage(
+                  pageBuilder: (_, state) => _adaptivePage(
                     state: state,
                     child: const RegexSheet(startExpanded: true),
                   ),
                 ),
                 GoRoute(
                   path: 'lorebooks',
-                  pageBuilder: (_, state) => _overlayPage(
+                  pageBuilder: (_, state) => _adaptivePage(
                     state: state,
                     child: const LorebookListScreen(),
                   ),
                   routes: [
                     GoRoute(
                       path: 'settings',
-                      pageBuilder: (_, state) => _overlayPage(
+                      pageBuilder: (_, state) => _adaptivePage(
                         state: state,
                         child: const LorebookGlobalSettingsScreen(),
                       ),
@@ -134,7 +150,7 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
                 ),
                 GoRoute(
                   path: 'embeddings',
-                  pageBuilder: (_, state) => _overlayPage(
+                  pageBuilder: (_, state) => _adaptivePage(
                     state: state,
                     child: const EmbeddingSettingsScreen(),
                   ),
@@ -152,14 +168,14 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
               routes: [
                 GoRoute(
                   path: 'settings',
-                  pageBuilder: (_, state) => _overlayPage(
+                  pageBuilder: (_, state) => _adaptivePage(
                     state: state,
                     child: const AppSettingsScreen(),
                   ),
                 ),
                 GoRoute(
                   path: 'themes',
-                  pageBuilder: (_, state) => _overlayPage(
+                  pageBuilder: (_, state) => _adaptivePage(
                     state: state,
                     child: const ThemePresetScreen(),
                   ),
@@ -167,11 +183,11 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
                 GoRoute(
                   path: 'about',
                   pageBuilder: (_, state) =>
-                      _overlayPage(state: state, child: const AboutScreen()),
+                      _adaptivePage(state: state, child: const AboutScreen()),
                 ),
                 GoRoute(
                   path: 'glossary',
-                  pageBuilder: (_, state) => _overlayPage(
+                  pageBuilder: (_, state) => _adaptivePage(
                     state: state,
                     child: const GlossarySheet(startExpanded: true),
                   ),
@@ -188,21 +204,24 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
               routes: [
                 GoRoute(
                   path: ':charId',
-                  builder: (_, state) {
+                  pageBuilder: (_, state) {
                     final charId = state.pathParameters['charId']!;
                     final sessionIdx = int.tryParse(
                       state.uri.queryParameters['session'] ?? '',
                     );
                     final isNew = state.uri.queryParameters['new'] == '1';
                     final targetMsgId = state.uri.queryParameters['msg'];
-                    return ChatScreen(
-                      charId: charId,
-                      initialSessionIndex: sessionIdx,
-                      forceNewSession: isNew,
-                      targetMessageId:
-                          (targetMsgId != null && targetMsgId.isNotEmpty)
-                          ? targetMsgId
-                          : null,
+                    return _adaptivePage(
+                      state: state,
+                      child: ChatScreen(
+                        charId: charId,
+                        initialSessionIndex: sessionIdx,
+                        forceNewSession: isNew,
+                        targetMessageId:
+                            (targetMsgId != null && targetMsgId.isNotEmpty)
+                                ? targetMsgId
+                                : null,
+                      ),
                     );
                   },
                 ),
@@ -214,23 +233,33 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
     ),
     GoRoute(
       path: '/character/create',
-      builder: (_, _) =>
-          CharacterEditorScreen(charId: generateId(), isNew: true),
+      pageBuilder: (_, state) => _adaptivePage(
+        state: state,
+        child: CharacterEditorScreen(charId: generateId(), isNew: true),
+      ),
     ),
     GoRoute(
       path: '/character/:charId',
-      builder: (_, state) =>
-          CharacterDetailSheetLauncher(charId: state.pathParameters['charId']!),
+      pageBuilder: (_, state) => _adaptivePage(
+        state: state,
+        child: CharacterDetailSheetLauncher(
+          charId: state.pathParameters['charId']!,
+        ),
+      ),
     ),
     GoRoute(
       path: '/character/:charId/edit',
-      builder: (_, state) =>
-          CharacterEditorScreen(charId: state.pathParameters['charId']!),
+      pageBuilder: (_, state) => _adaptivePage(
+        state: state,
+        child: CharacterEditorScreen(charId: state.pathParameters['charId']!),
+      ),
     ),
     GoRoute(
       path: '/character/:charId/gallery',
-      builder: (_, state) =>
-          GalleryScreen(charId: state.pathParameters['charId']!),
+      pageBuilder: (_, state) => _adaptivePage(
+        state: state,
+        child: GalleryScreen(charId: state.pathParameters['charId']!),
+      ),
     ),
     GoRoute(
       path: '/sync',
@@ -244,7 +273,7 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
       routes: [
         GoRoute(
           path: 'preset-editor/:presetId',
-          pageBuilder: (_, state) => _overlayPage(
+          pageBuilder: (_, state) => _adaptivePage(
             state: state,
             child: PresetEditorScreen(
               presetId: state.pathParameters['presetId']!,

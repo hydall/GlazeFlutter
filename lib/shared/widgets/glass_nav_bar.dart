@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -30,22 +33,22 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
 
   static const _items = [
     _NavItem(
-      label: 'Chats',
+      labelKey: 'tab_dialogs',
       svgPath:
           'M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z',
     ),
     _NavItem(
-      label: 'Characters',
+      labelKey: 'tab_characters',
       svgPath:
           'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z',
     ),
     _NavItem(
-      label: 'Tools',
+      labelKey: 'tab_tools',
       svgPath:
           'm21.71 20.29l-1.42 1.42a1 1 0 0 1-1.41 0L7 9.85A3.81 3.81 0 0 1 6 10a4 4 0 0 1-3.78-5.3l2.54 2.54l.53-.53l1.42-1.42l.53-.53L4.7 2.22A4 4 0 0 1 10 6a3.81 3.81 0 0 1-.15 1l11.86 11.88a1 1 0 0 1 0 1.41M2.29 18.88a1 1 0 0 0 0 1.41l1.42 1.42a1 1 0 0 0 1.41 0l5.47-5.46l-2.83-2.83M20 2l-4 2v2l-2.17 2.17l2 2L18 8h2l2-4Z',
     ),
     _NavItem(
-      label: 'Menu',
+      labelKey: 'tab_more',
       svgPath: 'M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z',
     ),
   ];
@@ -66,6 +69,10 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
+    final isIosLikeTargetPlatform =
+        !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.iOS ||
+            defaultTargetPlatform == TargetPlatform.macOS);
     final batterySaver =
         ref.watch(appSettingsProvider).value?.batterySaver ?? false;
 
@@ -78,7 +85,12 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
           (i) => _NavButton(
             item: _items[i],
             isActive: i == widget.currentIndex,
-            onTap: () => widget.onTap(i),
+            onTap: () {
+              if (i != widget.currentIndex) {
+                HapticFeedback.selectionClick();
+              }
+              widget.onTap(i);
+            },
           ),
         ),
       ),
@@ -86,7 +98,12 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
 
     return Padding(
       key: _key,
-      padding: EdgeInsets.fromLTRB(16, 0, 16, 16 + bottomPad),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        0,
+        16,
+        (isIosLikeTargetPlatform ? 6 : 16) + bottomPad,
+      ),
       child: GlassSurface(
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: context.cs.outlineVariant),
@@ -97,10 +114,10 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
 }
 
 class _NavItem {
-  final String label;
+  final String labelKey;
   final String svgPath;
 
-  const _NavItem({required this.label, required this.svgPath});
+  const _NavItem({required this.labelKey, required this.svgPath});
 }
 
 class _NavButton extends StatelessWidget {
@@ -117,6 +134,7 @@ class _NavButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final target = isActive ? 1.0 : 0.0;
+    final label = item.labelKey.tr();
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
@@ -164,7 +182,7 @@ class _NavButton extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  item.label,
+                  label,
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
