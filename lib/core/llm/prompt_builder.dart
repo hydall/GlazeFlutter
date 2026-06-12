@@ -100,6 +100,8 @@ class PromptPayload {
   final String memoryPackingMode;
   final int memoryExcerptTokensPerChunk;
   final int memoryExcerptChunksPerEntry;
+  final int chunkFirstTopEntries;
+  final int chunkFirstTopChunks;
 
   const PromptPayload({
     required this.character,
@@ -133,6 +135,8 @@ class PromptPayload {
     this.memoryPackingMode = 'hybrid',
     this.memoryExcerptTokensPerChunk = defaultMemoryExcerptTokensPerEntry,
     this.memoryExcerptChunksPerEntry = defaultMemoryExcerptChunksPerEntry,
+    this.chunkFirstTopEntries = 3,
+    this.chunkFirstTopChunks = 1,
   });
 }
 
@@ -885,7 +889,7 @@ PromptResult _assembleMessages({
     contextSize: payload.apiConfig.contextSize,
     maxTokens: payload.apiConfig.maxTokens,
   );
-  final historyOnly = messages.where((m) => m.isHistory).toList();
+  var historyOnly = messages.where((m) => m.isHistory).toList();
 
   var breakdown = calculator.calculate(
     staticBlocks: attributionBlocks,
@@ -905,6 +909,7 @@ PromptResult _assembleMessages({
     final refiltered = _refilterMemorySelection(
       selection,
       visibleMessageIds: breakdown.visibleMessageIds,
+      chunkBudgeting: payload.memoryPackingMode == 'chunk_first',
     );
     finalMemorySelection = refiltered;
     final useExcerptPacking =
@@ -917,6 +922,8 @@ PromptResult _assembleMessages({
             packingMode: payload.memoryPackingMode,
             maxExcerptTokensPerEntry: payload.memoryExcerptTokensPerChunk,
             maxExcerptChunksPerEntry: payload.memoryExcerptChunksPerEntry,
+            chunkFirstTopEntries: payload.chunkFirstTopEntries,
+            chunkFirstTopChunks: payload.chunkFirstTopChunks,
           );
     finalExcerptSelection = excerpted;
     if (excerpted.items.isNotEmpty) {
@@ -934,7 +941,10 @@ PromptResult _assembleMessages({
       if (replacedMacro) {
         memoryContent = rebuilt.macroContent;
         memoryMacroContent = rebuilt.macroContent;
+        historyOnly = messages.where((m) => m.isHistory).toList(growable: false);
+        macroTokens['memory'] = estimateTokens(memoryMacroContent);
       } else if (payload.memoryInjectionTarget == 'hard_block') {
+        memoryContent = rebuilt.content;
         final hasMemoryBlock =
             messages.any((m) => m.blockId == 'memory') ||
             appendedEntries.any((b) => b.id == 'memory');
@@ -983,9 +993,10 @@ PromptResult _assembleMessages({
   var historySeen = 0;
   for (final msg in messages) {
     if (msg.isHistory) {
-      final trimmedIndex = historySeen - breakdown.cutoffIndex;
-      if (trimmedIndex >= 0 && trimmedIndex < breakdown.trimmedHistory.length) {
-        finalMessages.add(breakdown.trimmedHistory[trimmedIndex]);
+      if (historySeen >= breakdown.cutoffIndex) {
+        // Use live history messages so deferred {{memory}} replacement on
+        // appendToLastMessage blocks is not lost to a stale trimmed copy.
+        finalMessages.add(msg);
       }
       historySeen++;
     } else if (msg.content.trim().isNotEmpty) {
@@ -1156,6 +1167,7 @@ class _RebuiltMemoryContent {
 MemorySelection _refilterMemorySelection(
   MemorySelection previous, {
   required Set<String> visibleMessageIds,
+  bool chunkBudgeting = false,
 }) {
   if (previous.selectionMode == 'legacy') return previous;
   if (visibleMessageIds.isEmpty) return previous;
@@ -1181,6 +1193,7 @@ MemorySelection _refilterMemorySelection(
           : previous.entries.length,
       sourceWindowExclusion: true,
       diversityAware: false,
+      chunkBudgeting: chunkBudgeting,
     ),
   );
 }
@@ -1288,8 +1301,8 @@ Map<String, dynamic> _finalizeMemoryCoverage(
     selection,
     budget: budget,
     excerptSelection: excerpted,
+    excerptTokensPerChunk: tokensPerChunk,
   ).toJson();
-  final previousDiagnostics = coverage['diagnostics'];
   return {
     ...coverage,
     'packingMode': packingMode,
@@ -1297,9 +1310,7 @@ Map<String, dynamic> _finalizeMemoryCoverage(
     'excerptChunksPerEntry': chunksPerEntry,
     'entryIds': excerpted.entries.map((e) => e.id).toList(growable: false),
     'budgetTrimmed': excerpted.budgetTrimmed,
-    'diagnostics': previousDiagnostics is Map
-        ? {...Map<String, dynamic>.from(previousDiagnostics), ...diagnostics}
-        : diagnostics,
+    'diagnostics': diagnostics,
   };
 }
 

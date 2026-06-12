@@ -233,6 +233,7 @@ class MemoryInjectionService {
         importanceWeight: book.settings.importanceWeight,
         sourceWindowExclusion: book.settings.sourceWindowExclusion,
         currentMessageIndex: history.length,
+        chunkBudgeting: book.settings.memoryPackingMode == 'chunk_first',
       ),
     );
     return finish(selection, budget: budget, settings: book.settings);
@@ -288,6 +289,8 @@ class MemoryInjectionService {
             packingMode: settings.memoryPackingMode,
             maxExcerptTokensPerEntry: settings.memoryExcerptTokensPerChunk,
             maxExcerptChunksPerEntry: settings.memoryExcerptChunksPerEntry,
+            chunkFirstTopEntries: settings.chunkFirstTopEntries,
+            chunkFirstTopChunks: settings.chunkFirstTopChunks,
           )
         : MemoryExcerptSelector.fullEntries(selection);
     final maxInjectionTokens = selection.budgetTokens;

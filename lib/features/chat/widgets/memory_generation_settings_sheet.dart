@@ -35,6 +35,8 @@ class _MemoryGenerationSettingsSheetState
   late String _memoryPackingMode;
   late int _memoryExcerptTokensPerChunk;
   late int _memoryExcerptChunksPerEntry;
+  late int _chunkFirstTopEntries;
+  late int _chunkFirstTopChunks;
   late String _memoryBudgetPreset;
   late int? _maxInjectedTokens;
   late int _autoCreateInterval;
@@ -95,6 +97,9 @@ class _MemoryGenerationSettingsSheetState
       2000,
     );
     _memoryExcerptChunksPerEntry = s.memoryExcerptChunksPerEntry.clamp(1, 10);
+    _chunkFirstTopEntries = s.chunkFirstTopEntries.clamp(0, 20);
+    _chunkFirstTopChunks = (s.chunkFirstTopChunks <= 0 ? 1 : s.chunkFirstTopChunks)
+        .clamp(1, 10);
     _memoryBudgetPreset = _normalizeMemoryBudgetPreset(
       s.memoryBudgetPreset,
       s.maxInjectedTokens,
@@ -191,6 +196,8 @@ class _MemoryGenerationSettingsSheetState
       memoryPackingMode: _memoryPackingMode,
       memoryExcerptTokensPerChunk: _memoryExcerptTokensPerChunk,
       memoryExcerptChunksPerEntry: _memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: _chunkFirstTopEntries,
+      chunkFirstTopChunks: _chunkFirstTopChunks,
       maxInjectedTokens: _maxInjectedTokens,
       memoryBudgetPreset: _memoryBudgetPreset,
       autoCreateInterval: _autoCreateInterval,
@@ -486,6 +493,28 @@ class _MemoryGenerationSettingsSheetState
               helpTitle: 'memory_excerpt_chunks_per_entry'.tr(),
               helpBody: 'memory_excerpt_chunks_per_entry_help'.tr(),
             ),
+            if (_memoryPackingMode == 'chunk_first') ...[
+              const SizedBox(height: 8),
+              _numberField(
+                'memory_chunk_first_top_entries'.tr(),
+                _chunkFirstTopEntries,
+                (v) => setState(() => _chunkFirstTopEntries = v),
+                min: 0,
+                max: 20,
+                helpTitle: 'memory_chunk_first_top_entries'.tr(),
+                helpBody: 'memory_chunk_first_top_entries_help'.tr(),
+              ),
+              if (_chunkFirstTopEntries > 0)
+                _numberField(
+                  'memory_chunk_first_top_chunks'.tr(),
+                  _chunkFirstTopChunks,
+                  (v) => setState(() => _chunkFirstTopChunks = v),
+                  min: 1,
+                  max: 10,
+                  helpTitle: 'memory_chunk_first_top_chunks'.tr(),
+                  helpBody: 'memory_chunk_first_top_chunks_help'.tr(),
+                ),
+            ],
           ],
           const SizedBox(height: 8),
           _switchTile(
@@ -1226,6 +1255,8 @@ class _MemoryGenerationSettingsSheetState
           memoryPackingMode: current.memoryPackingMode,
           memoryExcerptTokensPerChunk: current.memoryExcerptTokensPerChunk,
           memoryExcerptChunksPerEntry: current.memoryExcerptChunksPerEntry,
+          chunkFirstTopEntries: current.chunkFirstTopEntries,
+          chunkFirstTopChunks: current.chunkFirstTopChunks,
           maxInjectedTokens: current.maxInjectedTokens,
           memoryBudgetPreset: current.memoryBudgetPreset,
           autoCreateInterval: current.autoCreateInterval,

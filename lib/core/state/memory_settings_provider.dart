@@ -21,6 +21,8 @@ abstract class MemoryGlobalSettings with _$MemoryGlobalSettings {
     @Default('hybrid') String memoryPackingMode,
     @Default(500) int memoryExcerptTokensPerChunk,
     @Default(2) int memoryExcerptChunksPerEntry,
+    @Default(3) int chunkFirstTopEntries,
+    @Default(1) int chunkFirstTopChunks,
     int? maxInjectedTokens,
     @Default('auto') String memoryBudgetPreset,
     @Default(15) int autoCreateInterval,

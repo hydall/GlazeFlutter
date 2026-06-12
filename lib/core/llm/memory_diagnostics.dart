@@ -26,6 +26,8 @@ class MemoryCandidateDiagnostics {
   final int originalTokenCost;
   final List<int> excerptChunkIndexes;
   final List<String> excerptMatchedTerms;
+  final int excerptChunksTotal;
+  final int excerptChunksInjected;
 
   const MemoryCandidateDiagnostics({
     required this.entryId,
@@ -50,6 +52,8 @@ class MemoryCandidateDiagnostics {
     this.originalTokenCost = 0,
     this.excerptChunkIndexes = const [],
     this.excerptMatchedTerms = const [],
+    this.excerptChunksTotal = 0,
+    this.excerptChunksInjected = 0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -75,6 +79,8 @@ class MemoryCandidateDiagnostics {
     'originalTokenCost': originalTokenCost,
     'excerptChunkIndexes': excerptChunkIndexes,
     'excerptMatchedTerms': excerptMatchedTerms,
+    'excerptChunksTotal': excerptChunksTotal,
+    'excerptChunksInjected': excerptChunksInjected,
   };
 }
 
@@ -124,6 +130,8 @@ class MemoryDiagnostics {
     String memoryMode = 'fast',
     bool factualContinuityGuardEnabled = false,
     MemoryExcerptSelection? excerptSelection,
+    int excerptTokensPerChunk = defaultMemoryExcerptTokensPerEntry,
+    int Function(String text)? chunkTokenCounter,
   }) {
     final selectedIds = (excerptSelection?.entries ?? selection.entries)
         .map((e) => e.id)
@@ -164,7 +172,12 @@ class MemoryDiagnostics {
             diversityPenalty: score.diversityPenalty,
             matchedKeys: score.matchedKeys,
             catalogMatchedTerms: score.catalogMatchedTerms,
-            reason: _reasonFor(score, selected, selection),
+            reason: _reasonFor(
+              score,
+              selected,
+              selection,
+              excerptSelection: excerptSelection,
+            ),
             messageIds: score.entry.messageIds,
             messageRange: _formatMessageRange(score.entry.messageRange),
             arc: score.entry.arc,
@@ -177,6 +190,12 @@ class MemoryDiagnostics {
             originalTokenCost: item?.originalTokenCost ?? costOf(score),
             excerptChunkIndexes: item?.chunkIndexes ?? const [],
             excerptMatchedTerms: item?.matchedTerms ?? const [],
+            excerptChunksTotal: MemoryExcerptSelector.countChunks(
+              score.entry.content,
+              excerptTokensPerChunk,
+              tokenCounter: chunkTokenCounter,
+            ),
+            excerptChunksInjected: item?.chunkIndexes.length ?? 0,
           );
         })
         .toList(growable: false);
@@ -237,8 +256,9 @@ class MemoryDiagnostics {
   static String _reasonFor(
     MemoryCandidateScore score,
     bool selected,
-    MemorySelection selection,
-  ) {
+    MemorySelection selection, {
+    MemoryExcerptSelection? excerptSelection,
+  }) {
     if (selected) return 'selected';
     if (score.excludedBySourceWindow) {
       return score.exclusionReason ?? 'source_visible_in_prompt';
@@ -250,7 +270,10 @@ class MemoryDiagnostics {
         selection.entries.length >= selection.entryCap) {
       return 'entry_cap';
     }
-    return 'not_selected';
+    if (excerptSelection?.budgetTrimmed == true) {
+      return 'chunk_budget_trimmed';
+    }
+    return 'chunk_rank_trimmed';
   }
 
   static List<String> _missingContextSignals(

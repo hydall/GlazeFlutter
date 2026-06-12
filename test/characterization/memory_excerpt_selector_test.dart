@@ -267,5 +267,170 @@ void main() {
         expect(excerpted.items.last.text, contains('newer needle'));
       },
     );
+
+    test('chunk-first global budgets by injected chunk tokens not full entry', () {
+      MemoryEntry bulky(String id, int start, String needle) => MemoryEntry(
+        id: id,
+        title: id,
+        content: List.generate(
+          6,
+          (i) => i == 2 ? '$needle clue chunk $id' : 'filler words $id line $i',
+        ).join('\n\n'),
+        keys: const ['needle'],
+        messageRange: MessageRange(start: start, end: start + 14),
+        status: 'active',
+      );
+
+      final entries = [
+        bulky('e1', 10, 'alpha'),
+        bulky('e2', 30, 'beta'),
+        bulky('e3', 50, 'gamma'),
+        bulky('e4', 70, 'delta'),
+        bulky('e5', 90, 'epsilon'),
+        bulky('e6', 110, 'zeta'),
+      ];
+
+      final selection = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          keywordMatchedTerms: {
+            for (final entry in entries) entry.id: const ['needle'],
+          },
+          maxInjectionTokens: 20,
+          maxInjectedEntries: 3,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+          chunkBudgeting: true,
+        ),
+        tokenCounter: (entry) => entry.content.split(RegExp(r'\s+')).length,
+      );
+
+      final excerpted = MemoryExcerptSelector.selectChunkFirstGlobal(
+        selection,
+        maxExcerptTokensPerChunk: 6,
+        maxExcerptChunksPerEntry: 1,
+        tokenCounter: (text) => text.split(RegExp(r'\s+')).length,
+      );
+
+      expect(excerpted.items.length, greaterThan(3));
+      expect(excerpted.totalTokens, lessThanOrEqualTo(20));
+      expect(excerpted.items.every((item) => item.excerpt), isTrue);
+      expect(
+        excerpted.items.every((item) => item.tokenCost <= 6),
+        isTrue,
+      );
+    });
+
+    test(
+      'chunk-first reserves a chunk for fresh implied entries without keywords',
+      () {
+        final oldArc = MemoryEntry(
+          id: 'old',
+          title: 'Old arc',
+          content: List.generate(
+            15,
+            (i) =>
+                'frostscar academy ruins keyword line $i with many matched terms',
+          ).join('\n\n'),
+          keys: const ['frostscar', 'academy', 'ruins'],
+          messageRange: const MessageRange(start: 1, end: 15),
+          status: 'active',
+        );
+        final fresh = MemoryEntry(
+          id: 'fresh',
+          title: 'Recent scene',
+          content: [
+            'Arika met the pale-eyed stranger in silence.',
+            'Something shifted between them, unspoken but heavy.',
+            'The moment lingered after the others left the room.',
+          ].join('\n\n'),
+          keys: const ['arika', 'stranger'],
+          messageRange: const MessageRange(start: 121, end: 135),
+          status: 'active',
+        );
+
+        final selection = MemorySelector.select(
+          MemorySelectionInput(
+            entries: [oldArc, fresh],
+            keywordMatchedTerms: {
+              oldArc.id: const ['frostscar', 'academy', 'ruins'],
+            },
+            vectorScores: {fresh.id: 0.22},
+            maxInjectionTokens: 120,
+            maxInjectedEntries: 10,
+            keywordWeight: 6,
+            vectorWeight: 5,
+            recencyBoost: true,
+            recencyHalfLifeDays: 100,
+            importanceBoost: false,
+            diversityAware: false,
+            chunkBudgeting: true,
+            currentMessageIndex: 140,
+          ),
+        );
+
+        final excerpted = MemoryExcerptSelector.selectChunkFirstGlobal(
+          selection,
+          maxExcerptTokensPerChunk: 300,
+          maxExcerptChunksPerEntry: 5,
+        );
+
+        expect(
+          excerpted.items.map((item) => item.entry.id),
+          contains('fresh'),
+          reason: 'fresh implied memory should not lose to keyword-only old arc',
+        );
+      },
+    );
+
+    test('chunk-first floor injects up to N chunks per guaranteed entry', () {
+      final lone = MemoryEntry(
+        id: 'solo',
+        title: 'solo',
+        content: List.generate(
+          4,
+          (i) => 'needle paragraph $i with enough words here',
+        ).join('\n\n'),
+        keys: const ['needle'],
+        messageRange: const MessageRange(start: 1, end: 10),
+        status: 'active',
+      );
+
+      final selection = MemorySelector.select(
+        MemorySelectionInput(
+          entries: [lone],
+          keywordMatchedTerms: {'solo': const ['needle']},
+          maxInjectionTokens: 500,
+          maxInjectedEntries: 10,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+          chunkBudgeting: true,
+        ),
+      );
+
+      final oneChunk = MemoryExcerptSelector.selectChunkFirstGlobal(
+        selection,
+        maxExcerptTokensPerChunk: 50,
+        maxExcerptChunksPerEntry: 1,
+        topEntries: 1,
+        topChunks: 1,
+      );
+      final twoChunks = MemoryExcerptSelector.selectChunkFirstGlobal(
+        selection,
+        maxExcerptTokensPerChunk: 50,
+        maxExcerptChunksPerEntry: 2,
+        topEntries: 1,
+        topChunks: 2,
+      );
+
+      expect(oneChunk.items.single.chunkIndexes, hasLength(1));
+      expect(twoChunks.items.single.chunkIndexes, hasLength(2));
+    });
   });
 }

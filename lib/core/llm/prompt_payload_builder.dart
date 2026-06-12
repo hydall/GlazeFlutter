@@ -118,12 +118,15 @@ class PromptPayloadBuilder {
     Map<String, String> sessionVars = session?.sessionVars ?? {};
     List<LorebookEntry> vectorEntries = [];
     MemorySelection? memorySelection;
+    var memoryInjectionTarget = 'hard_block';
     final g = _ref.read(memoryGlobalSettingsProvider);
     var memorySettings = MemoryBookSettings(
       memoryExcerptingEnabled: g.memoryExcerptingEnabled,
       memoryPackingMode: g.memoryPackingMode,
       memoryExcerptTokensPerChunk: g.memoryExcerptTokensPerChunk,
       memoryExcerptChunksPerEntry: g.memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: g.chunkFirstTopEntries,
+      chunkFirstTopChunks: g.chunkFirstTopChunks,
     );
 
     if (session != null) {
@@ -186,8 +189,11 @@ class PromptPayloadBuilder {
       final results = await Future.wait([memoryFuture, lorebookFuture]);
       throwIfAborted();
       final memoryResult = results[0] as MemoryCandidateBuildResult;
-      final memorySelection = memoryResult.selection;
+      memorySelection = memoryResult.selection;
       memorySettings = memoryResult.settings ?? memorySettings;
+      memoryInjectionTarget = memorySettings.injectionTarget == 'macro'
+          ? 'macro'
+          : 'hard_block';
       vectorEntries = results[1] as List<LorebookEntry>;
       throwIfAborted();
       debugPrint(
@@ -206,6 +212,8 @@ class PromptPayloadBuilder {
         'packingMode': memorySettings.memoryPackingMode,
         'excerptTokensPerChunk': memorySettings.memoryExcerptTokensPerChunk,
         'excerptChunksPerEntry': memorySettings.memoryExcerptChunksPerEntry,
+        'chunkFirstTopEntries': memorySettings.chunkFirstTopEntries,
+        'chunkFirstTopChunks': memorySettings.chunkFirstTopChunks,
         if (memoryResult.diagnostics != null)
           'diagnostics': memoryResult.diagnostics!.toJson(),
       };
@@ -228,7 +236,9 @@ class PromptPayloadBuilder {
       }
     }
 
-    debugPrint('[payload] building final payload...');
+    debugPrint(
+      '[payload] building final payload... memorySelection=${memorySelection == null ? 'null' : '${memorySelection!.allScores.length} candidates'}',
+    );
     return PromptPayload(
       character: character,
       persona: persona,
@@ -244,7 +254,7 @@ class PromptPayloadBuilder {
       summaryContent: summaryContent,
       memoryContent: null,
       memoryMacroContent: null,
-      memoryInjectionTarget: 'hard_block',
+      memoryInjectionTarget: memoryInjectionTarget,
       memoryCoverage: memoryCoverage,
       guidanceText: guidanceText,
       authorsNote: session?.authorsNote,
@@ -259,6 +269,8 @@ class PromptPayloadBuilder {
       memoryPackingMode: memorySettings.memoryPackingMode,
       memoryExcerptTokensPerChunk: memorySettings.memoryExcerptTokensPerChunk,
       memoryExcerptChunksPerEntry: memorySettings.memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: memorySettings.chunkFirstTopEntries,
+      chunkFirstTopChunks: memorySettings.chunkFirstTopChunks,
     );
   }
 
@@ -336,6 +348,12 @@ class PromptPayloadBuilder {
       memoryExcerptChunksPerEntry: _ref
           .read(memoryGlobalSettingsProvider)
           .memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: _ref
+          .read(memoryGlobalSettingsProvider)
+          .chunkFirstTopEntries,
+      chunkFirstTopChunks: _ref
+          .read(memoryGlobalSettingsProvider)
+          .chunkFirstTopChunks,
     );
   }
 

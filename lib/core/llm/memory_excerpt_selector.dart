@@ -68,6 +68,8 @@ class MemoryExcerptSelector {
     String packingMode = 'hybrid',
     int maxExcerptTokensPerEntry = defaultMemoryExcerptTokensPerEntry,
     int maxExcerptChunksPerEntry = defaultMemoryExcerptChunksPerEntry,
+    int chunkFirstTopEntries = 3,
+    int chunkFirstTopChunks = 1,
     int Function(String text)? tokenCounter,
   }) {
     final tokenFn = tokenCounter ?? estimateTokens;
@@ -78,6 +80,17 @@ class MemoryExcerptSelector {
       0,
       (sum, entry) => sum + tokenFn(entry.content),
     );
+
+    if (normalizedPackingMode == 'chunk_first') {
+      return selectChunkFirstGlobal(
+        selection,
+        maxExcerptTokensPerChunk: maxExcerptTokensPerEntry,
+        maxExcerptChunksPerEntry: maxExcerptChunksPerEntry,
+        topEntries: chunkFirstTopEntries,
+        topChunks: chunkFirstTopChunks,
+        tokenCounter: tokenFn,
+      );
+    }
 
     if (normalizedPackingMode == 'full' ||
         budget == null ||
@@ -169,6 +182,156 @@ class MemoryExcerptSelector {
     );
   }
 
+  /// Ranks every chunk from every candidate entry globally, then packs by
+  /// injected chunk token cost (not full-entry cost). One query embedding
+  /// still compares against all stored chunk vectors upstream.
+  static MemoryExcerptSelection selectChunkFirstGlobal(
+    MemorySelection selection, {
+    int maxExcerptTokensPerChunk = defaultMemoryExcerptTokensPerEntry,
+    int maxExcerptChunksPerEntry = defaultMemoryExcerptChunksPerEntry,
+    int topEntries = 3,
+    int topChunks = 1,
+    int Function(String text)? tokenCounter,
+  }) {
+    final tokenFn = tokenCounter ?? estimateTokens;
+    final budget = selection.budgetTokens;
+    final ranked = <_GlobalChunkCandidate>[];
+
+    for (final score in selection.allScores) {
+      if (score.excludedBySourceWindow) continue;
+      final fullText = score.entry.content.trim();
+      if (fullText.isEmpty) continue;
+
+      final chunks = _chunk(fullText, maxExcerptTokensPerChunk, tokenFn);
+      final terms = _termsFor(score);
+      for (final chunk in chunks) {
+        ranked.add(
+          _GlobalChunkCandidate(
+            entry: score.entry,
+            entryScore: score.score,
+            recencyScore: score.recencyScore,
+            vectorScore: score.vectorScore,
+            chunkIndex: chunk.index,
+            text: chunk.text,
+            tokenCost: chunk.tokenCost,
+            relevance: _chunkRelevance(chunk.text, score, terms),
+          ),
+        );
+      }
+    }
+
+    ranked.sort((a, b) {
+      final byRel = b.relevance.compareTo(a.relevance);
+      if (byRel != 0) return byRel;
+      final byEntry = b.entryScore.compareTo(a.entryScore);
+      if (byEntry != 0) return byEntry;
+      return a.chunkIndex.compareTo(b.chunkIndex);
+    });
+
+    final perEntry = <String, List<_GlobalChunkCandidate>>{};
+    var usedTokens = 0;
+    var trimmed = false;
+
+    // Phase 1: top entries by entry score each get up to [topChunks] best chunks
+    // so recency / vector-implied relevance is not drowned out by keyword-heavy
+    // older arcs.
+    final rankedByEntry = <String, List<_GlobalChunkCandidate>>{};
+    for (final candidate in ranked) {
+      rankedByEntry
+          .putIfAbsent(candidate.entry.id, () => <_GlobalChunkCandidate>[])
+          .add(candidate);
+    }
+    final entryFloorCap = topEntries.clamp(0, 64);
+    final chunksPerGuaranteedEntry = topChunks.clamp(1, maxExcerptChunksPerEntry);
+    if (entryFloorCap > 0) {
+      var floorEntriesProcessed = 0;
+      for (final score in selection.allScores) {
+        if (score.excludedBySourceWindow) continue;
+        final entryChunks = rankedByEntry[score.entry.id];
+        if (entryChunks == null || entryChunks.isEmpty) continue;
+        if (floorEntriesProcessed >= entryFloorCap) break;
+        floorEntriesProcessed++;
+
+        var addedForEntry = 0;
+        for (final candidate in entryChunks) {
+          if (addedForEntry >= chunksPerGuaranteedEntry) break;
+          if (_tryAddGlobalChunk(
+            candidate,
+            perEntry,
+            maxExcerptChunksPerEntry: maxExcerptChunksPerEntry,
+            budget: budget,
+            usedTokens: usedTokens,
+          )) {
+            usedTokens += candidate.tokenCost;
+            addedForEntry++;
+          } else {
+            trimmed = true;
+          }
+        }
+      }
+    }
+
+    // Phase 2: fill remaining budget with globally ranked chunks.
+    for (final candidate in ranked) {
+      if (_tryAddGlobalChunk(
+        candidate,
+        perEntry,
+        maxExcerptChunksPerEntry: maxExcerptChunksPerEntry,
+        budget: budget,
+        usedTokens: usedTokens,
+      )) {
+        usedTokens += candidate.tokenCost;
+      } else if (perEntry[candidate.entry.id]?.any(
+            (c) => c.chunkIndex == candidate.chunkIndex,
+          ) !=
+          true) {
+        trimmed = true;
+      }
+    }
+
+    final items = <MemoryInjectionItem>[];
+    for (final entry in perEntry.entries) {
+      final chunks = entry.value
+        ..sort((a, b) => a.chunkIndex.compareTo(b.chunkIndex));
+      final score = selection.allScores.firstWhere(
+        (s) => s.entry.id == entry.key,
+      );
+      final text = chunks.map((c) => c.text).join('\n\n').trim();
+      if (text.isEmpty) continue;
+      final terms = _termsFor(score);
+      items.add(
+        MemoryInjectionItem(
+          entry: chunks.first.entry,
+          excerpt: true,
+          text: text,
+          tokenCost: tokenFn(text),
+          originalTokenCost: tokenFn(chunks.first.entry.content),
+          chunkIndexes: chunks.map((c) => c.chunkIndex).toList(growable: false),
+          matchedTerms: terms
+              .where((term) => text.toLowerCase().contains(term))
+              .toList(growable: false),
+          reason: 'chunk_first_global',
+        ),
+      );
+    }
+
+    return MemoryExcerptSelection(
+      items: _chronologicalItems(items),
+      totalTokens: usedTokens,
+      budgetTrimmed: trimmed,
+    );
+  }
+
+  static int countChunks(
+    String content,
+    int maxTokensPerChunk, {
+    int Function(String text)? tokenCounter,
+  }) {
+    final tokenFn = tokenCounter ?? estimateTokens;
+    if (content.trim().isEmpty || maxTokensPerChunk <= 0) return 0;
+    return _chunk(content, maxTokensPerChunk, tokenFn).length;
+  }
+
   static String _normalizePackingMode(String raw) {
     if (raw == 'full' || raw == 'chunk_first') return raw;
     return 'hybrid';
@@ -207,8 +370,7 @@ class MemoryExcerptSelector {
             .map(
               (chunk) => _ScoredChunk(
                 chunk,
-                _scoreChunk(chunk.text, terms) +
-                    _vectorChunkBoost(chunk.text, score.vectorMatchedChunks),
+                _chunkRelevance(chunk.text, score, terms),
               ),
             )
             .toList(growable: false)
@@ -340,6 +502,49 @@ class MemoryExcerptSelector {
     return 0;
   }
 
+  /// Entry-level signals (recency, vector, importance) that can justify
+  /// injection even when the current turn has no direct keyword overlap.
+  static double _entryChunkPrior(MemoryCandidateScore score) {
+    return score.recencyScore * 4.0 +
+        score.vectorScore * 0.6 +
+        score.importanceScore * 2.0 +
+        score.catalogScore * 0.4;
+  }
+
+  static double _chunkRelevance(
+    String text,
+    MemoryCandidateScore score,
+    Set<String> terms,
+  ) {
+    return _scoreChunk(text, terms) +
+        _vectorChunkBoost(text, score.vectorMatchedChunks) +
+        _entryChunkPrior(score);
+  }
+
+  static bool _tryAddGlobalChunk(
+    _GlobalChunkCandidate candidate,
+    Map<String, List<_GlobalChunkCandidate>> perEntry, {
+    required int maxExcerptChunksPerEntry,
+    required int? budget,
+    required int usedTokens,
+  }) {
+    final chunksForEntry = perEntry.putIfAbsent(
+      candidate.entry.id,
+      () => <_GlobalChunkCandidate>[],
+    );
+    if (chunksForEntry.any((c) => c.chunkIndex == candidate.chunkIndex)) {
+      return false;
+    }
+    if (chunksForEntry.length >= maxExcerptChunksPerEntry) return false;
+    if (budget != null &&
+        usedTokens + candidate.tokenCost > budget &&
+        perEntry.isNotEmpty) {
+      return false;
+    }
+    chunksForEntry.add(candidate);
+    return true;
+  }
+
   static double _scoreChunk(String text, Set<String> terms) {
     final lower = text.toLowerCase();
     var score = 0.0;
@@ -383,4 +588,26 @@ class _ScoredChunk {
   final double score;
 
   const _ScoredChunk(this.chunk, this.score);
+}
+
+class _GlobalChunkCandidate {
+  final MemoryEntry entry;
+  final double entryScore;
+  final double recencyScore;
+  final double vectorScore;
+  final int chunkIndex;
+  final String text;
+  final int tokenCost;
+  final double relevance;
+
+  const _GlobalChunkCandidate({
+    required this.entry,
+    required this.entryScore,
+    this.recencyScore = 0,
+    this.vectorScore = 0,
+    required this.chunkIndex,
+    required this.text,
+    required this.tokenCost,
+    required this.relevance,
+  });
 }

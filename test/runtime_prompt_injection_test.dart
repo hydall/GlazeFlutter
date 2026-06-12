@@ -291,6 +291,81 @@ void main() {
     expect(result.breakdown.memoryTokens, greaterThan(0));
   });
 
+  test(
+    'deferred memory appendToLastMessage receives final excerpts in history',
+    () {
+      final content = [
+        'The bridge scene opened with rain and silence.',
+        'Sable promised Ren she would hide the ritual map until the debt was paid.',
+        'They argued about lanterns and horses for several minutes.',
+      ].join('\n\n');
+      final entry = MemoryEntry(
+        id: 'm1',
+        title: 'Bridge memory',
+        content: content,
+        keys: const ['ritual map', 'debt'],
+        status: 'active',
+      );
+      final selection = MemorySelector.select(
+        MemorySelectionInput(
+          entries: [entry],
+          keywordMatchedTerms: const {
+            'm1': ['ritual map', 'debt'],
+          },
+          maxInjectionTokens: 12,
+          maxInjectedEntries: 1,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+        ),
+        tokenCounter: (entry) => entry.content.split(RegExp(r'\s+')).length,
+      );
+
+      final result = buildPrompt(
+        PromptPayload(
+          character: Character(id: 'c1', name: 'Alice'),
+          preset: const Preset(
+            id: 'p1',
+            name: 'Prompt',
+            blocks: [
+              PresetBlock(
+                id: 'inject_slot',
+                name: 'Inject Slot',
+                role: 'user',
+                content:
+                    '<lorebooks>\n{{lorebooks}}\n</lorebooks>\n<summary>\n{{memory}}\n</summary>',
+                appendToLastMessage: true,
+              ),
+              PresetBlock(
+                id: 'chat_history',
+                name: 'History',
+                role: 'system',
+                content: '',
+              ),
+            ],
+          ),
+          history: const [
+            ChatMessage(id: 'u1', role: 'user', content: 'What about the map?'),
+          ],
+          apiConfig: const ApiConfig(
+            id: 'api',
+            name: 'API',
+            contextSize: 10000,
+            maxTokens: 100,
+          ),
+          memorySelection: selection,
+          memoryInjectionTarget: 'macro',
+        ),
+      );
+
+      final lastUser = result.messages.lastWhere((m) => m.role == 'user');
+      expect(lastUser.content, contains('<summary>'));
+      expect(lastUser.content, contains('ritual map'));
+      expect(lastUser.content, isNot(contains('GLAZE_DEFERRED')));
+    },
+  );
+
   test('deferred memory chunk-first never injects full entries', () {
     final content = [
       'setup filler words words words',

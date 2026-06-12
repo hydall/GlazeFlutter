@@ -161,6 +161,8 @@ Map<String, dynamic> _serializePayload(PromptPayload p) => {
   'memoryPackingMode': p.memoryPackingMode,
   'memoryExcerptTokensPerChunk': p.memoryExcerptTokensPerChunk,
   'memoryExcerptChunksPerEntry': p.memoryExcerptChunksPerEntry,
+  'chunkFirstTopEntries': p.chunkFirstTopEntries,
+  'chunkFirstTopChunks': p.chunkFirstTopChunks,
 };
 
 PromptResult _deserializeResult(Map<String, dynamic> json) {
@@ -259,6 +261,8 @@ PromptPayload _deserializePayload(Map<String, dynamic> json) {
     memoryExcerptChunksPerEntry:
         json['memoryExcerptChunksPerEntry'] as int? ??
         defaultMemoryExcerptChunksPerEntry,
+    chunkFirstTopEntries: json['chunkFirstTopEntries'] as int? ?? 3,
+    chunkFirstTopChunks: json['chunkFirstTopChunks'] as int? ?? 1,
   );
 }
 
@@ -453,6 +457,7 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
         importanceWeight: inputs.memoryImportanceWeight,
         sourceWindowExclusion: inputs.memorySourceWindowExclusion,
         currentMessageIndex: inputs.history.length,
+        chunkBudgeting: inputs.memoryPackingMode == 'chunk_first',
       ),
     );
     final useExcerptPacking =
@@ -464,6 +469,8 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
             packingMode: inputs.memoryPackingMode,
             maxExcerptTokensPerEntry: inputs.memoryExcerptTokensPerChunk,
             maxExcerptChunksPerEntry: inputs.memoryExcerptChunksPerEntry,
+            chunkFirstTopEntries: inputs.chunkFirstTopEntries,
+            chunkFirstTopChunks: inputs.chunkFirstTopChunks,
           )
         : MemoryExcerptSelector.fullEntries(memorySelection);
 
@@ -535,6 +542,8 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
             'packingMode': inputs.memoryPackingMode,
             'excerptTokensPerChunk': inputs.memoryExcerptTokensPerChunk,
             'excerptChunksPerEntry': inputs.memoryExcerptChunksPerEntry,
+            'chunkFirstTopEntries': inputs.chunkFirstTopEntries,
+            'chunkFirstTopChunks': inputs.chunkFirstTopChunks,
           },
     triggeredMemories: triggeredMemories,
     runtimePromptBlocks: inputs.runtimePromptBlocks,
@@ -543,6 +552,8 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
     memoryPackingMode: inputs.memoryPackingMode,
     memoryExcerptTokensPerChunk: inputs.memoryExcerptTokensPerChunk,
     memoryExcerptChunksPerEntry: inputs.memoryExcerptChunksPerEntry,
+    chunkFirstTopEntries: inputs.chunkFirstTopEntries,
+    chunkFirstTopChunks: inputs.chunkFirstTopChunks,
   );
 
   // 3. Build prompt (lorebook scanning happens inside buildPrompt)
