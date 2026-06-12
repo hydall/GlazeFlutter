@@ -131,7 +131,7 @@ class PromptInputsCollector {
       memoryDiversityPenalty: memoryBook?.settings.diversityPenalty ?? 0.15,
       memoryRecencyBoost: memoryBook?.settings.recencyBoost ?? true,
       memoryRecencyHalfLifeDays:
-          memoryBook?.settings.recencyHalfLifeDays ?? 0.5,
+          memoryBook?.settings.recencyHalfLifeDays ?? 100,
       memoryImportanceBoost: memoryBook?.settings.importanceBoost ?? true,
       memoryImportanceWeight: memoryBook?.settings.importanceWeight ?? 0.5,
       memorySourceWindowExclusion:
@@ -140,7 +140,6 @@ class PromptInputsCollector {
           memoryBook?.settings.queryIncludeAssistant ?? true,
       memoryQueryRecentTurns: memoryBook?.settings.queryRecentTurns ?? 6,
       memoryQueryMaxChars: memoryBook?.settings.queryMaxChars ?? 1500,
-      memoryNowMillis: DateTime.now().millisecondsSinceEpoch,
       memoryContextBudgetTokens: chatApi.contextSize,
       runtimePromptBlocks: runtimePromptBlocks,
     );

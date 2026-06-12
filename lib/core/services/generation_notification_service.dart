@@ -64,6 +64,8 @@ class GenerationNotificationService {
   }
 
   Future<void> init() async {
+    if (!_isMobile) return;
+
     const androidSettings = AndroidInitializationSettings(
       '@drawable/ic_stat_icon_config_sample',
     );
@@ -242,7 +244,8 @@ class GenerationNotificationService {
 
       final NotificationDetails details;
       if (Platform.isAndroid) {
-        final personIcon = resolvedAvatar != null && File(resolvedAvatar).existsSync()
+        final personIcon =
+            resolvedAvatar != null && File(resolvedAvatar).existsSync()
             ? BitmapFilePathAndroidIcon(resolvedAvatar)
             : null;
         final person = Person(name: title, icon: personIcon);
@@ -275,7 +278,8 @@ class GenerationNotificationService {
           ),
         );
       } else {
-        final attachments = resolvedAvatar != null && File(resolvedAvatar).existsSync()
+        final attachments =
+            resolvedAvatar != null && File(resolvedAvatar).existsSync()
             ? [DarwinNotificationAttachment(resolvedAvatar)]
             : <DarwinNotificationAttachment>[];
         details = NotificationDetails(

@@ -89,7 +89,7 @@ class ThemeNotifier extends StateNotifier<ThemeSettings> {
     if (preset == null) return null;
     await importPreset(preset);
     if (apply) {
-      await this.applyPreset(preset);
+      await applyPreset(preset);
     }
     return preset;
   }

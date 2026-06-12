@@ -13,6 +13,7 @@ MemoryEntry _entry({
   String arc = '',
   double importance = 0,
   bool temporallyBlind = false,
+  MessageRange? messageRange,
 }) => MemoryEntry(
   id: id,
   title: title,
@@ -23,6 +24,7 @@ MemoryEntry _entry({
   arc: arc,
   importance: importance,
   temporallyBlind: temporallyBlind,
+  messageRange: messageRange,
   status: 'active',
 );
 
@@ -235,21 +237,26 @@ void main() {
       );
     });
 
-    test('temporallyBlind entries are not recency-boosted', () {
-      final now = 100000000000;
+    test('message-distance recency ignores wall-clock time', () {
       final entries = [
         _entry(
-          id: 'old_blind',
+          id: 'recent_source',
           content: 'word ' * 4,
-          createdAt: now - 30 * 86400000,
-          temporallyBlind: true,
+          createdAt: 1,
+          messageRange: const MessageRange(start: 880, end: 900),
         ),
-        _entry(id: 'old', content: 'word ' * 4, createdAt: now - 30 * 86400000),
+        _entry(
+          id: 'old_source',
+          content: 'word ' * 4,
+          createdAt: 999999999,
+          messageRange: const MessageRange(start: 1, end: 10),
+        ),
       ];
       final result = MemorySelector.select(
         MemorySelectionInput(
           entries: entries,
-          nowMillis: now,
+          currentMessageIndex: 1000,
+          recencyHalfLifeDays: 100,
           maxInjectedEntries: 2,
           keywordWeight: 0,
           vectorWeight: 0,
@@ -257,13 +264,52 @@ void main() {
           diversityAware: false,
         ),
       );
-      // The non-blind old entry has recency boost (small but non-zero).
+
+      final recent = result.allScores.firstWhere(
+        (s) => s.entry.id == 'recent_source',
+      );
+      final old = result.allScores.firstWhere(
+        (s) => s.entry.id == 'old_source',
+      );
+      expect(recent.recencyScore, closeTo(0.5, 0.0001));
+      expect(old.recencyScore, closeTo(1 / 10.9, 0.0001));
+      expect(recent.recencyScore, greaterThan(old.recencyScore));
+    });
+
+    test('temporallyBlind entries are not recency-boosted', () {
+      final entries = [
+        _entry(
+          id: 'blind_recent',
+          content: 'word ' * 4,
+          messageRange: const MessageRange(start: 90, end: 100),
+          temporallyBlind: true,
+        ),
+        _entry(
+          id: 'recent',
+          content: 'word ' * 4,
+          messageRange: const MessageRange(start: 90, end: 100),
+        ),
+      ];
+      final result = MemorySelector.select(
+        MemorySelectionInput(
+          entries: entries,
+          currentMessageIndex: 110,
+          maxInjectedEntries: 2,
+          keywordWeight: 0,
+          vectorWeight: 0,
+          importanceBoost: false,
+          diversityAware: false,
+        ),
+      );
+      // The non-blind sourced entry has recency boost.
       // The blind entry has 0 boost. Without the keyword/vector/importance
       // contributions, the blind entry's total score is only the baseline.
       final blind = result.allScores.firstWhere(
-        (s) => s.entry.id == 'old_blind',
+        (s) => s.entry.id == 'blind_recent',
       );
-      final nonBlind = result.allScores.firstWhere((s) => s.entry.id == 'old');
+      final nonBlind = result.allScores.firstWhere(
+        (s) => s.entry.id == 'recent',
+      );
       expect(blind.recencyScore, 0.0);
       expect(nonBlind.recencyScore, greaterThan(0.0));
     });

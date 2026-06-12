@@ -72,11 +72,14 @@ class MemorySelectionInput {
   final bool diversityAware;
   final double diversityPenalty;
   final bool recencyBoost;
+
+  /// Historical field name kept for persisted/settings compatibility.
+  /// Interpreted as message-count half-life, not wall-clock days.
   final double recencyHalfLifeDays;
   final bool importanceBoost;
   final double importanceWeight;
   final bool sourceWindowExclusion;
-  final int? nowMillis;
+  final int currentMessageIndex;
   final double keywordWeight;
   final double vectorWeight;
   final int now;
@@ -94,11 +97,11 @@ class MemorySelectionInput {
     this.diversityAware = true,
     this.diversityPenalty = 0.15,
     this.recencyBoost = true,
-    this.recencyHalfLifeDays = 0.5,
+    this.recencyHalfLifeDays = 100,
     this.importanceBoost = true,
     this.importanceWeight = 0.5,
     this.sourceWindowExclusion = true,
-    this.nowMillis,
+    this.currentMessageIndex = 0,
     this.keywordWeight = 6.0,
     this.vectorWeight = 5.0,
     int? nowSeconds,
@@ -143,8 +146,10 @@ class MemorySelector {
 
     if (entries.isEmpty) return const MemorySelection();
 
-    final nowMillis = input.nowMillis ?? DateTime.now().millisecondsSinceEpoch;
     final costFn = tokenCounter ?? tokenCost;
+    final currentMessageIndex = input.currentMessageIndex > 0
+        ? input.currentMessageIndex
+        : _latestSourcedMessageIndex(entries);
 
     final visibleSet = input.visibleMessageIds;
     final legacyMode = input.selectionMode == 'legacy';
@@ -188,12 +193,7 @@ class MemorySelector {
           : input.keywordWeight * _keywordBoost(matched, entry.keys.length);
       final catalog = input.catalogScores[entry.id] ?? 0;
       final recency = input.recencyBoost
-          ? _recencyBoost(
-              entry.createdAt,
-              nowMillis,
-              input.recencyHalfLifeDays,
-              entry.temporallyBlind,
-            )
+          ? _recencyBoost(entry, input.recencyHalfLifeDays, currentMessageIndex)
           : 0.0;
       final importance = input.importanceBoost
           ? (entry.importance.clamp(0, 1)) * input.importanceWeight
@@ -304,20 +304,33 @@ class MemorySelector {
     return matched;
   }
 
-  /// Recency boost: half-life decay; 0 if [temporallyBlind] or no timestamp.
+  /// Recency boost: message-distance half-life decay.
+  ///
+  /// This intentionally ignores wall-clock time. A memory's distance is based
+  /// on its source message range relative to the newest sourced memory entry.
+  /// Entries without source positions get no boost because their narrative
+  /// position is unknown.
   /// Returns a value in [0, 1] that callers can scale with recencyWeight.
   static double _recencyBoost(
-    int? createdAtMs,
-    int nowMs,
-    double halfLifeDays,
-    bool temporallyBlind,
+    MemoryEntry entry,
+    double halfLifeMessages,
+    int currentMessageIndex,
   ) {
-    if (temporallyBlind || createdAtMs == null || createdAtMs <= 0) return 0;
-    if (halfLifeDays <= 0) return 0;
-    final ageDays = (nowMs - createdAtMs) / 86400000.0;
-    if (ageDays < 0) return 0;
-    final halvings = ageDays / halfLifeDays;
+    if (entry.temporallyBlind || halfLifeMessages <= 0) return 0;
+    final end = entry.messageRange?.end;
+    if (end == null || end <= 0 || currentMessageIndex <= 0) return 0;
+    final distance = (currentMessageIndex - end).clamp(0, currentMessageIndex);
+    final halvings = distance / halfLifeMessages;
     return 1.0 / (1.0 + halvings);
+  }
+
+  static int _latestSourcedMessageIndex(List<MemoryEntry> entries) {
+    var latest = 0;
+    for (final entry in entries) {
+      final end = entry.messageRange?.end ?? 0;
+      if (end > latest) latest = end;
+    }
+    return latest;
   }
 
   static double _keywordBoost(List<String> matched, int totalKeys) {

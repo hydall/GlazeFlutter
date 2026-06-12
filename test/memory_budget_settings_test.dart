@@ -220,4 +220,17 @@ void main() {
     expect(updated.settings.queryRecentTurns, 5);
     expect(updated.settings.queryMaxChars, 1250);
   });
+
+  test('legacy memory entries recover messageRange from range title', () {
+    final entry = MemoryEntry.fromJson({
+      'id': 'mem_legacy',
+      'title': '91-105',
+      'content': 'remembered events',
+      'keys': <String>[],
+      'messageIds': <String>['m1'],
+      'status': 'active',
+    });
+
+    expect(entry.messageRange, const MessageRange(start: 91, end: 105));
+  });
 }

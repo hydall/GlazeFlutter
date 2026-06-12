@@ -278,6 +278,9 @@ class StreamGenerationService {
               diagnostics: Map<String, dynamic>.from(memoryDiagnostics),
               updatedAtMillis: DateTime.now().millisecondsSinceEpoch,
             );
+          } else {
+            _ref.read(lastMemoryActivityProvider(_charId).notifier).state =
+                null;
           }
         },
         onError: (error) {

@@ -85,7 +85,7 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(true) bool diversityAware,
     @Default(0.15) double diversityPenalty,
     @Default(true) bool recencyBoost,
-    @Default(0.5) double recencyHalfLifeDays,
+    @Default(100) double recencyHalfLifeDays,
     @Default(true) bool importanceBoost,
     @Default(0.5) double importanceWeight,
     @Default(true) bool sourceWindowExclusion,
@@ -133,6 +133,12 @@ Map<String, dynamic> _migrateEntryInPlace(Map<String, dynamic> json) {
   if (out['messageRange'] != null && out['messageRange'] is! Map) {
     out = {...out, 'messageRange': null};
   }
+  if (out['messageRange'] == null) {
+    final range = _parseLegacyTitleRange(out['title']);
+    if (range != null) {
+      out = {...out, 'messageRange': range};
+    }
+  }
   if (out['importance'] is! num) {
     out = {...out, 'importance': 0.0};
   }
@@ -149,6 +155,16 @@ Map<String, dynamic> _migrateEntryInPlace(Map<String, dynamic> json) {
     out = {...out, 'sourceHash': ''};
   }
   return out;
+}
+
+Map<String, int>? _parseLegacyTitleRange(Object? title) {
+  if (title is! String) return null;
+  final match = RegExp(r'^\s*(\d+)\s*-\s*(\d+)\s*$').firstMatch(title);
+  if (match == null) return null;
+  final start = int.tryParse(match.group(1)!);
+  final end = int.tryParse(match.group(2)!);
+  if (start == null || end == null || start <= 0 || end < start) return null;
+  return {'start': start, 'end': end};
 }
 
 @freezed

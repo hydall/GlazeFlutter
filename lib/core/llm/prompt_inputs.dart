@@ -51,7 +51,6 @@ class PromptInputs {
   final bool memoryQueryIncludeAssistant;
   final int memoryQueryRecentTurns;
   final int memoryQueryMaxChars;
-  final int memoryNowMillis;
   final int memoryContextBudgetTokens;
   final List<RuntimePromptBlock> runtimePromptBlocks;
 
@@ -85,14 +84,13 @@ class PromptInputs {
     this.memoryDiversityAware = true,
     this.memoryDiversityPenalty = 0.15,
     this.memoryRecencyBoost = true,
-    this.memoryRecencyHalfLifeDays = 0.5,
+    this.memoryRecencyHalfLifeDays = 100,
     this.memoryImportanceBoost = true,
     this.memoryImportanceWeight = 0.5,
     this.memorySourceWindowExclusion = true,
     this.memoryQueryIncludeAssistant = true,
     this.memoryQueryRecentTurns = 6,
     this.memoryQueryMaxChars = 1500,
-    this.memoryNowMillis = 0,
     this.memoryContextBudgetTokens = 0,
     this.runtimePromptBlocks = const [],
   });
@@ -134,7 +132,6 @@ class PromptInputs {
     'memoryQueryIncludeAssistant': memoryQueryIncludeAssistant,
     'memoryQueryRecentTurns': memoryQueryRecentTurns,
     'memoryQueryMaxChars': memoryQueryMaxChars,
-    'memoryNowMillis': memoryNowMillis,
     'memoryContextBudgetTokens': memoryContextBudgetTokens,
     'runtimePromptBlocks': runtimePromptBlocks
         .map((block) => block.toJson())
@@ -197,7 +194,7 @@ class PromptInputs {
         (json['memoryDiversityPenalty'] as num?)?.toDouble() ?? 0.15,
     memoryRecencyBoost: json['memoryRecencyBoost'] as bool? ?? true,
     memoryRecencyHalfLifeDays:
-        (json['memoryRecencyHalfLifeDays'] as num?)?.toDouble() ?? 0.5,
+        (json['memoryRecencyHalfLifeDays'] as num?)?.toDouble() ?? 100,
     memoryImportanceBoost: json['memoryImportanceBoost'] as bool? ?? true,
     memoryImportanceWeight:
         (json['memoryImportanceWeight'] as num?)?.toDouble() ?? 0.5,
@@ -207,7 +204,6 @@ class PromptInputs {
         json['memoryQueryIncludeAssistant'] as bool? ?? true,
     memoryQueryRecentTurns: json['memoryQueryRecentTurns'] as int? ?? 6,
     memoryQueryMaxChars: json['memoryQueryMaxChars'] as int? ?? 1500,
-    memoryNowMillis: json['memoryNowMillis'] as int? ?? 0,
     memoryContextBudgetTokens: json['memoryContextBudgetTokens'] as int? ?? 0,
     runtimePromptBlocks: (json['runtimePromptBlocks'] as List? ?? [])
         .map(

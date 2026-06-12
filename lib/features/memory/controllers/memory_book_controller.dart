@@ -370,6 +370,7 @@ class MemoryBookController {
       keys: draft.keys,
       vectorSearch: draft.vectorSearch,
       messageIds: draft.messageIds,
+      messageRange: draft.messageRange,
       status: 'active',
       createdAt: DateTime.now().millisecondsSinceEpoch,
     );
