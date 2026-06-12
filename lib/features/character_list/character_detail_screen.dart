@@ -19,6 +19,9 @@ import '../../core/state/character_provider.dart';
 import '../../core/state/chat_session_ops_provider.dart';
 import '../../features/chat/chat_actions_service.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/theme_preset.dart';
+import '../../shared/theme/theme_provider.dart';
+import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/glaze_toast.dart';
@@ -41,6 +44,14 @@ const _kBorderLine = Color(0x0DFFFFFF);
 const _kText75 = Color(0xBFFFFFFF);
 const _kText50 = Color(0x80FFFFFF);
 const _kText35 = Color(0x59FFFFFF);
+
+Border _detailHeaderBorder(BuildContext context, ThemePreset preset) {
+  final base = preset.borderParsed ?? context.cs.onSurface;
+  return Border.all(
+    color: base.withValues(alpha: preset.borderOpacity.clamp(0.0, 1.0)),
+    width: preset.borderWidth,
+  );
+}
 
 // ─── Tabs ──────────────────────────────────────────────────────────────────
 
@@ -139,16 +150,7 @@ class CharacterDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
-  late final Future<Character?> _charFuture;
   int _activeTabIndex = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _charFuture = widget.isPreview
-        ? Future.value(widget.previewCharacter)
-        : ref.read(charactersProvider.future).then((chars) => chars.where((c) => c.id == widget.charId).firstOrNull);
-  }
 
   /// Pops the GlazeBottomSheet, then pops this modal sheet returning [route]
   /// so the caller (launcher / card / drawer) can navigate safely.
@@ -200,7 +202,9 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
   }
 
   void _confirmDelete(BuildContext context) async {
-    final char = await _charFuture;
+    final char = widget.isPreview
+        ? widget.previewCharacter
+        : ref.read(characterByIdProvider(widget.charId));
     if (char == null) return;
     if (!context.mounted) return;
 
@@ -332,44 +336,35 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Character?>(
-      future: _charFuture,
-      builder: (context, snap) {
-        final char = snap.data;
-        return SheetView(
-          showBack: true,
-          actions: (char == null || widget.isPreview)
-              ? const []
-              : [
-                  SheetViewAction(
-                    icon: Icon(
-                      Icons.more_vert_rounded,
-                      size: 20,
-                      color: context.cs.primary,
-                    ),
-                    onPressed: _openActionsMenu,
-                  ),
-                ],
-          bodyPadding: EdgeInsets.zero,
-          body: _buildBody(snap),
-          floatingActionButton: char == null
-              ? null
-              : widget.isPreview
-                  ? _ImportFab(
-                      importing: widget.importing,
-                      onTap: () => widget.onImport?.call(),
-                    )
-                  : _ChatFab(onTap: () => _openChat(context, char.id)),
-        );
-      },
+    final charactersAsync = widget.isPreview
+        ? const AsyncData<List<Character>>(<Character>[])
+        : ref.watch(charactersProvider);
+    final char = widget.isPreview
+        ? widget.previewCharacter
+        : ref.watch(characterByIdProvider(widget.charId));
+
+    return SheetView(
+      floating: _buildFloatingHeader(char),
+      bodyPadding: EdgeInsets.zero,
+      body: _buildBody(charactersAsync, char),
+      floatingActionButton: char == null
+          ? null
+          : widget.isPreview
+              ? _ImportFab(
+                  importing: widget.importing,
+                  onTap: () => widget.onImport?.call(),
+                )
+              : _ChatFab(onTap: () => _openChat(context, char.id)),
     );
   }
 
-  Widget _buildBody(AsyncSnapshot<Character?> snap) {
-    if (snap.connectionState == ConnectionState.waiting) {
+  Widget _buildBody(
+    AsyncValue<List<Character>> charactersAsync,
+    Character? char,
+  ) {
+    if (!widget.isPreview && charactersAsync.isLoading && char == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    final char = snap.data;
     if (char == null) {
       return Center(
         child: Text(
@@ -411,6 +406,39 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
             ),
             SizedBox(height: 100 + safeBottom),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFloatingHeader(Character? char) {
+    final safeTop = MediaQuery.of(context).padding.top;
+    return IgnorePointer(
+      ignoring: char == null,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: Padding(
+          padding: EdgeInsets.only(top: safeTop + 12, left: 16, right: 16),
+          child: Row(
+            children: [
+              _DetailHeaderButton(
+                icon: Icons.arrow_back,
+                onTap: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go('/characters');
+                  }
+                },
+              ),
+              const Spacer(),
+              if (!widget.isPreview && char != null)
+                _DetailHeaderButton(
+                  icon: Icons.more_vert_rounded,
+                  onTap: _openActionsMenu,
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -509,6 +537,68 @@ class _ImportFab extends StatelessWidget {
 }
 
 // ─── Hero ──────────────────────────────────────────────────────────────────
+
+class _DetailHeaderButton extends ConsumerStatefulWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _DetailHeaderButton({required this.icon, this.onTap});
+
+  @override
+  ConsumerState<_DetailHeaderButton> createState() =>
+      _DetailHeaderButtonState();
+}
+
+class _DetailHeaderButtonState extends ConsumerState<_DetailHeaderButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _press;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _press = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 80),
+      reverseDuration: const Duration(milliseconds: 150),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.82).animate(
+      CurvedAnimation(parent: _press, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final preset = ref.watch(themeProvider.select((s) => s.activePreset));
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: widget.onTap != null ? (_) => _press.forward() : null,
+      onTapUp: widget.onTap != null ? (_) => _press.reverse() : null,
+      onTapCancel: widget.onTap != null ? () => _press.reverse() : null,
+      child: ScaleTransition(
+        scale: _scale,
+        child: SizedBox(
+          width: 40,
+          height: 40,
+          child: GlassSurface(
+            borderRadius: BorderRadius.circular(20),
+            tint: context.cs.surface,
+            border: _detailHeaderBorder(context, preset),
+            child: Center(
+              child: Icon(widget.icon, color: context.cs.primary, size: 20),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _HeroSection extends StatelessWidget {
   final Character character;
