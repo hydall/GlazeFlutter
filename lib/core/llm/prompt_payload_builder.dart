@@ -8,6 +8,7 @@ import '../models/api_config.dart';
 import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/lorebook.dart';
+import '../models/memory_book.dart';
 import '../models/persona.dart';
 import '../models/preset.dart';
 import '../state/active_selection_provider.dart';
@@ -117,6 +118,13 @@ class PromptPayloadBuilder {
     Map<String, String> sessionVars = session?.sessionVars ?? {};
     List<LorebookEntry> vectorEntries = [];
     MemorySelection? memorySelection;
+    final g = _ref.read(memoryGlobalSettingsProvider);
+    var memorySettings = MemoryBookSettings(
+      memoryExcerptingEnabled: g.memoryExcerptingEnabled,
+      memoryPackingMode: g.memoryPackingMode,
+      memoryExcerptTokensPerChunk: g.memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: g.memoryExcerptChunksPerEntry,
+    );
 
     if (session != null) {
       debugPrint('[payload] injecting ext blocks into history...');
@@ -179,6 +187,7 @@ class PromptPayloadBuilder {
       throwIfAborted();
       final memoryResult = results[0] as MemoryCandidateBuildResult;
       final memorySelection = memoryResult.selection;
+      memorySettings = memoryResult.settings ?? memorySettings;
       vectorEntries = results[1] as List<LorebookEntry>;
       throwIfAborted();
       debugPrint(
@@ -194,9 +203,9 @@ class PromptPayloadBuilder {
         'excludedBySourceWindow': memorySelection.excludedBySourceWindow,
         'budgetTokens': memorySelection.budgetTokens,
         'budgetTrimmed': memorySelection.budgetTrimmed,
-        'packingMode': _ref
-            .read(memoryGlobalSettingsProvider)
-            .memoryPackingMode,
+        'packingMode': memorySettings.memoryPackingMode,
+        'excerptTokensPerChunk': memorySettings.memoryExcerptTokensPerChunk,
+        'excerptChunksPerEntry': memorySettings.memoryExcerptChunksPerEntry,
         if (memoryResult.diagnostics != null)
           'diagnostics': memoryResult.diagnostics!.toJson(),
       };
@@ -246,12 +255,10 @@ class PromptPayloadBuilder {
       triggeredMemories: triggeredMemories,
       runtimePromptBlocks: runtimePromptBlocks,
       memorySelection: memorySelection,
-      memoryExcerptingEnabled: _ref
-          .read(memoryGlobalSettingsProvider)
-          .memoryExcerptingEnabled,
-      memoryPackingMode: _ref
-          .read(memoryGlobalSettingsProvider)
-          .memoryPackingMode,
+      memoryExcerptingEnabled: memorySettings.memoryExcerptingEnabled,
+      memoryPackingMode: memorySettings.memoryPackingMode,
+      memoryExcerptTokensPerChunk: memorySettings.memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: memorySettings.memoryExcerptChunksPerEntry,
     );
   }
 
@@ -323,6 +330,12 @@ class PromptPayloadBuilder {
       memoryPackingMode: _ref
           .read(memoryGlobalSettingsProvider)
           .memoryPackingMode,
+      memoryExcerptTokensPerChunk: _ref
+          .read(memoryGlobalSettingsProvider)
+          .memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: _ref
+          .read(memoryGlobalSettingsProvider)
+          .memoryExcerptChunksPerEntry,
     );
   }
 

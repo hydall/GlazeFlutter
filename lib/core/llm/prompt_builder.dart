@@ -98,6 +98,8 @@ class PromptPayload {
   final MemorySelection? memorySelection;
   final bool memoryExcerptingEnabled;
   final String memoryPackingMode;
+  final int memoryExcerptTokensPerChunk;
+  final int memoryExcerptChunksPerEntry;
 
   const PromptPayload({
     required this.character,
@@ -129,6 +131,8 @@ class PromptPayload {
     this.memorySelection,
     this.memoryExcerptingEnabled = true,
     this.memoryPackingMode = 'hybrid',
+    this.memoryExcerptTokensPerChunk = defaultMemoryExcerptTokensPerEntry,
+    this.memoryExcerptChunksPerEntry = defaultMemoryExcerptChunksPerEntry,
   });
 }
 
@@ -903,11 +907,16 @@ PromptResult _assembleMessages({
       visibleMessageIds: breakdown.visibleMessageIds,
     );
     finalMemorySelection = refiltered;
-    final excerpted = !payload.memoryExcerptingEnabled
+    final useExcerptPacking =
+        payload.memoryExcerptingEnabled ||
+        payload.memoryPackingMode == 'chunk_first';
+    final excerpted = !useExcerptPacking
         ? MemoryExcerptSelector.fullEntries(refiltered)
         : MemoryExcerptSelector.select(
             refiltered,
             packingMode: payload.memoryPackingMode,
+            maxExcerptTokensPerEntry: payload.memoryExcerptTokensPerChunk,
+            maxExcerptChunksPerEntry: payload.memoryExcerptChunksPerEntry,
           );
     finalExcerptSelection = excerpted;
     if (excerpted.items.isNotEmpty) {
@@ -1257,9 +1266,20 @@ Map<String, dynamic> _finalizeMemoryCoverage(
 ) {
   if (selection == null) return coverage;
   final packingMode = coverage['packingMode'] as String? ?? 'hybrid';
+  final tokensPerChunk =
+      coverage['excerptTokensPerChunk'] as int? ??
+      defaultMemoryExcerptTokensPerEntry;
+  final chunksPerEntry =
+      coverage['excerptChunksPerEntry'] as int? ??
+      defaultMemoryExcerptChunksPerEntry;
   final excerpted =
       excerptSelection ??
-      MemoryExcerptSelector.select(selection, packingMode: packingMode);
+      MemoryExcerptSelector.select(
+        selection,
+        packingMode: packingMode,
+        maxExcerptTokensPerEntry: tokensPerChunk,
+        maxExcerptChunksPerEntry: chunksPerEntry,
+      );
   final budget = MemoryBudgetBreakdown(
     effectiveTokens: selection.budgetTokens,
     source: selection.budgetTokens == null ? 'none' : 'effective',
@@ -1273,6 +1293,8 @@ Map<String, dynamic> _finalizeMemoryCoverage(
   return {
     ...coverage,
     'packingMode': packingMode,
+    'excerptTokensPerChunk': tokensPerChunk,
+    'excerptChunksPerEntry': chunksPerEntry,
     'entryIds': excerpted.entries.map((e) => e.id).toList(growable: false),
     'budgetTrimmed': excerpted.budgetTrimmed,
     'diagnostics': previousDiagnostics is Map

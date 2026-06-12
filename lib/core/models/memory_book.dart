@@ -68,6 +68,8 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(7) int maxInjectedEntries,
     @Default(true) bool memoryExcerptingEnabled,
     @Default('hybrid') String memoryPackingMode,
+    @Default(500) int memoryExcerptTokensPerChunk,
+    @Default(2) int memoryExcerptChunksPerEntry,
     @Default(0.35) double maxInjectionBudgetPercent,
     int? maxInjectedTokens,
     @Default('auto') String memoryBudgetPreset,

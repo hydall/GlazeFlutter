@@ -35,6 +35,8 @@ class MemoryBookRepo extends DatabaseAccessor<AppDatabase>
         maxInjectedEntries: global.maxInjectedEntries,
         memoryExcerptingEnabled: global.memoryExcerptingEnabled,
         memoryPackingMode: global.memoryPackingMode,
+        memoryExcerptTokensPerChunk: global.memoryExcerptTokensPerChunk,
+        memoryExcerptChunksPerEntry: global.memoryExcerptChunksPerEntry,
         maxInjectedTokens: global.maxInjectedTokens,
         memoryBudgetPreset: global.memoryBudgetPreset,
         autoCreateInterval: global.autoCreateInterval,

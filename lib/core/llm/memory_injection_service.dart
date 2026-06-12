@@ -55,10 +55,12 @@ class MemoryInjectionResult {
 class MemoryCandidateBuildResult {
   final MemorySelection selection;
   final MemoryDiagnostics? diagnostics;
+  final MemoryBookSettings? settings;
 
   const MemoryCandidateBuildResult({
     required this.selection,
     required this.diagnostics,
+    this.settings,
   });
 }
 
@@ -127,6 +129,7 @@ class MemoryInjectionService {
       final resolvedSettings = settings ?? const MemoryBookSettings();
       return MemoryCandidateBuildResult(
         selection: selection,
+        settings: settings,
         diagnostics: settings == null
             ? null
             : MemoryDiagnostics.fromSelection(
@@ -253,8 +256,6 @@ class MemoryInjectionService {
     final chatHistory = (history ?? const [])
         .map((m) => ChatMessage(id: '', role: m.role, content: m.content))
         .toList();
-    final gs = _ref.read(memoryGlobalSettingsProvider);
-
     final candidateResult = await buildCandidatesWithDiagnostics(
       sessionId: sessionId,
       history: chatHistory,
@@ -266,6 +267,7 @@ class MemoryInjectionService {
       visibleMessageIds: visibleMessageIds,
     );
     final selection = candidateResult.selection;
+    final settings = candidateResult.settings ?? const MemoryBookSettings();
 
     if (selection.entries.isEmpty) {
       return MemoryInjectionResult(
@@ -277,10 +279,15 @@ class MemoryInjectionService {
       );
     }
 
-    final excerptSelection = gs.memoryExcerptingEnabled
+    final useExcerptPacking =
+        settings.memoryExcerptingEnabled ||
+        settings.memoryPackingMode == 'chunk_first';
+    final excerptSelection = useExcerptPacking
         ? MemoryExcerptSelector.select(
             selection,
-            packingMode: gs.memoryPackingMode,
+            packingMode: settings.memoryPackingMode,
+            maxExcerptTokensPerEntry: settings.memoryExcerptTokensPerChunk,
+            maxExcerptChunksPerEntry: settings.memoryExcerptChunksPerEntry,
           )
         : MemoryExcerptSelector.fullEntries(selection);
     final maxInjectionTokens = selection.budgetTokens;
@@ -298,7 +305,7 @@ class MemoryInjectionService {
       _formatMemoryItems(excerptSelection.items, includeContextHeader: true),
     );
 
-    final injectionTarget = gs.injectionTarget == 'macro'
+    final injectionTarget = settings.injectionTarget == 'macro'
         ? 'macro'
         : 'hard_block';
 

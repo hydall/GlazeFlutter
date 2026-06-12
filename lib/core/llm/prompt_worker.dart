@@ -16,6 +16,7 @@ import 'glaze_matcher.dart';
 import 'history_assembler.dart';
 import 'lorebook_scanner.dart';
 import 'memory_budget.dart';
+import 'memory_excerpt_selector.dart';
 import 'memory_selector.dart';
 import 'prompt_builder.dart';
 import 'prompt_inputs.dart';
@@ -158,6 +159,8 @@ Map<String, dynamic> _serializePayload(PromptPayload p) => {
   'memorySelection': _serializeMemorySelection(p.memorySelection),
   'memoryExcerptingEnabled': p.memoryExcerptingEnabled,
   'memoryPackingMode': p.memoryPackingMode,
+  'memoryExcerptTokensPerChunk': p.memoryExcerptTokensPerChunk,
+  'memoryExcerptChunksPerEntry': p.memoryExcerptChunksPerEntry,
 };
 
 PromptResult _deserializeResult(Map<String, dynamic> json) {
@@ -250,6 +253,12 @@ PromptPayload _deserializePayload(Map<String, dynamic> json) {
     ),
     memoryExcerptingEnabled: json['memoryExcerptingEnabled'] as bool? ?? true,
     memoryPackingMode: json['memoryPackingMode'] as String? ?? 'hybrid',
+    memoryExcerptTokensPerChunk:
+        json['memoryExcerptTokensPerChunk'] as int? ??
+        defaultMemoryExcerptTokensPerEntry,
+    memoryExcerptChunksPerEntry:
+        json['memoryExcerptChunksPerEntry'] as int? ??
+        defaultMemoryExcerptChunksPerEntry,
   );
 }
 
@@ -446,20 +455,32 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
         currentMessageIndex: inputs.history.length,
       ),
     );
+    final useExcerptPacking =
+        inputs.memoryExcerptingEnabled ||
+        inputs.memoryPackingMode == 'chunk_first';
+    final excerptSelection = useExcerptPacking
+        ? MemoryExcerptSelector.select(
+            memorySelection,
+            packingMode: inputs.memoryPackingMode,
+            maxExcerptTokensPerEntry: inputs.memoryExcerptTokensPerChunk,
+            maxExcerptChunksPerEntry: inputs.memoryExcerptChunksPerEntry,
+          )
+        : MemoryExcerptSelector.fullEntries(memorySelection);
 
-    final topEntries = memorySelection.entries;
+    final topEntries = excerptSelection.entries;
 
-    if (topEntries.isNotEmpty) {
-      final macroContent = topEntries.map((e) => e.content.trim()).join('\n\n');
+    if (excerptSelection.items.isNotEmpty) {
+      final macroContent = _formatMemoryItems(
+        excerptSelection.items,
+        includeContextHeader: false,
+      );
       final contentParts = <String>[];
       if (inputs.summaryContent != null && inputs.summaryContent!.isNotEmpty) {
         contentParts.add('Summary excerpt:\n${inputs.summaryContent}');
       }
-      contentParts.add('Memory context:');
-      for (final entry in topEntries) {
-        final title = entry.title.isNotEmpty ? entry.title : 'Memory';
-        contentParts.add('- $title: ${entry.content.trim()}');
-      }
+      contentParts.add(
+        _formatMemoryItems(excerptSelection.items, includeContextHeader: true),
+      );
 
       memoryContent = contentParts.join('\n\n');
       memoryMacroContent = macroContent;
@@ -498,14 +519,65 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
     memoryContent: memoryContent,
     memoryMacroContent: memoryMacroContent,
     memoryInjectionTarget: memoryInjectionTarget,
+    memoryCoverage: memorySelection == null
+        ? const {}
+        : {
+            'entryIds': memorySelection.entries
+                .map((entry) => entry.id)
+                .toList(growable: false),
+            'needsRebuild': false,
+            'stale': false,
+            'injected': false,
+            'candidatesTotal': memorySelection.allScores.length,
+            'excludedBySourceWindow': memorySelection.excludedBySourceWindow,
+            'budgetTokens': memorySelection.budgetTokens,
+            'budgetTrimmed': memorySelection.budgetTrimmed,
+            'packingMode': inputs.memoryPackingMode,
+            'excerptTokensPerChunk': inputs.memoryExcerptTokensPerChunk,
+            'excerptChunksPerEntry': inputs.memoryExcerptChunksPerEntry,
+          },
     triggeredMemories: triggeredMemories,
     runtimePromptBlocks: inputs.runtimePromptBlocks,
     memorySelection: memorySelection,
     memoryExcerptingEnabled: inputs.memoryExcerptingEnabled,
+    memoryPackingMode: inputs.memoryPackingMode,
+    memoryExcerptTokensPerChunk: inputs.memoryExcerptTokensPerChunk,
+    memoryExcerptChunksPerEntry: inputs.memoryExcerptChunksPerEntry,
   );
 
   // 3. Build prompt (lorebook scanning happens inside buildPrompt)
   return buildPrompt(payload);
+}
+
+String _formatMemoryItems(
+  List<MemoryInjectionItem> items, {
+  required bool includeContextHeader,
+}) {
+  final parts = <String>[];
+  if (includeContextHeader) parts.add('Memory context:');
+  for (final item in items) {
+    final title = item.entry.title.isNotEmpty
+        ? item.entry.title
+        : _formatMemoryRange(item.entry) ?? 'Memory';
+    final range = _formatMemoryRange(item.entry);
+    final heading = range == null
+        ? 'Memory: $title'
+        : 'Memory: $title ($range)';
+    if (item.excerpt) {
+      parts.add(
+        '$heading\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
+      );
+    } else {
+      parts.add('$heading\n${item.text.trim()}');
+    }
+  }
+  return parts.where((part) => part.trim().isNotEmpty).join('\n\n');
+}
+
+String? _formatMemoryRange(MemoryEntry entry) {
+  final range = entry.messageRange;
+  if (range == null) return null;
+  return '${range.start}-${range.end}';
 }
 
 bool _glazeMatch(String key, String text) {

@@ -125,6 +125,15 @@ class PromptInputsCollector {
       memoryExcerptingEnabled:
           memoryBook?.settings.memoryExcerptingEnabled ??
           memorySettings.memoryExcerptingEnabled,
+      memoryPackingMode:
+          memoryBook?.settings.memoryPackingMode ??
+          memorySettings.memoryPackingMode,
+      memoryExcerptTokensPerChunk:
+          memoryBook?.settings.memoryExcerptTokensPerChunk ??
+          memorySettings.memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry:
+          memoryBook?.settings.memoryExcerptChunksPerEntry ??
+          memorySettings.memoryExcerptChunksPerEntry,
       memoryKeyMatchMode: memorySettings.keyMatchMode,
       memoryInjectionTarget: memorySettings.injectionTarget,
       memoryMaxInjectedTokens: memoryBook?.settings.maxInjectedTokens,

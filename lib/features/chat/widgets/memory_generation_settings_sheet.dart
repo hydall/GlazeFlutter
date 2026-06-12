@@ -33,6 +33,8 @@ class _MemoryGenerationSettingsSheetState
   late int _maxInjected;
   late bool _memoryExcerptingEnabled;
   late String _memoryPackingMode;
+  late int _memoryExcerptTokensPerChunk;
+  late int _memoryExcerptChunksPerEntry;
   late String _memoryBudgetPreset;
   late int? _maxInjectedTokens;
   late int _autoCreateInterval;
@@ -88,6 +90,11 @@ class _MemoryGenerationSettingsSheetState
     _maxInjected = s.maxInjectedEntries;
     _memoryExcerptingEnabled = s.memoryExcerptingEnabled;
     _memoryPackingMode = _normalizeMemoryPackingMode(s.memoryPackingMode);
+    _memoryExcerptTokensPerChunk = s.memoryExcerptTokensPerChunk.clamp(
+      100,
+      2000,
+    );
+    _memoryExcerptChunksPerEntry = s.memoryExcerptChunksPerEntry.clamp(1, 10);
     _memoryBudgetPreset = _normalizeMemoryBudgetPreset(
       s.memoryBudgetPreset,
       s.maxInjectedTokens,
@@ -182,6 +189,8 @@ class _MemoryGenerationSettingsSheetState
       maxInjectedEntries: _maxInjected,
       memoryExcerptingEnabled: _memoryExcerptingEnabled,
       memoryPackingMode: _memoryPackingMode,
+      memoryExcerptTokensPerChunk: _memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: _memoryExcerptChunksPerEntry,
       maxInjectedTokens: _maxInjectedTokens,
       memoryBudgetPreset: _memoryBudgetPreset,
       autoCreateInterval: _autoCreateInterval,
@@ -457,6 +466,26 @@ class _MemoryGenerationSettingsSheetState
           if (_memoryExcerptingEnabled) ...[
             const SizedBox(height: 8),
             _packingModeSelector(),
+            const SizedBox(height: 12),
+            _numberField(
+              'memory_excerpt_tokens_per_chunk'.tr(),
+              _memoryExcerptTokensPerChunk,
+              (v) => setState(() => _memoryExcerptTokensPerChunk = v),
+              min: 100,
+              max: 2000,
+              step: 100,
+              helpTitle: 'memory_excerpt_tokens_per_chunk'.tr(),
+              helpBody: 'memory_excerpt_tokens_per_chunk_help'.tr(),
+            ),
+            _numberField(
+              'memory_excerpt_chunks_per_entry'.tr(),
+              _memoryExcerptChunksPerEntry,
+              (v) => setState(() => _memoryExcerptChunksPerEntry = v),
+              min: 1,
+              max: 10,
+              helpTitle: 'memory_excerpt_chunks_per_entry'.tr(),
+              helpBody: 'memory_excerpt_chunks_per_entry_help'.tr(),
+            ),
           ],
           const SizedBox(height: 8),
           _switchTile(
@@ -1195,6 +1224,8 @@ class _MemoryGenerationSettingsSheetState
           maxInjectedEntries: current.maxInjectedEntries,
           memoryExcerptingEnabled: current.memoryExcerptingEnabled,
           memoryPackingMode: current.memoryPackingMode,
+          memoryExcerptTokensPerChunk: current.memoryExcerptTokensPerChunk,
+          memoryExcerptChunksPerEntry: current.memoryExcerptChunksPerEntry,
           maxInjectedTokens: current.maxInjectedTokens,
           memoryBudgetPreset: current.memoryBudgetPreset,
           autoCreateInterval: current.autoCreateInterval,

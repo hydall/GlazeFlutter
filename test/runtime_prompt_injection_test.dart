@@ -291,6 +291,76 @@ void main() {
     expect(result.breakdown.memoryTokens, greaterThan(0));
   });
 
+  test('deferred memory chunk-first never injects full entries', () {
+    final content = [
+      'setup filler words words words',
+      'needle clue should be the only injected chunk',
+      'tail filler words words words',
+    ].join('\n\n');
+    final entry = MemoryEntry(
+      id: 'm1',
+      title: 'Chunked memory',
+      content: content,
+      keys: const ['needle'],
+      status: 'active',
+    );
+    final selection = MemorySelection(
+      entries: [entry],
+      allScores: [
+        MemoryCandidateScore(
+          entry: entry,
+          score: 10,
+          matchedKeys: const ['needle'],
+        ),
+      ],
+      budgetTokens: 100,
+      entryCap: 1,
+    );
+
+    final result = buildPrompt(
+      PromptPayload(
+        character: Character(id: 'c1', name: 'Alice'),
+        preset: const Preset(
+          id: 'p1',
+          name: 'Prompt',
+          blocks: [
+            PresetBlock(
+              id: 'chat_history',
+              name: 'History',
+              role: 'system',
+              content: '',
+            ),
+          ],
+        ),
+        history: const [
+          ChatMessage(id: 'u1', role: 'user', content: 'What about needle?'),
+        ],
+        apiConfig: const ApiConfig(
+          id: 'api',
+          name: 'API',
+          contextSize: 10000,
+          maxTokens: 100,
+        ),
+        memorySelection: selection,
+        memoryInjectionTarget: 'hard_block',
+        memoryPackingMode: 'chunk_first',
+        memoryExcerptTokensPerChunk: 8,
+        memoryExcerptChunksPerEntry: 1,
+      ),
+    );
+
+    final memoryMessage = result.messages.firstWhere(
+      (message) => message.blockId == 'memory',
+    );
+    expect(memoryMessage.content, contains('needle clue'));
+    expect(memoryMessage.content, isNot(contains('setup filler')));
+    expect(memoryMessage.content, isNot(contains('tail filler')));
+    final diagnostics = result.memoryCoverage['diagnostics'] as Map;
+    final candidate = (diagnostics['candidates'] as List).single as Map;
+    expect(candidate['injectionType'], 'excerpt');
+    expect(candidate['excerptChunkIndexes'], [1]);
+  });
+
   test('lorebook badge includes keyword and vector macro injections', () {
     final keywordEntry = LorebookEntry(
       id: 'kw1',
