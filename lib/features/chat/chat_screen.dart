@@ -404,6 +404,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   double _inputBarHeight = 130.0;
   final GlobalKey _inputBarKey = GlobalKey();
 
+  /// Measured height of the floating [MemoryActivityCard] (0 when hidden) so
+  /// the message list can reserve space for it — otherwise the card floats over
+  /// the last message and covers its regenerate / action buttons.
+  double _memoryCardHeight = 0.0;
+  final GlobalKey _memoryCardKey = GlobalKey();
+
   final _selectionCtrl = ChatMessageSelectionController();
   bool _showScrollToBottom = false;
   bool _showMemoryActivity = false;
@@ -442,14 +448,33 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
   void _checkHeight() {
     if (!mounted) return;
-    final ctx = _inputBarKey.currentContext;
-    if (ctx != null) {
-      final size = ctx.size;
+    var changed = false;
+    var nextInputBarHeight = _inputBarHeight;
+    var nextMemoryCardHeight = _memoryCardHeight;
+
+    final inputCtx = _inputBarKey.currentContext;
+    if (inputCtx != null) {
+      final size = inputCtx.size;
       if (size != null && size.height != _inputBarHeight && size.height > 0) {
-        setState(() {
-          _inputBarHeight = size.height;
-        });
+        nextInputBarHeight = size.height;
+        changed = true;
       }
+    }
+
+    // The memory card is only mounted while visible. When it is absent its
+    // reserved height collapses back to 0 so the list reclaims the space.
+    final memoryCtx = _memoryCardKey.currentContext;
+    final memoryHeight = memoryCtx?.size?.height ?? 0.0;
+    if (memoryHeight != _memoryCardHeight) {
+      nextMemoryCardHeight = memoryHeight;
+      changed = true;
+    }
+
+    if (changed) {
+      setState(() {
+        _inputBarHeight = nextInputBarHeight;
+        _memoryCardHeight = nextMemoryCardHeight;
+      });
     }
   }
 
@@ -774,7 +799,20 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         final panelHeight = math.max(targetDrawerInset, widget.keyboardHeight);
         final factor = math.min(1.0, panelHeight / math.max(1.0, safeBottom));
         final effectiveBottomInset = panelHeight + (safeBottom * (1 - factor));
-        final messageListBottom = _inputBarHeight + effectiveBottomInset;
+        // Reserve room for the floating memory card so it sits in a gap above
+        // the input bar instead of covering the last message's action buttons
+        // (regenerate, edit, etc.). Only reserved while the card is shown.
+        final showMemoryCard =
+            memoryActivity != null && memoryActivity.hasDiagnostics;
+        // When the card is dismissed its widget unmounts, so the size notifier
+        // can't fire — reclaim the reserved space on the next frame.
+        if (!showMemoryCard && _memoryCardHeight != 0.0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _checkHeight());
+        }
+        final memoryReserve = showMemoryCard ? _memoryCardHeight + 8 : 0.0;
+
+        final messageListBottom =
+            _inputBarHeight + effectiveBottomInset + memoryReserve;
 
         final animatedBottomPanelInset =
             panelHeight + (safeBottom * (1 - factor));
@@ -1188,19 +1226,32 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                   widget.drawerCtrl.isDrawerAnimating,
                             ),
                     ),
-                  if (memoryActivity != null && memoryActivity.hasDiagnostics)
+                  if (showMemoryCard)
                     Positioned(
                       left: 12,
                       right: 12,
                       bottom: animatedBottomPanelInset + _inputBarHeight + 8,
-                      child: MemoryActivityCard(
-                        activity: memoryActivity,
-                        expanded: _showMemoryActivity,
-                        onToggle: () {
-                          setState(() {
-                            _showMemoryActivity = !_showMemoryActivity;
-                          });
+                      child: NotificationListener<SizeChangedLayoutNotification>(
+                        onNotification: (n) {
+                          WidgetsBinding.instance.addPostFrameCallback(
+                            (_) => _checkHeight(),
+                          );
+                          return true;
                         },
+                        child: SizeChangedLayoutNotifier(
+                          child: Container(
+                            key: _memoryCardKey,
+                            child: MemoryActivityCard(
+                              activity: memoryActivity,
+                              expanded: _showMemoryActivity,
+                              onToggle: () {
+                                setState(() {
+                                  _showMemoryActivity = !_showMemoryActivity;
+                                });
+                              },
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   Positioned(
