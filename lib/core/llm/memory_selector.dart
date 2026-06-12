@@ -85,6 +85,9 @@ class MemorySelectionInput {
   final int currentMessageIndex;
   final double keywordWeight;
   final double vectorWeight;
+  /// When true, entry-level token budget is deferred to
+  /// [MemoryExcerptSelector] chunk packing (chunk_first mode).
+  final bool chunkBudgeting;
   final int now;
 
   const MemorySelectionInput({
@@ -108,6 +111,7 @@ class MemorySelectionInput {
     this.currentMessageIndex = 0,
     this.keywordWeight = 6.0,
     this.vectorWeight = 5.0,
+    this.chunkBudgeting = false,
     int? nowSeconds,
   }) : now = nowSeconds ?? 0;
 
@@ -242,6 +246,10 @@ class MemorySelector {
 
     for (final c in scored) {
       if (c.excludedBySourceWindow) continue;
+      if (input.chunkBudgeting) {
+        picked.add(c);
+        continue;
+      }
       if (picked.length >= cap) break;
       final cost = costFn(c.entry);
       final wouldOverflow =

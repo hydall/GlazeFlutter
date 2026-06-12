@@ -58,6 +58,11 @@ class MemoryBookController {
       autoGenerateEnabled: g.autoGenerateEnabled,
       maxInjectedEntries: g.maxInjectedEntries,
       memoryExcerptingEnabled: g.memoryExcerptingEnabled,
+      memoryPackingMode: g.memoryPackingMode,
+      memoryExcerptTokensPerChunk: g.memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: g.memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: g.chunkFirstTopEntries,
+      chunkFirstTopChunks: g.chunkFirstTopChunks,
       maxInjectedTokens: g.maxInjectedTokens,
       memoryBudgetPreset: g.memoryBudgetPreset,
       autoCreateInterval: g.autoCreateInterval,
@@ -116,6 +121,11 @@ class MemoryBookController {
     final target = s.injectionTarget == 'macro' ? '{{memory}}' : 'Hard Block';
     final vectorThreshold = s.vectorThreshold.toStringAsFixed(2);
     final maxEntries = s.maxInjectedEntries;
+    final packing = switch (s.memoryPackingMode) {
+      'full' => 'Full',
+      'chunk_first' => 'Chunks',
+      _ => 'Hybrid',
+    };
     final memoryBudget = s.maxInjectedTokens == null
         ? 'Auto memory budget'
         : '${s.maxInjectedTokens} memory tokens';
@@ -124,7 +134,7 @@ class MemoryBookController {
         (s.generationMaxTokens != null && s.generationMaxTokens! > 0)
         ? '${s.generationMaxTokens} out'
         : 'Auto out';
-    return '$mode • $interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries entries • $memoryBudget';
+    return '$mode • $interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries entries • $memoryBudget • $packing • ${s.memoryExcerptChunksPerEntry}x${s.memoryExcerptTokensPerChunk} chunks';
   }
 
   String get searchModelLabel {
@@ -381,6 +391,11 @@ class MemoryBookController {
       autoGenerateEnabled: newSettings.autoGenerateEnabled,
       maxInjectedEntries: newSettings.maxInjectedEntries,
       memoryExcerptingEnabled: newSettings.memoryExcerptingEnabled,
+      memoryPackingMode: newSettings.memoryPackingMode,
+      memoryExcerptTokensPerChunk: newSettings.memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: newSettings.memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: newSettings.chunkFirstTopEntries,
+      chunkFirstTopChunks: newSettings.chunkFirstTopChunks,
       maxInjectedTokens: newSettings.maxInjectedTokens,
       memoryBudgetPreset: newSettings.memoryBudgetPreset,
       autoCreateInterval: newSettings.autoCreateInterval,

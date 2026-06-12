@@ -8,6 +8,7 @@ import '../models/api_config.dart';
 import '../models/character.dart';
 import '../models/chat_message.dart';
 import '../models/lorebook.dart';
+import '../models/memory_book.dart';
 import '../models/persona.dart';
 import '../models/preset.dart';
 import '../state/active_selection_provider.dart';
@@ -117,6 +118,16 @@ class PromptPayloadBuilder {
     Map<String, String> sessionVars = session?.sessionVars ?? {};
     List<LorebookEntry> vectorEntries = [];
     MemorySelection? memorySelection;
+    var memoryInjectionTarget = 'hard_block';
+    final g = _ref.read(memoryGlobalSettingsProvider);
+    var memorySettings = MemoryBookSettings(
+      memoryExcerptingEnabled: g.memoryExcerptingEnabled,
+      memoryPackingMode: g.memoryPackingMode,
+      memoryExcerptTokensPerChunk: g.memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: g.memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: g.chunkFirstTopEntries,
+      chunkFirstTopChunks: g.chunkFirstTopChunks,
+    );
 
     if (session != null) {
       debugPrint('[payload] injecting ext blocks into history...');
@@ -178,7 +189,11 @@ class PromptPayloadBuilder {
       final results = await Future.wait([memoryFuture, lorebookFuture]);
       throwIfAborted();
       final memoryResult = results[0] as MemoryCandidateBuildResult;
-      final memorySelection = memoryResult.selection;
+      memorySelection = memoryResult.selection;
+      memorySettings = memoryResult.settings ?? memorySettings;
+      memoryInjectionTarget = memorySettings.injectionTarget == 'macro'
+          ? 'macro'
+          : 'hard_block';
       vectorEntries = results[1] as List<LorebookEntry>;
       throwIfAborted();
       debugPrint(
@@ -194,6 +209,11 @@ class PromptPayloadBuilder {
         'excludedBySourceWindow': memorySelection.excludedBySourceWindow,
         'budgetTokens': memorySelection.budgetTokens,
         'budgetTrimmed': memorySelection.budgetTrimmed,
+        'packingMode': memorySettings.memoryPackingMode,
+        'excerptTokensPerChunk': memorySettings.memoryExcerptTokensPerChunk,
+        'excerptChunksPerEntry': memorySettings.memoryExcerptChunksPerEntry,
+        'chunkFirstTopEntries': memorySettings.chunkFirstTopEntries,
+        'chunkFirstTopChunks': memorySettings.chunkFirstTopChunks,
         if (memoryResult.diagnostics != null)
           'diagnostics': memoryResult.diagnostics!.toJson(),
       };
@@ -216,7 +236,9 @@ class PromptPayloadBuilder {
       }
     }
 
-    debugPrint('[payload] building final payload...');
+    debugPrint(
+      '[payload] building final payload... memorySelection=${memorySelection == null ? 'null' : '${memorySelection!.allScores.length} candidates'}',
+    );
     return PromptPayload(
       character: character,
       persona: persona,
@@ -232,7 +254,7 @@ class PromptPayloadBuilder {
       summaryContent: summaryContent,
       memoryContent: null,
       memoryMacroContent: null,
-      memoryInjectionTarget: 'hard_block',
+      memoryInjectionTarget: memoryInjectionTarget,
       memoryCoverage: memoryCoverage,
       guidanceText: guidanceText,
       authorsNote: session?.authorsNote,
@@ -243,9 +265,12 @@ class PromptPayloadBuilder {
       triggeredMemories: triggeredMemories,
       runtimePromptBlocks: runtimePromptBlocks,
       memorySelection: memorySelection,
-      memoryExcerptingEnabled: _ref
-          .read(memoryGlobalSettingsProvider)
-          .memoryExcerptingEnabled,
+      memoryExcerptingEnabled: memorySettings.memoryExcerptingEnabled,
+      memoryPackingMode: memorySettings.memoryPackingMode,
+      memoryExcerptTokensPerChunk: memorySettings.memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: memorySettings.memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: memorySettings.chunkFirstTopEntries,
+      chunkFirstTopChunks: memorySettings.chunkFirstTopChunks,
     );
   }
 
@@ -314,6 +339,21 @@ class PromptPayloadBuilder {
       memoryExcerptingEnabled: _ref
           .read(memoryGlobalSettingsProvider)
           .memoryExcerptingEnabled,
+      memoryPackingMode: _ref
+          .read(memoryGlobalSettingsProvider)
+          .memoryPackingMode,
+      memoryExcerptTokensPerChunk: _ref
+          .read(memoryGlobalSettingsProvider)
+          .memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: _ref
+          .read(memoryGlobalSettingsProvider)
+          .memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: _ref
+          .read(memoryGlobalSettingsProvider)
+          .chunkFirstTopEntries,
+      chunkFirstTopChunks: _ref
+          .read(memoryGlobalSettingsProvider)
+          .chunkFirstTopChunks,
     );
   }
 

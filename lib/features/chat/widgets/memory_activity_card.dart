@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../state/memory_activity_provider.dart';
 
-class MemoryActivityCard extends StatelessWidget {
+class MemoryActivityCard extends StatefulWidget {
   final MemoryActivityState activity;
   final bool expanded;
   final VoidCallback onToggle;
@@ -16,8 +16,23 @@ class MemoryActivityCard extends StatelessWidget {
   });
 
   @override
+  State<MemoryActivityCard> createState() => _MemoryActivityCardState();
+}
+
+class _MemoryActivityCardState extends State<MemoryActivityCard> {
+  final Set<String> _expandedEntryIds = {};
+
+  @override
+  void didUpdateWidget(covariant MemoryActivityCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activity.messageId != widget.activity.messageId) {
+      _expandedEntryIds.clear();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final diagnostics = activity.diagnostics;
+    final diagnostics = widget.activity.diagnostics;
     final selectedCount = diagnostics['selectedCount'] as int? ?? 0;
     final selectedTokens = diagnostics['selectedTokens'] as int? ?? 0;
     final totalCandidates = diagnostics['totalCandidates'] as int? ?? 0;
@@ -44,67 +59,71 @@ class MemoryActivityCard extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
-          child: InkWell(
-            onTap: onToggle,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.psychology_alt_outlined,
-                        size: 18,
-                        color: context.cs.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          title,
-                          style: TextStyle(
-                            color: context.cs.onSurface,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                InkWell(
+                  onTap: widget.onToggle,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.psychology_alt_outlined,
+                          size: 18,
+                          color: context.cs.primary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              color: context.cs.onSurface,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      ),
-                      Text(
-                        '$totalCandidates candidates',
-                        style: TextStyle(
-                          color: context.cs.onSurfaceVariant,
-                          fontSize: 11,
+                        Text(
+                          '$totalCandidates candidates',
+                          style: TextStyle(
+                            color: context.cs.onSurfaceVariant,
+                            fontSize: 11,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Icon(
-                        expanded
-                            ? Icons.expand_more_rounded
-                            : Icons.chevron_left_rounded,
-                        color: context.cs.onSurfaceVariant,
-                        size: 20,
-                      ),
-                    ],
-                  ),
-                  if (expanded) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: [
-                        _MemoryActivityChip(label: 'skipped $skippedCount'),
-                        _MemoryActivityChip(label: 'latency ${latencyMs}ms'),
-                        _MemoryActivityChip(
-                          label: _budgetLabel(diagnostics['budget']),
+                        const SizedBox(width: 6),
+                        Icon(
+                          widget.expanded
+                              ? Icons.expand_more_rounded
+                              : Icons.chevron_left_rounded,
+                          color: context.cs.onSurfaceVariant,
+                          size: 20,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    ..._candidateRows(diagnostics),
-                  ],
+                  ),
+                ),
+                if (widget.expanded) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _MemoryActivityChip(label: 'skipped $skippedCount'),
+                      _MemoryActivityChip(label: 'latency ${latencyMs}ms'),
+                      _MemoryActivityChip(
+                        label: _budgetLabel(diagnostics['budget']),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ..._candidateRows(context, diagnostics),
                 ],
-              ),
+              ],
             ),
           ),
         ),
@@ -119,54 +138,168 @@ class MemoryActivityCard extends StatelessWidget {
     return tokens is int ? 'budget $tokens ($source)' : 'budget $source';
   }
 
-  static List<Widget> _candidateRows(Map<String, dynamic> diagnostics) {
+  List<Widget> _candidateRows(
+    BuildContext context,
+    Map<String, dynamic> diagnostics,
+  ) {
     final raw = diagnostics['candidates'];
     if (raw is! List) return const [];
     return raw
-        .take(6)
         .whereType<Map<String, dynamic>>()
-        .map((candidate) {
-          final title = (candidate['title'] as String?)?.trim();
-          final entryId = candidate['entryId'] as String? ?? '';
-          final label = title == null || title.isEmpty ? entryId : title;
-          final selected = candidate['selected'] == true;
-          final reason = candidate['reason'] as String? ?? 'not_selected';
-          final tokens = candidate['tokenCost'] as int? ?? 0;
-          final injectionType = candidate['injectionType'] as String? ?? 'none';
-          final score = candidate['score'];
-          final scoreText = score is num ? score.toStringAsFixed(2) : '0.00';
-          final typeLabel = injectionType == 'excerpt'
-              ? 'excerpt'
-              : injectionType == 'full_entry'
-              ? 'full'
-              : reason;
-          return Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Row(
-              children: [
-                Icon(
-                  selected ? Icons.check_circle_outline : Icons.cancel_outlined,
-                  color: selected ? Colors.greenAccent : Colors.orangeAccent,
-                  size: 16,
-                ),
-                const SizedBox(width: 7),
-                Expanded(
-                  child: Text(
-                    '$label · $typeLabel',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                ),
-                Text(
-                  '$tokens tok · $scoreText',
-                  style: const TextStyle(fontSize: 11),
-                ),
-              ],
-            ),
-          );
-        })
+        .map((candidate) => _candidateTile(context, candidate))
         .toList(growable: false);
+  }
+
+  static String _chunkLabel(Map<String, dynamic> candidate) {
+    final injected = candidate['excerptChunksInjected'] as int? ?? 0;
+    final total = candidate['excerptChunksTotal'] as int? ?? 0;
+    if (injected > 0 && total > 0) {
+      return '$injected из $total';
+    }
+    final indexes = candidate['excerptChunkIndexes'];
+    if (indexes is List && indexes.isNotEmpty) {
+      return '${indexes.length} ch';
+    }
+    return '';
+  }
+
+  Widget _candidateTile(BuildContext context, Map<String, dynamic> candidate) {
+    final title = (candidate['title'] as String?)?.trim();
+    final entryId = candidate['entryId'] as String? ?? '';
+    final messageRange = (candidate['messageRange'] as String?)?.trim() ?? '';
+    final label = title == null || title.isEmpty
+        ? (messageRange.isNotEmpty ? messageRange : entryId)
+        : (title == messageRange || messageRange.isEmpty ? title : title);
+    final selected = candidate['selected'] == true;
+    final reason = candidate['reason'] as String? ?? 'not_selected';
+    final tokens = candidate['tokenCost'] as int? ?? 0;
+    final originalTokens = candidate['originalTokenCost'] as int? ?? tokens;
+    final injectionType = candidate['injectionType'] as String? ?? 'none';
+    final score = candidate['score'];
+    final scoreText = score is num ? score.toStringAsFixed(2) : '0.00';
+    final chunkLabel = _chunkLabel(candidate);
+    final typeLabel = switch (injectionType) {
+      'excerpt' when chunkLabel.isNotEmpty => chunkLabel,
+      'excerpt' => 'excerpt',
+      'full_entry' => 'full',
+      _ => reason,
+    };
+    final matchedTerms = candidate['excerptMatchedTerms'];
+    final chunkIndexes = candidate['excerptChunkIndexes'];
+    final canExpand = selected;
+    final expanded = _expandedEntryIds.contains(entryId);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: canExpand
+                  ? () {
+                      setState(() {
+                        if (expanded) {
+                          _expandedEntryIds.remove(entryId);
+                        } else {
+                          _expandedEntryIds.add(entryId);
+                        }
+                      });
+                    }
+                  : null,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                child: Row(
+                  children: [
+                    Icon(
+                      selected
+                          ? Icons.check_circle_outline
+                          : Icons.cancel_outlined,
+                      color: selected ? Colors.greenAccent : Colors.orangeAccent,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        '$label · $typeLabel',
+                        maxLines: expanded ? 4 : 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    if (canExpand)
+                      Icon(
+                        expanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                        size: 16,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '$tokens tok · $scoreText',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (expanded && canExpand)
+            Padding(
+              padding: const EdgeInsets.only(left: 25, top: 2, bottom: 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (chunkLabel.isNotEmpty)
+                    Text(
+                      'Чанки: $chunkLabel',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                    ),
+                  if (injectionType == 'excerpt' &&
+                      chunkIndexes is List &&
+                      chunkIndexes.isNotEmpty)
+                    Text(
+                      'Индексы: ${chunkIndexes.map((index) => '#$index').join(', ')}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                    ),
+                  if (injectionType == 'full_entry')
+                    Text(
+                      'Полная запись ($tokens / $originalTokens tok)',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                    ),
+                  if (matchedTerms is List && matchedTerms.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Matched: ${matchedTerms.whereType<String>().join(', ')}',
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.cs.onSurfaceVariant.withValues(
+                            alpha: 0.85,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

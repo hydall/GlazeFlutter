@@ -32,6 +32,11 @@ class _MemoryGenerationSettingsSheetState
   late bool _autoGenerate;
   late int _maxInjected;
   late bool _memoryExcerptingEnabled;
+  late String _memoryPackingMode;
+  late int _memoryExcerptTokensPerChunk;
+  late int _memoryExcerptChunksPerEntry;
+  late int _chunkFirstTopEntries;
+  late int _chunkFirstTopChunks;
   late String _memoryBudgetPreset;
   late int? _maxInjectedTokens;
   late int _autoCreateInterval;
@@ -86,6 +91,15 @@ class _MemoryGenerationSettingsSheetState
     _autoGenerate = s.autoGenerateEnabled;
     _maxInjected = s.maxInjectedEntries;
     _memoryExcerptingEnabled = s.memoryExcerptingEnabled;
+    _memoryPackingMode = _normalizeMemoryPackingMode(s.memoryPackingMode);
+    _memoryExcerptTokensPerChunk = s.memoryExcerptTokensPerChunk.clamp(
+      100,
+      2000,
+    );
+    _memoryExcerptChunksPerEntry = s.memoryExcerptChunksPerEntry.clamp(1, 10);
+    _chunkFirstTopEntries = s.chunkFirstTopEntries.clamp(0, 20);
+    _chunkFirstTopChunks = (s.chunkFirstTopChunks <= 0 ? 1 : s.chunkFirstTopChunks)
+        .clamp(1, 10);
     _memoryBudgetPreset = _normalizeMemoryBudgetPreset(
       s.memoryBudgetPreset,
       s.maxInjectedTokens,
@@ -107,7 +121,7 @@ class _MemoryGenerationSettingsSheetState
     _keyMatchMode = s.keyMatchMode;
     _vectorSearchEnabled = s.vectorSearchEnabled;
     _vectorThreshold = ref.read(memoryGlobalSettingsProvider).vectorThreshold;
-    _advancedSelectorOpen = false;
+    _advancedSelectorOpen = true;
     _diversityAware = s.diversityAware;
     _diversityPenalty = s.diversityPenalty;
     _recencyBoost = s.recencyBoost;
@@ -179,6 +193,11 @@ class _MemoryGenerationSettingsSheetState
       autoGenerateEnabled: _autoGenerate,
       maxInjectedEntries: _maxInjected,
       memoryExcerptingEnabled: _memoryExcerptingEnabled,
+      memoryPackingMode: _memoryPackingMode,
+      memoryExcerptTokensPerChunk: _memoryExcerptTokensPerChunk,
+      memoryExcerptChunksPerEntry: _memoryExcerptChunksPerEntry,
+      chunkFirstTopEntries: _chunkFirstTopEntries,
+      chunkFirstTopChunks: _chunkFirstTopChunks,
       maxInjectedTokens: _maxInjectedTokens,
       memoryBudgetPreset: _memoryBudgetPreset,
       autoCreateInterval: _autoCreateInterval,
@@ -287,24 +306,8 @@ class _MemoryGenerationSettingsSheetState
               min: 1,
               max: 50,
             ),
-            _numberField(
-              'memory_books_max_entries_prompt'.tr(),
-              _maxInjected,
-              (v) => setState(() => _maxInjected = v),
-              min: 1,
-              max: 20,
-            ),
             const SizedBox(height: 12),
-            _sectionLabel('Memory budget'),
-            _memoryBudgetSelector(),
-            const SizedBox(height: 8),
-            _effectiveBudgetHint(),
-            _switchTile(
-              'memory_excerpting_enabled'.tr(),
-              _memoryExcerptingEnabled,
-              (v) => setState(() => _memoryExcerptingEnabled = v),
-              subtitle: 'memory_excerpting_auto_desc'.tr(),
-            ),
+            _selectorSettings(),
             const SizedBox(height: 12),
             _sectionLabel('label_embedding_target'.tr()),
             SegmentedButton<String>(
@@ -401,8 +404,6 @@ class _MemoryGenerationSettingsSheetState
                 style: ButtonStyle(visualDensity: VisualDensity.compact),
               ),
             ],
-            const SizedBox(height: 12),
-            _advancedSelectorSettings(),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -428,7 +429,7 @@ class _MemoryGenerationSettingsSheetState
     );
   }
 
-  Widget _advancedSelectorSettings() {
+  Widget _selectorSettings() {
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
@@ -439,7 +440,7 @@ class _MemoryGenerationSettingsSheetState
         tilePadding: EdgeInsets.zero,
         childrenPadding: EdgeInsets.zero,
         title: Text(
-          'memory_selector_advanced'.tr(),
+          'memory_selector_settings'.tr(),
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -451,6 +452,71 @@ class _MemoryGenerationSettingsSheetState
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
         children: [
+          _numberField(
+            'memory_books_max_entries_prompt'.tr(),
+            _maxInjected,
+            (v) => setState(() => _maxInjected = v),
+            min: 1,
+            max: 20,
+          ),
+          const SizedBox(height: 12),
+          _sectionLabel('memory_budget'.tr()),
+          _memoryBudgetSelector(),
+          const SizedBox(height: 8),
+          _effectiveBudgetHint(),
+          _switchTile(
+            'memory_excerpting_enabled'.tr(),
+            _memoryExcerptingEnabled,
+            (v) => setState(() => _memoryExcerptingEnabled = v),
+            subtitle: 'memory_excerpting_auto_desc'.tr(),
+          ),
+          if (_memoryExcerptingEnabled) ...[
+            const SizedBox(height: 8),
+            _packingModeSelector(),
+            const SizedBox(height: 12),
+            _numberField(
+              'memory_excerpt_tokens_per_chunk'.tr(),
+              _memoryExcerptTokensPerChunk,
+              (v) => setState(() => _memoryExcerptTokensPerChunk = v),
+              min: 100,
+              max: 2000,
+              step: 100,
+              helpTitle: 'memory_excerpt_tokens_per_chunk'.tr(),
+              helpBody: 'memory_excerpt_tokens_per_chunk_help'.tr(),
+            ),
+            _numberField(
+              'memory_excerpt_chunks_per_entry'.tr(),
+              _memoryExcerptChunksPerEntry,
+              (v) => setState(() => _memoryExcerptChunksPerEntry = v),
+              min: 1,
+              max: 10,
+              helpTitle: 'memory_excerpt_chunks_per_entry'.tr(),
+              helpBody: 'memory_excerpt_chunks_per_entry_help'.tr(),
+            ),
+            if (_memoryPackingMode == 'chunk_first') ...[
+              const SizedBox(height: 8),
+              _numberField(
+                'memory_chunk_first_top_entries'.tr(),
+                _chunkFirstTopEntries,
+                (v) => setState(() => _chunkFirstTopEntries = v),
+                min: 0,
+                max: 20,
+                helpTitle: 'memory_chunk_first_top_entries'.tr(),
+                helpBody: 'memory_chunk_first_top_entries_help'.tr(),
+              ),
+              if (_chunkFirstTopEntries > 0)
+                _numberField(
+                  'memory_chunk_first_top_chunks'.tr(),
+                  _chunkFirstTopChunks,
+                  (v) => setState(() => _chunkFirstTopChunks = v),
+                  min: 1,
+                  max: 10,
+                  helpTitle: 'memory_chunk_first_top_chunks'.tr(),
+                  helpBody: 'memory_chunk_first_top_chunks_help'.tr(),
+                ),
+            ],
+          ],
+          const SizedBox(height: 8),
           _switchTile(
             'memory_selector_diversity'.tr(),
             _diversityAware,
@@ -586,6 +652,44 @@ class _MemoryGenerationSettingsSheetState
               : _memoryMode == 'deep'
               ? 'memory_mode_deep_desc'.tr()
               : 'memory_mode_fast_desc'.tr(),
+          style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+
+  Widget _packingModeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('memory_packing_mode'.tr()),
+        SegmentedButton<String>(
+          segments: [
+            ButtonSegment(
+              value: 'full',
+              label: Text('memory_packing_full'.tr()),
+            ),
+            ButtonSegment(
+              value: 'hybrid',
+              label: Text('memory_packing_hybrid'.tr()),
+            ),
+            ButtonSegment(
+              value: 'chunk_first',
+              label: Text('memory_packing_chunk_first'.tr()),
+            ),
+          ],
+          selected: {_memoryPackingMode},
+          onSelectionChanged: (s) =>
+              setState(() => _memoryPackingMode = s.first),
+          style: ButtonStyle(visualDensity: VisualDensity.compact),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _memoryPackingMode == 'full'
+              ? 'memory_packing_full_desc'.tr()
+              : _memoryPackingMode == 'chunk_first'
+              ? 'memory_packing_chunk_first_desc'.tr()
+              : 'memory_packing_hybrid_desc'.tr(),
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
       ],
@@ -1148,6 +1252,11 @@ class _MemoryGenerationSettingsSheetState
           autoGenerateEnabled: current.autoGenerateEnabled,
           maxInjectedEntries: current.maxInjectedEntries,
           memoryExcerptingEnabled: current.memoryExcerptingEnabled,
+          memoryPackingMode: current.memoryPackingMode,
+          memoryExcerptTokensPerChunk: current.memoryExcerptTokensPerChunk,
+          memoryExcerptChunksPerEntry: current.memoryExcerptChunksPerEntry,
+          chunkFirstTopEntries: current.chunkFirstTopEntries,
+          chunkFirstTopChunks: current.chunkFirstTopChunks,
           maxInjectedTokens: current.maxInjectedTokens,
           memoryBudgetPreset: current.memoryBudgetPreset,
           autoCreateInterval: current.autoCreateInterval,
@@ -1323,6 +1432,11 @@ String _normalizeMemoryMode(String raw) {
   if (raw == 'deep') return 'deep';
   if (raw == 'legacy') return 'legacy';
   return raw == 'balanced' ? 'balanced' : 'fast';
+}
+
+String _normalizeMemoryPackingMode(String raw) {
+  if (raw == 'full' || raw == 'chunk_first') return raw;
+  return 'hybrid';
 }
 
 String _normalizeClassifierSource(String raw) {

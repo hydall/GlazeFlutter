@@ -197,6 +197,11 @@ where `contextBudgetTokens` is supplied by the caller (typically
 order; once the running total of `estimateTokens(entry.content)`
 exceeds `maxInjectionTokens`, the tail of the list is dropped.
 
+In `memoryPackingMode == 'chunk_first'`, `MemorySelector` passes all
+non-excluded candidates to `MemoryExcerptSelector.selectChunkFirstGlobal()`,
+which budgets on **injected chunk tokens**, not full-entry sizes. The hard
+cap still applies to the final packed text.
+
 If `contextBudgetTokens` is not supplied (null/0) or
 `maxInjectionBudgetPercent <= 0`, the guard is a no-op — legacy
 behaviour is preserved for callers that don't yet pass the budget.

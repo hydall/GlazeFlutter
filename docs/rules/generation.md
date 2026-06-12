@@ -103,8 +103,8 @@ provider disposal is not a cleanup path.
 1. Vector lorebook scan (async, `PromptPayloadBuilder`, before isolate)
 2. Keyword lorebook scan (sync, `PromptBuilder`, inside isolate)
 3. Merge keyword + vector (keyword wins; dedupe vector by id)
-4. Memory injection (token budget — INV-PS4)
-5. Context cutoff — oldest messages trimmed first
+4. Memory candidate selection + excerpt packing (`memoryPackingMode`: full / hybrid / chunk_first — see `docs/ARCHITECTURE.md` §4)
+5. Context cutoff — oldest messages trimmed first; deferred `{{memory}}` macro finalization runs after cutoff when `memorySelection` is present
 
 ---
 

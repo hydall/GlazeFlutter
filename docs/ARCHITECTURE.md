@@ -466,7 +466,7 @@ post-gen, or pipeline sync notification. See `docs/INVARIANTS.md` INV-CM2.
 - `features/memory/controllers/memory_book_controller.dart` — UI-facing draft gen, cancel, mutex
 - `features/memory/state/memory_active_drafts_provider.dart` — cross-feature mutex with chat gen
 - `memory_draft_generator.dart` — LLM-based draft generation, batching, progress
-- `memory_injection_service.dart` + `memory_budget.dart` — scoring, top-N, INV-PS4 token cap
+- `memory_injection_service.dart` + `memory_budget.dart` + `memory_excerpt_selector.dart` — scoring, packing, INV-PS4 token cap
 - `memory_embedding_service.dart` — indexes/reindexes memory entries
 - `memory_book_repo.dart` — DB persistence for `MemoryBook` rows
 - `core/state/memory_settings_provider.dart` — global settings (SharedPreferences)
@@ -506,6 +506,52 @@ Memory entries are injected only when all linked `messageIds` are already **outs
 `MemoryInjectionBudget.maxInjectionTokens()` caps injected memory at
 `contextBudgetTokens * maxInjectionBudgetPercent` (default 35%).
 See `docs/INVARIANTS.md` INV-PS4.
+
+### Packing modes (`memoryPackingMode`)
+
+After `MemorySelector` scores candidates, `MemoryExcerptSelector` decides
+**what text** from each entry is injected. Settings live in
+`MemoryBookSettings` / `MemoryGlobalSettings` (UI: *Memory → Advanced
+selector → Packing mode*).
+
+| Mode | Behaviour |
+|------|-----------|
+| `full` | Inject whole entry bodies when they fit the budget. |
+| `hybrid` | Prefer full entries; when the budget is tight, fall back to per-entry excerpts (top chunks inside each entry). |
+| `chunk_first` | Always pack **chunks** globally by relevance × token cost, not full entries. |
+
+**Chunking** (`memory_excerpt_selector.dart`): entry content is split on blank
+lines (`\n\n`) into paragraph blocks up to
+`memoryExcerptTokensPerChunk` tokens; oversized blocks are split further by
+sentence/word windows.
+
+**`chunk_first` two-phase packing** (`selectChunkFirstGlobal`):
+
+1. **Floor pass** — top `chunkFirstTopEntries` entries by entry score (recency,
+   vector, keywords, importance) each receive up to `chunkFirstTopChunks` of
+   their best chunks. This keeps fresh or vector-implied memories from losing
+   entirely to keyword-heavy older arcs. Set `chunkFirstTopEntries` to `0` to
+   disable the floor pass.
+2. **Global pass** — remaining budget is filled with globally ranked chunks
+   until `memoryExcerptChunksPerEntry` per entry or the token budget is
+   exhausted.
+
+Chunk relevance blends keyword overlap, vector chunk hints, and entry-level
+signals (recency / vector / importance). Entry-level score shown in the
+Injected Memory UI is **not** identical to per-chunk relevance in
+`chunk_first` mode.
+
+**Deferred `{{memory}}`**: when `injectionTarget='macro'` and a preset block
+contains `{{memory}}` (e.g. inside `<summary>` on the last user message),
+`PromptBuilder` finalizes memory **after** the context cutoff is known,
+replacing `[[GLAZE_DEFERRED_MEMORY_CONTEXT]]` with the excerpt-packed macro
+content. `PromptPayload.memorySelection` must be populated (no shadowed local)
+for this path to run.
+
+**Diagnostics** (`memory_diagnostics.dart`, `memory_activity_card.dart`):
+per-candidate reasons include `chunk_rank_trimmed` / `chunk_budget_trimmed`;
+expanded rows show `N из M` chunks and chunk indexes. Labels like `121-135` are
+**chat message ranges** (`messageRange`), not chunk indices.
 
 ---
 

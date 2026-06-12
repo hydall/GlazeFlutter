@@ -68,6 +68,9 @@ void main() {
         .read(memoryGlobalSettingsProvider.notifier)
         .save(
           const MemoryGlobalSettings(
+            memoryPackingMode: 'chunk_first',
+            memoryExcerptTokensPerChunk: 300,
+            memoryExcerptChunksPerEntry: 4,
             diversityAware: false,
             diversityPenalty: 0.3,
             recencyBoost: false,
@@ -98,6 +101,9 @@ void main() {
     final json =
         jsonDecode(prefs.getString('memorySettings')!) as Map<String, dynamic>;
 
+    expect(json['memoryPackingMode'], 'chunk_first');
+    expect(json['memoryExcerptTokensPerChunk'], 300);
+    expect(json['memoryExcerptChunksPerEntry'], 4);
     expect(json['diversityAware'], false);
     expect(json['diversityPenalty'], 0.3);
     expect(json['recencyBoost'], false);
@@ -138,6 +144,9 @@ void main() {
           const MemoryGlobalSettings(
             diversityAware: false,
             memoryMode: 'balanced',
+            memoryPackingMode: 'chunk_first',
+            memoryExcerptTokensPerChunk: 300,
+            memoryExcerptChunksPerEntry: 4,
             recencyBoost: false,
             importanceWeight: 1.5,
             sourceWindowExclusion: false,
@@ -159,6 +168,9 @@ void main() {
 
     expect(book.settings.diversityAware, false);
     expect(book.settings.memoryMode, 'balanced');
+    expect(book.settings.memoryPackingMode, 'chunk_first');
+    expect(book.settings.memoryExcerptTokensPerChunk, 300);
+    expect(book.settings.memoryExcerptChunksPerEntry, 4);
     expect(book.settings.recencyBoost, false);
     expect(book.settings.importanceWeight, 1.5);
     expect(book.settings.sourceWindowExclusion, false);
@@ -188,6 +200,9 @@ void main() {
       'session_update',
       const MemoryBookSettings(
         memoryMode: 'balanced',
+        memoryPackingMode: 'chunk_first',
+        memoryExcerptTokensPerChunk: 300,
+        memoryExcerptChunksPerEntry: 4,
         diversityAware: false,
         factualContinuityGuardEnabled: true,
         classifierEnabled: true,
@@ -207,6 +222,9 @@ void main() {
     final updated = await repo.getBySessionId('session_update');
     expect(updated!.settings.diversityAware, false);
     expect(updated.settings.memoryMode, 'balanced');
+    expect(updated.settings.memoryPackingMode, 'chunk_first');
+    expect(updated.settings.memoryExcerptTokensPerChunk, 300);
+    expect(updated.settings.memoryExcerptChunksPerEntry, 4);
     expect(updated.settings.factualContinuityGuardEnabled, true);
     expect(updated.settings.classifierEnabled, true);
     expect(updated.settings.classifierSource, 'current');

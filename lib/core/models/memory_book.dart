@@ -67,6 +67,14 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(false) bool autoGenerateEnabled,
     @Default(7) int maxInjectedEntries,
     @Default(true) bool memoryExcerptingEnabled,
+    @Default('hybrid') String memoryPackingMode,
+    @Default(500) int memoryExcerptTokensPerChunk,
+    @Default(2) int memoryExcerptChunksPerEntry,
+    /// Top-N entries (by entry score) that each receive at least one chunk in
+    /// chunk_first mode. 0 disables the entry floor pass.
+    @Default(3) int chunkFirstTopEntries,
+    /// Best chunks reserved per guaranteed entry in chunk_first floor pass.
+    @Default(1) int chunkFirstTopChunks,
     @Default(0.35) double maxInjectionBudgetPercent,
     int? maxInjectedTokens,
     @Default('auto') String memoryBudgetPreset,

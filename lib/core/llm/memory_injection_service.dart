@@ -55,10 +55,12 @@ class MemoryInjectionResult {
 class MemoryCandidateBuildResult {
   final MemorySelection selection;
   final MemoryDiagnostics? diagnostics;
+  final MemoryBookSettings? settings;
 
   const MemoryCandidateBuildResult({
     required this.selection,
     required this.diagnostics,
+    this.settings,
   });
 }
 
@@ -127,6 +129,7 @@ class MemoryInjectionService {
       final resolvedSettings = settings ?? const MemoryBookSettings();
       return MemoryCandidateBuildResult(
         selection: selection,
+        settings: settings,
         diagnostics: settings == null
             ? null
             : MemoryDiagnostics.fromSelection(
@@ -230,6 +233,7 @@ class MemoryInjectionService {
         importanceWeight: book.settings.importanceWeight,
         sourceWindowExclusion: book.settings.sourceWindowExclusion,
         currentMessageIndex: history.length,
+        chunkBudgeting: book.settings.memoryPackingMode == 'chunk_first',
       ),
     );
     return finish(selection, budget: budget, settings: book.settings);
@@ -253,8 +257,6 @@ class MemoryInjectionService {
     final chatHistory = (history ?? const [])
         .map((m) => ChatMessage(id: '', role: m.role, content: m.content))
         .toList();
-    final gs = _ref.read(memoryGlobalSettingsProvider);
-
     final candidateResult = await buildCandidatesWithDiagnostics(
       sessionId: sessionId,
       history: chatHistory,
@@ -266,6 +268,7 @@ class MemoryInjectionService {
       visibleMessageIds: visibleMessageIds,
     );
     final selection = candidateResult.selection;
+    final settings = candidateResult.settings ?? const MemoryBookSettings();
 
     if (selection.entries.isEmpty) {
       return MemoryInjectionResult(
@@ -277,32 +280,35 @@ class MemoryInjectionService {
       );
     }
 
-    final excerptSelection = gs.memoryExcerptingEnabled
-        ? MemoryExcerptSelector.select(selection)
+    final useExcerptPacking =
+        settings.memoryExcerptingEnabled ||
+        settings.memoryPackingMode == 'chunk_first';
+    final excerptSelection = useExcerptPacking
+        ? MemoryExcerptSelector.select(
+            selection,
+            packingMode: settings.memoryPackingMode,
+            maxExcerptTokensPerEntry: settings.memoryExcerptTokensPerChunk,
+            maxExcerptChunksPerEntry: settings.memoryExcerptChunksPerEntry,
+            chunkFirstTopEntries: settings.chunkFirstTopEntries,
+            chunkFirstTopChunks: settings.chunkFirstTopChunks,
+          )
         : MemoryExcerptSelector.fullEntries(selection);
     final maxInjectionTokens = selection.budgetTokens;
     final totalTokens = excerptSelection.totalTokens;
-    final macroContent = excerptSelection.items
-        .map((item) => item.text.trim())
-        .join('\n\n');
+    final macroContent = _formatMemoryItems(
+      excerptSelection.items,
+      includeContextHeader: false,
+    );
 
     final contentParts = <String>[];
     if (summaryExcerpt != null && summaryExcerpt.isNotEmpty) {
       contentParts.add('Summary excerpt:\n$summaryExcerpt');
     }
-    contentParts.add('Memory context:');
-    for (final item in excerptSelection.items) {
-      final title = item.entry.title.isNotEmpty ? item.entry.title : 'Memory';
-      if (item.excerpt) {
-        contentParts.add(
-          '- Excerpt from $title:\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
-        );
-      } else {
-        contentParts.add('- $title: ${item.text.trim()}');
-      }
-    }
+    contentParts.add(
+      _formatMemoryItems(excerptSelection.items, includeContextHeader: true),
+    );
 
-    final injectionTarget = gs.injectionTarget == 'macro'
+    final injectionTarget = settings.injectionTarget == 'macro'
         ? 'macro'
         : 'hard_block';
 
@@ -350,7 +356,9 @@ class MemoryInjectionService {
           '[mem-vec] processing entry ${i + 1}/${entries.length}: id=${entry.id}',
         );
         final row = embeddingMap[entry.id];
-        if (shouldAbort?.call() == true) return const _MemoryVectorMatchResult();
+        if (shouldAbort?.call() == true) {
+          return const _MemoryVectorMatchResult();
+        }
         if (row == null || !_embeddingRepo.hasUsableVectors(row)) {
           debugPrint('[mem-vec]   skipped: no row or no vectorsBlob');
           continue;
@@ -443,7 +451,8 @@ class MemoryInjectionService {
       final topK = settings.maxInjectedEntries.clamp(1, 50);
       final scores = <String, double>{};
       final chunksByEntryId = <String, List<String>>{};
-      for (final result in results.where((r) => r.score >= threshold).take(topK)) {
+      for (final result
+          in results.where((r) => r.score >= threshold).take(topK)) {
         scores[result.id] = result.score;
         final chunkTexts = result.metadata['chunkTexts'];
         if (chunkTexts is List && result.bestCandidateChunk != null) {
@@ -666,3 +675,34 @@ final memoryEmbeddingServiceProvider = Provider<MemoryEmbeddingService>((ref) {
     EmbeddingService(),
   );
 });
+
+String _formatMemoryItems(
+  List<MemoryInjectionItem> items, {
+  required bool includeContextHeader,
+}) {
+  final parts = <String>[];
+  if (includeContextHeader) parts.add('Memory context:');
+  for (final item in items) {
+    final title = item.entry.title.isNotEmpty
+        ? item.entry.title
+        : _formatMemoryRange(item.entry) ?? 'Memory';
+    final range = _formatMemoryRange(item.entry);
+    final heading = range == null
+        ? 'Memory: $title'
+        : 'Memory: $title ($range)';
+    if (item.excerpt) {
+      parts.add(
+        '$heading\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
+      );
+    } else {
+      parts.add('$heading\n${item.text.trim()}');
+    }
+  }
+  return parts.where((part) => part.trim().isNotEmpty).join('\n\n');
+}
+
+String? _formatMemoryRange(MemoryEntry entry) {
+  final range = entry.messageRange;
+  if (range == null) return null;
+  return '${range.start}-${range.end}';
+}

@@ -16,7 +16,6 @@ import 'embedding_settings_screen.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import 'lorebook_connections_sheet.dart';
 import 'lorebook_editor_screen.dart';
-import 'lorebook_global_settings_screen.dart';
 
 class LorebookListScreen extends ConsumerWidget {
   const LorebookListScreen({super.key});
@@ -39,11 +38,7 @@ class LorebookListScreen extends ConsumerWidget {
         SheetViewAction(
           icon: const Icon(Icons.settings_outlined, size: 20),
           tooltip: 'Global Settings',
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => const LorebookGlobalSettingsScreen(),
-            ),
-          ),
+          onPressed: () => context.push('/tools/lorebooks/settings'),
         ),
         SheetViewAction(
           icon: const Icon(Icons.upload_file, size: 20),

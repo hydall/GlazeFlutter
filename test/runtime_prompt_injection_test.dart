@@ -6,6 +6,7 @@ import 'package:glaze_flutter/core/llm/memory_selector.dart';
 import 'package:glaze_flutter/core/models/api_config.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
+import 'package:glaze_flutter/core/models/lorebook.dart';
 import 'package:glaze_flutter/core/models/memory_book.dart';
 import 'package:glaze_flutter/core/models/preset.dart';
 import 'package:glaze_flutter/features/extensions/services/runtime_prompt_injection_service.dart';
@@ -199,7 +200,7 @@ void main() {
     final memoryMessage = result.messages.firstWhere(
       (message) => message.blockId == 'memory',
     );
-    expect(memoryMessage.content, contains('Excerpt from Bridge memory'));
+    expect(memoryMessage.content, contains('Memory: Bridge memory'));
     expect(memoryMessage.content, contains('ritual map'));
     expect(
       memoryMessage.content,
@@ -288,5 +289,313 @@ void main() {
     expect(memorySlot.content, isNot(contains('GLAZE_DEFERRED')));
     expect(result.messages.where((m) => m.blockId == 'memory'), isEmpty);
     expect(result.breakdown.memoryTokens, greaterThan(0));
+  });
+
+  test(
+    'deferred memory appendToLastMessage receives final excerpts in history',
+    () {
+      final content = [
+        'The bridge scene opened with rain and silence.',
+        'Sable promised Ren she would hide the ritual map until the debt was paid.',
+        'They argued about lanterns and horses for several minutes.',
+      ].join('\n\n');
+      final entry = MemoryEntry(
+        id: 'm1',
+        title: 'Bridge memory',
+        content: content,
+        keys: const ['ritual map', 'debt'],
+        status: 'active',
+      );
+      final selection = MemorySelector.select(
+        MemorySelectionInput(
+          entries: [entry],
+          keywordMatchedTerms: const {
+            'm1': ['ritual map', 'debt'],
+          },
+          maxInjectionTokens: 12,
+          maxInjectedEntries: 1,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+        ),
+        tokenCounter: (entry) => entry.content.split(RegExp(r'\s+')).length,
+      );
+
+      final result = buildPrompt(
+        PromptPayload(
+          character: Character(id: 'c1', name: 'Alice'),
+          preset: const Preset(
+            id: 'p1',
+            name: 'Prompt',
+            blocks: [
+              PresetBlock(
+                id: 'inject_slot',
+                name: 'Inject Slot',
+                role: 'user',
+                content:
+                    '<lorebooks>\n{{lorebooks}}\n</lorebooks>\n<summary>\n{{memory}}\n</summary>',
+                appendToLastMessage: true,
+              ),
+              PresetBlock(
+                id: 'chat_history',
+                name: 'History',
+                role: 'system',
+                content: '',
+              ),
+            ],
+          ),
+          history: const [
+            ChatMessage(id: 'u1', role: 'user', content: 'What about the map?'),
+          ],
+          apiConfig: const ApiConfig(
+            id: 'api',
+            name: 'API',
+            contextSize: 10000,
+            maxTokens: 100,
+          ),
+          memorySelection: selection,
+          memoryInjectionTarget: 'macro',
+        ),
+      );
+
+      final lastUser = result.messages.lastWhere((m) => m.role == 'user');
+      expect(lastUser.content, contains('<summary>'));
+      expect(lastUser.content, contains('ritual map'));
+      expect(lastUser.content, isNot(contains('GLAZE_DEFERRED')));
+    },
+  );
+
+  test('deferred memory chunk-first never injects full entries', () {
+    final content = [
+      'setup filler words words words',
+      'needle clue should be the only injected chunk',
+      'tail filler words words words',
+    ].join('\n\n');
+    final entry = MemoryEntry(
+      id: 'm1',
+      title: 'Chunked memory',
+      content: content,
+      keys: const ['needle'],
+      status: 'active',
+    );
+    final selection = MemorySelection(
+      entries: [entry],
+      allScores: [
+        MemoryCandidateScore(
+          entry: entry,
+          score: 10,
+          matchedKeys: const ['needle'],
+        ),
+      ],
+      budgetTokens: 100,
+      entryCap: 1,
+    );
+
+    final result = buildPrompt(
+      PromptPayload(
+        character: Character(id: 'c1', name: 'Alice'),
+        preset: const Preset(
+          id: 'p1',
+          name: 'Prompt',
+          blocks: [
+            PresetBlock(
+              id: 'chat_history',
+              name: 'History',
+              role: 'system',
+              content: '',
+            ),
+          ],
+        ),
+        history: const [
+          ChatMessage(id: 'u1', role: 'user', content: 'What about needle?'),
+        ],
+        apiConfig: const ApiConfig(
+          id: 'api',
+          name: 'API',
+          contextSize: 10000,
+          maxTokens: 100,
+        ),
+        memorySelection: selection,
+        memoryInjectionTarget: 'hard_block',
+        memoryPackingMode: 'chunk_first',
+        memoryExcerptTokensPerChunk: 8,
+        memoryExcerptChunksPerEntry: 1,
+      ),
+    );
+
+    final memoryMessage = result.messages.firstWhere(
+      (message) => message.blockId == 'memory',
+    );
+    expect(memoryMessage.content, contains('needle clue'));
+    expect(memoryMessage.content, isNot(contains('setup filler')));
+    expect(memoryMessage.content, isNot(contains('tail filler')));
+    final diagnostics = result.memoryCoverage['diagnostics'] as Map;
+    final candidate = (diagnostics['candidates'] as List).single as Map;
+    expect(candidate['injectionType'], 'excerpt');
+    expect(candidate['excerptChunkIndexes'], [1]);
+  });
+
+  test('lorebook badge includes keyword and vector macro injections', () {
+    final keywordEntry = LorebookEntry(
+      id: 'kw1',
+      comment: 'Keyword Entry',
+      keys: const ['Katelyn'],
+      content: 'Keyword lore payload.',
+      position: 'lorebooksMacro',
+    );
+    final vectorEntry = LorebookEntry(
+      id: 'vec1',
+      comment: 'Vector Entry',
+      content: 'Vector lore payload.',
+      position: 'lorebooksMacro',
+      vectorSearch: true,
+      useKeywordSearch: false,
+    );
+
+    final result = buildPrompt(
+      PromptPayload(
+        character: Character(id: 'c1', name: 'Alice'),
+        preset: const Preset(
+          id: 'p1',
+          name: 'Prompt',
+          blocks: [
+            PresetBlock(
+              id: 'lore_slot',
+              name: 'Lore Slot',
+              role: 'user',
+              content: '<lorebooks>\n{{lorebooks}}\n</lorebooks>',
+              appendToLastMessage: true,
+            ),
+            PresetBlock(
+              id: 'chat_history',
+              name: 'History',
+              role: 'system',
+              content: '',
+            ),
+          ],
+        ),
+        history: const [
+          ChatMessage(
+            id: 'u1',
+            role: 'user',
+            content: 'Tell me about Katelyn.',
+          ),
+        ],
+        apiConfig: const ApiConfig(
+          id: 'api',
+          name: 'API',
+          contextSize: 10000,
+          maxTokens: 100,
+        ),
+        lorebooks: [
+          Lorebook(
+            id: 'lb1',
+            name: 'Book',
+            entries: [keywordEntry, vectorEntry],
+          ),
+        ],
+        lorebookSettings: const LorebookGlobalSettings(
+          searchType: 'both',
+          injectionPosition: 'lorebooksMacro',
+          maxInjectedEntries: 4,
+        ),
+        vectorEntries: [vectorEntry],
+      ),
+    );
+
+    final lastUser = result.messages.lastWhere((m) => m.role == 'user');
+    expect(lastUser.content, contains('Keyword lore payload.'));
+    expect(lastUser.content, contains('Vector lore payload.'));
+    expect(result.triggeredLorebooks.map((e) => e.name), [
+      'Keyword Entry',
+      'Vector Entry',
+    ]);
+    expect(result.triggeredLorebooks.map((e) => e.source), [
+      'keyword',
+      'vector',
+    ]);
+  });
+
+  test('keyword source wins over vector when the same entry matches both', () {
+    final keywordOnlyEntry = LorebookEntry(
+      id: 'kw1',
+      comment: 'Keyword Only',
+      keys: const ['New York'],
+      content: 'Keyword-only payload.',
+      position: 'lorebooksMacro',
+    );
+    final duplicateEntry = LorebookEntry(
+      id: 'dupe1',
+      comment: 'Katelyn Brooks',
+      keys: const ['Katelyn'],
+      content: 'Katelyn payload.',
+      position: 'lorebooksMacro',
+      vectorSearch: true,
+      useKeywordSearch: true,
+    );
+
+    final result = buildPrompt(
+      PromptPayload(
+        character: Character(id: 'c1', name: 'Alice'),
+        preset: const Preset(
+          id: 'p1',
+          name: 'Prompt',
+          blocks: [
+            PresetBlock(
+              id: 'lore_slot',
+              name: 'Lore Slot',
+              role: 'user',
+              content: '<lorebooks>\n{{lorebooks}}\n</lorebooks>',
+              appendToLastMessage: true,
+            ),
+            PresetBlock(
+              id: 'chat_history',
+              name: 'History',
+              role: 'system',
+              content: '',
+            ),
+          ],
+        ),
+        history: const [
+          ChatMessage(
+            id: 'u1',
+            role: 'user',
+            content: 'New York and Katelyn are both relevant.',
+          ),
+        ],
+        apiConfig: const ApiConfig(
+          id: 'api',
+          name: 'API',
+          contextSize: 10000,
+          maxTokens: 100,
+        ),
+        lorebooks: [
+          Lorebook(
+            id: 'lb1',
+            name: 'Book',
+            entries: [keywordOnlyEntry, duplicateEntry],
+          ),
+        ],
+        lorebookSettings: const LorebookGlobalSettings(
+          searchType: 'both',
+          injectionPosition: 'lorebooksMacro',
+          maxInjectedEntries: 2,
+          keywordVectorSplit: 50,
+        ),
+        vectorEntries: [duplicateEntry],
+      ),
+    );
+
+    expect(
+      result.triggeredLorebooks.where((e) => e.name == 'Katelyn Brooks'),
+      hasLength(1),
+    );
+    expect(
+      result.triggeredLorebooks
+          .firstWhere((e) => e.name == 'Katelyn Brooks')
+          .source,
+      'keyword',
+    );
   });
 }

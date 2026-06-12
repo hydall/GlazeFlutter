@@ -70,7 +70,9 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     _nameController.text = lb.name;
     _entries = List.from(lb.entries);
     _settings = lb.settings;
-    _loadEmbeddingStatuses();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_loadEmbeddingStatuses());
+    });
   }
 
   Future<void> _loadEmbeddingStatuses() async {

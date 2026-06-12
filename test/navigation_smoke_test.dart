@@ -15,6 +15,7 @@ import 'package:glaze_flutter/features/settings/app_settings_screen.dart';
 import 'package:glaze_flutter/features/settings/theme_preset_screen.dart';
 import 'package:glaze_flutter/features/menu/about_screen.dart';
 import 'package:glaze_flutter/features/lorebooks/lorebook_list_screen.dart';
+import 'package:glaze_flutter/features/lorebooks/lorebook_global_settings_screen.dart';
 import 'package:glaze_flutter/features/lorebooks/embedding_settings_screen.dart';
 import 'package:glaze_flutter/features/settings/api_settings_screen.dart';
 import 'package:glaze_flutter/features/personas/persona_list_screen.dart';
@@ -103,6 +104,12 @@ const screenRegistry = <ScreenEntry>[
     screenType: LorebookListScreen,
     parentPath: '/tools',
     description: 'Lorebook list',
+  ),
+  ScreenEntry(
+    path: '/tools/lorebooks/settings',
+    screenType: LorebookGlobalSettingsScreen,
+    parentPath: '/tools/lorebooks',
+    description: 'Lorebook global settings',
   ),
   ScreenEntry(
     path: '/tools/embeddings',
@@ -237,4 +244,30 @@ void main() {
     expect(find.byType(AboutScreen, skipOffstage: false), findsWidgets,
         reason: 'AboutScreen at /menu/about not found');
   });
+
+  // Regression: pushing the lorebook global settings on top of the lorebook
+  // list (which has live Tooltip OverlayPortals in its header actions) used to
+  // crash during Scaffold layout — an OverlayPortal child reactivated mid
+  // `_RenderLayoutBuilder.performLayout`. Presenting the screen as a
+  // zero-transition GoRouter page avoids the animated reactivation path.
+  testWidgets(
+    'Lorebook list → global settings pushes without layout crash',
+    (tester) async {
+      await pumpGlazeApp(tester, container: container);
+
+      router().go('/tools/lorebooks');
+      await pumpNavigation(tester);
+      expect(find.byType(LorebookListScreen, skipOffstage: false), findsWidgets);
+
+      router().push('/tools/lorebooks/settings');
+      await pumpNavigation(tester);
+
+      expect(
+        find.byType(LorebookGlobalSettingsScreen, skipOffstage: false),
+        findsWidgets,
+        reason: 'Lorebook global settings did not render after push',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

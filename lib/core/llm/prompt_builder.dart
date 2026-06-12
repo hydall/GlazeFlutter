@@ -6,6 +6,7 @@ import '../models/preset.dart';
 import '../models/chat_message.dart';
 import '../models/api_config.dart';
 import '../models/lorebook.dart';
+import '../models/memory_book.dart';
 import 'macro_engine.dart';
 import 'history_assembler.dart';
 import 'context_calculator.dart';
@@ -96,6 +97,11 @@ class PromptPayload {
   final List<RuntimePromptBlock> runtimePromptBlocks;
   final MemorySelection? memorySelection;
   final bool memoryExcerptingEnabled;
+  final String memoryPackingMode;
+  final int memoryExcerptTokensPerChunk;
+  final int memoryExcerptChunksPerEntry;
+  final int chunkFirstTopEntries;
+  final int chunkFirstTopChunks;
 
   const PromptPayload({
     required this.character,
@@ -126,6 +132,11 @@ class PromptPayload {
     this.runtimePromptBlocks = const [],
     this.memorySelection,
     this.memoryExcerptingEnabled = true,
+    this.memoryPackingMode = 'hybrid',
+    this.memoryExcerptTokensPerChunk = defaultMemoryExcerptTokensPerEntry,
+    this.memoryExcerptChunksPerEntry = defaultMemoryExcerptChunksPerEntry,
+    this.chunkFirstTopEntries = 3,
+    this.chunkFirstTopChunks = 1,
   });
 }
 
@@ -878,7 +889,7 @@ PromptResult _assembleMessages({
     contextSize: payload.apiConfig.contextSize,
     maxTokens: payload.apiConfig.maxTokens,
   );
-  final historyOnly = messages.where((m) => m.isHistory).toList();
+  var historyOnly = messages.where((m) => m.isHistory).toList();
 
   var breakdown = calculator.calculate(
     staticBlocks: attributionBlocks,
@@ -898,11 +909,22 @@ PromptResult _assembleMessages({
     final refiltered = _refilterMemorySelection(
       selection,
       visibleMessageIds: breakdown.visibleMessageIds,
+      chunkBudgeting: payload.memoryPackingMode == 'chunk_first',
     );
     finalMemorySelection = refiltered;
-    final excerpted = !payload.memoryExcerptingEnabled
+    final useExcerptPacking =
+        payload.memoryExcerptingEnabled ||
+        payload.memoryPackingMode == 'chunk_first';
+    final excerpted = !useExcerptPacking
         ? MemoryExcerptSelector.fullEntries(refiltered)
-        : MemoryExcerptSelector.select(refiltered);
+        : MemoryExcerptSelector.select(
+            refiltered,
+            packingMode: payload.memoryPackingMode,
+            maxExcerptTokensPerEntry: payload.memoryExcerptTokensPerChunk,
+            maxExcerptChunksPerEntry: payload.memoryExcerptChunksPerEntry,
+            chunkFirstTopEntries: payload.chunkFirstTopEntries,
+            chunkFirstTopChunks: payload.chunkFirstTopChunks,
+          );
     finalExcerptSelection = excerpted;
     if (excerpted.items.isNotEmpty) {
       final rebuilt = _buildMemoryContentFromSelection(
@@ -919,7 +941,10 @@ PromptResult _assembleMessages({
       if (replacedMacro) {
         memoryContent = rebuilt.macroContent;
         memoryMacroContent = rebuilt.macroContent;
+        historyOnly = messages.where((m) => m.isHistory).toList(growable: false);
+        macroTokens['memory'] = estimateTokens(memoryMacroContent);
       } else if (payload.memoryInjectionTarget == 'hard_block') {
+        memoryContent = rebuilt.content;
         final hasMemoryBlock =
             messages.any((m) => m.blockId == 'memory') ||
             appendedEntries.any((b) => b.id == 'memory');
@@ -968,9 +993,10 @@ PromptResult _assembleMessages({
   var historySeen = 0;
   for (final msg in messages) {
     if (msg.isHistory) {
-      final trimmedIndex = historySeen - breakdown.cutoffIndex;
-      if (trimmedIndex >= 0 && trimmedIndex < breakdown.trimmedHistory.length) {
-        finalMessages.add(breakdown.trimmedHistory[trimmedIndex]);
+      if (historySeen >= breakdown.cutoffIndex) {
+        // Use live history messages so deferred {{memory}} replacement on
+        // appendToLastMessage blocks is not lost to a stale trimmed copy.
+        finalMessages.add(msg);
       }
       historySeen++;
     } else if (msg.content.trim().isNotEmpty) {
@@ -1141,6 +1167,7 @@ class _RebuiltMemoryContent {
 MemorySelection _refilterMemorySelection(
   MemorySelection previous, {
   required Set<String> visibleMessageIds,
+  bool chunkBudgeting = false,
 }) {
   if (previous.selectionMode == 'legacy') return previous;
   if (visibleMessageIds.isEmpty) return previous;
@@ -1166,6 +1193,7 @@ MemorySelection _refilterMemorySelection(
           : previous.entries.length,
       sourceWindowExclusion: true,
       diversityAware: false,
+      chunkBudgeting: chunkBudgeting,
     ),
   );
 }
@@ -1176,26 +1204,44 @@ _RebuiltMemoryContent _buildMemoryContentFromSelection(
   String? summaryExcerpt,
 }) {
   final injected = excerptSelection ?? MemoryExcerptSelector.select(selection);
-  final macro = injected.items
-      .map((item) => item.text.trim())
-      .where((s) => s.isNotEmpty)
-      .join('\n\n');
+  final macro = _formatMemoryItems(injected.items, includeContextHeader: false);
   final parts = <String>[];
   if (summaryExcerpt != null && summaryExcerpt.isNotEmpty) {
     parts.add('Summary excerpt:\n$summaryExcerpt');
   }
-  parts.add('Memory context:');
-  for (final item in injected.items) {
-    final title = item.entry.title.isNotEmpty ? item.entry.title : 'Memory';
+  parts.add(_formatMemoryItems(injected.items, includeContextHeader: true));
+  return _RebuiltMemoryContent(parts.join('\n\n'), macro);
+}
+
+String _formatMemoryItems(
+  List<MemoryInjectionItem> items, {
+  required bool includeContextHeader,
+}) {
+  final parts = <String>[];
+  if (includeContextHeader) parts.add('Memory context:');
+  for (final item in items) {
+    final title = item.entry.title.isNotEmpty
+        ? item.entry.title
+        : _formatMemoryRange(item.entry) ?? 'Memory';
+    final range = _formatMemoryRange(item.entry);
+    final heading = range == null
+        ? 'Memory: $title'
+        : 'Memory: $title ($range)';
     if (item.excerpt) {
       parts.add(
-        '- Excerpt from $title:\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
+        '$heading\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
       );
     } else {
-      parts.add('- $title: ${item.text.trim()}');
+      parts.add('$heading\n${item.text.trim()}');
     }
   }
-  return _RebuiltMemoryContent(parts.join('\n\n'), macro);
+  return parts.where((part) => part.trim().isNotEmpty).join('\n\n');
+}
+
+String? _formatMemoryRange(MemoryEntry entry) {
+  final range = entry.messageRange;
+  if (range == null) return null;
+  return '${range.start}-${range.end}';
 }
 
 bool _replaceDeferredMemoryPlaceholders(
@@ -1232,7 +1278,21 @@ Map<String, dynamic> _finalizeMemoryCoverage(
   MemoryExcerptSelection? excerptSelection,
 ) {
   if (selection == null) return coverage;
-  final excerpted = excerptSelection ?? MemoryExcerptSelector.select(selection);
+  final packingMode = coverage['packingMode'] as String? ?? 'hybrid';
+  final tokensPerChunk =
+      coverage['excerptTokensPerChunk'] as int? ??
+      defaultMemoryExcerptTokensPerEntry;
+  final chunksPerEntry =
+      coverage['excerptChunksPerEntry'] as int? ??
+      defaultMemoryExcerptChunksPerEntry;
+  final excerpted =
+      excerptSelection ??
+      MemoryExcerptSelector.select(
+        selection,
+        packingMode: packingMode,
+        maxExcerptTokensPerEntry: tokensPerChunk,
+        maxExcerptChunksPerEntry: chunksPerEntry,
+      );
   final budget = MemoryBudgetBreakdown(
     effectiveTokens: selection.budgetTokens,
     source: selection.budgetTokens == null ? 'none' : 'effective',
@@ -1241,15 +1301,16 @@ Map<String, dynamic> _finalizeMemoryCoverage(
     selection,
     budget: budget,
     excerptSelection: excerpted,
+    excerptTokensPerChunk: tokensPerChunk,
   ).toJson();
-  final previousDiagnostics = coverage['diagnostics'];
   return {
     ...coverage,
+    'packingMode': packingMode,
+    'excerptTokensPerChunk': tokensPerChunk,
+    'excerptChunksPerEntry': chunksPerEntry,
     'entryIds': excerpted.entries.map((e) => e.id).toList(growable: false),
     'budgetTrimmed': excerpted.budgetTrimmed,
-    'diagnostics': previousDiagnostics is Map
-        ? {...Map<String, dynamic>.from(previousDiagnostics), ...diagnostics}
-        : diagnostics,
+    'diagnostics': diagnostics,
   };
 }
 

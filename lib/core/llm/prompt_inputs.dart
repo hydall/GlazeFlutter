@@ -37,6 +37,11 @@ class PromptInputs {
   final String memoryMode;
   final int memoryMaxInjected;
   final bool memoryExcerptingEnabled;
+  final String memoryPackingMode;
+  final int memoryExcerptTokensPerChunk;
+  final int memoryExcerptChunksPerEntry;
+  final int chunkFirstTopEntries;
+  final int chunkFirstTopChunks;
   final String memoryKeyMatchMode;
   final String memoryInjectionTarget;
   // v2 selector knobs (see MemorySelector / MemoryBookSettings).
@@ -79,6 +84,11 @@ class PromptInputs {
     this.memoryMode = 'fast',
     this.memoryMaxInjected = 7,
     this.memoryExcerptingEnabled = true,
+    this.memoryPackingMode = 'hybrid',
+    this.memoryExcerptTokensPerChunk = 500,
+    this.memoryExcerptChunksPerEntry = 2,
+    this.chunkFirstTopEntries = 3,
+    this.chunkFirstTopChunks = 1,
     this.memoryKeyMatchMode = 'glaze',
     this.memoryInjectionTarget = 'hard_block',
     this.memoryMaxInjectedTokens,
@@ -121,6 +131,11 @@ class PromptInputs {
     'memoryMode': memoryMode,
     'memoryMaxInjected': memoryMaxInjected,
     'memoryExcerptingEnabled': memoryExcerptingEnabled,
+    'memoryPackingMode': memoryPackingMode,
+    'memoryExcerptTokensPerChunk': memoryExcerptTokensPerChunk,
+    'memoryExcerptChunksPerEntry': memoryExcerptChunksPerEntry,
+    'chunkFirstTopEntries': chunkFirstTopEntries,
+    'chunkFirstTopChunks': chunkFirstTopChunks,
     'memoryKeyMatchMode': memoryKeyMatchMode,
     'memoryInjectionTarget': _migrateInjectionTarget(memoryInjectionTarget),
     'memoryMaxInjectedTokens': memoryMaxInjectedTokens,
@@ -186,6 +201,13 @@ class PromptInputs {
     memoryMode: json['memoryMode'] as String? ?? 'fast',
     memoryMaxInjected: json['memoryMaxInjected'] as int? ?? 7,
     memoryExcerptingEnabled: json['memoryExcerptingEnabled'] as bool? ?? true,
+    memoryPackingMode: json['memoryPackingMode'] as String? ?? 'hybrid',
+    memoryExcerptTokensPerChunk:
+        json['memoryExcerptTokensPerChunk'] as int? ?? 500,
+    memoryExcerptChunksPerEntry:
+        json['memoryExcerptChunksPerEntry'] as int? ?? 2,
+    chunkFirstTopEntries: json['chunkFirstTopEntries'] as int? ?? 3,
+    chunkFirstTopChunks: json['chunkFirstTopChunks'] as int? ?? 1,
     memoryKeyMatchMode: json['memoryKeyMatchMode'] as String? ?? 'glaze',
     memoryInjectionTarget: _migrateInjectionTarget(
       json['memoryInjectionTarget'] as String?,

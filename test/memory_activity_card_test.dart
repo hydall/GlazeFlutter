@@ -76,4 +76,57 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('selected memory row expands independently from card header', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: Scaffold(
+          body: Center(
+            child: MemoryActivityCard(
+              activity: const MemoryActivityState(
+                sessionId: 's1',
+                messageId: 'a1',
+                diagnostics: {
+                  'selectedCount': 1,
+                  'selectedTokens': 42,
+                  'totalCandidates': 1,
+                  'skippedCount': 0,
+                  'latencyMs': 7,
+                  'budget': {'effectiveTokens': 1000, 'source': 'absolute'},
+                  'candidates': [
+                    {
+                      'entryId': 'm1',
+                      'title': 'Bridge memory',
+                      'selected': true,
+                      'reason': 'selected',
+                      'tokenCost': 42,
+                      'originalTokenCost': 900,
+                      'score': 3.25,
+                    'injectionType': 'excerpt',
+                    'excerptChunkIndexes': [1, 3],
+                    'excerptChunksTotal': 12,
+                    'excerptChunksInjected': 2,
+                    'messageRange': '10-24',
+                    },
+                  ],
+                },
+                updatedAtMillis: 123,
+              ),
+              expanded: true,
+              onToggle: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('Чанки:'), findsNothing);
+    await tester.tap(find.textContaining('Bridge memory · 2 из 12'));
+    await tester.pump();
+    expect(find.textContaining('Чанки: 2 из 12'), findsOneWidget);
+    expect(find.textContaining('Индексы: #1, #3'), findsOneWidget);
+  });
 }
