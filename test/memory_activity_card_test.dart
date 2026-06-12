@@ -129,4 +129,56 @@ void main() {
     expect(find.textContaining('Чанки: 2 из 12'), findsOneWidget);
     expect(find.textContaining('Индексы: #1, #3'), findsOneWidget);
   });
+
+  testWidgets('keyword-injected entry shows key trigger and matched keys', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(useMaterial3: true),
+        home: Scaffold(
+          body: Center(
+            child: MemoryActivityCard(
+              activity: const MemoryActivityState(
+                sessionId: 's1',
+                messageId: 'a1',
+                diagnostics: {
+                  'selectedCount': 1,
+                  'selectedTokens': 42,
+                  'totalCandidates': 1,
+                  'skippedCount': 0,
+                  'latencyMs': 7,
+                  'budget': {'effectiveTokens': 1000, 'source': 'absolute'},
+                  'candidates': [
+                    {
+                      'entryId': 'm1',
+                      'title': 'Keyword memory',
+                      'selected': true,
+                      'reason': 'selected',
+                      'tokenCost': 42,
+                      'score': 6.5,
+                      'keywordScore': 6.0,
+                      'vectorScore': 0.0,
+                      'injectionType': 'full_entry',
+                      'matchedKeys': ['castle', 'king'],
+                    },
+                  ],
+                },
+                updatedAtMillis: 123,
+              ),
+              expanded: true,
+              onToggle: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // The inline type label must advertise the keyword trigger so a
+    // keyword-only injection is not mistaken for a vector-only badge.
+    expect(find.textContaining('Keyword memory · full · key'), findsOneWidget);
+    await tester.tap(find.textContaining('Keyword memory · full · key'));
+    await tester.pump();
+    expect(find.textContaining('Ключи: castle, king'), findsOneWidget);
+  });
 }
