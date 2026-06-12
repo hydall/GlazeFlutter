@@ -19,6 +19,7 @@ import 'memory_catalog_builder.dart';
 import 'memory_budget.dart';
 import 'memory_diagnostics.dart';
 import 'memory_embedding_service.dart';
+import 'memory_excerpt_selector.dart';
 import 'memory_selector.dart';
 import 'retrieval_query_builder.dart';
 import 'vector_math.dart';
@@ -275,10 +276,11 @@ class MemoryInjectionService {
       );
     }
 
+    final excerptSelection = MemoryExcerptSelector.select(selection);
     final maxInjectionTokens = selection.budgetTokens;
-    final totalTokens = selection.totalTokens;
-    final macroContent = selection.entries
-        .map((e) => e.content.trim())
+    final totalTokens = excerptSelection.totalTokens;
+    final macroContent = excerptSelection.items
+        .map((item) => item.text.trim())
         .join('\n\n');
 
     final contentParts = <String>[];
@@ -286,9 +288,15 @@ class MemoryInjectionService {
       contentParts.add('Summary excerpt:\n$summaryExcerpt');
     }
     contentParts.add('Memory context:');
-    for (final entry in selection.entries) {
-      final title = entry.title.isNotEmpty ? entry.title : 'Memory';
-      contentParts.add('- $title: ${entry.content.trim()}');
+    for (final item in excerptSelection.items) {
+      final title = item.entry.title.isNotEmpty ? item.entry.title : 'Memory';
+      if (item.excerpt) {
+        contentParts.add(
+          '- Excerpt from $title:\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
+        );
+      } else {
+        contentParts.add('- $title: ${item.text.trim()}');
+      }
     }
 
     final injectionTarget = gs.injectionTarget == 'macro'
@@ -296,13 +304,13 @@ class MemoryInjectionService {
         : 'hard_block';
 
     return MemoryInjectionResult(
-      entries: selection.entries,
+      entries: excerptSelection.entries,
       content: contentParts.join('\n\n'),
       injectionTarget: injectionTarget,
       macroContent: macroContent,
       totalTokens: totalTokens,
       maxInjectionTokens: maxInjectionTokens,
-      budgetTrimmed: selection.budgetTrimmed,
+      budgetTrimmed: excerptSelection.budgetTrimmed,
       diagnostics: selection.allScores,
       memoryDiagnostics: candidateResult.diagnostics,
       excludedBySourceWindow: selection.excludedBySourceWindow,

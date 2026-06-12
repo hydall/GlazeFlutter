@@ -15,7 +15,12 @@ import 'prompt_block_resolver.dart';
 import 'fallback_prompt_builder.dart';
 import 'regex_service.dart';
 import 'tokenizer.dart';
+import 'memory_budget.dart';
+import 'memory_diagnostics.dart';
+import 'memory_excerpt_selector.dart';
 import 'memory_selector.dart';
+
+const _deferredMemoryPlaceholder = '[[GLAZE_DEFERRED_MEMORY_CONTEXT]]';
 
 class RuntimePromptBlock {
   final String id;
@@ -129,6 +134,7 @@ class PromptResult {
   final Map<String, String> globalVars;
   final List<TriggeredEntry> triggeredLorebooks;
   final List<TriggeredEntry> triggeredMemories;
+  final Map<String, dynamic> memoryCoverage;
 
   const PromptResult({
     required this.messages,
@@ -137,6 +143,7 @@ class PromptResult {
     required this.globalVars,
     this.triggeredLorebooks = const [],
     this.triggeredMemories = const [],
+    this.memoryCoverage = const {},
   });
 
   Map<String, dynamic> toJson() => {
@@ -146,6 +153,7 @@ class PromptResult {
     'globalVars': globalVars,
     'triggeredLorebooks': triggeredLorebooks.map((t) => t.toJson()).toList(),
     'triggeredMemories': triggeredMemories.map((t) => t.toJson()).toList(),
+    'memoryCoverage': memoryCoverage,
   };
 
   factory PromptResult.fromJson(Map<String, dynamic> json) => PromptResult(
@@ -163,6 +171,9 @@ class PromptResult {
     triggeredMemories: (json['triggeredMemories'] as List? ?? [])
         .map((t) => TriggeredEntry.fromJson(t as Map<String, dynamic>))
         .toList(),
+    memoryCoverage: Map<String, dynamic>.from(
+      json['memoryCoverage'] as Map? ?? {},
+    ),
   );
 }
 
@@ -260,6 +271,7 @@ PromptResult buildPrompt(PromptPayload payload) {
   final visibleHistory = payload.history
       .where((m) => !m.isHidden && !m.isTyping)
       .toList();
+  final deferMemoryMacro = payload.memorySelection != null;
 
   final loreEntries =
       payload.preScannedEntries ??
@@ -358,6 +370,7 @@ PromptResult buildPrompt(PromptPayload payload) {
   // inline at the exact position of the placeholder inside any preset block.
   currentMacroCtx = currentMacroCtx.copyWith(
     lorebooksContent: macroLoreContent,
+    memoryContent: deferMemoryMacro ? _deferredMemoryPlaceholder : null,
     charScenario: patchedScenario,
     charPersonality: patchedPersonality,
     charDescription: patchedDescription,
@@ -473,7 +486,10 @@ PromptResult buildPrompt(PromptPayload payload) {
   }
   if (currentMacroCtx.memoryContent != null &&
       currentMacroCtx.memoryContent!.isNotEmpty) {
-    macroTokens['memory'] = estimateTokens(currentMacroCtx.memoryContent!);
+    macroTokens['memory'] =
+        currentMacroCtx.memoryContent == _deferredMemoryPlaceholder
+        ? 0
+        : estimateTokens(currentMacroCtx.memoryContent!);
   }
   if (currentMacroCtx.charDescription != null &&
       currentMacroCtx.charDescription!.isNotEmpty) {
@@ -869,6 +885,8 @@ PromptResult _assembleMessages({
     macroTokens: macroTokens,
     vectorLoreTokens: vectorLoreTokens,
   );
+  var finalMemorySelection = payload.memorySelection;
+  MemoryExcerptSelection? finalExcerptSelection;
 
   // Deferred memory finalization: refilter the v2 selection against the
   // visible window now that the cutoff is known, then inject the hard
@@ -879,17 +897,31 @@ PromptResult _assembleMessages({
       selection,
       visibleMessageIds: breakdown.visibleMessageIds,
     );
-    if (refiltered.entries.isNotEmpty &&
-        payload.memoryInjectionTarget == 'hard_block') {
+    finalMemorySelection = refiltered;
+    final excerpted = MemoryExcerptSelector.select(refiltered);
+    finalExcerptSelection = excerpted;
+    if (excerpted.items.isNotEmpty) {
       final rebuilt = _buildMemoryContentFromSelection(
         refiltered,
+        excerptSelection: excerpted,
         summaryExcerpt: payload.summaryContent,
       );
-      final hasMemoryBlock =
-          messages.any((m) => m.blockId == 'memory') ||
-          appendedEntries.any((b) => b.id == 'memory');
-      if (!hasMemoryBlock) {
-        _injectMemoryBlock(messages, attributionBlocks, rebuilt.content);
+      var memoryContent = rebuilt.content;
+      var memoryMacroContent = rebuilt.macroContent;
+      final replacedMacro = _replaceDeferredMemoryPlaceholders(
+        messages,
+        rebuilt.macroContent,
+      );
+      if (replacedMacro) {
+        memoryContent = rebuilt.macroContent;
+        memoryMacroContent = rebuilt.macroContent;
+      } else if (payload.memoryInjectionTarget == 'hard_block') {
+        final hasMemoryBlock =
+            messages.any((m) => m.blockId == 'memory') ||
+            appendedEntries.any((b) => b.id == 'memory');
+        if (!hasMemoryBlock) {
+          _injectMemoryBlock(messages, attributionBlocks, rebuilt.content);
+        }
       }
       breakdown = _recomputeBreakdownWithMemory(
         calculator: calculator,
@@ -899,8 +931,8 @@ PromptResult _assembleMessages({
         lorebookReserveTokens: lorebookReserve,
         macroTokens: macroTokens,
         vectorLoreTokens: vectorLoreTokens,
-        memoryContent: rebuilt.content,
-        memoryMacroContent: rebuilt.macroContent,
+        memoryContent: memoryContent,
+        memoryMacroContent: memoryMacroContent,
         visibleMessageIds: breakdown.visibleMessageIds,
       );
     } else if (refiltered.entries.isEmpty &&
@@ -1009,6 +1041,12 @@ PromptResult _assembleMessages({
     }
   }
 
+  final finalMemoryCoverage = _finalizeMemoryCoverage(
+    payload.memoryCoverage,
+    finalMemorySelection,
+    finalExcerptSelection,
+  );
+
   return PromptResult(
     messages: finalMessages,
     breakdown: breakdown,
@@ -1016,6 +1054,7 @@ PromptResult _assembleMessages({
     globalVars: currentGlobalVars,
     triggeredLorebooks: triggeredLorebooks,
     triggeredMemories: triggeredMemories,
+    memoryCoverage: finalMemoryCoverage,
   );
 }
 
@@ -1129,10 +1168,12 @@ MemorySelection _refilterMemorySelection(
 
 _RebuiltMemoryContent _buildMemoryContentFromSelection(
   MemorySelection selection, {
+  MemoryExcerptSelection? excerptSelection,
   String? summaryExcerpt,
 }) {
-  final macro = selection.entries
-      .map((e) => e.content.trim())
+  final injected = excerptSelection ?? MemoryExcerptSelector.select(selection);
+  final macro = injected.items
+      .map((item) => item.text.trim())
       .where((s) => s.isNotEmpty)
       .join('\n\n');
   final parts = <String>[];
@@ -1140,11 +1181,72 @@ _RebuiltMemoryContent _buildMemoryContentFromSelection(
     parts.add('Summary excerpt:\n$summaryExcerpt');
   }
   parts.add('Memory context:');
-  for (final entry in selection.entries) {
-    final title = entry.title.isNotEmpty ? entry.title : 'Memory';
-    parts.add('- $title: ${entry.content.trim()}');
+  for (final item in injected.items) {
+    final title = item.entry.title.isNotEmpty ? item.entry.title : 'Memory';
+    if (item.excerpt) {
+      parts.add(
+        '- Excerpt from $title:\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
+      );
+    } else {
+      parts.add('- $title: ${item.text.trim()}');
+    }
   }
   return _RebuiltMemoryContent(parts.join('\n\n'), macro);
+}
+
+bool _replaceDeferredMemoryPlaceholders(
+  List<PromptMessage> messages,
+  String memoryContent,
+) {
+  var replaced = false;
+  for (var i = 0; i < messages.length; i++) {
+    final message = messages[i];
+    if (!message.content.contains(_deferredMemoryPlaceholder)) continue;
+    messages[i] = PromptMessage(
+      role: message.role,
+      content: message.content.replaceAll(
+        _deferredMemoryPlaceholder,
+        memoryContent,
+      ),
+      blockId: message.blockId,
+      depth: message.depth,
+      isHistory: message.isHistory,
+      isDepth: message.isDepth,
+      isLorebook: message.isLorebook,
+      isSummary: message.isSummary,
+      blockName: message.blockName,
+      sourceMessageId: message.sourceMessageId,
+    );
+    replaced = true;
+  }
+  return replaced;
+}
+
+Map<String, dynamic> _finalizeMemoryCoverage(
+  Map<String, dynamic> coverage,
+  MemorySelection? selection,
+  MemoryExcerptSelection? excerptSelection,
+) {
+  if (selection == null) return coverage;
+  final excerpted = excerptSelection ?? MemoryExcerptSelector.select(selection);
+  final budget = MemoryBudgetBreakdown(
+    effectiveTokens: selection.budgetTokens,
+    source: selection.budgetTokens == null ? 'none' : 'effective',
+  );
+  final diagnostics = MemoryDiagnostics.fromSelection(
+    selection,
+    budget: budget,
+    excerptSelection: excerpted,
+  ).toJson();
+  final previousDiagnostics = coverage['diagnostics'];
+  return {
+    ...coverage,
+    'entryIds': excerpted.entries.map((e) => e.id).toList(growable: false),
+    'budgetTrimmed': excerpted.budgetTrimmed,
+    'diagnostics': previousDiagnostics is Map
+        ? {...Map<String, dynamic>.from(previousDiagnostics), ...diagnostics}
+        : diagnostics,
+  };
 }
 
 /// Recompute a [TokenBreakdown] after the memory block is finalized so

@@ -132,8 +132,14 @@ class MemoryActivityCard extends StatelessWidget {
           final selected = candidate['selected'] == true;
           final reason = candidate['reason'] as String? ?? 'not_selected';
           final tokens = candidate['tokenCost'] as int? ?? 0;
+          final injectionType = candidate['injectionType'] as String? ?? 'none';
           final score = candidate['score'];
           final scoreText = score is num ? score.toStringAsFixed(2) : '0.00';
+          final typeLabel = injectionType == 'excerpt'
+              ? 'excerpt'
+              : injectionType == 'full_entry'
+              ? 'full'
+              : reason;
           return Padding(
             padding: const EdgeInsets.only(top: 4),
             child: Row(
@@ -146,7 +152,7 @@ class MemoryActivityCard extends StatelessWidget {
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    '$label · $reason',
+                    '$label · $typeLabel',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontSize: 12),

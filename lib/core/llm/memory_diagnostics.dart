@@ -1,5 +1,6 @@
 import '../models/memory_book.dart';
 import 'memory_budget.dart';
+import 'memory_excerpt_selector.dart';
 import 'memory_selector.dart';
 
 class MemoryCandidateDiagnostics {
@@ -21,6 +22,10 @@ class MemoryCandidateDiagnostics {
   final String messageRange;
   final String arc;
   final String kind;
+  final String injectionType;
+  final int originalTokenCost;
+  final List<int> excerptChunkIndexes;
+  final List<String> excerptMatchedTerms;
 
   const MemoryCandidateDiagnostics({
     required this.entryId,
@@ -41,6 +46,10 @@ class MemoryCandidateDiagnostics {
     required this.messageRange,
     required this.arc,
     required this.kind,
+    this.injectionType = 'none',
+    this.originalTokenCost = 0,
+    this.excerptChunkIndexes = const [],
+    this.excerptMatchedTerms = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -62,6 +71,10 @@ class MemoryCandidateDiagnostics {
     'messageRange': messageRange,
     'arc': arc,
     'kind': kind,
+    'injectionType': injectionType,
+    'originalTokenCost': originalTokenCost,
+    'excerptChunkIndexes': excerptChunkIndexes,
+    'excerptMatchedTerms': excerptMatchedTerms,
   };
 }
 
@@ -110,8 +123,16 @@ class MemoryDiagnostics {
     String currentText = '',
     String memoryMode = 'fast',
     bool factualContinuityGuardEnabled = false,
+    MemoryExcerptSelection? excerptSelection,
   }) {
-    final selectedIds = selection.entries.map((e) => e.id).toSet();
+    final selectedIds = (excerptSelection?.entries ?? selection.entries)
+        .map((e) => e.id)
+        .toSet();
+    final injectionItems = {
+      for (final item
+          in excerptSelection?.items ?? const <MemoryInjectionItem>[])
+        item.entry.id: item,
+    };
     final costs = <String, int>{};
     var selectedTokens = 0;
 
@@ -126,7 +147,8 @@ class MemoryDiagnostics {
     final candidates = selection.allScores
         .map((score) {
           final selected = selectedIds.contains(score.entry.id);
-          final tokenCost = costOf(score);
+          final item = injectionItems[score.entry.id];
+          final tokenCost = item?.tokenCost ?? costOf(score);
           if (selected) selectedTokens += tokenCost;
           return MemoryCandidateDiagnostics(
             entryId: score.entry.id,
@@ -147,6 +169,14 @@ class MemoryDiagnostics {
             messageRange: _formatMessageRange(score.entry.messageRange),
             arc: score.entry.arc,
             kind: score.entry.kind,
+            injectionType: item == null
+                ? 'none'
+                : item.excerpt
+                ? 'excerpt'
+                : 'full_entry',
+            originalTokenCost: item?.originalTokenCost ?? costOf(score),
+            excerptChunkIndexes: item?.chunkIndexes ?? const [],
+            excerptMatchedTerms: item?.matchedTerms ?? const [],
           );
         })
         .toList(growable: false);
@@ -155,7 +185,7 @@ class MemoryDiagnostics {
         : const <String>[];
 
     return MemoryDiagnostics(
-      selectedEntryIds: selection.entries
+      selectedEntryIds: (excerptSelection?.entries ?? selection.entries)
           .map((e) => e.id)
           .toList(growable: false),
       candidates: candidates,
@@ -169,11 +199,13 @@ class MemoryDiagnostics {
       selectedCount: selectedIds.length,
       skippedCount: candidates.length - selectedIds.length,
       totalCandidates: candidates.length,
-      selectedTokens: tokenCounter == null && selection.totalTokens > 0
-          ? selection.totalTokens
-          : selectedTokens,
+      selectedTokens:
+          excerptSelection?.totalTokens ??
+          (tokenCounter == null && selection.totalTokens > 0
+              ? selection.totalTokens
+              : selectedTokens),
       budget: budget,
-      budgetTrimmed: selection.budgetTrimmed,
+      budgetTrimmed: excerptSelection?.budgetTrimmed ?? selection.budgetTrimmed,
       excludedBySourceWindow: selection.excludedBySourceWindow,
       latencyMs: latencyMs,
     );
