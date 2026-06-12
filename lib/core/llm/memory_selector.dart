@@ -14,6 +14,7 @@ class MemoryCandidateScore {
   final double diversityPenalty;
   final List<String> matchedKeys;
   final List<String> catalogMatchedTerms;
+  final List<String> vectorMatchedChunks;
   final bool excludedBySourceWindow;
   final String? exclusionReason;
 
@@ -28,6 +29,7 @@ class MemoryCandidateScore {
     this.diversityPenalty = 0,
     this.matchedKeys = const [],
     this.catalogMatchedTerms = const [],
+    this.vectorMatchedChunks = const [],
     this.excludedBySourceWindow = false,
     this.exclusionReason,
   });
@@ -63,6 +65,7 @@ class MemorySelectionInput {
   final String selectionMode;
   final List<MemoryEntry> entries;
   final Map<String, double> vectorScores;
+  final Map<String, List<String>> vectorMatchedChunks;
   final Map<String, double> catalogScores;
   final Map<String, List<String>> catalogMatchedTerms;
   final Map<String, List<String>> keywordMatchedTerms;
@@ -88,6 +91,7 @@ class MemorySelectionInput {
     this.selectionMode = 'v2',
     required this.entries,
     this.vectorScores = const {},
+    this.vectorMatchedChunks = const {},
     this.catalogScores = const {},
     this.catalogMatchedTerms = const {},
     this.keywordMatchedTerms = const {},
@@ -183,6 +187,8 @@ class MemorySelector {
             keywordScore: keyword,
             vectorScore: vector,
             matchedKeys: matched,
+            vectorMatchedChunks:
+                input.vectorMatchedChunks[entry.id] ?? const [],
           ),
         );
         continue;
@@ -212,6 +218,7 @@ class MemorySelector {
           importanceScore: importance,
           matchedKeys: matched,
           catalogMatchedTerms: input.catalogMatchedTerms[entry.id] ?? const [],
+          vectorMatchedChunks: input.vectorMatchedChunks[entry.id] ?? const [],
         ),
       );
     }
@@ -265,6 +272,7 @@ class MemorySelector {
           diversityPenalty: penalty,
           matchedKeys: c.matchedKeys,
           catalogMatchedTerms: c.catalogMatchedTerms,
+          vectorMatchedChunks: c.vectorMatchedChunks,
         );
         picked[picked.length - 1] = reranked;
         // Also stamp the reranked score into allScores so the diagnostic

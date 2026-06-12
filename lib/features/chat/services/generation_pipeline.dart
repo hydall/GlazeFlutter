@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
+import '../../../core/llm/memory_draft_planner.dart';
+import '../../../core/state/memory_settings_provider.dart';
 import '../../../core/services/generation_notification_service.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/utils/time_helpers.dart';
@@ -201,6 +203,8 @@ class GenerationPipeline {
       if (!abortHandler.isCurrentGen(genId)) {
         return null;
       }
+
+      await _autoCreateMemoryDrafts(result.session);
 
       return GenerationOutcome(
         state: getState().value ?? result,
@@ -413,5 +417,35 @@ class GenerationPipeline {
       abortHandler.restorationMessage = null;
     }
     await notifService.onGenerationAborted();
+  }
+
+  Future<void> _autoCreateMemoryDrafts(ChatSession? session) async {
+    if (session == null) return;
+    final settings = ref.read(memoryGlobalSettingsProvider);
+    if (!settings.enabled || !settings.autoCreateEnabled) return;
+
+    try {
+      final repo = ref.read(memoryBookRepoProvider);
+      final book = await repo.ensureForSession(session.id);
+      final plan = MemoryDraftPlanner.plan(
+        book: book,
+        messages: session.messages,
+        interval: settings.autoCreateInterval,
+        lagMessages: settings.autoCreateLagMessages,
+        source: 'auto_create',
+        nowMillis: DateTime.now().millisecondsSinceEpoch,
+      );
+      if (plan.drafts.isEmpty) return;
+
+      await repo.put(
+        book.copyWith(pendingDrafts: [...book.pendingDrafts, ...plan.drafts]),
+      );
+      debugPrint(
+        '[GenerationPipeline] auto-created ${plan.drafts.length} memory drafts '
+        'with lag=${settings.autoCreateLagMessages}',
+      );
+    } catch (e) {
+      debugPrint('[GenerationPipeline] auto-create memory drafts failed: $e');
+    }
   }
 }

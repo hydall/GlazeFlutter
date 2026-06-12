@@ -128,8 +128,12 @@ class JsMemoryImporter with TypeConverters {
           rawSettings['autoGenerateEnabled'] == true,
       'maxInjectedEntries':
           toInt(rawSettings['maxInjectedEntries']) ?? 7,
+      'memoryExcerptingEnabled':
+          rawSettings['memoryExcerptingEnabled'] != false,
       'autoCreateInterval':
           toInt(rawSettings['autoCreateInterval']) ?? 15,
+      'autoCreateLagMessages':
+          toInt(rawSettings['autoCreateLagMessages']) ?? 4,
       'useDelayedAutomation':
           rawSettings['useDelayedAutomation'] == true,
       'injectionTarget': _migrateInjectionTarget(

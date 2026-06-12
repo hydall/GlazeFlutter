@@ -167,7 +167,7 @@ class MemoryInjectionService {
     debugPrint('[mem] active entries: ${activeEntries.length}');
     if (activeEntries.isEmpty) return finish(const MemorySelection());
 
-    final vectorScores = <String, double>{};
+    var vectorMatches = const _MemoryVectorMatchResult();
     final keywordMatchedTerms = _keywordMatches(
       activeEntries,
       _selectorScanText(book.settings, history, currentText),
@@ -184,18 +184,18 @@ class MemoryInjectionService {
         embeddingConfig.endpoint.isNotEmpty &&
         history.isNotEmpty) {
       debugPrint('[mem] starting vector search...');
-      vectorScores.addAll(
-        await _vectorSearchMemory(
-          activeEntries,
-          history,
-          currentText,
-          embeddingConfig,
-          gs,
-          shouldAbort: shouldAbort,
-          cancelToken: cancelToken,
-        ),
+      vectorMatches = await _vectorSearchMemory(
+        activeEntries,
+        history,
+        currentText,
+        embeddingConfig,
+        gs,
+        shouldAbort: shouldAbort,
+        cancelToken: cancelToken,
       );
-      debugPrint('[mem] vector search done, scores=${vectorScores.length}');
+      debugPrint(
+        '[mem] vector search done, scores=${vectorMatches.scores.length}',
+      );
     } else {
       debugPrint(
         '[mem] vector search skipped (enabled=${gs.vectorSearchEnabled}, endpoint=${embeddingConfig?.endpoint.isNotEmpty ?? false}, history=${history.isNotEmpty})',
@@ -214,7 +214,8 @@ class MemoryInjectionService {
       MemorySelectionInput(
         selectionMode: book.settings.memoryMode == 'legacy' ? 'legacy' : 'v2',
         entries: activeEntries,
-        vectorScores: vectorScores,
+        vectorScores: vectorMatches.scores,
+        vectorMatchedChunks: vectorMatches.chunksByEntryId,
         keywordMatchedTerms: keywordMatchedTerms,
         catalogScores: catalogMatches.scores,
         catalogMatchedTerms: catalogMatches.termsByEntryId,
@@ -276,7 +277,9 @@ class MemoryInjectionService {
       );
     }
 
-    final excerptSelection = MemoryExcerptSelector.select(selection);
+    final excerptSelection = gs.memoryExcerptingEnabled
+        ? MemoryExcerptSelector.select(selection)
+        : MemoryExcerptSelector.fullEntries(selection);
     final maxInjectionTokens = selection.budgetTokens;
     final totalTokens = excerptSelection.totalTokens;
     final macroContent = excerptSelection.items
@@ -318,7 +321,7 @@ class MemoryInjectionService {
     );
   }
 
-  Future<Map<String, double>> _vectorSearchMemory(
+  Future<_MemoryVectorMatchResult> _vectorSearchMemory(
     List<MemoryEntry> entries,
     List<ChatMessage> history,
     String currentText,
@@ -328,12 +331,12 @@ class MemoryInjectionService {
     CancelToken? cancelToken,
   }) async {
     try {
-      if (shouldAbort?.call() == true) return {};
+      if (shouldAbort?.call() == true) return const _MemoryVectorMatchResult();
       debugPrint('[mem-vec] reading embeddings from DB...');
       final embeddingRows = await _embeddingRepo.getBySourceType(
         'memory_entry',
       );
-      if (shouldAbort?.call() == true) return {};
+      if (shouldAbort?.call() == true) return const _MemoryVectorMatchResult();
       final embeddingMap = <String, EmbeddingRow>{};
       for (final row in embeddingRows) {
         embeddingMap[row.entryId] = row;
@@ -347,7 +350,7 @@ class MemoryInjectionService {
           '[mem-vec] processing entry ${i + 1}/${entries.length}: id=${entry.id}',
         );
         final row = embeddingMap[entry.id];
-        if (shouldAbort?.call() == true) return {};
+        if (shouldAbort?.call() == true) return const _MemoryVectorMatchResult();
         if (row == null || !_embeddingRepo.hasUsableVectors(row)) {
           debugPrint('[mem-vec]   skipped: no row or no vectorsBlob');
           continue;
@@ -367,14 +370,25 @@ class MemoryInjectionService {
           debugPrint('[mem-vec]   skipped: vectors null or empty');
           continue;
         }
+        final chunkTexts = _decodeMemoryChunkTexts(row, vectors.length);
 
         candidates.add(
           VectorCandidate(
             id: entry.id,
             vectors: vectors
-                .map((v) => VectorChunk(text: '', vector: v))
+                .asMap()
+                .entries
+                .map(
+                  (v) => VectorChunk(
+                    text: v.key < chunkTexts.length ? chunkTexts[v.key] : '',
+                    vector: v.value,
+                  ),
+                )
                 .toList(),
-            metadata: {'hints': _embeddingRepo.decodeHints(row) ?? []},
+            metadata: {
+              'hints': _embeddingRepo.decodeHints(row) ?? [],
+              'chunkTexts': chunkTexts,
+            },
           ),
         );
         debugPrint(
@@ -383,7 +397,7 @@ class MemoryInjectionService {
       }
       debugPrint('[mem-vec] valid candidates: ${candidates.length}');
 
-      if (candidates.isEmpty) return {};
+      if (candidates.isEmpty) return const _MemoryVectorMatchResult();
 
       final queryText = settings.memoryMode == 'legacy'
           ? _legacyVectorQuery(history, currentText)
@@ -394,8 +408,8 @@ class MemoryInjectionService {
               recentTurns: settings.queryRecentTurns,
               maxChars: settings.queryMaxChars,
             );
-      if (queryText.isEmpty) return {};
-      if (shouldAbort?.call() == true) return {};
+      if (queryText.isEmpty) return const _MemoryVectorMatchResult();
+      if (shouldAbort?.call() == true) return const _MemoryVectorMatchResult();
 
       debugPrint(
         '[mem-vec] calling embedding API (endpoint=${config.endpoint})...',
@@ -407,11 +421,13 @@ class MemoryInjectionService {
             cancelToken: cancelToken,
           )
           .timeout(const Duration(seconds: 15), onTimeout: () => []);
-      if (cancelToken?.isCancelled == true) return {};
+      if (cancelToken?.isCancelled == true) {
+        return const _MemoryVectorMatchResult();
+      }
       debugPrint(
         '[mem-vec] embedding API returned ${queryChunks.length} chunks',
       );
-      if (queryChunks.isEmpty) return {};
+      if (queryChunks.isEmpty) return const _MemoryVectorMatchResult();
 
       final queryVecChunks = queryChunks
           .map((c) => VectorChunk(text: c.text, vector: c.vector))
@@ -425,15 +441,51 @@ class MemoryInjectionService {
 
       final threshold = settings.vectorThreshold;
       final topK = settings.maxInjectedEntries.clamp(1, 50);
-      return Map.fromEntries(
-        results
-            .where((r) => r.score >= threshold)
-            .take(topK)
-            .map((r) => MapEntry(r.id, r.score)),
+      final scores = <String, double>{};
+      final chunksByEntryId = <String, List<String>>{};
+      for (final result in results.where((r) => r.score >= threshold).take(topK)) {
+        scores[result.id] = result.score;
+        final chunkTexts = result.metadata['chunkTexts'];
+        if (chunkTexts is List && result.bestCandidateChunk != null) {
+          final bestIndex = result.bestCandidateChunk!;
+          final matched = <String>[];
+          if (bestIndex >= 0 && bestIndex < chunkTexts.length) {
+            final text = chunkTexts[bestIndex];
+            if (text is String && text.trim().isNotEmpty) matched.add(text);
+          }
+          final neighboringIndexes = [bestIndex - 1, bestIndex + 1];
+          for (final index in neighboringIndexes) {
+            if (index < 0 || index >= chunkTexts.length) continue;
+            final text = chunkTexts[index];
+            if (text is String && text.trim().isNotEmpty) matched.add(text);
+          }
+          if (matched.isNotEmpty) chunksByEntryId[result.id] = matched;
+        }
+      }
+      return _MemoryVectorMatchResult(
+        scores: scores,
+        chunksByEntryId: chunksByEntryId,
       );
     } catch (_) {
-      return {};
+      return const _MemoryVectorMatchResult();
     }
+  }
+
+  List<String> _decodeMemoryChunkTexts(EmbeddingRow row, int vectorCount) {
+    final metadata = _embeddingRepo.decodeMetadata(row);
+    final chunks = metadata?['chunks'];
+    if (chunks is! List) return const [];
+    final texts = List<String>.filled(vectorCount, '');
+    for (final chunk in chunks) {
+      if (chunk is! Map) continue;
+      final indexRaw = chunk['index'];
+      final textRaw = chunk['text'];
+      if (indexRaw is! num || textRaw is! String) continue;
+      final index = indexRaw.toInt();
+      if (index < 0 || index >= texts.length) continue;
+      texts[index] = textRaw;
+    }
+    return texts;
   }
 
   Future<_CatalogMatchResult> _catalogMatches(
@@ -576,6 +628,16 @@ class MemoryInjectionService {
     final importance = row.importance.clamp(0, 1) * 0.5;
     return (matched.length.clamp(1, 6) * 0.75 + importance) * tokenFactor;
   }
+}
+
+class _MemoryVectorMatchResult {
+  final Map<String, double> scores;
+  final Map<String, List<String>> chunksByEntryId;
+
+  const _MemoryVectorMatchResult({
+    this.scores = const {},
+    this.chunksByEntryId = const {},
+  });
 }
 
 class _CatalogMatchResult {

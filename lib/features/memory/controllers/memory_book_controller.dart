@@ -4,8 +4,8 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/lorebook_providers.dart';
+import '../../../core/llm/memory_draft_planner.dart';
 import '../../../core/llm/memory_injection_service.dart';
-import '../../../core/models/chat_message.dart';
 import '../../../core/models/memory_book.dart';
 import '../../../core/state/memory_book_ops_provider.dart';
 import '../../../core/state/memory_settings_provider.dart';
@@ -57,9 +57,11 @@ class MemoryBookController {
       autoCreateEnabled: g.autoCreateEnabled,
       autoGenerateEnabled: g.autoGenerateEnabled,
       maxInjectedEntries: g.maxInjectedEntries,
+      memoryExcerptingEnabled: g.memoryExcerptingEnabled,
       maxInjectedTokens: g.maxInjectedTokens,
       memoryBudgetPreset: g.memoryBudgetPreset,
       autoCreateInterval: g.autoCreateInterval,
+      autoCreateLagMessages: g.autoCreateLagMessages,
       useDelayedAutomation: g.useDelayedAutomation,
       injectionTarget: g.injectionTarget,
       batchSize: g.batchSize,
@@ -148,75 +150,32 @@ class MemoryBookController {
     final session = chatState.value?.session;
     if (session == null) return null;
 
-    final messages = session.messages
-        .where(
-          (m) => !m.isTyping && (m.role == 'user' || m.role == 'assistant'),
-        )
-        .toList();
-    if (messages.isEmpty) {
+    final plan = MemoryDraftPlanner.plan(
+      book: _book!,
+      messages: session.messages,
+      interval: globalSettings.autoCreateInterval,
+      lagMessages: globalSettings.autoCreateLagMessages,
+      source: 'scan_chat',
+      nowMillis: DateTime.now().millisecondsSinceEpoch,
+    );
+    if (plan.stableMessageCount == 0) {
       return 'No stable messages to scan';
     }
-
-    final coveredIds = <String>{};
-    for (final entry in _book!.entries) {
-      coveredIds.addAll(entry.messageIds);
+    if (plan.eligibleMessageCount == 0) {
+      return 'Waiting for ${globalSettings.autoCreateLagMessages} newer messages before creating a draft';
     }
-    for (final draft in _book!.pendingDrafts) {
-      coveredIds.addAll(draft.messageIds);
-    }
-
-    final uncovered = messages
-        .where((m) => m.id.isNotEmpty && !coveredIds.contains(m.id))
-        .toList();
-    if (uncovered.isEmpty) {
+    if (plan.uncoveredMessageCount == 0) {
       return 'All messages are already covered';
     }
-
-    final interval = globalSettings.autoCreateInterval;
-    final segments = <List<ChatMessage>>[];
-    for (int i = 0; i + interval <= uncovered.length; i += interval) {
-      segments.add(uncovered.sublist(i, i + interval));
-    }
-
-    if (segments.isEmpty) {
+    if (plan.drafts.isEmpty) {
       return 'Need more uncovered messages before creating a draft';
     }
 
-    final newDrafts = <MemoryDraft>[];
-    for (int i = 0; i < segments.length; i++) {
-      final segment = segments[i];
-      final segmentIds = segment.map((m) => m.id).toList();
-      final firstIdx = messages.indexOf(segment.first);
-      final lastIdx = messages.indexOf(segment.last);
-
-      final alreadyExists = _book!.pendingDrafts.any(
-        (d) => d.messageIds.toSet().containsAll(segmentIds.toSet()),
-      );
-      if (alreadyExists) continue;
-
-      newDrafts.add(
-        MemoryDraft(
-          id: 'draft_${DateTime.now().millisecondsSinceEpoch}_${i}_${_generateId()}',
-          title: '${firstIdx + 1}-${lastIdx + 1}',
-          messageIds: segmentIds,
-          messageRange: MessageRange(start: firstIdx + 1, end: lastIdx + 1),
-          status: 'pending_generation',
-          source: 'scan_chat',
-          createdAt: DateTime.now().millisecondsSinceEpoch,
-          updatedAt: DateTime.now().millisecondsSinceEpoch,
-        ),
-      );
-    }
-
-    if (newDrafts.isEmpty) {
-      return 'All segments already have drafts';
-    }
-
     _book = _book!.copyWith(
-      pendingDrafts: [..._book!.pendingDrafts, ...newDrafts],
+      pendingDrafts: [..._book!.pendingDrafts, ...plan.drafts],
     );
     await save();
-    return '${newDrafts.length} drafts created';
+    return '${plan.drafts.length} drafts created';
   }
 
   void generateAllPending() {
@@ -421,9 +380,11 @@ class MemoryBookController {
       autoCreateEnabled: newSettings.autoCreateEnabled,
       autoGenerateEnabled: newSettings.autoGenerateEnabled,
       maxInjectedEntries: newSettings.maxInjectedEntries,
+      memoryExcerptingEnabled: newSettings.memoryExcerptingEnabled,
       maxInjectedTokens: newSettings.maxInjectedTokens,
       memoryBudgetPreset: newSettings.memoryBudgetPreset,
       autoCreateInterval: newSettings.autoCreateInterval,
+      autoCreateLagMessages: newSettings.autoCreateLagMessages,
       useDelayedAutomation: newSettings.useDelayedAutomation,
       injectionTarget: newSettings.injectionTarget,
       batchSize: newSettings.batchSize,
@@ -601,10 +562,6 @@ class MemoryBookController {
 
   void dispose() {
     _genElapsedTimer?.cancel();
-  }
-
-  String _generateId() {
-    return DateTime.now().microsecondsSinceEpoch.toRadixString(36);
   }
 
   /// Updates the book state (called from UI when state changes).

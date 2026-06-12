@@ -36,6 +36,7 @@ class PromptInputs {
   final bool memoryEnabled;
   final String memoryMode;
   final int memoryMaxInjected;
+  final bool memoryExcerptingEnabled;
   final String memoryKeyMatchMode;
   final String memoryInjectionTarget;
   // v2 selector knobs (see MemorySelector / MemoryBookSettings).
@@ -77,6 +78,7 @@ class PromptInputs {
     this.memoryEnabled = true,
     this.memoryMode = 'fast',
     this.memoryMaxInjected = 7,
+    this.memoryExcerptingEnabled = true,
     this.memoryKeyMatchMode = 'glaze',
     this.memoryInjectionTarget = 'hard_block',
     this.memoryMaxInjectedTokens,
@@ -118,6 +120,7 @@ class PromptInputs {
     'memoryEnabled': memoryEnabled,
     'memoryMode': memoryMode,
     'memoryMaxInjected': memoryMaxInjected,
+    'memoryExcerptingEnabled': memoryExcerptingEnabled,
     'memoryKeyMatchMode': memoryKeyMatchMode,
     'memoryInjectionTarget': _migrateInjectionTarget(memoryInjectionTarget),
     'memoryMaxInjectedTokens': memoryMaxInjectedTokens,
@@ -182,6 +185,7 @@ class PromptInputs {
     memoryEnabled: json['memoryEnabled'] as bool? ?? true,
     memoryMode: json['memoryMode'] as String? ?? 'fast',
     memoryMaxInjected: json['memoryMaxInjected'] as int? ?? 7,
+    memoryExcerptingEnabled: json['memoryExcerptingEnabled'] as bool? ?? true,
     memoryKeyMatchMode: json['memoryKeyMatchMode'] as String? ?? 'glaze',
     memoryInjectionTarget: _migrateInjectionTarget(
       json['memoryInjectionTarget'] as String?,

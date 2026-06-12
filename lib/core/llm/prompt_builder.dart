@@ -95,6 +95,7 @@ class PromptPayload {
   final List<TriggeredEntry> triggeredMemories;
   final List<RuntimePromptBlock> runtimePromptBlocks;
   final MemorySelection? memorySelection;
+  final bool memoryExcerptingEnabled;
 
   const PromptPayload({
     required this.character,
@@ -124,6 +125,7 @@ class PromptPayload {
     this.triggeredMemories = const [],
     this.runtimePromptBlocks = const [],
     this.memorySelection,
+    this.memoryExcerptingEnabled = true,
   });
 }
 
@@ -898,7 +900,9 @@ PromptResult _assembleMessages({
       visibleMessageIds: breakdown.visibleMessageIds,
     );
     finalMemorySelection = refiltered;
-    final excerpted = MemoryExcerptSelector.select(refiltered);
+    final excerpted = !payload.memoryExcerptingEnabled
+        ? MemoryExcerptSelector.fullEntries(refiltered)
+        : MemoryExcerptSelector.select(refiltered);
     finalExcerptSelection = excerpted;
     if (excerpted.items.isNotEmpty) {
       final rebuilt = _buildMemoryContentFromSelection(

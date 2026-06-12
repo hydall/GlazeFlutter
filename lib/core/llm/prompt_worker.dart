@@ -156,6 +156,7 @@ Map<String, dynamic> _serializePayload(PromptPayload p) => {
       .map((block) => block.toJson())
       .toList(),
   'memorySelection': _serializeMemorySelection(p.memorySelection),
+  'memoryExcerptingEnabled': p.memoryExcerptingEnabled,
 };
 
 PromptResult _deserializeResult(Map<String, dynamic> json) {
@@ -246,6 +247,7 @@ PromptPayload _deserializePayload(Map<String, dynamic> json) {
     memorySelection: _deserializeMemorySelection(
       json['memorySelection'] as Map<String, dynamic>?,
     ),
+    memoryExcerptingEnabled: json['memoryExcerptingEnabled'] as bool? ?? true,
   );
 }
 
@@ -284,6 +286,7 @@ Map<String, dynamic> _serializeMemoryScore(MemoryCandidateScore score) => {
   'diversityPenalty': score.diversityPenalty,
   'matchedKeys': score.matchedKeys,
   'catalogMatchedTerms': score.catalogMatchedTerms,
+  'vectorMatchedChunks': score.vectorMatchedChunks,
   'excludedBySourceWindow': score.excludedBySourceWindow,
   'exclusionReason': score.exclusionReason,
 };
@@ -318,6 +321,8 @@ MemoryCandidateScore _deserializeMemoryScore(Map<String, dynamic> json) =>
       diversityPenalty: (json['diversityPenalty'] as num?)?.toDouble() ?? 0,
       matchedKeys: (json['matchedKeys'] as List? ?? []).cast<String>(),
       catalogMatchedTerms: (json['catalogMatchedTerms'] as List? ?? [])
+          .cast<String>(),
+      vectorMatchedChunks: (json['vectorMatchedChunks'] as List? ?? [])
           .cast<String>(),
       excludedBySourceWindow: json['excludedBySourceWindow'] as bool? ?? false,
       exclusionReason: json['exclusionReason'] as String?,
@@ -494,6 +499,7 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
     triggeredMemories: triggeredMemories,
     runtimePromptBlocks: inputs.runtimePromptBlocks,
     memorySelection: memorySelection,
+    memoryExcerptingEnabled: inputs.memoryExcerptingEnabled,
   );
 
   // 3. Build prompt (lorebook scanning happens inside buildPrompt)

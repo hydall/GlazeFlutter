@@ -40,6 +40,7 @@ class MemoryEmbeddingService {
     try {
       final chunks = await _embeddingService.getEmbeddingsWithChunks([text], config);
       final vectors = chunks.map((c) => c.vector).toList();
+      final chunkTexts = chunks.map((c) => c.text).toList(growable: false);
 
       await _repo.putEmbeddingVector(
         entryId: entry.id,
@@ -47,7 +48,13 @@ class MemoryEmbeddingService {
         sourceId: 'memorybook_${charId}_$sessionId',
         vectors: vectors,
         textHash: textHash,
-        retrievalHints: hints,
+        retrievalMetadata: {
+          'hints': hints,
+          'chunks': [
+            for (int i = 0; i < chunkTexts.length; i++)
+              {'index': i, 'text': chunkTexts[i]},
+          ],
+        },
       );
     } on RateLimitException {
       await _repo.putEmbeddingError(
@@ -56,7 +63,7 @@ class MemoryEmbeddingService {
         sourceId: 'memorybook_${charId}_$sessionId',
         textHash: textHash,
         error: {'type': 'rate_limit', 'message': 'Rate limited, deferred', 'retryable': true},
-        retrievalHints: hints,
+        retrievalMetadata: {'hints': hints},
       );
       rethrow;
     } catch (e) {
@@ -66,7 +73,7 @@ class MemoryEmbeddingService {
         sourceId: 'memorybook_${charId}_$sessionId',
         textHash: textHash,
         error: {'type': 'api_error', 'message': e.toString(), 'retryable': true},
-        retrievalHints: hints,
+        retrievalMetadata: {'hints': hints},
       );
     }
   }

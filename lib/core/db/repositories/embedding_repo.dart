@@ -52,9 +52,14 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
     required List<List<double>> vectors,
     required String textHash,
     List<String>? retrievalHints,
+    Map<String, dynamic>? retrievalMetadata,
   }) async {
     final vectorsBlob = vectorListToBytes(vectors);
-    final hintsJson = retrievalHints != null ? jsonEncode(retrievalHints) : null;
+    final hintsJson = retrievalMetadata != null
+        ? jsonEncode(retrievalMetadata)
+        : retrievalHints != null
+        ? jsonEncode(retrievalHints)
+        : null;
 
     await put(EmbeddingsCompanion.insert(
       entryId: entryId,
@@ -75,8 +80,13 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
     required String textHash,
     required Map<String, dynamic> error,
     List<String>? retrievalHints,
+    Map<String, dynamic>? retrievalMetadata,
   }) async {
-    final hintsJson = retrievalHints != null ? jsonEncode(retrievalHints) : null;
+    final hintsJson = retrievalMetadata != null
+        ? jsonEncode(retrievalMetadata)
+        : retrievalHints != null
+        ? jsonEncode(retrievalHints)
+        : null;
 
     await put(EmbeddingsCompanion.insert(
       entryId: entryId,
@@ -103,7 +113,24 @@ class EmbeddingRepo extends DatabaseAccessor<AppDatabase>
   List<String>? decodeHints(EmbeddingRow row) {
     if (row.retrievalHintsJson == null) return null;
     try {
-      return (jsonDecode(row.retrievalHintsJson!) as List).cast<String>();
+      final decoded = jsonDecode(row.retrievalHintsJson!);
+      if (decoded is List) return decoded.cast<String>();
+      if (decoded is Map && decoded['hints'] is List) {
+        return (decoded['hints'] as List).cast<String>();
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Map<String, dynamic>? decodeMetadata(EmbeddingRow row) {
+    if (row.retrievalHintsJson == null) return null;
+    try {
+      final decoded = jsonDecode(row.retrievalHintsJson!);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      return null;
     } catch (_) {
       return null;
     }

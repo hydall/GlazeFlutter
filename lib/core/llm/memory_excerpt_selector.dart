@@ -44,6 +44,25 @@ class MemoryExcerptSelection {
 class MemoryExcerptSelector {
   const MemoryExcerptSelector._();
 
+  static MemoryExcerptSelection fullEntries(MemorySelection selection) {
+    final items = selection.entries
+        .map(
+          (entry) => MemoryInjectionItem(
+            entry: entry,
+            excerpt: false,
+            text: entry.content.trim(),
+            tokenCost: estimateTokens(entry.content),
+            originalTokenCost: estimateTokens(entry.content),
+          ),
+        )
+        .toList(growable: false);
+    return MemoryExcerptSelection(
+      items: items,
+      totalTokens: items.fold<int>(0, (sum, item) => sum + item.tokenCost),
+      budgetTrimmed: selection.budgetTrimmed,
+    );
+  }
+
   static MemoryExcerptSelection select(
     MemorySelection selection, {
     int maxExcerptTokensPerEntry = defaultMemoryExcerptTokensPerEntry,
@@ -169,7 +188,13 @@ class MemoryExcerptSelector {
     final terms = _termsFor(score);
     final ranked =
         chunks
-            .map((chunk) => _ScoredChunk(chunk, _scoreChunk(chunk.text, terms)))
+            .map(
+              (chunk) => _ScoredChunk(
+                chunk,
+                _scoreChunk(chunk.text, terms) +
+                    _vectorChunkBoost(chunk.text, score.vectorMatchedChunks),
+              ),
+            )
             .toList(growable: false)
           ..sort((a, b) {
             final byScore = b.score.compareTo(a.score);
@@ -232,6 +257,15 @@ class MemoryExcerptSelector {
           final text = window.join(' ').trim();
           chunks.add(_ExcerptChunk(index++, text, tokenCounter(text)));
           window = [sentence];
+        } else if (tokenCounter(candidate) > maxTokens) {
+          final words = sentence.split(RegExp(r'\s+'));
+          final shortText = words.take(maxTokens * 3).join(' ').trim();
+          if (shortText.isNotEmpty) {
+            chunks.add(
+              _ExcerptChunk(index++, shortText, tokenCounter(shortText)),
+            );
+          }
+          window = [];
         } else {
           window.add(sentence);
         }
@@ -270,6 +304,24 @@ class MemoryExcerptSelector {
       }
     }
     return terms;
+  }
+
+  static double _vectorChunkBoost(String text, List<String> vectorChunks) {
+    if (vectorChunks.isEmpty) return 0;
+    final lower = text.toLowerCase();
+    for (final vectorChunk in vectorChunks) {
+      final chunk = vectorChunk.trim().toLowerCase();
+      if (chunk.isEmpty) continue;
+      if (lower.contains(chunk) || chunk.contains(lower)) return 100.0;
+      final chunkTerms = chunk
+          .split(RegExp(r'[^\p{L}\p{N}_]+', unicode: true))
+          .where((term) => term.length >= 4)
+          .toSet();
+      if (chunkTerms.isEmpty) continue;
+      final overlap = chunkTerms.where(lower.contains).length;
+      if (overlap > 0) return overlap.clamp(0, 12) * 2.0;
+    }
+    return 0;
   }
 
   static double _scoreChunk(String text, Set<String> terms) {
