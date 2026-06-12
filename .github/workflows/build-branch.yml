@@ -335,6 +335,11 @@ jobs:
               '{chat_id: $cid, text: $text, parse_mode: "HTML"}')" \
             | jq -r '.result.message_id')
 
+          curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/pinChatMessage" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg cid "$TG_CHAT_ID" --arg mid "$MSG_ID" \
+              '{chat_id: $cid, message_id: ($mid | tonumber), disable_notification: true}')"
+
           curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" \
             -F "chat_id=${TG_CHAT_ID}" \
             -F "reply_to_message_id=${MSG_ID}" \
