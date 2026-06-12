@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -441,8 +442,8 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
   Future<void> _importTheme() async {
     try {
       final result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json', 'thm'],
+        type: Platform.isIOS ? FileType.any : FileType.custom,
+        allowedExtensions: Platform.isIOS ? null : ['json', 'thm'],
         dialogTitle: 'Import Theme',
         withData: true,
       );
@@ -450,10 +451,26 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
 
       final file = result.files.first;
       if (file.path == null) return;
+      final path = file.path!;
+      final lowerPath = path.toLowerCase();
+      final isSupported =
+          lowerPath.endsWith('.json') || lowerPath.endsWith('.thm');
+      if (!isSupported) {
+        if (mounted) {
+          GlazeToast.show(
+            context,
+            'Unsupported file type. Pick a .json or .thm theme file.',
+            isError: true,
+            position: ToastPosition.top,
+            duration: 4000,
+          );
+        }
+        return;
+      }
 
       final preset = await ref
           .read(themeProvider.notifier)
-          .importPresetFromFile(file.path!);
+          .importPresetFromFile(path);
       if (preset == null) return;
 
       if (mounted) {
