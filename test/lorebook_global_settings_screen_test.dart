@@ -33,12 +33,11 @@ void main() {
       );
 
       expect(find.text('Vector Search'), findsOneWidget);
-      expect(find.byType(Slider), findsNothing);
-      expect(find.text('0.45'), findsAtLeastNWidgets(1));
+      expect(find.byType(Slider), findsOneWidget);
 
-      await tester.ensureVisible(find.text('0.45').first);
+      await tester.ensureVisible(find.byType(Slider));
       await tester.pump();
-      await tester.tapAt(const Offset(700, 590));
+      await tester.drag(find.byType(Slider), const Offset(120, 0));
       await tester.pump();
       await tester.pump();
 

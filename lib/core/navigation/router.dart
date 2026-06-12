@@ -34,31 +34,10 @@ CustomTransitionPage<void> _overlayPage({
 }) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
-    transitionDuration: const Duration(milliseconds: 260),
-    reverseTransitionDuration: const Duration(milliseconds: 220),
+    transitionDuration: Duration.zero,
+    reverseTransitionDuration: Duration.zero,
     child: child,
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      final primary = CurvedAnimation(
-        parent: animation,
-        curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeOutCubic,
-      );
-      final incomingSlide = Tween<Offset>(
-        begin: const Offset(0.06, 0),
-        end: Offset.zero,
-      ).animate(primary);
-      final incomingFade = Tween<double>(begin: 0.0, end: 1.0).animate(
-        CurvedAnimation(
-          parent: animation,
-          curve: const Interval(0.0, 0.85, curve: Curves.easeOutCubic),
-          reverseCurve: Curves.easeOutCubic,
-        ),
-      );
-      return SlideTransition(
-        position: incomingSlide,
-        child: FadeTransition(opacity: incomingFade, child: child),
-      );
-    },
+    transitionsBuilder: (_, _, _, child) => child,
   );
 }
 

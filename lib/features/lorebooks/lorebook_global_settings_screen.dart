@@ -408,7 +408,7 @@ class _DropdownField<T> extends StatelessWidget {
   }
 }
 
-class _SliderField extends StatefulWidget {
+class _SliderField extends StatelessWidget {
   final String label;
   final double value;
   final double min;
@@ -428,76 +428,6 @@ class _SliderField extends StatefulWidget {
   });
 
   @override
-  State<_SliderField> createState() => _SliderFieldState();
-}
-
-class _SliderFieldState extends State<_SliderField> {
-  late final TextEditingController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = TextEditingController(text: _formatValue(widget.value));
-  }
-
-  @override
-  void didUpdateWidget(_SliderField oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) {
-      final text = _formatValue(widget.value);
-      if (_ctrl.text != text) _ctrl.text = text;
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  String _formatValue(double value) {
-    return widget.max <= 1
-        ? value.toStringAsFixed(2)
-        : value.round().toString();
-  }
-
-  bool get _showDisplayText {
-    final numeric = widget.max <= 1
-        ? widget.value.toStringAsFixed(2)
-        : widget.value.round().toString();
-    return widget.displayText != numeric;
-  }
-
-  void _commit() {
-    final parsed = double.tryParse(_ctrl.text.replaceAll(',', '.'));
-    if (parsed == null) {
-      _ctrl.text = _formatValue(widget.value);
-      return;
-    }
-    final clamped = parsed.clamp(widget.min, widget.max).toDouble();
-    final step = widget.divisions > 0
-        ? (widget.max - widget.min) / widget.divisions
-        : 0.0;
-    final snapped = step > 0
-        ? widget.min + ((clamped - widget.min) / step).round() * step
-        : clamped;
-    widget.onChanged(snapped.clamp(widget.min, widget.max).toDouble());
-  }
-
-  void _updateFromLocalPosition(double dx, double width) {
-    if (width <= 0) return;
-    final t = (dx / width).clamp(0.0, 1.0);
-    final raw = widget.min + (widget.max - widget.min) * t;
-    final step = widget.divisions > 0
-        ? (widget.max - widget.min) / widget.divisions
-        : 0.0;
-    final snapped = step > 0
-        ? widget.min + ((raw - widget.min) / step).round() * step
-        : raw;
-    widget.onChanged(snapped.clamp(widget.min, widget.max).toDouble());
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -505,115 +435,30 @@ class _SliderFieldState extends State<_SliderField> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: Text(
-                widget.label,
-                style: TextStyle(
-                  color: context.cs.onSurfaceVariant,
-                  fontSize: 14,
-                ),
+            Text(
+              label,
+              style: TextStyle(
+                color: context.cs.onSurfaceVariant,
+                fontSize: 14,
               ),
             ),
-            SizedBox(
-              width: 96,
-              child: TextField(
-                controller: _ctrl,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                textAlign: TextAlign.center,
-                style: TextStyle(color: context.cs.onSurface, fontSize: 13),
-                decoration: InputDecoration(
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.05),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                onSubmitted: (_) => _commit(),
-                onEditingComplete: _commit,
-                onTapOutside: (_) {
-                  FocusScope.of(context).unfocus();
-                  _commit();
-                },
+            Text(
+              displayText,
+              style: TextStyle(
+                color: context.cs.onSurface,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            if (_showDisplayText) ...[
-              const SizedBox(width: 8),
-              Text(
-                widget.displayText,
-                style: TextStyle(
-                  color: context.cs.onSurface,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
           ],
         ),
-        const SizedBox(height: 10),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final range = widget.max - widget.min;
-            final pct = range <= 0
-                ? 0.0
-                : ((widget.value - widget.min) / range).clamp(0.0, 1.0);
-            final width = constraints.maxWidth;
-            final thumbLeft = (width - 18) * pct;
-
-            return GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTapDown: (details) =>
-                  _updateFromLocalPosition(details.localPosition.dx, width),
-              onHorizontalDragUpdate: (details) =>
-                  _updateFromLocalPosition(details.localPosition.dx, width),
-              child: SizedBox(
-                height: 32,
-                child: Stack(
-                  alignment: Alignment.centerLeft,
-                  children: [
-                    Container(
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: context.cs.surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    FractionallySizedBox(
-                      widthFactor: pct,
-                      child: Container(
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: context.cs.primary,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      left: thumbLeft,
-                      child: Container(
-                        width: 18,
-                        height: 18,
-                        decoration: BoxDecoration(
-                          color: context.cs.primary,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.25),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
+        Slider(
+          value: value,
+          min: min,
+          max: max,
+          divisions: divisions,
+          activeColor: context.cs.primary,
+          onChanged: onChanged,
         ),
       ],
     );
