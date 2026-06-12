@@ -494,6 +494,11 @@ MemoryDraft {
 }
 ```
 
+`messageRange` is provenance metadata and must survive draft approval:
+`MemoryDraft.messageRange` is copied to `MemoryEntry.messageRange`. Older
+generated entries whose title is a plain range like `91-105` are read with a
+compatibility backfill into `messageRange`.
+
 ### Injection Rule
 Memory entries are injected only when all linked `messageIds` are already **outside** the active context window. This prevents double-coverage.
 

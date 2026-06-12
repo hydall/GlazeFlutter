@@ -145,6 +145,18 @@ it ends (success, error, or cancel).
 Shared state contract is pinned by
 `test/characterization/memory_draft_mutex_test.dart` (7 tests).
 
+### INV-M5: Memory draft approval preserves source range ✅ ENFORCED
+
+`MemoryBookController.approveDraft()` must copy `MemoryDraft.messageRange`
+into the resulting `MemoryEntry.messageRange`. This range is provenance used by
+source-window exclusion, message-distance recency, diagnostics, and future
+excerpt selection.
+
+Compatibility rule: legacy generated entries whose title is only a numeric
+range such as `91-105` are read with a `messageRange` backfill in
+`MemoryEntry.fromJson()`. This does not rewrite the stored JSON until the book
+is saved normally.
+
 ---
 
 ## 5. Prompt Semantics Invariants
