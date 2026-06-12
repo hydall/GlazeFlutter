@@ -113,6 +113,7 @@ class MenuItem extends StatefulWidget {
   final IconData? icon;
   final Widget? iconWidget;
   final String label;
+  final String? subtitle;
   final String? value;
   final Widget? trailing;
   final VoidCallback onTap;
@@ -122,6 +123,7 @@ class MenuItem extends StatefulWidget {
     this.icon,
     this.iconWidget,
     required this.label,
+    this.subtitle,
     this.value,
     this.trailing,
     required this.onTap,
@@ -158,11 +160,26 @@ class _MenuItemState extends State<MenuItem> {
             if (widget.icon != null || widget.iconWidget != null)
               const SizedBox(width: 16),
             Expanded(
-              child: Text(widget.label,
-                  style: TextStyle(
-                      color: context.cs.onSurfaceVariant,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(widget.label,
+                      style: TextStyle(
+                          color: context.cs.onSurfaceVariant,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w400)),
+                  if (widget.subtitle != null &&
+                      widget.subtitle!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(widget.subtitle!,
+                        style: TextStyle(
+                            color: context.cs.onSurfaceVariant
+                                .withValues(alpha: 0.45),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w400)),
+                  ],
+                ],
+              ),
             ),
             if (widget.value != null)
               Text(widget.value!,

@@ -9,6 +9,7 @@ import '../../../core/utils/platform_paths.dart';
 import 'chat_webview_settings.dart';
 
 WebViewEnvironment? _chatWebViewEnvironment;
+String? _janitorWebViewUserAgent;
 HttpServer? _chatWebViewAssetServer;
 WebUri? _chatWebViewAssetBaseUrl;
 HttpServer? _chatWebViewLocalFileServer;
@@ -19,6 +20,54 @@ WebUri? _chatWebViewLocalFileBaseUrl;
 /// The Windows implementation of `flutter_inappwebview` expects WebView2 to be
 /// initialized before creating WebViews. Mobile platforms do not use this.
 WebViewEnvironment? get chatWebViewEnvironment => _chatWebViewEnvironment;
+
+/// Cleaned-up User-Agent for the janitorai WebViews, or `null` to keep the
+/// native UA (no override).
+///
+/// Embedded WebViews carry markers that gatekeepers reject: WebView2's native UA
+/// has an `Edg/…` token Google's sign-in flags as "UA inconsistency", and
+/// Android WebView's UA has a `; wv` qualifier Google blocks with
+/// `disallowed_useragent`. We can't just hardcode a clean Chrome UA: the
+/// `userAgent` override changes only the UA *string*, while the WebView keeps
+/// emitting User-Agent Client Hints (`Sec-CH-UA`) from its real Chromium version
+/// — and Cloudflare blocks when the two disagree. So we keep the real
+/// `Chrome/<major>` version (matching the client hints CF sees) and only strip
+/// the embedded-WebView markers. See [_deriveJanitorWebViewUA] (Windows) and
+/// [_deriveMobileJanitorWebViewUA] (Android/iOS).
+String? get janitorWebViewUserAgent => _janitorWebViewUserAgent;
+
+/// Builds a clean Windows desktop-Chrome UA pinned to [webView2Version]'s major
+/// (e.g. `120.0.2210.91` → `Chrome/120.0.0.0`). Returns `null` if the version
+/// can't be parsed, leaving the WebViews on their native UA.
+String? _deriveJanitorWebViewUA(String webView2Version) {
+  final major = RegExp(r'^\d+').firstMatch(webView2Version)?.group(0);
+  if (major == null) return null;
+  return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/$major.0.0.0 Safari/537.36';
+}
+
+/// Mobile counterpart of [_deriveJanitorWebViewUA]: takes the platform's default
+/// WebView UA and strips the embedded-WebView markers Google's sign-in flow
+/// rejects with `disallowed_useragent` — Android's `; wv` qualifier and the
+/// `Version/4.0` WebView token — leaving a plain mobile-Chrome UA. The real
+/// `Chrome/<major>` version is preserved, so it stays aligned with the client
+/// hints Cloudflare validates. Returns `null` if the default UA is unavailable
+/// or already clean (e.g. iOS WKWebView), leaving the WebViews on their native
+/// UA → no override applied.
+Future<String?> _deriveMobileJanitorWebViewUA() async {
+  try {
+    final defaultUa = await InAppWebViewController.getDefaultUserAgent();
+    if (defaultUa.isEmpty) return null;
+    final cleaned = defaultUa
+        .replaceAll('; wv', '')
+        .replaceAll(RegExp(r'\bVersion/\d+\.\d+\s+'), '')
+        .replaceAll(RegExp(r'\s{2,}'), ' ')
+        .trim();
+    return cleaned == defaultUa ? null : cleaned;
+  } catch (_) {
+    return null;
+  }
+}
 
 String? chatWebViewInitialFile() {
   if (_chatWebViewAssetBaseUrl != null) return null;
@@ -74,6 +123,7 @@ Future<void> initChatWebViewEnvironment() async {
   if (defaultTargetPlatform == TargetPlatform.android) {
     setChatWebViewAndroidFileRoot(await getAppDataDir());
     await _startChatWebViewLocalFileServer();
+    _janitorWebViewUserAgent = await _deriveMobileJanitorWebViewUA();
     return;
   }
   if (defaultTargetPlatform == TargetPlatform.iOS) {
@@ -85,6 +135,7 @@ Future<void> initChatWebViewEnvironment() async {
     // app bundle layout differs from the Windows `data/flutter_assets` tree).
     await getAppDataDir();
     await _startChatWebViewBundleServer();
+    _janitorWebViewUserAgent = await _deriveMobileJanitorWebViewUA();
     return;
   }
   if (defaultTargetPlatform != TargetPlatform.windows) return;
@@ -95,6 +146,7 @@ Future<void> initChatWebViewEnvironment() async {
     if (availableVersion == null) {
       return;
     }
+    _janitorWebViewUserAgent = _deriveJanitorWebViewUA(availableVersion);
 
     _chatWebViewEnvironment = await WebViewEnvironment.create();
     await _startChatWebViewAssetServer();

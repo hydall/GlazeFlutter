@@ -406,6 +406,10 @@ class _CfChallengeWebViewState extends State<_CfChallengeWebView> {
         thirdPartyCookiesEnabled: true,
         isInspectable: false,
         useHybridComposition: true,
+        // Mint cf_clearance under the same Edg-stripped, version-aligned UA the
+        // proxy/login WebViews use, so the catalog's in-page fetches stay
+        // consistent. Null on mobile → native UA kept.
+        userAgent: janitorWebViewUserAgent,
       ),
       webViewEnvironment: defaultTargetPlatform == TargetPlatform.windows
           ? chatWebViewEnvironment

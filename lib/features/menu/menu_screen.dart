@@ -10,6 +10,7 @@ import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/widgets/menu_group.dart';
 import '../backup/backup_screen.dart';
+import '../catalog/janitor_account_provider.dart';
 import '../catalog/widgets/janitor_login_sheet.dart';
 import '../cloud_sync/widgets/sync_sheet.dart';
 import '../dev/menu_group_demo_screen.dart';
@@ -48,12 +49,14 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                   items: [
                     MenuItem(
                       icon: Icons.settings_outlined,
-                      label: 'App Settings',
+                      label: 'menu_app_settings'.tr(),
+                      subtitle: 'menu_app_settings_hint'.tr(),
                       onTap: () => context.push('/menu/settings'),
                     ),
                     MenuItem(
                       icon: Icons.replay_rounded,
-                      label: 'Replay Onboarding',
+                      label: 'onboarding_replay'.tr(),
+                      subtitle: 'onboarding_replay_hint'.tr(),
                       onTap: () async {
                         await resetOnboarding();
                         if (context.mounted) showOnboarding(context);
@@ -61,7 +64,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                     ),
                     MenuItem(
                       icon: Icons.backup_outlined,
-                      label: 'Backups',
+                      label: 'menu_backups'.tr(),
+                      subtitle: 'menu_backups_hint'.tr(),
                       onTap: () => showModalBottomSheet<void>(
                         context: context,
                         useRootNavigator: true,
@@ -74,7 +78,8 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                     ),
                     MenuItem(
                       icon: Icons.sync_rounded,
-                      label: 'Cloud Sync',
+                      label: 'menu_cloud_sync'.tr(),
+                      subtitle: 'menu_cloud_sync_hint'.tr(),
                       onTap: () => showModalBottomSheet<void>(
                         context: context,
                         useRootNavigator: true,
@@ -88,7 +93,13 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                     MenuItem(
                       icon: Icons.person_outline_rounded,
                       label: 'janitor_login_menu'.tr(),
-                      onTap: () => showJanitorLoginSheet(context),
+                      subtitle: ref.watch(janitorAccountProvider).isLoggedIn
+                          ? 'janitor_login_menu_logged_in'.tr(namedArgs: {
+                              'name':
+                                  ref.watch(janitorAccountProvider).userName!,
+                            })
+                          : 'janitor_login_menu_logged_out'.tr(),
+                      onTap: () => openJanitorAccountSheet(context, ref),
                     ),
                   ],
                 ),
@@ -141,12 +152,14 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                   items: [
                     MenuItem(
                       icon: Icons.menu_book_rounded,
-                      label: 'Glossary',
+                      label: 'menu_glossary'.tr(),
+                      subtitle: 'menu_glossary_hint'.tr(),
                       onTap: () => context.push('/menu/glossary'),
                     ),
                     MenuItem(
                       icon: Icons.info_outline_rounded,
-                      label: 'About',
+                      label: 'menu_about'.tr(),
+                      subtitle: 'menu_about_hint'.tr(),
                       onTap: () => context.push('/menu/about'),
                     ),
                   ],

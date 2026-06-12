@@ -209,6 +209,45 @@ class JanitorWebViewProxy {
     }
   }
 
+  /// Reads the signed-in JanitorAI profile's `user_name` from [controller]'s
+  /// page, mirroring the request the site front-end makes after login
+  /// (`GET /hampter/profiles/mine`). Runs in-page so it shares the cookie jar and
+  /// CF fingerprint, and attaches the Supabase bearer token like [_rawFetch].
+  /// Returns null when logged out or on any error.
+  static Future<String?> fetchUserName(
+    InAppWebViewController controller,
+  ) async {
+    try {
+      final res = await controller
+          .callAsyncJavaScript(
+            functionBody: '''
+              $_findTokenJs
+              const token = __glazeFindToken();
+              if (!token) return null;
+              const r = await fetch(
+                "https://janitorai.com/hampter/profiles/mine",
+                {
+                  headers: {
+                    "Accept": "application/json, text/plain, */*",
+                    "authorization": "Bearer " + token,
+                  },
+                  credentials: "include",
+                },
+              );
+              if (!r.ok) return null;
+              const j = await r.json();
+              return (j && typeof j.user_name === "string") ? j.user_name : null;
+            ''',
+          )
+          .timeout(const Duration(seconds: 10));
+      final value = res?.value;
+      return (value is String && value.isNotEmpty) ? value : null;
+    } catch (e) {
+      _log('fetchUserName error: $e');
+      return null;
+    }
+  }
+
   /// Clears the JanitorAI account session (cookies + DOM storage) and reloads
   /// the offscreen page so subsequent requests are anonymous again.
   Future<void> logout() async {
@@ -286,6 +325,9 @@ class JanitorWebViewProxy {
         thirdPartyCookiesEnabled: true,
         isInspectable: false,
         useHybridComposition: true,
+        // Match the visible login sheet's UA: Edg-stripped but version-aligned
+        // with the client hints CF validates. Null on mobile → native UA kept.
+        userAgent: janitorWebViewUserAgent,
       ),
       webViewEnvironment: defaultTargetPlatform == TargetPlatform.windows
           ? chatWebViewEnvironment

@@ -3,10 +3,44 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../chat/bridge/chat_webview_environment.dart';
+import '../janitor_account_provider.dart';
 import '../services/janitor_webview_proxy.dart';
+
+/// Entry point for the menu's "JanitorAI Account" item. When a session already
+/// exists, shows a small log-out / cancel sheet instead of the login WebView;
+/// otherwise opens the WebView so the user can sign in.
+Future<void> openJanitorAccountSheet(BuildContext context, WidgetRef ref) async {
+  if (!ref.read(janitorAccountProvider).isLoggedIn) {
+    await showJanitorLoginSheet(context);
+    return;
+  }
+  await GlazeBottomSheet.show<void>(
+    context,
+    title: 'janitor_login_menu'.tr(),
+    items: [
+      BottomSheetItem(
+        label: 'janitor_auth_logout'.tr(),
+        icon: Icons.logout_rounded,
+        isDestructive: true,
+        onTap: () async {
+          Navigator.of(context, rootNavigator: true).pop();
+          await JanitorWebViewProxy.instance.logout();
+          await ref.read(janitorAccountProvider.notifier).setUserName(null);
+        },
+      ),
+      BottomSheetItem(
+        label: 'btn_cancel'.tr(),
+        icon: Icons.close_rounded,
+        onTap: () => Navigator.of(context, rootNavigator: true).pop(),
+      ),
+    ],
+  );
+}
 
 /// Opens the JanitorAI login WebView as a modal sheet. After it closes the
 /// account session (if any) is active for catalog requests; callers that show a
@@ -26,16 +60,16 @@ Future<void> showJanitorLoginSheet(BuildContext context) {
 /// headless [JanitorWebViewProxy] (same origin, same app storage), so once the
 /// user signs in here the account session is automatically used for catalog
 /// requests. No cookies are wiped — unlike the CF challenge WebView.
-class JanitorLoginSheet extends StatefulWidget {
+class JanitorLoginSheet extends ConsumerStatefulWidget {
   const JanitorLoginSheet({super.key});
 
   static const _loginUrl = 'https://janitorai.com/login';
 
   @override
-  State<JanitorLoginSheet> createState() => _JanitorLoginSheetState();
+  ConsumerState<JanitorLoginSheet> createState() => _JanitorLoginSheetState();
 }
 
-class _JanitorLoginSheetState extends State<JanitorLoginSheet> {
+class _JanitorLoginSheetState extends ConsumerState<JanitorLoginSheet> {
   InAppWebViewController? _controller;
   bool _busy = false;
 
@@ -46,6 +80,7 @@ class _JanitorLoginSheetState extends State<JanitorLoginSheet> {
   Future<void> _logout() async {
     setState(() => _busy = true);
     await JanitorWebViewProxy.instance.logout();
+    await ref.read(janitorAccountProvider.notifier).setUserName(null);
     await _controller?.loadUrl(
       urlRequest: URLRequest(url: WebUri(JanitorLoginSheet._loginUrl)),
     );
@@ -67,6 +102,13 @@ class _JanitorLoginSheetState extends State<JanitorLoginSheet> {
     final loggedIn = await JanitorWebViewProxy.hasSessionToken(controller);
     if (!loggedIn || _closing || !mounted) return;
     _closing = true;
+    // The page is signed in here — grab the profile name (same request the site
+    // front-end makes) and persist it for the menu hint before the sheet closes.
+    final userName = await JanitorWebViewProxy.fetchUserName(controller);
+    if (userName != null) {
+      await ref.read(janitorAccountProvider.notifier).setUserName(userName);
+    }
+    if (!mounted) return;
     Navigator.of(context).pop();
   }
 
@@ -98,6 +140,11 @@ class _JanitorLoginSheetState extends State<JanitorLoginSheet> {
                 thirdPartyCookiesEnabled: true,
                 isInspectable: false,
                 useHybridComposition: true,
+                // Drop WebView2's native `Edg/…` token (rejected by Google
+                // sign-in) while keeping the Chrome version aligned with the
+                // client hints CF validates. Null on mobile → native UA kept.
+                // See [janitorWebViewUserAgent].
+                userAgent: janitorWebViewUserAgent,
               ),
               webViewEnvironment:
                   defaultTargetPlatform == TargetPlatform.windows
