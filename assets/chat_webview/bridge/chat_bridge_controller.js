@@ -974,6 +974,28 @@ export class Bridge {
     return true;
   }
 
+  _escapeAttr(value) {
+    return String(value || '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  _extBlockImageSrc(payload) {
+    let path = payload || '';
+    const pipeIdx = path.indexOf('|');
+    if (pipeIdx !== -1) path = path.substring(0, pipeIdx);
+    if (path.startsWith('data:') || path.startsWith('file://') || path.startsWith('http://') || path.startsWith('https://')) return path;
+    const normalized = path.replace(/\\/g, '/');
+    return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
+  }
+
+  _renderExtBlockImageHtml(payload) {
+    const src = this._escapeAttr(this._extBlockImageSrc(payload));
+    return `<span class="ext-block-image-wrapper img-result-wrapper"><img src="${src}" class="ext-block-image" loading="lazy" data-action="image-click" data-src="${src}"><button class="img-download-btn" data-action="img-download" data-src="${src}" title="Save image">⤓</button></span>`;
+  }
+
   _fillExtBlockBody(body, block) {
     const hasContent = block.content && block.content.trim().length > 0;
     if (!hasContent && block.status !== 'pending') {
@@ -992,15 +1014,7 @@ export class Bridge {
     if (hasImgResult && hasHtmlMarkup) {
       let html = block.content.replace(
         /\[IMG:RESULT:([^\]]+)\]/g,
-        (match, payload) => {
-          let path = payload;
-          const pipeIdx = path.indexOf('|');
-          if (pipeIdx !== -1) path = path.substring(0, pipeIdx);
-          const src = path.startsWith('file://') || path.startsWith('http://') || path.startsWith('https://')
-            ? path
-            : `file:///${path.replace(/\\/g, '/')}`;
-          return `<img src="${src}" class="ext-block-image" style="display:block;width:100%;border-radius:15px;">`;
-        },
+        (match, payload) => this._renderExtBlockImageHtml(payload),
       );
       const htmlEl = document.createElement('div');
       htmlEl.className = 'ext-block-content';
@@ -1008,13 +1022,9 @@ export class Bridge {
       body.appendChild(htmlEl);
     } else if (hasImgResult) {
       const imgMatch = block.content.match(imgResultRegex);
-      const img = document.createElement('img');
-      let path = imgMatch[1];
-      const pipeIdx = path.indexOf('|');
-      if (pipeIdx !== -1) path = path.substring(0, pipeIdx);
-      img.src = path.startsWith('file://') || path.startsWith('http://') || path.startsWith('https://') ? path : `file:///${path.replace(/\\/g, '/')}`;
-      img.className = 'ext-block-image';
-      body.appendChild(img);
+      const wrapper = document.createElement('span');
+      wrapper.innerHTML = this._renderExtBlockImageHtml(imgMatch[1]);
+      body.appendChild(wrapper.firstElementChild);
     } else {
       const html = document.createElement('div');
       html.className = 'ext-block-content';
