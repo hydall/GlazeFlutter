@@ -105,5 +105,48 @@ void main() {
       expect(excerpted.items.first.text, isNot(contains('catalog')));
       expect(excerpted.totalTokens, lessThanOrEqualTo(30));
     });
+
+    test('prefers vector-matched chunks and can include multiple chunks', () {
+      final content = [
+        'A quiet setup paragraph about weather and tea.',
+        'Ren hid the silver key beneath the chapel floor before sunrise.',
+        'The market argument was unrelated and mostly about bread.',
+        'Sable later found the chapel map and marked the hidden vault door.',
+      ].join('\n\n');
+
+      final selection = MemorySelector.select(
+        MemorySelectionInput(
+          entries: [
+            _entry(id: 'a', title: 'Chapel clues', content: content),
+          ],
+          vectorScores: const {'a': 0.9},
+          vectorMatchedChunks: const {
+            'a': [
+              'Ren hid the silver key beneath the chapel floor before sunrise.',
+              'Sable later found the chapel map and marked the hidden vault door.',
+            ],
+          },
+          maxInjectionTokens: 28,
+          maxInjectedEntries: 1,
+          keywordWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+        ),
+        tokenCounter: (entry) => entry.content.split(RegExp(r'\s+')).length,
+      );
+
+      final excerpted = MemoryExcerptSelector.select(
+        selection,
+        maxExcerptTokensPerEntry: 28,
+        maxExcerptChunksPerEntry: 2,
+        tokenCounter: (text) => text.split(RegExp(r'\s+')).length,
+      );
+
+      expect(excerpted.items.single.excerpt, isTrue);
+      expect(excerpted.items.single.text, contains('silver key'));
+      expect(excerpted.items.single.text, contains('hidden vault'));
+      expect(excerpted.items.single.text, isNot(contains('weather and tea')));
+    });
   });
 }
