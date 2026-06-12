@@ -21,6 +21,7 @@ class MemoryActivityCard extends StatefulWidget {
 
 class _MemoryActivityCardState extends State<MemoryActivityCard> {
   final Set<String> _expandedEntryIds = {};
+  final ScrollController _listScrollController = ScrollController();
 
   @override
   void didUpdateWidget(covariant MemoryActivityCard oldWidget) {
@@ -28,6 +29,12 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
     if (oldWidget.activity.messageId != widget.activity.messageId) {
       _expandedEntryIds.clear();
     }
+  }
+
+  @override
+  void dispose() {
+    _listScrollController.dispose();
+    super.dispose();
   }
 
   @override
@@ -107,6 +114,16 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                     ),
                   ),
                 ),
+                if (diagnostics['memoryMacroMissing'] == true)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _MemoryActivityWarning(
+                      text:
+                          'Память собрана, но не вставлена: в пресете нет '
+                          '{{memory}}, а инжект настроен на макрос. Добавьте '
+                          '{{memory}} в пресет или переключите инжект на блок.',
+                    ),
+                  ),
                 if (widget.expanded) ...[
                   const SizedBox(height: 8),
                   Wrap(
@@ -154,9 +171,10 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
     return ConstrainedBox(
       constraints: const BoxConstraints(maxHeight: 280),
       child: Scrollbar(
+        controller: _listScrollController,
         thumbVisibility: true,
         child: SingleChildScrollView(
-          primary: false,
+          controller: _listScrollController,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,6 +332,47 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MemoryActivityWarning extends StatelessWidget {
+  final String text;
+
+  const _MemoryActivityWarning({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.orangeAccent.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Colors.orangeAccent.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            size: 16,
+            color: Colors.orangeAccent,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 11,
+                color: context.cs.onSurface,
+                height: 1.3,
+              ),
+            ),
+          ),
         ],
       ),
     );
