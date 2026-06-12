@@ -24,7 +24,7 @@ class SummaryRepo extends DatabaseAccessor<AppDatabase>
     String? prompt,
   }) async {
     final existing = await get(sessionId);
-    return into(chatSummaries).insertOnConflictUpdate(
+    await into(chatSummaries).insertOnConflictUpdate(
       ChatSummariesCompanion.insert(
         sessionId: sessionId,
         content: content,
@@ -55,6 +55,7 @@ class SummaryRepo extends DatabaseAccessor<AppDatabase>
 
   Future<void> deleteBySessionId(String sessionId) {
     return (delete(chatSummaries)..where((t) => t.sessionId.equals(sessionId)))
-        .go();
+        .go()
+        .then((_) {});
   }
 }
