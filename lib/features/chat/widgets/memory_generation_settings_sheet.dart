@@ -31,9 +31,11 @@ class _MemoryGenerationSettingsSheetState
   late bool _autoCreate;
   late bool _autoGenerate;
   late int _maxInjected;
+  late bool _memoryExcerptingEnabled;
   late String _memoryBudgetPreset;
   late int? _maxInjectedTokens;
   late int _autoCreateInterval;
+  late int _autoCreateLagMessages;
   late int _batchSize;
   late bool _useDelayedAutomation;
   late String _injectionTarget;
@@ -83,6 +85,7 @@ class _MemoryGenerationSettingsSheetState
     _autoCreate = s.autoCreateEnabled;
     _autoGenerate = s.autoGenerateEnabled;
     _maxInjected = s.maxInjectedEntries;
+    _memoryExcerptingEnabled = s.memoryExcerptingEnabled;
     _memoryBudgetPreset = _normalizeMemoryBudgetPreset(
       s.memoryBudgetPreset,
       s.maxInjectedTokens,
@@ -95,6 +98,7 @@ class _MemoryGenerationSettingsSheetState
       text: (_maxInjectedTokens ?? 6000).toString(),
     );
     _autoCreateInterval = s.autoCreateInterval;
+    _autoCreateLagMessages = s.autoCreateLagMessages;
     _batchSize = s.batchSize;
     _useDelayedAutomation = s.useDelayedAutomation;
     _injectionTarget = _migrateInjectionTarget(s.injectionTarget);
@@ -174,9 +178,11 @@ class _MemoryGenerationSettingsSheetState
       autoCreateEnabled: _autoCreate,
       autoGenerateEnabled: _autoGenerate,
       maxInjectedEntries: _maxInjected,
+      memoryExcerptingEnabled: _memoryExcerptingEnabled,
       maxInjectedTokens: _maxInjectedTokens,
       memoryBudgetPreset: _memoryBudgetPreset,
       autoCreateInterval: _autoCreateInterval,
+      autoCreateLagMessages: _autoCreateLagMessages,
       batchSize: _batchSize,
       useDelayedAutomation: _useDelayedAutomation,
       injectionTarget: _injectionTarget,
@@ -264,6 +270,15 @@ class _MemoryGenerationSettingsSheetState
                 min: 1,
                 max: 200,
               ),
+              _numberField(
+                'memory_books_auto_create_lag'.tr(),
+                _autoCreateLagMessages,
+                (v) => setState(() => _autoCreateLagMessages = v),
+                min: 0,
+                max: 50,
+                helpTitle: 'memory_books_auto_create_lag'.tr(),
+                helpBody: 'memory_books_auto_create_lag_help'.tr(),
+              ),
             ],
             _numberField(
               'memory_books_batch_size'.tr(),
@@ -284,6 +299,12 @@ class _MemoryGenerationSettingsSheetState
             _memoryBudgetSelector(),
             const SizedBox(height: 8),
             _effectiveBudgetHint(),
+            _switchTile(
+              'memory_excerpting_enabled'.tr(),
+              _memoryExcerptingEnabled,
+              (v) => setState(() => _memoryExcerptingEnabled = v),
+              subtitle: 'memory_excerpting_auto_desc'.tr(),
+            ),
             const SizedBox(height: 12),
             _sectionLabel('label_embedding_target'.tr()),
             SegmentedButton<String>(
@@ -1126,9 +1147,11 @@ class _MemoryGenerationSettingsSheetState
           autoCreateEnabled: current.autoCreateEnabled,
           autoGenerateEnabled: current.autoGenerateEnabled,
           maxInjectedEntries: current.maxInjectedEntries,
+          memoryExcerptingEnabled: current.memoryExcerptingEnabled,
           maxInjectedTokens: current.maxInjectedTokens,
           memoryBudgetPreset: current.memoryBudgetPreset,
           autoCreateInterval: current.autoCreateInterval,
+          autoCreateLagMessages: current.autoCreateLagMessages,
           useDelayedAutomation: current.useDelayedAutomation,
           injectionTarget: current.injectionTarget,
           batchSize: current.batchSize,

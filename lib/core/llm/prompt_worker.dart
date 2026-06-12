@@ -10,6 +10,7 @@ import '../models/preset.dart';
 import '../models/chat_message.dart';
 import '../models/api_config.dart';
 import '../models/lorebook.dart';
+import '../models/memory_book.dart';
 import 'context_calculator.dart';
 import 'glaze_matcher.dart';
 import 'history_assembler.dart';
@@ -154,6 +155,8 @@ Map<String, dynamic> _serializePayload(PromptPayload p) => {
   'runtimePromptBlocks': p.runtimePromptBlocks
       .map((block) => block.toJson())
       .toList(),
+  'memorySelection': _serializeMemorySelection(p.memorySelection),
+  'memoryExcerptingEnabled': p.memoryExcerptingEnabled,
 };
 
 PromptResult _deserializeResult(Map<String, dynamic> json) {
@@ -172,6 +175,9 @@ PromptResult _deserializeResult(Map<String, dynamic> json) {
     triggeredMemories: (json['triggeredMemories'] as List? ?? [])
         .map((t) => TriggeredEntry.fromJson(t as Map<String, dynamic>))
         .toList(),
+    memoryCoverage: Map<String, dynamic>.from(
+      json['memoryCoverage'] as Map? ?? {},
+    ),
   );
 }
 
@@ -238,6 +244,10 @@ PromptPayload _deserializePayload(Map<String, dynamic> json) {
           (block) => RuntimePromptBlock.fromJson(block as Map<String, dynamic>),
         )
         .toList(),
+    memorySelection: _deserializeMemorySelection(
+      json['memorySelection'] as Map<String, dynamic>?,
+    ),
+    memoryExcerptingEnabled: json['memoryExcerptingEnabled'] as bool? ?? true,
   );
 }
 
@@ -248,7 +258,75 @@ Map<String, dynamic> _serializeResult(PromptResult r) => {
   'globalVars': r.globalVars,
   'triggeredLorebooks': r.triggeredLorebooks.map((t) => t.toJson()).toList(),
   'triggeredMemories': r.triggeredMemories.map((t) => t.toJson()).toList(),
+  'memoryCoverage': r.memoryCoverage,
 };
+
+Map<String, dynamic>? _serializeMemorySelection(MemorySelection? selection) {
+  if (selection == null) return null;
+  return {
+    'selectionMode': selection.selectionMode,
+    'entries': selection.entries.map((entry) => entry.toJson()).toList(),
+    'allScores': selection.allScores.map(_serializeMemoryScore).toList(),
+    'totalTokens': selection.totalTokens,
+    'budgetTokens': selection.budgetTokens,
+    'entryCap': selection.entryCap,
+    'budgetTrimmed': selection.budgetTrimmed,
+    'excludedBySourceWindow': selection.excludedBySourceWindow,
+  };
+}
+
+Map<String, dynamic> _serializeMemoryScore(MemoryCandidateScore score) => {
+  'entry': score.entry.toJson(),
+  'score': score.score,
+  'keywordScore': score.keywordScore,
+  'vectorScore': score.vectorScore,
+  'recencyScore': score.recencyScore,
+  'importanceScore': score.importanceScore,
+  'catalogScore': score.catalogScore,
+  'diversityPenalty': score.diversityPenalty,
+  'matchedKeys': score.matchedKeys,
+  'catalogMatchedTerms': score.catalogMatchedTerms,
+  'vectorMatchedChunks': score.vectorMatchedChunks,
+  'excludedBySourceWindow': score.excludedBySourceWindow,
+  'exclusionReason': score.exclusionReason,
+};
+
+MemorySelection? _deserializeMemorySelection(Map<String, dynamic>? json) {
+  if (json == null) return null;
+  return MemorySelection(
+    selectionMode: json['selectionMode'] as String? ?? 'v2',
+    entries: (json['entries'] as List? ?? [])
+        .map((entry) => MemoryEntry.fromJson(entry as Map<String, dynamic>))
+        .toList(),
+    allScores: (json['allScores'] as List? ?? [])
+        .map((score) => _deserializeMemoryScore(score as Map<String, dynamic>))
+        .toList(),
+    totalTokens: json['totalTokens'] as int? ?? 0,
+    budgetTokens: json['budgetTokens'] as int?,
+    entryCap: json['entryCap'] as int? ?? 0,
+    budgetTrimmed: json['budgetTrimmed'] as bool? ?? false,
+    excludedBySourceWindow: json['excludedBySourceWindow'] as int? ?? 0,
+  );
+}
+
+MemoryCandidateScore _deserializeMemoryScore(Map<String, dynamic> json) =>
+    MemoryCandidateScore(
+      entry: MemoryEntry.fromJson(json['entry'] as Map<String, dynamic>),
+      score: (json['score'] as num?)?.toDouble() ?? 0,
+      keywordScore: (json['keywordScore'] as num?)?.toDouble() ?? 0,
+      vectorScore: (json['vectorScore'] as num?)?.toDouble() ?? 0,
+      recencyScore: (json['recencyScore'] as num?)?.toDouble() ?? 0,
+      importanceScore: (json['importanceScore'] as num?)?.toDouble() ?? 0,
+      catalogScore: (json['catalogScore'] as num?)?.toDouble() ?? 0,
+      diversityPenalty: (json['diversityPenalty'] as num?)?.toDouble() ?? 0,
+      matchedKeys: (json['matchedKeys'] as List? ?? []).cast<String>(),
+      catalogMatchedTerms: (json['catalogMatchedTerms'] as List? ?? [])
+          .cast<String>(),
+      vectorMatchedChunks: (json['vectorMatchedChunks'] as List? ?? [])
+          .cast<String>(),
+      excludedBySourceWindow: json['excludedBySourceWindow'] as bool? ?? false,
+      exclusionReason: json['exclusionReason'] as String?,
+    );
 
 // ---- Isolate entry point (top-level function) ----
 
@@ -421,6 +499,7 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
     triggeredMemories: triggeredMemories,
     runtimePromptBlocks: inputs.runtimePromptBlocks,
     memorySelection: memorySelection,
+    memoryExcerptingEnabled: inputs.memoryExcerptingEnabled,
   );
 
   // 3. Build prompt (lorebook scanning happens inside buildPrompt)

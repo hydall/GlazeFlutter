@@ -6,6 +6,7 @@ import 'package:glaze_flutter/core/llm/memory_selector.dart';
 import 'package:glaze_flutter/core/models/api_config.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
+import 'package:glaze_flutter/core/models/memory_book.dart';
 import 'package:glaze_flutter/core/models/preset.dart';
 import 'package:glaze_flutter/features/extensions/services/runtime_prompt_injection_service.dart';
 
@@ -135,5 +136,157 @@ void main() {
       isTrue,
     );
     expect(guardedResult.messages.where((m) => m.isHistory), hasLength(1));
+  });
+
+  test('deferred memory injection can inject source-linked excerpts', () {
+    final content = [
+      'The bridge scene opened with rain and silence.',
+      'Sable promised Ren she would hide the ritual map until the debt was paid.',
+      'They argued about lanterns and horses for several minutes.',
+    ].join('\n\n');
+    final entry = MemoryEntry(
+      id: 'm1',
+      title: 'Bridge memory',
+      content: content,
+      keys: const ['ritual map', 'debt'],
+      status: 'active',
+    );
+    final selection = MemorySelector.select(
+      MemorySelectionInput(
+        entries: [entry],
+        keywordMatchedTerms: const {
+          'm1': ['ritual map', 'debt'],
+        },
+        maxInjectionTokens: 12,
+        maxInjectedEntries: 1,
+        vectorWeight: 0,
+        recencyBoost: false,
+        importanceBoost: false,
+        diversityAware: false,
+      ),
+      tokenCounter: (entry) => entry.content.split(RegExp(r'\s+')).length,
+    );
+
+    final result = buildPrompt(
+      PromptPayload(
+        character: Character(id: 'c1', name: 'Alice'),
+        preset: const Preset(
+          id: 'p1',
+          name: 'Prompt',
+          blocks: [
+            PresetBlock(
+              id: 'chat_history',
+              name: 'History',
+              role: 'system',
+              content: '',
+            ),
+          ],
+        ),
+        history: const [
+          ChatMessage(id: 'u1', role: 'user', content: 'What about the map?'),
+        ],
+        apiConfig: const ApiConfig(
+          id: 'api',
+          name: 'API',
+          contextSize: 10000,
+          maxTokens: 100,
+        ),
+        memorySelection: selection,
+        memoryInjectionTarget: 'hard_block',
+      ),
+    );
+
+    final memoryMessage = result.messages.firstWhere(
+      (message) => message.blockId == 'memory',
+    );
+    expect(memoryMessage.content, contains('Excerpt from Bridge memory'));
+    expect(memoryMessage.content, contains('ritual map'));
+    expect(
+      memoryMessage.content,
+      contains('Excerpted from a larger Memory Book entry'),
+    );
+
+    final diagnostics = result.memoryCoverage['diagnostics'] as Map;
+    final candidates = diagnostics['candidates'] as List;
+    final candidate = candidates.single as Map;
+    expect(candidate['injectionType'], 'excerpt');
+    expect(
+      candidate['originalTokenCost'] as int,
+      greaterThan(candidate['tokenCost'] as int),
+    );
+  });
+
+  test('deferred memory macro placement receives final excerpts', () {
+    final content = [
+      'The bridge scene opened with rain and silence.',
+      'Sable promised Ren she would hide the ritual map until the debt was paid.',
+      'They argued about lanterns and horses for several minutes.',
+    ].join('\n\n');
+    final entry = MemoryEntry(
+      id: 'm1',
+      title: 'Bridge memory',
+      content: content,
+      keys: const ['ritual map', 'debt'],
+      status: 'active',
+    );
+    final selection = MemorySelector.select(
+      MemorySelectionInput(
+        entries: [entry],
+        keywordMatchedTerms: const {
+          'm1': ['ritual map', 'debt'],
+        },
+        maxInjectionTokens: 12,
+        maxInjectedEntries: 1,
+        vectorWeight: 0,
+        recencyBoost: false,
+        importanceBoost: false,
+        diversityAware: false,
+      ),
+      tokenCounter: (entry) => entry.content.split(RegExp(r'\s+')).length,
+    );
+
+    final result = buildPrompt(
+      PromptPayload(
+        character: Character(id: 'c1', name: 'Alice'),
+        preset: const Preset(
+          id: 'p1',
+          name: 'Prompt',
+          blocks: [
+            PresetBlock(
+              id: 'memory_slot',
+              name: 'Memory Slot',
+              role: 'system',
+              content: 'Selected memories:\n{{memory}}',
+            ),
+            PresetBlock(
+              id: 'chat_history',
+              name: 'History',
+              role: 'system',
+              content: '',
+            ),
+          ],
+        ),
+        history: const [
+          ChatMessage(id: 'u1', role: 'user', content: 'What about the map?'),
+        ],
+        apiConfig: const ApiConfig(
+          id: 'api',
+          name: 'API',
+          contextSize: 10000,
+          maxTokens: 100,
+        ),
+        memorySelection: selection,
+        memoryInjectionTarget: 'macro',
+      ),
+    );
+
+    final memorySlot = result.messages.firstWhere(
+      (message) => message.blockId == 'memory_slot',
+    );
+    expect(memorySlot.content, contains('Selected memories:'));
+    expect(memorySlot.content, contains('ritual map'));
+    expect(memorySlot.content, isNot(contains('GLAZE_DEFERRED')));
+    expect(result.messages.where((m) => m.blockId == 'memory'), isEmpty);
+    expect(result.breakdown.memoryTokens, greaterThan(0));
   });
 }

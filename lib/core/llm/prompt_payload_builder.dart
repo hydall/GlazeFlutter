@@ -14,6 +14,7 @@ import '../state/active_selection_provider.dart';
 import '../state/db_provider.dart';
 import '../state/global_regex_provider.dart';
 import '../state/lorebook_provider.dart';
+import '../state/memory_settings_provider.dart';
 import 'embedding_types.dart';
 import 'lorebook_providers.dart';
 import 'memory_injection_service.dart';
@@ -242,6 +243,9 @@ class PromptPayloadBuilder {
       triggeredMemories: triggeredMemories,
       runtimePromptBlocks: runtimePromptBlocks,
       memorySelection: memorySelection,
+      memoryExcerptingEnabled: _ref
+          .read(memoryGlobalSettingsProvider)
+          .memoryExcerptingEnabled,
     );
   }
 
@@ -307,6 +311,9 @@ class PromptPayloadBuilder {
       globalRegexes: _ref.read(globalRegexProvider).value ?? [],
       triggeredMemories: triggeredMemories,
       runtimePromptBlocks: runtimePromptBlocks,
+      memoryExcerptingEnabled: _ref
+          .read(memoryGlobalSettingsProvider)
+          .memoryExcerptingEnabled,
     );
   }
 

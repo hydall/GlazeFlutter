@@ -122,6 +122,9 @@ class PromptInputsCollector {
       memoryEnabled: memorySettings.enabled,
       memoryMode: memorySettings.memoryMode,
       memoryMaxInjected: memorySettings.maxInjectedEntries,
+      memoryExcerptingEnabled:
+          memoryBook?.settings.memoryExcerptingEnabled ??
+          memorySettings.memoryExcerptingEnabled,
       memoryKeyMatchMode: memorySettings.keyMatchMode,
       memoryInjectionTarget: memorySettings.injectionTarget,
       memoryMaxInjectedTokens: memoryBook?.settings.maxInjectedTokens,

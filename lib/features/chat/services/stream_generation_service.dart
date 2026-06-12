@@ -149,7 +149,9 @@ class StreamGenerationService {
       final startGenTime = DateTime.now();
       final transport = pickChatTransport(apiConfig.protocol);
       ChatState? finalState;
-      final coverage = payload.memoryCoverage;
+      final coverage = promptResult.memoryCoverage.isNotEmpty
+          ? promptResult.memoryCoverage
+          : payload.memoryCoverage;
       final memoryDiagnostics = coverage['diagnostics'];
       final triggeredLorebooks = promptResult.triggeredLorebooks;
       final triggeredMemories = promptResult.triggeredMemories;
