@@ -148,5 +148,60 @@ void main() {
       expect(excerpted.items.single.text, contains('hidden vault'));
       expect(excerpted.items.single.text, isNot(contains('weather and tea')));
     });
+
+    test('uses remaining budget for excerpted entries trimmed by full-entry budget', () {
+      final selection = MemorySelector.select(
+        MemorySelectionInput(
+          entries: [
+            _entry(
+              id: 'a',
+              title: 'Full A',
+              content: List.filled(40, 'alpha').join(' '),
+            ),
+            _entry(
+              id: 'b',
+              title: 'Full B',
+              content: List.filled(40, 'bravo').join(' '),
+            ),
+            _entry(
+              id: 'c',
+              title: 'Trimmed C',
+              content: [
+                List.filled(10, 'boring').join(' '),
+                'needle clue should be excerpted here',
+                List.filled(20, 'tail').join(' '),
+              ].join('\n\n'),
+              keys: const ['needle'],
+            ),
+          ],
+          keywordMatchedTerms: const {
+            'a': ['alpha'],
+            'b': ['bravo'],
+            'c': ['needle'],
+          },
+          maxInjectionTokens: 90,
+          maxInjectedEntries: 3,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+        ),
+        tokenCounter: (entry) => entry.content.split(RegExp(r'\s+')).length,
+      );
+
+      expect(selection.entries.map((e) => e.id), ['a', 'b']);
+      expect(selection.budgetTrimmed, isTrue);
+
+      final excerpted = MemoryExcerptSelector.select(
+        selection,
+        maxExcerptTokensPerEntry: 8,
+        maxExcerptChunksPerEntry: 1,
+        tokenCounter: (text) => text.split(RegExp(r'\s+')).length,
+      );
+
+      expect(excerpted.items.map((item) => item.entry.id), ['a', 'b', 'c']);
+      expect(excerpted.items.last.excerpt, isTrue);
+      expect(excerpted.items.last.text, contains('needle clue'));
+      expect(excerpted.totalTokens, lessThanOrEqualTo(90));
+    });
   });
 }

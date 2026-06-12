@@ -77,7 +77,8 @@ class MemoryExcerptSelector {
       (sum, entry) => sum + tokenFn(entry.content),
     );
 
-    if (budget == null || selectedFullTokens <= budget) {
+    if (budget == null ||
+        (selectedFullTokens <= budget && !selection.budgetTrimmed)) {
       return MemoryExcerptSelection(
         items: selection.entries
             .map(
