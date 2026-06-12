@@ -88,6 +88,7 @@ const _staticBlockIds = <String>{
   'summary',
   'authors_note',
   'guided_generation',
+  'memory',
 };
 
 Map<String, dynamic> _normalizeBlock(Map<String, dynamic> json) {

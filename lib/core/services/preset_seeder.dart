@@ -45,6 +45,7 @@ Future<void> seedDefaultPresets(WidgetRef ref) async {
         insertionMode: 'depth',
         depth: 1,
       ),
+      PresetBlock(id: 'memory', name: 'Memory Book', role: 'system', content: '', enabled: true, isStatic: true),
       PresetBlock(id: 'summary', name: 'Summary', role: 'system', content: '', enabled: true, isStatic: true, depth: 4, insertionMode: 'depth', prefix: 'Summary: '),
       PresetBlock(id: 'authors_note', name: "Author's Note", role: 'system', content: '', enabled: true, isStatic: true, insertionMode: 'relative'),
       mandatoryBlocks.firstWhere((b) => b.id == 'chat_history'),

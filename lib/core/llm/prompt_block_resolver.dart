@@ -75,6 +75,15 @@ ResolvedContent? resolveBlockContent({
       // Only content + enabled are session-scoped. Role/depth/insertion mode
       // belong to the preset block, so keep [resolvedRole] = the block's role.
       content = authorsNote.content;
+    case 'memory':
+      // Dedicated Memory Book hard block. Acts as the sink for memory content
+      // exactly like the {{memory}} macro: macroCtx.memoryContent is the
+      // deferred placeholder while memory is finalized after the context
+      // cutoff, then PromptBuilder swaps in the real packed memory. When no
+      // memory is selected the content is null and the block is skipped.
+      final memory = macroCtx.memoryContent;
+      if (memory == null || memory.isEmpty) return null;
+      content = memory;
     default:
       content = rawContent;
   }
