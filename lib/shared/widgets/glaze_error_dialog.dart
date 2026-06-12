@@ -9,11 +9,32 @@ import 'glass_surface.dart';
 
 class GlazeErrorDialog {
   static void show(BuildContext context, Object error) {
-    showDialog<void>(
+    showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
+      barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       barrierColor: Colors.black.withValues(alpha: 0.55),
-      builder: (_) => _ErrorDialogContent(message: formatError(error)),
+      transitionDuration: const Duration(milliseconds: 240),
+      pageBuilder: (_, __, ___) =>
+          _ErrorDialogContent(message: formatError(error)),
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(
+              begin: 0.96,
+              end: 1,
+            ).animate(curved),
+            child: child,
+          ),
+        );
+      },
     );
   }
 }
@@ -115,31 +136,38 @@ class _ErrorDialogContentState extends ConsumerState<_ErrorDialogContent> {
               ),
               // ── Copy row ───────────────────────────────────────────────────
               const Divider(height: 1, thickness: 1, color: Color(0x22FFFFFF)),
-              GestureDetector(
-                onTap: _copy,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 11,
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _copy,
+                  customBorder: const RoundedRectangleBorder(
+                    borderRadius: BorderRadius.vertical(
+                      bottom: Radius.circular(16),
+                    ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _copied ? Icons.check_rounded : Icons.copy_rounded,
-                        size: 15,
-                        color: _copied ? cs.primary : cs.onSurfaceVariant,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _copied ? 'Copied' : 'Copy',
-                        style: TextStyle(
-                          fontFamily: uiFont,
-                          fontSize: 13,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 11,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _copied ? Icons.check_rounded : Icons.copy_rounded,
+                          size: 15,
                           color: _copied ? cs.primary : cs.onSurfaceVariant,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 6),
+                        Text(
+                          _copied ? 'Copied' : 'Copy',
+                          style: TextStyle(
+                            fontFamily: uiFont,
+                            fontSize: 13,
+                            color: _copied ? cs.primary : cs.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
