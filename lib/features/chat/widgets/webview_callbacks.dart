@@ -10,6 +10,7 @@ typedef EditSaveCallback = void Function(String id, String text);
 typedef EditCancelCallback = void Function(String id);
 typedef EditFocusCallback = void Function(String id, bool focused);
 typedef ImgActionCallback = void Function(String instruction, String messageId);
+typedef ImgOptionsCallback = void Function(String src, String instruction, String messageId);
 typedef ImgVoidCallback = void Function();
 typedef HeaderScrollCallback = void Function(bool hidden);
 typedef ScrollToBottomVisibilityCallback = void Function(bool visible);
@@ -55,6 +56,7 @@ class ImageGenCallbacks {
   final ImgActionCallback? onImgRetry;
   final ImgActionCallback? onImgFind;
   final ImgActionCallback? onImgRegen;
+  final ImgOptionsCallback? onImgOptions;
   final ImgVoidCallback? onImgCancel;
   final ImageClickCallback? onImgDownload;
 
@@ -62,6 +64,7 @@ class ImageGenCallbacks {
     this.onImgRetry,
     this.onImgFind,
     this.onImgRegen,
+    this.onImgOptions,
     this.onImgCancel,
     this.onImgDownload,
   });

@@ -215,6 +215,7 @@ class ChatBridgeController {
   void Function(String instruction, String messageId)? onImgRetry;
   void Function(String instruction, String messageId)? onImgFind;
   void Function(String instruction, String messageId)? onImgRegen;
+  void Function(String src, String instruction, String messageId)? onImgOptions;
   void Function()? onImgCancel;
   void Function()? onStop;
   void Function(String messageId)? onExtBlocksRunAll;
@@ -346,6 +347,12 @@ class ChatBridgeController {
           final height = (data['height'] as num?)?.toDouble() ?? 0.0;
           if (panelId.isEmpty) return;
           onPanelResize?.call(panelId, '', height);
+        case 'onImgOptions':
+          onImgOptions?.call(
+            data['src'] as String? ?? '',
+            data['instruction'] as String? ?? '',
+            data['messageId'] as String? ?? '',
+          );
         case 'onPanelEvent':
           final panelId = data['panelId'] as String? ?? '';
           final event = data['event'] as String? ?? 'action';

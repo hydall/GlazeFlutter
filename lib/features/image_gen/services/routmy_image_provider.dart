@@ -118,7 +118,7 @@ class RoutmyImageProvider {
 
     final images = referenceImages
         .where((s) => s.isNotEmpty)
-        .map((s) => {'image_url': s})
+        .map((s) => {'image_url': _asDataUrl(s)})
         .toList();
 
     final body = <String, dynamic>{
@@ -141,6 +141,26 @@ class RoutmyImageProvider {
       extractBase64: _extractImageBase64,
     );
     return ImageGenHttp.base64ToBytes(b64);
+  }
+
+  /// Reference images arrive as bare base64 (from ImageGenService._fileToBase64)
+  /// or already as data/https URLs. rout.my expects a full data URL (or https)
+  /// in `image_url`, so wrap bare base64 and sniff the MIME from its signature.
+  /// Without this, every avatar/context reference was silently dropped.
+  String _asDataUrl(String s) {
+    if (s.isEmpty) return s;
+    if (s.startsWith('data:') || s.startsWith('http://') || s.startsWith('https://')) {
+      return s;
+    }
+    return 'data:${_sniffMime(s)};base64,$s';
+  }
+
+  String _sniffMime(String b64) {
+    if (b64.startsWith('/9j/')) return 'image/jpeg';
+    if (b64.startsWith('iVBORw0KGgo')) return 'image/png';
+    if (b64.startsWith('UklGR')) return 'image/webp';
+    if (b64.startsWith('R0lGOD')) return 'image/gif';
+    return 'image/png';
   }
 
   String _extractImageBase64(Map<String, dynamic> json) {
@@ -177,15 +197,11 @@ class RoutmyImageProvider {
     final content = <Map<String, dynamic>>[];
 
     if (referenceImages != null) {
-      for (final dataUrl in referenceImages) {
-        final commaIdx = dataUrl.indexOf(',');
-        if (commaIdx == -1) continue;
-        final meta = dataUrl.substring(5, commaIdx);
-        final mimeType = meta.split(';')[0];
-        final base64Data = dataUrl.substring(commaIdx + 1);
+      for (final ref in referenceImages) {
+        if (ref.isEmpty) continue;
         content.add({
           'type': 'image_url',
-          'image_url': {'url': 'data:$mimeType;base64,$base64Data'},
+          'image_url': {'url': _asDataUrl(ref)},
         });
       }
     }

@@ -5,6 +5,7 @@ import { Renderer } from '../renderer/index.js';
 export { Bridge } from './chat_bridge_controller.js';
 export { EditController } from './edit_controller.js';
 export { GenTimer } from './gen_timer.js';
+export { ImgGenTimer } from './imggen_timer.js';
 export { InteractionDispatch } from './interaction_dispatch.js';
 export { MessageUpdateBatcher } from './message_update_batcher.js';
 export { PanelHost } from './panel_host.js';

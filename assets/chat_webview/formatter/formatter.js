@@ -1,6 +1,9 @@
 import { expandMacros } from './macros.js';
 import { renderStyledSegment } from './text_format.js';
 
+// Vertical 3-dot "options" icon (ported from Glaze useMessageImageGen.js).
+const OPTIONS_SVG = '<svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>';
+
 export class Formatter {
   constructor() {
     this.cache = new Map();
@@ -125,9 +128,10 @@ export class Formatter {
       return id;
     });
 
-    // 5b. Janitor images: ![alt](url) → <span class="janitor-img-wrapper">
+    // 5b. Janitor images: ![alt](url) → <span class="janitor-img-wrapper"> with options button
     html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
-      return `<span class="janitor-img-wrapper"><img src="${url}" alt="${alt}" class="janitor-img" loading="lazy"></span>`;
+      const safeUrl = this._escapeHtml(url);
+      return `<span class="janitor-img-wrapper"><img src="${safeUrl}" alt="${this._escapeHtml(alt)}" class="janitor-img" loading="lazy" data-action="image-click" data-src="${safeUrl}"><button class="janitor-options-btn" type="button" data-action="img-options" data-src="${safeUrl}" title="Options">${OPTIONS_SVG}</button></span>`;
     });
 
     // 5c. Glaze image gen tags
@@ -350,18 +354,19 @@ export class Formatter {
       return `<span class="font-color-block" style="color:${block.color}">${formatted}</span>`;
     });
 
-    // 19. Restore image gen blocks
+    // 19. Restore image gen blocks (Imagen UI ported from Glaze ShadowContent.vue)
     html = html.replace(/\x01IG_BLOCK_(\d+)\x01/g, (_, i) => {
       const block = imgBlocks[parseInt(i)];
       if (block.type === 'result') {
         const src = this._imageSrc(block.path);
-        const instrRaw = block.instruction || '';
-        const encInstr = encodeURIComponent(instrRaw);
-        console.log('[FORMATTER] IMG:RESULT render, path=', block.path.substring(0, 80), 'instruction=', instrRaw.substring(0, 80));
-        return `<div class="img-result-frame img-result-wrapper"><img src="${src}" class="img-result" loading="lazy" data-action="image-click" data-src="${src}"><button class="img-download-btn" data-action="img-download" data-src="${src}" title="Save image">⤓</button><button class="img-regen-btn" data-action="img-regen" data-instruction="${encInstr}" title="Regenerate image">↻</button></div>`;
+        const encInstr = encodeURIComponent(block.instruction || '');
+        return `<span class="imggen-result-wrapper"><img src="${src}" class="imggen-result" loading="lazy" data-action="image-click" data-src="${src}"><button class="imggen-options-btn" type="button" data-action="img-options" data-src="${src}" data-instruction="${encInstr}" title="Options">${OPTIONS_SVG}</button></span>`;
       }
       if (block.type === 'gen') {
-        return `<div class="img-gen-frame"><div class="img-gen-spinner"></div><span class="img-gen-label">Generating image...</span><button class="img-gen-stop-btn" data-action="img-stop" title="Stop image generation">⏹</button></div>`;
+        const start = Date.now();
+        const prompt = this._escapeHtml(this._imgPrompt(block.instruction));
+        const promptEl = prompt ? `<div class="imggen-loading-prompt">${prompt}</div>` : '';
+        return `<div class="imggen-loading" data-start="${start}"><span class="imggen-loading-hint">Generating image…</span><span class="imggen-loading-timer" data-start="${start}">0.0s</span><button class="imggen-stop-btn" type="button" data-action="img-stop" title="Stop image generation">⏹</button>${promptEl}</div>`;
       }
       if (block.type === 'error') {
         let errorMsg = 'Unknown error';
@@ -371,8 +376,8 @@ export class Formatter {
           errorMsg = parsed.error || errorMsg;
           instruction = parsed.instruction || '';
         } catch(_) {}
-        const encData = encodeURIComponent(block.data);
-        return `<div class="img-error-frame"><span class="img-error-icon">⚠</span> Image error: ${errorMsg}<div class="img-error-actions"><button class="img-error-retry-btn" data-action="img-retry" data-instruction="${instruction}">Retry</button><button class="img-error-find-btn" data-action="img-find" data-instruction="${instruction}">Find on disk</button></div></div>`;
+        const encInstr = encodeURIComponent(instruction);
+        return `<div class="imggen-error" data-instruction="${encInstr}"><span class="imggen-error-icon">⚠</span><span class="imggen-error-msg">${this._escapeHtml(errorMsg)}</span><div class="imggen-error-actions"><button class="imggen-error-retry" type="button" data-action="img-retry" data-instruction="${encInstr}">↻ Retry</button><button class="imggen-error-retry imggen-error-find" type="button" data-action="img-find" data-instruction="${encInstr}">Find on disk</button></div></div>`;
       }
       return '';
     });
@@ -393,5 +398,29 @@ export class Formatter {
     }
     const normalized = path.replace(/\\/g, '/');
     return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
+  }
+
+  _escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  // Extract a human-readable prompt from an IMG:GEN instruction payload.
+  // The payload may be a JSON object ({prompt, caption, ...}) or raw text.
+  _imgPrompt(instruction) {
+    const raw = (instruction || '').trim();
+    if (!raw) return '';
+    try {
+      const json = JSON.parse(raw);
+      if (json && typeof json === 'object') {
+        const p = (json.prompt || json.caption || '').replace(/^SCENE_PROMPT:\s*/, '');
+        return p || '';
+      }
+    } catch (_) { /* fall through to raw */ }
+    return raw;
   }
 }

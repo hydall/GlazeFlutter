@@ -1,6 +1,7 @@
 ﻿/* Extracted from ../bridge.legacy.js. Keep public behavior stable. */
 
 import { GenTimer } from './gen_timer.js';
+import { ImgGenTimer } from './imggen_timer.js';
 import { MessageUpdateBatcher } from './message_update_batcher.js';
 import { SelectionManager } from './selection_manager.js';
 import { EditController } from './edit_controller.js';
@@ -18,6 +19,7 @@ export class Bridge {
     this.isGenerating = false;
     this.isGeneratingImage = false;
     this._genTimer = new GenTimer(renderer);
+    this._imgGenTimer = new ImgGenTimer();
     this._updateBatcher = new MessageUpdateBatcher();
     this._selectionManager = new SelectionManager((name, args) => this._sendToFlutter(name, args));
     this._editController = new EditController((name, args) => this._sendToFlutter(name, args));
@@ -302,6 +304,7 @@ export class Bridge {
 
     this.virtualList.setMessagesBatch(ids, elements);
     this._hideLoadingScreen();
+    this._imgGenTimer.ensureRunning();
     setTimeout(() => { this._suppressLoadMore = false; }, 1000);
   }
 
@@ -314,6 +317,7 @@ export class Bridge {
       this.virtualList.append(id, el);
     }
     this.virtualList.scrollToBottom();
+    this._imgGenTimer.ensureRunning();
   }
 
   appendMessages(messagesJson) {
@@ -326,6 +330,7 @@ export class Bridge {
         this.virtualList.append(id, el);
       }
     });
+    this._imgGenTimer.ensureRunning();
   }
 
   prependMessages(messagesJson) {
@@ -376,6 +381,7 @@ export class Bridge {
       !!msg.isTyping,
       animate
     );
+    this._imgGenTimer.ensureRunning();
 
     if (msg.isHidden !== undefined) {
       section.classList.toggle('msg-hidden', !!msg.isHidden);

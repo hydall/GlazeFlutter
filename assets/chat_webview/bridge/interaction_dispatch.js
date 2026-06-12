@@ -32,6 +32,16 @@ export class InteractionDispatch {
       }
     }
 
+    // Imagen loading block: click anywhere (except action buttons handled
+    // above) toggles the expanded prompt overlay. Ported from Glaze
+    // useMessageImageGen.js handleContentClick.
+    const loadingBlock = this._findInPath(e, 'imggen-loading');
+    if (loadingBlock) {
+      e.stopPropagation();
+      loadingBlock.classList.toggle('expanded');
+      return;
+    }
+
     const link = e.target.closest('a');
     if (link) {
       e.preventDefault();
@@ -123,6 +133,18 @@ export class InteractionDispatch {
         : null;
   }
 
+  // Returns the first element along the event's composed path (pierces
+  // Shadow DOM) that carries the given CSS class, or null.
+  _findInPath(e, className) {
+    const path = (e.composedPath && e.composedPath()) || [];
+    for (const node of path) {
+      if (node && node.nodeType === 1 && node.classList && node.classList.contains(className)) {
+        return node;
+      }
+    }
+    return null;
+  }
+
   _extractImgInstruction(el, path) {
     const sec = path.find(e => e.dataset?.messageId);
     const messageId = sec ? sec.dataset.messageId : '';
@@ -200,6 +222,17 @@ export class InteractionDispatch {
         bridge._sendToFlutter('onImgRegen', [instr, messageId]);
       },
       'img-stop': (e, el) => bridge._sendToFlutter('onImgCancel', []),
+      'img-options': (e, el) => {
+        const { messageId } = this._extractImgInstruction(el, e.composedPath());
+        let instruction = '';
+        try { instruction = decodeURIComponent(el.dataset.instruction || ''); }
+        catch (_) { instruction = el.dataset.instruction || ''; }
+        bridge._sendToFlutter('onImgOptions', [JSON.stringify({
+          src: el.dataset.src || '',
+          instruction,
+          messageId,
+        })]);
+      },
       'image-click': (e, el) => {
         const src = el.dataset.src || (el.tagName === 'IMG' ? el.src : '');
         if (src) bridge._sendToFlutter('onImageClick', [src]);

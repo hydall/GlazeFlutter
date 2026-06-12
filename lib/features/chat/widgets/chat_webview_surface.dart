@@ -194,6 +194,7 @@ class ChatWebViewSurface extends ConsumerWidget {
                 bridge.onImgRetry = callbacks.onImgRetry;
                 bridge.onImgFind = callbacks.onImgFind;
                 bridge.onImgRegen = callbacks.onImgRegen;
+                bridge.onImgOptions = callbacks.onImgOptions;
                 bridge.onImgCancel = callbacks.onImgCancel;
                 bridge.onStop = callbacks.onStop;
                 bridge.onLinkClick = callbacks.onLinkClick;

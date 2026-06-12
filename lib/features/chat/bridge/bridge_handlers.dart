@@ -84,6 +84,7 @@ const Map<String, HandlerSpec> bridgeHandlers = {
     HandlerKind.noArgs,
     debugPrint: '[BRIDGE] onImgCancel called',
   ),
+  'onImgOptions': HandlerSpec(HandlerKind.jsonObject),
   // Stop
   'onStop': HandlerSpec(HandlerKind.noArgs),
   // Ext blocks

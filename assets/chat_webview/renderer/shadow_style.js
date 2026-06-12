@@ -63,9 +63,174 @@ export const SHADOW_STYLE = `
     font-size: 10px; opacity: 0.4;
     text-transform: uppercase; font-family: monospace;
   }
-  .glaze-message .janitor-img-wrapper { display: inline-block; max-width: 100%; margin: 4px 0; }
+  .glaze-message .janitor-img-wrapper {
+    display: inline-block; position: relative; max-width: 100%; margin: 4px 0;
+  }
   .glaze-message .janitor-img-wrapper .janitor-img {
-    max-width: 100%; border-radius: 8px; cursor: pointer;
+    max-width: 100%; border-radius: 8px; cursor: pointer; display: block;
+  }
+  .glaze-message .janitor-options-btn,
+  .glaze-message .imggen-options-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.50);
+    border: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    opacity: 0;
+    color: #fff;
+    font-size: 18px;
+    line-height: 1;
+    transition: opacity 0.2s, background 0.15s;
+  }
+  .glaze-message .janitor-img-wrapper:hover .janitor-options-btn,
+  .glaze-message .imggen-result-wrapper:hover .imggen-options-btn { opacity: 1; }
+  @media (hover: none) {
+    .glaze-message .janitor-options-btn,
+    .glaze-message .imggen-options-btn { opacity: 0.7; }
+  }
+  .glaze-message .janitor-options-btn:active,
+  .glaze-message .imggen-options-btn:active { background: rgba(0,0,0,0.75); }
+  .glaze-message .janitor-options-btn svg,
+  .glaze-message .imggen-options-btn svg { width: 16px; height: 16px; fill: #fff; pointer-events: none; }
+
+  /* ── Imagen: loading shimmer ── */
+  .glaze-message .imggen-loading {
+    display: block;
+    max-width: 100%;
+    min-height: 120px;
+    border-radius: 12px;
+    margin: 8px 0;
+    background: linear-gradient(90deg,
+      rgba(255,255,255,0.04) 25%,
+      rgba(255,255,255,0.10) 50%,
+      rgba(255,255,255,0.04) 75%);
+    background-size: 200% 100%;
+    animation: imggen-shimmer 1.5s infinite linear;
+    position: relative;
+    overflow: hidden;
+    border: none;
+    cursor: pointer;
+  }
+  .glaze-message .imggen-loading-hint {
+    display: inline-block;
+    padding: 12px 0 0 12px;
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+    user-select: none;
+  }
+  .glaze-message .imggen-loading-timer {
+    display: inline-block;
+    padding: 12px 12px 0 4px;
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+  }
+  .glaze-message .imggen-stop-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.55);
+    color: #fff;
+    border: none;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+  }
+  .glaze-message .imggen-stop-btn:active { background: rgba(0,0,0,0.8); }
+  .glaze-message .imggen-loading-prompt {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    font-size: 11px;
+    color: rgba(128,128,128,0.85);
+    line-height: 1.4;
+    max-height: 2.8em;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+    user-select: none;
+  }
+  .glaze-message .imggen-loading.expanded .imggen-loading-prompt {
+    top: 44px;
+    max-height: calc(100% - 54px);
+    overflow-y: auto;
+  }
+  @keyframes imggen-shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+  }
+
+  /* ── Imagen: error card ── */
+  .glaze-message .imggen-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 240px;
+    max-width: 100%;
+    border-radius: 12px;
+    margin: 8px 0;
+    padding: 14px 12px;
+    box-sizing: border-box;
+    background: rgba(255,59,48,0.13);
+    border: 1px solid rgba(255,59,48,0.32);
+  }
+  .glaze-message .imggen-error-icon { font-size: 20px; line-height: 1; flex-shrink: 0; }
+  .glaze-message .imggen-error-msg {
+    font-size: 11px;
+    color: rgba(255,59,48,0.9);
+    text-align: center;
+    word-break: break-word;
+    line-height: 1.4;
+  }
+  .glaze-message .imggen-error-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+  .glaze-message .imggen-error-retry {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 12px;
+    padding: 2px 10px;
+    height: 24px;
+    font-size: 11px;
+    color: rgba(255,59,48,0.95);
+    background: rgba(255,59,48,0.1);
+    border: 1px solid rgba(255,59,48,0.3);
+    cursor: pointer;
+  }
+  .glaze-message .imggen-error-retry:active { background: rgba(255,59,48,0.2); }
+
+  /* ── Imagen: result ── */
+  .glaze-message .imggen-result-wrapper {
+    display: inline-block;
+    position: relative;
+    margin: 6px 0;
+    max-width: 100%;
+  }
+  .glaze-message .imggen-result {
+    max-width: 100%;
+    border-radius: 10px;
+    display: block;
+    margin: 0;
+    cursor: pointer;
   }
   .glaze-message table tbody tr:nth-child(even) { background-color: rgba(255,255,255,0.02); }
   .glaze-message table td { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }

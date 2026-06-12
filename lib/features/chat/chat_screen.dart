@@ -696,6 +696,71 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     );
   }
 
+  /// Options sheet for a generated/janitor image (Imagen UI, ported from
+  /// Glaze useMessageImageGen.js): Expand → fullscreen, Save → share/save,
+  /// Regenerate → re-run image generation for the owning message. The
+  /// Regenerate entry is hidden when there is no owning message (e.g. inline
+  /// janitor `![](url)` images, which carry no messageId).
+  void _showImageOptionsSheet(String src, String instruction, String messageId) {
+    final messages = widget.state.messages;
+    final idx = messageId.isEmpty
+        ? -1
+        : messages.indexWhere((m) => m.id == messageId);
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.cs.surfaceContainerHigh,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            Container(
+              width: 32,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.cs.outlineVariant.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ListTile(
+              leading: const Icon(Icons.fullscreen),
+              title: Text('imggen_expand_image'.tr()),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _showImageViewer(context, src);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.save_alt),
+              title: Text('action_save_image'.tr()),
+              onTap: () {
+                Navigator.pop(sheetCtx);
+                _downloadImage(src);
+              },
+            ),
+            if (idx >= 0)
+              ListTile(
+                leading: const Icon(Icons.refresh),
+                title: Text('action_regenerate'.tr()),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  ref
+                      .read(chatProvider(widget.charId).notifier)
+                      .retryImageGenerationForMessage(idx);
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     super.dispose();
@@ -1069,6 +1134,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                             .cancelImageGeneration();
                       },
                       onImgDownload: _downloadImage,
+                      onImgOptions: _showImageOptionsSheet,
                     ),
                     scrollActions: ScrollCallbacks(
                       onHeaderScroll: (hidden) {
