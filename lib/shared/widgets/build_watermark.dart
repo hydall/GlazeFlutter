@@ -40,6 +40,7 @@ class BuildWatermark extends ConsumerWidget {
                 height: 1.0,
                 letterSpacing: 0.2,
                 fontWeight: FontWeight.w500,
+                decoration: TextDecoration.none,
                 color: cs.onSurface.withValues(alpha: 0.3),
               ),
             ),
