@@ -684,7 +684,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
     final currentSettings = _ctrl.globalSettingsAsBookSettings();
     final newResult = await GlazeBottomSheet.show<MemorySettingsSheetResult>(
       context,
-      title: 'memory_books_btn_gen_settings'.tr(),
+      title: 'memory_books_settings_title'.tr(),
       child: MemoryGenerationSettingsSheet(settings: currentSettings),
     );
     if (newResult != null && mounted) {

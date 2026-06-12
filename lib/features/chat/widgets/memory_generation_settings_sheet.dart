@@ -107,7 +107,7 @@ class _MemoryGenerationSettingsSheetState
     _keyMatchMode = s.keyMatchMode;
     _vectorSearchEnabled = s.vectorSearchEnabled;
     _vectorThreshold = ref.read(memoryGlobalSettingsProvider).vectorThreshold;
-    _advancedSelectorOpen = false;
+    _advancedSelectorOpen = true;
     _diversityAware = s.diversityAware;
     _diversityPenalty = s.diversityPenalty;
     _recencyBoost = s.recencyBoost;
@@ -287,24 +287,8 @@ class _MemoryGenerationSettingsSheetState
               min: 1,
               max: 50,
             ),
-            _numberField(
-              'memory_books_max_entries_prompt'.tr(),
-              _maxInjected,
-              (v) => setState(() => _maxInjected = v),
-              min: 1,
-              max: 20,
-            ),
             const SizedBox(height: 12),
-            _sectionLabel('Memory budget'),
-            _memoryBudgetSelector(),
-            const SizedBox(height: 8),
-            _effectiveBudgetHint(),
-            _switchTile(
-              'memory_excerpting_enabled'.tr(),
-              _memoryExcerptingEnabled,
-              (v) => setState(() => _memoryExcerptingEnabled = v),
-              subtitle: 'memory_excerpting_auto_desc'.tr(),
-            ),
+            _selectorSettings(),
             const SizedBox(height: 12),
             _sectionLabel('label_embedding_target'.tr()),
             SegmentedButton<String>(
@@ -401,8 +385,6 @@ class _MemoryGenerationSettingsSheetState
                 style: ButtonStyle(visualDensity: VisualDensity.compact),
               ),
             ],
-            const SizedBox(height: 12),
-            _advancedSelectorSettings(),
             const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -428,7 +410,7 @@ class _MemoryGenerationSettingsSheetState
     );
   }
 
-  Widget _advancedSelectorSettings() {
+  Widget _selectorSettings() {
     return Theme(
       data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
       child: ExpansionTile(
@@ -439,7 +421,7 @@ class _MemoryGenerationSettingsSheetState
         tilePadding: EdgeInsets.zero,
         childrenPadding: EdgeInsets.zero,
         title: Text(
-          'memory_selector_advanced'.tr(),
+          'memory_selector_settings'.tr(),
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -451,6 +433,25 @@ class _MemoryGenerationSettingsSheetState
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
         children: [
+          _numberField(
+            'memory_books_max_entries_prompt'.tr(),
+            _maxInjected,
+            (v) => setState(() => _maxInjected = v),
+            min: 1,
+            max: 20,
+          ),
+          const SizedBox(height: 12),
+          _sectionLabel('memory_budget'.tr()),
+          _memoryBudgetSelector(),
+          const SizedBox(height: 8),
+          _effectiveBudgetHint(),
+          _switchTile(
+            'memory_excerpting_enabled'.tr(),
+            _memoryExcerptingEnabled,
+            (v) => setState(() => _memoryExcerptingEnabled = v),
+            subtitle: 'memory_excerpting_auto_desc'.tr(),
+          ),
+          const SizedBox(height: 8),
           _switchTile(
             'memory_selector_diversity'.tr(),
             _diversityAware,
