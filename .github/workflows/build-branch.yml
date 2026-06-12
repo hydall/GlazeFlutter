@@ -7,6 +7,11 @@ on:
         description: 'Branch to build'
         required: false
         default: ''
+      notify_people:
+        description: 'Ping people in Telegram'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -303,6 +308,7 @@ jobs:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
           TG_MENTIONS:  ${{ secrets.TG_MENTIONS }}
+          NOTIFY_PEOPLE: ${{ github.event.inputs.notify_people || 'true' }}
           VERSION:      ${{ needs.metadata.outputs.version }}
           BUILD_DATE:   ${{ needs.metadata.outputs.build_date }}
           BUILD_FRUIT:  ${{ needs.metadata.outputs.build_fruit }}
@@ -315,7 +321,7 @@ jobs:
           fi
 
           MENTIONS_SECTION=""
-          if [ -n "$TG_MENTIONS" ]; then
+          if [ "$NOTIFY_PEOPLE" = "true" ] && [ -n "$TG_MENTIONS" ]; then
             MENTIONS_SECTION=$(printf '\n\n<tg-spoiler>%s</tg-spoiler>' "$TG_MENTIONS")
           fi
 
