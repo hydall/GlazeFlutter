@@ -454,9 +454,18 @@
 }
 
 .ext-block-image {
+  display: block;
   max-width: 100%;
+  width: 100%;
   border-radius: 6px;
   margin-top: 4px;
+  cursor: pointer;
+}
+
+.ext-block-image-wrapper {
+  display: inline-block;
+  max-width: 680px;
+  width: 100%;
 }
 
 /* ============================================================

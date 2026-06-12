@@ -354,8 +354,7 @@ export class Formatter {
     html = html.replace(/\x01IG_BLOCK_(\d+)\x01/g, (_, i) => {
       const block = imgBlocks[parseInt(i)];
       if (block.type === 'result') {
-        const isUrl = block.path.startsWith('data:') || block.path.startsWith('http://') || block.path.startsWith('https://') || block.path.startsWith('file://');
-        const src = isUrl ? block.path : `file:///${block.path.replace(/\\/g, '/')}`;
+        const src = this._imageSrc(block.path);
         const instrRaw = block.instruction || '';
         const encInstr = encodeURIComponent(instrRaw);
         console.log('[FORMATTER] IMG:RESULT render, path=', block.path.substring(0, 80), 'instruction=', instrRaw.substring(0, 80));
@@ -385,5 +384,14 @@ export class Formatter {
 
   _renderStyledSegment(seg) {
     return renderStyledSegment(seg, (innerRaw) => this._processText(innerRaw, false, true));
+  }
+
+  _imageSrc(path) {
+    if (!path) return '';
+    if (path.startsWith('data:') || path.startsWith('http://') || path.startsWith('https://') || path.startsWith('file://')) {
+      return path;
+    }
+    const normalized = path.replace(/\\/g, '/');
+    return normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`;
   }
 }

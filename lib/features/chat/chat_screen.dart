@@ -472,12 +472,23 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         imageUrl.startsWith('https://')) {
       provider = NetworkImage(imageUrl);
     } else {
-      final path = imageUrl
-          .replaceFirst('file:///', '')
-          .replaceFirst('file://', '');
+      final path = _imageSrcToFilePath(imageUrl);
       provider = FileImage(File(path));
     }
     ImageViewer.show(context, imageProvider: provider);
+  }
+
+  String _imageSrcToFilePath(String src) {
+    if (src.startsWith('file://')) {
+      try {
+        return Uri.parse(src).toFilePath(windows: Platform.isWindows);
+      } catch (_) {
+        final withoutScheme = src.replaceFirst('file://', '');
+        if (Platform.isWindows) return withoutScheme.replaceFirst('/', '');
+        return withoutScheme.startsWith('/') ? withoutScheme : '/$withoutScheme';
+      }
+    }
+    return src;
   }
 
   /// Saves/shares a generated image. The native share sheet on iOS/Android
@@ -504,9 +515,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
           ext = 'jpg';
         }
       } else {
-        final path = src
-            .replaceFirst('file:///', '/')
-            .replaceFirst('file://', '');
+        final path = _imageSrcToFilePath(src);
         final resolved = resolveGlazeFilePath(path) ?? path;
         final file = File(resolved);
         if (!await file.exists()) return;
