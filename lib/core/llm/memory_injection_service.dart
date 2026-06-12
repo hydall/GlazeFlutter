@@ -53,7 +53,7 @@ class MemoryInjectionResult {
 
 class MemoryCandidateBuildResult {
   final MemorySelection selection;
-  final MemoryDiagnostics diagnostics;
+  final MemoryDiagnostics? diagnostics;
 
   const MemoryCandidateBuildResult({
     required this.selection,
@@ -115,55 +115,56 @@ class MemoryInjectionService {
     Set<String> visibleMessageIds = const {},
   }) async {
     final sw = Stopwatch()..start();
-    var memoryMode = 'fast';
-    var memorySettings = const MemoryBookSettings();
     MemoryCandidateBuildResult finish(
-      MemorySelection selection,
-      MemoryBudgetBreakdown budget,
-    ) {
+      MemorySelection selection, {
+      MemoryBudgetBreakdown budget = const MemoryBudgetBreakdown(
+        source: 'none',
+      ),
+      MemoryBookSettings? settings,
+    }) {
       sw.stop();
+      final resolvedSettings = settings ?? const MemoryBookSettings();
       return MemoryCandidateBuildResult(
         selection: selection,
-        diagnostics: MemoryDiagnostics.fromSelection(
-          selection,
-          budget: budget,
-          latencyMs: sw.elapsedMilliseconds,
-          currentText: currentText,
-          memoryMode: memoryMode,
-          factualContinuityGuardEnabled:
-              memorySettings.factualContinuityGuardEnabled,
-        ),
+        diagnostics: settings == null
+            ? null
+            : MemoryDiagnostics.fromSelection(
+                selection,
+                budget: budget,
+                latencyMs: sw.elapsedMilliseconds,
+                currentText: currentText,
+                memoryMode: resolvedSettings.memoryMode,
+                factualContinuityGuardEnabled:
+                    resolvedSettings.factualContinuityGuardEnabled,
+              ),
       );
     }
 
-    const noBudget = MemoryBudgetBreakdown(source: 'none');
     if (shouldAbort?.call() == true) {
-      return finish(const MemorySelection(), noBudget);
+      return finish(const MemorySelection());
     }
     debugPrint('[mem] buildCandidates: reading memory book...');
     final book = await _repo.getBySessionId(sessionId);
     if (shouldAbort?.call() == true) {
-      return finish(const MemorySelection(), noBudget);
+      return finish(const MemorySelection());
     }
     if (book == null) {
       debugPrint('[mem] no memory book found');
-      return finish(const MemorySelection(), noBudget);
+      return finish(const MemorySelection());
     }
-    memoryMode = book.settings.memoryMode;
-    memorySettings = book.settings;
     debugPrint('[mem] memory book loaded, entries=${book.entries.length}');
 
     final gs = _ref.read(memoryGlobalSettingsProvider);
-    if (!gs.enabled) {
-      debugPrint('[mem] memory disabled globally');
-      return finish(const MemorySelection(), noBudget);
+    if (!gs.enabled || !book.settings.enabled) {
+      debugPrint('[mem] memory disabled');
+      return finish(const MemorySelection());
     }
 
     final activeEntries = book.entries
         .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
         .toList();
     debugPrint('[mem] active entries: ${activeEntries.length}');
-    if (activeEntries.isEmpty) return finish(const MemorySelection(), noBudget);
+    if (activeEntries.isEmpty) return finish(const MemorySelection());
 
     final vectorScores = <String, double>{};
     final keywordMatchedTerms = _keywordMatches(
@@ -175,7 +176,7 @@ class MemoryInjectionService {
         ? await _catalogMatches(book, activeEntries, history, currentText)
         : const _CatalogMatchResult();
     if (shouldAbort?.call() == true) {
-      return finish(const MemorySelection(), noBudget);
+      return finish(const MemorySelection(), settings: book.settings);
     }
     if (gs.vectorSearchEnabled &&
         embeddingConfig != null &&
@@ -228,7 +229,7 @@ class MemoryInjectionService {
         sourceWindowExclusion: book.settings.sourceWindowExclusion,
       ),
     );
-    return finish(selection, budget);
+    return finish(selection, budget: budget, settings: book.settings);
   }
 
   /// Backwards-compatible facade for callers that still expect an

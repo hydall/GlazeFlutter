@@ -13,7 +13,9 @@ class MemoryActivityState {
     required this.updatedAtMillis,
   });
 
-  bool get hasDiagnostics => diagnostics.isNotEmpty;
+  bool get hasDiagnostics =>
+      (diagnostics['totalCandidates'] as int? ?? 0) > 0 ||
+      (diagnostics['selectedCount'] as int? ?? 0) > 0;
 }
 
 final lastMemoryActivityProvider =

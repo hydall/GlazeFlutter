@@ -193,7 +193,8 @@ class PromptPayloadBuilder {
         'excludedBySourceWindow': memorySelection.excludedBySourceWindow,
         'budgetTokens': memorySelection.budgetTokens,
         'budgetTrimmed': memorySelection.budgetTrimmed,
-        'diagnostics': memoryResult.diagnostics.toJson(),
+        if (memoryResult.diagnostics != null)
+          'diagnostics': memoryResult.diagnostics!.toJson(),
       };
       if (memorySelection.entries.isNotEmpty) {
         triggeredMemories = memorySelection.entries

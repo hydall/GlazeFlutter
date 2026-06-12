@@ -224,181 +224,185 @@ class _MemoryGenerationSettingsSheetState
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _switchTile(
-            'label_enabled'.tr(),
-            _enabled,
-            (v) => setState(() => _enabled = v),
-          ),
-          _memoryModeSelector(),
-          const SizedBox(height: 12),
-          _switchTile(
-            'memory_books_summary_auto_on'.tr(),
-            _autoCreate,
-            (v) => setState(() => _autoCreate = v),
-            subtitle: 'memory_books_summary_auto_text'.tr(),
-          ),
-          _switchTile(
-            'memory_books_summary_auto_on'.tr(),
-            _autoGenerate,
-            (v) => setState(() => _autoGenerate = v),
-            subtitle: 'memory_books_summary_auto_text'.tr(),
-          ),
-          if (_autoCreate) ...[
+    return Material(
+      type: MaterialType.transparency,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
             _switchTile(
-              'memory_books_summary_delayed'.tr(),
-              _useDelayedAutomation,
-              (v) => setState(() => _useDelayedAutomation = v),
-              subtitle: 'memory_books_summary_delayed'.tr(),
+              'label_enabled'.tr(),
+              _enabled,
+              (v) => setState(() => _enabled = v),
+            ),
+            _memoryModeSelector(),
+            const SizedBox(height: 12),
+            _switchTile(
+              'memory_books_auto_create'.tr(),
+              _autoCreate,
+              (v) => setState(() => _autoCreate = v),
+              subtitle: 'memory_books_auto_create_desc'.tr(),
+            ),
+            _switchTile(
+              'memory_books_auto_generate'.tr(),
+              _autoGenerate,
+              (v) => setState(() => _autoGenerate = v),
+              subtitle: 'memory_books_auto_generate_desc'.tr(),
+            ),
+            if (_autoCreate) ...[
+              _switchTile(
+                'memory_books_delayed_automation'.tr(),
+                _useDelayedAutomation,
+                (v) => setState(() => _useDelayedAutomation = v),
+                subtitle: 'memory_books_delayed_automation_desc'.tr(),
+              ),
+              _numberField(
+                'memory_books_auto_create_interval'.tr(),
+                _autoCreateInterval,
+                (v) => setState(() => _autoCreateInterval = v),
+                min: 1,
+                max: 200,
+              ),
+            ],
+            _numberField(
+              'memory_books_batch_size'.tr(),
+              _batchSize,
+              (v) => setState(() => _batchSize = v),
+              min: 1,
+              max: 50,
             ),
             _numberField(
-              'memory_books_summary_msgs'.tr(),
-              _autoCreateInterval,
-              (v) => setState(() => _autoCreateInterval = v),
+              'memory_books_max_entries_prompt'.tr(),
+              _maxInjected,
+              (v) => setState(() => _maxInjected = v),
               min: 1,
-              max: 200,
+              max: 20,
             ),
-          ],
-          _numberField(
-            'memory_books_summary_batch'.tr(),
-            _batchSize,
-            (v) => setState(() => _batchSize = v),
-            min: 1,
-            max: 50,
-          ),
-          _numberField(
-            'memory_books_summary_in_prompt'.tr(),
-            _maxInjected,
-            (v) => setState(() => _maxInjected = v),
-            min: 1,
-            max: 20,
-          ),
-          const SizedBox(height: 12),
-          _sectionLabel('Memory budget'),
-          _memoryBudgetSelector(),
-          const SizedBox(height: 8),
-          _effectiveBudgetHint(),
-          const SizedBox(height: 12),
-          _sectionLabel('label_embedding_target'.tr()),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'hard_block', label: Text('Hard Block')),
-              ButtonSegment(value: 'macro', label: Text('{{memory}}')),
-            ],
-            selected: {_injectionTarget},
-            onSelectionChanged: (s) =>
-                setState(() => _injectionTarget = s.first),
-            style: ButtonStyle(visualDensity: VisualDensity.compact),
-          ),
-          const SizedBox(height: 12),
-          _sectionLabel('regex_script_settings'.tr()),
-          _promptPresetSelector(),
-          const SizedBox(height: 12),
-          _sectionLabel('tab_api'.tr()),
-          _switchTile(
-            'settings_use_llm_api'.tr(),
-            _generationSource != 'custom',
-            (v) => setState(() => _generationSource = v ? 'current' : 'custom'),
-            subtitle: 'settings_use_llm_api_desc'.tr(),
-          ),
-          if (_generationSource == 'custom') ...[
+            const SizedBox(height: 12),
+            _sectionLabel('Memory budget'),
+            _memoryBudgetSelector(),
             const SizedBox(height: 8),
-            _labeledField(
-              'settings_embedding_endpoint'.tr(),
-              _generationEndpointCtrl,
-              hint: 'https://...',
-            ),
-            const SizedBox(height: 8),
-            _modelField(
-              _generationModelCtrl,
-              hint: 'gpt-4o-mini',
-              isCustom: true,
-            ),
-            const SizedBox(height: 8),
-            _labeledField(
-              'label_embedding_key'.tr(),
-              _generationApiKeyCtrl,
-              hint: 'sk-...',
-              obscure: true,
-            ),
-          ] else ...[
-            const SizedBox(height: 8),
-            _modelField(
-              _generationModelCtrl,
-              hint: 'Leave blank for current LLM model',
-              isCustom: false,
-            ),
-          ],
-          const SizedBox(height: 8),
-          _labeledField(
-            'label_temperature'.tr(),
-            _temperatureCtrl,
-            hint: '0 = use API default',
-            inputType: TextInputType.number,
-          ),
-          _labeledField(
-            'label_max_tokens'.tr(),
-            _maxTokensCtrl,
-            hint: '0 = auto (recommended 2000-4000)',
-            inputType: TextInputType.number,
-          ),
-          const SizedBox(height: 12),
-          _sectionLabel('search'.tr()),
-          _switchTile(
-            'label_vector_search'.tr(),
-            _vectorSearchEnabled,
-            (v) => setState(() => _vectorSearchEnabled = v),
-          ),
-          if (_vectorSearchEnabled) ...[
-            const SizedBox(height: 8),
-            _sliderField(
-              label: 'label_similarity_threshold'.tr(),
-              value: _vectorThreshold,
-              min: 0.0,
-              max: 1.0,
-              divisions: 20,
-              display: _vectorThreshold.toStringAsFixed(2),
-              onChanged: (v) => setState(() => _vectorThreshold = v),
-            ),
-            const SizedBox(height: 8),
+            _effectiveBudgetHint(),
+            const SizedBox(height: 12),
+            _sectionLabel('label_embedding_target'.tr()),
             SegmentedButton<String>(
               segments: const [
-                ButtonSegment(value: 'plain', label: Text('Plain')),
-                ButtonSegment(value: 'glaze', label: Text('Glaze')),
-                ButtonSegment(value: 'both', label: Text('Both')),
+                ButtonSegment(value: 'hard_block', label: Text('Hard Block')),
+                ButtonSegment(value: 'macro', label: Text('{{memory}}')),
               ],
-              selected: {_keyMatchMode},
+              selected: {_injectionTarget},
               onSelectionChanged: (s) =>
-                  setState(() => _keyMatchMode = s.first),
+                  setState(() => _injectionTarget = s.first),
               style: ButtonStyle(visualDensity: VisualDensity.compact),
             ),
-          ],
-          const SizedBox(height: 12),
-          _advancedSelectorSettings(),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text('btn_cancel'.tr()),
+            const SizedBox(height: 12),
+            _sectionLabel('regex_script_settings'.tr()),
+            _promptPresetSelector(),
+            const SizedBox(height: 12),
+            _sectionLabel('tab_api'.tr()),
+            _switchTile(
+              'settings_use_llm_api'.tr(),
+              _generationSource != 'custom',
+              (v) =>
+                  setState(() => _generationSource = v ? 'current' : 'custom'),
+              subtitle: 'settings_use_llm_api_desc'.tr(),
+            ),
+            if (_generationSource == 'custom') ...[
+              const SizedBox(height: 8),
+              _labeledField(
+                'settings_embedding_endpoint'.tr(),
+                _generationEndpointCtrl,
+                hint: 'https://...',
               ),
-              const SizedBox(width: 8),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: context.cs.primary,
-                  foregroundColor: Colors.black,
-                ),
-                onPressed: _save,
-                child: Text('btn_save'.tr()),
+              const SizedBox(height: 8),
+              _modelField(
+                _generationModelCtrl,
+                hint: 'gpt-4o-mini',
+                isCustom: true,
+              ),
+              const SizedBox(height: 8),
+              _labeledField(
+                'label_embedding_key'.tr(),
+                _generationApiKeyCtrl,
+                hint: 'sk-...',
+                obscure: true,
+              ),
+            ] else ...[
+              const SizedBox(height: 8),
+              _modelField(
+                _generationModelCtrl,
+                hint: 'Leave blank for current LLM model',
+                isCustom: false,
               ),
             ],
-          ),
-        ],
+            const SizedBox(height: 8),
+            _labeledField(
+              'label_temperature'.tr(),
+              _temperatureCtrl,
+              hint: '0 = use API default',
+              inputType: TextInputType.number,
+            ),
+            _labeledField(
+              'label_max_tokens'.tr(),
+              _maxTokensCtrl,
+              hint: '0 = auto (recommended 2000-4000)',
+              inputType: TextInputType.number,
+            ),
+            const SizedBox(height: 12),
+            _sectionLabel('search'.tr()),
+            _switchTile(
+              'label_vector_search'.tr(),
+              _vectorSearchEnabled,
+              (v) => setState(() => _vectorSearchEnabled = v),
+            ),
+            if (_vectorSearchEnabled) ...[
+              const SizedBox(height: 8),
+              _sliderField(
+                label: 'label_similarity_threshold'.tr(),
+                value: _vectorThreshold,
+                min: 0.0,
+                max: 1.0,
+                divisions: 20,
+                display: _vectorThreshold.toStringAsFixed(2),
+                onChanged: (v) => setState(() => _vectorThreshold = v),
+              ),
+              const SizedBox(height: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'plain', label: Text('Plain')),
+                  ButtonSegment(value: 'glaze', label: Text('Glaze')),
+                  ButtonSegment(value: 'both', label: Text('Both')),
+                ],
+                selected: {_keyMatchMode},
+                onSelectionChanged: (s) =>
+                    setState(() => _keyMatchMode = s.first),
+                style: ButtonStyle(visualDensity: VisualDensity.compact),
+              ),
+            ],
+            const SizedBox(height: 12),
+            _advancedSelectorSettings(),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('btn_cancel'.tr()),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: context.cs.primary,
+                    foregroundColor: Colors.black,
+                  ),
+                  onPressed: _save,
+                  child: Text('btn_save'.tr()),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -414,7 +418,7 @@ class _MemoryGenerationSettingsSheetState
         tilePadding: EdgeInsets.zero,
         childrenPadding: EdgeInsets.zero,
         title: Text(
-          'Advanced selector tuning',
+          'memory_selector_advanced'.tr(),
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
@@ -422,18 +426,19 @@ class _MemoryGenerationSettingsSheetState
           ),
         ),
         subtitle: Text(
-          'Diversity, recency, importance, source-window exclusion, and query shape.',
+          'memory_selector_advanced_desc'.tr(),
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
         children: [
           _switchTile(
-            'Diversity-aware selection',
+            'memory_selector_diversity'.tr(),
             _diversityAware,
             (v) => setState(() => _diversityAware = v),
+            subtitle: 'memory_selector_diversity_desc'.tr(),
           ),
           if (_diversityAware)
             _sliderField(
-              label: 'Diversity penalty',
+              label: 'memory_selector_diversity_penalty'.tr(),
               value: _diversityPenalty,
               min: 0,
               max: 1,
@@ -442,13 +447,14 @@ class _MemoryGenerationSettingsSheetState
               onChanged: (v) => setState(() => _diversityPenalty = v),
             ),
           _switchTile(
-            'Recency boost',
+            'memory_selector_recency'.tr(),
             _recencyBoost,
             (v) => setState(() => _recencyBoost = v),
+            subtitle: 'memory_selector_recency_desc'.tr(),
           ),
           if (_recencyBoost)
             _sliderField(
-              label: 'Recency half-life days',
+              label: 'memory_selector_recency_half_life'.tr(),
               value: _recencyHalfLifeDays,
               min: 0.1,
               max: 30,
@@ -457,13 +463,14 @@ class _MemoryGenerationSettingsSheetState
               onChanged: (v) => setState(() => _recencyHalfLifeDays = v),
             ),
           _switchTile(
-            'Importance boost',
+            'memory_selector_importance'.tr(),
             _importanceBoost,
             (v) => setState(() => _importanceBoost = v),
+            subtitle: 'memory_selector_importance_desc'.tr(),
           ),
           if (_importanceBoost)
             _sliderField(
-              label: 'Importance weight',
+              label: 'memory_selector_importance_weight'.tr(),
               value: _importanceWeight,
               min: 0,
               max: 2,
@@ -472,33 +479,34 @@ class _MemoryGenerationSettingsSheetState
               onChanged: (v) => setState(() => _importanceWeight = v),
             ),
           _switchTile(
-            'Exclude sources already visible',
+            'memory_selector_exclude_visible'.tr(),
             _sourceWindowExclusion,
             (v) => setState(() => _sourceWindowExclusion = v),
+            subtitle: 'memory_selector_exclude_visible_desc'.tr(),
           ),
           _switchTile(
-            'Factual-continuity guard',
+            'memory_selector_continuity_guard'.tr(),
             _factualContinuityGuardEnabled,
             (v) => setState(() => _factualContinuityGuardEnabled = v),
-            subtitle:
-                'Opt-in: when Balanced suspects missing context but finds no reliable memory, add a short anti-hallucination guard to the prompt.',
+            subtitle: 'memory_selector_continuity_guard_desc'.tr(),
           ),
           _classifierSettings(),
           _sidecarSettings(),
           _switchTile(
-            'Include assistant turns in vector query',
+            'memory_selector_query_assistant'.tr(),
             _queryIncludeAssistant,
             (v) => setState(() => _queryIncludeAssistant = v),
+            subtitle: 'memory_selector_query_assistant_desc'.tr(),
           ),
           _numberField(
-            'Query recent turns',
+            'memory_selector_query_recent_turns'.tr(),
             _queryRecentTurns,
             (v) => setState(() => _queryRecentTurns = v),
             min: 1,
             max: 20,
           ),
           _numberField(
-            'Query max chars',
+            'memory_selector_query_max_chars'.tr(),
             _queryMaxChars,
             (v) => setState(() => _queryMaxChars = v),
             min: 500,
@@ -514,7 +522,7 @@ class _MemoryGenerationSettingsSheetState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionLabel('Memory mode'),
+        _sectionLabel('memory_mode'.tr()),
         SegmentedButton<String>(
           segments: const [
             ButtonSegment(
@@ -545,12 +553,12 @@ class _MemoryGenerationSettingsSheetState
         const SizedBox(height: 6),
         Text(
           _memoryMode == 'legacy'
-              ? 'Emergency rollback: old Memory Book scoring/top-N selector. Keeps the current injection format.'
+              ? 'memory_mode_legacy_desc'.tr()
               : _memoryMode == 'balanced'
-              ? 'Deterministic selector plus local catalog/heuristics. No external classifier call.'
+              ? 'memory_mode_balanced_desc'.tr()
               : _memoryMode == 'deep'
-              ? 'Deep mode configuration only for now. Sidecar reranking remains read-only and is not called until the next implementation step.'
-              : 'Deterministic selector only. Fastest and most predictable.',
+              ? 'memory_mode_deep_desc'.tr()
+              : 'memory_mode_fast_desc'.tr(),
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
       ],
@@ -562,15 +570,14 @@ class _MemoryGenerationSettingsSheetState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _switchTile(
-          'Needs-memory classifier',
+          'memory_selector_classifier'.tr(),
           _classifierEnabled,
           (v) => setState(() => _classifierEnabled = v),
-          subtitle:
-              'Optional external model call in future Balanced/Deep modes. Disabled by default; this commit only saves configuration.',
+          subtitle: 'memory_selector_classifier_desc'.tr(),
         ),
         if (_classifierEnabled) ...[
           Text(
-            'External-call disclosure: enabling the classifier may send recent chat context to the selected model before generation. Commit 12 stores settings only; no classifier request is made yet.',
+            'memory_selector_classifier_disclosure'.tr(),
             style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
@@ -594,11 +601,11 @@ class _MemoryGenerationSettingsSheetState
             const SizedBox(height: 8),
           ],
           _labeledField(
-            'Classifier model',
+            'memory_selector_classifier_model'.tr(),
             _classifierModelCtrl,
             hint: _classifierSource == 'custom'
                 ? 'gpt-4o-mini'
-                : 'Leave blank for current LLM model',
+                : 'memory_selector_current_model_hint'.tr(),
           ),
           if (_classifierSource == 'custom') ...[
             const SizedBox(height: 8),
@@ -610,7 +617,7 @@ class _MemoryGenerationSettingsSheetState
             ),
           ],
           _numberField(
-            'Classifier timeout ms',
+            'memory_selector_classifier_timeout'.tr(),
             _classifierTimeoutMs,
             (v) => setState(() => _classifierTimeoutMs = v),
             min: 500,
@@ -627,15 +634,14 @@ class _MemoryGenerationSettingsSheetState
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _switchTile(
-          'Deep sidecar reranker',
+          'memory_selector_sidecar'.tr(),
           _sidecarEnabled,
           (v) => setState(() => _sidecarEnabled = v),
-          subtitle:
-              'Optional external model for future Deep mode reranking. Read-only configuration; no sidecar call is made in this commit.',
+          subtitle: 'memory_selector_sidecar_desc'.tr(),
         ),
         if (_sidecarEnabled) ...[
           Text(
-            'Cost/latency disclosure: sidecar reranking may add another model request before generation. It must not write, edit, or delete memories.',
+            'memory_selector_sidecar_disclosure'.tr(),
             style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
           ),
           const SizedBox(height: 8),
@@ -658,11 +664,11 @@ class _MemoryGenerationSettingsSheetState
             const SizedBox(height: 8),
           ],
           _labeledField(
-            'Sidecar model',
+            'memory_selector_sidecar_model'.tr(),
             _sidecarModelCtrl,
             hint: _sidecarSource == 'custom'
                 ? 'gpt-4o-mini'
-                : 'Leave blank for current LLM model',
+                : 'memory_selector_current_model_hint'.tr(),
           ),
           if (_sidecarSource == 'custom') ...[
             const SizedBox(height: 8),
@@ -674,7 +680,7 @@ class _MemoryGenerationSettingsSheetState
             ),
           ],
           _numberField(
-            'Sidecar timeout ms',
+            'memory_selector_sidecar_timeout'.tr(),
             _sidecarTimeoutMs,
             (v) => setState(() => _sidecarTimeoutMs = v),
             min: 500,
