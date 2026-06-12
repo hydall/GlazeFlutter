@@ -179,6 +179,31 @@ When context overflows, history is trimmed from the **oldest** end.
 `ContextCalculator._trimHistory()` walks backwards from the newest end, accumulating
 messages until the budget is full. The oldest messages are dropped because they are never accumulated.
 
+### INV-PS3b: The prompt budget always reserves the completion window ✅ ENFORCED
+
+The provider enforces `prompt_tokens + max_tokens <= contextSize`, and the
+transport layer sends `max_tokens` (`apiConfig.maxTokens`) as the completion
+budget with every request (`*_chat_transport.dart`). The prompt must therefore
+never be allowed to fill the entire context window, or the model has no room to
+answer and returns an **empty completion**.
+
+`ContextCalculator.safeContext` reserves `maxTokens` up front:
+
+```
+safeContext  = max(0, contextSize - maxTokens)
+historyBudget = safeContext - staticTotal - effectiveReserve - memoryTokens
+```
+
+This mirrors `fallback_prompt_builder.dart`. Large memory injection
+(`chunk_first` packing, high `maxInjectedTokens`) shrinks `historyBudget` but
+can never reclaim the reserved completion window. If `historyBudget <= 0`,
+`_trimHistory` returns an empty list with `cutoffIndex == history.length`
+(all history dropped) — the caller still keeps the synthetic memory block and
+static prompt, but the operator should lower memory budget / raise context size.
+
+`safeContext` is clamped to `>= 0` so a misconfigured `maxTokens >= contextSize`
+yields a zero window instead of a negative budget.
+
 ### INV-PS4: Memory injection is guarded by a token budget ✅ ENFORCED (PR-B C13)
 
 `MemoryInjectionService.buildInjection()` enforces a hard upper bound
