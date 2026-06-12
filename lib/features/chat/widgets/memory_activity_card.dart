@@ -121,7 +121,7 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  ..._candidateRows(context, diagnostics),
+                  _candidateList(context, diagnostics),
                 ],
               ],
             ),
@@ -138,16 +138,33 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
     return tokens is int ? 'budget $tokens ($source)' : 'budget $source';
   }
 
-  List<Widget> _candidateRows(
+  Widget _candidateList(
     BuildContext context,
     Map<String, dynamic> diagnostics,
   ) {
     final raw = diagnostics['candidates'];
-    if (raw is! List) return const [];
-    return raw
+    if (raw is! List) return const SizedBox.shrink();
+    final rows = raw
         .whereType<Map<String, dynamic>>()
         .map((candidate) => _candidateTile(context, candidate))
         .toList(growable: false);
+    if (rows.isEmpty) return const SizedBox.shrink();
+    // Cap the list height so a large memory book (dozens of entries) scrolls
+    // inside the card instead of expanding into one giant screen-tall panel.
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 280),
+      child: Scrollbar(
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          primary: false,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: rows,
+          ),
+        ),
+      ),
+    );
   }
 
   static String _chunkLabel(Map<String, dynamic> candidate) {
