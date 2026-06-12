@@ -19,6 +19,7 @@ import 'editing_message_provider.dart';
 
 import '../../core/state/character_provider.dart';
 import '../../core/state/active_selection_provider.dart';
+import '../../core/state/memory_settings_provider.dart';
 import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import 'widgets/message_actions.dart';
@@ -405,8 +406,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
   final GlobalKey _inputBarKey = GlobalKey();
 
   /// Measured height of the floating [MemoryActivityCard] (0 when hidden) so
-  /// the message list can reserve space for it — otherwise the card floats over
-  /// the last message and covers its regenerate / action buttons.
+  /// the message list reserves room at the *top* for it — otherwise the card
+  /// floats under the header and covers the first visible messages.
   double _memoryCardHeight = 0.0;
   final GlobalKey _memoryCardKey = GlobalKey();
 
@@ -462,9 +463,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     }
 
     // The memory card is only mounted while visible. When it is absent its
-    // reserved height collapses back to 0 so the list reclaims the space.
-    final memoryCtx = _memoryCardKey.currentContext;
-    final memoryHeight = memoryCtx?.size?.height ?? 0.0;
+    // reserved top height collapses back to 0 so the list reclaims the space.
+    final memoryHeight = _memoryCardKey.currentContext?.size?.height ?? 0.0;
     if (memoryHeight != _memoryCardHeight) {
       nextMemoryCardHeight = memoryHeight;
       changed = true;
@@ -706,6 +706,9 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     final isEditingMessage =
         ref.watch(editingMessageIdProvider(widget.charId)) != null;
     final memoryActivity = ref.watch(lastMemoryActivityProvider(widget.charId));
+    final memoryEnabled = ref.watch(
+      memoryGlobalSettingsProvider.select((s) => s.enabled),
+    );
     ref.listen<String?>(editingMessageIdProvider(widget.charId), (prev, next) {
       if (next != null) {
         if (widget.drawerCtrl.inputFocus.hasFocus) {
@@ -799,20 +802,22 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
         final panelHeight = math.max(targetDrawerInset, widget.keyboardHeight);
         final factor = math.min(1.0, panelHeight / math.max(1.0, safeBottom));
         final effectiveBottomInset = panelHeight + (safeBottom * (1 - factor));
-        // Reserve room for the floating memory card so it sits in a gap above
-        // the input bar instead of covering the last message's action buttons
-        // (regenerate, edit, etc.). Only reserved while the card is shown.
-        final showMemoryCard =
-            memoryActivity != null && memoryActivity.hasDiagnostics;
+        // The memory activity card floats under the header (top of the chat).
+        // Hidden entirely when memory books are disabled globally.
+        final showMemoryCard = memoryActivity != null &&
+            memoryActivity.hasDiagnostics &&
+            memoryEnabled;
         // When the card is dismissed its widget unmounts, so the size notifier
-        // can't fire — reclaim the reserved space on the next frame.
+        // can't fire — reclaim the reserved top space on the next frame.
         if (!showMemoryCard && _memoryCardHeight != 0.0) {
           WidgetsBinding.instance.addPostFrameCallback((_) => _checkHeight());
         }
-        final memoryReserve = showMemoryCard ? _memoryCardHeight + 8 : 0.0;
+        // Reserve room at the top so the card sits in a gap under the header
+        // instead of covering the first visible messages.
+        final memoryTopReserve = showMemoryCard ? _memoryCardHeight + 8 : 0.0;
+        final effectiveTopInset = messageListTop + memoryTopReserve;
 
-        final messageListBottom =
-            _inputBarHeight + effectiveBottomInset + memoryReserve;
+        final messageListBottom = _inputBarHeight + effectiveBottomInset;
 
         final animatedBottomPanelInset =
             panelHeight + (safeBottom * (1 - factor));
@@ -837,7 +842,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     isGeneratingImage: widget.state.isGeneratingImage,
                     regenTargetId: widget.state.regenTargetId,
                     bottomInset: messageListBottom,
-                    topInset: messageListTop,
+                    topInset: effectiveTopInset,
                     charName: character?.name,
                     charColor: character?.color,
                     personaName: effectivePersona?.name,
@@ -1196,6 +1201,35 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                 ),
               ),
             ),
+            // Memory activity card: floats under the header, over the chat.
+            if (showMemoryCard)
+              Positioned(
+                top: messageListTop,
+                left: 12,
+                right: 12,
+                child: NotificationListener<SizeChangedLayoutNotification>(
+                  onNotification: (n) {
+                    WidgetsBinding.instance.addPostFrameCallback(
+                      (_) => _checkHeight(),
+                    );
+                    return true;
+                  },
+                  child: SizeChangedLayoutNotifier(
+                    child: Container(
+                      key: _memoryCardKey,
+                      child: MemoryActivityCard(
+                        activity: memoryActivity,
+                        expanded: _showMemoryActivity,
+                        onToggle: () {
+                          setState(() {
+                            _showMemoryActivity = !_showMemoryActivity;
+                          });
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             // Bottom panel: drawer + input bar
             Positioned.fill(
               child: Stack(
@@ -1225,34 +1259,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                   batterySaver &&
                                   widget.drawerCtrl.isDrawerAnimating,
                             ),
-                    ),
-                  if (showMemoryCard)
-                    Positioned(
-                      left: 12,
-                      right: 12,
-                      bottom: animatedBottomPanelInset + _inputBarHeight + 8,
-                      child: NotificationListener<SizeChangedLayoutNotification>(
-                        onNotification: (n) {
-                          WidgetsBinding.instance.addPostFrameCallback(
-                            (_) => _checkHeight(),
-                          );
-                          return true;
-                        },
-                        child: SizeChangedLayoutNotifier(
-                          child: Container(
-                            key: _memoryCardKey,
-                            child: MemoryActivityCard(
-                              activity: memoryActivity,
-                              expanded: _showMemoryActivity,
-                              onToggle: () {
-                                setState(() {
-                                  _showMemoryActivity = !_showMemoryActivity;
-                                });
-                              },
-                            ),
-                          ),
-                        ),
-                      ),
                     ),
                   Positioned(
                     left: 0,
