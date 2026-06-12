@@ -157,6 +157,7 @@ Map<String, dynamic> _serializePayload(PromptPayload p) => {
       .toList(),
   'memorySelection': _serializeMemorySelection(p.memorySelection),
   'memoryExcerptingEnabled': p.memoryExcerptingEnabled,
+  'memoryPackingMode': p.memoryPackingMode,
 };
 
 PromptResult _deserializeResult(Map<String, dynamic> json) {
@@ -248,6 +249,7 @@ PromptPayload _deserializePayload(Map<String, dynamic> json) {
       json['memorySelection'] as Map<String, dynamic>?,
     ),
     memoryExcerptingEnabled: json['memoryExcerptingEnabled'] as bool? ?? true,
+    memoryPackingMode: json['memoryPackingMode'] as String? ?? 'hybrid',
   );
 }
 

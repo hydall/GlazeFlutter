@@ -32,6 +32,7 @@ class _MemoryGenerationSettingsSheetState
   late bool _autoGenerate;
   late int _maxInjected;
   late bool _memoryExcerptingEnabled;
+  late String _memoryPackingMode;
   late String _memoryBudgetPreset;
   late int? _maxInjectedTokens;
   late int _autoCreateInterval;
@@ -86,6 +87,7 @@ class _MemoryGenerationSettingsSheetState
     _autoGenerate = s.autoGenerateEnabled;
     _maxInjected = s.maxInjectedEntries;
     _memoryExcerptingEnabled = s.memoryExcerptingEnabled;
+    _memoryPackingMode = _normalizeMemoryPackingMode(s.memoryPackingMode);
     _memoryBudgetPreset = _normalizeMemoryBudgetPreset(
       s.memoryBudgetPreset,
       s.maxInjectedTokens,
@@ -179,6 +181,7 @@ class _MemoryGenerationSettingsSheetState
       autoGenerateEnabled: _autoGenerate,
       maxInjectedEntries: _maxInjected,
       memoryExcerptingEnabled: _memoryExcerptingEnabled,
+      memoryPackingMode: _memoryPackingMode,
       maxInjectedTokens: _maxInjectedTokens,
       memoryBudgetPreset: _memoryBudgetPreset,
       autoCreateInterval: _autoCreateInterval,
@@ -451,6 +454,10 @@ class _MemoryGenerationSettingsSheetState
             (v) => setState(() => _memoryExcerptingEnabled = v),
             subtitle: 'memory_excerpting_auto_desc'.tr(),
           ),
+          if (_memoryExcerptingEnabled) ...[
+            const SizedBox(height: 8),
+            _packingModeSelector(),
+          ],
           const SizedBox(height: 8),
           _switchTile(
             'memory_selector_diversity'.tr(),
@@ -587,6 +594,44 @@ class _MemoryGenerationSettingsSheetState
               : _memoryMode == 'deep'
               ? 'memory_mode_deep_desc'.tr()
               : 'memory_mode_fast_desc'.tr(),
+          style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
+        ),
+      ],
+    );
+  }
+
+  Widget _packingModeSelector() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionLabel('memory_packing_mode'.tr()),
+        SegmentedButton<String>(
+          segments: [
+            ButtonSegment(
+              value: 'full',
+              label: Text('memory_packing_full'.tr()),
+            ),
+            ButtonSegment(
+              value: 'hybrid',
+              label: Text('memory_packing_hybrid'.tr()),
+            ),
+            ButtonSegment(
+              value: 'chunk_first',
+              label: Text('memory_packing_chunk_first'.tr()),
+            ),
+          ],
+          selected: {_memoryPackingMode},
+          onSelectionChanged: (s) =>
+              setState(() => _memoryPackingMode = s.first),
+          style: ButtonStyle(visualDensity: VisualDensity.compact),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _memoryPackingMode == 'full'
+              ? 'memory_packing_full_desc'.tr()
+              : _memoryPackingMode == 'chunk_first'
+              ? 'memory_packing_chunk_first_desc'.tr()
+              : 'memory_packing_hybrid_desc'.tr(),
           style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant),
         ),
       ],
@@ -1149,6 +1194,7 @@ class _MemoryGenerationSettingsSheetState
           autoGenerateEnabled: current.autoGenerateEnabled,
           maxInjectedEntries: current.maxInjectedEntries,
           memoryExcerptingEnabled: current.memoryExcerptingEnabled,
+          memoryPackingMode: current.memoryPackingMode,
           maxInjectedTokens: current.maxInjectedTokens,
           memoryBudgetPreset: current.memoryBudgetPreset,
           autoCreateInterval: current.autoCreateInterval,
@@ -1324,6 +1370,11 @@ String _normalizeMemoryMode(String raw) {
   if (raw == 'deep') return 'deep';
   if (raw == 'legacy') return 'legacy';
   return raw == 'balanced' ? 'balanced' : 'fast';
+}
+
+String _normalizeMemoryPackingMode(String raw) {
+  if (raw == 'full' || raw == 'chunk_first') return raw;
+  return 'hybrid';
 }
 
 String _normalizeClassifierSource(String raw) {

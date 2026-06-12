@@ -200,7 +200,7 @@ void main() {
     final memoryMessage = result.messages.firstWhere(
       (message) => message.blockId == 'memory',
     );
-    expect(memoryMessage.content, contains('Excerpt from Bridge memory'));
+    expect(memoryMessage.content, contains('Memory: Bridge memory'));
     expect(memoryMessage.content, contains('ritual map'));
     expect(
       memoryMessage.content,

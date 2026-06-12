@@ -6,6 +6,7 @@ import '../models/preset.dart';
 import '../models/chat_message.dart';
 import '../models/api_config.dart';
 import '../models/lorebook.dart';
+import '../models/memory_book.dart';
 import 'macro_engine.dart';
 import 'history_assembler.dart';
 import 'context_calculator.dart';
@@ -96,6 +97,7 @@ class PromptPayload {
   final List<RuntimePromptBlock> runtimePromptBlocks;
   final MemorySelection? memorySelection;
   final bool memoryExcerptingEnabled;
+  final String memoryPackingMode;
 
   const PromptPayload({
     required this.character,
@@ -126,6 +128,7 @@ class PromptPayload {
     this.runtimePromptBlocks = const [],
     this.memorySelection,
     this.memoryExcerptingEnabled = true,
+    this.memoryPackingMode = 'hybrid',
   });
 }
 
@@ -902,7 +905,10 @@ PromptResult _assembleMessages({
     finalMemorySelection = refiltered;
     final excerpted = !payload.memoryExcerptingEnabled
         ? MemoryExcerptSelector.fullEntries(refiltered)
-        : MemoryExcerptSelector.select(refiltered);
+        : MemoryExcerptSelector.select(
+            refiltered,
+            packingMode: payload.memoryPackingMode,
+          );
     finalExcerptSelection = excerpted;
     if (excerpted.items.isNotEmpty) {
       final rebuilt = _buildMemoryContentFromSelection(
@@ -1176,26 +1182,44 @@ _RebuiltMemoryContent _buildMemoryContentFromSelection(
   String? summaryExcerpt,
 }) {
   final injected = excerptSelection ?? MemoryExcerptSelector.select(selection);
-  final macro = injected.items
-      .map((item) => item.text.trim())
-      .where((s) => s.isNotEmpty)
-      .join('\n\n');
+  final macro = _formatMemoryItems(injected.items, includeContextHeader: false);
   final parts = <String>[];
   if (summaryExcerpt != null && summaryExcerpt.isNotEmpty) {
     parts.add('Summary excerpt:\n$summaryExcerpt');
   }
-  parts.add('Memory context:');
-  for (final item in injected.items) {
-    final title = item.entry.title.isNotEmpty ? item.entry.title : 'Memory';
+  parts.add(_formatMemoryItems(injected.items, includeContextHeader: true));
+  return _RebuiltMemoryContent(parts.join('\n\n'), macro);
+}
+
+String _formatMemoryItems(
+  List<MemoryInjectionItem> items, {
+  required bool includeContextHeader,
+}) {
+  final parts = <String>[];
+  if (includeContextHeader) parts.add('Memory context:');
+  for (final item in items) {
+    final title = item.entry.title.isNotEmpty
+        ? item.entry.title
+        : _formatMemoryRange(item.entry) ?? 'Memory';
+    final range = _formatMemoryRange(item.entry);
+    final heading = range == null
+        ? 'Memory: $title'
+        : 'Memory: $title ($range)';
     if (item.excerpt) {
       parts.add(
-        '- Excerpt from $title:\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
+        '$heading\n${item.text.trim()}\n[Excerpted from a larger Memory Book entry]',
       );
     } else {
-      parts.add('- $title: ${item.text.trim()}');
+      parts.add('$heading\n${item.text.trim()}');
     }
   }
-  return _RebuiltMemoryContent(parts.join('\n\n'), macro);
+  return parts.where((part) => part.trim().isNotEmpty).join('\n\n');
+}
+
+String? _formatMemoryRange(MemoryEntry entry) {
+  final range = entry.messageRange;
+  if (range == null) return null;
+  return '${range.start}-${range.end}';
 }
 
 bool _replaceDeferredMemoryPlaceholders(
@@ -1232,7 +1256,10 @@ Map<String, dynamic> _finalizeMemoryCoverage(
   MemoryExcerptSelection? excerptSelection,
 ) {
   if (selection == null) return coverage;
-  final excerpted = excerptSelection ?? MemoryExcerptSelector.select(selection);
+  final packingMode = coverage['packingMode'] as String? ?? 'hybrid';
+  final excerpted =
+      excerptSelection ??
+      MemoryExcerptSelector.select(selection, packingMode: packingMode);
   final budget = MemoryBudgetBreakdown(
     effectiveTokens: selection.budgetTokens,
     source: selection.budgetTokens == null ? 'none' : 'effective',
@@ -1245,6 +1272,7 @@ Map<String, dynamic> _finalizeMemoryCoverage(
   final previousDiagnostics = coverage['diagnostics'];
   return {
     ...coverage,
+    'packingMode': packingMode,
     'entryIds': excerpted.entries.map((e) => e.id).toList(growable: false),
     'budgetTrimmed': excerpted.budgetTrimmed,
     'diagnostics': previousDiagnostics is Map

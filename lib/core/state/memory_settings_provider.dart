@@ -18,6 +18,7 @@ abstract class MemoryGlobalSettings with _$MemoryGlobalSettings {
     @Default(false) bool autoGenerateEnabled,
     @Default(7) int maxInjectedEntries,
     @Default(true) bool memoryExcerptingEnabled,
+    @Default('hybrid') String memoryPackingMode,
     int? maxInjectedTokens,
     @Default('auto') String memoryBudgetPreset,
     @Default(15) int autoCreateInterval,

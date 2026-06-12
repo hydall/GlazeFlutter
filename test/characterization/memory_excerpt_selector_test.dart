@@ -116,9 +116,7 @@ void main() {
 
       final selection = MemorySelector.select(
         MemorySelectionInput(
-          entries: [
-            _entry(id: 'a', title: 'Chapel clues', content: content),
-          ],
+          entries: [_entry(id: 'a', title: 'Chapel clues', content: content)],
           vectorScores: const {'a': 0.9},
           vectorMatchedChunks: const {
             'a': [
@@ -149,59 +147,125 @@ void main() {
       expect(excerpted.items.single.text, isNot(contains('weather and tea')));
     });
 
-    test('uses remaining budget for excerpted entries trimmed by full-entry budget', () {
-      final selection = MemorySelector.select(
-        MemorySelectionInput(
-          entries: [
-            _entry(
-              id: 'a',
-              title: 'Full A',
-              content: List.filled(40, 'alpha').join(' '),
+    test(
+      'uses remaining budget for excerpted entries trimmed by full-entry budget',
+      () {
+        final selection = MemorySelector.select(
+          MemorySelectionInput(
+            entries: [
+              _entry(
+                id: 'a',
+                title: 'Full A',
+                content: List.filled(40, 'alpha').join(' '),
+              ),
+              _entry(
+                id: 'b',
+                title: 'Full B',
+                content: List.filled(40, 'bravo').join(' '),
+              ),
+              _entry(
+                id: 'c',
+                title: 'Trimmed C',
+                content: [
+                  List.filled(10, 'boring').join(' '),
+                  'needle clue should be excerpted here',
+                  List.filled(20, 'tail').join(' '),
+                ].join('\n\n'),
+                keys: const ['needle'],
+              ),
+            ],
+            keywordMatchedTerms: const {
+              'a': ['alpha'],
+              'b': ['bravo'],
+              'c': ['needle'],
+            },
+            maxInjectionTokens: 90,
+            maxInjectedEntries: 3,
+            recencyBoost: false,
+            importanceBoost: false,
+            diversityAware: false,
+          ),
+          tokenCounter: (entry) => entry.content.split(RegExp(r'\s+')).length,
+        );
+
+        expect(selection.entries.map((e) => e.id), ['a', 'b']);
+        expect(selection.budgetTrimmed, isTrue);
+
+        final excerpted = MemoryExcerptSelector.select(
+          selection,
+          maxExcerptTokensPerEntry: 8,
+          maxExcerptChunksPerEntry: 1,
+          tokenCounter: (text) => text.split(RegExp(r'\s+')).length,
+        );
+
+        expect(excerpted.items.map((item) => item.entry.id), ['a', 'b', 'c']);
+        expect(excerpted.items.last.excerpt, isTrue);
+        expect(excerpted.items.last.text, contains('needle clue'));
+        expect(excerpted.totalTokens, lessThanOrEqualTo(90));
+      },
+    );
+
+    test(
+      'chunk-first packs excerpts for every memory in source chronology',
+      () {
+        final older = MemoryEntry(
+          id: 'older',
+          title: 'Older memory',
+          content: [
+            'setup filler words words words',
+            'older needle clue stays first',
+          ].join('\n\n'),
+          keys: const ['needle'],
+          messageRange: const MessageRange(start: 10, end: 20),
+          status: 'active',
+        );
+        final newer = MemoryEntry(
+          id: 'newer',
+          title: 'Newer memory',
+          content: [
+            'newer needle clue stays second',
+            'tail filler words words words',
+          ].join('\n\n'),
+          keys: const ['needle'],
+          messageRange: const MessageRange(start: 30, end: 40),
+          status: 'active',
+        );
+
+        final selection = MemorySelection(
+          entries: [newer, older],
+          allScores: [
+            MemoryCandidateScore(
+              entry: newer,
+              score: 20,
+              matchedKeys: const ['needle'],
             ),
-            _entry(
-              id: 'b',
-              title: 'Full B',
-              content: List.filled(40, 'bravo').join(' '),
-            ),
-            _entry(
-              id: 'c',
-              title: 'Trimmed C',
-              content: [
-                List.filled(10, 'boring').join(' '),
-                'needle clue should be excerpted here',
-                List.filled(20, 'tail').join(' '),
-              ].join('\n\n'),
-              keys: const ['needle'],
+            MemoryCandidateScore(
+              entry: older,
+              score: 10,
+              matchedKeys: const ['needle'],
             ),
           ],
-          keywordMatchedTerms: const {
-            'a': ['alpha'],
-            'b': ['bravo'],
-            'c': ['needle'],
-          },
-          maxInjectionTokens: 90,
-          maxInjectedEntries: 3,
-          recencyBoost: false,
-          importanceBoost: false,
-          diversityAware: false,
-        ),
-        tokenCounter: (entry) => entry.content.split(RegExp(r'\s+')).length,
-      );
+          budgetTokens: 20,
+          entryCap: 2,
+        );
 
-      expect(selection.entries.map((e) => e.id), ['a', 'b']);
-      expect(selection.budgetTrimmed, isTrue);
+        final excerpted = MemoryExcerptSelector.select(
+          selection,
+          packingMode: 'chunk_first',
+          maxExcerptTokensPerEntry: 6,
+          maxExcerptChunksPerEntry: 1,
+          tokenCounter: (text) => text.split(RegExp(r'\s+')).length,
+        );
 
-      final excerpted = MemoryExcerptSelector.select(
-        selection,
-        maxExcerptTokensPerEntry: 8,
-        maxExcerptChunksPerEntry: 1,
-        tokenCounter: (text) => text.split(RegExp(r'\s+')).length,
-      );
-
-      expect(excerpted.items.map((item) => item.entry.id), ['a', 'b', 'c']);
-      expect(excerpted.items.last.excerpt, isTrue);
-      expect(excerpted.items.last.text, contains('needle clue'));
-      expect(excerpted.totalTokens, lessThanOrEqualTo(90));
-    });
+        expect(excerpted.items, hasLength(2));
+        expect(excerpted.items.every((item) => item.excerpt), isTrue);
+        expect(excerpted.items.map((item) => item.entry.id), [
+          'older',
+          'newer',
+        ]);
+        expect(excerpted.items.first.text, contains('older needle'));
+        expect(excerpted.items.last.text, contains('newer needle'));
+      },
+    );
   });
 }

@@ -194,6 +194,9 @@ class PromptPayloadBuilder {
         'excludedBySourceWindow': memorySelection.excludedBySourceWindow,
         'budgetTokens': memorySelection.budgetTokens,
         'budgetTrimmed': memorySelection.budgetTrimmed,
+        'packingMode': _ref
+            .read(memoryGlobalSettingsProvider)
+            .memoryPackingMode,
         if (memoryResult.diagnostics != null)
           'diagnostics': memoryResult.diagnostics!.toJson(),
       };
@@ -246,6 +249,9 @@ class PromptPayloadBuilder {
       memoryExcerptingEnabled: _ref
           .read(memoryGlobalSettingsProvider)
           .memoryExcerptingEnabled,
+      memoryPackingMode: _ref
+          .read(memoryGlobalSettingsProvider)
+          .memoryPackingMode,
     );
   }
 
@@ -314,6 +320,9 @@ class PromptPayloadBuilder {
       memoryExcerptingEnabled: _ref
           .read(memoryGlobalSettingsProvider)
           .memoryExcerptingEnabled,
+      memoryPackingMode: _ref
+          .read(memoryGlobalSettingsProvider)
+          .memoryPackingMode,
     );
   }
 

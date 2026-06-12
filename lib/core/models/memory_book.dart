@@ -67,6 +67,7 @@ abstract class MemoryBookSettings with _$MemoryBookSettings {
     @Default(false) bool autoGenerateEnabled,
     @Default(7) int maxInjectedEntries,
     @Default(true) bool memoryExcerptingEnabled,
+    @Default('hybrid') String memoryPackingMode,
     @Default(0.35) double maxInjectionBudgetPercent,
     int? maxInjectedTokens,
     @Default('auto') String memoryBudgetPreset,

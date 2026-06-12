@@ -65,35 +65,26 @@ class MemoryExcerptSelector {
 
   static MemoryExcerptSelection select(
     MemorySelection selection, {
+    String packingMode = 'hybrid',
     int maxExcerptTokensPerEntry = defaultMemoryExcerptTokensPerEntry,
     int maxExcerptChunksPerEntry = defaultMemoryExcerptChunksPerEntry,
     int Function(String text)? tokenCounter,
   }) {
     final tokenFn = tokenCounter ?? estimateTokens;
     final budget = selection.budgetTokens;
+    final normalizedPackingMode = _normalizePackingMode(packingMode);
     final selectedIds = selection.entries.map((entry) => entry.id).toSet();
     final selectedFullTokens = selection.entries.fold<int>(
       0,
       (sum, entry) => sum + tokenFn(entry.content),
     );
 
-    if (budget == null ||
-        (selectedFullTokens <= budget && !selection.budgetTrimmed)) {
-      return MemoryExcerptSelection(
-        items: selection.entries
-            .map(
-              (entry) => MemoryInjectionItem(
-                entry: entry,
-                excerpt: false,
-                text: entry.content.trim(),
-                tokenCost: tokenFn(entry.content),
-                originalTokenCost: tokenFn(entry.content),
-              ),
-            )
-            .toList(growable: false),
-        totalTokens: selectedFullTokens,
-        budgetTrimmed: selection.budgetTrimmed,
-      );
+    if (normalizedPackingMode == 'full' ||
+        budget == null ||
+        (normalizedPackingMode == 'hybrid' &&
+            selectedFullTokens <= budget &&
+            !selection.budgetTrimmed)) {
+      return fullEntries(selection);
     }
 
     final cap = selection.entryCap > 0
@@ -111,7 +102,8 @@ class MemoryExcerptSelector {
       if (fullText.isEmpty) continue;
       final fullTokens = tokenFn(fullText);
 
-      if (usedTokens + fullTokens <= budget) {
+      if (normalizedPackingMode == 'hybrid' &&
+          usedTokens + fullTokens <= budget) {
         items.add(
           MemoryInjectionItem(
             entry: entry,
@@ -171,10 +163,33 @@ class MemoryExcerptSelector {
     }
 
     return MemoryExcerptSelection(
-      items: items,
+      items: _chronologicalItems(items),
       totalTokens: usedTokens,
       budgetTrimmed: trimmed,
     );
+  }
+
+  static String _normalizePackingMode(String raw) {
+    if (raw == 'full' || raw == 'chunk_first') return raw;
+    return 'hybrid';
+  }
+
+  static List<MemoryInjectionItem> _chronologicalItems(
+    List<MemoryInjectionItem> items,
+  ) {
+    final out = [...items];
+    out.sort((a, b) {
+      final ar = a.entry.messageRange;
+      final br = b.entry.messageRange;
+      final as = ar?.start ?? 1 << 30;
+      final bs = br?.start ?? 1 << 30;
+      if (as != bs) return as.compareTo(bs);
+      final ae = ar?.end ?? as;
+      final be = br?.end ?? bs;
+      if (ae != be) return ae.compareTo(be);
+      return a.entry.id.compareTo(b.entry.id);
+    });
+    return out;
   }
 
   static MemoryInjectionItem? _buildExcerpt(
