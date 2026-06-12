@@ -363,9 +363,7 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
         importanceBoost: inputs.memoryImportanceBoost,
         importanceWeight: inputs.memoryImportanceWeight,
         sourceWindowExclusion: inputs.memorySourceWindowExclusion,
-        nowMillis: inputs.memoryNowMillis > 0
-            ? inputs.memoryNowMillis
-            : DateTime.now().millisecondsSinceEpoch,
+        currentMessageIndex: inputs.history.length,
       ),
     );
 

@@ -38,7 +38,7 @@ abstract class MemoryGlobalSettings with _$MemoryGlobalSettings {
     @Default(true) bool diversityAware,
     @Default(0.15) double diversityPenalty,
     @Default(true) bool recencyBoost,
-    @Default(0.5) double recencyHalfLifeDays,
+    @Default(100) double recencyHalfLifeDays,
     @Default(true) bool importanceBoost,
     @Default(0.5) double importanceWeight,
     @Default(true) bool sourceWindowExclusion,

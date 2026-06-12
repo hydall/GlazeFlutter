@@ -227,6 +227,7 @@ class MemoryInjectionService {
         importanceBoost: book.settings.importanceBoost,
         importanceWeight: book.settings.importanceWeight,
         sourceWindowExclusion: book.settings.sourceWindowExclusion,
+        currentMessageIndex: history.length,
       ),
     );
     return finish(selection, budget: budget, settings: book.settings);

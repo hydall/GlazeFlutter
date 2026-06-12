@@ -456,11 +456,13 @@ class _MemoryGenerationSettingsSheetState
             _sliderField(
               label: 'memory_selector_recency_half_life'.tr(),
               value: _recencyHalfLifeDays,
-              min: 0.1,
-              max: 30,
-              divisions: 299,
+              min: 10,
+              max: 1000,
+              divisions: 99,
               display: _recencyHalfLifeDays.toStringAsFixed(1),
               onChanged: (v) => setState(() => _recencyHalfLifeDays = v),
+              helpTitle: 'memory_selector_recency_half_life'.tr(),
+              helpBody: 'memory_selector_recency_half_life_help'.tr(),
             ),
           _switchTile(
             'memory_selector_importance'.tr(),
@@ -504,6 +506,8 @@ class _MemoryGenerationSettingsSheetState
             (v) => setState(() => _queryRecentTurns = v),
             min: 1,
             max: 20,
+            helpTitle: 'memory_selector_query_recent_turns'.tr(),
+            helpBody: 'memory_selector_query_recent_turns_help'.tr(),
           ),
           _numberField(
             'memory_selector_query_max_chars'.tr(),
@@ -512,6 +516,8 @@ class _MemoryGenerationSettingsSheetState
             min: 500,
             max: 5000,
             step: 250,
+            helpTitle: 'memory_selector_query_max_chars'.tr(),
+            helpBody: 'memory_selector_query_max_chars_help'.tr(),
           ),
         ],
       ),
@@ -727,15 +733,25 @@ class _MemoryGenerationSettingsSheetState
     int min = 0,
     int max = 99999,
     int step = 1,
+    String? helpTitle,
+    String? helpBody,
   }) {
     final normalized = min + (((value - min) / step).round() * step);
     final clamped = normalized.clamp(min, max);
     return Row(
       children: [
         Expanded(
-          child: Text(
-            label,
-            style: TextStyle(fontSize: 13, color: context.cs.onSurface),
+          child: Row(
+            children: [
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(fontSize: 13, color: context.cs.onSurface),
+                ),
+              ),
+              if (helpTitle != null && helpBody != null)
+                _helpButton(title: helpTitle, body: helpBody),
+            ],
           ),
         ),
         SizedBox(
@@ -1180,6 +1196,8 @@ class _MemoryGenerationSettingsSheetState
     required int divisions,
     required String display,
     required ValueChanged<double> onChanged,
+    String? helpTitle,
+    String? helpBody,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1187,9 +1205,20 @@ class _MemoryGenerationSettingsSheetState
         Row(
           children: [
             Expanded(
-              child: Text(
-                label,
-                style: TextStyle(fontSize: 13, color: context.cs.onSurface),
+              child: Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: context.cs.onSurface,
+                      ),
+                    ),
+                  ),
+                  if (helpTitle != null && helpBody != null)
+                    _helpButton(title: helpTitle, body: helpBody),
+                ],
               ),
             ),
             Text(
@@ -1209,6 +1238,39 @@ class _MemoryGenerationSettingsSheetState
           onChanged: onChanged,
         ),
       ],
+    );
+  }
+
+  Widget _helpButton({required String title, required String body}) {
+    return Tooltip(
+      message: 'memory_selector_help_tooltip'.tr(),
+      child: IconButton(
+        visualDensity: VisualDensity.compact,
+        padding: const EdgeInsets.all(4),
+        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+        icon: Icon(
+          Icons.help_outline_rounded,
+          size: 16,
+          color: context.cs.onSurfaceVariant,
+        ),
+        onPressed: () => _showHelpDialog(title: title, body: body),
+      ),
+    );
+  }
+
+  Future<void> _showHelpDialog({required String title, required String body}) {
+    return showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('btn_ok'.tr()),
+          ),
+        ],
+      ),
     );
   }
 }
