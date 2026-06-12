@@ -310,27 +310,41 @@ class ChatWebViewSyncDispatcher {
     }
   }
 
+  /// Reconcile the WebView's generation flags against [current]
+  /// **level-triggered**, not edge-triggered. `bridge.isGenerating` /
+  /// `bridge.isGeneratingImage` mirror what the JS side last received, so
+  /// comparing against them (instead of the previous widget config) means a
+  /// rising/falling edge that Riverpod coalesced into a single rebuild — or a
+  /// dispatch skipped while the bridge was not ready / mid session-switch — is
+  /// caught up on the next dispatch instead of being lost forever.
+  ///
+  /// A lost falling edge would otherwise leave JS `isGenerating` stuck `true`:
+  /// `updateHeader` early-returns permanently (frozen hide-on-scroll header)
+  /// and `GenTimer` never stops (endless gen-time animation). A lost rising
+  /// edge renders the just-sent user message with `isGenerating:false` and a
+  /// stray Regenerate button. [old] is unused but kept for signature parity
+  /// with the sibling `_maybeApply*` helpers.
   void _maybeApplyGeneratingState({
     required ChatBridgeController bridge,
     required ChatWebViewWidgetFields old,
     required ChatWebViewWidgetFields current,
   }) {
+    if (current.isGenerating == bridge.isGenerating &&
+        current.isGeneratingImage == bridge.isGeneratingImage) {
+      return;
+    }
+    bridge.isGenerating = current.isGenerating;
+    bridge.isGeneratingImage = current.isGeneratingImage;
+    bridge.evalJs(
+      'if (window.bridge) { window.bridge.setGenerating(${current.isGenerating}); window.bridge.isGeneratingImage = ${current.isGeneratingImage}; }',
+    );
     final anyGenerating = current.isGenerating || current.isGeneratingImage;
-    final oldAnyGenerating = old.isGenerating || old.isGeneratingImage;
-    if (anyGenerating != oldAnyGenerating ||
-        current.isGenerating != old.isGenerating) {
-      bridge.isGenerating = current.isGenerating;
-      bridge.isGeneratingImage = current.isGeneratingImage;
-      bridge.evalJs(
-        'if (window.bridge) { window.bridge.setGenerating(${current.isGenerating}); window.bridge.isGeneratingImage = ${current.isGeneratingImage}; }',
+    if (!anyGenerating && current.messages.isNotEmpty) {
+      bridge.setLastMessage(
+        lastUserMessageId(current.messages) ?? current.messages.last.id,
       );
-      if (!anyGenerating && current.messages.isNotEmpty) {
-        bridge.setLastMessage(
-          lastUserMessageId(current.messages) ?? current.messages.last.id,
-        );
-      } else if (current.isGenerating) {
-        bridge.setLastMessage(null);
-      }
+    } else if (current.isGenerating) {
+      bridge.setLastMessage(null);
     }
   }
 
