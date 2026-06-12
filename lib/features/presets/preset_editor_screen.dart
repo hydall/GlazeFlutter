@@ -547,6 +547,33 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   // ─── Actions ─────────────────────────────────────────────────────────────
 
   void _addBlock() {
+    final hasMemoryBlock = _blocks.any((b) => b.id == 'memory');
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'Add Block',
+      items: [
+        if (!hasMemoryBlock)
+          BottomSheetItem(
+            icon: Icons.psychology_alt_outlined,
+            label: 'Memory Book',
+            onTap: () {
+              Navigator.pop(context);
+              _addMemoryBlock();
+            },
+          ),
+        BottomSheetItem(
+          icon: Icons.add,
+          label: 'Custom Block',
+          onTap: () {
+            Navigator.pop(context);
+            _addCustomBlock();
+          },
+        ),
+      ],
+    );
+  }
+
+  void _addCustomBlock() {
     setState(() {
       _blocks.add(PresetBlock(
         id: generateId(),
@@ -554,6 +581,29 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
         role: 'system',
         content: '',
       ));
+    });
+    _scheduleSave();
+  }
+
+  void _addMemoryBlock() {
+    if (_blocks.any((b) => b.id == 'memory')) return;
+    setState(() {
+      // Insert the Memory Book block just before Chat History so injected
+      // memories sit with the other system context, not after the dialogue.
+      final chatHistoryIdx = _blocks.indexWhere((b) => b.id == 'chat_history');
+      const memoryBlock = PresetBlock(
+        id: 'memory',
+        name: 'Memory Book',
+        role: 'system',
+        content: '',
+        enabled: true,
+        isStatic: true,
+      );
+      if (chatHistoryIdx != -1) {
+        _blocks.insert(chatHistoryIdx, memoryBlock);
+      } else {
+        _blocks.add(memoryBlock);
+      }
     });
     _scheduleSave();
   }

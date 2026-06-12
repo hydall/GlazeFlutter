@@ -401,7 +401,7 @@ post-gen, or pipeline sync notification. See `docs/INVARIANTS.md` INV-CM2.
 
 **Dynamic content:**
 - `{{summary}}` — current chat summary (user-authored only)
-- `{{memory}}` — triggered memory book entries. With `injectionTarget='macro'` this is the only way memory enters the prompt; with `injectionTarget='hard_block'` (default) the system already injects a "Memory Book" system message and `{{memory}}` lets the user place additional copies with custom wrapper tags.
+- `{{memory}}` — triggered memory book entries. Memory can enter the prompt three ways: a dedicated `memory` ("Memory Book") preset block (addable from the editor, resolves like the macro), the `{{memory}}` macro, or — with `injectionTarget='hard_block'` (default) — an auto-injected "Memory Book" system message. With `injectionTarget='macro'` and no `{{memory}}` macro or `memory` block present, memory is dropped and `memoryMacroMissing` is flagged. See INV-PS5.
 - `{{lorebooks}}` — triggered lorebook content
 - `{{guidance}}` — guided swipe instruction
 

@@ -179,6 +179,31 @@ When context overflows, history is trimmed from the **oldest** end.
 `ContextCalculator._trimHistory()` walks backwards from the newest end, accumulating
 messages until the budget is full. The oldest messages are dropped because they are never accumulated.
 
+### INV-PS3b: The prompt budget always reserves the completion window ✅ ENFORCED
+
+The provider enforces `prompt_tokens + max_tokens <= contextSize`, and the
+transport layer sends `max_tokens` (`apiConfig.maxTokens`) as the completion
+budget with every request (`*_chat_transport.dart`). The prompt must therefore
+never be allowed to fill the entire context window, or the model has no room to
+answer and returns an **empty completion**.
+
+`ContextCalculator.safeContext` reserves `maxTokens` up front:
+
+```
+safeContext  = max(0, contextSize - maxTokens)
+historyBudget = safeContext - staticTotal - effectiveReserve - memoryTokens
+```
+
+This mirrors `fallback_prompt_builder.dart`. Large memory injection
+(`chunk_first` packing, high `maxInjectedTokens`) shrinks `historyBudget` but
+can never reclaim the reserved completion window. If `historyBudget <= 0`,
+`_trimHistory` returns an empty list with `cutoffIndex == history.length`
+(all history dropped) — the caller still keeps the synthetic memory block and
+static prompt, but the operator should lower memory budget / raise context size.
+
+`safeContext` is clamped to `>= 0` so a misconfigured `maxTokens >= contextSize`
+yields a zero window instead of a negative budget.
+
 ### INV-PS4: Memory injection is guarded by a token budget ✅ ENFORCED (PR-B C13)
 
 `MemoryInjectionService.buildInjection()` enforces a hard upper bound
@@ -212,9 +237,21 @@ added in the future without changing the service signature.
 
 ### INV-PS5: Memory injection position is deterministic
 
-Memory can be injected into the prompt via one of two mechanisms,
-both keyed off `MemoryGlobalSettings.injectionTarget` and
-`MemoryBookSettings.injectionTarget` (per-book override):
+Memory can be injected into the prompt via one of three mechanisms.
+The first two are keyed off `MemoryGlobalSettings.injectionTarget`
+and `MemoryBookSettings.injectionTarget` (per-book override); the
+third is an explicit preset block the user can add/enable like any
+other system block:
+
+* **Dedicated `memory` preset block**: a `PresetBlock(id: 'memory',
+  name: 'Memory Book', isStatic: true)`. It ships in
+  `defaultPresetBlocks()`, `seedDefaultPresets()`, and is re-injected
+  by `finalizeImportedPreset()`, and can be added from the preset
+  editor's "Add Block" menu. `resolveBlockContent` resolves it to
+  `MacroContext.memoryContent` (the deferred placeholder during
+  finalization, then the packed memory after the cutoff), exactly
+  like the `{{memory}}` macro. A disabled block (`enabled: false`)
+  is skipped and falls back to the `injectionTarget` mechanism below.
 
 * **`hard_block`** (default): a hard system message with
   `blockId='memory'` and `blockName='Memory Book'` is added before
@@ -225,8 +262,11 @@ both keyed off `MemoryGlobalSettings.injectionTarget` and
   `{{memory}}` in a custom wrapper).
 
 * **`macro`**: no hard block is added automatically. Memory is
-  reachable only through the `{{memory}}` macro inside the preset,
-  which gives the user full control over placement and wrapper tags.
+  reachable through the `{{memory}}` macro or the dedicated `memory`
+  block inside the preset, which give the user full control over
+  placement and wrapper tags. If neither sink is present but memory
+  was selected, the memory is dropped and `memoryMacroMissing` is set
+  in `memoryCoverage` so the Memory Activity card can warn the user.
 
 Summary injection is independent and unchanged: the `{{summary}}`
 macro resolves to `MacroContext.summaryContent` (user-authored

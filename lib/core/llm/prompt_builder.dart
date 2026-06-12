@@ -900,6 +900,11 @@ PromptResult _assembleMessages({
   );
   var finalMemorySelection = payload.memorySelection;
   MemoryExcerptSelection? finalExcerptSelection;
+  // Set when the user picked `injectionTarget: 'macro'` but the active preset
+  // has no `{{memory}}` placeholder. In that case memory is silently dropped
+  // (no macro to fill, and we don't force a hard block). Surface it in the
+  // diagnostics so the Memory Activity card can warn the user.
+  var memoryMacroMissing = false;
 
   // Deferred memory finalization: refilter the v2 selection against the
   // visible window now that the cutoff is known, then inject the hard
@@ -950,6 +955,15 @@ PromptResult _assembleMessages({
             appendedEntries.any((b) => b.id == 'memory');
         if (!hasMemoryBlock) {
           _injectMemoryBlock(messages, attributionBlocks, rebuilt.content);
+        }
+      } else {
+        // injectionTarget == 'macro' but the preset has no {{memory}}
+        // placeholder, so the packed memory has nowhere to go and is dropped.
+        final hasMemoryBlock =
+            messages.any((m) => m.blockId == 'memory') ||
+            appendedEntries.any((b) => b.id == 'memory');
+        if (!hasMemoryBlock) {
+          memoryMacroMissing = true;
         }
       }
       breakdown = _recomputeBreakdownWithMemory(
@@ -1075,6 +1089,7 @@ PromptResult _assembleMessages({
     payload.memoryCoverage,
     finalMemorySelection,
     finalExcerptSelection,
+    memoryMacroMissing: memoryMacroMissing,
   );
 
   return PromptResult(
@@ -1275,9 +1290,15 @@ bool _replaceDeferredMemoryPlaceholders(
 Map<String, dynamic> _finalizeMemoryCoverage(
   Map<String, dynamic> coverage,
   MemorySelection? selection,
-  MemoryExcerptSelection? excerptSelection,
-) {
-  if (selection == null) return coverage;
+  MemoryExcerptSelection? excerptSelection, {
+  bool memoryMacroMissing = false,
+}) {
+  if (selection == null) {
+    if (memoryMacroMissing) {
+      return {...coverage, 'memoryMacroMissing': true};
+    }
+    return coverage;
+  }
   final packingMode = coverage['packingMode'] as String? ?? 'hybrid';
   final tokensPerChunk =
       coverage['excerptTokensPerChunk'] as int? ??
@@ -1303,6 +1324,8 @@ Map<String, dynamic> _finalizeMemoryCoverage(
     excerptSelection: excerpted,
     excerptTokensPerChunk: tokensPerChunk,
   ).toJson();
+  // The card reads diagnostics directly, so embed the warning there too.
+  diagnostics['memoryMacroMissing'] = memoryMacroMissing;
   return {
     ...coverage,
     'packingMode': packingMode,
@@ -1310,6 +1333,7 @@ Map<String, dynamic> _finalizeMemoryCoverage(
     'excerptChunksPerEntry': chunksPerEntry,
     'entryIds': excerpted.entries.map((e) => e.id).toList(growable: false),
     'budgetTrimmed': excerpted.budgetTrimmed,
+    'memoryMacroMissing': memoryMacroMissing,
     'diagnostics': diagnostics,
   };
 }

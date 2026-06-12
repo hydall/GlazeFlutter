@@ -449,7 +449,7 @@ void main() {
       final customBlocks = preset.blocks.where((b) => !{
         'chat_history', 'char_card', 'char_personality', 'user_persona',
         'example_dialogue', 'worldInfoBefore', 'worldInfoAfter', 'scenario',
-        'main', 'summary', 'authors_note', 'guided_generation',
+        'main', 'summary', 'authors_note', 'guided_generation', 'memory',
       }.contains(b.id)).toList();
 
       expect(customBlocks.length, equals(2));

@@ -15,6 +15,7 @@ List<PresetBlock> defaultPresetBlocks({String mainPrompt = "Write {{char}}'s nex
   return [
     PresetBlock(id: 'main', name: 'Main Prompt', role: 'system', content: mainPrompt, enabled: true),
     ...mandatoryBlocks.where((b) => b.id != 'chat_history'),
+    PresetBlock(id: 'memory', name: 'Memory Book', role: 'system', content: '', enabled: true, isStatic: true),
     PresetBlock(id: 'summary', name: 'Summary', role: 'system', content: '', enabled: true, isStatic: true, depth: 4, insertionMode: 'depth', prefix: 'Summary: '),
     PresetBlock(id: 'authors_note', name: "Author's Note", role: 'system', content: '', enabled: true, isStatic: true, insertionMode: 'relative'),
     PresetBlock(id: 'guided_generation', name: 'Guided Generation', role: 'system', content: '[System Note: {{guidance}}]', enabled: true, isStatic: true, insertionMode: 'relative'),
@@ -36,6 +37,13 @@ Preset finalizeImportedPreset(Preset preset) {
       }
       existingIds.add(mb.id);
     }
+  }
+
+  if (!existingIds.contains('memory')) {
+    final chatHistoryIdx = blocks.indexWhere((b) => b.id == 'chat_history');
+    final insertIdx = chatHistoryIdx != -1 ? chatHistoryIdx : blocks.length;
+    blocks.insert(insertIdx, const PresetBlock(id: 'memory', name: 'Memory Book', role: 'system', content: '', enabled: true, isStatic: true));
+    existingIds.add('memory');
   }
 
   if (!existingIds.contains('summary')) {

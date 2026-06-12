@@ -23,7 +23,19 @@ class ContextCalculator {
     required this.maxTokens,
   });
 
-  int get safeContext => contextSize;
+  /// Context window available for the *prompt*, i.e. everything we send.
+  ///
+  /// The provider enforces `prompt_tokens + max_tokens <= contextSize`, where
+  /// `max_tokens` is the completion budget the transport layer sends with every
+  /// request (see *_chat_transport.dart). If we let the prompt grow up to the
+  /// full [contextSize] the model has no room left to answer and returns an
+  /// empty completion. Reserving [maxTokens] up front mirrors the fallback
+  /// builder and keeps a guaranteed completion budget. Clamped to >= 0 so a
+  /// misconfigured `maxTokens >= contextSize` never yields a negative window.
+  int get safeContext {
+    final reserved = contextSize - maxTokens;
+    return reserved > 0 ? reserved : 0;
+  }
 
   TokenBreakdown calculate({
     required List<StaticBlock> staticBlocks,

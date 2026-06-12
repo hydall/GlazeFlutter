@@ -291,6 +291,169 @@ void main() {
     expect(result.breakdown.memoryTokens, greaterThan(0));
   });
 
+  test('dedicated memory preset block receives deferred excerpts', () {
+    final content = [
+      'The bridge scene opened with rain and silence.',
+      'Sable promised Ren she would hide the ritual map until the debt was paid.',
+      'They argued about lanterns and horses for several minutes.',
+    ].join('\n\n');
+    final entry = MemoryEntry(
+      id: 'm1',
+      title: 'Bridge memory',
+      content: content,
+      keys: const ['ritual map', 'debt'],
+      status: 'active',
+    );
+    final selection = MemorySelector.select(
+      MemorySelectionInput(
+        entries: [entry],
+        keywordMatchedTerms: const {
+          'm1': ['ritual map', 'debt'],
+        },
+        maxInjectionTokens: 12,
+        maxInjectedEntries: 1,
+        vectorWeight: 0,
+        recencyBoost: false,
+        importanceBoost: false,
+        diversityAware: false,
+      ),
+      tokenCounter: (entry) => entry.content.split(RegExp(r'\s+')).length,
+    );
+
+    final result = buildPrompt(
+      PromptPayload(
+        character: Character(id: 'c1', name: 'Alice'),
+        preset: const Preset(
+          id: 'p1',
+          name: 'Prompt',
+          blocks: [
+            // Dedicated Memory Book block — no {{memory}} macro anywhere.
+            PresetBlock(
+              id: 'memory',
+              name: 'Memory Book',
+              role: 'system',
+              content: '',
+              isStatic: true,
+            ),
+            PresetBlock(
+              id: 'chat_history',
+              name: 'History',
+              role: 'system',
+              content: '',
+            ),
+          ],
+        ),
+        history: const [
+          ChatMessage(id: 'u1', role: 'user', content: 'What about the map?'),
+        ],
+        apiConfig: const ApiConfig(
+          id: 'api',
+          name: 'API',
+          contextSize: 10000,
+          maxTokens: 100,
+        ),
+        memorySelection: selection,
+        // Even with macro target, the dedicated block is the sink.
+        memoryInjectionTarget: 'macro',
+      ),
+    );
+
+    final memoryMessage = result.messages.firstWhere(
+      (message) => message.blockId == 'memory',
+    );
+    expect(memoryMessage.content, contains('Bridge memory'));
+    expect(memoryMessage.content, contains('ritual map'));
+    expect(memoryMessage.content, isNot(contains('GLAZE_DEFERRED')));
+    // No silent-drop warning: memory landed in the block.
+    expect(result.memoryCoverage['memoryMacroMissing'], isNot(isTrue));
+    expect(result.breakdown.memoryTokens, greaterThan(0));
+  });
+
+  test(
+    'macro target without {{memory}} placeholder flags memoryMacroMissing',
+    () {
+      final content = [
+        'The bridge scene opened with rain and silence.',
+        'Sable promised Ren she would hide the ritual map until the debt was paid.',
+        'They argued about lanterns and horses for several minutes.',
+      ].join('\n\n');
+      final entry = MemoryEntry(
+        id: 'm1',
+        title: 'Bridge memory',
+        content: content,
+        keys: const ['ritual map', 'debt'],
+        status: 'active',
+      );
+      final selection = MemorySelector.select(
+        MemorySelectionInput(
+          entries: [entry],
+          keywordMatchedTerms: const {
+            'm1': ['ritual map', 'debt'],
+          },
+          maxInjectionTokens: 12,
+          maxInjectedEntries: 1,
+          vectorWeight: 0,
+          recencyBoost: false,
+          importanceBoost: false,
+          diversityAware: false,
+        ),
+        tokenCounter: (entry) => entry.content.split(RegExp(r'\s+')).length,
+      );
+
+      final result = buildPrompt(
+        PromptPayload(
+          character: Character(id: 'c1', name: 'Alice'),
+          preset: const Preset(
+            id: 'p1',
+            name: 'Prompt',
+            blocks: [
+              // No {{memory}} anywhere — the macro target has nowhere to land.
+              PresetBlock(
+                id: 'system',
+                name: 'System',
+                role: 'system',
+                content: 'You are Alice.',
+              ),
+              PresetBlock(
+                id: 'chat_history',
+                name: 'History',
+                role: 'system',
+                content: '',
+              ),
+            ],
+          ),
+          history: const [
+            ChatMessage(id: 'u1', role: 'user', content: 'What about the map?'),
+          ],
+          apiConfig: const ApiConfig(
+            id: 'api',
+            name: 'API',
+            contextSize: 10000,
+            maxTokens: 100,
+          ),
+          memorySelection: selection,
+          memoryInjectionTarget: 'macro',
+        ),
+      );
+
+      // Memory is neither injected as a macro nor as a hard block.
+      expect(result.messages.where((m) => m.blockId == 'memory'), isEmpty);
+      for (final message in result.messages) {
+        expect(message.content, isNot(contains('GLAZE_DEFERRED')));
+      }
+      // The warning flag is surfaced for the UI.
+      expect(result.memoryCoverage['memoryMacroMissing'], isTrue);
+      final diagnostics =
+          result.memoryCoverage['diagnostics'] as Map<String, dynamic>;
+      expect(diagnostics['memoryMacroMissing'], isTrue);
+      // The last user message is preserved.
+      expect(
+        result.messages.any((m) => m.isHistory && m.role == 'user'),
+        isTrue,
+      );
+    },
+  );
+
   test(
     'deferred memory appendToLastMessage receives final excerpts in history',
     () {
