@@ -10,6 +10,7 @@ import '../../features/character_gallery/gallery_screen.dart';
 import '../../features/chat/chat_screen.dart';
 import '../../features/chat_history/chat_history_screen.dart';
 import '../../features/lorebooks/lorebook_list_screen.dart';
+import '../../features/lorebooks/lorebook_global_settings_screen.dart';
 import '../../features/lorebooks/embedding_settings_screen.dart';
 import '../../features/menu/about_screen.dart';
 import '../../features/menu/menu_screen.dart';
@@ -121,6 +122,15 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
                     state: state,
                     child: const LorebookListScreen(),
                   ),
+                  routes: [
+                    GoRoute(
+                      path: 'settings',
+                      pageBuilder: (_, state) => _overlayPage(
+                        state: state,
+                        child: const LorebookGlobalSettingsScreen(),
+                      ),
+                    ),
+                  ],
                 ),
                 GoRoute(
                   path: 'embeddings',

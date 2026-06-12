@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/models/lorebook.dart';
 import '../../../core/state/lorebook_provider.dart';
@@ -39,7 +40,15 @@ class _LorebookGlobalSettingsScreenState
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               child: GlazeAppBar(
                 title: 'Lorebook Settings',
-                leading: BackButton(onPressed: () => Navigator.pop(context)),
+                leading: BackButton(
+                  onPressed: () {
+                    if (context.canPop()) {
+                      context.pop();
+                    } else {
+                      context.go('/tools/lorebooks');
+                    }
+                  },
+                ),
               ),
             ),
           ),
