@@ -7,12 +7,16 @@ List<LorebookEntry> mergeKeywordVector({
   required LorebookGlobalSettings settings,
 }) {
   if (vectorEntries.isEmpty) {
-    return keywordEntries.map((e) => LorebookEntry(
-      id: e.id,
-      comment: e.comment,
-      content: e.content,
-      position: e.position,
-    )).toList();
+    return keywordEntries
+        .map(
+          (e) => LorebookEntry(
+            id: e.id,
+            comment: e.comment,
+            content: e.content,
+            position: e.position,
+          ),
+        )
+        .toList();
   }
 
   final maxEntries = settings.maxInjectedEntries;
@@ -25,20 +29,28 @@ List<LorebookEntry> mergeKeywordVector({
   final unusedKeywordSlots = keywordSlots - usedKeyword.length;
   final adjustedVectorSlots = vectorSlots + unusedKeywordSlots;
 
-  final keywordIds = usedKeyword.map((e) => e.id).toSet();
-  final dedupedVector = vectorEntries.where((e) => !keywordIds.contains(e.id)).toList();
+  final usedKeywordIds = usedKeyword.map((e) => e.id).toSet();
+  final keywordById = {for (final e in keywordEntries) e.id: e};
+  final dedupedVector = vectorEntries
+      .where((e) => !usedKeywordIds.contains(e.id))
+      .map(
+        (e) => keywordById[e.id] != null ? _fromScanned(keywordById[e.id]!) : e,
+      )
+      .toList();
 
   // If dedup removed some entries, compensate by taking more from the vector
   // pool so vectorSlots is still filled (requires vector search to return
   // enough candidates — overrideTopK=maxInjectedEntries handles that).
   final usedVector = dedupedVector.take(adjustedVectorSlots).toList();
 
-  final keywordAsEntries = usedKeyword.map((e) => LorebookEntry(
-    id: e.id,
-    comment: e.comment,
-    content: e.content,
-    position: e.position,
-  )).toList();
+  final keywordAsEntries = usedKeyword.map(_fromScanned).toList();
 
   return [...keywordAsEntries, ...usedVector];
 }
+
+LorebookEntry _fromScanned(ScannedEntry e) => LorebookEntry(
+  id: e.id,
+  comment: e.comment,
+  content: e.content,
+  position: e.position,
+);

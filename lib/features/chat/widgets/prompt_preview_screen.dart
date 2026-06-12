@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'dart:convert';
 
-import '../../../core/llm/context_calculator.dart';
 import '../../../core/llm/history_assembler.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
@@ -56,56 +55,20 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       }
 
       final builder = ref.read(promptPayloadBuilderProvider);
-      final inputs = await builder.collectInputs(
+      final payload = await builder.buildFromSession(
         charId: widget.charId,
         session: session,
       );
-      _apiConfig = inputs.apiConfig;
+      _apiConfig = payload.apiConfig;
       _sessionId = session.id;
 
-      final result = await buildFromInputsInIsolate(inputs);
-      var breakdown = result.breakdown;
+      final result = await buildPromptInIsolate(payload);
 
-      final lastVectorTokens = ref.read(lastVectorLoreTokensProvider(widget.charId));
-      if (lastVectorTokens > 0 && breakdown.vectorLoreTokens == 0) {
-        // The fast-path collectInputs skips vector search (it can take
-        // seconds via the embedding endpoint), but vector entries were
-        // counted on the last real generation. Reuse that count here so
-        // the preview reflects what was actually sent to the model.
-        final newSources = Map<String, int>.from(breakdown.sourceTokens)
-          ..['vectorLore'] = lastVectorTokens;
-        breakdown = TokenBreakdown(
-          sourceTokens: newSources,
-          macroTokens: breakdown.macroTokens,
-          staticTotal: breakdown.staticTotal,
-          historyBudget: breakdown.historyBudget,
-          historyTokens: breakdown.historyTokens,
-          totalTokens: breakdown.totalTokens + lastVectorTokens,
-          cutoffIndex: breakdown.cutoffIndex,
-          trimmedHistory: breakdown.trimmedHistory,
-          lorebookReserveTokens: breakdown.lorebookReserveTokens,
-          memoryTokens: breakdown.memoryTokens,
-          vectorLoreTokens: lastVectorTokens,
-          fixedTotal: breakdown.fixedTotal + lastVectorTokens,
-          remaining: breakdown.remaining - lastVectorTokens,
-        );
-      }
-
-      final mergedResult = PromptResult(
-        messages: result.messages,
-        breakdown: breakdown,
-        sessionVars: result.sessionVars,
-        globalVars: result.globalVars,
-        triggeredLorebooks: result.triggeredLorebooks,
-        triggeredMemories: result.triggeredMemories,
-      );
-
-      ref
-          .read(cachedTokenBreakdownProvider(widget.charId).notifier)
-          .state = breakdown;
+      ref.read(cachedTokenBreakdownProvider(widget.charId).notifier).state =
+          result.breakdown;
       if (mounted) {
         setState(() {
-          _result = mergedResult;
+          _result = result;
           _loading = false;
         });
       }
@@ -152,7 +115,11 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
                     width: 40,
                     height: 40,
                     child: Center(
-                      child: Icon(Icons.copy, size: 20, color: context.cs.primary),
+                      child: Icon(
+                        Icons.copy,
+                        size: 20,
+                        color: context.cs.primary,
+                      ),
                     ),
                   ),
                 ),
@@ -162,7 +129,8 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
           ],
           _SegmentedToggle(
             isRaw: _previewTabIndex == 1,
-            onChanged: (isRaw) => setState(() => _previewTabIndex = isRaw ? 1 : 0),
+            onChanged: (isRaw) =>
+                setState(() => _previewTabIndex = isRaw ? 1 : 0),
           ),
         ],
       ),
@@ -202,12 +170,13 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
           }
           return CustomScrollView(
             slivers: [
-              SliverToBoxAdapter(
-                child: SizedBox(height: topPad),
-              ),
+              SliverToBoxAdapter(child: SizedBox(height: topPad)),
               if (_apiConfig != null) ...[
                 SliverToBoxAdapter(
-                  child: _SummaryBar(result: _result!, contextSize: _apiConfig!.contextSize),
+                  child: _SummaryBar(
+                    result: _result!,
+                    contextSize: _apiConfig!.contextSize,
+                  ),
                 ),
                 const SliverToBoxAdapter(child: _SectionTitle('Parameters')),
                 SliverPadding(
@@ -262,16 +231,19 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
             // completion_tokens, usage, etc. are visible and readable.
             try {
               final decoded = jsonDecode(raw);
-              displayString = const JsonEncoder.withIndent('  ').convert(decoded);
+              displayString = const JsonEncoder.withIndent(
+                '  ',
+              ).convert(decoded);
             } catch (_) {}
           } else {
             // Pretty/preview view: extract just the assistant text content.
             try {
               final decoded = jsonDecode(raw) as Map<String, dynamic>;
               final choices = decoded['choices'] as List?;
-              final content = choices?.firstOrNull?['message']?['content']
-                  ?? choices?.firstOrNull?['delta']?['content']
-                  ?? decoded['content'];
+              final content =
+                  choices?.firstOrNull?['message']?['content'] ??
+                  choices?.firstOrNull?['delta']?['content'] ??
+                  decoded['content'];
               if (content is String && content.isNotEmpty) {
                 displayString = content;
               }
@@ -352,7 +324,9 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
         return Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: items.map((w) => SizedBox(width: itemWidth, child: w)).toList(),
+          children: items
+              .map((w) => SizedBox(width: itemWidth, child: w))
+              .toList(),
         );
       },
     );
@@ -404,9 +378,10 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
         try {
           final decoded = jsonDecode(raw) as Map<String, dynamic>;
           final choices = decoded['choices'] as List?;
-          final content = choices?.firstOrNull?['message']?['content']
-              ?? choices?.firstOrNull?['delta']?['content']
-              ?? decoded['content'];
+          final content =
+              choices?.firstOrNull?['message']?['content'] ??
+              choices?.firstOrNull?['delta']?['content'] ??
+              decoded['content'];
           textToCopy = content is String ? content : raw;
         } catch (_) {
           textToCopy = raw;
@@ -426,9 +401,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
           .where((m) => m.content.trim().isNotEmpty)
           .map((m) => m.toApiMap())
           .toList();
-      final body = <String, dynamic>{
-        'model': _apiConfig!.model,
-      };
+      final body = <String, dynamic>{'model': _apiConfig!.model};
       if ((_apiConfig!.protocol == LlmProtocol.anthropic ||
               _apiConfig!.protocol == LlmProtocol.openai) &&
           (_apiConfig!.cacheControlTtl == '5min' ||
@@ -506,7 +479,10 @@ class _SummaryBar extends StatelessWidget {
               ),
               Text(
                 ' / $contextSize tokens',
-                style: TextStyle(fontSize: 14, color: context.cs.onSurfaceVariant),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: context.cs.onSurfaceVariant,
+                ),
               ),
               const Spacer(),
               Text(
@@ -520,7 +496,10 @@ class _SummaryBar extends StatelessWidget {
               const SizedBox(width: 8),
               Text(
                 '${result.messages.length} msgs',
-                style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.cs.onSurfaceVariant,
+                ),
               ),
             ],
           ),
@@ -614,10 +593,7 @@ class _ParamItem extends StatelessWidget {
 class _PromptMessageCard extends StatefulWidget {
   final PromptMessage message;
   final int index;
-  const _PromptMessageCard({
-    required this.message,
-    required this.index,
-  });
+  const _PromptMessageCard({required this.message, required this.index});
 
   @override
   State<_PromptMessageCard> createState() => _PromptMessageCardState();
@@ -739,6 +715,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
       ),
     );
   }
+
   Widget _buildRoleChip(String role) {
     Color bg = const Color(0xFF424242);
     Color fg = const Color(0xFFE0E0E0);
@@ -761,11 +738,7 @@ class _PromptMessageCardState extends State<_PromptMessageCard> {
       ),
       child: Text(
         role.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: fg,
-        ),
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fg),
       ),
     );
   }
@@ -814,7 +787,9 @@ class _SegmentedToggle extends StatelessWidget {
                     child: Icon(
                       Icons.visibility,
                       size: 16,
-                      color: !isRaw ? Colors.white : context.cs.onSurfaceVariant,
+                      color: !isRaw
+                          ? Colors.white
+                          : context.cs.onSurfaceVariant,
                     ),
                   ),
                 ),
