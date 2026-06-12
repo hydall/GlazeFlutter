@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/models/chat_message.dart';
-import '../../../core/state/chat_session_ops_provider.dart';
 import '../../../features/settings/api_list_provider.dart';
 
 import '../../../shared/widgets/generic_editor.dart';
@@ -24,86 +22,63 @@ class SummarySheet extends ConsumerStatefulWidget {
 
 class _SummarySheetState extends ConsumerState<SummarySheet> {
   late Map<String, dynamic> _localItem;
+  bool _enabled = true;
   bool _isGenerating = false;
 
   @override
   void initState() {
     super.initState();
+    _localItem = {'content': ''};
+    _load();
+  }
+
+  Future<void> _load() async {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
-    final summary = session?.summary;
-    
-    _localItem = {
-      'content': summary?.content ?? '',
-    };
+    if (session == null) return;
+    final service = ref.read(summaryServiceProvider);
+    final content = await service.getSummaryContent(session.id);
+    final enabled = await service.isSummaryEnabled(session.id);
+    if (!mounted) return;
+    setState(() {
+      _localItem = {'content': content ?? ''};
+      _enabled = enabled;
+    });
   }
 
   Future<void> _performSave(Map<String, dynamic> item) async {
     final session = ref.read(chatProvider(widget.charId)).value?.session;
     if (session == null) return;
-    
     final content = (item['content'] as String?)?.trim() ?? '';
-    final summary = content.isNotEmpty
-        ? ChatSummary(
-            content: content,
-            role: item['role'] as String? ?? 'system',
-            insertionMode: item['insertionMode'] as String? ?? 'relative',
-            depth: item['depth'] as int? ?? 4,
-            prefix: item['prefix'] as String? ?? 'Summary: ',
-          )
-        : null;
-        
-    final updated = session.copyWith(
-      summary: summary,
-      updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-    );
-    await ref.read(chatSessionOpsProvider.notifier).saveSession(updated);
-    ref.invalidate(chatProvider(widget.charId));
+    // Write to the same store the prompt reads, so manual summaries inject.
+    await ref.read(summaryServiceProvider).setSummary(
+          sessionId: session.id,
+          content: content,
+          messageCount: session.messages.length,
+        );
+    ref.read(summaryRevisionProvider.notifier).state++;
+  }
+
+  void _setEnabled(bool value) {
+    setState(() => _enabled = value);
+    syncSummaryEnabled(ref, charId: widget.charId, enabled: value);
   }
 
   List<GenericEditorSection> get _config => [
         GenericEditorSection(
           fields: [
             GenericEditorField(
-              key: 'role',
-              label: 'Role',
-              type: 'select',
-              options: [
-                {'label': 'System', 'value': 'system'},
-                {'label': 'User', 'value': 'user'},
-                {'label': 'Assistant', 'value': 'assistant'},
-              ],
-            ),
-            GenericEditorField(
-              key: 'insertionMode',
-              label: 'Insertion Mode',
-              type: 'select',
-              options: [
-                {'label': 'Relative', 'value': 'relative'},
-                {'label': 'Depth', 'value': 'depth'},
-              ],
-            ),
-            GenericEditorField(
-              key: 'depth',
-              label: 'Depth',
-              type: 'select',
-              options: List.generate(
-                20,
-                (i) => {'label': '${i + 1}', 'value': i + 1},
-              ),
-              showIf: (item) => item['insertionMode'] == 'depth',
-            ),
-            GenericEditorField(
-              key: 'prefix',
-              label: 'Prefix',
-              type: 'text',
-              placeholder: 'Summary: ',
-            ),
-            GenericEditorField(
               key: 'content',
               label: 'Summary Content',
               type: 'textarea',
               placeholder: 'Enter conversation summary...',
               rows: 8,
+            ),
+            const GenericEditorField(
+              key: '__settingsHint',
+              label: '',
+              type: 'info',
+              text: 'Role, depth, insertion mode and prefix are set per preset, '
+                  'in the preset editor.',
             ),
           ],
         ),
@@ -143,7 +118,8 @@ class _SummarySheetState extends ConsumerState<SummarySheet> {
       setState(() {
         _localItem = Map.from(_localItem)..['content'] = summary;
       });
-      unawaited(_performSave(_localItem));
+      // generateSummary already persisted to the repo; just notify watchers.
+      ref.read(summaryRevisionProvider.notifier).state++;
     } catch (e) {
       if (!mounted) return;
       GlazeToast.error(context, 'Summary Failed', e);
@@ -157,6 +133,16 @@ class _SummarySheetState extends ConsumerState<SummarySheet> {
     return SheetView(
       title: "Summary",
       showBack: true,
+      actions: [
+        SheetViewAction(
+          icon: Switch(
+            value: _enabled,
+            onChanged: _setEnabled,
+            activeThumbColor: Theme.of(context).colorScheme.primary,
+          ),
+          onPressed: () => _setEnabled(!_enabled),
+        ),
+      ],
       body: Builder(
         builder: (innerContext) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -199,8 +185,8 @@ class _SummarySheetState extends ConsumerState<SummarySheet> {
   }
 }
 
-void showSummarySheet(BuildContext context, String charId) {
-  showModalBottomSheet<void>(
+Future<void> showSummarySheet(BuildContext context, String charId) {
+  return showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,

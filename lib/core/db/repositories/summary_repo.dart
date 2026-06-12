@@ -20,14 +20,34 @@ class SummaryRepo extends DatabaseAccessor<AppDatabase>
     required String sessionId,
     required String content,
     required int messageCount,
+    bool? enabled,
     String? prompt,
-  }) {
+  }) async {
+    final existing = await get(sessionId);
     return into(chatSummaries).insertOnConflictUpdate(
       ChatSummariesCompanion.insert(
         sessionId: sessionId,
         content: content,
+        enabled: Value(enabled ?? existing?.enabled ?? true),
         messageCount: Value(messageCount),
-        prompt: Value(prompt),
+        prompt: Value(prompt ?? existing?.prompt),
+        updatedAt: Value(currentTimestampSeconds()),
+      ),
+    );
+  }
+
+  Future<void> setEnabled({
+    required String sessionId,
+    required bool enabled,
+  }) async {
+    final existing = await get(sessionId);
+    await into(chatSummaries).insertOnConflictUpdate(
+      ChatSummariesCompanion.insert(
+        sessionId: sessionId,
+        content: existing?.content ?? '',
+        enabled: Value(enabled),
+        messageCount: Value(existing?.messageCount ?? 0),
+        prompt: Value(existing?.prompt),
         updatedAt: Value(currentTimestampSeconds()),
       ),
     );

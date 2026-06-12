@@ -31,7 +31,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 29;
+  int get schemaVersion => 30;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -284,6 +284,18 @@ class AppDatabase extends _$AppDatabase {
         if (!tableNames.contains('memory_catalog_rows')) {
           await m.createTable(memoryCatalogRows);
         }
+      }
+      if (from < 30) {
+        final cols = await customSelect(
+          'PRAGMA table_info("chat_summaries")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('enabled')) {
+          await m.addColumn(chatSummaries, chatSummaries.enabled);
+        }
+        await customStatement(
+          'UPDATE chat_summaries SET enabled = 1 WHERE enabled IS NULL',
+        );
       }
     },
   );

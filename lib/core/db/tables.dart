@@ -244,6 +244,7 @@ class ChatSummaries extends Table {
 
   TextColumn get sessionId => text()();
   TextColumn get content => text()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
   IntColumn get messageCount => integer().withDefault(const Constant(0))();
   TextColumn get prompt => text().nullable()();
   IntColumn get updatedAt => integer().withDefault(const Constant(0))();

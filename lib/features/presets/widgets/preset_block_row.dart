@@ -109,7 +109,12 @@ class PresetBlockRow extends StatelessWidget {
                 ),
               ),
             ),
-            if (!block.isStatic)
+            // Author's Note and Summary are static blocks but stay editable:
+            // tapping opens an editor for their per-preset settings, with the
+            // session-scoped content shown/linked.
+            if (!block.isStatic ||
+                block.id == 'authors_note' ||
+                block.id == 'summary')
               SizedBox(
                 width: 36,
                 height: 44,

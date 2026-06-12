@@ -14,6 +14,7 @@ import '../../../core/state/lorebook_provider.dart';
 import '../../../features/settings/app_settings_provider.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../core/state/chat_session_ops_provider.dart';
+import '../../../core/llm/summary_service.dart';
 import '../../../features/chat_history/chat_history_provider.dart';
 import '../../../shared/utils/time_formatter.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -384,7 +385,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         showTokenizerSheet(context, widget.charId);
         return;
       case 'summary':
-        showSummarySheet(context, widget.charId);
+        await showSummarySheet(context, widget.charId);
         return;
       case 'sessions':
         await _showSessionsSheet();
@@ -448,7 +449,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             backgroundColor: Colors.transparent,
             barrierColor: Colors.black54,
             isScrollControlled: true,
-            builder: (_) => const PresetListScreen(),
+            builder: (_) => PresetListScreen(charId: widget.charId),
           );
         }
         return;
@@ -483,7 +484,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         }
         return;
       case 'authors-note':
-        showAuthorsNoteSheet(context, widget.charId);
+        await showAuthorsNoteSheet(context, widget.charId);
         return;
       case 'glossary':
         widget.onClose?.call();
@@ -699,6 +700,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       }
     });
     ref.listen(activePresetIdProvider, (prev, next) {
+      if (prev != next) _scheduleRefresh();
+    });
+    // Summary is written straight to its repo (not through chatProvider), so
+    // refresh the card when it changes.
+    ref.listen(summaryRevisionProvider, (prev, next) {
       if (prev != next) _scheduleRefresh();
     });
     ref.listen(activePersonaIdProvider, (prev, next) {

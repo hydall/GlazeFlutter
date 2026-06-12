@@ -72,8 +72,9 @@ ResolvedContent? resolveBlockContent({
       if (authorsNote == null || !authorsNote.enabled || authorsNote.content.isEmpty) {
         return null;
       }
+      // Only content + enabled are session-scoped. Role/depth/insertion mode
+      // belong to the preset block, so keep [resolvedRole] = the block's role.
       content = authorsNote.content;
-      resolvedRole = authorsNote.role.isNotEmpty ? authorsNote.role : role;
     default:
       content = rawContent;
   }

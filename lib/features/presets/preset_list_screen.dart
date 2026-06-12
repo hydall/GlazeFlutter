@@ -21,7 +21,15 @@ import 'preset_list_provider.dart';
 
 class PresetListScreen extends ConsumerStatefulWidget {
   final bool startExpanded;
-  const PresetListScreen({super.key, this.startExpanded = false});
+
+  /// Active chat, forwarded to the preset editor so the Author's Note block can
+  /// edit the session-scoped note. Null when opened outside a chat.
+  final String? charId;
+  const PresetListScreen({
+    super.key,
+    this.startExpanded = false,
+    this.charId,
+  });
 
   @override
   ConsumerState<PresetListScreen> createState() => _PresetListScreenState();
@@ -83,6 +91,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
           ? PresetEditorBody(
               key: _editorKey,
               preset: _editingPreset,
+              charId: widget.charId,
               onDeleted: _closeEditor,
             )
           : presets.when(

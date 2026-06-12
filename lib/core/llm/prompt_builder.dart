@@ -378,7 +378,9 @@ PromptResult buildPrompt(PromptPayload payload) {
       globalVars: currentGlobalVars,
       notifyObj: notifyObj,
       summaryContent: payload.summaryContent,
-      summaryPrefix: payload.summaryPrefix,
+      // Prefix is a per-preset setting on the summary block (falls back to the
+      // runtime payload value, then the resolver default).
+      summaryPrefix: rawBlock.prefix ?? payload.summaryPrefix,
       authorsNote: payload.authorsNote,
     );
 
@@ -397,37 +399,11 @@ PromptResult buildPrompt(PromptPayload payload) {
     final blockIsSummary =
         id == 'summary' || rawBlock.content.contains('{{summary}}');
 
-    if (id == 'authors_note' && payload.authorsNote != null) {
-      final anMode = payload.authorsNote!.insertionMode.isNotEmpty
-          ? payload.authorsNote!.insertionMode
-          : rawBlock.insertionMode;
-      final anDepth = payload.authorsNote!.depth > 0
-          ? payload.authorsNote!.depth
-          : rawBlock.depth ?? 0;
-      if (anMode == 'depth') {
-        depthBlocks.add(
-          _ResolvedDepthBlock(
-            id: id,
-            role: resolved.role,
-            content: resolved.content,
-            depth: anDepth,
-            isSummary: blockIsSummary,
-          ),
-        );
-      } else {
-        relativeBlocks.add(
-          _ResolvedRelativeBlock(
-            id: id,
-            name: rawBlock.name,
-            role: resolved.role,
-            content: resolved.content,
-            contentForAccounting: resolved.contentForAccounting,
-            isSummary: blockIsSummary,
-            appendToLastMessage: rawBlock.appendToLastMessage,
-          ),
-        );
-      }
-    } else if (rawBlock.insertionMode == 'depth' && id != 'chat_history') {
+    // Author's Note is positioned like any other block: its depth / insertion
+    // mode come from the preset block (per-preset), while content and role are
+    // injected from the chat session by resolveBlockContent. So it falls
+    // through to the generic depth/relative handling below.
+    if (rawBlock.insertionMode == 'depth' && id != 'chat_history') {
       depthBlocks.add(
         _ResolvedDepthBlock(
           id: id,

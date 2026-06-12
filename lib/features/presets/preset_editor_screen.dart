@@ -16,12 +16,17 @@ import '../../shared/widgets/help_tip.dart';
 import 'preset_list_provider.dart';
 import 'preset_export.dart';
 import 'widgets/preset_block_row.dart';
+import '../../core/llm/summary_service.dart';
+import '../chat/chat_provider.dart';
+import '../chat/widgets/authors_note_sheet.dart';
+import '../chat/widgets/summary_sheet.dart';
 import '../regex/regex_sheet.dart';
 
 /// Standalone screen wrapper around [PresetEditorBody].
 class PresetEditorScreen extends StatefulWidget {
   final Preset? preset;
-  const PresetEditorScreen({super.key, this.preset});
+  final String? charId;
+  const PresetEditorScreen({super.key, this.preset, this.charId});
 
   @override
   State<PresetEditorScreen> createState() => _PresetEditorScreenState();
@@ -54,6 +59,7 @@ class _PresetEditorScreenState extends State<PresetEditorScreen> {
           child: PresetEditorBody(
             key: _editorKey,
             preset: widget.preset,
+            charId: widget.charId,
             onDeleted: () => Navigator.of(context).pop(),
           ),
         ),
@@ -67,12 +73,17 @@ class _PresetEditorScreenState extends State<PresetEditorScreen> {
 /// from an outer widget (e.g. a [SheetView] header action).
 class PresetEditorBody extends ConsumerStatefulWidget {
   final Preset? preset;
+
+  /// Active chat used to edit the session-scoped Author's Note block. Null when
+  /// the editor is opened outside a chat (the note editor then shows a hint).
+  final String? charId;
   final VoidCallback? onDeleted;
   final ValueChanged<bool>? onEditingBlockChanged;
 
   const PresetEditorBody({
     super.key,
     this.preset,
+    this.charId,
     this.onDeleted,
     this.onEditingBlockChanged,
   });
@@ -108,7 +119,9 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
     super.initState();
     _blocks = List.from(widget.preset?.blocks ?? defaultPresetBlocks());
     _regexes = List.from(widget.preset?.regexes ?? []);
-    
+    _reconcileAuthorsNoteEnabled();
+    _reconcileSummaryEnabled();
+
     _nameCtrl.addListener(_scheduleSave);
     _reasoningStartCtrl.addListener(_scheduleSave);
     _reasoningEndCtrl.addListener(_scheduleSave);
@@ -189,9 +202,36 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   @override
   Widget build(BuildContext context) {
     if (_expandedBlockIndex != null) {
+      final expanded = _blocks[_expandedBlockIndex!];
+      // Author's Note edits per-preset role/depth/insertion here; its content
+      // (session-scoped) is shown and edited via the linked chat note sheet.
+      if (expanded.id == 'authors_note') {
+        return _AuthorsNoteBlockEditor(
+          key: ValueKey(expanded.id),
+          block: expanded,
+          charId: widget.charId,
+          onSave: (updated) {
+            setState(() => _blocks[_expandedBlockIndex!] = updated);
+            _scheduleSave();
+          },
+        );
+      }
+      // Summary: per-preset role/depth/insertion/prefix here; content (session-
+      // scoped, in the summary repo) is shown and edited via the chat sheet.
+      if (expanded.id == 'summary') {
+        return _SummaryBlockEditor(
+          key: ValueKey(expanded.id),
+          block: expanded,
+          charId: widget.charId,
+          onSave: (updated) {
+            setState(() => _blocks[_expandedBlockIndex!] = updated);
+            _scheduleSave();
+          },
+        );
+      }
       return _BlockEditorInline(
-        key: ValueKey(_blocks[_expandedBlockIndex!].id),
-        block: _blocks[_expandedBlockIndex!],
+        key: ValueKey(expanded.id),
+        block: expanded,
         onSave: (updated) {
           setState(() => _blocks[_expandedBlockIndex!] = updated);
           _scheduleSave();
@@ -356,6 +396,13 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
         onToggle: (v) {
           setState(() => _blocks[i] = _blocks[i].copyWith(enabled: v));
           _scheduleSave();
+          // Author's Note enable is one entity for the chat — mirror it onto
+          // the session note and every other preset's block.
+          if (_blocks[i].id == 'authors_note') {
+            syncAuthorsNoteEnabled(ref, charId: widget.charId, enabled: v);
+          } else if (_blocks[i].id == 'summary') {
+            syncSummaryEnabled(ref, charId: widget.charId, enabled: v);
+          }
         },
       ),
     );
@@ -462,6 +509,39 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
         ],
       ),
     );
+  }
+
+  // ─── Author's Note (content session-scoped; role/depth per-preset) ────────
+
+  /// On open, make the local authors_note block enable mirror the session note
+  /// (the note's on/off is one entity for the chat). Persisted via [_scheduleSave].
+  void _reconcileAuthorsNoteEnabled() {
+    final charId = widget.charId;
+    if (charId == null) return;
+    final note = ref.read(chatProvider(charId)).value?.session?.authorsNote;
+    if (note == null) return;
+    final idx = _blocks.indexWhere((b) => b.id == 'authors_note');
+    if (idx == -1 || _blocks[idx].enabled == note.enabled) return;
+    _blocks[idx] = _blocks[idx].copyWith(enabled: note.enabled);
+    _scheduleSave();
+  }
+
+  /// Summary enable is session-scoped and mirrored onto every preset's block.
+  /// On open, sync the local block with the current chat summary flag.
+  void _reconcileSummaryEnabled() {
+    final charId = widget.charId;
+    if (charId == null) return;
+    final session = ref.read(chatProvider(charId)).value?.session;
+    if (session == null) return;
+    final idx = _blocks.indexWhere((b) => b.id == 'summary');
+    if (idx == -1) return;
+    ref.read(summaryEnabledProvider(session.id).future).then((enabled) {
+      if (!mounted || _blocks[idx].enabled == enabled) return;
+      setState(() {
+        _blocks[idx] = _blocks[idx].copyWith(enabled: enabled);
+      });
+      _scheduleSave();
+    });
   }
 
   // ─── Actions ─────────────────────────────────────────────────────────────
@@ -989,4 +1069,282 @@ class _BlockEditorInline extends StatelessWidget {
   }
 }
 
+// ─── _AuthorsNoteBlockEditor ────────────────────────────────────────────────────
+
+/// Inline editor for the `authors_note` block. Edits the per-preset settings
+/// (role / insertion mode / depth) on the block itself, while the note's
+/// content + enabled are session-scoped: shown here read-only and edited via the
+/// linked chat note sheet. Outside a chat ([charId] == null) a hint is shown.
+class _AuthorsNoteBlockEditor extends ConsumerWidget {
+  final PresetBlock block;
+  final String? charId;
+  final ValueChanged<PresetBlock> onSave;
+
+  const _AuthorsNoteBlockEditor({
+    super.key,
+    required this.block,
+    required this.charId,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final note = charId == null
+        ? null
+        : ref.watch(chatProvider(charId!)).value?.session?.authorsNote;
+    final content = note?.content ?? '';
+
+    final config = [
+      GenericEditorSection(
+        title: null,
+        fields: [
+          const GenericEditorField(
+            key: 'role',
+            label: 'Role',
+            type: 'select',
+            options: [
+              {'label': 'System', 'value': 'system'},
+              {'label': 'User', 'value': 'user'},
+              {'label': 'Assistant', 'value': 'assistant'},
+            ],
+          ),
+          const GenericEditorField(
+            key: 'insertionMode',
+            label: 'Insertion',
+            type: 'select',
+            options: [
+              {'label': 'Relative', 'value': 'relative'},
+              {'label': 'Depth', 'value': 'depth'},
+            ],
+          ),
+          GenericEditorField(
+            key: 'depth',
+            label: 'Depth',
+            type: 'select',
+            options: List.generate(20, (i) => {'label': '${i + 1}', 'value': i + 1}),
+            showIf: (item) => item['insertionMode'] == 'depth',
+          ),
+        ],
+      ),
+    ];
+
+    return Material(
+      type: MaterialType.transparency,
+      child: ListView(
+        padding: EdgeInsets.only(
+          top: MediaQuery.paddingOf(context).top + 16,
+          bottom: MediaQuery.paddingOf(context).bottom + 60,
+        ),
+        children: [
+          _linkedSessionContentCard(
+            context,
+            charId: charId,
+            content: content,
+            hint:
+                "Author's note content is tied to a chat. Open a chat to edit it.",
+            onEdit: () => showAuthorsNoteSheet(context, charId),
+          ),
+          GenericEditor(
+            item: block.toJson(),
+            config: config,
+            scrollable: false,
+            onChanged: (values) => onSave(PresetBlock.fromJson(values)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── _SummaryBlockEditor ────────────────────────────────────────────────────────
+
+/// Inline editor for the `summary` block. Edits per-preset settings (role /
+/// insertion mode / depth / prefix) on the block; the summary content is
+/// session-scoped (stored in the summary repo), shown here and edited via the
+/// linked chat summary sheet. Outside a chat ([charId] == null) a hint is shown.
+class _SummaryBlockEditor extends ConsumerWidget {
+  final PresetBlock block;
+  final String? charId;
+  final ValueChanged<PresetBlock> onSave;
+
+  const _SummaryBlockEditor({
+    super.key,
+    required this.block,
+    required this.charId,
+    required this.onSave,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final sessionId = charId == null
+        ? null
+        : ref.watch(chatProvider(charId!)).value?.session?.id;
+    final content = sessionId == null
+        ? ''
+        : (ref.watch(summaryContentProvider(sessionId)).value ?? '');
+
+    final config = [
+      GenericEditorSection(
+        title: null,
+        fields: [
+          const GenericEditorField(
+            key: 'role',
+            label: 'Role',
+            type: 'select',
+            options: [
+              {'label': 'System', 'value': 'system'},
+              {'label': 'User', 'value': 'user'},
+              {'label': 'Assistant', 'value': 'assistant'},
+            ],
+          ),
+          const GenericEditorField(
+            key: 'insertionMode',
+            label: 'Insertion',
+            type: 'select',
+            options: [
+              {'label': 'Relative', 'value': 'relative'},
+              {'label': 'Depth', 'value': 'depth'},
+            ],
+          ),
+          GenericEditorField(
+            key: 'depth',
+            label: 'Depth',
+            type: 'select',
+            options: List.generate(20, (i) => {'label': '${i + 1}', 'value': i + 1}),
+            showIf: (item) => item['insertionMode'] == 'depth',
+          ),
+          const GenericEditorField(
+            key: 'prefix',
+            label: 'Prefix',
+            type: 'text',
+            placeholder: 'Summary: ',
+          ),
+        ],
+      ),
+    ];
+
+    return Material(
+      type: MaterialType.transparency,
+      child: ListView(
+        padding: EdgeInsets.only(
+          top: MediaQuery.paddingOf(context).top + 16,
+          bottom: MediaQuery.paddingOf(context).bottom + 60,
+        ),
+        children: [
+          _linkedSessionContentCard(
+            context,
+            charId: charId,
+            content: content,
+            hint: 'Summary content is tied to a chat. Open a chat to edit it.',
+            onEdit: () => showSummarySheet(context, charId!),
+          ),
+          GenericEditor(
+            item: block.toJson(),
+            config: config,
+            scrollable: false,
+            onChanged: (values) => onSave(PresetBlock.fromJson(values)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── shared content card ─────────────────────────────────────────────────────
+
+/// Card showing the chat-scoped content of a linked block (Author's Note /
+/// Summary) with an "Edit content" action, or a hint when no chat is active.
+Widget _linkedSessionContentCard(
+  BuildContext context, {
+  required String? charId,
+  required String content,
+  required String hint,
+  required VoidCallback onEdit,
+}) {
+  return Container(
+    margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: context.cs.primary.withValues(alpha: 0.05),
+      border: Border.all(color: context.cs.outline),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text(
+              'Content',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurface,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              'from current chat',
+              style: TextStyle(
+                fontSize: 11,
+                color: context.cs.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (charId == null)
+          Text(
+            hint,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.4,
+              color: context.cs.onSurfaceVariant,
+            ),
+          )
+        else ...[
+          Text(
+            content.isEmpty ? 'Empty' : content,
+            maxLines: 4,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.4,
+              color: content.isEmpty
+                  ? context.cs.onSurfaceVariant
+                  : context.cs.onSurface.withValues(alpha: 0.9),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Material(
+            color: context.cs.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              onTap: onEdit,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.edit_outlined, size: 18, color: context.cs.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Edit content',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: context.cs.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+}
 

@@ -2,15 +2,56 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/chat_message.dart';
+import '../../../core/models/preset.dart';
 import '../../../core/state/chat_session_ops_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/generic_editor.dart';
 import '../../../shared/widgets/sheet_view.dart';
+import '../../presets/preset_list_provider.dart';
 import '../chat_provider.dart';
 
+/// Keeps the Author's Note enable state in sync across its homes. The note is
+/// one entity for the chat: its `enabled` (and content) live on the session and
+/// are mirrored onto the `authors_note` block of every preset, so the note
+/// shows consistently no matter which preset is active. Role/depth/insertion
+/// mode are per-preset and are NOT touched here.
+Future<void> syncAuthorsNoteEnabled(
+  WidgetRef ref, {
+  required String? charId,
+  required bool enabled,
+}) async {
+  if (charId != null) {
+    final session = ref.read(chatProvider(charId)).value?.session;
+    final note = session?.authorsNote;
+    if (session != null && note != null && note.enabled != enabled) {
+      await ref.read(chatSessionOpsProvider.notifier).saveSession(
+            session.copyWith(
+              authorsNote: note.copyWith(enabled: enabled),
+              updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+            ),
+          );
+      ref.invalidate(chatProvider(charId));
+    }
+  }
+  final presets = ref.read(presetListProvider).value ?? const [];
+  for (final preset in presets) {
+    final idx = preset.blocks.indexWhere((b) => b.id == 'authors_note');
+    if (idx == -1 || preset.blocks[idx].enabled == enabled) continue;
+    final blocks = List<PresetBlock>.from(preset.blocks)
+      ..[idx] = preset.blocks[idx].copyWith(enabled: enabled);
+    await ref
+        .read(presetListProvider.notifier)
+        .updatePreset(preset.copyWith(blocks: blocks));
+  }
+}
+
 class AuthorsNoteSheet extends ConsumerStatefulWidget {
-  final String charId;
-  const AuthorsNoteSheet({super.key, required this.charId});
+  /// Author's note content + enabled live on the chat session, so a chat must
+  /// be active to edit them. When [charId] is null (e.g. the sheet is opened
+  /// from the preset editor outside a chat) the body shows a hint instead.
+  /// Role / depth / insertion mode are per-preset and edited in the preset.
+  final String? charId;
+  const AuthorsNoteSheet({super.key, this.charId});
 
   @override
   ConsumerState<AuthorsNoteSheet> createState() => _AuthorsNoteSheetState();
@@ -19,33 +60,43 @@ class AuthorsNoteSheet extends ConsumerStatefulWidget {
 class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
   late Map<String, dynamic> _localItem;
   late bool _enabled;
+  late final bool _hasSession;
 
   @override
   void initState() {
     super.initState();
-    final session = ref.read(chatProvider(widget.charId)).value?.session;
+    final session = widget.charId == null
+        ? null
+        : ref.read(chatProvider(widget.charId!)).value?.session;
+    _hasSession = session != null;
     final note = session?.authorsNote;
-    
+
     _enabled = note?.enabled ?? true;
-    _localItem = {
-      'content': note?.content ?? '',
-      'insertionMode': note?.insertionMode ?? 'depth',
-      'depth': note?.depth ?? 4,
-      'role': note?.role ?? 'system',
-    };
+    _localItem = {'content': note?.content ?? ''};
+  }
+
+  /// Toggle handler: persist the session note (via [_performSave], which writes
+  /// the current [_enabled]) and mirror the new state onto every preset's block.
+  void _setEnabled(bool v) {
+    _performSave(_localItem);
+    syncAuthorsNoteEnabled(ref, charId: null, enabled: v);
   }
 
   Future<void> _performSave(Map<String, dynamic> item) async {
-    final session = ref.read(chatProvider(widget.charId)).value?.session;
+    if (widget.charId == null) return;
+    final session = ref.read(chatProvider(widget.charId!)).value?.session;
     if (session == null) return;
-    
+
     final content = (item['content'] as String?)?.trim() ?? '';
+    // Preserve the session note's existing role/depth/insertion fields — they
+    // are unused at runtime (preset-owned) but kept for backward compatibility.
+    final existing = session.authorsNote;
     final note = content.isNotEmpty
         ? AuthorsNote(
             content: content,
-            role: item['role'] as String? ?? 'system',
-            insertionMode: item['insertionMode'] as String? ?? 'depth',
-            depth: item['depth'] as int? ?? 4,
+            role: existing?.role ?? 'system',
+            insertionMode: existing?.insertionMode ?? 'relative',
+            depth: existing?.depth ?? 0,
             enabled: _enabled,
           )
         : null;
@@ -55,7 +106,7 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
       updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     await ref.read(chatSessionOpsProvider.notifier).saveSession(updated);
-    ref.invalidate(chatProvider(widget.charId));
+    ref.invalidate(chatProvider(widget.charId!));
   }
 
   List<GenericEditorSection> get _config => [
@@ -68,34 +119,12 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
               placeholder: 'Enter author\'s note...',
               rows: 6,
             ),
-            GenericEditorField(
-              key: 'insertionMode',
-              label: 'Insertion Mode',
-              type: 'select',
-              options: [
-                {'label': 'Depth', 'value': 'depth'},
-                {'label': 'Relative', 'value': 'relative'},
-              ],
-            ),
-            GenericEditorField(
-              key: 'depth',
-              label: 'Depth',
-              type: 'select',
-              options: List.generate(
-                20,
-                (i) => {'label': '${i + 1}', 'value': i + 1},
-              ),
-              showIf: (item) => item['insertionMode'] == 'depth',
-            ),
-            GenericEditorField(
-              key: 'role',
-              label: 'Role',
-              type: 'select',
-              options: [
-                {'label': 'System', 'value': 'system'},
-                {'label': 'User', 'value': 'user'},
-                {'label': 'Assistant', 'value': 'assistant'},
-              ],
+            const GenericEditorField(
+              key: '__roleHint',
+              label: '',
+              type: 'info',
+              text: 'Role, depth and insertion mode are set per preset, '
+                  'in the preset editor.',
             ),
           ],
         ),
@@ -106,41 +135,77 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
     return SheetView(
       title: "Author's Note",
       showBack: true,
-      actions: [
-        SheetViewAction(
-          icon: Switch(
-            value: _enabled,
-            onChanged: (v) {
-              setState(() => _enabled = v);
-              _performSave(_localItem);
-            },
-            activeThumbColor: context.cs.primary,
+      actions: _hasSession
+          ? [
+              SheetViewAction(
+                icon: Switch(
+                  value: _enabled,
+                  onChanged: (v) {
+                    setState(() => _enabled = v);
+                    _setEnabled(v);
+                  },
+                  activeThumbColor: context.cs.primary,
+                ),
+                onPressed: () {
+                  setState(() => _enabled = !_enabled);
+                  _setEnabled(_enabled);
+                },
+              ),
+            ]
+          : const [],
+      body: _hasSession
+          ? Builder(
+              builder: (innerContext) => GenericEditor(
+                item: _localItem,
+                config: _config,
+                onChanged: (val) => setState(() => _localItem = val),
+                onSave: _performSave,
+                useWindows: false,
+                padding: EdgeInsets.only(
+                  top: MediaQuery.paddingOf(innerContext).top + 4,
+                  bottom: MediaQuery.paddingOf(innerContext).bottom + 24,
+                ),
+              ),
+            )
+          : _buildNoSessionHint(context),
+    );
+  }
+
+  Widget _buildNoSessionHint(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        32,
+        40,
+        32,
+        MediaQuery.paddingOf(context).bottom + 40,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.chat_bubble_outline,
+            size: 40,
+            color: context.cs.onSurfaceVariant.withValues(alpha: 0.6),
           ),
-          onPressed: () {
-            setState(() => _enabled = !_enabled);
-            _performSave(_localItem);
-          },
-        ),
-      ],
-      body: Builder(
-        builder: (innerContext) => GenericEditor(
-          item: _localItem,
-          config: _config,
-          onChanged: (val) => setState(() => _localItem = val),
-          onSave: _performSave,
-          useWindows: false,
-          padding: EdgeInsets.only(
-            top: MediaQuery.paddingOf(innerContext).top + 4,
-            bottom: MediaQuery.paddingOf(innerContext).bottom + 24,
+          const SizedBox(height: 16),
+          Text(
+            "Author's note content is tied to a chat.\n"
+            'Open a chat to edit it.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.4,
+              color: context.cs.onSurfaceVariant,
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
-void showAuthorsNoteSheet(BuildContext context, String charId) {
-  showModalBottomSheet<void>(
+Future<void> showAuthorsNoteSheet(BuildContext context, String? charId) {
+  return showModalBottomSheet<void>(
     context: context,
     useRootNavigator: true,
     isScrollControlled: true,
