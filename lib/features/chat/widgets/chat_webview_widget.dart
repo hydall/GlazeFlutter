@@ -26,6 +26,7 @@ const String _kStreamingId = '__streaming__';
 const Duration _kBridgeOpTimeout = Duration(seconds: 15);
 const Duration _kWebViewInitTimeout = Duration(seconds: 45);
 const Duration _kJsBridgeReadyTimeout = Duration(seconds: 30);
+const Object _identityUnset = Object();
 
 class ChatWebViewWidget extends ConsumerStatefulWidget {
   final String charId;
@@ -299,45 +300,45 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     try {
       await _waitForJsBridgeReady();
       await ChatWebViewInitializer(
-      ref: ref,
-      bridge: bridge,
-      input: ChatWebViewInitInput(
-        charId: widget.charId,
-        sessionId: widget.sessionId,
-        charName: widget.charName,
-        charColor: widget.charColor,
-        personaName: widget.personaName,
-        chatLayout: widget.chatLayout,
-        charAvatarPath: widget.charAvatarPath,
-        personaAvatarPath: widget.personaAvatarPath,
-        greetingTotal: widget.greetingTotal,
-        bgNoiseOpacity: widget.bgNoiseOpacity,
-        bgNoiseIntensity: widget.bgNoiseIntensity,
-        chatFontName: widget.chatFontName,
-        chatFontDataUrl: widget.chatFontDataUrl,
-        chatFontSize: widget.chatFontSize,
-        chatLetterSpacing: widget.chatLetterSpacing,
-        batterySaver: widget.batterySaver,
-        hideMessageId: widget.hideMessageId,
-        hideGenerationTime: widget.hideGenerationTime,
-        hideTokenCount: widget.hideTokenCount,
-        disableSwipeRegeneration: widget.disableSwipeRegeneration,
-        messages: widget.messages,
-        visibleStartIndex: widget.visibleStartIndex,
-        memoryEntries: widget.memoryEntries,
-        memoryDrafts: widget.memoryDrafts,
-        bottomInset: widget.bottomInset,
-        topInset: widget.topInset,
-        searchQuery: widget.searchQuery,
-        searchCurrentIndex: widget.searchCurrentIndex,
-        isSelectionMode: widget.isSelectionMode,
-        isGenerating: widget.isGenerating,
-        isGeneratingImage: widget.isGeneratingImage,
-      ),
-      onReady: () => _ready = true,
-      onSyncExtBlockPanels: _syncExtBlockPanels,
-      applyTheme: _applyThemeToBridge,
-    ).run().timeout(_kWebViewInitTimeout);
+        ref: ref,
+        bridge: bridge,
+        input: ChatWebViewInitInput(
+          charId: widget.charId,
+          sessionId: widget.sessionId,
+          charName: widget.charName,
+          charColor: widget.charColor,
+          personaName: widget.personaName,
+          chatLayout: widget.chatLayout,
+          charAvatarPath: widget.charAvatarPath,
+          personaAvatarPath: widget.personaAvatarPath,
+          greetingTotal: widget.greetingTotal,
+          bgNoiseOpacity: widget.bgNoiseOpacity,
+          bgNoiseIntensity: widget.bgNoiseIntensity,
+          chatFontName: widget.chatFontName,
+          chatFontDataUrl: widget.chatFontDataUrl,
+          chatFontSize: widget.chatFontSize,
+          chatLetterSpacing: widget.chatLetterSpacing,
+          batterySaver: widget.batterySaver,
+          hideMessageId: widget.hideMessageId,
+          hideGenerationTime: widget.hideGenerationTime,
+          hideTokenCount: widget.hideTokenCount,
+          disableSwipeRegeneration: widget.disableSwipeRegeneration,
+          messages: widget.messages,
+          visibleStartIndex: widget.visibleStartIndex,
+          memoryEntries: widget.memoryEntries,
+          memoryDrafts: widget.memoryDrafts,
+          bottomInset: widget.bottomInset,
+          topInset: widget.topInset,
+          searchQuery: widget.searchQuery,
+          searchCurrentIndex: widget.searchCurrentIndex,
+          isSelectionMode: widget.isSelectionMode,
+          isGenerating: widget.isGenerating,
+          isGeneratingImage: widget.isGeneratingImage,
+        ),
+        onReady: () => _ready = true,
+        onSyncExtBlockPanels: _syncExtBlockPanels,
+        applyTheme: _applyThemeToBridge,
+      ).run().timeout(_kWebViewInitTimeout);
     } on TimeoutException catch (e, st) {
       _handleWebViewFailure(e, st, phase: 'init');
       return;
@@ -371,10 +372,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     GlazeToast.error(context, 'Chat view failed to load', e);
   }
 
-  Future<void> _bridgeOp(
-    Future<void> op, {
-    required String label,
-  }) async {
+  Future<void> _bridgeOp(Future<void> op, {required String label}) async {
     try {
       await op.timeout(_kBridgeOpTimeout);
     } on TimeoutException catch (e, st) {
@@ -407,23 +405,35 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   }
 
   Future<void> applyIdentity({
-    String? charName,
-    String? charColor,
-    String? personaName,
-    String? charAvatarPath,
-    String? personaAvatarPath,
-    int? greetingTotal,
+    Object? charName = _identityUnset,
+    Object? charColor = _identityUnset,
+    Object? personaName = _identityUnset,
+    Object? charAvatarPath = _identityUnset,
+    Object? personaAvatarPath = _identityUnset,
+    Object? greetingTotal = _identityUnset,
   }) {
     final bridge = _bridge;
     if (bridge == null || !_ready) return Future.value();
     return bridge.setIdentity(
-      charName: charName ?? widget.charName,
-      charColor: charColor ?? widget.charColor,
-      personaName: personaName ?? widget.personaName,
+      charName: charName == _identityUnset
+          ? widget.charName
+          : charName as String?,
+      charColor: charColor == _identityUnset
+          ? widget.charColor
+          : charColor as String?,
+      personaName: personaName == _identityUnset
+          ? widget.personaName
+          : personaName as String?,
       layout: widget.chatLayout,
-      charAvatarPath: charAvatarPath ?? widget.charAvatarPath,
-      personaAvatarPath: personaAvatarPath ?? widget.personaAvatarPath,
-      greetingTotal: greetingTotal ?? widget.greetingTotal,
+      charAvatarPath: charAvatarPath == _identityUnset
+          ? widget.charAvatarPath
+          : charAvatarPath as String?,
+      personaAvatarPath: personaAvatarPath == _identityUnset
+          ? widget.personaAvatarPath
+          : personaAvatarPath as String?,
+      greetingTotal: greetingTotal == _identityUnset
+          ? widget.greetingTotal
+          : greetingTotal as int?,
     );
   }
 

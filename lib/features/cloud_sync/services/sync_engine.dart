@@ -80,6 +80,7 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/personas');
     await _adapter.ensureFolder('$cloudBase/chats');
     await _adapter.ensureFolder('$cloudBase/memory_books');
+    await _adapter.ensureFolder('$cloudBase/persona_avatars');
     await _adapter.ensureFolder('$cloudBase/extension_presets');
     await _adapter.ensureFolder('$cloudBase/info_blocks');
 
@@ -94,18 +95,24 @@ class SyncEngine {
     } catch (_) {}
 
     final entries = localManifest.entries.values.toList();
-    final needsCloudFileScan =
-        cloudManifest != null &&
-        entries.any((entry) {
-          if (entry.deleted) return false;
-          final cloudEntry = cloudManifest?.entries[entry.key];
-          return cloudEntry != null &&
-              !cloudEntry.deleted &&
-              cloudEntry.hash == entry.hash;
-        });
-    final cloudFilePaths = needsCloudFileScan
-        ? await _loadCloudFilePaths(onProgress: onProgress)
-        : <String>{};
+    final candidatePaths = cloudManifest == null
+        ? const <String>[]
+        : entries
+              .where((entry) {
+                if (entry.deleted) return false;
+                final cloudEntry = cloudManifest?.entries[entry.key];
+                return cloudEntry != null &&
+                    !cloudEntry.deleted &&
+                    cloudEntry.hash == entry.hash;
+              })
+              .map((entry) => entry.path)
+              .toList();
+    final cloudFilePaths = candidatePaths.isEmpty
+        ? <String>{}
+        : await _loadCloudFilePathsForEntries(
+            candidatePaths,
+            onProgress: onProgress,
+          );
 
     final galleryDirs = <String>{};
     for (final entry in entries) {
@@ -206,27 +213,30 @@ class SyncEngine {
     await _manifestBuilder.clearDeleted();
   }
 
-  Future<Set<String>> _loadCloudFilePaths({
+  Future<Set<String>> _loadCloudFilePathsForEntries(
+    List<String> entryPaths, {
     required void Function(SyncProgress) onProgress,
   }) async {
-    try {
-      onProgress(const SyncProgress(message: 'Scanning cloud files...'));
-      return await _collectCloudFilePaths(cloudBase);
-    } catch (_) {
-      return {};
-    }
-  }
-
-  Future<Set<String>> _collectCloudFilePaths(String path) async {
-    final files = await _adapter.listFolder(path);
-    final paths = files
-        .where((f) => !f.isFolder)
-        .map((f) => normalizeCloudSyncPath(f.path))
-        .toSet();
-    for (final folder in files.where((f) => f.isFolder)) {
-      paths.addAll(await _collectCloudFilePaths(folder.path));
+    onProgress(const SyncProgress(message: 'Checking cloud files...'));
+    final folders = entryPaths.map(_cloudParentFolder).toSet();
+    final paths = <String>{};
+    for (final folder in folders) {
+      try {
+        final files = await _adapter.listFolder(folder);
+        paths.addAll(
+          files
+              .where((f) => !f.isFolder)
+              .map((f) => normalizeCloudSyncPath(f.path)),
+        );
+      } catch (_) {}
     }
     return paths;
+  }
+
+  String _cloudParentFolder(String path) {
+    final slash = path.lastIndexOf('/');
+    if (slash <= 0) return cloudBase;
+    return path.substring(0, slash);
   }
 
   Future<void> pullEntities({
@@ -1099,6 +1109,7 @@ class SyncEngine {
       if (!await file.exists()) return;
       final bytes = await file.readAsBytes();
       final ext = p.avatarPath!.split('.').last;
+      await _adapter.ensureFolder('$cloudBase/persona_avatars/$personaId');
       await _adapter.uploadBinary(
         personaAvatarCloudPath(personaId, ext),
         bytes,

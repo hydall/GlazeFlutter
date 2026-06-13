@@ -16,7 +16,12 @@ class DropboxAuth {
   static const _tokenUrl = 'https://api.dropboxapi.com/oauth2/token';
   static const _revokeUrl = 'https://api.dropboxapi.com/2/auth/token/revoke';
 
-  final Dio _dio = Dio();
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 60),
+    ),
+  );
 
   String? _accessToken;
   String? _refreshToken;
@@ -78,8 +83,16 @@ class DropboxAuth {
       final callbackUri = await deepLinkService.waitForOAuthCallback('dropbox');
       final code = callbackUri.queryParameters['code'];
       final returnedState = callbackUri.queryParameters['state'];
-      if (code == null) throw StateError('No authorization code in callback (uri=$callbackUri)');
-      if (returnedState != state) throw StateError('OAuth state mismatch (expected=$state got=$returnedState)');
+      if (code == null) {
+        throw StateError(
+          'No authorization code in callback (uri=$callbackUri)',
+        );
+      }
+      if (returnedState != state) {
+        throw StateError(
+          'OAuth state mismatch (expected=$state got=$returnedState)',
+        );
+      }
       await _handleCodeExchange(code, redirectUri);
       return;
     }
@@ -176,8 +189,10 @@ class DropboxAuth {
     const chars =
         'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
     final rng = Random.secure();
-    return List.generate(length, (_) => chars[rng.nextInt(chars.length)])
-        .join();
+    return List.generate(
+      length,
+      (_) => chars[rng.nextInt(chars.length)],
+    ).join();
   }
 
   String _sha256Base64Url(String input) {
