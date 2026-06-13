@@ -96,7 +96,16 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(memoryBookRows, memoryBookRows.pendingDraftsJson);
       }
       if (from < 16) {
-        await m.addColumn(characters, characters.macroName);
+        // Guard: early builds may have already added macro_name under a
+        // different schema version. Unguarded addColumn raises "duplicate
+        // column name: macro_name" and aborts DB open (gray chats screen).
+        final cols = await customSelect(
+          'PRAGMA table_info("characters")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('macro_name')) {
+          await m.addColumn(characters, characters.macroName);
+        }
       }
       if (from < 17) {
         await customStatement(
@@ -104,10 +113,22 @@ class AppDatabase extends _$AppDatabase {
         );
       }
       if (from < 18) {
-        await m.addColumn(characters, characters.picksHash);
+        final cols = await customSelect(
+          'PRAGMA table_info("characters")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('picks_hash')) {
+          await m.addColumn(characters, characters.picksHash);
+        }
       }
       if (from < 19) {
-        await m.addColumn(characters, characters.createdAt);
+        final cols = await customSelect(
+          'PRAGMA table_info("characters")',
+        ).get();
+        final colNames = cols.map((r) => r.read<String>('name')).toSet();
+        if (!colNames.contains('created_at')) {
+          await m.addColumn(characters, characters.createdAt);
+        }
         await customStatement(
           'UPDATE characters SET created_at = updated_at WHERE created_at = 0',
         );
