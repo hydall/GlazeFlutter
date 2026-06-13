@@ -18,6 +18,7 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/generic_editor.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/help_tip.dart';
 import '../../shared/widgets/sheet_view.dart';
 
@@ -84,7 +85,10 @@ class PersonaListScreen extends ConsumerWidget {
                     ),
                   ),
                   itemCount: list.length,
-                  itemBuilder: (_, i) => _PersonaTile(persona: list[i]),
+                  itemBuilder: (_, i) => _PersonaTile(
+                    persona: list[i],
+                    openEditor: (persona) => _showEditor(context, ref, persona),
+                  ),
                 ),
               ),
       ),
@@ -92,7 +96,7 @@ class PersonaListScreen extends ConsumerWidget {
   }
 
   void _showEditor(BuildContext context, WidgetRef ref, [Persona? existing]) {
-    Navigator.of(context, rootNavigator: true).push(
+    Navigator.of(context, rootNavigator: !startExpanded).push(
       MaterialPageRoute<void>(
         builder: (_) => _PersonaEditorScreen(existing: existing),
       ),
@@ -102,100 +106,111 @@ class PersonaListScreen extends ConsumerWidget {
 
 class _PersonaTile extends ConsumerWidget {
   final Persona persona;
-  const _PersonaTile({required this.persona});
+  final void Function(Persona persona) openEditor;
+
+  const _PersonaTile({
+    required this.persona,
+    required this.openEditor,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final activeId = ref.watch(activePersonaIdProvider);
     final isActive = activeId == persona.id;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: isActive
+    final displayName = (persona.displayName?.trim().isNotEmpty ?? false)
+        ? persona.displayName!.trim()
+        : persona.name;
+    final rawAvatarPath = persona.avatarPath?.trim();
+    final resolvedAvatarPath =
+        (rawAvatarPath != null && rawAvatarPath.isNotEmpty)
+            ? resolveGlazeFilePath(rawAvatarPath)
+            : null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: GlassSurface(
+        enableRipple: true,
+        tint: isActive
             ? context.cs.primary.withValues(alpha: 0.12)
-            : Colors.white.withValues(alpha: 0.05),
+            : null,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isActive
               ? context.cs.primary.withValues(alpha: 0.5)
               : context.cs.outline,
         ),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        onTap: () =>
-            setActivePersona(ref, isActive ? null : persona.id),
-        leading: CircleAvatar(
-          radius: 24,
-          backgroundColor: context.cs.primary.withValues(alpha: 0.18),
-          backgroundImage: persona.avatarPath != null
-              ? FileImage(File(resolveGlazeFilePath(persona.avatarPath!)!))
-              : null,
-          child: persona.avatarPath == null
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          onTap: () =>
+              setActivePersona(ref, isActive ? null : persona.id),
+          leading: CircleAvatar(
+            radius: 24,
+            backgroundColor: context.cs.primary.withValues(alpha: 0.18),
+            backgroundImage: resolvedAvatarPath != null &&
+                    resolvedAvatarPath.isNotEmpty
+                ? FileImage(File(resolvedAvatarPath))
+                : null,
+            child: resolvedAvatarPath == null || resolvedAvatarPath.isEmpty
+                ? Text(
+                    displayName.isNotEmpty ? displayName[0].toUpperCase() : '?',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: context.cs.onSurface,
+                    ),
+                  )
+                : null,
+          ),
+          title: Text(displayName),
+          subtitle: persona.prompt != null && persona.prompt!.isNotEmpty
               ? Text(
-                  persona.name.isNotEmpty ? persona.name[0].toUpperCase() : '?',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: context.cs.onSurface,
-                  ),
+                  persona.prompt!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 )
-              : null,
-        ),
-        title: Text(persona.name),
-        subtitle: persona.prompt != null && persona.prompt!.isNotEmpty
-            ? Text(
-                persona.prompt!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              )
-            : Text(
-                'no_prompt'.tr(),
-                style: TextStyle(color: context.cs.onSurfaceVariant),
+              : Text(
+                  'no_prompt'.tr(),
+                  style: TextStyle(color: context.cs.onSurfaceVariant),
+                ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.link, size: 18),
+                tooltip: 'header_connections'.tr(),
+                onPressed: () => showPersonaConnections(context, persona.id),
               ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.link, size: 18),
-              tooltip: 'header_connections'.tr(),
-              onPressed: () => showPersonaConnections(context, persona.id),
-            ),
-            IconButton(
-              icon: const Icon(Icons.more_vert, size: 20),
-              tooltip: 'header_more'.tr(),
-              onPressed: () {
-                GlazeBottomSheet.show<void>(
-                  context,
-                  title: "${'tab_personas'.tr()} ${'header_more'.tr()}",
-                  items: [
-                    BottomSheetItem(
-                      label: 'action_edit'.tr(),
-                      icon: Icons.edit,
-                      onTap: () {
-                        Navigator.pop(context);
-                        Navigator.of(context, rootNavigator: true).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) => _PersonaEditorScreen(existing: persona),
-                          ),
-                        );
-                      },
-                    ),
-                    BottomSheetItem(
-                      label: 'action_delete'.tr(),
-                      icon: Icons.delete,
-                      isDestructive: true,
-                      onTap: () {
-                        Navigator.pop(context);
-                        ref.read(personaListProvider.notifier).remove(persona.id);
-                      },
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
+              IconButton(
+                icon: const Icon(Icons.more_vert, size: 20),
+                tooltip: 'header_more'.tr(),
+                onPressed: () {
+                  GlazeBottomSheet.show<void>(
+                    context,
+                    title: "${'tab_personas'.tr()} ${'header_more'.tr()}",
+                    items: [
+                      BottomSheetItem(
+                        label: 'action_edit'.tr(),
+                        icon: Icons.edit,
+                        onTap: () {
+                          Navigator.of(context, rootNavigator: true).pop();
+                          openEditor(persona);
+                        },
+                      ),
+                      BottomSheetItem(
+                        label: 'action_delete'.tr(),
+                        icon: Icons.delete,
+                        isDestructive: true,
+                        onTap: () {
+                          Navigator.of(context, rootNavigator: true).pop();
+                          ref.read(personaListProvider.notifier).remove(persona.id);
+                        },
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -226,6 +241,11 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
               placeholder: 'placeholder_enter_name'.tr(),
             ),
             GenericEditorField(
+              key: 'display_name',
+              label: 'Display Name',
+              placeholder: 'Name shown in lists',
+            ),
+            GenericEditorField(
               key: 'prompt',
               label: "${'tab_personas'.tr()} ${'label_char_prompt'.tr().replaceAll(RegExp(r'Character |Персонажа ', caseSensitive: false), '')}",
               type: 'textarea',
@@ -243,6 +263,7 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
     _createdAt = widget.existing?.createdAt ?? currentTimestampSeconds();
     _item = {
       'name': widget.existing?.name ?? '',
+      'display_name': widget.existing?.displayName ?? '',
       'prompt': widget.existing?.prompt ?? '',
       'avatarPath': widget.existing?.avatarPath,
     };
@@ -274,11 +295,13 @@ class _PersonaEditorScreenState extends ConsumerState<_PersonaEditorScreen> {
 
   void _save(Map<String, dynamic> values) {
     final name = (values['name'] as String?)?.trim() ?? '';
+    final displayName = (values['display_name'] as String?)?.trim() ?? '';
     final promptStr = (values['prompt'] as String?)?.trim() ?? '';
 
     final persona = Persona(
       id: _personaId,
       name: name.isEmpty ? 'unnamed_entry'.tr().split(' ')[0] : name,
+      displayName: displayName.isEmpty ? null : displayName,
       prompt: promptStr.isEmpty ? null : promptStr,
       avatarPath: values['avatarPath'] as String?,
       createdAt: _createdAt,

@@ -115,6 +115,8 @@ class GlowInkWell extends StatefulWidget {
     this.onLongPress,
     this.borderRadius,
     this.glowColor,
+    this.radiusFactor = 1.0,
+    this.intensity = 0.15,
   });
 
   final Widget child;
@@ -122,6 +124,8 @@ class GlowInkWell extends StatefulWidget {
   final VoidCallback? onLongPress;
   final BorderRadius? borderRadius;
   final Color? glowColor;
+  final double radiusFactor;
+  final double intensity;
 
   @override
   State<GlowInkWell> createState() => _GlowInkWellState();
@@ -140,7 +144,12 @@ class _GlowInkWellState extends State<GlowInkWell>
   Widget build(BuildContext context) {
     final color = widget.glowColor ?? context.cs.primary;
 
-    Widget inner = buildRippleOverlay(color, widget.child);
+    Widget inner = buildRippleOverlay(
+      color,
+      widget.child,
+      radiusFactor: widget.radiusFactor,
+      intensity: widget.intensity,
+    );
 
     if (widget.borderRadius != null) {
       inner = ClipRRect(borderRadius: widget.borderRadius!, child: inner);

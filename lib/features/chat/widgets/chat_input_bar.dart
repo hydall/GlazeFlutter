@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../../../shared/theme/theme_provider.dart';
+import '../../../shared/widgets/fullscreen_editor.dart';
 import '../../../shared/widgets/glass_surface.dart';
 
 Border _uiBorder(BuildContext context, ThemePreset preset) {
@@ -249,6 +250,25 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       _attachedImageBytes = null;
       _attachedImageDataUrl = null;
     });
+  }
+
+  Future<void> _openFullscreenEditor() async {
+    if (widget.onFullScreen != null) {
+      widget.onFullScreen!.call();
+      return;
+    }
+
+    await FullscreenEditorScreen.show(
+      context,
+      title: _guidanceMode ? 'Compose message' : 'Message',
+      controller: _controller,
+      hintText: _guidanceMode
+          ? 'Write a long message here...'
+          : 'Type a message...',
+      onChanged: (_) {
+        if (mounted) setState(() {});
+      },
+    );
   }
 
   @override
@@ -541,7 +561,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     const SizedBox(width: 8),
                     _CircleBtn(
                       icon: Icons.fullscreen,
-                      onTap: widget.onFullScreen,
+                      onTap: _openFullscreenEditor,
                       batterySaver: widget.batterySaver,
                     ),
                     const SizedBox(width: 8),

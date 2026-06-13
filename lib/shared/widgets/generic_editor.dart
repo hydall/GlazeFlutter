@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import '../../core/utils/platform_paths.dart';
 import '../theme/app_colors.dart';
+import 'fullscreen_editor.dart';
 import 'glaze_bottom_sheet.dart';
+import 'glass_surface.dart';
 import 'menu_group.dart';
 
 class GenericEditorField {
@@ -200,7 +202,7 @@ class _GenericEditorState extends State<GenericEditor> {
     widget.onChanged(_localItem);
     _scheduleSave();
     setState(() {});
-    widget.onOpenFsEditor?.call('alternate_greetings', alt.length);
+    _openGreetingEditor(alt.length);
   }
 
   void _confirmDeleteGreeting(int index) {
@@ -272,6 +274,61 @@ class _GenericEditorState extends State<GenericEditor> {
     return (opt?['label'] as String?) ?? val?.toString() ?? '';
   }
 
+  Future<void> _openFieldEditor(GenericEditorField field) async {
+    if (widget.onOpenFsEditor != null) {
+      widget.onOpenFsEditor!(field.key, -1);
+      return;
+    }
+
+    final ctrl = _controllers[field.key];
+    if (ctrl == null) return;
+
+    await FullscreenEditorScreen.show(
+      context,
+      title: field.label,
+      controller: ctrl,
+      hintText: field.placeholder,
+      onChanged: (_) => setState(() {}),
+    );
+  }
+
+  Future<void> _openGreetingEditor(int index) async {
+    if (widget.onOpenFsEditor != null) {
+      widget.onOpenFsEditor!('first_mes', index);
+      return;
+    }
+
+    final greetings = _allGreetings;
+    if (index < 0 || index >= greetings.length) return;
+
+    final ctrl = TextEditingController(text: greetings[index]);
+
+    void applyGreeting(String value) {
+      if (index == 0) {
+        _localItem['first_mes'] = value;
+      } else {
+        final alt = ((_localItem['alternate_greetings'] as List?) ?? <dynamic>[])
+            .cast<String>()
+            .toList();
+        if (index - 1 >= alt.length) return;
+        alt[index - 1] = value;
+        _localItem['alternate_greetings'] = alt;
+      }
+      widget.onChanged(_localItem);
+      _scheduleSave();
+      if (mounted) setState(() {});
+    }
+
+    await FullscreenEditorScreen.show(
+      context,
+      title: 'Greeting #${index + 1}',
+      controller: ctrl,
+      hintText: 'Enter greeting text',
+      onChanged: applyGreeting,
+    );
+    ctrl.dispose();
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────────
 
   @override
@@ -339,9 +396,7 @@ class _GenericEditorState extends State<GenericEditor> {
                   ? TextInputType.multiline
                   : TextInputType.text,
           maxLines: field.type == 'textarea' ? (field.rows ?? 3) : 1,
-          onExpand: field.expandable && widget.onOpenFsEditor != null
-              ? () => widget.onOpenFsEditor!(field.key, -1)
-              : null,
+          onExpand: field.expandable ? () => _openFieldEditor(field) : null,
         );
       case 'select':
         return MenuSelectorItem(
@@ -401,7 +456,7 @@ class _GenericEditorState extends State<GenericEditor> {
                         Row(
                           children: [
                             GestureDetector(
-                              onTap: () => widget.onOpenFsEditor?.call('first_mes', i),
+                              onTap: () => _openGreetingEditor(i),
                               child: Icon(Icons.edit_outlined, size: 18, color: context.cs.primary),
                             ),
                             const SizedBox(width: 12),
@@ -415,7 +470,7 @@ class _GenericEditorState extends State<GenericEditor> {
                     ),
                     const SizedBox(height: 6),
                     GestureDetector(
-                      onTap: () => widget.onOpenFsEditor?.call('first_mes', i),
+                      onTap: () => _openGreetingEditor(i),
                       child: Text(
                         greets[i].isEmpty ? 'Empty' : greets[i],
                         style: TextStyle(
@@ -464,80 +519,79 @@ class _GenericEditorState extends State<GenericEditor> {
     final avatarPath = _localItem[widget.avatarField] as String?;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: GestureDetector(
+      child: GlassSurface(
         onTap: widget.onAvatarTap,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Stack(
-            children: [
-              AspectRatio(
-                aspectRatio: 1,
-                child: Container(
-                  color: context.cs.surfaceContainerHighest,
-                  child: avatarPath != null && avatarPath.isNotEmpty
-                      ? Image.file(File(resolveGlazeFilePath(avatarPath)!), fit: BoxFit.cover)
-                      : Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [const Color(0xFF66CCFF), context.cs.primary],
-                            ),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            widget.avatarPlaceholder.toUpperCase(),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 96,
-                              fontWeight: FontWeight.bold,
-                            ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: context.cs.outlineVariant),
+        child: Stack(
+          children: [
+            AspectRatio(
+              aspectRatio: 1,
+              child: Container(
+                color: context.cs.surfaceContainerHighest,
+                child: avatarPath != null && avatarPath.isNotEmpty
+                    ? Image.file(File(resolveGlazeFilePath(avatarPath)!), fit: BoxFit.cover)
+                    : Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [const Color(0xFF66CCFF), context.cs.primary],
                           ),
                         ),
-                ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          widget.avatarPlaceholder.toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 96,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
               ),
-              Positioned(
-                top: 0, left: 0, right: 0,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 30),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.black54, Colors.transparent],
-                    ),
-                  ),
-                  child: const Text(
-                    'AVATAR',
-                    style: TextStyle(
-                      color: Color(0xE6FFFFFF),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
-                    ),
+            ),
+            Positioned(
+              top: 0, left: 0, right: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 30),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.black54, Colors.transparent],
                   ),
                 ),
-              ),
-              Positioned(
-                bottom: 0, left: 0, right: 0,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [Colors.black54, Colors.transparent],
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    widget.avatarHint,
-                    style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 14),
+                child: const Text(
+                  'AVATAR',
+                  style: TextStyle(
+                    color: Color(0xE6FFFFFF),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
                   ),
                 ),
               ),
-            ],
-          ),
+            ),
+            Positioned(
+              bottom: 0, left: 0, right: 0,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black54, Colors.transparent],
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  widget.avatarHint,
+                  style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 14),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

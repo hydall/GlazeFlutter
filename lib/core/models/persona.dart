@@ -8,6 +8,7 @@ abstract class Persona with _$Persona {
   const factory Persona({
     required String id,
     required String name,
+    String? displayName,
     String? prompt,
     String? avatarPath,
     @Default(0) int createdAt,

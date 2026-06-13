@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/settings/app_settings_provider.dart';
+import '../theme/app_colors.dart';
 import '../theme/theme_preset.dart';
 import '../theme/theme_provider.dart';
+import 'glow_ripple.dart';
 import 'noise_overlay.dart';
 
 /// Reusable glassmorphic surface that reads `elementOpacity` / `elementBlur` /
@@ -20,6 +22,12 @@ class GlassSurface extends ConsumerWidget {
   final Color? tint;
   final BoxBorder? border;
   final List<BoxShadow>? boxShadow;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final bool enableRipple;
+  final Color? glowColor;
+  final double rippleRadiusFactor;
+  final double rippleIntensity;
 
   const GlassSurface({
     super.key,
@@ -28,6 +36,12 @@ class GlassSurface extends ConsumerWidget {
     this.tint,
     this.border,
     this.boxShadow,
+    this.onTap,
+    this.onLongPress,
+    this.enableRipple = false,
+    this.glowColor,
+    this.rippleRadiusFactor = 1.0,
+    this.rippleIntensity = 0.15,
   });
 
   @override
@@ -41,16 +55,25 @@ class GlassSurface extends ConsumerWidget {
   Widget _build(BuildContext context, ThemePreset preset, bool batterySaver) {
     final alpha = batterySaver ? 1.0 : preset.elementOpacity.clamp(0.0, 1.0);
     final blur = batterySaver ? 0.0 : preset.elementBlur;
-    final base = tint ?? Theme.of(context).colorScheme.surfaceContainerHighest;
+    final defaultBase = Theme.of(context).colorScheme.surfaceContainerHighest;
+    final effectiveTint = tint;
+    final fillColor = effectiveTint == null
+        ? defaultBase.withValues(alpha: alpha)
+        : effectiveTint.withValues(
+            alpha: (effectiveTint.a * alpha).clamp(0.0, 1.0),
+          );
 
     final filled = DecoratedBox(
       decoration: BoxDecoration(
-        color: base.withValues(alpha: alpha),
+        color: fillColor,
         borderRadius: borderRadius,
         border: border,
         boxShadow: boxShadow,
       ),
-      child: child,
+      child: Material(
+        type: MaterialType.transparency,
+        child: child,
+      ),
     );
 
     final withNoise = !batterySaver && preset.noiseOpacity > 0
@@ -73,7 +96,7 @@ class GlassSurface extends ConsumerWidget {
           )
         : filled;
 
-    return ClipRRect(
+    final surface = ClipRRect(
       borderRadius: borderRadius,
       child: blur > 0
           ? BackdropFilter(
@@ -82,5 +105,27 @@ class GlassSurface extends ConsumerWidget {
             )
           : withNoise,
     );
+
+    final hasTapHandler = onTap != null || onLongPress != null;
+    if (hasTapHandler) {
+      return GlowInkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: borderRadius,
+        glowColor: glowColor ?? context.cs.primary,
+        radiusFactor: rippleRadiusFactor,
+        intensity: rippleIntensity,
+        child: surface,
+      );
+    }
+    if (enableRipple) {
+      return GlowRippleOverlay(
+        glowColor: glowColor ?? context.cs.primary,
+        radiusFactor: rippleRadiusFactor,
+        intensity: rippleIntensity,
+        child: surface,
+      );
+    }
+    return surface;
   }
 }

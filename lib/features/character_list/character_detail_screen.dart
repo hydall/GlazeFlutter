@@ -214,7 +214,8 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
       title: 'action_delete_char'.tr(),
       bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
-        description: '${'confirm_delete_character'.tr().replaceAll('?', '')} "${char.name}"?',
+        description:
+            '${'confirm_delete_character'.tr().replaceAll('?', '')} "${char.displayName?.trim().isNotEmpty == true ? char.displayName!.trim() : char.name}"?',
       ),
       items: [
         BottomSheetItem(
@@ -605,6 +606,13 @@ class _HeroSection extends StatelessWidget {
   final String? previewAvatarUrl;
   const _HeroSection({required this.character, this.previewAvatarUrl});
 
+  String get _displayName {
+    final displayName = character.displayName?.trim();
+    return (displayName != null && displayName.isNotEmpty)
+        ? displayName
+        : character.name;
+  }
+
   @override
   Widget build(BuildContext context) {
     return SizedBox(
@@ -622,7 +630,7 @@ class _HeroSection extends StatelessWidget {
             ImageViewer.show(
               context,
               imageProvider: provider,
-              description: character.name,
+              description: _displayName,
             );
           }
         },
@@ -653,7 +661,7 @@ class _HeroSection extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  character.name,
+                  _displayName,
                   style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
@@ -687,8 +695,8 @@ class _HeroSection extends StatelessWidget {
         imageUrl: previewAvatarUrl!,
         fit: BoxFit.cover,
         alignment: Alignment.topCenter,
-        placeholder: (_, _) => _HeroPlaceholder(name: character.name),
-        errorWidget: (_, _, _) => _HeroPlaceholder(name: character.name),
+        placeholder: (_, _) => _HeroPlaceholder(name: _displayName),
+        errorWidget: (_, _, _) => _HeroPlaceholder(name: _displayName),
       );
     }
     if (character.avatarPath != null && character.avatarPath!.isNotEmpty) {
@@ -696,10 +704,10 @@ class _HeroSection extends StatelessWidget {
         File(resolveGlazeFilePath(character.avatarPath!)!),
         fit: BoxFit.cover,
         alignment: Alignment.topCenter,
-        errorBuilder: (_, _, _) => _HeroPlaceholder(name: character.name),
+        errorBuilder: (_, _, _) => _HeroPlaceholder(name: _displayName),
       );
     }
-    return _HeroPlaceholder(name: character.name);
+    return _HeroPlaceholder(name: _displayName);
   }
 }
 

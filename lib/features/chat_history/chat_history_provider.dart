@@ -39,6 +39,7 @@ final chatHistoryProvider =
 
 class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
   StreamSubscription<dynamic>? _sub;
+  StreamSubscription<dynamic>? _charactersSub;
   List<ChatSessionInfo>? _lastResult;
 
   @override
@@ -46,10 +47,18 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
     final chatRepo = ref.read(chatRepoProvider);
     final charRepo = ref.read(characterRepoProvider);
     await _sub?.cancel();
+    await _charactersSub?.cancel();
     _sub = chatRepo.watchAllSessionMetadata().listen((allMeta) {
       _updateFromMetadata(allMeta, charRepo);
     });
-    ref.onDispose(() => unawaited(_sub?.cancel()));
+    _charactersSub = charRepo.watchAll().listen((_) async {
+      final allMeta = await chatRepo.getAllSessionMetadata();
+      await _updateFromMetadata(allMeta, charRepo);
+    });
+    ref.onDispose(() {
+      unawaited(_sub?.cancel());
+      unawaited(_charactersSub?.cancel());
+    });
 
     final allMeta = await chatRepo.getAllSessionMetadata();
     return _buildFromMetadata(allMeta, charRepo);
@@ -67,7 +76,9 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
       return ChatSessionInfo(
         sessionId: m.sessionId,
         characterId: m.characterId,
-        characterName: char?.name ?? 'Unknown',
+        characterName: char?.displayName?.trim().isNotEmpty == true
+            ? char!.displayName!.trim()
+            : (char?.name ?? 'Unknown'),
         avatarPath: char?.avatarPath,
         lastMessage: m.lastMessageContent,
         lastMessageTime: m.lastMessageTimestamp,
@@ -99,6 +110,8 @@ class ChatHistoryNotifier extends AsyncNotifier<List<ChatSessionInfo>> {
     for (int i = 0; i < a.length; i++) {
       final ai = a[i], bi = b[i];
       if (ai.sessionId != bi.sessionId ||
+          ai.characterName != bi.characterName ||
+          ai.avatarPath != bi.avatarPath ||
           ai.lastMessageTime != bi.lastMessageTime ||
           ai.messageCount != bi.messageCount ||
           ai.lastMessage != bi.lastMessage ||

@@ -1476,7 +1476,6 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                                         : null,
                                     onMagicDrawer: () =>
                                         widget.drawerCtrl.toggleDrawer(context),
-                                    onFullScreen: () {},
                                     onQuickReplies: () =>
                                         widget.drawerCtrl.toggleDrawer(
                                           context,

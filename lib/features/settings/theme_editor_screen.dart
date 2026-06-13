@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/theme_preset.dart';
 import '../../shared/theme/theme_provider.dart';
 import '../../shared/theme/app_colors.dart';
@@ -14,6 +15,7 @@ import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/glaze_toast.dart';
+import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/menu_group.dart';
 import 'theme_preview.dart';
 import 'widgets/chat_layout_picker.dart';
@@ -30,6 +32,9 @@ const _presetUiColors = [
   '#FFFFFF', '#19191A', '#7996CE', '#E0555D',
   '#4BB34B', '#FFA000', '#8858C9', '#333333',
 ];
+
+const _customColorHistoryKey = 'themeEditorCustomColorHistory';
+const _customColorHistoryLimit = 6;
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
 
@@ -487,9 +492,29 @@ class _ChatTab extends StatefulWidget {
 
 class _ChatTabState extends State<_ChatTab> {
   int _activeSubTab = 0;
+  late final ScrollController _fontScrollController;
+  late final ScrollController _colorsScrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _fontScrollController = ScrollController();
+    _colorsScrollController = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _fontScrollController.dispose();
+    _colorsScrollController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final activeScrollController = _activeSubTab == 0
+        ? _fontScrollController
+        : _colorsScrollController;
+
     return Column(
       children: [
         SizedBox(height: widget.topPadding),
@@ -500,31 +525,42 @@ class _ChatTabState extends State<_ChatTab> {
             borderColor: context.cs.outlineVariant,
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
-          child: _LayoutPickerRow(
-            value: widget.preset.chatLayout,
-            onTap: () => _showLayoutPicker(context),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: GlazeTabBar(
-            tabs: const [
-              GlazeTabItem(label: 'Font', icon: Icons.text_fields),
-              GlazeTabItem(label: 'Colors', icon: Icons.palette_outlined),
-            ],
-            activeIndex: _activeSubTab,
-            onChanged: (i) => setState(() => _activeSubTab = i),
-          ),
-        ),
         Expanded(
-          child: IndexedStack(
-            index: _activeSubTab,
-            children: [
-              _ChatFontTab(preset: widget.preset, onUpdate: widget.onUpdate),
-              _ChatColorsTab(preset: widget.preset, onUpdate: widget.onUpdate),
-            ],
+          child: SingleChildScrollView(
+            controller: activeScrollController,
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+                  child: _LayoutPickerRow(
+                    value: widget.preset.chatLayout,
+                    onTap: () => _showLayoutPicker(context),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  child: GlazeTabBar(
+                    tabs: const [
+                      GlazeTabItem(label: 'Font', icon: Icons.text_fields),
+                      GlazeTabItem(label: 'Colors', icon: Icons.palette_outlined),
+                    ],
+                    activeIndex: _activeSubTab,
+                    onChanged: (i) => setState(() => _activeSubTab = i),
+                  ),
+                ),
+                if (_activeSubTab == 0)
+                  _ChatFontTab(
+                    preset: widget.preset,
+                    onUpdate: widget.onUpdate,
+                  )
+                else
+                  _ChatColorsTab(
+                    preset: widget.preset,
+                    onUpdate: widget.onUpdate,
+                  ),
+              ],
+            ),
           ),
         ),
       ],
@@ -551,8 +587,7 @@ class _ChatFontTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    return Column(
       children: [
         MenuGroup(
           header: 'Chat Messages Font',
@@ -636,8 +671,7 @@ class _ChatColorsTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isBubble = preset.chatLayout == 'bubble';
-    return ListView(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+    return Column(
       children: [
         MenuGroup(
           header: 'Bubble Colors',
@@ -658,6 +692,7 @@ class _ChatColorsTab extends StatelessWidget {
                 value: preset.userBubbleColor,
                 palette: _presetColors,
                 allowNull: true,
+                showPreviewOverlay: false,
                 nullLabel: 'Auto',
                 onChanged: (v) =>
                     onUpdate((p) => p.copyWith(userBubbleColor: v)),
@@ -667,6 +702,7 @@ class _ChatColorsTab extends StatelessWidget {
                 value: preset.charBubbleColor,
                 palette: _presetColors,
                 allowNull: true,
+                showPreviewOverlay: false,
                 nullLabel: 'Auto',
                 onChanged: (v) =>
                     onUpdate((p) => p.copyWith(charBubbleColor: v)),
@@ -731,6 +767,7 @@ class _ChatColorsTab extends StatelessWidget {
               value: preset.userQuoteColor,
               palette: _presetColors,
               allowNull: true,
+              showPreviewOverlay: false,
               nullLabel: 'Auto',
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(userQuoteColor: v)),
@@ -740,6 +777,7 @@ class _ChatColorsTab extends StatelessWidget {
               value: preset.charQuoteColor,
               palette: _presetColors,
               allowNull: true,
+              showPreviewOverlay: false,
               nullLabel: 'Auto',
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(charQuoteColor: v)),
@@ -754,6 +792,7 @@ class _ChatColorsTab extends StatelessWidget {
               value: preset.userTextColor,
               palette: _presetColors,
               allowNull: true,
+              showPreviewOverlay: false,
               nullLabel: 'Auto',
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(userTextColor: v)),
@@ -763,6 +802,7 @@ class _ChatColorsTab extends StatelessWidget {
               value: preset.charTextColor,
               palette: _presetColors,
               allowNull: true,
+              showPreviewOverlay: false,
               nullLabel: 'Auto',
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(charTextColor: v)),
@@ -777,6 +817,7 @@ class _ChatColorsTab extends StatelessWidget {
               value: preset.userItalicColor,
               palette: _presetColors,
               allowNull: true,
+              showPreviewOverlay: false,
               nullLabel: 'Auto',
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(userItalicColor: v)),
@@ -786,6 +827,7 @@ class _ChatColorsTab extends StatelessWidget {
               value: preset.charItalicColor,
               palette: _presetColors,
               allowNull: true,
+              showPreviewOverlay: false,
               nullLabel: 'Auto',
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(charItalicColor: v)),
@@ -1104,12 +1146,13 @@ class _FontModeRow extends StatelessWidget {
 
 // ─── Color row ───────────────────────────────────────────────────────────────
 
-class _ColorRow extends StatelessWidget {
+class _ColorRow extends ConsumerWidget {
   final String label;
   final String? value; // null = auto
   final List<String> palette;
   final bool allowNull;
   final String nullLabel;
+  final bool showPreviewOverlay;
   final ValueChanged<String?> onChanged;
 
   const _ColorRow({
@@ -1119,16 +1162,17 @@ class _ColorRow extends StatelessWidget {
     required this.allowNull,
     required this.onChanged,
     this.nullLabel = 'Auto',
+    this.showPreviewOverlay = true,
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final current = value != null && value!.isNotEmpty ? _hex(value!) : null;
     final textOnCurrent = current != null
         ? (current.computeLuminance() > 0.5 ? Colors.black : Colors.white)
         : context.cs.onSurfaceVariant;
     return InkWell(
-      onTap: () => _openPicker(context),
+      onTap: () => _openPicker(context, ref.read(themeProvider).activePreset),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
@@ -1174,20 +1218,153 @@ class _ColorRow extends StatelessWidget {
     );
   }
 
-  Future<void> _openPicker(BuildContext context) async {
+  Future<void> _openPicker(BuildContext context, ThemePreset previewPreset) async {
     await showModalBottomSheet<void>(
       context: context,
       useRootNavigator: true,
       useSafeArea: true,
+      enableDrag: false,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black54,
-      builder: (_) => _ColorPickerSheet(
+      builder: (_) => _ColorPickerOverlay(
+        showPreviewOverlay: showPreviewOverlay,
+        previewPreset: previewPreset,
         current: value,
         palette: palette,
         allowNull: allowNull,
         nullLabel: nullLabel,
         onChanged: onChanged,
+      ),
+    );
+  }
+}
+
+class _ColorPickerOverlay extends StatefulWidget {
+  final bool showPreviewOverlay;
+  final ThemePreset previewPreset;
+  final String? current;
+  final List<String> palette;
+  final bool allowNull;
+  final String nullLabel;
+  final ValueChanged<String?> onChanged;
+
+  const _ColorPickerOverlay({
+    required this.showPreviewOverlay,
+    required this.previewPreset,
+    required this.current,
+    required this.palette,
+    required this.allowNull,
+    required this.nullLabel,
+    required this.onChanged,
+  });
+
+  @override
+  State<_ColorPickerOverlay> createState() => _ColorPickerOverlayState();
+}
+
+class _ColorPickerOverlayState extends State<_ColorPickerOverlay>
+    with SingleTickerProviderStateMixin {
+  static const double _dismissThreshold = 80;
+  double _dragOffset = 0;
+  bool _closing = false;
+
+  Future<void> _close() async {
+    if (_closing) return;
+    setState(() {
+      _closing = true;
+      _dragOffset = 0;
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 220));
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: _close,
+            ),
+          ),
+          if (widget.showPreviewOverlay)
+            Positioned.fill(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                child: IgnorePointer(
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.28),
+                              blurRadius: 22,
+                              offset: const Offset(0, 10),
+                            ),
+                          ],
+                        ),
+                        child: ClipRect(
+                          child: Align(
+                            alignment: Alignment.topCenter,
+                            child: ThemeChatPreview(
+                              preset: widget.previewPreset,
+                              borderColor: context.cs.outlineVariant.withValues(alpha: 0.75),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: AnimatedSlide(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeInOutCubic,
+              offset: _closing ? const Offset(0, 1.05) : Offset(0, _dragOffset / 400),
+              child: Transform.translate(
+                offset: Offset(0, _dragOffset),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onVerticalDragUpdate: (details) {
+                    if (details.primaryDelta == null) return;
+                    final next = (_dragOffset + details.primaryDelta!).clamp(0.0, 400.0);
+                    setState(() => _dragOffset = next);
+                  },
+                  onVerticalDragEnd: (details) {
+                    final velocity = details.primaryVelocity ?? 0;
+                    if (_dragOffset > _dismissThreshold || velocity > 700) {
+                      _close();
+                      return;
+                    }
+                    setState(() => _dragOffset = 0);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+                    child: _ColorPickerSheet(
+                      current: widget.current,
+                      palette: widget.palette,
+                      allowNull: widget.allowNull,
+                      nullLabel: widget.nullLabel,
+                      onChanged: widget.onChanged,
+                      onClose: _close,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1293,12 +1470,13 @@ class _BgImageRow extends StatelessWidget {
 
 // ─── Color picker bottom sheet ────────────────────────────────────────────────
 
-class _ColorPickerSheet extends StatefulWidget {
+class _ColorPickerSheet extends ConsumerStatefulWidget {
   final String? current;
   final List<String> palette;
   final bool allowNull;
   final String nullLabel;
   final ValueChanged<String?> onChanged;
+  final Future<void> Function() onClose;
 
   const _ColorPickerSheet({
     required this.current,
@@ -1306,16 +1484,21 @@ class _ColorPickerSheet extends StatefulWidget {
     required this.allowNull,
     required this.nullLabel,
     required this.onChanged,
+    required this.onClose,
   });
 
   @override
-  State<_ColorPickerSheet> createState() => _ColorPickerSheetState();
+  ConsumerState<_ColorPickerSheet> createState() => _ColorPickerSheetState();
 }
 
-class _ColorPickerSheetState extends State<_ColorPickerSheet> {
+class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
   late TextEditingController _hexCtrl;
+  late String _committedHex;
+  late String _lastCustomHex;
+  List<String> _recentCustomHexes = const [];
   String? _error;
   bool _isHslMode = true;
+  bool _showAdvancedEditor = false;
   late double _h, _s, _l;
   late int _r, _g, _b;
   bool _suppressSliderSync = false;
@@ -1323,8 +1506,10 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
   @override
   void initState() {
     super.initState();
-    _hexCtrl = TextEditingController(text: widget.current ?? '');
-    final currentColor = widget.current != null ? _hex(widget.current!) : const Color(0xFF7996CE);
+    _committedHex = widget.current ?? '#7996CE';
+    _lastCustomHex = _committedHex;
+    _hexCtrl = TextEditingController(text: _committedHex);
+    final currentColor = _hex(_committedHex);
     final hsl = HSLColor.fromColor(currentColor);
     _h = hsl.hue;
     _s = hsl.saturation;
@@ -1332,6 +1517,7 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
     _r = (currentColor.r * 255).round();
     _g = (currentColor.g * 255).round();
     _b = (currentColor.b * 255).round();
+    _loadCustomColorHistory();
   }
 
   @override
@@ -1340,20 +1526,42 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
     super.dispose();
   }
 
-  void _applyColor(Color color) {
+  void _setHexText(String hex) {
+    if (_hexCtrl.text == hex) return;
+    _hexCtrl.value = TextEditingValue(
+      text: hex,
+      selection: TextSelection.collapsed(offset: hex.length),
+    );
+  }
+
+  void _syncFromColor(Color color, {required bool updateHsl}) {
     final hex = _toHex(color);
     _suppressSliderSync = true;
-    final hsl = HSLColor.fromColor(color);
-    _h = hsl.hue;
-    _s = hsl.saturation;
-    _l = hsl.lightness;
+    if (updateHsl) {
+      final hsl = HSLColor.fromColor(color);
+      _h = hsl.hue;
+      _s = hsl.saturation;
+      _l = hsl.lightness;
+    }
     _r = (color.r * 255).round();
     _g = (color.g * 255).round();
     _b = (color.b * 255).round();
-    _hexCtrl.text = hex;
+    _committedHex = hex;
+    if (_showAdvancedEditor) {
+      _lastCustomHex = hex;
+    }
+    _setHexText(hex);
     setState(() => _error = null);
     widget.onChanged(hex);
     _suppressSliderSync = false;
+  }
+
+  void _applyExternalColor(Color color) {
+    _syncFromColor(color, updateHsl: true);
+  }
+
+  void _applyHslColor(Color color) {
+    _syncFromColor(color, updateHsl: false);
   }
 
   void _onHexChanged(String hex) {
@@ -1370,19 +1578,19 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
       return;
     }
     setState(() => _error = null);
-    _applyColor(parsed);
+    _applyExternalColor(parsed);
   }
 
   void _onHslChanged() {
     if (_suppressSliderSync) return;
     final color = HSLColor.fromAHSL(1.0, _h, _s.clamp(0.0, 1.0), _l.clamp(0.0, 1.0)).toColor();
-    _applyColor(color);
+    _applyHslColor(color);
   }
 
   void _onRgbChanged() {
     if (_suppressSliderSync) return;
     final color = Color.fromARGB(255, _r.clamp(0, 255), _g.clamp(0, 255), _b.clamp(0, 255));
-    _applyColor(color);
+    _applyExternalColor(color);
   }
 
   Color? _parseHexSafe(String hex) {
@@ -1396,24 +1604,68 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
     }
   }
 
+  Future<void> _loadCustomColorHistory() async {
+    final prefs = await ref.read(sharedPreferencesProvider.future);
+    final stored = prefs.getStringList(_customColorHistoryKey) ?? const [];
+    final cleaned = stored
+        .map((e) => e.trim().toUpperCase())
+        .where((e) => RegExp(r'^#[0-9A-F]{6}$').hasMatch(e))
+        .take(_customColorHistoryLimit)
+        .toList();
+    if (!mounted) return;
+    setState(() {
+      _recentCustomHexes = cleaned;
+      if (cleaned.isNotEmpty) {
+        _lastCustomHex = cleaned.first;
+      }
+    });
+  }
+
+  Future<void> _saveCustomColorHistory(String hex) async {
+    final normalized = hex.trim().toUpperCase();
+    if (!RegExp(r'^#[0-9A-F]{6}$').hasMatch(normalized)) return;
+    final next = [
+      normalized,
+      ..._recentCustomHexes.where((item) => item.toUpperCase() != normalized),
+    ].take(_customColorHistoryLimit).toList();
+    final prefs = await ref.read(sharedPreferencesProvider.future);
+    await prefs.setStringList(_customColorHistoryKey, next);
+    if (!mounted) return;
+    setState(() {
+      _recentCustomHexes = next;
+      _lastCustomHex = normalized;
+    });
+  }
+
+  Future<void> _confirmAndClose() async {
+    if (_showAdvancedEditor && _committedHex.trim().isNotEmpty) {
+      await _saveCustomColorHistory(_committedHex);
+    }
+    if (!mounted) return;
+    await widget.onClose();
+  }
+
+  bool _isPaletteSelected(String hex) {
+    return _toHex(_hex(hex)).toUpperCase() == _committedHex.toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final currentColor = _parseHexSafe(_hexCtrl.text) ?? const Color(0xFF7996CE);
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          color: cs.surface.withValues(alpha: 0.85),
-          child: Padding(
-            padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom),
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                child: SingleChildScrollView(
-                  child: Column(
+    final currentColor = _parseHexSafe(_committedHex) ?? const Color(0xFF7996CE);
+    final isAutoSelected = widget.allowNull && _hexCtrl.text.trim().isEmpty;
+    final primaryPalette = widget.palette.skip(1).take(5).toList();
+    return GlazeBottomSheetFrame(
+      maxHeightFactor: 0.82,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 16,
+          top: 4,
+          right: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 8,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -1428,211 +1680,385 @@ class _ColorPickerSheetState extends State<_ColorPickerSheet> {
                           ),
                         ),
                       ),
-                      // Preview swatch
-                      Center(
-                        child: Container(
-                          width: 56,
-                          height: 56,
-                          margin: const EdgeInsets.only(bottom: 12),
-                          decoration: BoxDecoration(
-                            color: currentColor,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: cs.outlineVariant, width: 1.5),
-                          ),
-                        ),
-                      ),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 10,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
+                          _PickerIconButton(
+                            icon: Icons.arrow_back_rounded,
+                            onTap: _confirmAndClose,
+                            iconColor: cs.primary,
+                            borderColor: cs.outlineVariant,
+                            tintColor: cs.surface,
+                            size: 56,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Container(
+                              height: 56,
+                              decoration: BoxDecoration(
+                                color: currentColor,
+                                borderRadius: BorderRadius.circular(28),
+                                border: Border.all(
+                                  color: cs.onSurfaceVariant.withValues(alpha: 0.45),
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: Wrap(
+                          alignment: WrapAlignment.center,
+                          runAlignment: WrapAlignment.center,
+                          spacing: 10,
+                          runSpacing: 10,
+                          children: [
                           if (widget.allowNull)
                             GestureDetector(
                               onTap: () {
+                                setState(() {
+                                  _hexCtrl.clear();
+                                  _error = null;
+                                  _committedHex = '';
+                                  _showAdvancedEditor = false;
+                                });
                                 widget.onChanged(null);
-                                Navigator.pop(context);
                               },
                               child: Container(
                                 width: 44,
                                 height: 44,
                                 decoration: BoxDecoration(
-                                  border: Border.all(
-                                      color: cs.outlineVariant, width: 1.5),
-                                  borderRadius: BorderRadius.circular(10),
+                                  color: Colors.transparent,
+                                  border: isAutoSelected
+                                      ? Border.all(
+                                          color: cs.onSurfaceVariant.withValues(alpha: 0.45),
+                                          width: 1.5,
+                                        )
+                                      : null,
+                                  shape: BoxShape.circle,
                                 ),
                                 child: Icon(Icons.auto_awesome,
                                     size: 18, color: cs.onSurfaceVariant),
                               ),
                             ),
-                          ...widget.palette.map((hex) {
+                          ...primaryPalette.map((hex) {
                             final color = _hex(hex);
-                            final isSelected = widget.current?.toUpperCase() ==
-                                hex.toUpperCase();
+                            final isSelected = _isPaletteSelected(hex);
                             return GestureDetector(
                               onTap: () {
-                                _applyColor(color);
-                                Navigator.pop(context);
+                                _applyExternalColor(color);
+                                setState(() => _showAdvancedEditor = false);
                               },
                               child: Container(
                                 width: 44,
                                 height: 44,
                                 decoration: BoxDecoration(
                                   color: color,
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? cs.primary
-                                        : cs.outlineVariant,
-                                    width: isSelected ? 3 : 1,
-                                  ),
+                                  shape: BoxShape.circle,
+                                  border: isSelected
+                                      ? Border.all(
+                                          color: cs.onSurfaceVariant.withValues(alpha: 0.45),
+                                          width: 1.5,
+                                        )
+                                      : null,
                                 ),
-                                child: isSelected
-                                    ? Icon(
-                                        Icons.check,
-                                        size: 20,
-                                        color: color.computeLuminance() > 0.4
-                                            ? Colors.black
-                                            : Colors.white,
-                                      )
-                                    : null,
                               ),
                             );
                           }),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      // Mode toggle
-                      Row(
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setState(() => _isHslMode = true),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: _isHslMode ? cs.primary.withValues(alpha: 0.15) : Colors.transparent,
-                                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
-                                  border: Border.all(color: cs.outlineVariant),
-                                ),
-                                child: Text(
-                                  'HSL',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: _isHslMode ? cs.primary : cs.onSurfaceVariant,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
-                                  ),
-                                ),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _showAdvancedEditor = !_showAdvancedEditor;
+                                if (_showAdvancedEditor) {
+                                  _applyExternalColor(_hex(_lastCustomHex));
+                                }
+                              });
+                            },
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: _showAdvancedEditor
+                                    ? currentColor
+                                    : cs.surfaceContainerHighest.withValues(alpha: 0.35),
+                                shape: BoxShape.circle,
+                                border: _showAdvancedEditor
+                                    ? Border.all(
+                                        color: cs.onSurfaceVariant.withValues(alpha: 0.45),
+                                        width: 1.5,
+                                      )
+                                    : null,
+                              ),
+                              child: Icon(
+                                Icons.edit_outlined,
+                                size: 18,
+                                color: _showAdvancedEditor
+                                    ? (currentColor.computeLuminance() > 0.5
+                                        ? Colors.black
+                                        : Colors.white)
+                                    : cs.onSurfaceVariant,
                               ),
                             ),
                           ),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => setState(() => _isHslMode = false),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: !_isHslMode ? cs.primary.withValues(alpha: 0.15) : Colors.transparent,
-                                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
-                                  border: Border(
-                                    top: BorderSide(color: cs.outlineVariant),
-                                    right: BorderSide(color: cs.outlineVariant),
-                                    bottom: BorderSide(color: cs.outlineVariant),
-                                  ),
-                                ),
-                                child: Text(
-                                  'RGB',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: !_isHslMode ? cs.primary : cs.onSurfaceVariant,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                      if (_isHslMode) ...[
-                        _PickerSlider(
-                          label: 'Hue',
-                          value: _h,
-                          min: 0,
-                          max: 360,
-                          divisions: 360,
-                          display: '${_h.round()}\u00B0',
-                          onChanged: (v) { _h = v; _onHslChanged(); setState(() {}); },
-                        ),
-                        _PickerSlider(
-                          label: 'Saturation',
-                          value: _s * 100,
-                          min: 0,
-                          max: 100,
-                          divisions: 100,
-                          display: '${(_s * 100).round()}%',
-                          onChanged: (v) { _s = v / 100; _onHslChanged(); setState(() {}); },
-                        ),
-                        _PickerSlider(
-                          label: 'Lightness',
-                          value: _l * 100,
-                          min: 0,
-                          max: 100,
-                          divisions: 100,
-                          display: '${(_l * 100).round()}%',
-                          onChanged: (v) { _l = v / 100; _onHslChanged(); setState(() {}); },
-                        ),
-                      ] else ...[
-                        _PickerSlider(
-                          label: 'Red',
-                          value: _r.toDouble(),
-                          min: 0,
-                          max: 255,
-                          divisions: 255,
-                          display: '$_r',
-                          activeColor: const Color(0xFFFF4444),
-                          onChanged: (v) { _r = v.round(); _onRgbChanged(); setState(() {}); },
-                        ),
-                        _PickerSlider(
-                          label: 'Green',
-                          value: _g.toDouble(),
-                          min: 0,
-                          max: 255,
-                          divisions: 255,
-                          display: '$_g',
-                          activeColor: const Color(0xFF44BB44),
-                          onChanged: (v) { _g = v.round(); _onRgbChanged(); setState(() {}); },
-                        ),
-                        _PickerSlider(
-                          label: 'Blue',
-                          value: _b.toDouble(),
-                          min: 0,
-                          max: 255,
-                          divisions: 255,
-                          display: '$_b',
-                          activeColor: const Color(0xFF4488FF),
-                          onChanged: (v) { _b = v.round(); _onRgbChanged(); setState(() {}); },
+                      if (_recentCustomHexes.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: Wrap(
+                            alignment: WrapAlignment.center,
+                            runAlignment: WrapAlignment.center,
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: _recentCustomHexes.map((hex) {
+                              final color = _hex(hex);
+                              final isSelected = _showAdvancedEditor &&
+                                  _committedHex.toUpperCase() == hex.toUpperCase();
+                              return GestureDetector(
+                                onTap: () {
+                                  _applyExternalColor(color);
+                                  setState(() {
+                                    _lastCustomHex = hex;
+                                    _showAdvancedEditor = true;
+                                  });
+                                },
+                                child: Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    border: isSelected
+                                        ? Border.all(
+                                            color: cs.onSurfaceVariant.withValues(alpha: 0.45),
+                                            width: 1.5,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
                         ),
                       ],
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: _hexCtrl,
-                        decoration: InputDecoration(
-                          hintText: '#7996CE',
-                          labelText: 'Hex Color',
-                          errorText: _error,
-                          prefixText:
-                              _hexCtrl.text.startsWith('#') ? null : '#',
-                          border: const OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        onChanged: _onHexChanged,
+                      AnimatedSize(
+                        duration: const Duration(milliseconds: 220),
+                        curve: Curves.easeInOutCubic,
+                        alignment: Alignment.topCenter,
+                        child: _showAdvancedEditor
+                            ? Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const SizedBox(height: 16),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: () => setState(() => _isHslMode = true),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: _isHslMode ? cs.primary.withValues(alpha: 0.15) : Colors.transparent,
+                                              borderRadius: const BorderRadius.horizontal(left: Radius.circular(8)),
+                                              border: Border.all(color: cs.outlineVariant),
+                                            ),
+                                            child: Text(
+                                              'HSL',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: _isHslMode ? cs.primary : cs.onSurfaceVariant,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: () => setState(() => _isHslMode = false),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: !_isHslMode ? cs.primary.withValues(alpha: 0.15) : Colors.transparent,
+                                              borderRadius: const BorderRadius.horizontal(right: Radius.circular(8)),
+                                              border: Border(
+                                                top: BorderSide(color: cs.outlineVariant),
+                                                right: BorderSide(color: cs.outlineVariant),
+                                                bottom: BorderSide(color: cs.outlineVariant),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'RGB',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                color: !_isHslMode ? cs.primary : cs.onSurfaceVariant,
+                                                fontWeight: FontWeight.w600,
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  if (_isHslMode) ...[
+                                    _PickerSlider(
+                                      label: 'Hue',
+                                      value: _h,
+                                      min: 0,
+                                      max: 360,
+                                      divisions: 360,
+                                      display: '${_h.round()}\u00B0',
+                                      onChanged: (v) { _h = v; _onHslChanged(); setState(() {}); },
+                                    ),
+                                    _PickerSlider(
+                                      label: 'Saturation',
+                                      value: _s * 100,
+                                      min: 0,
+                                      max: 100,
+                                      divisions: 100,
+                                      display: '${(_s * 100).round()}%',
+                                      onChanged: (v) { _s = v / 100; _onHslChanged(); setState(() {}); },
+                                    ),
+                                    _PickerSlider(
+                                      label: 'Lightness',
+                                      value: _l * 100,
+                                      min: 0,
+                                      max: 100,
+                                      divisions: 100,
+                                      display: '${(_l * 100).round()}%',
+                                      onChanged: (v) { _l = v / 100; _onHslChanged(); setState(() {}); },
+                                    ),
+                                  ] else ...[
+                                    _PickerSlider(
+                                      label: 'Red',
+                                      value: _r.toDouble(),
+                                      min: 0,
+                                      max: 255,
+                                      divisions: 255,
+                                      display: '$_r',
+                                      activeColor: const Color(0xFFFF4444),
+                                      onChanged: (v) { _r = v.round(); _onRgbChanged(); setState(() {}); },
+                                    ),
+                                    _PickerSlider(
+                                      label: 'Green',
+                                      value: _g.toDouble(),
+                                      min: 0,
+                                      max: 255,
+                                      divisions: 255,
+                                      display: '$_g',
+                                      activeColor: const Color(0xFF44BB44),
+                                      onChanged: (v) { _g = v.round(); _onRgbChanged(); setState(() {}); },
+                                    ),
+                                    _PickerSlider(
+                                      label: 'Blue',
+                                      value: _b.toDouble(),
+                                      min: 0,
+                                      max: 255,
+                                      divisions: 255,
+                                      display: '$_b',
+                                      activeColor: const Color(0xFF4488FF),
+                                      onChanged: (v) { _b = v.round(); _onRgbChanged(); setState(() {}); },
+                                    ),
+                                  ],
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: _hexCtrl,
+                                    decoration: InputDecoration(
+                                      hintText: '#7996CE',
+                                      labelText: 'Hex Color',
+                                      errorText: _error,
+                                      prefixText:
+                                          _hexCtrl.text.startsWith('#') ? null : '#',
+                                      border: const OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    onChanged: _onHexChanged,
+                                  ),
+                                  const SizedBox(height: 8),
+                                ],
+                              )
+                            : const SizedBox(height: 8),
                       ),
-                      const SizedBox(height: 8),
                     ],
                   ),
-                ),
-              ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerIconButton extends StatefulWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final Color iconColor;
+  final Color borderColor;
+  final Color tintColor;
+  final double size;
+
+  const _PickerIconButton({
+    required this.icon,
+    required this.onTap,
+    required this.iconColor,
+    required this.borderColor,
+    required this.tintColor,
+    this.size = 40,
+  });
+
+  @override
+  State<_PickerIconButton> createState() => _PickerIconButtonState();
+}
+
+class _PickerIconButtonState extends State<_PickerIconButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _press;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _press = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 80),
+      reverseDuration: const Duration(milliseconds: 150),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 0.82).animate(
+      CurvedAnimation(parent: _press, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: widget.onTap != null ? (_) => _press.forward() : null,
+      onTapUp: widget.onTap != null ? (_) => _press.reverse() : null,
+      onTapCancel: widget.onTap != null ? () => _press.reverse() : null,
+      child: ScaleTransition(
+        scale: _scale,
+        child: SizedBox(
+          width: widget.size,
+          height: widget.size,
+          child: GlassSurface(
+            borderRadius: BorderRadius.circular(widget.size / 2),
+            tint: widget.tintColor,
+            border: Border.all(color: widget.borderColor),
+            child: Center(
+              child: Icon(widget.icon, color: widget.iconColor, size: 20),
             ),
           ),
         ),

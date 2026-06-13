@@ -10,6 +10,7 @@ abstract class Character with _$Character {
   const factory Character({
     required String id,
     required String name,
+    String? displayName,
     String? avatarPath,
     String? description,
     String? personality,

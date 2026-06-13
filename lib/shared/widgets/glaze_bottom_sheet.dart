@@ -164,6 +164,43 @@ class GlazeBottomSheet {
 
 // ── Sheet content ─────────────────────────────────────────────────────────────
 
+class GlazeBottomSheetFrame extends ConsumerWidget {
+  final Widget child;
+  final bool showHandle;
+  final double maxHeightFactor;
+
+  const GlazeBottomSheetFrame({
+    super.key,
+    required this.child,
+    this.showHandle = true,
+    this.maxHeightFactor = 0.95,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * maxHeightFactor,
+      ),
+      child: GlassSurface(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        border: Border(top: BorderSide(color: context.cs.outlineVariant)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (showHandle) _HandleBar(),
+            Flexible(
+              fit: FlexFit.loose,
+              child: child,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _GlazeBottomSheetContent extends ConsumerStatefulWidget {
   final String? title;
   final Widget? headerAction;

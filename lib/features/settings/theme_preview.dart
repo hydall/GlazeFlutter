@@ -39,52 +39,22 @@ class ThemeChatPreview extends ConsumerWidget {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(20),
-      child: Stack(
-        children: [
-          Theme(
-            data: previewTheme,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: previewTheme.scaffoldBackgroundColor,
-                border: Border.all(color: borderColor),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: AbsorbPointer(
-                child: _PreviewChatScene(
-                  preset: preset,
-                  character: previewCharacter,
-                  isStandard: isStandard,
-                ),
-              ),
+      child: Theme(
+        data: previewTheme,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: previewTheme.scaffoldBackgroundColor,
+            border: Border.all(color: borderColor),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: AbsorbPointer(
+            child: _PreviewChatScene(
+              preset: preset,
+              character: previewCharacter,
+              isStandard: isStandard,
             ),
           ),
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            child: IgnorePointer(
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.black54, Colors.transparent],
-                  ),
-                ),
-                child: const Text(
-                  'PREVIEW',
-                  style: TextStyle(
-                    color: Color(0xE6FFFFFF),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -121,10 +91,8 @@ class _PreviewChatScene extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Top padding leaves room for the "PREVIEW" label overlay drawn by
-          // the parent.
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 44, 8, 0),
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
             child: GlazeAppBar(
               showBack: true,
               onBack: () {},

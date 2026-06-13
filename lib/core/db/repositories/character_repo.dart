@@ -245,42 +245,48 @@ class CharacterRepo implements SyncCharacterStore {
         );
   }
 
-  Character _toModel(CharacterRow c) => Character(
-        id: c.charId,
-        name: c.name,
-        avatarPath: c.avatarPath,
-        description: c.description,
-        personality: c.personality,
-        scenario: c.scenario,
-        firstMes: c.firstMes,
-        mesExample: c.mesExample,
-        systemPrompt: c.systemPrompt,
-        postHistoryInstructions: c.postHistoryInstructions,
-        creator: c.creator,
-        creatorNotes: c.creatorNotes,
-        color: c.color,
-        updatedAt: c.updatedAt,
-        createdAt: c.createdAt,
-        tags: c.tagsJson != null
-            ? List<String>.from(jsonDecode(c.tagsJson!) as List<dynamic>)
-            : [],
-        alternateGreetings: c.alternateGreetingsJson != null
-            ? List<String>.from(jsonDecode(c.alternateGreetingsJson!) as List<dynamic>)
-            : [],
-        gallery: c.galleryJson != null
-            ? (jsonDecode(c.galleryJson!) as List)
-                .map((e) => GalleryEntry.fromJson(e as Map<String, dynamic>))
-                .toList()
-            : [],
-        currentSessionIndex: c.currentSessionIndex,
-        fav: c.fav,
-        extensions: c.extensionsJson != null
-            ? Map<String, dynamic>.from(jsonDecode(c.extensionsJson!) as Map)
-            : {},
-        characterVersion: c.characterVersion,
-        macroName: c.macroName,
-        picksHash: c.picksHash,
-      );
+  Character _toModel(CharacterRow c) {
+    final extensions = c.extensionsJson != null
+        ? Map<String, dynamic>.from(jsonDecode(c.extensionsJson!) as Map)
+        : <String, dynamic>{};
+    final rawDisplayName = extensions.remove('displayName');
+
+    return Character(
+      id: c.charId,
+      name: c.name,
+      displayName: rawDisplayName is String ? rawDisplayName : null,
+      avatarPath: c.avatarPath,
+      description: c.description,
+      personality: c.personality,
+      scenario: c.scenario,
+      firstMes: c.firstMes,
+      mesExample: c.mesExample,
+      systemPrompt: c.systemPrompt,
+      postHistoryInstructions: c.postHistoryInstructions,
+      creator: c.creator,
+      creatorNotes: c.creatorNotes,
+      color: c.color,
+      updatedAt: c.updatedAt,
+      createdAt: c.createdAt,
+      tags: c.tagsJson != null
+          ? List<String>.from(jsonDecode(c.tagsJson!) as List<dynamic>)
+          : [],
+      alternateGreetings: c.alternateGreetingsJson != null
+          ? List<String>.from(jsonDecode(c.alternateGreetingsJson!) as List<dynamic>)
+          : [],
+      gallery: c.galleryJson != null
+          ? (jsonDecode(c.galleryJson!) as List)
+              .map((e) => GalleryEntry.fromJson(e as Map<String, dynamic>))
+              .toList()
+          : [],
+      currentSessionIndex: c.currentSessionIndex,
+      fav: c.fav,
+      extensions: extensions,
+      characterVersion: c.characterVersion,
+      macroName: c.macroName,
+      picksHash: c.picksHash,
+    );
+  }
 
   CharactersCompanion _toCompanion(Character m) => CharactersCompanion(
         charId: Value(m.id),
@@ -303,11 +309,22 @@ class CharacterRepo implements SyncCharacterStore {
         galleryJson: Value(jsonEncode(m.gallery.map((e) => e.toJson()).toList())),
         currentSessionIndex: Value(m.currentSessionIndex),
         fav: Value(m.fav),
-        extensionsJson: Value(m.extensions.isNotEmpty ? jsonEncode(m.extensions) : null),
+        extensionsJson: Value(_encodeCharacterExtensions(m)),
         characterVersion: Value(m.characterVersion),
         macroName: Value(m.macroName),
         picksHash: Value(m.picksHash),
       );
+
+  String? _encodeCharacterExtensions(Character m) {
+    final extensions = Map<String, dynamic>.from(m.extensions);
+    final displayName = m.displayName?.trim();
+    if (displayName != null && displayName.isNotEmpty) {
+      extensions['displayName'] = displayName;
+    } else {
+      extensions.remove('displayName');
+    }
+    return extensions.isNotEmpty ? jsonEncode(extensions) : null;
+  }
 
   Map<String, dynamic> _decodeJsonMap(String? text) {
     if (text == null || text.isEmpty) return <String, dynamic>{};

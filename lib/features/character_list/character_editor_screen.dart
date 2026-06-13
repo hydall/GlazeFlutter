@@ -42,6 +42,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
     if (widget.isNew) {
       _item = {
         'name': '',
+        'display_name': '',
         'description': '',
         'personality': '',
         'scenario': '',
@@ -82,6 +83,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
       _original = char;
       _item = {
         'name': char.name,
+        'display_name': char.displayName ?? '',
         'description': char.description ?? '',
         'personality': char.personality ?? '',
         'scenario': char.scenario ?? '',
@@ -164,6 +166,9 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
 
       final updated = _original?.copyWith(
         name: (item['name'] as String).trim(),
+        displayName: (item['display_name'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : (item['display_name'] as String).trim(),
         avatarPath: item['avatarPath'] as String?,
         description: (item['description'] as String?)?.trim().isEmpty ?? true
             ? null
@@ -208,6 +213,9 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
       ) ?? Character(
         id: _effectiveId,
         name: (item['name'] as String).trim(),
+        displayName: (item['display_name'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : (item['display_name'] as String).trim(),
         avatarPath: item['avatarPath'] as String?,
         description: (item['description'] as String?)?.trim().isEmpty ?? true
             ? null
@@ -262,66 +270,6 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
     }
   }
 
-  void _onOpenFsEditor(String field, int index) {
-    if (field == 'first_mes') {
-      _editGreeting(index);
-    } else {
-      _editExpandableField(field);
-    }
-  }
-
-  void _editGreeting(int index) {
-    final greetings = <String>[];
-    final first = (_item['first_mes'] as String?) ?? '';
-    greetings.add(first);
-    final alt = _item['alternate_greetings'];
-    if (alt is List) greetings.addAll(alt.cast<String>());
-    if (index < 0 || index >= greetings.length) return;
-
-    final ctrl = TextEditingController(text: greetings[index]);
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
-        title: Text("${'action_edit'.tr()} ${'placeholder_greeting'.tr().replaceAll('.', '')} #${index + 1}"),
-        content: SizedBox(
-          width: MediaQuery.of(ctx).size.width * 0.8,
-          child: TextField(
-            controller: ctrl,
-            maxLines: 12,
-            autofocus: true,
-            keyboardType: TextInputType.multiline,
-            textInputAction: TextInputAction.newline,
-            style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface, fontSize: 14),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.05),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('btn_cancel'.tr())),
-          FilledButton(
-            onPressed: () {
-              final newText = ctrl.text;
-              if (index == 0) {
-                _item['first_mes'] = newText;
-              } else {
-                final altList = (_item['alternate_greetings'] as List?)?.cast<String>().toList() ?? <String>[];
-                if (index - 1 < altList.length) altList[index - 1] = newText;
-                _item['alternate_greetings'] = altList;
-              }
-              Navigator.pop(ctx);
-              setState(() {});
-            },
-            child: Text('btn_save'.tr()),
-          ),
-        ],
-      ),
-    );
-  }
-
   String _getFieldLabel(String field) => switch (field) {
         'name' => 'label_name'.tr(),
         'creator' => 'placeholder_author_name'.tr(),
@@ -338,44 +286,6 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         _ => field.replaceAll('_', ' ').replaceFirstMapped(RegExp(r'[a-z]'), (m) => m.group(0)!.toUpperCase()),
       };
 
-  void _editExpandableField(String field) {
-    final ctrl = TextEditingController(text: (_item[field] as String?) ?? '');
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(ctx).scaffoldBackgroundColor,
-        title: Text(_getFieldLabel(field)),
-        content: SizedBox(
-          width: MediaQuery.of(ctx).size.width * 0.8,
-          child: TextField(
-            controller: ctrl,
-            maxLines: 16,
-            autofocus: true,
-            keyboardType: TextInputType.multiline,
-            textInputAction: TextInputAction.newline,
-            style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface, fontSize: 14),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.05),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('btn_cancel'.tr())),
-          FilledButton(
-            onPressed: () {
-              _item[field] = ctrl.text;
-              Navigator.pop(ctx);
-              setState(() {});
-            },
-            child: Text('btn_save'.tr()),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -390,6 +300,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
         title: null,
         fields: [
           GenericEditorField(key: 'name', label: 'label_name'.tr(), type: 'text'),
+          GenericEditorField(key: 'display_name', label: 'Display Name', type: 'text'),
           GenericEditorField(key: 'creator', label: 'placeholder_author_name'.tr(), type: 'text'),
           GenericEditorField(key: 'tags', label: 'label_tags'.tr(), type: 'tags', placeholder: 'tag1, tag2, tag3'),
         ],
@@ -489,7 +400,6 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
           _item = values;
         },
         onSave: widget.isNew ? null : _save,
-        onOpenFsEditor: _onOpenFsEditor,
       ),
     );
   }

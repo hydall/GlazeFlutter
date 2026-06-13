@@ -199,100 +199,98 @@ class _HeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final card = GestureDetector(
+    final card = GlassSurface(
       onTap: onTap,
-      child: GlassSurface(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: context.cs.outlineVariant),
-        child: SizedBox(
-          height: isAvatar ? null : 140,
-          child: Stack(
-            children: [
-              if (isAvatar) ...[
-                Positioned.fill(
-                  child: avatarPath != null && avatarPath!.isNotEmpty
-                      ? Image.file(
-                          File(resolveGlazeFilePath(avatarPath!)!),
-                          key: ValueKey(avatarPath),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, _, _) =>
-                              _AvatarGradientPlaceholder(subtitle: subtitle),
-                        )
-                      : _AvatarGradientPlaceholder(subtitle: subtitle),
-                ),
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.3),
-                          Colors.black.withValues(alpha: 0.8),
-                        ],
-                      ),
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(color: context.cs.outlineVariant),
+      child: SizedBox(
+        height: isAvatar ? null : 140,
+        child: Stack(
+          children: [
+            if (isAvatar) ...[
+              Positioned.fill(
+                child: avatarPath != null && avatarPath!.isNotEmpty
+                    ? Image.file(
+                        File(resolveGlazeFilePath(avatarPath!)!),
+                        key: ValueKey(avatarPath),
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, _, _) =>
+                            _AvatarGradientPlaceholder(subtitle: subtitle),
+                      )
+                    : _AvatarGradientPlaceholder(subtitle: subtitle),
+              ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.3),
+                        Colors.black.withValues(alpha: 0.8),
+                      ],
                     ),
                   ),
                 ),
-              ] else ...[
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          Colors.white.withValues(alpha: 0.05),
-                          Colors.white.withValues(alpha: 0.01),
-                        ],
-                      ),
+              ),
+            ] else ...[
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Colors.white.withValues(alpha: 0.05),
+                        Colors.white.withValues(alpha: 0.01),
+                      ],
                     ),
                   ),
-                ),
-              ],
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    if (isAvatar)
-                      Text(title.toUpperCase(), style: _labelStyle)
-                    else
-                      Row(
-                        children: [
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: _svgPath(
-                                iconPath,
-                                fill: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Text(title.toUpperCase(), style: _labelStyle),
-                        ],
-                      ),
-                    Text(
-                      subtitle,
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
                 ),
               ),
             ],
-          ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  if (isAvatar)
+                    Text(title.toUpperCase(), style: _labelStyle)
+                  else
+                    Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Center(
+                            child: _svgPath(
+                              iconPath,
+                              fill: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(title.toUpperCase(), style: _labelStyle),
+                      ],
+                    ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -347,76 +345,74 @@ class _GridTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return GlassSurface(
       onTap: onTap,
-      child: GlassSurface(
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.cs.outlineVariant),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: context.cs.surface,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Center(
-                      child: _svgPath(
-                        iconPath!,
-                        fill: context.cs.onSurfaceVariant,
-                        size: 22,
-                      ),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: context.cs.outlineVariant),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: context.cs.surface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: _svgPath(
+                      iconPath!,
+                      fill: context.cs.onSurfaceVariant,
+                      size: 22,
                     ),
                   ),
-                  if (showStatusDot)
-                    Positioned(
-                      bottom: -2,
-                      right: -2,
-                      child: Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: context.cs.onSurfaceVariant,
-                          border: Border.all(
-                            color: context.cs.surface,
-                            width: 2,
-                          ),
+                ),
+                if (showStatusDot)
+                  Positioned(
+                    bottom: -2,
+                    right: -2,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: context.cs.onSurfaceVariant,
+                        border: Border.all(
+                          color: context.cs.surface,
+                          width: 2,
                         ),
                       ),
                     ),
-                ],
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurface,
               ),
-              const SizedBox(height: 16),
-              Text(
-                title,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: context.cs.onSurface,
-                ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: context.cs.primary,
               ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: context.cs.primary,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ),
       ),
     );

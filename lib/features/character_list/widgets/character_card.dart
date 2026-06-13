@@ -41,6 +41,12 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   late final Animation<double> _scaleAnim;
 
   Character get character => widget.character;
+  String get _displayName {
+    final displayName = character.displayName?.trim();
+    return (displayName != null && displayName.isNotEmpty)
+        ? displayName
+        : character.name;
+  }
 
   @override
   void initState() {
@@ -243,7 +249,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
       color: _avatarColor().withValues(alpha: 0.2),
       child: Center(
         child: Text(
-          character.name.isNotEmpty ? character.name[0].toUpperCase() : '?',
+          _displayName.isNotEmpty ? _displayName[0].toUpperCase() : '?',
           style: TextStyle(
             fontSize: 48,
             color: _avatarColor(),
@@ -323,7 +329,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   void _showExportOptions(BuildContext context) {
     GlazeBottomSheet.show<void>(
       context,
-      title: 'Export ${character.name}',
+      title: 'Export $_displayName',
       items: [
         BottomSheetItem(
           icon: Icons.image_outlined,
@@ -475,7 +481,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
       title: 'Delete Character',
       bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
-        description: 'Delete ${character.name}? This cannot be undone.',
+        description: 'Delete $_displayName? This cannot be undone.',
       ),
       items: [
         BottomSheetItem(
@@ -520,6 +526,13 @@ class _CardInfo extends StatelessWidget {
 
   const _CardInfo({required this.character});
 
+  String get _displayName {
+    final displayName = character.displayName?.trim();
+    return (displayName != null && displayName.isNotEmpty)
+        ? displayName
+        : character.name;
+  }
+
   @override
   Widget build(BuildContext context) {
     final desc = character.scenario?.isNotEmpty == true
@@ -551,7 +564,7 @@ class _CardInfo extends StatelessWidget {
               ],
               Expanded(
                 child: Text(
-                  character.name,
+                  _displayName,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -604,6 +617,10 @@ class _CardMenuButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.black.withValues(alpha: 0.5),
           shape: BoxShape.circle,
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 1,
+          ),
         ),
         child: const Icon(
           Icons.more_vert_rounded,

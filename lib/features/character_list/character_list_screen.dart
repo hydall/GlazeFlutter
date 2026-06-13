@@ -338,7 +338,12 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
       data: (all) {
         final q = _searchQuery.toLowerCase();
         final filtered = all
-            .where((c) => c.fav || c.name.toLowerCase().contains(q))
+            .where((c) {
+              final displayName = c.displayName?.toLowerCase() ?? '';
+              return c.fav ||
+                  c.name.toLowerCase().contains(q) ||
+                  displayName.contains(q);
+            })
             .toList();
         final sorted = _sortChars(filtered);
 
@@ -421,13 +426,22 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     final effectiveSort = _sortBy == SortType.lastChat
         ? SortType.name
         : _sortBy;
+    String displayNameOf(Character c) {
+      final displayName = c.displayName?.trim();
+      return (displayName != null && displayName.isNotEmpty)
+          ? displayName
+          : c.name;
+    }
+
     list.sort((a, b) {
       if (a.fav != b.fav) return a.fav ? -1 : 1;
       final cmp = switch (effectiveSort) {
-        SortType.name => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+        SortType.name => displayNameOf(a).toLowerCase().compareTo(
+          displayNameOf(b).toLowerCase(),
+        ),
         SortType.date => a.createdAt.compareTo(b.createdAt),
-        SortType.lastChat => a.name.toLowerCase().compareTo(
-          b.name.toLowerCase(),
+        SortType.lastChat => displayNameOf(a).toLowerCase().compareTo(
+          displayNameOf(b).toLowerCase(),
         ),
       };
       if (cmp != 0) return _sortDir == SortDir.desc ? -cmp : cmp;

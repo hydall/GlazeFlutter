@@ -9,7 +9,6 @@ import '../../features/settings/app_settings_provider.dart';
 import '../shell/nav_height_provider.dart';
 import '../theme/app_colors.dart';
 import 'glass_surface.dart';
-import 'glow_ripple.dart';
 
 String _iconSvg(String path) =>
     '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="$path"/></svg>';
@@ -105,9 +104,10 @@ class _GlassNavBarState extends ConsumerState<GlassNavBar> {
         (isIosLikeTargetPlatform ? 6 : 16) + bottomPad,
       ),
       child: GlassSurface(
+        enableRipple: !batterySaver,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: context.cs.outlineVariant),
-        child: batterySaver ? row : GlowRippleOverlay(child: row),
+        child: row,
       ),
     );
   }
