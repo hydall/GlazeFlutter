@@ -4,6 +4,8 @@ import 'package:crypto/crypto.dart';
 
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/memory_book.dart';
+import '../../../core/constants/image_gen_patterns.dart';
+import '../../../features/extensions/models/info_block.dart';
 import '../cloud_adapter.dart';
 import '../sync_models.dart';
 
@@ -54,7 +56,6 @@ class SyncSerialization {
     return {
       'sessionId': json['sessionId'],
       'entries': json['entries'] ?? <dynamic>[],
-      'pendingDrafts': json['pendingDrafts'] ?? <dynamic>[],
       'settings': _memoryBookSettingsForHash(settings),
     };
   }
@@ -92,6 +93,41 @@ class SyncSerialization {
         return copy;
       }).toList(),
     );
+  }
+
+  static Map<String, dynamic> infoBlocksPayload(List<InfoBlock> blocks) {
+    return {
+      '__infoBlocks': true,
+      'items': blocks.map(normalizeInfoBlockForSync).toList(),
+    };
+  }
+
+  /// Normalizes an InfoBlock for cloud storage:
+  /// - imageGen blocks: replaces [IMG:RESULT:/path|json] with [IMG:GEN:json]
+  ///   so images can be regenerated on pull without storing device-local paths.
+  /// - All other block types: stored as-is.
+  static Map<String, dynamic> normalizeInfoBlockForSync(InfoBlock block) {
+    final json = block.toJson();
+    if (block.blockType != 'imageGen') return json;
+    final normalized = Map<String, dynamic>.from(json);
+    normalized['content'] = normalizeImageGenContent(block.content);
+    return normalized;
+  }
+
+  /// Replaces [IMG:RESULT:/abs/path|json] → [IMG:GEN:json]
+  /// and [IMG:ERROR:...] → [IMG:GEN] so that pulled blocks can be regenerated.
+  static String normalizeImageGenContent(String content) {
+    var result = content.replaceAllMapped(ImgGenPatterns.imgResultRegex, (m) {
+      final payload = m.group(1) ?? '';
+      final pipeIdx = payload.indexOf('|');
+      if (pipeIdx >= 0) {
+        final instruction = payload.substring(pipeIdx + 1);
+        return '[IMG:GEN:$instruction]';
+      }
+      return '[IMG:GEN]';
+    });
+    result = result.replaceAll(ImgGenPatterns.imgErrorStripRegex, '[IMG:GEN]');
+    return result;
   }
 
   static String computeBinaryHash(List<int> bytes) {

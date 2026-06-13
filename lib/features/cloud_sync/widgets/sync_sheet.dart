@@ -30,7 +30,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
   @override
   void initState() {
     super.initState();
-    _ctrl = SyncController(ref);
+    _ctrl = SyncController(ref, isMounted: () => mounted);
     _ctrl.initStateFromService();
     _ctrl.loadIncludeApiKeys().then((_) {
       if (mounted) setState(() {});
@@ -69,108 +69,134 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
         onBack: _goBack,
         body: Builder(
           builder: (innerContext) => SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(16, 12 + MediaQuery.paddingOf(innerContext).top, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (!connected) ...[
-                buildSyncSectionHeader(context, 'sync_connect_provider'.tr()),
-                const SizedBox(height: 4),
-                buildSyncProviderButton(
-                  icon: const DropboxIcon(size: 22, color: Colors.white),
-                  label: _ctrl.isConnecting ? 'sync_connecting'.tr() : 'Dropbox',
-                  color: context.colors.accent,
-                  onPressed: _ctrl.isConnecting || _ctrl.isConnectingGdrive ? null : _connectDropbox,
-                ),
-                const SizedBox(height: 8),
-                buildSyncProviderButton(
-                  icon: const GDriveIcon(size: 22, color: Colors.white),
-                  label: _ctrl.isConnectingGdrive ? 'sync_connecting'.tr() : 'Google Drive',
-                  color: const Color(0xFF4285F4),
-                  onPressed: _ctrl.isConnecting || _ctrl.isConnectingGdrive ? null : _connectGDrive,
-                ),
-                if (lastError != null) ...[
-                  const SizedBox(height: 12),
-                  buildSyncErrorCard(lastError),
-                ],
-              ] else ...[
-                _buildConnectedCard(context, status, provider, service),
-                if (provider == SyncProvider.gdrive && _ctrl.gdriveFolderId != null)
-                  _buildFolderIdRow(context),
-                if (conflicts.isNotEmpty)
-                  _buildConflictBanner(context, conflicts),
-                if (_ctrl.syncResult != null)
-                  buildSyncResultCard(context, _ctrl.syncResult!),
-                if ((status == SyncStatus.syncing || _ctrl.isWiping) && progress != null)
-                  buildSyncProgressBar(context, progress),
-                if (lastError != null) ...[
-                  const SizedBox(height: 12),
-                  buildSyncErrorCard(lastError),
-                ],
-                const SizedBox(height: 16),
-                buildSyncSectionHeader(context, 'sync_manual'.tr()),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: buildSyncManualButton(
-                        context: context,
-                        onPressed: isSyncing ? null : () => _doSync('push'),
-                        icon: Icons.cloud_upload_outlined,
-                        label: 'sync_push'.tr(),
-                        primary: false,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: buildSyncManualButton(
-                        context: context,
-                        onPressed: isSyncing ? null : () => _doSync('pull'),
-                        icon: Icons.cloud_download_outlined,
-                        label: 'sync_pull'.tr(),
-                        primary: true,
-                      ),
-                    ),
+            padding: EdgeInsets.fromLTRB(
+              16,
+              12 + MediaQuery.paddingOf(innerContext).top,
+              16,
+              16,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (!connected) ...[
+                  buildSyncSectionHeader(context, 'sync_connect_provider'.tr()),
+                  const SizedBox(height: 4),
+                  buildSyncProviderButton(
+                    icon: const DropboxIcon(size: 22, color: Colors.white),
+                    label: _ctrl.isConnecting
+                        ? 'sync_connecting'.tr()
+                        : 'Dropbox',
+                    color: context.colors.accent,
+                    onPressed: _ctrl.isConnecting || _ctrl.isConnectingGdrive
+                        ? null
+                        : _connectDropbox,
+                  ),
+                  const SizedBox(height: 8),
+                  buildSyncProviderButton(
+                    icon: const GDriveIcon(size: 22, color: Colors.white),
+                    label: _ctrl.isConnectingGdrive
+                        ? 'sync_connecting'.tr()
+                        : 'Google Drive',
+                    color: const Color(0xFF4285F4),
+                    onPressed: _ctrl.isConnecting || _ctrl.isConnectingGdrive
+                        ? null
+                        : _connectGDrive,
+                  ),
+                  if (lastError != null) ...[
+                    const SizedBox(height: 12),
+                    buildSyncErrorCard(lastError),
                   ],
-                ),
-                const SizedBox(height: 16),
-                buildSyncSectionHeader(context, 'section_sync_settings'.tr()),
-                const SizedBox(height: 4),
-                _buildAutoSyncToggle(context, autoEnabled, service),
-                if (autoEnabled && service != null)
-                  _buildAutoSyncThresholdRow(context, service),
-                _buildIncludeApiKeysToggle(context),
-                const SizedBox(height: 16),
-                Divider(color: Colors.white.withValues(alpha: 0.1), height: 1),
-                const SizedBox(height: 16),
-                buildSyncDangerButton(
-                  icon: Icons.logout_rounded,
-                  label: 'sync_disconnect'.tr(),
-                  onPressed: _ctrl.isDisconnecting ? null : _disconnect,
-                ),
-                const SizedBox(height: 8),
-                buildSyncDangerButton(
-                  icon: Icons.delete_outline_rounded,
-                  label: _ctrl.isWiping ? 'sync_wiping'.tr() : 'sync_wipe_cloud'.tr(),
-                  onPressed: _ctrl.isWiping ? null : _wipeCloudData,
-                  light: true,
-                ),
+                ] else ...[
+                  _buildConnectedCard(context, status, provider, service),
+                  if (provider == SyncProvider.gdrive &&
+                      _ctrl.gdriveFolderId != null)
+                    _buildFolderIdRow(context),
+                  if (conflicts.isNotEmpty)
+                    _buildConflictBanner(context, conflicts),
+                  if (_ctrl.syncResult != null)
+                    buildSyncResultCard(context, _ctrl.syncResult!),
+                  if ((status == SyncStatus.syncing || _ctrl.isWiping) &&
+                      progress != null)
+                    buildSyncProgressBar(context, progress),
+                  if (lastError != null) ...[
+                    const SizedBox(height: 12),
+                    buildSyncErrorCard(lastError),
+                  ],
+                  const SizedBox(height: 16),
+                  buildSyncSectionHeader(context, 'sync_manual'.tr()),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: buildSyncManualButton(
+                          context: context,
+                          onPressed: isSyncing ? null : () => _doSync('push'),
+                          icon: Icons.cloud_upload_outlined,
+                          label: 'sync_push'.tr(),
+                          primary: false,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: buildSyncManualButton(
+                          context: context,
+                          onPressed: isSyncing ? null : () => _doSync('pull'),
+                          icon: Icons.cloud_download_outlined,
+                          label: 'sync_pull'.tr(),
+                          primary: true,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  buildSyncSectionHeader(context, 'section_sync_settings'.tr()),
+                  const SizedBox(height: 4),
+                  _buildAutoSyncToggle(context, autoEnabled, service),
+                  if (autoEnabled && service != null)
+                    _buildAutoSyncThresholdRow(context, service),
+                  _buildIncludeApiKeysToggle(context),
+                  const SizedBox(height: 16),
+                  Divider(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    height: 1,
+                  ),
+                  const SizedBox(height: 16),
+                  buildSyncDangerButton(
+                    icon: Icons.logout_rounded,
+                    label: 'sync_disconnect'.tr(),
+                    onPressed: _ctrl.isDisconnecting ? null : _disconnect,
+                  ),
+                  const SizedBox(height: 8),
+                  buildSyncDangerButton(
+                    icon: Icons.delete_outline_rounded,
+                    label: _ctrl.isWiping
+                        ? 'sync_wiping'.tr()
+                        : 'sync_wipe_cloud'.tr(),
+                    onPressed: _ctrl.isWiping ? null : _wipeCloudData,
+                    light: true,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
-        ),
-
       ),
     );
   }
 
-  Widget _buildConnectedCard(BuildContext context, SyncStatus status, SyncProvider provider, SyncService? service) {
+  Widget _buildConnectedCard(
+    BuildContext context,
+    SyncStatus status,
+    SyncProvider provider,
+    SyncService? service,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: context.colors.accent.withValues(alpha: 0.05),
-        border: Border.all(color: context.colors.accent.withValues(alpha: 0.15)),
+        border: Border.all(
+          color: context.colors.accent.withValues(alpha: 0.15),
+        ),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -214,7 +240,8 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 ),
             ],
           ),
-          if (service?.accountInfo != null && service!.accountInfo!['email'] != null) ...[
+          if (service?.accountInfo != null &&
+              service!.accountInfo!['email'] != null) ...[
             const SizedBox(height: 6),
             Text(
               service.accountInfo!['email'] as String,
@@ -227,10 +254,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
           const SizedBox(height: 4),
           Text(
             _getStatusLabel(status, service),
-            style: TextStyle(
-              fontSize: 13,
-              color: context.cs.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -249,10 +273,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
         children: [
           Text(
             'sync_gdrive_folder_id'.tr(),
-            style: TextStyle(
-              fontSize: 12,
-              color: context.cs.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -272,7 +293,10 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
             icon: const Icon(Icons.copy, size: 16, color: Colors.white54),
             onPressed: () {
               Clipboard.setData(ClipboardData(text: _ctrl.gdriveFolderId!));
-              GlazeToast.show(context, "${'sync_gdrive_folder_id'.tr()} ${'action_copy'.tr().toLowerCase()}");
+              GlazeToast.show(
+                context,
+                "${'sync_gdrive_folder_id'.tr()} ${'action_copy'.tr().toLowerCase()}",
+              );
             },
           ),
         ],
@@ -280,7 +304,10 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     );
   }
 
-  Widget _buildConflictBanner(BuildContext context, List<SyncConflict> conflicts) {
+  Widget _buildConflictBanner(
+    BuildContext context,
+    List<SyncConflict> conflicts,
+  ) {
     return Container(
       margin: const EdgeInsets.only(top: 12),
       padding: const EdgeInsets.all(12),
@@ -294,7 +321,11 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
         children: [
           Row(
             children: [
-              const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 20),
+              const Icon(
+                Icons.warning_amber_rounded,
+                color: Colors.orangeAccent,
+                size: 20,
+              ),
               const SizedBox(width: 8),
               Text(
                 "${'sync_conflicts_title'.tr()} (${conflicts.length})",
@@ -313,11 +344,23 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 child: TextButton(
                   onPressed: () => _resolveAllConflicts('local'),
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                  child: Text('sync_keep_all_local'.tr(), style: const TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    'sync_keep_all_local'.tr(),
+                    style: const TextStyle(
+                      color: Colors.blueAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -325,43 +368,70 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
                 child: TextButton(
                   onPressed: () => _resolveAllConflicts('cloud'),
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
                     backgroundColor: Colors.greenAccent.withValues(alpha: 0.15),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                  child: Text('sync_keep_all_cloud'.tr(), style: const TextStyle(color: Colors.greenAccent, fontSize: 12, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    'sync_keep_all_cloud'.tr(),
+                    style: const TextStyle(
+                      color: Colors.greenAccent,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          ...conflicts.map((c) => Container(
+          ...conflicts.map(
+            (c) => Container(
               margin: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
                       c.name,
-                      style: const TextStyle(fontSize: 13, color: Colors.white70),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.white70,
+                      ),
                     ),
                   ),
                   TextButton(
                     onPressed: () => _resolveConflict(c, 'local'),
-                    child: Text('sync_keep_local'.tr(), style: const TextStyle(color: Colors.blueAccent)),
+                    child: Text(
+                      'sync_keep_local'.tr(),
+                      style: const TextStyle(color: Colors.blueAccent),
+                    ),
                   ),
                   TextButton(
                     onPressed: () => _resolveConflict(c, 'cloud'),
-                    child: Text('sync_keep_cloud'.tr(), style: const TextStyle(color: Colors.greenAccent)),
+                    child: Text(
+                      'sync_keep_cloud'.tr(),
+                      style: const TextStyle(color: Colors.greenAccent),
+                    ),
                   ),
                 ],
               ),
-            )),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildAutoSyncToggle(BuildContext context, bool autoEnabled, SyncService? service) {
+  Widget _buildAutoSyncToggle(
+    BuildContext context,
+    bool autoEnabled,
+    SyncService? service,
+  ) {
     return GestureDetector(
       onTap: () {
         _setAutoSync(!autoEnabled);
@@ -412,16 +482,14 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
         children: [
           Text(
             '${'sync_every'.tr()} ',
-            style: TextStyle(
-              fontSize: 14,
-              color: context.cs.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 14, color: context.cs.onSurfaceVariant),
           ),
           const SizedBox(width: 8),
           buildSyncCountButton(
             icon: Icons.remove,
             onPressed: service.autoSyncMessageCount > 1
-                ? () => _updateAutoSyncThreshold(service.autoSyncMessageCount - 1)
+                ? () =>
+                      _updateAutoSyncThreshold(service.autoSyncMessageCount - 1)
                 : null,
           ),
           Container(
@@ -439,16 +507,14 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
           buildSyncCountButton(
             icon: Icons.add,
             onPressed: service.autoSyncMessageCount < 50
-                ? () => _updateAutoSyncThreshold(service.autoSyncMessageCount + 1)
+                ? () =>
+                      _updateAutoSyncThreshold(service.autoSyncMessageCount + 1)
                 : null,
           ),
           const SizedBox(width: 8),
           Text(
             ' ${'sync_messages'.tr()}',
-            style: TextStyle(
-              fontSize: 14,
-              color: context.cs.onSurfaceVariant,
-            ),
+            style: TextStyle(fontSize: 14, color: context.cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -577,7 +643,9 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     final service = ref.read(syncServiceProvider).value;
     if (service == null) return;
 
-    final providerLabel = service.provider == SyncProvider.dropbox ? 'Dropbox' : 'Google Drive';
+    final providerLabel = service.provider == SyncProvider.dropbox
+        ? 'Dropbox'
+        : 'Google Drive';
 
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
@@ -617,7 +685,11 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
         onConfirm: (typed) async {
           if (typed.trim().toLowerCase() != providerLabel.toLowerCase()) {
             if (context.mounted) {
-              GlazeToast.show(context, "${'title_error'.tr()}: ${'sync_invalid_phrase'.tr()}", isError: true);
+              GlazeToast.show(
+                context,
+                "${'title_error'.tr()}: ${'sync_invalid_phrase'.tr()}",
+                isError: true,
+              );
             }
             return;
           }
