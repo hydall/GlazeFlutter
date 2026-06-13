@@ -735,7 +735,7 @@ class _GroupHeader extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '${sessions.length} ${'count_sessions'.plural(sessions.length)}',
+                        'count_sessions_format'.plural(sessions.length),
                         style: TextStyle(
                           fontSize: 12,
                           color: context.cs.onSurfaceVariant,

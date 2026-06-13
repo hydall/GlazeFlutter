@@ -152,7 +152,19 @@ class ChatRepo implements SyncChatStore {
             final lastMsg =
                 jsonDecode(json.substring(startIdx, lastBrace + 1))
                     as Map<String, dynamic>;
-            lastContent = (lastMsg['content'] as String?) ?? '';
+            final rawContent = lastMsg['content'];
+            if (rawContent is String) {
+              lastContent = rawContent;
+            } else if (rawContent is List) {
+              final parts = <String>[];
+              for (final p in rawContent) {
+                if (p is Map && p['type'] == 'text') {
+                  final t = p['text'];
+                  if (t is String) parts.add(t);
+                }
+              }
+              lastContent = parts.join(' ');
+            }
             if (lastContent.length > 250) {
               lastContent = lastContent.substring(0, 250);
             }
