@@ -10,6 +10,7 @@ import '../../../core/state/character_provider.dart';
 import '../../../core/state/db_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../character_list/character_detail_screen.dart';
 import '../picks_models.dart';
@@ -150,7 +151,7 @@ class _PicksDetailLauncherState extends ConsumerState<PicksDetailLauncher> {
     } catch (e) {
       if (mounted) {
         setState(() => _importing = false);
-        GlazeToast.error(context, 'Import failed: ', e);
+        GlazeErrorDialog.show(context, e, prefix: 'Import failed: ');
       }
     }
   }

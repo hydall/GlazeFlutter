@@ -14,9 +14,10 @@ import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
-import '../../shared/widgets/glaze_toast.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/menu_group.dart';
+import 'app_settings_provider.dart';
 import 'theme_preview.dart';
 import 'widgets/chat_layout_picker.dart';
 
@@ -86,7 +87,7 @@ Future<void> _pickCustomFont(
     }
   } catch (e) {
     if (context.mounted) {
-      GlazeToast.error(context, 'Failed to load font: ', e);
+      GlazeErrorDialog.show(context, e, prefix: 'Failed to load font: ');
     }
   }
 }
@@ -674,15 +675,21 @@ class _ChatFontTab extends StatelessWidget {
 
 // ─── Chat → Colors ────────────────────────────────────────────────────────────
 
-class _ChatColorsTab extends StatelessWidget {
+class _ChatColorsTab extends ConsumerWidget {
   final ThemePreset preset;
   final void Function(ThemePreset Function(ThemePreset)) onUpdate;
 
   const _ChatColorsTab({required this.preset, required this.onUpdate});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isBubble = preset.chatLayout == 'bubble';
+    final appSettings = ref.watch(appSettingsProvider).value ?? const AppSettings();
+    final hideMessageId = preset.hideMessageId ?? appSettings.hideMessageId;
+    final hideGenerationTime =
+        preset.hideGenerationTime ?? appSettings.hideGenerationTime;
+    final hideTokenCount =
+        preset.hideTokenCount ?? appSettings.hideTokenCount;
     return Column(
       children: [
         MenuGroup(
@@ -766,6 +773,27 @@ class _ChatColorsTab extends StatelessWidget {
               value: preset.showCharName,
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(showCharName: v)),
+            ),
+          ],
+        ),
+        MenuGroup(
+          header: 'Message Meta',
+          items: [
+            _SwitchRow(
+              label: 'Hide Message ID',
+              value: hideMessageId,
+              onChanged: (v) => onUpdate((p) => p.copyWith(hideMessageId: v)),
+            ),
+            _SwitchRow(
+              label: 'Hide Generation Time',
+              value: hideGenerationTime,
+              onChanged: (v) =>
+                  onUpdate((p) => p.copyWith(hideGenerationTime: v)),
+            ),
+            _SwitchRow(
+              label: 'Hide Token Count',
+              value: hideTokenCount,
+              onChanged: (v) => onUpdate((p) => p.copyWith(hideTokenCount: v)),
             ),
           ],
         ),
@@ -1415,7 +1443,7 @@ class _BgImageRow extends StatelessWidget {
       onUpdate((p) => p.copyWith(bgImage: dataUri));
     } catch (e) {
       if (context.mounted) {
-        GlazeToast.error(context, 'Failed to load image: ', e);
+        GlazeErrorDialog.show(context, e, prefix: 'Failed to load image: ');
       }
     }
   }

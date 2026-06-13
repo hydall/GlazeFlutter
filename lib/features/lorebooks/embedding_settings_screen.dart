@@ -8,6 +8,7 @@ import '../../../core/state/lorebook_provider.dart';
 import '../../../core/state/shared_prefs_provider.dart';
 import '../../../shared/shell/shell_header_provider.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 
 class EmbeddingSettingsScreen extends ConsumerStatefulWidget {
@@ -112,7 +113,7 @@ class _EmbeddingSettingsScreenState
       case ApiTestSuccess(:final message):
         GlazeToast.show(context, message);
       case ApiTestFailure(:final error):
-        GlazeToast.error(context, 'Failed: ', error);
+        GlazeErrorDialog.show(context, error, prefix: 'Failed: ');
     }
     if (mounted) setState(() => _isTesting = false);
   }

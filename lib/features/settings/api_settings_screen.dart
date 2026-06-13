@@ -13,6 +13,7 @@ import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/sheet_view.dart';
 import 'api_list_provider.dart';
@@ -1120,7 +1121,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoadingModels = false);
-        GlazeToast.error(context, 'settings_err_failed'.tr(), e);
+        GlazeErrorDialog.show(context, e, prefix: 'settings_err_failed'.tr());
       }
     }
   }
@@ -1156,7 +1157,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
           _llmStatus = ApiConnectionStatus.failed;
           _llmError = error.toString();
         });
-        GlazeToast.error(context, 'settings_err_conn_failed'.tr(), error);
+        GlazeErrorDialog.show(context, error, prefix: 'settings_err_conn_failed'.tr());
     }
   }
 
@@ -1192,7 +1193,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
         GlazeToast.show(context, message);
       case ApiTestFailure(:final error):
         setState(() => _embStatus = ApiConnectionStatus.failed);
-        GlazeToast.error(context, 'settings_err_conn_failed'.tr(), error);
+        GlazeErrorDialog.show(context, error, prefix: 'settings_err_conn_failed'.tr());
     }
   }
 }

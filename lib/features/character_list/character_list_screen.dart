@@ -21,16 +21,20 @@ import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../catalog/catalog_provider.dart';
 import '../catalog/widgets/widgets.dart';
 import '../character_gallery/gallery_provider.dart';
 import '../picks/widgets/picks_grid.dart';
 import '../settings/app_settings_provider.dart';
+import 'character_detail_screen.dart';
 import 'widgets/widgets.dart';
 
 class CharacterListScreen extends ConsumerStatefulWidget {
-  const CharacterListScreen({super.key});
+  final String? initialCharacterId;
+
+  const CharacterListScreen({super.key, this.initialCharacterId});
 
   @override
   ConsumerState<CharacterListScreen> createState() =>
@@ -54,6 +58,8 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   final FocusNode _searchFocus = FocusNode();
   bool _searchExpanded = false;
   Timer? _catalogDebounce;
+  String? _lastOpenedInitialCharacterId;
+  bool _openingInitialCharacter = false;
 
   @override
   void dispose() {
@@ -165,6 +171,70 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
 
   CharacterSortDir get _sortDirEnum =>
       _sortDir == SortDir.asc ? CharacterSortDir.asc : CharacterSortDir.desc;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _maybeOpenInitialCharacter();
+  }
+
+  @override
+  void didUpdateWidget(covariant CharacterListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialCharacterId != widget.initialCharacterId) {
+      _openingInitialCharacter = false;
+      _maybeOpenInitialCharacter();
+    }
+  }
+
+  void _maybeOpenInitialCharacter() {
+    final charId = widget.initialCharacterId;
+    if (charId == null ||
+        charId.isEmpty ||
+        _openingInitialCharacter ||
+        _lastOpenedInitialCharacterId == charId) {
+      return;
+    }
+
+    _openingInitialCharacter = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      if (_tabIndex != 0 || _searchExpanded) {
+        _catalogDebounce?.cancel();
+        setState(() {
+          _tabIndex = 0;
+          _searchExpanded = false;
+        });
+        refreshShellHeader();
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        if (!mounted) return;
+      }
+
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (!mounted) return;
+      _lastOpenedInitialCharacterId = charId;
+
+      final result = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        useRootNavigator: true,
+        backgroundColor: Colors.transparent,
+        builder: (_) => CharacterDetailScreen(charId: charId),
+      );
+
+      if (!mounted) return;
+      _openingInitialCharacter = false;
+
+      final uri = GoRouterState.of(context).uri;
+      if (uri.path == '/characters' && uri.queryParameters.containsKey('open')) {
+        context.go('/characters');
+      }
+
+      if (result != null && result.isNotEmpty && mounted) {
+        context.go(result);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -524,7 +594,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
       }
     } catch (e) {
       if (!context.mounted) return;
-      GlazeToast.error(context, 'Import failed: ', e);
+      GlazeErrorDialog.show(context, e, prefix: 'Import failed: ');
     }
   }
 

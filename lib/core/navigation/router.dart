@@ -93,7 +93,9 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
           routes: [
             GoRoute(
               path: '/characters',
-              builder: (_, _) => const CharacterListScreen(),
+              builder: (_, state) => CharacterListScreen(
+                initialCharacterId: state.uri.queryParameters['open'],
+              ),
             ),
           ],
         ),
@@ -196,40 +198,30 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
             ),
           ],
         ),
-        StatefulShellBranch(
-          routes: [
-            GoRoute(
-              path: '/chat',
-              builder: (_, _) => const SizedBox.shrink(),
-              routes: [
-                GoRoute(
-                  path: ':charId',
-                  pageBuilder: (_, state) {
-                    final charId = state.pathParameters['charId']!;
-                    final sessionIdx = int.tryParse(
-                      state.uri.queryParameters['session'] ?? '',
-                    );
-                    final isNew = state.uri.queryParameters['new'] == '1';
-                    final targetMsgId = state.uri.queryParameters['msg'];
-                    return _adaptivePage(
-                      state: state,
-                      child: ChatScreen(
-                        charId: charId,
-                        initialSessionIndex: sessionIdx,
-                        forceNewSession: isNew,
-                        targetMessageId:
-                            (targetMsgId != null && targetMsgId.isNotEmpty)
-                                ? targetMsgId
-                                : null,
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ],
-        ),
       ],
+    ),
+    GoRoute(
+      path: '/chat/:charId',
+      pageBuilder: (_, state) {
+        final charId = state.pathParameters['charId']!;
+        final sessionIdx = int.tryParse(
+          state.uri.queryParameters['session'] ?? '',
+        );
+        final isNew = state.uri.queryParameters['new'] == '1';
+        final targetMsgId = state.uri.queryParameters['msg'];
+        return _adaptivePage(
+          state: state,
+          child: ChatScreen(
+            charId: charId,
+            initialSessionIndex: sessionIdx,
+            forceNewSession: isNew,
+            targetMessageId:
+                (targetMsgId != null && targetMsgId.isNotEmpty)
+                    ? targetMsgId
+                    : null,
+          ),
+        );
+      },
     ),
     GoRoute(
       path: '/character/create',

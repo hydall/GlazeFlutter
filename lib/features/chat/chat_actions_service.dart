@@ -13,6 +13,7 @@ import '../../core/services/file_export_service.dart';
 import '../../core/llm/summary_service.dart';
 import '../../core/state/db_provider.dart';
 import '../../core/utils/time_helpers.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../chat_history/chat_history_provider.dart';
 import 'chat_session_service.dart';
@@ -113,9 +114,9 @@ class ChatActionsService {
       if (context.mounted) GlazeToast.show(context, e.message);
     } on Exception catch (e) {
       if (e.toString().contains('Save cancelled')) return;
-      if (context.mounted) GlazeToast.error(context, 'Export failed: ', e);
+      if (context.mounted) GlazeErrorDialog.show(context, e, prefix: 'Export failed: ');
     } catch (e) {
-      if (context.mounted) GlazeToast.error(context, 'Export failed: ', e);
+      if (context.mounted) GlazeErrorDialog.show(context, e, prefix: 'Export failed: ');
     }
   }
 

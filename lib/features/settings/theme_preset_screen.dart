@@ -13,6 +13,7 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glass_surface.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import 'theme_editor_screen.dart';
 
@@ -423,7 +424,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
     } catch (e) {
       if (e.toString().contains('cancelled')) return;
       if (!mounted) return;
-      GlazeToast.error(context, 'Export failed: ', e);
+      GlazeErrorDialog.show(context, e, prefix: 'Export failed: ');
     }
   }
 
@@ -468,13 +469,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
           lowerPath.endsWith('.json') || lowerPath.endsWith('.thm');
       if (!isSupported) {
         if (mounted) {
-          GlazeToast.show(
-            context,
-            'Unsupported file type. Pick a .json or .thm theme file.',
-            isError: true,
-            position: ToastPosition.top,
-            duration: 4000,
-          );
+          GlazeErrorDialog.show(context, 'Unsupported file type. Pick a .json or .thm theme file.');
         }
         return;
       }
@@ -489,17 +484,11 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       }
     } on FormatException catch (e) {
       if (mounted) {
-        GlazeToast.show(
-          context,
-          'Invalid theme file: ${e.message}',
-          isError: true,
-          position: ToastPosition.top,
-          duration: 4000,
-        );
+        GlazeErrorDialog.show(context, 'Invalid theme file: ${e.message}');
       }
     } catch (e) {
       if (mounted) {
-        GlazeToast.error(context, 'Failed to import: ', e);
+        GlazeErrorDialog.show(context, e, prefix: 'Failed to import: ');
       }
     }
   }

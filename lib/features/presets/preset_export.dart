@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/models/preset.dart';
 import '../../core/services/file_export_service.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 
 /// Exports [preset] to a JSON file and shows a toast with the result.
@@ -65,7 +66,7 @@ Future<void> exportPreset(BuildContext context, Preset preset) async {
     }
   } catch (e) {
     if (context.mounted) {
-      GlazeToast.error(context, 'Export failed: ', e);
+      GlazeErrorDialog.show(context, e, prefix: 'Export failed: ');
     }
   }
 }

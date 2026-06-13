@@ -5,10 +5,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_toast.dart';
 import '../../chat/bridge/chat_webview_environment.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
@@ -300,18 +302,24 @@ class CatalogGrid extends ConsumerWidget {
     );
   }
 
-  void _openDetail(
+  Future<void> _openDetail(
     BuildContext context,
     CatalogItem item,
     CatalogProvider provider,
-  ) {
-    showModalBottomSheet<void>(
+  ) async {
+    final importedCharId = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       useRootNavigator: true,
       backgroundColor: Colors.transparent,
       builder: (_) => CatalogDetailLauncher(item: item, provider: provider),
     );
+    if (!context.mounted || importedCharId == null || importedCharId.isEmpty) {
+      return;
+    }
+
+    GlazeToast.show(context, 'Imported ${item.name}');
+    context.go('/characters?open=${Uri.encodeQueryComponent(importedCharId)}');
   }
 }
 

@@ -8,7 +8,7 @@ import '../theme/theme_font_provider.dart';
 import 'glass_surface.dart';
 
 class GlazeErrorDialog {
-  static void show(BuildContext context, Object error) {
+  static void show(BuildContext context, Object error, {String prefix = ''}) {
     showGeneralDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -16,7 +16,7 @@ class GlazeErrorDialog {
       barrierColor: Colors.black.withValues(alpha: 0.55),
       transitionDuration: const Duration(milliseconds: 240),
       pageBuilder: (_, __, ___) =>
-          _ErrorDialogContent(message: formatError(error)),
+          _ErrorDialogContent(message: '$prefix${formatError(error)}'),
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(
           parent: animation,

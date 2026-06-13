@@ -13,6 +13,7 @@ import '../../core/state/active_selection_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/sheet_view.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import 'preset_connections_sheet.dart';
 import 'preset_editor_screen.dart';
@@ -257,7 +258,7 @@ class _PresetListScreenState extends ConsumerState<PresetListScreen> {
         );
       }
     } catch (e) {
-      if (ctx.mounted) GlazeToast.error(ctx, 'Import failed: ', e);
+      if (ctx.mounted) GlazeErrorDialog.show(ctx, e, prefix: 'Import failed: ');
     }
   }
 }

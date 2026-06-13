@@ -12,6 +12,7 @@ import '../../../features/personas/persona_list_provider.dart';
 import '../../../features/presets/preset_list_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../chat_provider.dart';
 
@@ -68,7 +69,7 @@ void showRawPromptDialog(
     ),
   );
   } catch (e) {
-    if (context.mounted) GlazeToast.error(context, 'Failed to build prompt: ', e);
+    if (context.mounted) GlazeErrorDialog.show(context, e, prefix: 'Failed to build prompt: ');
   }
 }
 

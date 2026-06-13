@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
-import '../../../shared/widgets/glaze_toast.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../character_list/character_detail_screen.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
@@ -88,15 +88,16 @@ class _CatalogDetailLauncherState
     if (downloaded == null || _importing) return;
     setState(() => _importing = true);
     try {
-      await ref.read(catalogProvider.notifier).importCharacter(downloaded);
+      final importedCharId = await ref
+          .read(catalogProvider.notifier)
+          .importCharacter(downloaded);
       if (mounted) {
-        Navigator.of(context).pop();
-        GlazeToast.show(context, 'Imported ${downloaded.charData.name}');
+        Navigator.of(context, rootNavigator: true).pop(importedCharId);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _importing = false);
-        GlazeToast.error(context, 'Import failed: ', e);
+        GlazeErrorDialog.show(context, e, prefix: 'Import failed: ');
       }
     }
   }

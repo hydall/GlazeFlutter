@@ -8,6 +8,7 @@ import '../../app.dart';
 import '../../core/services/backup/backup_cancel.dart';
 import '../../core/services/onboarding_service.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/sheet_view.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
@@ -121,7 +122,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
       }
     } catch (e) {
       if (mounted) {
-        GlazeToast.error(context, 'settings_err_failed'.tr(), e);
+        GlazeErrorDialog.show(context, e, prefix: 'settings_err_failed'.tr());
       }
     } finally {
       if (mounted) setState(() => _isExporting = false);
@@ -222,7 +223,7 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
         _importComplete = false;
         _hasCleared = false;
       });
-      GlazeToast.errorWithCopy(context, 'settings_err_failed'.tr(), '$e\n\n$st');
+      GlazeErrorDialog.show(context, '$e\n\n$st', prefix: 'settings_err_failed'.tr());
     }
   }
 

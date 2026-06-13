@@ -18,6 +18,7 @@ import '../../core/utils/id_generator.dart';
 import '../presets/preset_list_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/menu_group.dart';
@@ -298,7 +299,7 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
       if (context.mounted) GlazeToast.show(context, 'export_success'.tr());
     } catch (e) {
       if (context.mounted) {
-        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+        GlazeErrorDialog.show(context, e, prefix: '${'settings_err_failed'.tr()} ');
       }
     }
   }
@@ -381,7 +382,7 @@ class _RegexSheetState extends ConsumerState<RegexSheet> {
       }
     } catch (e) {
       if (context.mounted) {
-        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+        GlazeErrorDialog.show(context, e, prefix: '${'settings_err_failed'.tr()} ');
       }
     }
   }

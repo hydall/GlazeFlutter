@@ -24,6 +24,7 @@ import '../../shared/theme/theme_provider.dart';
 import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../../shared/widgets/sheet_view.dart';
@@ -331,7 +332,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
             .pop<String>('/chat/$charId?session=$sessionIndex');
       }
     } catch (e) {
-      if (mounted) GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+      if (mounted) GlazeErrorDialog.show(context, e, prefix: '${'settings_err_failed'.tr()} ');
     }
   }
 
@@ -413,7 +414,7 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
   }
 
   Widget _buildFloatingHeader(Character? char) {
-    final safeTop = MediaQuery.of(context).padding.top;
+    final safeTop = MediaQueryData.fromView(View.of(context)).padding.top;
     return IgnorePointer(
       ignoring: char == null,
       child: Align(

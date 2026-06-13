@@ -15,6 +15,7 @@ import '../../core/utils/time_helpers.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/sheet_view.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/generic_editor.dart';
 import '../../shared/widgets/help_tip.dart';
@@ -265,7 +266,7 @@ class _CharacterEditorScreenState extends ConsumerState<CharacterEditorScreen> {
       }
     } catch (e) {
       if (mounted) {
-        GlazeToast.error(context, 'Save failed: ', e);
+        GlazeErrorDialog.show(context, e, prefix: 'Save failed: ');
       }
     }
   }

@@ -9,6 +9,7 @@ import 'package:easy_localization/easy_localization.dart';
 import '../../core/models/gallery_entry.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import 'gallery_provider.dart';
 
@@ -117,7 +118,7 @@ class GalleryScreen extends ConsumerWidget {
       ref.invalidate(galleryProvider(charId));
     } catch (e) {
       if (context.mounted) {
-        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+        GlazeErrorDialog.show(context, e, prefix: '${'settings_err_failed'.tr()} ');
       }
     }
   }
@@ -208,7 +209,7 @@ class _GalleryTile extends ConsumerWidget {
               }
             } catch (e) {
               if (context.mounted) {
-                GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+                GlazeErrorDialog.show(context, e, prefix: '${'settings_err_failed'.tr()} ');
               }
             }
           },
@@ -227,7 +228,7 @@ class _GalleryTile extends ConsumerWidget {
               ref.invalidate(galleryProvider(charId));
             } catch (e) {
               if (context.mounted) {
-                GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+                GlazeErrorDialog.show(context, e, prefix: '${'settings_err_failed'.tr()} ');
               }
             }
           },
@@ -296,7 +297,7 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
                 }
               } catch (e) {
                 if (context.mounted) {
-                  GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+                  GlazeErrorDialog.show(context, e, prefix: '${'settings_err_failed'.tr()} ');
                 }
               }
             },
@@ -327,7 +328,7 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
                         if (context.mounted) Navigator.pop(context);
                       } catch (e) {
                         if (context.mounted) {
-                          GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+                          GlazeErrorDialog.show(context, e, prefix: '${'settings_err_failed'.tr()} ');
                         }
                       }
                     },

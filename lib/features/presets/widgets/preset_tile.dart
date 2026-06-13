@@ -9,6 +9,7 @@ import '../../../core/utils/id_generator.dart';
 import '../../../core/state/active_selection_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../preset_editor_screen.dart';
 import '../preset_list_provider.dart';
@@ -132,7 +133,7 @@ class PresetTile extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        GlazeToast.error(context, 'Export failed: ', e);
+        GlazeErrorDialog.show(context, e, prefix: 'Export failed: ');
       }
     }
   }

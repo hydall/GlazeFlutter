@@ -50,6 +50,23 @@ static assertion failure.
 build. Remove it once all affected Windows plugins stop depending on
 `<experimental/coroutine>`.
 
+## `app_settings` 6.1.x breaks iOS build with Xcode 16
+
+**Symptom:** `flutter build ios` fails with:
+
+```
+Swift Compiler Error: Main actor-isolated static method 'register(with:)' cannot
+be used to satisfy nonisolated requirement from protocol 'FlutterPlugin'
+Swift Compiler Error: Main actor-isolated instance method 'handle(_:result:)'
+cannot be used to satisfy nonisolated requirement from protocol 'FlutterPlugin'
+```
+
+**Cause:** Xcode 16 enforces Swift Concurrency strictly. `app_settings` 6.1.1
+marks its plugin class `@MainActor` but `FlutterPlugin` requires `nonisolated`
+implementations. Fixed upstream in `app_settings` 6.3.0.
+
+**Fix (applied 2026-06-11):** bumped constraint to `^6.3.0` in `pubspec.yaml`.
+
 ## GitHub Actions `windows-latest` redirects to Windows Server 2025
 
 **Symptom:** the Windows release workflow fails during

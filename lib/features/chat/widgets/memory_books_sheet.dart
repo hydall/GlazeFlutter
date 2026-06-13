@@ -8,6 +8,7 @@ import '../../../core/models/memory_book.dart';
 import '../../../core/state/memory_settings_provider.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../memory/controllers/memory_book_controller.dart';
 import 'memory_entry_editor_sheet.dart';
@@ -700,7 +701,7 @@ class _MemoryBooksSheetState extends ConsumerState<MemoryBooksSheet> {
       setState(() {});
       if (msg != null) {
         if (msg.startsWith('Reindex failed') || msg.startsWith('Set up')) {
-          GlazeToast.error(context, '', msg);
+          GlazeErrorDialog.show(context, msg);
         } else {
           GlazeToast.show(context, msg);
         }

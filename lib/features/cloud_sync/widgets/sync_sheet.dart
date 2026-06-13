@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/utils/time_formatter.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
@@ -593,7 +594,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     final error = await _ctrl.connectDropbox();
     if (mounted) {
       setState(() {});
-      if (error != null) GlazeToast.error(context, '', error);
+      if (error != null) GlazeErrorDialog.show(context, error);
     }
   }
 
@@ -602,7 +603,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     final error = await _ctrl.connectGDrive();
     if (mounted) {
       setState(() {});
-      if (error != null) GlazeToast.error(context, '', error);
+      if (error != null) GlazeErrorDialog.show(context, error);
     }
   }
 
@@ -635,7 +636,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     final error = await _ctrl.disconnect();
     if (mounted) {
       setState(() {});
-      if (error != null) GlazeToast.error(context, '', error);
+      if (error != null) GlazeErrorDialog.show(context, error);
     }
   }
 
@@ -685,11 +686,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
         onConfirm: (typed) async {
           if (typed.trim().toLowerCase() != providerLabel.toLowerCase()) {
             if (context.mounted) {
-              GlazeToast.show(
-                context,
-                "${'title_error'.tr()}: ${'sync_invalid_phrase'.tr()}",
-                isError: true,
-              );
+              GlazeErrorDialog.show(context, "${'title_error'.tr()}: ${'sync_invalid_phrase'.tr()}");
             }
             return;
           }
@@ -709,7 +706,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
           } catch (e) {
             if (mounted) {
               setState(() {});
-              GlazeToast.error(context, "${'title_error'.tr()}: ", e);
+              GlazeErrorDialog.show(context, e, prefix: "${'title_error'.tr()}: ");
             }
           }
         },
@@ -724,7 +721,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
       setState(() {});
       if (result != null) {
         if (result.startsWith('Sync failed')) {
-          GlazeToast.errorWithCopy(context, '', result);
+          GlazeErrorDialog.show(context, result);
         } else {
           GlazeToast.show(context, result);
         }
@@ -736,7 +733,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     final result = await _ctrl.resolveConflict(conflict, choice);
     if (mounted && result != null) {
       if (result.startsWith('Could not')) {
-        GlazeToast.errorWithCopy(context, '', result);
+        GlazeErrorDialog.show(context, result);
       } else {
         GlazeToast.show(context, result);
       }
@@ -747,7 +744,7 @@ class _SyncSheetState extends ConsumerState<SyncSheet> {
     final result = await _ctrl.resolveAllConflicts(choice);
     if (mounted && result != null) {
       if (result.startsWith('Could not')) {
-        GlazeToast.errorWithCopy(context, '', result);
+        GlazeErrorDialog.show(context, result);
       } else {
         GlazeToast.show(context, result);
       }

@@ -11,7 +11,7 @@ import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_webview_bridge_host.dart';
 import '../bridge/chat_webview_theme_builder.dart';
 import '../../../core/models/chat_message.dart';
-import '../../../shared/widgets/glaze_toast.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../extensions/services/panel_host_service.dart';
 import '../bridge/chat_bridge_registry.dart';
 import 'chat_message_sync.dart';
@@ -369,7 +369,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     setState(() => _sessionSwitching = false);
     if (_bridgeFailureNotified) return;
     _bridgeFailureNotified = true;
-    GlazeToast.error(context, 'Chat view failed to load', e);
+    GlazeErrorDialog.show(context, e, prefix: 'Chat view failed to load');
   }
 
   Future<void> _bridgeOp(Future<void> op, {required String label}) async {

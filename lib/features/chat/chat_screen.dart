@@ -28,7 +28,7 @@ import '../../shared/theme/theme_preset.dart';
 import '../../shared/theme/theme_provider.dart';
 
 import '../../shared/widgets/glaze_scaffold.dart';
-import '../../shared/widgets/glaze_toast.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/image_viewer.dart';
 import '../settings/app_settings_provider.dart';
 import 'chat_drawer_controller.dart'
@@ -163,11 +163,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
       }
     } on TimeoutException catch (e) {
       if (mounted) {
-        GlazeToast.error(context, 'Failed to open chat session', e);
+        GlazeErrorDialog.show(context, e, prefix: 'Failed to open chat session');
       }
     } catch (e) {
       if (mounted) {
-        GlazeToast.error(context, 'Failed to open chat session', e);
+        GlazeErrorDialog.show(context, e, prefix: 'Failed to open chat session');
       }
     } finally {
       if (mounted && _sessionSwitchPending) {
@@ -568,7 +568,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
       );
     } catch (e) {
       if (mounted) {
-        GlazeToast.error(context, 'settings_err_failed'.tr(), e);
+        GlazeErrorDialog.show(context, e, prefix: 'settings_err_failed'.tr());
       }
     }
   }
@@ -945,10 +945,15 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                     sessionId: widget.state.session?.id,
                     visibleStartIndex: widget.state.visibleStartIndex,
                     batterySaver: appSettings?.batterySaver ?? false,
-                    hideMessageId: appSettings?.hideMessageId ?? false,
+                    hideMessageId:
+                        preset.hideMessageId ??
+                        (appSettings?.hideMessageId ?? false),
                     hideGenerationTime:
-                        appSettings?.hideGenerationTime ?? false,
-                    hideTokenCount: appSettings?.hideTokenCount ?? false,
+                        preset.hideGenerationTime ??
+                        (appSettings?.hideGenerationTime ?? false),
+                    hideTokenCount:
+                        preset.hideTokenCount ??
+                        (appSettings?.hideTokenCount ?? false),
                     disableSwipeRegeneration:
                         appSettings?.disableSwipeRegeneration ?? false,
                     messageActions: MessageActionsCallbacks(

@@ -59,9 +59,6 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
       tags = await fetchJanitorTags();
     }
 
-    // Sort alphabetically
-    tags.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
-
     if (mounted) {
       setState(() {
         _allTags = tags;

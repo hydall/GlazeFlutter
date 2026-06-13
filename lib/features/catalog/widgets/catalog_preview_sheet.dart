@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
@@ -324,7 +325,7 @@ class _CatalogPreviewSheetState extends ConsumerState<CatalogPreviewSheet> {
     } catch (e) {
       if (mounted) {
         setState(() => _importing = false);
-        GlazeToast.error(context, "${'catalog_error_import'.tr()}: ", e);
+        GlazeErrorDialog.show(context, e, prefix: "${'catalog_error_import'.tr()}: ");
       }
     }
   }

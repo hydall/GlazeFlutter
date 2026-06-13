@@ -14,6 +14,7 @@ import '../../core/utils/time_helpers.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import '../../shared/widgets/help_tip.dart';
 import 'lorebook_connections_sheet.dart';
@@ -234,7 +235,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         });
         await _loadEmbeddingStatuses();
         if (!mounted) return;
-        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+        GlazeErrorDialog.show(context, e, prefix: '${'settings_err_failed'.tr()} ');
       }
     }
   }
@@ -300,7 +301,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         });
         await _loadEmbeddingStatuses();
         if (!mounted) return;
-        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+        GlazeErrorDialog.show(context, e, prefix: '${'settings_err_failed'.tr()} ');
       }
     }
   }
@@ -397,7 +398,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         });
         await _loadEmbeddingStatuses();
         if (!mounted) return;
-        GlazeToast.error(context, '${'settings_err_failed'.tr()} ', e);
+        GlazeErrorDialog.show(context, e, prefix: '${'settings_err_failed'.tr()} ');
       }
     }
   }

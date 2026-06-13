@@ -20,6 +20,7 @@ import '../../../shared/utils/time_formatter.dart';
 import '../../../shared/theme/app_colors.dart';
 
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../image_gen/widgets/image_gen_sheet.dart';
 import '../chat_actions_service.dart';
@@ -683,7 +684,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         count == 0 ? 'No messages found in file' : 'Imported $count messages',
       );
     } catch (e) {
-      if (mounted) GlazeToast.error(context, 'Import failed: ', e);
+      if (mounted) GlazeErrorDialog.show(context, e, prefix: 'Import failed: ');
     }
   }
 

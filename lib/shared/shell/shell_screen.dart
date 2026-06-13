@@ -64,7 +64,8 @@ class _ShellScreenState extends State<ShellScreen>
     final hideNavBarRoutes = <String>{
       '/menu/about',
     };
-    final showNavBar = currentIndex < 4 && !hideNavBarRoutes.contains(location);
+    final showNavBar =
+        !location.startsWith('/chat/') && !hideNavBarRoutes.contains(location);
     return GlazeBackground(
       child: PopScope(
         canPop: false,

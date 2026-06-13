@@ -18,6 +18,7 @@ import '../../../core/state/lorebook_provider.dart';
 import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../character_detail_screen.dart';
 import '../../../core/llm/tokenizer.dart' as tok;
@@ -469,7 +470,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
       }
     } catch (e) {
       if (context.mounted) {
-        GlazeToast.error(context, 'Export failed: ', e);
+        GlazeErrorDialog.show(context, e, prefix: 'Export failed: ');
       }
     }
   }

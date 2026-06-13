@@ -11,6 +11,7 @@ import '../../core/utils/time_helpers.dart';
 import '../../core/state/lorebook_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/widgets/sheet_view.dart';
+import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../shared/widgets/glaze_toast.dart';
 import 'embedding_settings_screen.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
@@ -167,7 +168,7 @@ class LorebookListScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        GlazeToast.error(context, 'Import failed: ', e);
+        GlazeErrorDialog.show(context, e, prefix: 'Import failed: ');
       }
     }
   }

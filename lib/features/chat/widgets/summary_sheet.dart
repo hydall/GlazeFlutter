@@ -9,7 +9,7 @@ import '../../../shared/widgets/generic_editor.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../../core/llm/summary_service.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
-import '../../../shared/widgets/glaze_toast.dart';
+import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../chat_provider.dart';
 
 class SummarySheet extends ConsumerStatefulWidget {
@@ -122,7 +122,7 @@ class _SummarySheetState extends ConsumerState<SummarySheet> {
       ref.read(summaryRevisionProvider.notifier).state++;
     } catch (e) {
       if (!mounted) return;
-      GlazeToast.error(context, 'Summary Failed', e);
+      GlazeErrorDialog.show(context, e, prefix: 'Summary Failed');
     } finally {
       if (mounted) setState(() => _isGenerating = false);
     }
