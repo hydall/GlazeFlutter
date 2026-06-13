@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../shared/shell/nav_height_provider.dart';
 import '../../../shared/widgets/glaze_scaffold.dart';
 import '../../../shared/widgets/menu_group.dart';
 import '../providers/extension_presets_provider.dart';
@@ -57,6 +58,7 @@ class ExtensionsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final bottomPad = ref.watch(navHeightProvider) + 20;
     final items = _availableExtensions.map((ext) {
       return MenuSwitchItem(
         label: ext.label,
@@ -70,7 +72,7 @@ class ExtensionsScreen extends ConsumerWidget {
       title: 'Расширения',
       onBack: () => context.pop(),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: EdgeInsets.fromLTRB(0, 12, 0, bottomPad),
         children: [
           MenuGroup(
             header: 'Доступные расширения',

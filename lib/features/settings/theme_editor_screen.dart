@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/state/shared_prefs_provider.dart';
+import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/theme_preset.dart';
 import '../../shared/theme/theme_provider.dart';
 import '../../shared/theme/app_colors.dart';
@@ -124,6 +125,7 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
     final preset = ref.watch(themeProvider).activePreset;
     final isDefault = preset.id == 'default';
     final topPad = MediaQuery.of(context).padding.top + 74.0;
+    final bottomPad = ref.watch(navHeightProvider) + 20;
     final tabHeight = 68.0;
     final warningHeight = isDefault ? 62.0 : 0.0;
     final totalTopPadding = topPad + warningHeight + tabHeight;
@@ -146,11 +148,13 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
                       preset: preset,
                       onUpdate: _update,
                       topPadding: totalTopPadding,
+                      bottomPadding: bottomPad,
                     ),
                     _ChatTab(
                       preset: preset,
                       onUpdate: _update,
                       topPadding: totalTopPadding,
+                      bottomPadding: bottomPad,
                     ),
                   ],
                 ),
@@ -218,17 +222,19 @@ class _GeneralTab extends StatelessWidget {
   final ThemePreset preset;
   final void Function(ThemePreset Function(ThemePreset)) onUpdate;
   final double topPadding;
+  final double bottomPadding;
 
   const _GeneralTab({
     required this.preset,
     required this.onUpdate,
     required this.topPadding,
+    required this.bottomPadding,
   });
 
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: EdgeInsets.fromLTRB(0, topPadding + 8, 0, 8),
+      padding: EdgeInsets.fromLTRB(0, topPadding + 8, 0, bottomPadding),
       children: [
         MenuGroup(
           header: 'Accent Color',
@@ -486,11 +492,13 @@ class _ChatTab extends StatefulWidget {
   final ThemePreset preset;
   final void Function(ThemePreset Function(ThemePreset)) onUpdate;
   final double topPadding;
+  final double bottomPadding;
 
   const _ChatTab({
     required this.preset,
     required this.onUpdate,
     required this.topPadding,
+    required this.bottomPadding,
   });
 
   @override
@@ -541,7 +549,7 @@ class _ChatTabState extends State<_ChatTab> {
         Expanded(
           child: SingleChildScrollView(
             controller: activeScrollController,
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: EdgeInsets.only(bottom: widget.bottomPadding),
             child: Column(
               children: [
                 Padding(

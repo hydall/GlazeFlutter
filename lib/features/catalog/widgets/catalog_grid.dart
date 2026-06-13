@@ -193,7 +193,9 @@ class CatalogGrid extends ConsumerWidget {
               child: CatalogControls(state: state, notifier: notifier),
             ),
           ),
-          if (state.filters.tagIds.isNotEmpty || state.filters.tagNames.isNotEmpty)
+          if (state.filters.nsfw ||
+              state.filters.tagIds.isNotEmpty ||
+              state.filters.tagNames.isNotEmpty)
             SliverToBoxAdapter(
               child: _ActiveTagsRow(state: state, notifier: notifier),
             ),
@@ -505,9 +507,18 @@ class _ActiveTagsRow extends StatelessWidget {
 
   const _ActiveTagsRow({required this.state, required this.notifier});
 
-  List<String> _getActiveTagNames() {
-    final names = <String>{};
-    names.addAll(state.filters.tagNames);
+  List<String> _getActiveFilters() {
+    final names = <String>[];
+    if (state.filters.nsfw) {
+      names.add('NSFW');
+    }
+
+    final seen = <String>{};
+    for (final tagName in state.filters.tagNames) {
+      if (seen.add(tagName)) {
+        names.add(tagName);
+      }
+    }
 
     if (state.filters.tagIds.isNotEmpty) {
       List<CatalogTag> allTags = [];
@@ -520,17 +531,23 @@ class _ActiveTagsRow extends StatelessWidget {
       }
 
       for (final tag in allTags) {
-        if (tag.id != null && state.filters.tagIds.contains(tag.id)) {
+        if (tag.id != null &&
+            state.filters.tagIds.contains(tag.id) &&
+            seen.add(tag.name)) {
           names.add(tag.name);
         }
       }
     }
 
-    final list = names.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return list;
+    return names;
   }
 
-  void _removeTag(String name) {
+  void _removeFilter(String name) {
+    if (name == 'NSFW') {
+      notifier.setFilters(state.filters.copyWith(nsfw: false));
+      return;
+    }
+
     List<CatalogTag> allTags = [];
     if (state.activeProvider == CatalogProvider.chub) {
       allTags = getCachedChubTags();
@@ -559,7 +576,7 @@ class _ActiveTagsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final names = _getActiveTagNames();
+    final names = _getActiveFilters();
     if (names.isEmpty) return const SizedBox.shrink();
 
     return Padding(
@@ -573,14 +590,21 @@ class _ActiveTagsRow extends StatelessWidget {
           separatorBuilder: (_, _) => const SizedBox(width: 8),
           itemBuilder: (context, index) {
             final name = names[index];
+            final isNsfw = name.toUpperCase() == 'NSFW';
             return GestureDetector(
-              onTap: () => _removeTag(name),
+              onTap: () => _removeFilter(name),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
-                  color: context.cs.primary.withValues(alpha: 0.2),
+                  color: isNsfw
+                      ? const Color(0x33FF4444)
+                      : context.cs.primary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: context.cs.primary),
+                  border: Border.all(
+                    color: isNsfw
+                        ? const Color(0x4DFF4444)
+                        : context.cs.primary,
+                  ),
                 ),
                 alignment: Alignment.center,
                 child: Row(
@@ -588,13 +612,21 @@ class _ActiveTagsRow extends StatelessWidget {
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
-                        color: Colors.white,
+                        color: isNsfw
+                            ? const Color(0xFFFF4444)
+                            : Colors.white,
                       ),
                     ),
                     const SizedBox(width: 4),
-                    const Icon(Icons.close, size: 10, color: Colors.white),
+                    Icon(
+                      Icons.close,
+                      size: 10,
+                      color: isNsfw
+                          ? const Color(0xFFFF4444)
+                          : Colors.white,
+                    ),
                   ],
                 ),
               ),

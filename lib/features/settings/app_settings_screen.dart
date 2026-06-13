@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/platform/system_settings.dart';
+import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/theme/app_colors.dart';
 import '../../shared/theme/theme_provider.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
@@ -25,11 +26,14 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final settingsAsync = ref.watch(appSettingsProvider);
+    final topPad = MediaQuery.of(context).padding.top + 74.0;
+    final bottomPad = ref.watch(navHeightProvider) + 20;
 
     return GlazeScaffold(
       title: _currentScreen == 'main' ? 'section_settings'.tr() : 'menu_interface_settings'.tr(),
       useShellHeader: true,
       headerBranchIndex: 3,
+      extendBodyBehindHeader: true,
       onBack: () {
         if (_currentScreen == 'interface') {
           setState(() => _currentScreen = 'main');
@@ -44,18 +48,23 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
         data: (s) => AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
           child: _currentScreen == 'main'
-              ? _buildMainSettings(context, s)
-              : _buildInterfaceSettings(context, s),
+              ? _buildMainSettings(context, s, topPad, bottomPad)
+              : _buildInterfaceSettings(context, s, topPad, bottomPad),
         ),
       ),
     );
   }
 
-  Widget _buildMainSettings(BuildContext context, AppSettings s) {
+  Widget _buildMainSettings(
+    BuildContext context,
+    AppSettings s,
+    double topPad,
+    double bottomPad,
+  ) {
     return ListView(
       key: const ValueKey('main'),
+      padding: EdgeInsets.fromLTRB(0, topPad + 8, 0, bottomPad),
       children: [
-        const SizedBox(height: 12),
         MenuGroup(
           header: 'tab_general'.tr(),
           items: [
@@ -109,11 +118,16 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
     );
   }
 
-  Widget _buildInterfaceSettings(BuildContext context, AppSettings s) {
+  Widget _buildInterfaceSettings(
+    BuildContext context,
+    AppSettings s,
+    double topPad,
+    double bottomPad,
+  ) {
     return ListView(
       key: const ValueKey('interface'),
+      padding: EdgeInsets.fromLTRB(0, topPad + 8, 0, bottomPad),
       children: [
-        const SizedBox(height: 12),
         MenuGroup(
           items: [
             MenuSwitchItem(

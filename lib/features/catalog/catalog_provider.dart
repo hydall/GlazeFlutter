@@ -97,11 +97,7 @@ class CatalogNotifier extends StateNotifier<CatalogState> {
 
     state = state.copyWith(
       activeProvider: provider,
-      filters: state.filters.copyWith(
-        sort: savedSort,
-        tagIds: savedFilters.tagIds,
-        tagNames: savedFilters.tagNames,
-      ),
+      filters: savedFilters.copyWith(sort: savedSort),
     );
     await search(reset: true);
   }

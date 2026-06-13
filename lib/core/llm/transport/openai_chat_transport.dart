@@ -93,9 +93,8 @@ class OpenAiChatTransport implements ChatTransport {
   }
 
   /// Builds the JSON body for a chat completion request. Public so the
-  /// OpenRouter transport (which reuses the same shape with extra fields)
-  /// can call it.
-  @visibleForTesting
+  /// OpenRouter transport (which reuses the same shape with extra fields) and
+  /// the request-preview UI can reproduce the exact on-the-wire body.
   static Map<String, dynamic> buildBody(ChatTransportRequest r) {
     final body = <String, dynamic>{
       'model': r.model,

@@ -106,9 +106,6 @@ Future<List<CatalogTag>> fetchJanitorTags() async {
   return _cachedJanitorTags;
 }
 
-/// Fetches [url] from inside the janitor WebView session and decodes the JSON
-/// body. The WebView proxy transparently solves the Cloudflare Turnstile
-/// challenge (see [JanitorWebViewProxy] for why Dio can't be used here).
 Future<dynamic> _janitorFetch(String url) async {
   debugPrint('[CF] janitorFetch: ${url.length > 80 ? url.substring(0, 80) : url}');
   final body = await JanitorWebViewProxy.instance.fetch(url);
@@ -121,20 +118,17 @@ Future<CatalogSearchResult> janitorSearch({
   CatalogFilters filters = const CatalogFilters(),
 }) async {
   final activeSort = filters.sort;
-  String sortMode = 'trending';
-  if (activeSort == 'popular' || activeSort == 'trending_week') {
-    sortMode = 'trending';
-  } else if (activeSort == 'trending_24h') {
+  String sortMode = activeSort;
+  if (activeSort == 'trending_24h') {
     sortMode = 'trending24';
   } else if (activeSort == 'newest' || activeSort == 'latest') {
     sortMode = 'latest';
-  } else {
-    sortMode = activeSort;
   }
 
-  final params = StringBuffer('sort=$sortMode&page=$page');
+  final params = StringBuffer(
+    'page=$page&mode=${filters.nsfw ? 'all' : 'sfw'}&sort=$sortMode',
+  );
   if (query.isNotEmpty) params.write('&search=${Uri.encodeComponent(query)}');
-  params.write(filters.nsfw ? '&mode=all' : '&mode=sfw');
 
   for (final tagId in filters.tagIds) {
     params.write('&tag_id[]=$tagId');

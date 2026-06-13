@@ -8,7 +8,12 @@ import '../../../core/llm/history_assembler.dart';
 import '../../../core/llm/prompt_builder.dart';
 import '../../../core/llm/prompt_isolate.dart';
 import '../../../core/llm/prompt_payload_builder.dart';
+import '../../../core/llm/transport/anthropic_chat_transport.dart';
+import '../../../core/llm/transport/chat_transport_request.dart';
+import '../../../core/llm/transport/gemini_chat_transport.dart';
 import '../../../core/llm/transport/llm_protocol.dart';
+import '../../../core/llm/transport/openai_chat_transport.dart';
+import '../../../core/llm/transport/openrouter_chat_transport.dart';
 import '../../../core/llm/tokenizer.dart';
 import '../../../core/models/api_config.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -32,6 +37,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   PromptResult? _result;
   ApiConfig? _apiConfig;
   String? _sessionId;
+  Map<String, dynamic>? _requestBody;
   bool _loading = true;
   _SectionFilter _filter = _SectionFilter.all;
   int _dataTabIndex = 0;
@@ -69,6 +75,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       if (mounted) {
         setState(() {
           _result = result;
+          _requestBody = _buildRequestBody();
           _loading = false;
         });
       }
@@ -178,13 +185,14 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
                     contextSize: _apiConfig!.contextSize,
                   ),
                 ),
-                const SliverToBoxAdapter(child: _SectionTitle('Parameters')),
-                SliverPadding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  sliver: SliverToBoxAdapter(
-                    child: _buildParamsGrid(_apiConfig!),
+                SliverToBoxAdapter(child: _SectionTitle(_protocolLabel)),
+                if (_requestBody != null)
+                  SliverPadding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    sliver: SliverToBoxAdapter(
+                      child: _buildParamsGrid(_requestBody!),
+                    ),
                   ),
-                ),
               ],
               SliverToBoxAdapter(
                 child: _SectionTitle('Messages (${_result!.messages.length})'),
@@ -278,49 +286,15 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
     );
   }
 
-  Widget _buildParamsGrid(ApiConfig config) {
+  /// Renders the request parameters straight from the protocol-specific body
+  /// so the grid always matches what's actually sent. Bulk message-carrying
+  /// keys are skipped; nested config maps (`generationConfig`, `thinking`,
+  /// `cache_control`, …) are flattened into individual chips.
+  Widget _buildParamsGrid(Map<String, dynamic> body) {
+    final items = _paramItemsFromBody(body);
     return LayoutBuilder(
       builder: (context, constraints) {
         final itemWidth = (constraints.maxWidth - 8) / 2;
-        final items = [
-          _ParamItem(label: 'model', value: config.model),
-          _ParamItem(label: 'max_tokens', value: config.maxTokens.toString()),
-          if (!(config.protocol == LlmProtocol.anthropic &&
-              config.requestReasoning))
-            _ParamItem(
-              label: 'temperature',
-              value: config.temperature.toString(),
-            ),
-          if (!(config.protocol == LlmProtocol.anthropic &&
-              config.requestReasoning))
-            _ParamItem(label: 'top_p', value: config.topP.toString()),
-          if (config.topK > 0 &&
-              !(config.protocol == LlmProtocol.anthropic &&
-                  config.requestReasoning))
-            _ParamItem(label: 'top_k', value: config.topK.toString()),
-          if ((config.protocol == LlmProtocol.openai ||
-                  config.protocol == LlmProtocol.openrouter) &&
-              config.frequencyPenalty != 0)
-            _ParamItem(
-              label: 'frequency_penalty',
-              value: config.frequencyPenalty.toString(),
-            ),
-          if ((config.protocol == LlmProtocol.openai ||
-                  config.protocol == LlmProtocol.openrouter) &&
-              config.presencePenalty != 0)
-            _ParamItem(
-              label: 'presence_penalty',
-              value: config.presencePenalty.toString(),
-            ),
-          _ParamItem(label: 'stream', value: config.stream.toString()),
-          if (config.requestReasoning)
-            _ParamItem(label: 'reasoning', value: 'true'),
-          if (config.requestReasoning)
-            _ParamItem(
-              label: 'reasoning_effort',
-              value: config.reasoningEffort,
-            ),
-        ];
         return Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -330,6 +304,51 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
         );
       },
     );
+  }
+
+  /// Keys whose values are bulky message payloads, not tunable parameters —
+  /// excluded from the parameter grid (they're shown in the Messages list /
+  /// raw view instead).
+  static const Set<String> _bulkBodyKeys = {
+    'messages',
+    'system',
+    'contents',
+    'systemInstruction',
+    'safetySettings',
+  };
+
+  List<_ParamItem> _paramItemsFromBody(Map<String, dynamic> body) {
+    final items = <_ParamItem>[];
+
+    // Model lives in the URL (not the body) for Gemini, so surface it from the
+    // config to keep it visible across every protocol.
+    final model = _apiConfig?.model;
+    if (model != null && model.isNotEmpty) {
+      items.add(_ParamItem(label: 'model', value: model));
+    }
+
+    void add(String label, dynamic value) {
+      if (value is Map) {
+        value.forEach((k, v) => add('$label.$k', v));
+      } else if (value is List) {
+        // Lists here are nested structures (e.g. cache_control breakpoints);
+        // not meaningful as a single chip — skip.
+      } else {
+        items.add(_ParamItem(label: label, value: '$value'));
+      }
+    }
+
+    body.forEach((key, value) {
+      if (_bulkBodyKeys.contains(key) || key == 'model') return;
+      // Hoist Gemini's generationConfig children to top-level chips.
+      if (key == 'generationConfig' && value is Map) {
+        value.forEach((k, v) => add('$k', v));
+      } else {
+        add(key, value);
+      }
+    });
+
+    return items;
   }
 
   List<PromptMessage> get _filteredMessages {
@@ -394,54 +413,72 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
     GlazeToast.show(context, 'Copied to clipboard');
   }
 
-  String _getRawPromptJson() {
-    if (_result == null || _apiConfig == null) return '';
+  /// Builds the actual on-the-wire request body for the configured protocol by
+  /// delegating to the same transport builders the live generation path uses
+  /// (see `stream_generation_service.dart`). This keeps the preview faithful
+  /// for Anthropic (`system` blocks, `thinking`), Gemini (`contents` /
+  /// `generationConfig` / `safetySettings`) and OpenRouter (cache markers),
+  /// instead of always emitting an OpenAI-shaped body. Returns `null` when the
+  /// prompt/config isn't ready or building throws.
+  Map<String, dynamic>? _buildRequestBody() {
+    if (_result == null || _apiConfig == null) return null;
     try {
+      final cfg = _apiConfig!;
       final apiMessages = _result!.messages
           .where((m) => m.content.trim().isNotEmpty)
           .map((m) => m.toApiMap())
           .toList();
-      final body = <String, dynamic>{'model': _apiConfig!.model};
-      if ((_apiConfig!.protocol == LlmProtocol.anthropic ||
-              _apiConfig!.protocol == LlmProtocol.openai) &&
-          (_apiConfig!.cacheControlTtl == '5min' ||
-              _apiConfig!.cacheControlTtl == '1h')) {
-        body['cache_control'] = <String, dynamic>{
-          'type': 'ephemeral',
-          if (_apiConfig!.cacheControlTtl == '1h') 'ttl': '1h',
-        };
-        if (_sessionId != null && _sessionId!.isNotEmpty) {
-          body['session_id'] = _sessionId;
-        }
-      }
-      body['messages'] = apiMessages;
-      body['max_tokens'] = _apiConfig!.maxTokens;
-      if (!(_apiConfig!.protocol == LlmProtocol.anthropic &&
-          _apiConfig!.requestReasoning)) {
-        body['temperature'] = _apiConfig!.temperature;
-        body['top_p'] = _apiConfig!.topP;
-        if (_apiConfig!.topK > 0) {
-          body[_apiConfig!.protocol == LlmProtocol.gemini ? 'topK' : 'top_k'] =
-              _apiConfig!.topK;
-        }
-      }
-      if (_apiConfig!.protocol == LlmProtocol.openai ||
-          _apiConfig!.protocol == LlmProtocol.openrouter) {
-        if (_apiConfig!.frequencyPenalty != 0) {
-          body['frequency_penalty'] = _apiConfig!.frequencyPenalty;
-        }
-        if (_apiConfig!.presencePenalty != 0) {
-          body['presence_penalty'] = _apiConfig!.presencePenalty;
-        }
-      }
-      body['stream'] = _apiConfig!.stream;
-      if (_apiConfig!.requestReasoning) {
-        body['reasoning_effort'] = _apiConfig!.reasoningEffort;
-      }
-      return const JsonEncoder.withIndent('  ').convert(body);
+
+      final request = ChatTransportRequest(
+        endpoint: cfg.endpoint,
+        apiKey: cfg.apiKey,
+        model: cfg.model,
+        messages: apiMessages,
+        maxTokens: cfg.maxTokens,
+        temperature: cfg.temperature,
+        topP: cfg.topP,
+        topK: cfg.topK,
+        frequencyPenalty: cfg.frequencyPenalty,
+        presencePenalty: cfg.presencePenalty,
+        stream: cfg.stream,
+        requestReasoning: cfg.requestReasoning,
+        reasoningEffort: cfg.reasoningEffort,
+        omitTemperature: cfg.omitTemperature,
+        omitTopP: cfg.omitTopP,
+        omitReasoning: cfg.omitReasoning,
+        omitReasoningEffort: cfg.omitReasoningEffort,
+        sessionId: _sessionId,
+        cacheControlTtl: cfg.cacheControlTtl,
+        cacheBreakpointMode: cfg.cacheBreakpointMode,
+        sessionIdMode: cfg.sessionIdMode,
+      );
+
+      return switch (cfg.protocol) {
+        LlmProtocol.anthropic =>
+          AnthropicChatTransport.buildRequest(request).body,
+        LlmProtocol.gemini => GeminiChatTransport.buildRequest(request).body,
+        LlmProtocol.openrouter => OpenAiChatTransport.buildBody(
+          OpenRouterChatTransport.buildRouterRequest(request),
+        ),
+        _ => OpenAiChatTransport.buildBody(request),
+      };
     } catch (_) {
-      return '';
+      return null;
     }
+  }
+
+  String _getRawPromptJson() {
+    final body = _requestBody;
+    if (body == null) return '';
+    return const JsonEncoder.withIndent('  ').convert(body);
+  }
+
+  /// Human-readable name of the active protocol, used as the parameters
+  /// section header.
+  String get _protocolLabel {
+    final protocol = _apiConfig?.protocol;
+    if (protocol == null) return 'Parameters';
+    return LlmProtocol.labels[protocol] ?? protocol;
   }
 }
 

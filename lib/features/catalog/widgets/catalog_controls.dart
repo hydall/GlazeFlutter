@@ -229,45 +229,47 @@ class _FilterIconButton extends StatelessWidget {
       child: SizedBox(
         width: 32,
         height: 32,
-        child: GlassSurface(
-          borderRadius: BorderRadius.circular(16),
-          tint: context.cs.surface,
-          border: Border.all(color: context.cs.primary.withValues(alpha: 0.18)),
-          child: Stack(
-            clipBehavior: Clip.none,
-            alignment: Alignment.center,
-            children: [
-              Icon(
-                Icons.filter_list_rounded,
-                size: 18,
-                color: context.cs.primary,
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            GlassSurface(
+              borderRadius: BorderRadius.circular(16),
+              tint: context.cs.surface,
+              border: Border.all(color: context.cs.primary.withValues(alpha: 0.18)),
+              child: Center(
+                child: Icon(
+                  Icons.filter_list_rounded,
+                  size: 18,
+                  color: context.cs.primary,
+                ),
               ),
-              if (count > 0)
-                Positioned(
-                  top: -2,
-                  right: -2,
-                  child: Container(
-                    constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      color: context.cs.primary,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(
-                      child: Text(
-                        '$count',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          height: 1.0,
-                        ),
+            ),
+            if (count > 0)
+              Positioned(
+                top: -2,
+                right: -2,
+                child: Container(
+                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  decoration: BoxDecoration(
+                    color: context.cs.primary,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$count',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                        height: 1.0,
                       ),
                     ),
                   ),
                 ),
-            ],
-          ),
+              ),
+          ],
         ),
       ),
     );

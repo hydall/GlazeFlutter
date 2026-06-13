@@ -199,7 +199,7 @@ class _GalleryTile extends ConsumerWidget {
           icon: Icons.face,
           label: 'avatar'.tr(),
           onTap: () async {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             try {
               final service =
                   await ref.read(galleryServiceProvider.future);
@@ -220,7 +220,7 @@ class _GalleryTile extends ConsumerWidget {
           label: 'action_delete_msg'.tr(),
           isDestructive: true,
           onTap: () async {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             try {
               final service =
                   await ref.read(galleryServiceProvider.future);
@@ -305,7 +305,7 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
           IconButton(
             icon: const Icon(Icons.delete),
             tooltip: 'action_delete_msg'.tr(),
-            onPressed: () {
+              onPressed: () {
               GlazeBottomSheet.show<void>(
                 context,
                 title: '${'action_delete_msg'.tr()}?',
@@ -319,7 +319,7 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
                     isDestructive: true,
                     centered: true,
                     onTap: () async {
-                      Navigator.pop(context);
+                      Navigator.of(context, rootNavigator: true).pop();
                       try {
                         final service =
                             await ref.read(galleryServiceProvider.future);
@@ -336,7 +336,7 @@ class _GalleryViewerState extends ConsumerState<_GalleryViewer> {
                   BottomSheetItem(
                     label: 'btn_cancel'.tr(),
                     centered: true,
-                    onTap: () => Navigator.pop(context),
+                    onTap: () => Navigator.of(context, rootNavigator: true).pop(),
                   ),
                 ],
               );

@@ -216,14 +216,14 @@ class _GenericEditorState extends State<GenericEditor> {
           iconColor: const Color(0xFFFF4444),
           isDestructive: true,
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             _performDeleteGreeting(index);
           },
         ),
         BottomSheetItem(
           label: 'No',
           icon: Icons.close,
-          onTap: () => Navigator.pop(context),
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(),
         ),
       ],
     );
@@ -257,7 +257,7 @@ class _GenericEditorState extends State<GenericEditor> {
         label: opt['label'] as String? ?? opt['value'].toString(),
         icon: isSelected ? Icons.check : null,
         onTap: () {
-          Navigator.pop(context);
+          Navigator.of(context, rootNavigator: true).pop();
           _localItem[field.key] = opt['value'];
           widget.onChanged(_localItem);
           _scheduleSave();

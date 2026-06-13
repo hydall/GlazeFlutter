@@ -11,6 +11,7 @@ import '../../core/llm/preset_macro_attribution.dart';
 import '../../core/models/preset.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/sheet_view.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
@@ -294,114 +295,110 @@ class _PsCard extends ConsumerWidget {
     final hasCharBinding = connections.character.values.contains(preset.id);
     final hasChatBinding = connections.chat.values.contains(preset.id);
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      decoration: BoxDecoration(
-        color: context.cs.surfaceContainerHighest.withValues(alpha: 0.4),
-        border: Border.all(
-          color: isActive ? context.cs.primary : context.cs.outline,
-          width: 2,
-        ),
-        borderRadius: BorderRadius.circular(12),
+    return GlassSurface(
+      enableRipple: true,
+      tint: isActive
+          ? Color.alphaBlend(
+              context.cs.primary.withValues(alpha: 0.12),
+              context.cs.surfaceContainerHighest,
+            )
+          : null,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: isActive
+            ? context.cs.primary.withValues(alpha: 0.5)
+            : context.cs.outline,
+        width: isActive ? 2 : 1,
       ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(10),
-        child: InkWell(
-          onTap: onActivate,
-          borderRadius: BorderRadius.circular(10),
-          splashColor: context.cs.primary.withValues(alpha: 0.08),
-          highlightColor: context.cs.primary.withValues(alpha: 0.04),
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Circular icon
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: context.cs.primary.withValues(alpha: 0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.description_outlined,
-                    size: 20,
-                    color: context.cs.primary,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        preset.name,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: context.cs.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          _SmallBadge(
-                            icon: Icons.description,
-                            label: '${_presetTokenCount(preset)}',
-                          ),
-                          if (preset.author != null &&
-                              preset.author!.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                'by ${preset.author}',
-                                 style: TextStyle(
-                                   fontSize: 12,
-                                   color: context.cs.onSurfaceVariant,
-                                 ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Connection badge — tappable, colour shows binding type
-                _ConnBadge(
-                  isActive: isActive,
-                  hasChatBinding: hasChatBinding,
-                  hasCharBinding: hasCharBinding,
-                  onTap: onConnections,
-                ),
-                const SizedBox(width: 8),
-                // Edit button
-                SizedBox(
-                  width: 34,
-                  height: 34,
-                  child: Material(
-                    color: Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    child: InkWell(
-                      onTap: onEdit,
-                      onLongPress: () => _showContextMenu(context),
-                      borderRadius: BorderRadius.circular(8),
-                       child: Icon(
-                         Icons.edit_outlined,
-                         size: 18,
-                         color: context.cs.onSurfaceVariant,
-                       ),
+      onTap: onActivate,
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Circular icon
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: context.cs.primary.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.description_outlined,
+                size: 20,
+                color: context.cs.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Info
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    preset.name,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: context.cs.onSurface,
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      _SmallBadge(
+                        icon: Icons.description,
+                        label: '${_presetTokenCount(preset)}',
+                      ),
+                      if (preset.author != null &&
+                          preset.author!.isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            'by ${preset.author}',
+                             style: TextStyle(
+                               fontSize: 12,
+                               color: context.cs.onSurfaceVariant,
+                             ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
+            const SizedBox(width: 8),
+            // Connection badge — tappable, colour shows binding type
+            _ConnBadge(
+              isActive: isActive,
+              hasChatBinding: hasChatBinding,
+              hasCharBinding: hasCharBinding,
+              onTap: onConnections,
+            ),
+            const SizedBox(width: 8),
+            // Edit button
+            SizedBox(
+              width: 34,
+              height: 34,
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(8),
+                child: InkWell(
+                  onTap: onEdit,
+                  onLongPress: () => _showContextMenu(context),
+                  borderRadius: BorderRadius.circular(8),
+                   child: Icon(
+                     Icons.edit_outlined,
+                     size: 18,
+                     color: context.cs.onSurfaceVariant,
+                   ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

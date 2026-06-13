@@ -130,7 +130,10 @@ class _PersonaTile extends ConsumerWidget {
       child: GlassSurface(
         enableRipple: true,
         tint: isActive
-            ? context.cs.primary.withValues(alpha: 0.12)
+            ? Color.alphaBlend(
+                context.cs.primary.withValues(alpha: 0.12),
+                context.cs.surfaceContainerHighest,
+              )
             : null,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(

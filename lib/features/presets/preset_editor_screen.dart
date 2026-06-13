@@ -9,6 +9,7 @@ import '../../core/services/preset_defaults.dart';
 import '../../core/utils/id_generator.dart';
 import '../../core/utils/time_helpers.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_scaffold.dart';
 import '../../shared/widgets/generic_editor.dart';
@@ -275,82 +276,81 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
     final displayName =
         _nameCtrl.text.trim().isEmpty ? 'New Preset' : _nameCtrl.text.trim();
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      decoration: BoxDecoration(
-        color: context.cs.primary.withValues(alpha: 0.05),
-        border: Border.all(color: context.cs.outline),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: GlassSurface(
         borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Header: name + author + three-dot menu
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 12, 0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: _showRenameDialog,
-                    child: Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            displayName,
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: context.cs.onSurface,
-                            ),
-                          ),
-                          if (_author.isNotEmpty)
+        border: Border.all(color: context.cs.outline),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Header: name + author + three-dot menu
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 12, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: _showRenameDialog,
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              'by $_author',
+                              displayName,
                               style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color:
-                                    context.cs.primary.withValues(alpha: 0.8),
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: context.cs.onSurface,
                               ),
                             ),
-                        ],
+                            if (_author.isNotEmpty)
+                              Text(
+                                'by $_author',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color:
+                                      context.cs.primary.withValues(alpha: 0.8),
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-                _DotsButton(onTap: _showOptionsMenu),
-              ],
+                  _DotsButton(onTap: _showOptionsMenu),
+                ],
+              ),
             ),
-          ),
-          // Utils row: regex button | spacer | block count badge
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-            child: Row(
-              children: [
-                _UtilButton(
-                  icon: Icons.code,
-                  count: _regexes.length,
-                  onTap: _showRegexSheet,
-                ),
-                const Spacer(),
-                _BlocksBadge(
-                  count: _blocks
-                      .where((b) => b.enabled && !b.isStashed && b.content.isNotEmpty)
-                      .fold(0, (sum, b) => sum + estimateTokens(b.content)),
-                ),
-              ],
+            // Utils row: regex button | spacer | block count badge
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+              child: Row(
+                children: [
+                  _UtilButton(
+                    icon: Icons.code,
+                    count: _regexes.length,
+                    onTap: _showRegexSheet,
+                  ),
+                  const Spacer(),
+                  _BlocksBadge(
+                    count: _blocks
+                        .where((b) => b.enabled && !b.isStashed && b.content.isNotEmpty)
+                        .fold(0, (sum, b) => sum + estimateTokens(b.content)),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          // Reorderable block list
-          if (_blocks.isNotEmpty) _buildBlockList(),
-          // Add block row
-          _AddBlockRow(onTap: _addBlock),
-        ],
+            const SizedBox(height: 12),
+            // Reorderable block list
+            if (_blocks.isNotEmpty) _buildBlockList(),
+            // Add block row
+            _AddBlockRow(onTap: _addBlock),
+          ],
+        ),
       ),
     );
   }
@@ -411,102 +411,101 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   // ─── Advanced settings ───────────────────────────────────────────────────
 
   Widget _buildAdvancedToggle() {
-    return GestureDetector(
-      onTap: () => setState(() => _showAdvanced = !_showAdvanced),
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-        padding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.03),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Text(
-              'Advanced Settings',
-               style: TextStyle(
-                 fontSize: 14,
-                 fontWeight: FontWeight.w600,
-                 color: context.cs.onSurfaceVariant,
-               ),
-            ),
-            const Spacer(),
-            AnimatedRotation(
-              turns: _showAdvanced ? 0.5 : 0,
-              duration: const Duration(milliseconds: 300),
-               child: Icon(
-                 Icons.expand_more,
-                 color: context.cs.onSurfaceVariant,
-                 size: 20,
-               ),
-            ),
-          ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: GlassSurface(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => setState(() => _showAdvanced = !_showAdvanced),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          child: Row(
+            children: [
+              Text(
+                'Advanced Settings',
+                 style: TextStyle(
+                   fontSize: 14,
+                   fontWeight: FontWeight.w600,
+                   color: context.cs.onSurfaceVariant,
+                 ),
+              ),
+              const Spacer(),
+              AnimatedRotation(
+                turns: _showAdvanced ? 0.5 : 0,
+                duration: const Duration(milliseconds: 300),
+                 child: Icon(
+                   Icons.expand_more,
+                   color: context.cs.onSurfaceVariant,
+                   size: 20,
+                 ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildAdvancedPanel() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.02),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: GlassSurface(
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: context.cs.outline),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const _SectionLabel('Reasoning', helpTerm: 'preset-reasoning'),
-          const SizedBox(height: 8),
-          _SettingsToggle(
-            label: 'Parse Inline Reasoning',
-            description: 'Extract reasoning tags from model output',
-            value: _parseInlineReasoning,
-            helpTerm: 'preset-reasoning-inline',
-            onChanged: (v) {
-              setState(() => _parseInlineReasoning = v);
-              _scheduleSave();
-            },
-          ),
-          if (_parseInlineReasoning) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _reasoningStartCtrl,
-                    style: TextStyle(color: context.cs.onSurface),
-                    decoration: _inputDecoration('<think>'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _reasoningEndCtrl,
-                    style: TextStyle(color: context.cs.onSurface),
-                    decoration: _inputDecoration('</think>'),
-                  ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const _SectionLabel('Reasoning', helpTerm: 'preset-reasoning'),
+              const SizedBox(height: 8),
+              _SettingsToggle(
+                label: 'Parse Inline Reasoning',
+                description: 'Extract reasoning tags from model output',
+                value: _parseInlineReasoning,
+                helpTerm: 'preset-reasoning-inline',
+                onChanged: (v) {
+                  setState(() => _parseInlineReasoning = v);
+                  _scheduleSave();
+                },
+              ),
+              if (_parseInlineReasoning) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _reasoningStartCtrl,
+                        style: TextStyle(color: context.cs.onSurface),
+                        decoration: _inputDecoration('<think>'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _reasoningEndCtrl,
+                        style: TextStyle(color: context.cs.onSurface),
+                        decoration: _inputDecoration('</think>'),
+                      ),
+                    ),
+                  ],
                 ),
               ],
-            ),
-          ],
-          const SizedBox(height: 20),
-          const _SectionLabel('Post-processing'),
-          const SizedBox(height: 8),
-          _SettingsToggle(
-            label: 'Merge Prompts',
-            description: 'Combine adjacent blocks into one message',
-            value: _mergePrompts,
-            helpTerm: 'preset-merge',
-            onChanged: (v) {
-              setState(() => _mergePrompts = v);
-              _scheduleSave();
-            },
+              const SizedBox(height: 20),
+              const _SectionLabel('Post-processing'),
+              const SizedBox(height: 8),
+              _SettingsToggle(
+                label: 'Merge Prompts',
+                description: 'Combine adjacent blocks into one message',
+                value: _mergePrompts,
+                helpTerm: 'preset-merge',
+                onChanged: (v) {
+                  setState(() => _mergePrompts = v);
+                  _scheduleSave();
+                },
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -557,7 +556,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
             icon: Icons.psychology_alt_outlined,
             label: 'Memory Book',
             onTap: () {
-              Navigator.pop(context);
+              Navigator.of(context, rootNavigator: true).pop();
               _addMemoryBlock();
             },
           ),
@@ -565,7 +564,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
           icon: Icons.add,
           label: 'Custom Block',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             _addCustomBlock();
           },
         ),
@@ -619,7 +618,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
         value: _nameCtrl.text,
         confirmLabel: 'Rename',
         onConfirm: (val) {
-          Navigator.pop(context);
+          Navigator.of(context, rootNavigator: true).pop();
           setState(() => _nameCtrl.text = val);
           _scheduleSave();
         },
@@ -636,7 +635,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
         value: _author,
         confirmLabel: 'Save',
         onConfirm: (val) {
-          Navigator.pop(context);
+          Navigator.of(context, rootNavigator: true).pop();
           setState(() => _author = val.trim());
           _scheduleSave();
         },
@@ -653,7 +652,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
           icon: Icons.drive_file_rename_outline,
           label: 'Rename',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             _showRenameDialog();
           },
         ),
@@ -661,7 +660,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
           icon: Icons.person_outline,
           label: 'Set Author',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             _showAuthorDialog();
           },
         ),
@@ -669,7 +668,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
           icon: Icons.upload_file_outlined,
           label: 'Export',
           onTap: () {
-            Navigator.pop(context);
+            Navigator.of(context, rootNavigator: true).pop();
             final name = _nameCtrl.text.trim().isEmpty
                 ? 'New Preset'
                 : _nameCtrl.text.trim();
@@ -703,7 +702,7 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
             label: 'Delete',
             isDestructive: true,
             onTap: () async {
-              Navigator.pop(context);
+              Navigator.of(context, rootNavigator: true).pop();
               await ref
                   .read(presetListProvider.notifier)
                   .remove(widget.preset!.id);
@@ -1311,89 +1310,90 @@ Widget _linkedSessionContentCard(
   required String hint,
   required VoidCallback onEdit,
 }) {
-  return Container(
-    margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: context.cs.primary.withValues(alpha: 0.05),
-      border: Border.all(color: context.cs.outline),
+  return Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    child: GlassSurface(
       borderRadius: BorderRadius.circular(12),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
+      border: Border.all(color: context.cs.outline),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Content',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: context.cs.onSurface,
-              ),
+            Row(
+              children: [
+                Text(
+                  'Content',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: context.cs.onSurface,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'from current chat',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: context.cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
-            const Spacer(),
-            Text(
-              'from current chat',
-              style: TextStyle(
-                fontSize: 11,
-                color: context.cs.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        if (charId == null)
-          Text(
-            hint,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              color: context.cs.onSurfaceVariant,
-            ),
-          )
-        else ...[
-          Text(
-            content.isEmpty ? 'Empty' : content,
-            maxLines: 4,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 14,
-              height: 1.4,
-              color: content.isEmpty
-                  ? context.cs.onSurfaceVariant
-                  : context.cs.onSurface.withValues(alpha: 0.9),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Material(
-            color: context.cs.primary.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-            child: InkWell(
-              onTap: onEdit,
-              borderRadius: BorderRadius.circular(10),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.edit_outlined, size: 18, color: context.cs.primary),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Edit content',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: context.cs.primary,
-                      ),
-                    ),
-                  ],
+            const SizedBox(height: 8),
+            if (charId == null)
+              Text(
+                hint,
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: context.cs.onSurfaceVariant,
+                ),
+              )
+            else ...[
+              Text(
+                content.isEmpty ? 'Empty' : content,
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.4,
+                  color: content.isEmpty
+                      ? context.cs.onSurfaceVariant
+                      : context.cs.onSurface.withValues(alpha: 0.9),
                 ),
               ),
-            ),
-          ),
-        ],
-      ],
+              const SizedBox(height: 12),
+              Material(
+                color: context.cs.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  onTap: onEdit,
+                  borderRadius: BorderRadius.circular(10),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.edit_outlined, size: 18, color: context.cs.primary),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Edit content',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: context.cs.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     ),
   );
 }

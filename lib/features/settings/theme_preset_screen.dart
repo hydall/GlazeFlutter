@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/services/file_export_service.dart';
+import '../../../shared/shell/nav_height_provider.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../../../shared/theme/theme_provider.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -37,6 +38,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
     final theme = ref.watch(themeProvider);
     final presets = theme.presets;
     final activeId = theme.activePreset.id;
+    final bottomPad = ref.watch(navHeightProvider) + 20;
 
     return GlazeScaffold(
       title: 'Themes',
@@ -46,7 +48,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       body: Stack(
         children: [
           ListView(
-            padding: const EdgeInsets.only(top: 12, bottom: 96),
+            padding: EdgeInsets.only(top: 12, bottom: bottomPad + 60),
             children: [
               _buildFontToggle(context),
               Padding(
@@ -73,7 +75,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
           ),
           Positioned(
             right: 16,
-            bottom: 16 + MediaQuery.of(context).padding.bottom,
+            bottom: bottomPad,
             child: _ThemeFab(onTap: () => _showAddSheet(context)),
           ),
         ],

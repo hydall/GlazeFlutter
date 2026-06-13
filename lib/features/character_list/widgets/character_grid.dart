@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
+import '../../../shared/widgets/glass_surface.dart';
 import 'character_card.dart';
 
 enum SortType { name, date, lastChat }
@@ -139,23 +140,23 @@ class _SortDirButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: SizedBox(
         width: 32,
         height: 32,
-        decoration: BoxDecoration(
-          color: context.cs.primary.withValues(alpha: 0.15),
-          shape: BoxShape.circle,
-          border: Border.all(color: context.cs.primary.withValues(alpha: 0.2)),
-        ),
-        child: Center(
-          child: AnimatedRotation(
-            turns: isAsc ? 0.5 : 0,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutBack,
-            child: Icon(
-              Icons.arrow_downward_rounded,
-              size: 18,
-              color: context.cs.primary,
+        child: GlassSurface(
+          borderRadius: BorderRadius.circular(16),
+          tint: context.cs.surface,
+          border: Border.all(color: context.cs.primary.withValues(alpha: 0.18)),
+          child: Center(
+            child: AnimatedRotation(
+              turns: isAsc ? 0.5 : 0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeOutBack,
+              child: Icon(
+                Icons.arrow_downward_rounded,
+                size: 18,
+                color: context.cs.primary,
+              ),
             ),
           ),
         ),
@@ -435,32 +436,34 @@ class _SortTypePill extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => _showPicker(context),
-      child: Container(
+      child: SizedBox(
         height: 32,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: context.cs.primary.withValues(alpha: 0.15),
+        child: GlassSurface(
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: context.cs.primary.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              _label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: context.cs.primary,
-              ),
+          tint: context.cs.surface,
+          border: Border.all(color: context.cs.primary.withValues(alpha: 0.18)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: context.cs.primary,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 18,
+                  color: context.cs.primary,
+                ),
+              ],
             ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 18,
-              color: context.cs.primary,
-            ),
-          ],
+          ),
         ),
       ),
     );

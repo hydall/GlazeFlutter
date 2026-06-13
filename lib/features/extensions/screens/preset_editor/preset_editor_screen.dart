@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../shared/shell/nav_height_provider.dart';
 import '../../../../shared/widgets/glaze_scaffold.dart';
 import '../../providers/extension_presets_provider.dart';
 import 'sections/blocks_section.dart';
@@ -16,6 +17,7 @@ class PresetEditorScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preset = ref.watch(extensionPresetByIdProvider(presetId));
+    final bottomPad = ref.watch(navHeightProvider) + 20;
 
     if (preset == null) {
       return GlazeScaffold(
@@ -29,7 +31,7 @@ class PresetEditorScreen extends ConsumerWidget {
       title: preset.name,
       onBack: () => context.pop(),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        padding: EdgeInsets.fromLTRB(0, 12, 0, bottomPad),
         children: [
           BlocksSection(preset: preset),
           const SizedBox(height: 24),
