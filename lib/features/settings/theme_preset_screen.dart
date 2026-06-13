@@ -254,15 +254,26 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
                 ),
               ),
               if (preset.id != 'default')
-                IconButton(
-                  icon: Icon(
-                    Icons.more_vert,
-                    size: 20,
-                    color: hasImage ? Colors.white : cs.onSurfaceVariant,
-                  ),
-                  tooltip: 'Menu',
-                  onPressed: () =>
+                GestureDetector(
+                  onTap: () =>
                       _showPresetActions(context, preset, isActive),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        width: 1,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.more_vert_rounded,
+                      size: 18,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
             ],
           ),
