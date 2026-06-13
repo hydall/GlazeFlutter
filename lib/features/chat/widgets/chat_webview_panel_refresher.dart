@@ -21,6 +21,7 @@ class ChatWebViewPanelRefresher {
     required this.ref,
     required this.bridge,
     required this.ready,
+    required this.isMounted,
     required this.charId,
     required this.messages,
   });
@@ -28,6 +29,13 @@ class ChatWebViewPanelRefresher {
   final WidgetRef ref;
   final ChatBridgeController? bridge;
   final bool Function() ready;
+
+  /// Guards every `ref` access. The refresher is driven by async provider
+  /// listeners and `await` continuations that can fire after the owning
+  /// widget has been disposed (e.g. closing the chat while a message-action
+  /// menu refresh is in flight). Reading `ref` then throws
+  /// "Using \"ref\" when a widget is about to or has been unmounted".
+  final bool Function() isMounted;
   final String charId;
   final List<ChatMessage> Function() messages;
 
@@ -36,7 +44,7 @@ class ChatWebViewPanelRefresher {
   /// current blocks / canRunAll from Riverpod.
   Future<void> refreshForMessage(String sessionId, String messageId) async {
     final b = bridge;
-    if (b == null || !ready()) return;
+    if (b == null || !ready() || !isMounted()) return;
     final isLastAssistant = messageId == _lastAssistantMessageId();
     final swipeId = _swipeIdForMessage(messageId);
     final isGreeting = _isGreetingMessage(messageId);
@@ -71,8 +79,11 @@ class ChatWebViewPanelRefresher {
     final sid = sessionId;
     if (sid == null || sid.isEmpty) return;
     final b = bridge;
-    if (b == null || !ready()) return;
+    if (b == null || !ready() || !isMounted()) return;
     await ref.read(infoBlocksProvider(sid).notifier).refresh();
+    // The refresh above is async; the widget may have been disposed while it
+    // ran. Bail before touching `ref` again (refreshForMessage reads providers).
+    if (!isMounted()) return;
     for (final msg in messages()) {
       if (msg.role != 'assistant' && msg.role != 'character') continue;
       await refreshForMessage(sid, msg.id);

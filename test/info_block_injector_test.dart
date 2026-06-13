@@ -95,45 +95,48 @@ void main() {
       expect(result[5].content, isNot(contains('ledger-2')));
     });
 
-    test('injectLastN limits how many assistant messages receive blocks', () async {
-      const sessionId = 'sess1';
-      final messages = [
-        ChatMessage(id: 'a1', role: 'assistant', content: 'one'),
-        ChatMessage(id: 'a2', role: 'assistant', content: 'two'),
-        ChatMessage(id: 'a3', role: 'assistant', content: 'three'),
-      ];
+    test(
+      'injectLastN limits how many assistant messages receive blocks',
+      () async {
+        const sessionId = 'sess1';
+        final messages = [
+          ChatMessage(id: 'a1', role: 'assistant', content: 'one'),
+          ChatMessage(id: 'a2', role: 'assistant', content: 'two'),
+          ChatMessage(id: 'a3', role: 'assistant', content: 'three'),
+        ];
 
-      final repo = _FakeInfoBlockReader({
-        for (final id in ['a1', 'a2', 'a3'])
-          id: [_block(id: 'b-$id', messageId: id, content: 'L-$id')],
-      });
+        final repo = _FakeInfoBlockReader({
+          for (final id in ['a1', 'a2', 'a3'])
+            id: [_block(id: 'b-$id', messageId: id, content: 'L-$id')],
+        });
 
-      const preset = ExtensionPreset(
-        id: 'p1',
-        name: 'test',
-        createdAt: 0,
-        blocks: [
-          BlockConfig(
-            id: 'cfg1',
-            name: 'loomledger',
-            enabled: true,
-            inject: true,
-            injectLastN: 2,
-          ),
-        ],
-      );
+        const preset = ExtensionPreset(
+          id: 'p1',
+          name: 'test',
+          createdAt: 0,
+          blocks: [
+            BlockConfig(
+              id: 'cfg1',
+              name: 'loomledger',
+              enabled: true,
+              inject: true,
+              injectLastN: 2,
+            ),
+          ],
+        );
 
-      final injector = InfoBlockInjector(repo);
-      final result = await injector.injectBlocks(
-        messages: messages,
-        sessionId: sessionId,
-        preset: preset,
-      );
+        final injector = InfoBlockInjector(repo);
+        final result = await injector.injectBlocks(
+          messages: messages,
+          sessionId: sessionId,
+          preset: preset,
+        );
 
-      expect(result[0].content, 'one');
-      expect(result[1].content, contains('L-a2'));
-      expect(result[2].content, contains('L-a3'));
-    });
+        expect(result[0].content, 'one');
+        expect(result[1].content, contains('L-a2'));
+        expect(result[2].content, contains('L-a3'));
+      },
+    );
 
     test('injectPrefix is inserted between blank line and block', () async {
       const sessionId = 'sess1';
@@ -174,6 +177,89 @@ void main() {
         result[0].content,
         'reply\n\n$prefix\n<loomledger>\nledger-1\n</loomledger>',
       );
+    });
+
+    test(
+      'injectPrefix follows injectLastN and is not added to older messages',
+      () async {
+        const sessionId = 'sess1';
+        const prefix = 'Reference block only.';
+        final messages = [
+          ChatMessage(id: 'a1', role: 'assistant', content: 'one'),
+          ChatMessage(id: 'a2', role: 'assistant', content: 'two'),
+          ChatMessage(id: 'a3', role: 'assistant', content: 'three'),
+        ];
+
+        final repo = _FakeInfoBlockReader({
+          for (final id in ['a1', 'a2', 'a3'])
+            id: [_block(id: 'b-$id', messageId: id, content: 'L-$id')],
+        });
+
+        const preset = ExtensionPreset(
+          id: 'p1',
+          name: 'test',
+          createdAt: 0,
+          blocks: [
+            BlockConfig(
+              id: 'cfg1',
+              name: 'loomledger',
+              enabled: true,
+              inject: true,
+              injectLastN: 1,
+              injectPrefix: prefix,
+            ),
+          ],
+        );
+
+        final injector = InfoBlockInjector(repo);
+        final result = await injector.injectBlocks(
+          messages: messages,
+          sessionId: sessionId,
+          preset: preset,
+        );
+
+        expect(result[0].content, 'one');
+        expect(result[1].content, 'two');
+        expect(result[2].content, contains(prefix));
+        expect(result[2].content, contains('L-a3'));
+      },
+    );
+
+    test('injectPrefix is not injected when injectLastN is zero', () async {
+      const sessionId = 'sess1';
+      const prefix = 'Reference block only.';
+      final messages = [
+        ChatMessage(id: 'a1', role: 'assistant', content: 'one'),
+      ];
+
+      final repo = _FakeInfoBlockReader({
+        'a1': [_block(id: 'b-a1', messageId: 'a1', content: 'L-a1')],
+      });
+
+      const preset = ExtensionPreset(
+        id: 'p1',
+        name: 'test',
+        createdAt: 0,
+        blocks: [
+          BlockConfig(
+            id: 'cfg1',
+            name: 'loomledger',
+            enabled: true,
+            inject: true,
+            injectLastN: 0,
+            injectPrefix: prefix,
+          ),
+        ],
+      );
+
+      final injector = InfoBlockInjector(repo);
+      final result = await injector.injectBlocks(
+        messages: messages,
+        sessionId: sessionId,
+        preset: preset,
+      );
+
+      expect(result[0].content, 'one');
     });
   });
 }

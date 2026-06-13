@@ -173,11 +173,22 @@ class ChatBridgeController {
   }
 
   Future<void> evalJs(String source) async {
-    await _controller.evaluateJavascript(source: source);
+    try {
+      await _controller.evaluateJavascript(source: source);
+    } on MissingPluginException {
+      // The native WebView platform channel has already been torn down
+      // (e.g. the chat screen was closed while a deferred panel-JS refresh
+      // was still in flight). Nothing to update — swallow quietly instead
+      // of logging a misleading "panel JS update failed" stack trace.
+    }
   }
 
-  Future<Object?> evalJsWithResult(String source) {
-    return _controller.evaluateJavascript(source: source);
+  Future<Object?> evalJsWithResult(String source) async {
+    try {
+      return await _controller.evaluateJavascript(source: source);
+    } on MissingPluginException {
+      return null;
+    }
   }
 
   String escape(String s) {

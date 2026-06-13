@@ -9,8 +9,10 @@ import '../../../core/llm/transport/transport_factory.dart';
 import '../../../core/models/api_config.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/models/character.dart';
+import '../../../core/state/db_provider.dart';
 import '../../settings/api_list_provider.dart';
 import '../models/block_config.dart';
+import '../models/info_block.dart';
 import 'block_content_extractor.dart';
 import 'ext_blocks_prompt_injection.dart';
 import 'block_context_builder.dart';
@@ -36,6 +38,7 @@ class InfoBlockService {
     required Character? character,
     required String? persona,
     required String? previousOutput,
+    int swipeId = 0,
     CancelToken? cancelToken,
     void Function(String partial)? onStreamUpdate,
   }) async {
@@ -50,6 +53,16 @@ class InfoBlockService {
       messages: messagesWithInject,
       anchorMessageId: messageId,
       count: blockConfig.contextMessageCount,
+    );
+
+    // Pull this block's own prior outputs (same name, earlier messages) so the
+    // model can continue/update the existing state instead of regenerating from
+    // scratch. Controlled per-block via [previousBlocksCount] (0 = disabled).
+    final previousBlocks = await _loadPreviousBlocks(
+      sessionId: sessionId,
+      currentMessageId: messageId,
+      currentSwipeId: swipeId,
+      blockConfig: blockConfig,
     );
 
     // Image / JS blocks run an LLM agent first; no XML template extract.
@@ -69,6 +82,7 @@ class InfoBlockService {
       persona: persona,
       contextMessages: contextMessages,
       previousOutput: previousOutput,
+      previousBlocks: previousBlocks,
     );
 
     // Resolve API config.
@@ -154,6 +168,42 @@ class InfoBlockService {
     return MacroContext(character: character, persona: persona);
   }
 
+  /// Loads up to [BlockConfig.previousBlocksCount] of this block's own prior
+  /// outputs (same [BlockConfig.name], same session, from OTHER messages),
+  /// ordered oldest → newest for prompt insertion. Returns empty when the
+  /// feature is disabled (`previousBlocksCount <= 0`) or the block has no name.
+  Future<List<InfoBlock>> _loadPreviousBlocks({
+    required String sessionId,
+    required String currentMessageId,
+    required int currentSwipeId,
+    required BlockConfig blockConfig,
+  }) async {
+    final count = blockConfig.previousBlocksCount;
+    if (count <= 0 || blockConfig.name.trim().isEmpty) {
+      return const [];
+    }
+
+    final repo = _ref.read(infoBlocksRepoProvider);
+    // Over-fetch a little so excluding the current message's block(s) still
+    // leaves [count] historical entries.
+    final recent = await repo.getRecentBlocks(
+      sessionId,
+      blockConfig.name,
+      count + 4,
+    );
+
+    final filtered = recent
+        .where((b) =>
+            b.content.trim().isNotEmpty &&
+            !(b.messageId == currentMessageId && b.swipeId == currentSwipeId))
+        .take(count)
+        .toList();
+
+    // getRecentBlocks is newest-first; present oldest-first so the model reads
+    // the history in chronological order.
+    return filtered.reversed.toList();
+  }
+
   /// Returns the template sent to the LLM. Empty [blockConfig.template] means
   /// no XML wrapper — the full model reply is stored as-is.
   String _resolveTemplate(BlockConfig blockConfig) {
@@ -222,6 +272,7 @@ class InfoBlockService {
     required String? persona,
     required List<ChatMessage> contextMessages,
     required String? previousOutput,
+    List<InfoBlock> previousBlocks = const [],
   }) {
     final buffer = StringBuffer();
 
@@ -231,6 +282,21 @@ class InfoBlockService {
         _macroContext(character: character, persona: persona),
       );
       buffer.writeln(sysPrompt);
+      buffer.writeln();
+    }
+
+    if (previousBlocks.isNotEmpty) {
+      final label = blockConfig.name.trim().isEmpty
+          ? 'this block'
+          : '"${blockConfig.name}"';
+      buffer.writeln(
+        'Previous outputs of $label (oldest first). Continue and update the '
+        'latest state instead of starting over:',
+      );
+      for (var i = 0; i < previousBlocks.length; i++) {
+        buffer.writeln('--- #${i + 1} ---');
+        buffer.writeln(previousBlocks[i].content.trim());
+      }
       buffer.writeln();
     }
 

@@ -34,6 +34,7 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
   late int _injectLastN;
   late bool _dependsOnPrevious;
   late int _contextMessageCount;
+  late int _previousBlocksCount;
   late bool _streamToPanel;
   late bool _useStaticHtml;
   bool _fetchingModels = false;
@@ -65,6 +66,7 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
     _injectLastN = b.injectLastN;
     _dependsOnPrevious = b.dependsOnPrevious;
     _contextMessageCount = b.contextMessageCount;
+    _previousBlocksCount = b.previousBlocksCount;
     _streamToPanel = b.streamToPanel;
     _useStaticHtml =
         b.type == BlockType.interactive && b.script.trim().isNotEmpty;
@@ -97,6 +99,7 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
       imagePromptInstruction: '',
       imageGenEnabled: true,
       contextMessageCount: usesLlm ? _contextMessageCount : 0,
+      previousBlocksCount: usesLlm ? _previousBlocksCount : 0,
       contextSystemPrompt: usesLlm ? _contextSystemPromptController.text : '',
       streamToPanel: usesLlm ? _streamToPanel : false,
       script: isInteractive
@@ -189,9 +192,11 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
                   modelController: _modelController,
                   contextSystemPromptController: _contextSystemPromptController,
                   contextMessageCount: _contextMessageCount,
+                  previousBlocksCount: _previousBlocksCount,
                   streamToPanel: _streamToPanel,
                   fetchingModels: _fetchingModels,
                   onContextMessageCountChanged: (v) => _contextMessageCount = v,
+                  onPreviousBlocksCountChanged: (v) => _previousBlocksCount = v,
                   onStreamToPanelChanged: (v) =>
                       setState(() => _streamToPanel = v),
                   onApiChanged: (id) {
@@ -422,9 +427,11 @@ class _LlmOptionsFields extends StatelessWidget {
     required this.modelController,
     required this.contextSystemPromptController,
     required this.contextMessageCount,
+    required this.previousBlocksCount,
     required this.streamToPanel,
     required this.fetchingModels,
     required this.onContextMessageCountChanged,
+    required this.onPreviousBlocksCountChanged,
     required this.onStreamToPanelChanged,
     required this.onApiChanged,
     required this.onFetchStart,
@@ -436,9 +443,11 @@ class _LlmOptionsFields extends StatelessWidget {
   final TextEditingController modelController;
   final TextEditingController contextSystemPromptController;
   final int contextMessageCount;
+  final int previousBlocksCount;
   final bool streamToPanel;
   final bool fetchingModels;
   final ValueChanged<int> onContextMessageCountChanged;
+  final ValueChanged<int> onPreviousBlocksCountChanged;
   final ValueChanged<bool> onStreamToPanelChanged;
   final ValueChanged<String?> onApiChanged;
   final VoidCallback onFetchStart;
@@ -456,6 +465,11 @@ class _LlmOptionsFields extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         _ContextSystemPromptField(controller: contextSystemPromptController),
+        const SizedBox(height: 8),
+        _PreviousBlocksCountField(
+          value: previousBlocksCount,
+          onChanged: onPreviousBlocksCountChanged,
+        ),
         const SizedBox(height: 16),
         SectionLabel(switch (type) {
           BlockType.imageGen => 'API agent\'а',
@@ -672,6 +686,33 @@ class _ContextMessageCountField extends StatelessWidget {
             : 'Считается от сообщения, на котором висит блок (не от конца чата).',
       ),
       keyboardType: const TextInputType.numberWithOptions(signed: true),
+      controller: TextEditingController(text: value.toString()),
+      onChanged: (v) => onChanged(int.tryParse(v) ?? value),
+    );
+  }
+}
+
+class _PreviousBlocksCountField extends StatelessWidget {
+  const _PreviousBlocksCountField({
+    required this.value,
+    required this.onChanged,
+  });
+
+  final int value;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      decoration: const InputDecoration(
+        labelText: 'Сколько прошлых выводов этого блока подмешать',
+        helperText:
+            'Берёт последние N сохранённых выводов блока с тем же именем '
+            'из прошлых сообщений и даёт модели как контекст, чтобы продолжить/'
+            'обновить состояние, а не генерировать заново.\n'
+            '0 — выключено (по умолчанию).',
+      ),
+      keyboardType: TextInputType.number,
       controller: TextEditingController(text: value.toString()),
       onChanged: (v) => onChanged(int.tryParse(v) ?? value),
     );

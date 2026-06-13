@@ -185,6 +185,17 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
     );
   }
 
+  static List<String> _stringList(Object? raw) {
+    if (raw is! List) return const [];
+    return raw
+        .whereType<String>()
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static bool _isPositive(Object? raw) => raw is num && raw > 0;
+
   static String _chunkLabel(Map<String, dynamic> candidate) {
     final injected = candidate['excerptChunksInjected'] as int? ?? 0;
     final total = candidate['excerptChunksTotal'] as int? ?? 0;
@@ -213,12 +224,32 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
     final score = candidate['score'];
     final scoreText = score is num ? score.toStringAsFixed(2) : '0.00';
     final chunkLabel = _chunkLabel(candidate);
-    final typeLabel = switch (injectionType) {
+    final matchedKeys = _stringList(candidate['matchedKeys']);
+    final catalogTerms = _stringList(candidate['catalogMatchedTerms']);
+    final keywordScore = candidate['keywordScore'];
+    final vectorScore = candidate['vectorScore'];
+    final catalogScore = candidate['catalogScore'];
+    // Which retrieval layer actually fired for this entry. Keyword-triggered
+    // entries previously had no visible marker (only vector excerpt overlap
+    // terms were rendered), making it look like the badge "only shows vectors".
+    final hasKeyword = matchedKeys.isNotEmpty || _isPositive(keywordScore);
+    final hasVector = _isPositive(vectorScore);
+    final hasCatalog = catalogTerms.isNotEmpty || _isPositive(catalogScore);
+    final triggers = <String>[
+      if (hasKeyword) 'key',
+      if (hasVector) 'vec',
+      if (hasCatalog) 'cat',
+    ];
+    final triggerLabel = triggers.isEmpty ? '' : triggers.join('+');
+    final baseTypeLabel = switch (injectionType) {
       'excerpt' when chunkLabel.isNotEmpty => chunkLabel,
       'excerpt' => 'excerpt',
       'full_entry' => 'full',
       _ => reason,
     };
+    final typeLabel = triggerLabel.isEmpty
+        ? baseTypeLabel
+        : '$baseTypeLabel · $triggerLabel';
     final matchedTerms = candidate['excerptMatchedTerms'];
     final chunkIndexes = candidate['excerptChunkIndexes'];
     final canExpand = selected;
@@ -312,6 +343,32 @@ class _MemoryActivityCardState extends State<MemoryActivityCard> {
                       style: TextStyle(
                         fontSize: 11,
                         color: context.cs.onSurfaceVariant,
+                      ),
+                    ),
+                  if (matchedKeys.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Ключи: ${matchedKeys.join(', ')}',
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.cs.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  if (catalogTerms.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        'Каталог: ${catalogTerms.join(', ')}',
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: context.cs.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   if (matchedTerms is List && matchedTerms.isNotEmpty)

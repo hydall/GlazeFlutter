@@ -48,6 +48,11 @@ abstract class BlockConfig with _$BlockConfig {
     /// Additional system text prepended before chat history.
     /// Supports macros: {{char}}, {{user}}, {{description}}, {{personality}}.
     @Default('') String contextSystemPrompt,
+    /// Number of this block's own previous outputs (same [name], same session,
+    /// from earlier messages) to feed into the generation prompt as reference,
+    /// so a new run can continue/update the prior state instead of starting
+    /// from scratch. 0 = disabled (default).
+    @Default(0) int previousBlocksCount,
     // JS Runner (Phase 10)
     /// Legacy static script (used only when [prompt] is empty). Prefer LLM prompt.
     @Default('') String script,

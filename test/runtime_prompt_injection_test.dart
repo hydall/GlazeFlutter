@@ -743,7 +743,7 @@ void main() {
         lorebookSettings: const LorebookGlobalSettings(
           searchType: 'both',
           injectionPosition: 'lorebooksMacro',
-          maxInjectedEntries: 2,
+          maxInjectedEntries: 4,
           keywordVectorSplit: 50,
         ),
         vectorEntries: [duplicateEntry],
@@ -760,5 +760,96 @@ void main() {
           .source,
       'keyword',
     );
+  });
+
+  test('keyword-matched overflow entries are not reintroduced as vector', () {
+    final firstKeyword = LorebookEntry(
+      id: 'kw1',
+      comment: 'First Keyword',
+      keys: const ['alpha'],
+      content: 'First keyword payload.',
+      position: 'lorebooksMacro',
+      order: 10,
+    );
+    final duplicate = LorebookEntry(
+      id: 'dupe1',
+      comment: 'Duplicate Keyword Vector',
+      keys: const ['beta'],
+      content: 'Duplicate payload.',
+      position: 'lorebooksMacro',
+      order: 20,
+      vectorSearch: true,
+      useKeywordSearch: true,
+    );
+    final vectorOnly = LorebookEntry(
+      id: 'vec1',
+      comment: 'Vector Only',
+      content: 'Vector-only payload.',
+      position: 'lorebooksMacro',
+      order: 30,
+      vectorSearch: true,
+      useKeywordSearch: false,
+    );
+
+    final result = buildPrompt(
+      PromptPayload(
+        character: Character(id: 'c1', name: 'Alice'),
+        preset: const Preset(
+          id: 'p1',
+          name: 'Prompt',
+          blocks: [
+            PresetBlock(
+              id: 'lore_slot',
+              name: 'Lore Slot',
+              role: 'user',
+              content: '<lorebooks>\n{{lorebooks}}\n</lorebooks>',
+              appendToLastMessage: true,
+            ),
+            PresetBlock(
+              id: 'chat_history',
+              name: 'History',
+              role: 'system',
+              content: '',
+            ),
+          ],
+        ),
+        history: const [
+          ChatMessage(id: 'u1', role: 'user', content: 'alpha beta'),
+        ],
+        apiConfig: const ApiConfig(
+          id: 'api',
+          name: 'API',
+          contextSize: 10000,
+          maxTokens: 100,
+        ),
+        lorebooks: [
+          Lorebook(
+            id: 'lb1',
+            name: 'Book',
+            entries: [firstKeyword, duplicate, vectorOnly],
+          ),
+        ],
+        lorebookSettings: const LorebookGlobalSettings(
+          searchType: 'both',
+          injectionPosition: 'lorebooksMacro',
+          maxInjectedEntries: 2,
+          keywordVectorSplit: 50,
+        ),
+        vectorEntries: [duplicate, vectorOnly],
+      ),
+    );
+
+    final lastUser = result.messages.lastWhere((m) => m.role == 'user');
+    expect(lastUser.content, contains('First keyword payload.'));
+    expect(lastUser.content, isNot(contains('Duplicate payload.')));
+    expect(lastUser.content, contains('Vector-only payload.'));
+    expect(result.triggeredLorebooks.map((e) => e.name), [
+      'First Keyword',
+      'Vector Only',
+    ]);
+    expect(result.triggeredLorebooks.map((e) => e.source), [
+      'keyword',
+      'vector',
+    ]);
   });
 }
