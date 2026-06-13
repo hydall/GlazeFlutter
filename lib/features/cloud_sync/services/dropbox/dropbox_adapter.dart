@@ -10,12 +10,15 @@ class DropboxAdapter implements CloudAdapter {
   static const _apiBase = 'https://api.dropboxapi.com/2';
   static const _contentBase = 'https://content.dropboxapi.com/2';
   static const _appFolderPrefix = '/Glaze';
+  static const _deleteBatchPolls = 30;
 
   final DropboxAuth _auth;
-  final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 120),
-  ));
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 120),
+    ),
+  );
 
   final Set<String> _ensuredFolders = {};
 
@@ -64,7 +67,8 @@ class DropboxAdapter implements CloudAdapter {
   }
 
   @override
-  Future<bool> isConnected() => _auth.isConnected ? Future.value(true) : Future.value(false);
+  Future<bool> isConnected() =>
+      _auth.isConnected ? Future.value(true) : Future.value(false);
 
   @override
   Future<void> ensureFolder(String path) async {
@@ -77,10 +81,9 @@ class DropboxAdapter implements CloudAdapter {
       current += '/$part';
       if (_ensuredFolders.contains(current)) continue;
       try {
-        await _retryOn401(() => _apiCall<dynamic>(
-              '/files/create_folder_v2',
-              {'path': current},
-            ));
+        await _retryOn401(
+          () => _apiCall<dynamic>('/files/create_folder_v2', {'path': current}),
+        );
       } on DioException catch (e) {
         if (e.response?.statusCode != 409) rethrow;
       }
@@ -121,7 +124,10 @@ class DropboxAdapter implements CloudAdapter {
       await _dio.post<void>(
         '$_contentBase/files/upload',
         data: Stream.fromIterable([data]),
-        options: Options(headers: headers, contentType: 'application/octet-stream'),
+        options: Options(
+          headers: headers,
+          contentType: 'application/octet-stream',
+        ),
       );
     });
   }
@@ -154,10 +160,9 @@ class DropboxAdapter implements CloudAdapter {
 
   @override
   Future<void> deleteFile(String path) async {
-    await _retryOn401(() => _apiCall<dynamic>(
-          '/files/delete_v2',
-          {'path': _stripPrefix(path)},
-        ));
+    await _retryOn401(
+      () => _apiCall<dynamic>('/files/delete_v2', {'path': _stripPrefix(path)}),
+    );
   }
 
   @override
@@ -168,20 +173,21 @@ class DropboxAdapter implements CloudAdapter {
       _ensuredFolders.clear();
       return;
     }
-    await _retryOn401(() => _apiCall<dynamic>(
-          '/files/delete_v2',
-          {'path': stripped},
-        ));
+    await _retryOn401(
+      () => _apiCall<dynamic>('/files/delete_v2', {'path': stripped}),
+    );
     _ensuredFolders.remove(stripped);
   }
 
   Future<void> _deleteAllInRoot() async {
     final entries = <Map<String, dynamic>>[];
-    var result = await _apiCall<Map<String, dynamic>>(
-      '/files/list_folder',
-      {'path': '', 'recursive': true},
+    var result = await _apiCall<Map<String, dynamic>>('/files/list_folder', {
+      'path': '',
+      'recursive': true,
+    });
+    entries.addAll(
+      (result['entries'] as List? ?? []).cast<Map<String, dynamic>>(),
     );
-    entries.addAll((result['entries'] as List? ?? []).cast<Map<String, dynamic>>());
 
     var hasMore = result['has_more'] as bool? ?? false;
     while (hasMore) {
@@ -189,28 +195,62 @@ class DropboxAdapter implements CloudAdapter {
         '/files/list_folder/continue',
         {'cursor': result['cursor']},
       );
-      entries.addAll((result['entries'] as List? ?? []).cast<Map<String, dynamic>>());
+      entries.addAll(
+        (result['entries'] as List? ?? []).cast<Map<String, dynamic>>(),
+      );
       hasMore = result['has_more'] as bool? ?? false;
     }
 
     if (entries.isEmpty) return;
 
     try {
-      await _apiCall<dynamic>('/files/delete_batch', {
-        'entries': entries
-            .map((e) => {'path': e['path_lower'] ?? e['path_display']})
-            .toList(),
-      });
+      final result = await _apiCall<Map<String, dynamic>>(
+        '/files/delete_batch',
+        {
+          'entries': entries
+              .map((e) => {'path': e['path_lower'] ?? e['path_display']})
+              .toList(),
+        },
+      );
+      await _waitForDeleteBatch(result);
     } catch (_) {
       for (final entry in entries) {
         try {
-          await _apiCall<dynamic>(
-            '/files/delete_v2',
-            {'path': entry['path_lower'] ?? entry['path_display']},
-          );
+          await _apiCall<dynamic>('/files/delete_v2', {
+            'path': entry['path_lower'] ?? entry['path_display'],
+          });
         } catch (_) {}
         await Future<void>.delayed(const Duration(milliseconds: 300));
       }
+    }
+  }
+
+  Future<void> _waitForDeleteBatch(Map<String, dynamic> result) async {
+    var tag = result['.tag'] as String?;
+    var asyncJobId = result['async_job_id'] as String?;
+
+    for (
+      var i = 0;
+      tag == 'async_job_id' && asyncJobId != null && i < _deleteBatchPolls;
+      i++
+    ) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      final check = await _apiCall<Map<String, dynamic>>(
+        '/files/delete_batch/check',
+        {'async_job_id': asyncJobId},
+      );
+      tag = check['.tag'] as String?;
+      if (tag == 'complete') return;
+      if (tag == 'failed') {
+        throw Exception('Dropbox delete_batch failed: $check');
+      }
+    }
+
+    if (tag == 'async_job_id') {
+      throw Exception('Dropbox delete_batch did not complete in time');
+    }
+    if (tag == 'failed') {
+      throw Exception('Dropbox delete_batch failed: $result');
     }
   }
 
@@ -220,7 +260,7 @@ class DropboxAdapter implements CloudAdapter {
       final result = <CloudFileInfo>[];
       var response = await _apiCall<Map<String, dynamic>>(
         '/files/list_folder',
-        {'path': _stripPrefix(path), 'recursive': true},
+        {'path': _stripPrefix(path), 'recursive': false},
       );
       result.addAll(_parseEntries(response['entries'] as List? ?? []));
 
@@ -240,11 +280,13 @@ class DropboxAdapter implements CloudAdapter {
   List<CloudFileInfo> _parseEntries(List<Object?> entries) {
     return entries
         .whereType<Map<String, dynamic>>()
-        .map((e) => CloudFileInfo(
-              path: e['path_display'] as String? ?? '',
-              name: e['name'] as String? ?? '',
-              isFolder: e['.tag'] == 'folder',
-            ))
+        .map(
+          (e) => CloudFileInfo(
+            path: e['path_display'] as String? ?? '',
+            name: e['name'] as String? ?? '',
+            isFolder: e['.tag'] == 'folder',
+          ),
+        )
         .toList();
   }
 

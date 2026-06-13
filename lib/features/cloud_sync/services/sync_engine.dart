@@ -19,7 +19,8 @@ import '../../../core/models/api_config.dart';
 import '../../../core/models/preset.dart';
 import '../../../shared/theme/theme_preset.dart';
 import '../sync_repo_interfaces.dart';
-import '../../../core/state/lorebook_provider.dart' show saveLorebookActivations;
+import '../../../core/state/lorebook_provider.dart'
+    show saveLorebookActivations;
 import '../../../features/extensions/models/extension_preset.dart';
 import '../../../features/extensions/models/extensions_settings.dart';
 import '../../../features/extensions/models/info_block.dart';
@@ -82,16 +83,29 @@ class SyncEngine {
     await _adapter.ensureFolder('$cloudBase/extension_presets');
     await _adapter.ensureFolder('$cloudBase/info_blocks');
 
+    onProgress(const SyncProgress(message: 'Building sync manifest...'));
     final localManifest = await _manifestBuilder.buildLocalManifest();
     SyncManifest? cloudManifest;
     try {
       final raw = await _adapter.download(cloudPath('manifest', 'manifest'));
-      cloudManifest = SyncManifest.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+      cloudManifest = SyncManifest.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
     } catch (_) {}
 
-    final cloudFilePaths = await _loadCloudFilePaths();
-
     final entries = localManifest.entries.values.toList();
+    final needsCloudFileScan =
+        cloudManifest != null &&
+        entries.any((entry) {
+          if (entry.deleted) return false;
+          final cloudEntry = cloudManifest?.entries[entry.key];
+          return cloudEntry != null &&
+              !cloudEntry.deleted &&
+              cloudEntry.hash == entry.hash;
+        });
+    final cloudFilePaths = needsCloudFileScan
+        ? await _loadCloudFilePaths(onProgress: onProgress)
+        : <String>{};
 
     final galleryDirs = <String>{};
     for (final entry in entries) {
@@ -114,53 +128,71 @@ class SyncEngine {
         if (cloudEntry != null && !cloudEntry.deleted) {
           tasks.add(() async {
             processed++;
-            onProgress(SyncProgress(
-              current: processed,
-              total: tasks.length,
-              message: 'Deleting ${entry.type}:${entry.id}',
-            ));
+            onProgress(
+              SyncProgress(
+                current: processed,
+                total: tasks.length,
+                message: 'Deleting ${entry.type}:${entry.id}',
+              ),
+            );
             await SyncSerialization.deleteCloudFileIfExists(_adapter, entry);
           });
         }
         continue;
       }
 
-      final cloudFileExists = cloudSyncPathExists(cloudFilePaths, entry.path);
+      final cloudFileExists = cloudFilePaths.isEmpty
+          ? false
+          : cloudSyncPathExists(cloudFilePaths, entry.path);
 
       if (cloudEntry != null && !cloudEntry.deleted) {
         if (cloudEntry.hash == entry.hash && cloudFileExists) {
           hashSkippedKeys.add(entry.key);
           continue;
         }
-        if (cloudEntry.hash == entry.hash && !cloudFileExists) {
-        }
+        if (cloudEntry.hash == entry.hash && !cloudFileExists) {}
       }
 
       tasks.add(() async {
         processed++;
-        onProgress(SyncProgress(
-          current: processed,
-          total: tasks.length,
-          message: 'Pushing ${entry.type}:${entry.id}',
-        ));
+        onProgress(
+          SyncProgress(
+            current: processed,
+            total: tasks.length,
+            message: 'Pushing ${entry.type}:${entry.id}',
+          ),
+        );
         await _pushEntry(entry);
       });
     }
 
-    onProgress(SyncProgress(
-      current: 0,
-      total: tasks.length,
-      message: tasks.isEmpty ? 'Nothing to push' : 'Pushing ${tasks.length} items...',
-    ));
+    onProgress(
+      SyncProgress(
+        current: 0,
+        total: tasks.length,
+        message: tasks.isEmpty
+            ? 'Nothing to push'
+            : 'Pushing ${tasks.length} items...',
+      ),
+    );
 
     List<Object>? taskErrors;
     if (tasks.isNotEmpty) {
-      final result = await _queue.enqueueAll(tasks, concurrency: 3, delayMs: 300);
+      final result = await _queue.enqueueAll(
+        tasks,
+        concurrency: 3,
+        delayMs: 300,
+      );
       taskErrors = result.errors;
     }
 
-    final cleanedEntries = Map<String, SyncManifestEntry>.from(localManifest.entries)
-      ..removeWhere((_, e) => e.deleted);
+    if (taskErrors != null && taskErrors.isNotEmpty) {
+      throw SyncQueueAggregateError(taskErrors);
+    }
+
+    final cleanedEntries = Map<String, SyncManifestEntry>.from(
+      localManifest.entries,
+    )..removeWhere((_, e) => e.deleted);
 
     final updatedManifest = localManifest.copyWith(
       version: SyncManifest.currentVersion,
@@ -169,20 +201,16 @@ class SyncEngine {
       apiKeysIncluded: _includeApiKeys,
     );
     final manifestJson = jsonEncode(updatedManifest.toJson());
-    await _adapter.upload(
-      cloudPath('manifest', 'manifest'),
-      manifestJson,
-    );
+    await _adapter.upload(cloudPath('manifest', 'manifest'), manifestJson);
     await _manifestBuilder.writeLocalManifest(updatedManifest);
     await _manifestBuilder.clearDeleted();
-
-    if (taskErrors != null && taskErrors.isNotEmpty) {
-      throw SyncQueueAggregateError(taskErrors);
-    }
   }
 
-  Future<Set<String>> _loadCloudFilePaths() async {
+  Future<Set<String>> _loadCloudFilePaths({
+    required void Function(SyncProgress) onProgress,
+  }) async {
     try {
+      onProgress(const SyncProgress(message: 'Scanning cloud files...'));
       return await _collectCloudFilePaths(cloudBase);
     } catch (_) {
       return {};
@@ -195,10 +223,6 @@ class SyncEngine {
         .where((f) => !f.isFolder)
         .map((f) => normalizeCloudSyncPath(f.path))
         .toSet();
-
-    final hasNestedFiles = paths.any((p) => p.split('/').where((s) => s.isNotEmpty).length > 1);
-    if (hasNestedFiles) return paths;
-
     for (final folder in files.where((f) => f.isFolder)) {
       paths.addAll(await _collectCloudFilePaths(folder.path));
     }
@@ -224,7 +248,8 @@ class SyncEngine {
     for (final cloudEntry in entries) {
       final localEntry = localManifest.entries[cloudEntry.key];
 
-      if (cloudEntry.hash == localEntry?.hash && cloudEntry.deleted == localEntry?.deleted) {
+      if (cloudEntry.hash == localEntry?.hash &&
+          cloudEntry.deleted == localEntry?.deleted) {
         continue;
       }
 
@@ -236,12 +261,19 @@ class SyncEngine {
         continue;
       }
 
-      if (await _entriesSemanticallyEqual(cloudEntry, localEntry, cloudManifest)) {
+      if (await _entriesSemanticallyEqual(
+        cloudEntry,
+        localEntry,
+        cloudManifest,
+      )) {
         continue;
       }
 
       if (SyncConflictDetector.needsConflict(localEntry, cloudEntry)) {
-        final localData = await _readLocalEntity(cloudEntry.type, cloudEntry.id);
+        final localData = await _readLocalEntity(
+          cloudEntry.type,
+          cloudEntry.id,
+        );
         String? characterName;
         if (cloudEntry.type == 'chat') {
           final charId = localData?['characterId'] as String?;
@@ -251,17 +283,22 @@ class SyncEngine {
           }
         }
         final name = SyncConflictDetector.getConflictName(
-          cloudEntry.type, localData, null, cloudEntry.id,
+          cloudEntry.type,
+          localData,
+          null,
+          cloudEntry.id,
           characterName: characterName,
         );
-        conflicts.add(SyncConflict(
-          key: cloudEntry.key,
-          type: cloudEntry.type,
-          id: cloudEntry.id,
-          localEntry: localEntry!,
-          cloudEntry: cloudEntry,
-          name: name,
-        ));
+        conflicts.add(
+          SyncConflict(
+            key: cloudEntry.key,
+            type: cloudEntry.type,
+            id: cloudEntry.id,
+            localEntry: localEntry!,
+            cloudEntry: cloudEntry,
+            name: name,
+          ),
+        );
         continue;
       }
 
@@ -273,9 +310,16 @@ class SyncEngine {
     }
 
     if (pullEntries.isNotEmpty) {
-      await _applyPullEntries(pullEntries, localManifest, cloudManifest, onProgress);
+      await _applyPullEntries(
+        pullEntries,
+        localManifest,
+        cloudManifest,
+        onProgress,
+      );
     } else if (conflicts.isEmpty) {
-      onProgress(const SyncProgress(current: 0, total: 0, message: 'Nothing to pull'));
+      onProgress(
+        const SyncProgress(current: 0, total: 0, message: 'Nothing to pull'),
+      );
       await _finalizePull(localManifest, cloudManifest);
     } else {
       await _saveCloudManifestForPendingPull(cloudManifest);
@@ -287,7 +331,8 @@ class SyncEngine {
     List<String>? resolvedAsCloud,
   }) async {
     final cloudManifest =
-        await _loadCloudManifestForPendingPull() ?? await _downloadCloudManifest();
+        await _loadCloudManifestForPendingPull() ??
+        await _downloadCloudManifest();
     if (cloudManifest == null) return;
     final localManifest = await _manifestBuilder.buildLocalManifest(
       cloudManifest: cloudManifest,
@@ -298,14 +343,20 @@ class SyncEngine {
 
     for (final cloudEntry in cloudManifest.entries.values) {
       final localEntry = localManifest.entries[cloudEntry.key];
-      if (cloudEntry.hash == localEntry?.hash && cloudEntry.deleted == localEntry?.deleted) {
+      if (cloudEntry.hash == localEntry?.hash &&
+          cloudEntry.deleted == localEntry?.deleted) {
         continue;
       }
-      if (await _entriesSemanticallyEqual(cloudEntry, localEntry, cloudManifest)) {
+      if (await _entriesSemanticallyEqual(
+        cloudEntry,
+        localEntry,
+        cloudManifest,
+      )) {
         continue;
       }
       if (SyncConflictDetector.needsConflict(localEntry, cloudEntry)) {
-        if (resolvedAsCloud != null && resolvedAsCloud.contains(cloudEntry.key)) {
+        if (resolvedAsCloud != null &&
+            resolvedAsCloud.contains(cloudEntry.key)) {
           pullEntries.add(cloudEntry);
         }
         continue;
@@ -321,9 +372,16 @@ class SyncEngine {
     }
 
     if (pullEntries.isNotEmpty) {
-      await _applyPullEntries(pullEntries, localManifest, cloudManifest, onProgress);
+      await _applyPullEntries(
+        pullEntries,
+        localManifest,
+        cloudManifest,
+        onProgress,
+      );
     } else {
-      onProgress(const SyncProgress(current: 0, total: 0, message: 'Nothing to pull'));
+      onProgress(
+        const SyncProgress(current: 0, total: 0, message: 'Nothing to pull'),
+      );
       await _finalizePull(localManifest, cloudManifest);
     }
 
@@ -342,24 +400,32 @@ class SyncEngine {
     for (final entry in pullEntries) {
       tasks.add(() async {
         processed++;
-        onProgress(SyncProgress(
-          current: processed,
-          total: tasks.length,
-          message: 'Pulling ${entry.type}:${entry.id}',
-        ));
+        onProgress(
+          SyncProgress(
+            current: processed,
+            total: tasks.length,
+            message: 'Pulling ${entry.type}:${entry.id}',
+          ),
+        );
         await _pullEntry(entry);
       });
     }
 
-    onProgress(SyncProgress(
-      current: 0,
-      total: tasks.length,
-      message: 'Pulling ${tasks.length} items...',
-    ));
+    onProgress(
+      SyncProgress(
+        current: 0,
+        total: tasks.length,
+        message: 'Pulling ${tasks.length} items...',
+      ),
+    );
 
     List<Object>? taskErrors;
     if (tasks.isNotEmpty) {
-      final result = await _queue.enqueueAll(tasks, concurrency: 3, delayMs: 300);
+      final result = await _queue.enqueueAll(
+        tasks,
+        concurrency: 3,
+        delayMs: 300,
+      );
       taskErrors = result.errors;
     }
 
@@ -378,7 +444,10 @@ class SyncEngine {
     }
   }
 
-  Future<void> _finalizePull(SyncManifest localManifest, SyncManifest cloudManifest) async {
+  Future<void> _finalizePull(
+    SyncManifest localManifest,
+    SyncManifest cloudManifest,
+  ) async {
     final rebuilt = await _manifestBuilder.buildLocalManifest(
       cloudManifest: cloudManifest,
     );
@@ -431,7 +500,9 @@ class SyncEngine {
     }
 
     final rebuiltManifest = await _manifestBuilder.buildLocalManifest();
-    final updatedEntries = Map<String, SyncManifestEntry>.from(rebuiltManifest.entries);
+    final updatedEntries = Map<String, SyncManifestEntry>.from(
+      rebuiltManifest.entries,
+    );
     final rebuiltEntry = updatedEntries[conflict.key];
 
     if (choice == 'cloud') {
@@ -545,26 +616,32 @@ class SyncEngine {
       case 'memory_book':
         final localMb = await _memoryBookRepo.getBySessionId(cloudEntry.id);
         if (localMb == null) return false;
-        final cloudData =
-            await SyncSerialization.readCloudEntity(_adapter, cloudEntry);
+        final cloudData = await SyncSerialization.readCloudEntity(
+          _adapter,
+          cloudEntry,
+        );
         if (cloudData == null) return false;
-        final localHash =
-            SyncSerialization.computeMemoryBookHash(localMb.toJson());
-        final cloudHash =
-            SyncSerialization.computeMemoryBookHash(cloudData);
+        final localHash = SyncSerialization.computeMemoryBookHash(
+          localMb.toJson(),
+        );
+        final cloudHash = SyncSerialization.computeMemoryBookHash(cloudData);
         final equal = localHash == cloudHash;
         return equal;
       case 'api_presets':
         if (cloudManifest.apiKeysIncluded) return false;
         final localAll = await _apiRepo.getAll();
-        final cloudData =
-            await SyncSerialization.readCloudEntity(_adapter, cloudEntry);
+        final cloudData = await SyncSerialization.readCloudEntity(
+          _adapter,
+          cloudEntry,
+        );
         if (cloudData == null) return false;
         final List<Map<String, dynamic>> cloudItems;
         if (cloudData['__singleton'] == true) {
-          cloudItems = (cloudData['items'] as List).cast<Map<String, dynamic>>();
+          cloudItems = (cloudData['items'] as List)
+              .cast<Map<String, dynamic>>();
         } else if (cloudData.containsKey('items')) {
-          cloudItems = (cloudData['items'] as List).cast<Map<String, dynamic>>();
+          cloudItems = (cloudData['items'] as List)
+              .cast<Map<String, dynamic>>();
         } else {
           cloudItems = [cloudData];
         }
@@ -599,7 +676,10 @@ class SyncEngine {
           return mb.toJson();
         case 'lorebooks':
           final all = await _lorebookRepo.getAll();
-          return {'__singleton': true, 'items': all.map((l) => l.toJson()).toList()};
+          return {
+            '__singleton': true,
+            'items': all.map((l) => l.toJson()).toList(),
+          };
         case 'api_presets':
           final all = await _apiRepo.getAll();
           final items = all.map((a) {
@@ -611,10 +691,16 @@ class SyncEngine {
           return {'__singleton': true, 'items': items};
         case 'theme_presets':
           final all = await _presetRepo.getAll();
-          return {'__singleton': true, 'items': all.map((p) => p.toJson()).toList()};
+          return {
+            '__singleton': true,
+            'items': all.map((p) => p.toJson()).toList(),
+          };
         case 'ui_themes':
           final all = await _themePresetRepo.getAll();
-          return {'__singleton': true, 'items': all.map((t) => t.toJson()).toList()};
+          return {
+            '__singleton': true,
+            'items': all.map((t) => t.toJson()).toList(),
+          };
         case 'extension_preset':
           final ep = await _extensionPresetRepo.getById(id);
           if (ep == null) return null;
@@ -626,10 +712,7 @@ class SyncEngine {
           // id == sessionId for info_block entries
           final blocks = await _infoBlockStore.getBySessionId(id);
           if (blocks.isEmpty) return null;
-          return {
-            '__infoBlocks': true,
-            'items': blocks.map((b) => _normalizeInfoBlockForSync(b)).toList(),
-          };
+          return SyncSerialization.infoBlocksPayload(blocks);
         default:
           return null;
       }
@@ -638,42 +721,11 @@ class SyncEngine {
     }
   }
 
-  /// Normalizes an InfoBlock for cloud storage:
-  /// - imageGen blocks: replaces [IMG:RESULT:/path|json] with [IMG:GEN:json]
-  ///   so images can be regenerated on pull without storing device-local paths.
-  /// - All other block types: stored as-is.
-  Map<String, dynamic> _normalizeInfoBlockForSync(InfoBlock block) {
-    final json = block.toJson();
-    if (block.blockType != 'imageGen') return json;
-    final normalized = Map<String, dynamic>.from(json);
-    normalized['content'] = _normalizeImageGenContent(block.content);
-    return normalized;
-  }
-
-  /// Replaces [IMG:RESULT:/abs/path|json] → [IMG:GEN:json]
-  /// and [IMG:ERROR:...] → [IMG:GEN] so that pulled blocks can be regenerated.
-  String _normalizeImageGenContent(String content) {
-    // Replace [IMG:RESULT:/path|{"prompt":"..."}] → [IMG:GEN:{"prompt":"..."}]
-    // Replace [IMG:RESULT:/path] (no json) → [IMG:GEN]
-    var result = content.replaceAllMapped(
-      ImgGenPatterns.imgResultRegex,
-      (m) {
-        final payload = m.group(1) ?? '';
-        // payload is "/abs/path" or "/abs/path|{json}"
-        final pipeIdx = payload.indexOf('|');
-        if (pipeIdx >= 0) {
-          final instruction = payload.substring(pipeIdx + 1);
-          return '[IMG:GEN:$instruction]';
-        }
-        return '[IMG:GEN]';
-      },
-    );
-    // Replace any remaining [IMG:ERROR:...] → [IMG:GEN]
-    result = result.replaceAll(ImgGenPatterns.imgErrorStripRegex, '[IMG:GEN]');
-    return result;
-  }
-
-  Future<void> _applyCloudEntity(String type, String id, Map<String, dynamic> data) async {
+  Future<void> _applyCloudEntity(
+    String type,
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     try {
       switch (type) {
         case 'character':
@@ -746,7 +798,10 @@ class SyncEngine {
   /// avatarPath and gallery hold device-local paths; never apply cloud values
   /// directly — binary assets are synced in [_pullCharacterAvatar] /
   /// [_pullCharacterGallery].
-  Future<void> _applyCloudCharacter(String id, Map<String, dynamic> data) async {
+  Future<void> _applyCloudCharacter(
+    String id,
+    Map<String, dynamic> data,
+  ) async {
     final local = await _characterRepo.getById(id);
     final json = Map<String, dynamic>.from(data);
     json.remove('avatarPath');
@@ -834,7 +889,8 @@ class SyncEngine {
   /// removed lorebooks and rebuilding the lorebookActivations SharedPreferences
   /// from the DB truth after the apply completes.
   Future<void> _applyLorebooksWithEmbeddingCleanup(
-      Map<String, dynamic> data) async {
+    Map<String, dynamic> data,
+  ) async {
     final List<Map<String, dynamic>> items;
     if (data['__singleton'] == true) {
       items = (data['items'] as List).cast<Map<String, dynamic>>();
@@ -1022,7 +1078,10 @@ class SyncEngine {
           final bytes = await _adapter.downloadBinary(imgCloudPath);
           if (bytes.isNotEmpty) {
             final localPath = await _imageStorage.saveBytes(
-              bytes, 'avatars', charId, ext,
+              bytes,
+              'avatars',
+              charId,
+              ext,
             );
             await _characterRepo.put(current.copyWith(avatarPath: localPath));
             return;
@@ -1058,7 +1117,10 @@ class SyncEngine {
           final bytes = await _adapter.downloadBinary(imgCloudPath);
           if (bytes.isNotEmpty) {
             final relativePath = await _imageStorage.saveBytes(
-              bytes, 'avatars', personaId, ext,
+              bytes,
+              'avatars',
+              personaId,
+              ext,
             );
             await _personaRepo.put(p.copyWith(avatarPath: relativePath));
             return;
@@ -1102,7 +1164,10 @@ class SyncEngine {
             final bytes = await _adapter.downloadBinary(imgCloudPath);
             if (bytes.isNotEmpty) {
               final destPath = await _imageStorage.saveBytes(
-                bytes, 'gallery/$charId', entry.id, ext,
+                bytes,
+                'gallery/$charId',
+                entry.id,
+                ext,
               );
               updatedGallery.add(entry.copyWith(imagePath: destPath));
               pulled = true;

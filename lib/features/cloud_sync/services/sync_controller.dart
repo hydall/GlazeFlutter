@@ -20,6 +20,7 @@ import 'sync_conflict.dart';
 /// Controller for cloud sync operations, separating business logic from UI.
 class SyncController {
   final WidgetRef _ref;
+  final bool Function() isMounted;
 
   bool _isConnecting = false;
   bool _isConnectingGdrive = false;
@@ -29,7 +30,7 @@ class SyncController {
   bool _syncIncludeApiKeys = false;
   String? _gdriveFolderId;
 
-  SyncController(this._ref);
+  SyncController(this._ref, {required this.isMounted});
 
   bool get isConnecting => _isConnecting;
   bool get isConnectingGdrive => _isConnectingGdrive;
@@ -142,54 +143,62 @@ class SyncController {
   }) async {
     final service = _ref.read(syncServiceProvider).value;
     if (service == null) return null;
+    final statusNotifier = _ref.read(syncStatusProvider.notifier);
+    final progressNotifier = _ref.read(syncProgressProvider.notifier);
 
     _isWiping = true;
     _syncResult = null;
-    _ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
+    statusNotifier.state = SyncStatus.syncing;
 
     try {
       await service.wipeCloudData(onProgress: onProgress);
-      _ref.read(syncStatusProvider.notifier).state = service.status;
+      statusNotifier.state = service.status;
       _syncResult = {'type': 'wipe', 'total': 'all'};
       return _syncResult;
     } catch (e) {
-      _ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
+      statusNotifier.state = SyncStatus.error;
       rethrow;
     } finally {
       _isWiping = false;
-      _ref.read(syncProgressProvider.notifier).state = null;
-      _ref.read(syncStatusProvider.notifier).state =
-          _ref.read(syncServiceProvider).value?.status ?? SyncStatus.idle;
+      progressNotifier.state = null;
+      statusNotifier.state = service.status;
     }
   }
 
   Future<String?> doSync(String mode) async {
-    _ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
-    _ref.read(syncLastErrorProvider.notifier).state = null;
+    final statusNotifier = _ref.read(syncStatusProvider.notifier);
+    final lastErrorNotifier = _ref.read(syncLastErrorProvider.notifier);
+    final progressNotifier = _ref.read(syncProgressProvider.notifier);
+    final conflictsNotifier = _ref.read(syncConflictsProvider.notifier);
+
+    statusNotifier.state = SyncStatus.syncing;
+    lastErrorNotifier.state = null;
     _syncResult = null;
 
     int itemsCount = 0;
     late final SyncService service;
+    var serviceReady = false;
     try {
       service = await _ref.read(syncServiceProvider.future);
+      serviceReady = true;
       switch (mode) {
         case 'push':
           await service.fullPush(
             includeApiKeys: _syncIncludeApiKeys,
             onProgress: (p) {
-              _ref.read(syncProgressProvider.notifier).state = p;
+              if (isMounted()) progressNotifier.state = p;
               itemsCount = p.total;
             },
           );
           _syncResult = {'type': 'push', 'pushed': itemsCount};
-          _ref.read(syncStatusProvider.notifier).state = service.status;
-          _ref.read(syncConflictsProvider.notifier).state = service.conflicts;
+          statusNotifier.state = service.status;
+          conflictsNotifier.state = service.conflicts;
           return 'Push completed ($itemsCount items)';
 
         case 'pull':
           await service.fullPull(
             onProgress: (p) {
-              _ref.read(syncProgressProvider.notifier).state = p;
+              if (isMounted()) progressNotifier.state = p;
               itemsCount = p.total;
             },
           );
@@ -198,9 +207,9 @@ class SyncController {
             'pulled': itemsCount,
             'conflictsCount': service.conflicts.length,
           };
-          invalidateDataProviders();
-          _ref.read(syncStatusProvider.notifier).state = service.status;
-          _ref.read(syncConflictsProvider.notifier).state = service.conflicts;
+          if (isMounted()) invalidateDataProviders();
+          statusNotifier.state = service.status;
+          conflictsNotifier.state = service.conflicts;
           if (service.conflicts.isNotEmpty) {
             return 'Pull completed with ${service.conflicts.length} conflicts';
           }
@@ -210,23 +219,23 @@ class SyncController {
           await service.fullSync(
             includeApiKeys: _syncIncludeApiKeys,
             onProgress: (p) {
-              _ref.read(syncProgressProvider.notifier).state = p;
+              if (isMounted()) progressNotifier.state = p;
               itemsCount = p.total;
             },
           );
           _syncResult = {'type': 'full'};
-          invalidateDataProviders();
-          _ref.read(syncStatusProvider.notifier).state = service.status;
-          _ref.read(syncConflictsProvider.notifier).state = service.conflicts;
+          if (isMounted()) invalidateDataProviders();
+          statusNotifier.state = service.status;
+          conflictsNotifier.state = service.conflicts;
           return 'Full sync completed';
       }
     } catch (e) {
-      _ref.read(syncLastErrorProvider.notifier).state = e.toString();
-      _ref.read(syncStatusProvider.notifier).state = service.status;
-      _ref.read(syncConflictsProvider.notifier).state = service.conflicts;
+      lastErrorNotifier.state = e.toString();
+      statusNotifier.state = serviceReady ? service.status : SyncStatus.error;
+      conflictsNotifier.state = serviceReady ? service.conflicts : const [];
       return 'Sync failed: $e';
     } finally {
-      _ref.read(syncProgressProvider.notifier).state = null;
+      progressNotifier.state = null;
     }
     return null;
   }

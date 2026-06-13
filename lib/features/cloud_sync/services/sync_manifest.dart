@@ -46,7 +46,8 @@ class SyncManifestBuilder implements SyncManifestProvider {
     final prefs = await SharedPreferences.getInstance();
     var id = prefs.getString(_deviceIdKey);
     if (id == null) {
-      id = '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
+      id =
+          '${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
       await prefs.setString(_deviceIdKey, id);
     }
     return id;
@@ -65,9 +66,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     final characters = await _characterRepo.getAll();
     for (final c in characters) {
       final json = c.toJson();
-      final hash = SyncSerialization.computeSyncHash(
-        _normalizeForHash(json),
-      );
+      final hash = SyncSerialization.computeSyncHash(_normalizeForHash(json));
       final key = entryKey('character', c.id);
       final prevEntry = previous.entries[key];
       final cloudEntry = cloudManifest?.entries[key];
@@ -91,9 +90,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
     final personas = await _personaRepo.getAll();
     for (final p in personas) {
       final json = p.toJson();
-      final hash = SyncSerialization.computeSyncHash(
-        _normalizeForHash(json),
-      );
+      final hash = SyncSerialization.computeSyncHash(_normalizeForHash(json));
       final key = entryKey('persona', p.id);
       final prevEntry = previous.entries[key];
       final cloudEntry = cloudManifest?.entries[key];
@@ -188,7 +185,7 @@ class SyncManifestBuilder implements SyncManifestProvider {
       final blocks = await _infoBlockStore.getBySessionId(sessionId);
       if (blocks.isEmpty) continue;
       final hash = SyncSerialization.computeSyncHash(
-        blocks.map((b) => b.toJson()).toList(),
+        SyncSerialization.infoBlocksPayload(blocks),
       );
       final key = entryKey('info_block', sessionId);
       final prevEntry = previous.entries[key];
@@ -425,5 +422,4 @@ class SyncManifestBuilder implements SyncManifestProvider {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_deletedKey);
   }
-
 }

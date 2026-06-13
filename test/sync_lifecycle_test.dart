@@ -16,6 +16,7 @@ import 'package:glaze_flutter/features/cloud_sync/cloud_adapter.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_conflict.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_engine.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_manifest.dart';
+import 'package:glaze_flutter/features/cloud_sync/services/sync_queue.dart';
 import 'package:glaze_flutter/features/cloud_sync/services/sync_serialization.dart';
 import 'package:glaze_flutter/features/cloud_sync/sync_models.dart';
 import 'package:glaze_flutter/features/cloud_sync/sync_repo_interfaces.dart';
@@ -51,15 +52,17 @@ class FakeChatStore implements SyncChatStore {
   @override
   Future<List<SessionMetadata>> getAllSessionMetadata() async {
     return data.values
-        .map((s) => SessionMetadata(
-              sessionId: s.id,
-              characterId: s.characterId,
-              sessionIndex: s.sessionIndex,
-              updatedAt: s.updatedAt,
-              messageCount: s.messages.length,
-              lastMessageContent: '',
-              lastMessageTimestamp: 0,
-            ))
+        .map(
+          (s) => SessionMetadata(
+            sessionId: s.id,
+            characterId: s.characterId,
+            sessionIndex: s.sessionIndex,
+            updatedAt: s.updatedAt,
+            messageCount: s.messages.length,
+            lastMessageContent: '',
+            lastMessageTimestamp: 0,
+          ),
+        )
         .toList();
   }
 
@@ -200,24 +203,44 @@ class FakeEmbeddingStore implements SyncEmbeddingStore {
 
 class FakeExtensionPresetStore implements SyncExtensionPresetStore {
   final Map<String, ExtensionPreset> data = {};
-  @override Future<List<ExtensionPreset>> getAll() async => data.values.toList();
-  @override Future<ExtensionPreset?> getById(String id) async => data[id];
-  @override Future<void> put(ExtensionPreset p) async { data[p.id] = p; }
-  @override Future<void> delete(String id) async { data.remove(id); }
+  @override
+  Future<List<ExtensionPreset>> getAll() async => data.values.toList();
+  @override
+  Future<ExtensionPreset?> getById(String id) async => data[id];
+  @override
+  Future<void> put(ExtensionPreset p) async {
+    data[p.id] = p;
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    data.remove(id);
+  }
 }
 
 class FakeExtensionsSettingsStore implements SyncExtensionsSettingsStore {
   ExtensionsSettings _value = const ExtensionsSettings();
-  @override Future<ExtensionsSettings> get() async => _value;
-  @override Future<void> put(ExtensionsSettings s) async { _value = s; }
+  @override
+  Future<ExtensionsSettings> get() async => _value;
+  @override
+  Future<void> put(ExtensionsSettings s) async {
+    _value = s;
+  }
 }
 
 class FakeInfoBlockStore implements SyncInfoBlockStore {
   final Map<String, List<InfoBlock>> data = {};
-  @override Future<List<String>> getAllSessionIds() async => data.keys.toList();
-  @override Future<List<InfoBlock>> getBySessionId(String sid) async => data[sid] ?? [];
-  @override Future<void> deleteBySessionId(String sid) async { data.remove(sid); }
-  @override Future<void> insert(InfoBlock block) async {
+  @override
+  Future<List<String>> getAllSessionIds() async => data.keys.toList();
+  @override
+  Future<List<InfoBlock>> getBySessionId(String sid) async => data[sid] ?? [];
+  @override
+  Future<void> deleteBySessionId(String sid) async {
+    data.remove(sid);
+  }
+
+  @override
+  Future<void> insert(InfoBlock block) async {
     data.putIfAbsent(block.sessionId, () => []).add(block);
   }
 }
@@ -230,7 +253,11 @@ class FakeImageStore implements SyncImageStore {
 
   @override
   Future<String> saveBytes(
-      Uint8List bytes, String subfolder, String filename, String ext) async {
+    Uint8List bytes,
+    String subfolder,
+    String filename,
+    String ext,
+  ) async {
     final key = '$subfolder/$filename.$ext';
     saved[key] = bytes;
     return key;
@@ -239,8 +266,11 @@ class FakeImageStore implements SyncImageStore {
 
 class FakeCloudAdapter implements CloudAdapter {
   final Map<String, String> files = {};
+
   /// When true, [listFolder] returns paths without the `/Glaze` prefix (Dropbox-style).
   bool stripGlazePrefixInList = false;
+  bool omitFilesFromList = false;
+  final uploadFailures = <String>{};
 
   @override
   Future<bool> isConnected() async => true;
@@ -250,6 +280,9 @@ class FakeCloudAdapter implements CloudAdapter {
 
   @override
   Future<void> upload(String path, String data) async {
+    if (uploadFailures.contains(path)) {
+      throw Exception('Upload failed: $path');
+    }
     files[path] = data;
   }
 
@@ -284,19 +317,19 @@ class FakeCloudAdapter implements CloudAdapter {
 
   @override
   Future<List<CloudFileInfo>> listFolder(String path) async {
-    return files.keys
-        .where((k) => k.startsWith(path) && !k.endsWith('/'))
-        .map((k) {
-          final listedPath = stripGlazePrefixInList && k.startsWith('$cloudBase/')
-              ? k.substring(cloudBase.length)
-              : k;
-          return CloudFileInfo(
-            path: listedPath,
-            name: k.split('/').last,
-            isFolder: false,
-          );
-        })
-        .toList();
+    if (omitFilesFromList) return [];
+    return files.keys.where((k) => k.startsWith(path) && !k.endsWith('/')).map((
+      k,
+    ) {
+      final listedPath = stripGlazePrefixInList && k.startsWith('$cloudBase/')
+          ? k.substring(cloudBase.length)
+          : k;
+      return CloudFileInfo(
+        path: listedPath,
+        name: k.split('/').last,
+        isFolder: false,
+      );
+    }).toList();
   }
 
   @override
@@ -326,18 +359,19 @@ class InMemoryManifestProvider implements SyncManifestProvider {
     SyncExtensionsSettingsStore? extensionsSettingsStore,
     SyncInfoBlockStore? infoBlockStore,
   }) : _builder = SyncManifestBuilder(
-          characterRepo: characterRepo,
-          chatRepo: chatRepo,
-          personaRepo: personaRepo,
-          presetRepo: presetRepo,
-          apiRepo: apiRepo,
-          memoryBookRepo: memoryBookRepo,
-          lorebookRepo: lorebookRepo,
-          themePresetRepo: themePresetRepo,
-          extensionPresetRepo: extensionPresetRepo ?? FakeExtensionPresetStore(),
-          extensionsSettingsStore: extensionsSettingsStore ?? FakeExtensionsSettingsStore(),
-          infoBlockStore: infoBlockStore ?? FakeInfoBlockStore(),
-        );
+         characterRepo: characterRepo,
+         chatRepo: chatRepo,
+         personaRepo: personaRepo,
+         presetRepo: presetRepo,
+         apiRepo: apiRepo,
+         memoryBookRepo: memoryBookRepo,
+         lorebookRepo: lorebookRepo,
+         themePresetRepo: themePresetRepo,
+         extensionPresetRepo: extensionPresetRepo ?? FakeExtensionPresetStore(),
+         extensionsSettingsStore:
+             extensionsSettingsStore ?? FakeExtensionsSettingsStore(),
+         infoBlockStore: infoBlockStore ?? FakeInfoBlockStore(),
+       );
 
   @override
   Future<SyncManifest> buildLocalManifest({SyncManifest? cloudManifest}) async {
@@ -420,22 +454,22 @@ class SyncWorld {
   }
 
   SyncEngine get engine => SyncEngine(
-        cloud,
-        manifestProvider,
-        characters,
-        chats,
-        personas,
-        presets,
-        apiConfigs,
-        memoryBooks,
-        lorebooks,
-        embeddings,
-        images,
-        uiThemes,
-        FakeExtensionPresetStore(),
-        FakeExtensionsSettingsStore(),
-        FakeInfoBlockStore(),
-      );
+    cloud,
+    manifestProvider,
+    characters,
+    chats,
+    personas,
+    presets,
+    apiConfigs,
+    memoryBooks,
+    lorebooks,
+    embeddings,
+    images,
+    uiThemes,
+    FakeExtensionPresetStore(),
+    FakeExtensionsSettingsStore(),
+    FakeInfoBlockStore(),
+  );
 }
 
 // ─── Fixtures ───────────────────────────────────────────────────────
@@ -458,7 +492,8 @@ Preset makePreset(String id, {String name = 'Preset'}) =>
 Lorebook makeLorebook(String id, {String name = 'Lorebook'}) =>
     Lorebook(id: id, name: name);
 
-MemoryBook makeMemoryBook(String sessionId, {int updatedAt = 1000}) => MemoryBook(
+MemoryBook makeMemoryBook(String sessionId, {int updatedAt = 1000}) =>
+    MemoryBook(
       id: 'memorybook_$sessionId',
       sessionId: sessionId,
       updatedAt: updatedAt,
@@ -470,6 +505,11 @@ void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
+
+  SyncProgress firstTaskProgress(List<SyncProgress> progressList) =>
+      progressList.firstWhere(
+        (p) => p.total > 0 || p.message?.contains('Nothing to push') == true,
+      );
 
   test('Full sync lifecycle: push → pull → conflict → resolve', () async {
     // ── SCENE 1: Device A pushes to empty cloud ──
@@ -487,17 +527,26 @@ void main() {
 
     await deviceA.engine.pushEntities(onProgress: (_) {});
 
-    expect(deviceA.cloud.files.containsKey(cloudPath('character', 'char1')),
-        isTrue,
-        reason: 'Push should upload character to cloud');
-    expect(deviceA.cloud.files.containsKey(cloudPath('persona', 'p1')),
-        isTrue,
-        reason: 'Push should upload persona to cloud');
-    expect(deviceA.cloud.files.containsKey(cloudPath('chat', 's1')), isTrue,
-        reason: 'Push should upload chat to cloud');
-    expect(deviceA.cloud.files.containsKey(cloudPath('manifest', 'manifest')),
-        isTrue,
-        reason: 'Push should upload manifest');
+    expect(
+      deviceA.cloud.files.containsKey(cloudPath('character', 'char1')),
+      isTrue,
+      reason: 'Push should upload character to cloud',
+    );
+    expect(
+      deviceA.cloud.files.containsKey(cloudPath('persona', 'p1')),
+      isTrue,
+      reason: 'Push should upload persona to cloud',
+    );
+    expect(
+      deviceA.cloud.files.containsKey(cloudPath('chat', 's1')),
+      isTrue,
+      reason: 'Push should upload chat to cloud',
+    );
+    expect(
+      deviceA.cloud.files.containsKey(cloudPath('manifest', 'manifest')),
+      isTrue,
+      reason: 'Push should upload manifest',
+    );
 
     // ── SCENE 2: Device B (empty) pulls from cloud ──
     final deviceB = SyncWorld();
@@ -511,27 +560,38 @@ void main() {
     );
 
     // BUG 1: False conflicts on empty device
-    expect(conflicts, isEmpty,
-        reason:
-            'BUG: Empty device should have NO conflicts when pulling. '
-            'The manifest builder creates singleton entries (lorebooks, api_presets, '
-            'theme_presets) with updatedAt=now even for empty data. Since now > '
-            'cloud.updatedAt, needsConflict returns true → false conflicts.');
+    expect(
+      conflicts,
+      isEmpty,
+      reason:
+          'BUG: Empty device should have NO conflicts when pulling. '
+          'The manifest builder creates singleton entries (lorebooks, api_presets, '
+          'theme_presets) with updatedAt=now even for empty data. Since now > '
+          'cloud.updatedAt, needsConflict returns true → false conflicts.',
+    );
 
-    expect(deviceB.characters.data['char1'], isNotNull,
-        reason: 'Pull should download character from cloud');
-    expect(deviceB.personas.data['p1'], isNotNull,
-        reason: 'Pull should download persona from cloud');
-    expect(deviceB.chats.data['s1'], isNotNull,
-        reason: 'Pull should download chat from cloud');
+    expect(
+      deviceB.characters.data['char1'],
+      isNotNull,
+      reason: 'Pull should download character from cloud',
+    );
+    expect(
+      deviceB.personas.data['p1'],
+      isNotNull,
+      reason: 'Pull should download persona from cloud',
+    );
+    expect(
+      deviceB.chats.data['s1'],
+      isNotNull,
+      reason: 'Pull should download chat from cloud',
+    );
 
     // ── SCENE 3: Both modify same entity → conflict ──
     final deviceX = SyncWorld();
     final sharedChar = makeChar('shared1', name: 'Original');
     await deviceX.characters.put(sharedChar);
 
-    final xLocalManifest =
-        await deviceX.manifestProvider.buildLocalManifest();
+    final xLocalManifest = await deviceX.manifestProvider.buildLocalManifest();
     await deviceX.manifestProvider.writeLocalManifest(xLocalManifest);
     await deviceX.engine.pushEntities(onProgress: (_) {});
 
@@ -546,7 +606,9 @@ void main() {
     // Force local manifest to show updatedAt newer than cloud.
     // Set lastSync > 0 so isFirstSync is false (simulates a second sync).
     final yManifest = await deviceY.manifestProvider.buildLocalManifest();
-    final patchedEntries = Map<String, SyncManifestEntry>.from(yManifest.entries);
+    final patchedEntries = Map<String, SyncManifestEntry>.from(
+      yManifest.entries,
+    );
     final charEntry = patchedEntries['character:shared1'];
     if (charEntry != null) {
       patchedEntries['character:shared1'] = charEntry.copyWith(
@@ -565,10 +627,11 @@ void main() {
     );
 
     expect(
-        yConflicts.any((c) => c.type == 'character' && c.id == 'shared1'),
-        isTrue,
-        reason:
-            'Conflict should be detected when local entity is newer than cloud');
+      yConflicts.any((c) => c.type == 'character' && c.id == 'shared1'),
+      isTrue,
+      reason:
+          'Conflict should be detected when local entity is newer than cloud',
+    );
 
     // ── SCENE 4: Resolve conflict — choose cloud ──
     await deviceY.engine.resolveConflict(
@@ -576,9 +639,12 @@ void main() {
       'cloud',
     );
 
-    expect(deviceY.characters.data['shared1']?.name, equals('Original'),
-        reason:
-            'After resolving conflict with "cloud", local should have cloud data');
+    expect(
+      deviceY.characters.data['shared1']?.name,
+      equals('Original'),
+      reason:
+          'After resolving conflict with "cloud", local should have cloud data',
+    );
 
     // ── SCENE 5: Second pull after resolution → no duplicate conflict ──
     final yConflicts2 = <SyncConflict>[];
@@ -587,332 +653,393 @@ void main() {
       onConflict: (c) => yConflicts2.add(c),
     );
 
-    expect(yConflicts2.any((c) => c.id == 'shared1'), isFalse,
-        reason:
-            'BUG: After resolving a conflict, the next pull should not '
-            're-trigger the same conflict. But resolveConflict only calls '
-            '_pullEntry (which applies the data) without updating the '
-            'manifest. The old hash/timestamp remains in the manifest, '
-            'so the next pull sees a mismatch again → infinite conflict loop.');
+    expect(
+      yConflicts2.any((c) => c.id == 'shared1'),
+      isFalse,
+      reason:
+          'BUG: After resolving a conflict, the next pull should not '
+          're-trigger the same conflict. But resolveConflict only calls '
+          '_pullEntry (which applies the data) without updating the '
+          'manifest. The old hash/timestamp remains in the manifest, '
+          'so the next pull sees a mismatch again → infinite conflict loop.',
+    );
   });
 
   test(
-      'Singleton push: lorebooks/api_presets/theme_presets upload as list',
-      () async {
-    final world = SyncWorld();
-    await world.lorebooks.put(makeLorebook('lb1', name: 'World Lore'));
-    await world.apiConfigs.put(makeApiConfig('api1', name: 'My API'));
-    await world.presets.put(makePreset('pr1', name: 'My Preset'));
+    'Singleton push: lorebooks/api_presets/theme_presets upload as list',
+    () async {
+      final world = SyncWorld();
+      await world.lorebooks.put(makeLorebook('lb1', name: 'World Lore'));
+      await world.apiConfigs.put(makeApiConfig('api1', name: 'My API'));
+      await world.presets.put(makePreset('pr1', name: 'My Preset'));
 
-    final manifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest);
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
 
-    await world.engine.pushEntities(onProgress: (_) {});
+      await world.engine.pushEntities(onProgress: (_) {});
 
-    // BUG: _readLocalEntity('lorebooks', 'lorebooks') calls
-    // _lorebookRepo.getById('lorebooks') which returns null because
-    // no lorebook has id='lorebooks'. The manifest entry has
-    // type='lorebooks', id='lorebooks' (singleton pattern).
-    // But _readLocalEntity tries to fetch a single entity by that id,
-    // not the full list. Same for api_presets and theme_presets.
-    expect(
+      // BUG: _readLocalEntity('lorebooks', 'lorebooks') calls
+      // _lorebookRepo.getById('lorebooks') which returns null because
+      // no lorebook has id='lorebooks'. The manifest entry has
+      // type='lorebooks', id='lorebooks' (singleton pattern).
+      // But _readLocalEntity tries to fetch a single entity by that id,
+      // not the full list. Same for api_presets and theme_presets.
+      expect(
         world.cloud.files.containsKey(cloudPath('lorebooks', 'lorebooks')),
         isTrue,
         reason:
             'Singleton types should push the entire list wrapped in '
-            '{"__singleton": true, "items": [...]} format');
+            '{"__singleton": true, "items": [...]} format',
+      );
 
-    expect(
-        world.cloud.files
-            .containsKey(cloudPath('api_presets', 'api_presets')),
+      expect(
+        world.cloud.files.containsKey(cloudPath('api_presets', 'api_presets')),
         isTrue,
-        reason: 'Same for api_presets singleton');
+        reason: 'Same for api_presets singleton',
+      );
 
-    expect(
-        world.cloud.files
-            .containsKey(cloudPath('theme_presets', 'theme_presets')),
+      expect(
+        world.cloud.files.containsKey(
+          cloudPath('theme_presets', 'theme_presets'),
+        ),
         isTrue,
-        reason: 'Same for theme_presets singleton');
-  });
+        reason: 'Same for theme_presets singleton',
+      );
+    },
+  );
 
   test(
-      'Singleton pull: lorebooks/api_presets deserialize items array correctly',
-      () async {
-    final world = SyncWorld();
+    'Singleton pull: lorebooks/api_presets deserialize items array correctly',
+    () async {
+      final world = SyncWorld();
 
-    // Simulate cloud having lorebooks in singleton format
-    final cloudLorebooks = [
-      makeLorebook('lb1', name: 'World').toJson(),
-      makeLorebook('lb2', name: 'Characters').toJson(),
-    ];
+      // Simulate cloud having lorebooks in singleton format
+      final cloudLorebooks = [
+        makeLorebook('lb1', name: 'World').toJson(),
+        makeLorebook('lb2', name: 'Characters').toJson(),
+      ];
 
-    final manifest = SyncManifest(
-      deviceId: 'cloud',
-      createdAt: 1000,
-      entries: {
-        'lorebooks:lorebooks': SyncManifestEntry(
-          type: 'lorebooks',
-          id: 'lorebooks',
-          path: cloudPath('lorebooks', 'lorebooks'),
-          updatedAt: 1000,
-          hash: 'abc',
-        ),
-      },
-    );
+      final manifest = SyncManifest(
+        deviceId: 'cloud',
+        createdAt: 1000,
+        entries: {
+          'lorebooks:lorebooks': SyncManifestEntry(
+            type: 'lorebooks',
+            id: 'lorebooks',
+            path: cloudPath('lorebooks', 'lorebooks'),
+            updatedAt: 1000,
+            hash: 'abc',
+          ),
+        },
+      );
 
-    world.cloud.files[cloudPath('manifest', 'manifest')] =
-        jsonEncode(manifest.toJson());
-    world.cloud.files[cloudPath('lorebooks', 'lorebooks')] =
-        jsonEncode({'__singleton': true, 'items': cloudLorebooks});
+      world.cloud.files[cloudPath('manifest', 'manifest')] = jsonEncode(
+        manifest.toJson(),
+      );
+      world.cloud.files[cloudPath('lorebooks', 'lorebooks')] = jsonEncode({
+        '__singleton': true,
+        'items': cloudLorebooks,
+      });
 
-    // Device has no lorebooks locally
-    final conflicts = <SyncConflict>[];
-    await world.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (c) => conflicts.add(c),
-    );
+      // Device has no lorebooks locally
+      final conflicts = <SyncConflict>[];
+      await world.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts.add(c),
+      );
 
-    // BUG: _applyCloudEntity('lorebooks', 'lorebooks', data) does:
-    //   Lorebook.fromJson(data)
-    // But data is a List, not a Map. fromJson throws, catch(_){} swallows.
-    // The lorebooks are never saved locally.
-    expect(world.lorebooks.data.length, greaterThan(0),
+      // BUG: _applyCloudEntity('lorebooks', 'lorebooks', data) does:
+      //   Lorebook.fromJson(data)
+      // But data is a List, not a Map. fromJson throws, catch(_){} swallows.
+      // The lorebooks are never saved locally.
+      expect(
+        world.lorebooks.data.length,
+        greaterThan(0),
         reason:
             'Cloud lorebooks stored in singleton format should be applied '
             'locally. _applyCloudEntity iterates the items array and '
-            'puts each lorebook individually.');
-  });
+            'puts each lorebook individually.',
+      );
+    },
+  );
 
   test(
-      'Empty device with no API presets should not conflict with cloud',
-      () async {
-    final world = SyncWorld();
+    'Empty device with no API presets should not conflict with cloud',
+    () async {
+      final world = SyncWorld();
 
-    // Device has NO API configs — completely empty
-    final cloudApi = makeApiConfig('default', name: 'Default');
-    final cloudManifest = SyncManifest(
-      deviceId: 'cloud',
-      createdAt: 1000,
-      entries: {
-        'api_presets:api_presets': SyncManifestEntry(
-          type: 'api_presets',
-          id: 'api_presets',
-          path: cloudPath('api_presets', 'api_presets'),
-          updatedAt: 500,
-          hash: 'cloud_hash',
-        ),
-      },
-    );
+      // Device has NO API configs — completely empty
+      final cloudApi = makeApiConfig('default', name: 'Default');
+      final cloudManifest = SyncManifest(
+        deviceId: 'cloud',
+        createdAt: 1000,
+        entries: {
+          'api_presets:api_presets': SyncManifestEntry(
+            type: 'api_presets',
+            id: 'api_presets',
+            path: cloudPath('api_presets', 'api_presets'),
+            updatedAt: 500,
+            hash: 'cloud_hash',
+          ),
+        },
+      );
 
-    world.cloud.files[cloudPath('manifest', 'manifest')] =
-        jsonEncode(cloudManifest.toJson());
-    world.cloud.files[cloudPath('api_presets', 'api_presets')] =
-        jsonEncode({'__singleton': true, 'items': [cloudApi.toJson()]});
+      world.cloud.files[cloudPath('manifest', 'manifest')] = jsonEncode(
+        cloudManifest.toJson(),
+      );
+      world.cloud.files[cloudPath('api_presets', 'api_presets')] = jsonEncode({
+        '__singleton': true,
+        'items': [cloudApi.toJson()],
+      });
 
-    // Build local manifest — empty singleton should get updatedAt=0
-    final localManifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(localManifest);
+      // Build local manifest — empty singleton should get updatedAt=0
+      final localManifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(localManifest);
 
-    // Verify: empty singletons have updatedAt=0
-    final apiEntry = localManifest.entries['api_presets:api_presets'];
-    expect(apiEntry?.updatedAt, equals(0),
+      // Verify: empty singletons have updatedAt=0
+      final apiEntry = localManifest.entries['api_presets:api_presets'];
+      expect(
+        apiEntry?.updatedAt,
+        equals(0),
         reason:
             'Empty singleton entries should have updatedAt=0 so they '
-            'never appear "newer" than cloud data');
+            'never appear "newer" than cloud data',
+      );
 
-    final conflicts = <SyncConflict>[];
-    await world.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (c) => conflicts.add(c),
-    );
+      final conflicts = <SyncConflict>[];
+      await world.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts.add(c),
+      );
 
-    expect(conflicts, isEmpty,
+      expect(
+        conflicts,
+        isEmpty,
         reason:
             'Empty device with no API presets should NOT conflict with '
             'cloud. Empty singletons get updatedAt=0 which is always <= '
-            'cloud updatedAt, so needsConflict returns false.');
+            'cloud updatedAt, so needsConflict returns false.',
+      );
 
-    expect(world.apiConfigs.data['default'], isNotNull,
-        reason: 'Cloud API config should be pulled to local');
-  });
+      expect(
+        world.apiConfigs.data['default'],
+        isNotNull,
+        reason: 'Cloud API config should be pulled to local',
+      );
+    },
+  );
 
   test(
-      'resolveConflict("cloud") updates manifest — next pull does not re-trigger conflict',
-      () async {
-    final world = SyncWorld();
+    'resolveConflict("cloud") updates manifest — next pull does not re-trigger conflict',
+    () async {
+      final world = SyncWorld();
 
-    final localChar = makeChar('c1', name: 'Local Version');
-    await world.characters.put(localChar);
+      final localChar = makeChar('c1', name: 'Local Version');
+      await world.characters.put(localChar);
 
-    final cloudChar = makeChar('c1', name: 'Cloud Version');
-    final cloudHash = SyncSerialization.computeSyncHash(cloudChar.toJson());
-    final cloudManifest = SyncManifest(
-      deviceId: 'cloud',
-      createdAt: 1000,
-      entries: {
-        'character:c1': SyncManifestEntry(
-          type: 'character',
-          id: 'c1',
-          path: cloudPath('character', 'c1'),
-          updatedAt: 500,
-          hash: cloudHash,
-        ),
-      },
-    );
-
-    world.cloud.files[cloudPath('manifest', 'manifest')] =
-        jsonEncode(cloudManifest.toJson());
-    world.cloud.files[cloudPath('character', 'c1')] =
-        jsonEncode(cloudChar.toJson());
-
-    // Build a real local manifest from data, then write it
-    final localManifest = await world.manifestProvider.buildLocalManifest();
-    // Patch: make the character entry appear newer than cloud
-    final patchedEntries = Map<String, SyncManifestEntry>.from(localManifest.entries);
-    final charEntry = patchedEntries['character:c1'];
-    if (charEntry != null) {
-      patchedEntries['character:c1'] = charEntry.copyWith(
-        updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+      final cloudChar = makeChar('c1', name: 'Cloud Version');
+      final cloudHash = SyncSerialization.computeSyncHash(cloudChar.toJson());
+      final cloudManifest = SyncManifest(
+        deviceId: 'cloud',
+        createdAt: 1000,
+        entries: {
+          'character:c1': SyncManifestEntry(
+            type: 'character',
+            id: 'c1',
+            path: cloudPath('character', 'c1'),
+            updatedAt: 500,
+            hash: cloudHash,
+          ),
+        },
       );
-    }
-    await world.manifestProvider.writeLocalManifest(
-      localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
-    );
 
-    // First pull — detects conflict
-    final conflicts1 = <SyncConflict>[];
-    await world.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (c) => conflicts1.add(c),
-    );
+      world.cloud.files[cloudPath('manifest', 'manifest')] = jsonEncode(
+        cloudManifest.toJson(),
+      );
+      world.cloud.files[cloudPath('character', 'c1')] = jsonEncode(
+        cloudChar.toJson(),
+      );
 
-    expect(conflicts1.length, 1, reason: 'Should detect one conflict');
+      // Build a real local manifest from data, then write it
+      final localManifest = await world.manifestProvider.buildLocalManifest();
+      // Patch: make the character entry appear newer than cloud
+      final patchedEntries = Map<String, SyncManifestEntry>.from(
+        localManifest.entries,
+      );
+      final charEntry = patchedEntries['character:c1'];
+      if (charEntry != null) {
+        patchedEntries['character:c1'] = charEntry.copyWith(
+          updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+        );
+      }
+      await world.manifestProvider.writeLocalManifest(
+        localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
+      );
 
-    // Resolve: choose cloud
-    await world.engine.resolveConflict(conflicts1.first, 'cloud');
+      // First pull — detects conflict
+      final conflicts1 = <SyncConflict>[];
+      await world.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts1.add(c),
+      );
 
-    expect(world.characters.data['c1']?.name, equals('Cloud Version'),
+      expect(conflicts1.length, 1, reason: 'Should detect one conflict');
+
+      // Resolve: choose cloud
+      await world.engine.resolveConflict(conflicts1.first, 'cloud');
+
+      expect(
+        world.characters.data['c1']?.name,
+        equals('Cloud Version'),
         reason:
-            'After resolving conflict with "cloud", local should have cloud data');
+            'After resolving conflict with "cloud", local should have cloud data',
+      );
 
-    // Rebuild manifest from current data (now cloud version)
-    final resolvedManifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(resolvedManifest);
+      // Rebuild manifest from current data (now cloud version)
+      final resolvedManifest = await world.manifestProvider
+          .buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(resolvedManifest);
 
-    // Second pull — should NOT conflict because hashes now match
-    final conflicts2 = <SyncConflict>[];
-    await world.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (c) => conflicts2.add(c),
-    );
+      // Second pull — should NOT conflict because hashes now match
+      final conflicts2 = <SyncConflict>[];
+      await world.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts2.add(c),
+      );
 
-    expect(conflicts2, isEmpty,
+      expect(
+        conflicts2,
+        isEmpty,
         reason:
             'After resolving a conflict and rebuilding the manifest, '
             'the next pull should not re-trigger the same conflict. '
-            'The rebuilt manifest should have the same hash as cloud.');
-  });
+            'The rebuilt manifest should have the same hash as cloud.',
+      );
+    },
+  );
 
-  test('Wipe resets status to idle — subsequent push does not show wipe state',
-      () async {
-    final world = SyncWorld();
+  test(
+    'Wipe resets status to idle — subsequent push does not show wipe state',
+    () async {
+      final world = SyncWorld();
 
-    // Push some data first
-    await world.characters.put(makeChar('c1', name: 'Alice'));
-    final manifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest);
-    await world.engine.pushEntities(onProgress: (_) {});
+      // Push some data first
+      await world.characters.put(makeChar('c1', name: 'Alice'));
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
+      await world.engine.pushEntities(onProgress: (_) {});
 
-    expect(world.cloud.files.isNotEmpty, isTrue,
-        reason: 'Cloud should have data before wipe');
+      expect(
+        world.cloud.files.isNotEmpty,
+        isTrue,
+        reason: 'Cloud should have data before wipe',
+      );
 
-    // Wipe cloud data — engine resets to idle after wipe
-    await world.engine.wipeCloudData(onProgress: (_) {});
+      // Wipe cloud data — engine resets to idle after wipe
+      await world.engine.wipeCloudData(onProgress: (_) {});
 
-    expect(world.cloud.files.isEmpty, isTrue,
-        reason: 'Cloud should be empty after wipe');
+      expect(
+        world.cloud.files.isEmpty,
+        isTrue,
+        reason: 'Cloud should be empty after wipe',
+      );
 
-    // Simulate the SyncService status transition:
-    // wipeCloudData sets _status = SyncStatus.syncing, then idle on success
-    // The UI must read service.status after wipe completes
-    // If it doesn't, the status provider stays at SyncStatus.syncing
+      // Simulate the SyncService status transition:
+      // wipeCloudData sets _status = SyncStatus.syncing, then idle on success
+      // The UI must read service.status after wipe completes
+      // If it doesn't, the status provider stays at SyncStatus.syncing
 
-    // Push again after wipe
-    await world.characters.put(makeChar('c2', name: 'Bob'));
-    final manifest2 = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest2);
+      // Push again after wipe
+      await world.characters.put(makeChar('c2', name: 'Bob'));
+      final manifest2 = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest2);
 
-    // This should work without issues — no stale wipe state
-    await world.engine.pushEntities(onProgress: (_) {});
+      // This should work without issues — no stale wipe state
+      await world.engine.pushEntities(onProgress: (_) {});
 
-    expect(world.cloud.files.containsKey(cloudPath('character', 'c2')), isTrue,
-        reason: 'Push after wipe should upload new character');
-    expect(world.cloud.files.containsKey(cloudPath('character', 'c1')), isTrue,
-        reason: 'Push after wipe should upload previously wiped character too');
-  });
+      expect(
+        world.cloud.files.containsKey(cloudPath('character', 'c2')),
+        isTrue,
+        reason: 'Push after wipe should upload new character',
+      );
+      expect(
+        world.cloud.files.containsKey(cloudPath('character', 'c1')),
+        isTrue,
+        reason: 'Push after wipe should upload previously wiped character too',
+      );
+    },
+  );
 
-  test('Push progress reports correct current/total (tasks, not entries)', () async {
-    final world = SyncWorld();
+  test(
+    'Push progress reports correct current/total (tasks, not entries)',
+    () async {
+      final world = SyncWorld();
 
-    await world.characters.put(makeChar('c1', name: 'Alpha'));
-    await world.characters.put(makeChar('c2', name: 'Beta'));
-    await world.characters.put(makeChar('c3', name: 'Gamma'));
+      await world.characters.put(makeChar('c1', name: 'Alpha'));
+      await world.characters.put(makeChar('c2', name: 'Beta'));
+      await world.characters.put(makeChar('c3', name: 'Gamma'));
 
-    final manifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest);
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
 
-    await world.engine.pushEntities(onProgress: (_) {});
+      await world.engine.pushEntities(onProgress: (_) {});
 
-    await world.characters.put(makeChar('c2', name: 'Beta Updated'));
-    final manifest2 = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest2);
+      await world.characters.put(makeChar('c2', name: 'Beta Updated'));
+      final manifest2 = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest2);
 
-    final progressList = <SyncProgress>[];
-    await world.engine.pushEntities(
-      onProgress: (p) => progressList.add(p),
-    );
+      final progressList = <SyncProgress>[];
+      await world.engine.pushEntities(onProgress: (p) => progressList.add(p));
 
-    final initial = progressList.first;
-    expect(initial.total, equals(1),
-        reason: 'Only c2 needs pushing, so total should be 1');
+      final initial = firstTaskProgress(progressList);
+      expect(
+        initial.total,
+        equals(1),
+        reason: 'Only c2 needs pushing, so total should be 1',
+      );
 
-    final itemProgress = progressList.where((p) => p.message?.contains('c2') ?? false);
-    expect(itemProgress.length, 1);
-    expect(itemProgress.first.current, equals(1));
-    expect(itemProgress.first.total, equals(1));
-  });
+      final itemProgress = progressList.where(
+        (p) => p.message?.contains('c2') ?? false,
+      );
+      expect(itemProgress.length, 1);
+      expect(itemProgress.first.current, equals(1));
+      expect(itemProgress.first.total, equals(1));
+    },
+  );
 
-  test('Pull progress reports correct current/total (tasks, not entries)', () async {
-    final world = SyncWorld();
+  test(
+    'Pull progress reports correct current/total (tasks, not entries)',
+    () async {
+      final world = SyncWorld();
 
-    await world.characters.put(makeChar('c1', name: 'Alpha'));
-    await world.characters.put(makeChar('c2', name: 'Beta'));
-    await world.characters.put(makeChar('c3', name: 'Gamma'));
+      await world.characters.put(makeChar('c1', name: 'Alpha'));
+      await world.characters.put(makeChar('c2', name: 'Beta'));
+      await world.characters.put(makeChar('c3', name: 'Gamma'));
 
-    final manifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest);
-    await world.engine.pushEntities(onProgress: (_) {});
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
+      await world.engine.pushEntities(onProgress: (_) {});
 
-    world.characters.data.clear();
+      world.characters.data.clear();
 
-    final progressList = <SyncProgress>[];
-    await world.engine.pullEntities(
-      onProgress: (p) => progressList.add(p),
-      onConflict: (_) {},
-    );
+      final progressList = <SyncProgress>[];
+      await world.engine.pullEntities(
+        onProgress: (p) => progressList.add(p),
+        onConflict: (_) {},
+      );
 
-    final initial = progressList.first;
-    expect(initial.total, equals(3),
-        reason: 'All 3 characters need pulling');
+      final initial = progressList.first;
+      expect(initial.total, equals(3), reason: 'All 3 characters need pulling');
 
-    final itemProgresses = progressList.where((p) => p.current > 0);
-    for (final p in itemProgresses) {
-      expect(p.total, equals(3));
-    }
+      final itemProgresses = progressList.where((p) => p.current > 0);
+      for (final p in itemProgresses) {
+        expect(p.total, equals(3));
+      }
 
-    final last = itemProgresses.last;
-    expect(last.current, equals(3));
-  });
+      final last = itemProgresses.last;
+      expect(last.current, equals(3));
+    },
+  );
 
   test('Push with nothing to push reports total=0', () async {
     final world = SyncWorld();
@@ -923,14 +1050,43 @@ void main() {
     await world.engine.pushEntities(onProgress: (_) {});
 
     final progressList = <SyncProgress>[];
-    await world.engine.pushEntities(
-      onProgress: (p) => progressList.add(p),
-    );
+    await world.engine.pushEntities(onProgress: (p) => progressList.add(p));
 
     expect(progressList.isNotEmpty, isTrue);
-    expect(progressList.first.total, equals(0),
-        reason: 'Nothing changed, so total tasks should be 0');
-    expect(progressList.first.message, contains('Nothing to push'));
+    final initial = firstTaskProgress(progressList);
+    expect(
+      initial.total,
+      equals(0),
+      reason: 'Nothing changed, so total tasks should be 0',
+    );
+    expect(initial.message, contains('Nothing to push'));
+  });
+
+  test('Push failure after wipe does not write success manifest', () async {
+    final world = SyncWorld();
+
+    await world.characters.put(makeChar('c1', name: 'Alpha'));
+    final manifest = await world.manifestProvider.buildLocalManifest();
+    await world.manifestProvider.writeLocalManifest(manifest);
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    await world.engine.wipeCloudData(onProgress: (_) {});
+
+    final c1Path = cloudPath('character', 'c1');
+    world.cloud.uploadFailures.add(c1Path);
+    await expectLater(
+      world.engine.pushEntities(onProgress: (_) {}),
+      throwsA(isA<SyncQueueAggregateError>()),
+    );
+
+    world.cloud.uploadFailures.clear();
+    await world.engine.pushEntities(onProgress: (_) {});
+
+    expect(
+      world.cloud.files.containsKey(c1Path),
+      isTrue,
+      reason: 'A failed push must retry entity uploads on the next push',
+    );
   });
 
   test('Push skips upload when cloud listing omits /Glaze prefix', () async {
@@ -944,14 +1100,63 @@ void main() {
     world.cloud.stripGlazePrefixInList = true;
 
     final progressList = <SyncProgress>[];
-    await world.engine.pushEntities(
-      onProgress: (p) => progressList.add(p),
-    );
+    await world.engine.pushEntities(onProgress: (p) => progressList.add(p));
 
-    expect(progressList.first.total, equals(0),
-        reason: 'Hash match + file exists (Dropbox-style paths) → no uploads');
-    expect(progressList.first.message, contains('Nothing to push'));
+    final initial = firstTaskProgress(progressList);
+    expect(
+      initial.total,
+      equals(0),
+      reason: 'Hash match + file exists (Dropbox-style paths) → no uploads',
+    );
+    expect(initial.message, contains('Nothing to push'));
   });
+
+  test(
+    'Push does not skip uploads when cloud listing is empty after wipe',
+    () async {
+      final world = SyncWorld();
+
+      await world.characters.put(makeChar('c1', name: 'Alpha'));
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
+      await world.engine.pushEntities(onProgress: (_) {});
+
+      world.cloud.files.clear();
+      world.cloud.omitFilesFromList = true;
+
+      final progressList = <SyncProgress>[];
+      await world.engine.pushEntities(onProgress: (p) => progressList.add(p));
+
+      expect(
+        world.cloud.files.containsKey(cloudPath('character', 'c1')),
+        isTrue,
+      );
+      expect(firstTaskProgress(progressList).total, greaterThan(0));
+    },
+  );
+
+  test(
+    'Push after wipe with no cloud manifest does not scan cloud files',
+    () async {
+      final world = SyncWorld();
+
+      await world.characters.put(makeChar('c1', name: 'Alpha'));
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
+
+      final progressList = <SyncProgress>[];
+      await world.engine.pushEntities(onProgress: (p) => progressList.add(p));
+
+      expect(
+        world.cloud.files.containsKey(cloudPath('character', 'c1')),
+        isTrue,
+      );
+      expect(
+        progressList.any((p) => p.message == 'Scanning cloud files...'),
+        isFalse,
+      );
+    },
+  );
 
   test('Wipe progress reports indeterminate (no total)', () async {
     final world = SyncWorld();
@@ -962,65 +1167,82 @@ void main() {
     await world.engine.pushEntities(onProgress: (_) {});
 
     final progressList = <SyncProgress>[];
-    await world.engine.wipeCloudData(
-      onProgress: (p) => progressList.add(p),
-    );
+    await world.engine.wipeCloudData(onProgress: (p) => progressList.add(p));
 
     expect(progressList.isNotEmpty, isTrue);
     for (final p in progressList) {
-      expect(p.total, equals(0),
-          reason: 'Wipe progress should be indeterminate (total=0)');
+      expect(
+        p.total,
+        equals(0),
+        reason: 'Wipe progress should be indeterminate (total=0)',
+      );
     }
-    expect(progressList.any((p) => p.message?.contains('Deleting') == true), isTrue);
-    expect(progressList.any((p) => p.message?.contains('Recreating') == true), isTrue);
-  });
-
-  test('Push progress: final event has current == total (bar reaches 100%)',
-      () async {
-    final world = SyncWorld();
-
-    await world.characters.put(makeChar('c1', name: 'A'));
-    await world.characters.put(makeChar('c2', name: 'B'));
-    await world.characters.put(makeChar('c3', name: 'C'));
-
-    final manifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest);
-
-    final progressList = <SyncProgress>[];
-    await world.engine.pushEntities(
-      onProgress: (p) => progressList.add(p),
+    expect(
+      progressList.any((p) => p.message?.contains('Deleting') == true),
+      isTrue,
     );
-
-    final last = progressList.lastWhere((p) => p.total > 0);
-    expect(last.current, equals(last.total),
-        reason: 'Final progress event must have current == total so bar reaches 100%');
-  });
-
-  test('Pull progress: final event has current == total (bar reaches 100%)',
-      () async {
-    final world = SyncWorld();
-
-    await world.characters.put(makeChar('c1', name: 'A'));
-    await world.characters.put(makeChar('c2', name: 'B'));
-
-    final manifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest);
-    await world.engine.pushEntities(onProgress: (_) {});
-
-    world.characters.data.clear();
-    world.personas.data.clear();
-    world.chats.data.clear();
-
-    final progressList = <SyncProgress>[];
-    await world.engine.pullEntities(
-      onProgress: (p) => progressList.add(p),
-      onConflict: (_) {},
+    expect(
+      progressList.any((p) => p.message?.contains('Recreating') == true),
+      isTrue,
     );
-
-    final last = progressList.lastWhere((p) => p.total > 0);
-    expect(last.current, equals(last.total),
-        reason: 'Final progress event must have current == total so bar reaches 100%');
   });
+
+  test(
+    'Push progress: final event has current == total (bar reaches 100%)',
+    () async {
+      final world = SyncWorld();
+
+      await world.characters.put(makeChar('c1', name: 'A'));
+      await world.characters.put(makeChar('c2', name: 'B'));
+      await world.characters.put(makeChar('c3', name: 'C'));
+
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
+
+      final progressList = <SyncProgress>[];
+      await world.engine.pushEntities(onProgress: (p) => progressList.add(p));
+
+      final last = progressList.lastWhere((p) => p.total > 0);
+      expect(
+        last.current,
+        equals(last.total),
+        reason:
+            'Final progress event must have current == total so bar reaches 100%',
+      );
+    },
+  );
+
+  test(
+    'Pull progress: final event has current == total (bar reaches 100%)',
+    () async {
+      final world = SyncWorld();
+
+      await world.characters.put(makeChar('c1', name: 'A'));
+      await world.characters.put(makeChar('c2', name: 'B'));
+
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
+      await world.engine.pushEntities(onProgress: (_) {});
+
+      world.characters.data.clear();
+      world.personas.data.clear();
+      world.chats.data.clear();
+
+      final progressList = <SyncProgress>[];
+      await world.engine.pullEntities(
+        onProgress: (p) => progressList.add(p),
+        onConflict: (_) {},
+      );
+
+      final last = progressList.lastWhere((p) => p.total > 0);
+      expect(
+        last.current,
+        equals(last.total),
+        reason:
+            'Final progress event must have current == total so bar reaches 100%',
+      );
+    },
+  );
 
   test('Push progress events are emitted between start and end', () async {
     final world = SyncWorld();
@@ -1032,66 +1254,85 @@ void main() {
     await world.manifestProvider.writeLocalManifest(manifest);
 
     final progressList = <SyncProgress>[];
-    await world.engine.pushEntities(
-      onProgress: (p) => progressList.add(p),
+    await world.engine.pushEntities(onProgress: (p) => progressList.add(p));
+
+    expect(
+      progressList.length,
+      greaterThanOrEqualTo(3),
+      reason: 'Should have initial + per-item + completion events',
     );
 
-    expect(progressList.length, greaterThanOrEqualTo(3),
-        reason: 'Should have initial + per-item + completion events');
+    final initial = firstTaskProgress(progressList);
+    expect(
+      initial.total,
+      greaterThanOrEqualTo(2),
+      reason:
+          'Initial event should report total >= 2 (characters + singleton types)',
+    );
 
-    expect(progressList.first.total, greaterThanOrEqualTo(2),
-        reason: 'Initial event should report total >= 2 (characters + singleton types)');
-
-    expect(progressList.last.current, equals(progressList.last.total),
-        reason: 'Last event should report all items done');
+    expect(
+      progressList.lastWhere((p) => p.total > 0).current,
+      equals(progressList.lastWhere((p) => p.total > 0).total),
+      reason: 'Last event should report all items done',
+    );
   });
 
-  test('SyncService-style status transitions: idle → syncing → idle on push success',
-      () async {
-    final world = SyncWorld();
-    await world.characters.put(makeChar('c1', name: 'A'));
-    final manifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest);
+  test(
+    'SyncService-style status transitions: idle → syncing → idle on push success',
+    () async {
+      final world = SyncWorld();
+      await world.characters.put(makeChar('c1', name: 'A'));
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
 
-    final statusLog = <SyncStatus>[];
-    var currentStatus = SyncStatus.idle;
-    void trackStatus(SyncStatus s) {
-      currentStatus = s;
-      statusLog.add(s);
-    }
+      final statusLog = <SyncStatus>[];
+      var currentStatus = SyncStatus.idle;
+      void trackStatus(SyncStatus s) {
+        currentStatus = s;
+        statusLog.add(s);
+      }
 
-    trackStatus(SyncStatus.syncing);
-    await world.engine.pushEntities(onProgress: (_) {});
-    trackStatus(SyncStatus.idle);
-
-    expect(statusLog, equals([SyncStatus.syncing, SyncStatus.idle]),
-        reason: 'Status should go idle → syncing → idle after successful push');
-    expect(currentStatus, equals(SyncStatus.idle));
-  });
-
-  test('SyncService-style status transitions: idle → syncing → error on push failure',
-      () async {
-    final world = SyncWorld();
-
-    final statusLog = <SyncStatus>[];
-    var currentStatus = SyncStatus.idle;
-    void trackStatus(SyncStatus s) {
-      currentStatus = s;
-      statusLog.add(s);
-    }
-
-    trackStatus(SyncStatus.syncing);
-    try {
+      trackStatus(SyncStatus.syncing);
       await world.engine.pushEntities(onProgress: (_) {});
       trackStatus(SyncStatus.idle);
-    } catch (e) {
-      trackStatus(SyncStatus.error);
-    }
 
-    expect(statusLog, equals([SyncStatus.syncing, SyncStatus.idle]),
-        reason: 'Pushing with no data should succeed (nothing to push)');
-    expect(currentStatus, equals(SyncStatus.idle));
-  });
+      expect(
+        statusLog,
+        equals([SyncStatus.syncing, SyncStatus.idle]),
+        reason: 'Status should go idle → syncing → idle after successful push',
+      );
+      expect(currentStatus, equals(SyncStatus.idle));
+    },
+  );
+
+  test(
+    'SyncService-style status transitions: idle → syncing → error on push failure',
+    () async {
+      final world = SyncWorld();
+
+      final statusLog = <SyncStatus>[];
+      var currentStatus = SyncStatus.idle;
+      void trackStatus(SyncStatus s) {
+        currentStatus = s;
+        statusLog.add(s);
+      }
+
+      trackStatus(SyncStatus.syncing);
+      try {
+        await world.engine.pushEntities(onProgress: (_) {});
+        trackStatus(SyncStatus.idle);
+      } catch (e) {
+        trackStatus(SyncStatus.error);
+      }
+
+      expect(
+        statusLog,
+        equals([SyncStatus.syncing, SyncStatus.idle]),
+        reason: 'Pushing with no data should succeed (nothing to push)',
+      );
+      expect(currentStatus, equals(SyncStatus.idle));
+    },
+  );
 
   test('Persona avatar is pushed to cloud and pulled back', () async {
     final deviceA = SyncWorld();
@@ -1102,7 +1343,11 @@ void main() {
     final avatarFile = File('${tmpDir.path}/p1.png');
     await avatarFile.writeAsBytes(avatarBytes);
 
-    final persona = Persona(id: 'p1', name: 'Test', avatarPath: avatarFile.path);
+    final persona = Persona(
+      id: 'p1',
+      name: 'Test',
+      avatarPath: avatarFile.path,
+    );
     await deviceA.personas.put(persona);
 
     final manifest = await deviceA.manifestProvider.buildLocalManifest();
@@ -1111,25 +1356,31 @@ void main() {
     await deviceA.engine.pushEntities(onProgress: (_) {});
 
     final avatarCloudPath = personaAvatarCloudPath('p1', 'png');
-    expect(deviceA.cloud.files.containsKey(avatarCloudPath), isTrue,
-        reason: 'Persona avatar should be uploaded to cloud');
+    expect(
+      deviceA.cloud.files.containsKey(avatarCloudPath),
+      isTrue,
+      reason: 'Persona avatar should be uploaded to cloud',
+    );
 
     final deviceB = SyncWorld();
     deviceB.cloud.files.addAll(deviceA.cloud.files);
 
-    await deviceB.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (_) {},
-    );
+    await deviceB.engine.pullEntities(onProgress: (_) {}, onConflict: (_) {});
 
     final pulled = deviceB.personas.data['p1'];
     expect(pulled, isNotNull, reason: 'Persona should be pulled');
-    expect(pulled!.avatarPath, isNotNull,
-        reason: 'Persona avatar path should be set after pull');
+    expect(
+      pulled!.avatarPath,
+      isNotNull,
+      reason: 'Persona avatar path should be set after pull',
+    );
 
     final savedKey = 'avatars/p1.png';
-    expect(deviceB.images.saved[savedKey], isNotNull,
-        reason: 'Persona avatar bytes should be saved to image storage');
+    expect(
+      deviceB.images.saved[savedKey],
+      isNotNull,
+      reason: 'Persona avatar bytes should be saved to image storage',
+    );
 
     try {
       await tmpDir.delete(recursive: true);
@@ -1150,12 +1401,10 @@ void main() {
     final manifest = await world.manifestProvider.buildLocalManifest();
     await world.manifestProvider.writeLocalManifest(manifest);
 
-    await world.engine.pushEntities(
-      onProgress: (_) {},
-      includeApiKeys: false,
-    );
+    await world.engine.pushEntities(onProgress: (_) {}, includeApiKeys: false);
 
-    final cloudData = world.cloud.files[cloudPath('api_presets', 'api_presets')];
+    final cloudData =
+        world.cloud.files[cloudPath('api_presets', 'api_presets')];
     expect(cloudData, isNotNull);
 
     final decoded = jsonDecode(cloudData!) as Map<String, dynamic>;
@@ -1163,12 +1412,21 @@ void main() {
     expect(items, isNotEmpty);
 
     final pushedApi = items.first as Map<String, dynamic>;
-    expect(pushedApi['apiKey'], equals(''),
-        reason: 'API key should be stripped when includeApiKeys=false');
-    expect(pushedApi['embeddingApiKey'], equals(''),
-        reason: 'Embedding API key should be stripped when includeApiKeys=false');
-    expect(pushedApi['name'], equals('Test API'),
-        reason: 'Non-key fields should be preserved');
+    expect(
+      pushedApi['apiKey'],
+      equals(''),
+      reason: 'API key should be stripped when includeApiKeys=false',
+    );
+    expect(
+      pushedApi['embeddingApiKey'],
+      equals(''),
+      reason: 'Embedding API key should be stripped when includeApiKeys=false',
+    );
+    expect(
+      pushedApi['name'],
+      equals('Test API'),
+      reason: 'Non-key fields should be preserved',
+    );
   });
 
   test('Push includes API keys when includeApiKeys is true', () async {
@@ -1185,260 +1443,304 @@ void main() {
     final manifest = await world.manifestProvider.buildLocalManifest();
     await world.manifestProvider.writeLocalManifest(manifest);
 
-    await world.engine.pushEntities(
-      onProgress: (_) {},
-      includeApiKeys: true,
-    );
+    await world.engine.pushEntities(onProgress: (_) {}, includeApiKeys: true);
 
-    final cloudData = world.cloud.files[cloudPath('api_presets', 'api_presets')];
+    final cloudData =
+        world.cloud.files[cloudPath('api_presets', 'api_presets')];
     expect(cloudData, isNotNull);
 
     final decoded = jsonDecode(cloudData!) as Map<String, dynamic>;
     final items = decoded['items'] as List;
     final pushedApi = items.first as Map<String, dynamic>;
-    expect(pushedApi['apiKey'], equals('sk-secret-key-12345'),
-        reason: 'API key should be included when includeApiKeys=true');
-    expect(pushedApi['embeddingApiKey'], equals('emb-secret-67890'),
-        reason: 'Embedding API key should be included when includeApiKeys=true');
-  });
-
-  test('needsConflict returns false when hashes match (same data, different timestamps)',
-      () async {
-    final world = SyncWorld();
-
-    await world.characters.put(makeChar('c1', name: 'Alice'));
-    final manifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest);
-    await world.engine.pushEntities(onProgress: (_) {});
-
-    world.characters.data.clear();
-    world.personas.data.clear();
-    world.chats.data.clear();
-
-    final conflicts = <SyncConflict>[];
-    await world.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (c) => conflicts.add(c),
+    expect(
+      pushedApi['apiKey'],
+      equals('sk-secret-key-12345'),
+      reason: 'API key should be included when includeApiKeys=true',
     );
-
-    expect(conflicts, isEmpty,
-        reason: 'Pull on empty device should produce no conflicts');
-
-    await world.characters.put(makeChar('c1', name: 'Alice'));
-    final manifest2 = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest2);
-
-    final conflicts2 = <SyncConflict>[];
-    await world.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (c) => conflicts2.add(c),
+    expect(
+      pushedApi['embeddingApiKey'],
+      equals('emb-secret-67890'),
+      reason: 'Embedding API key should be included when includeApiKeys=true',
     );
-
-    expect(conflicts2, isEmpty,
-        reason:
-            'Same data (same hash) should not conflict even if timestamps differ');
-  });
-
-  test('resolveConflict("local") preserves local data — next push uploads it', () async {
-    final world = SyncWorld();
-
-    final localChar = makeChar('c1', name: 'Local Version');
-    await world.characters.put(localChar);
-
-    final cloudChar = makeChar('c1', name: 'Cloud Version');
-    final cloudHash = SyncSerialization.computeSyncHash(cloudChar.toJson());
-    final cloudManifest = SyncManifest(
-      deviceId: 'cloud',
-      createdAt: 1000,
-      entries: {
-        'character:c1': SyncManifestEntry(
-          type: 'character',
-          id: 'c1',
-          path: cloudPath('character', 'c1'),
-          updatedAt: 500,
-          hash: cloudHash,
-        ),
-      },
-    );
-
-    world.cloud.files[cloudPath('manifest', 'manifest')] =
-        jsonEncode(cloudManifest.toJson());
-    world.cloud.files[cloudPath('character', 'c1')] =
-        jsonEncode(cloudChar.toJson());
-
-    final localManifest = await world.manifestProvider.buildLocalManifest();
-    final patchedEntries = Map<String, SyncManifestEntry>.from(localManifest.entries);
-    final charEntry = patchedEntries['character:c1'];
-    if (charEntry != null) {
-      patchedEntries['character:c1'] = charEntry.copyWith(
-        updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
-      );
-    }
-    await world.manifestProvider.writeLocalManifest(
-      localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
-    );
-
-    final conflicts = <SyncConflict>[];
-    await world.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (c) => conflicts.add(c),
-    );
-
-    expect(conflicts.length, 1);
-
-    await world.engine.resolveConflict(conflicts.first, 'local');
-
-    expect(world.characters.data['c1']?.name, equals('Local Version'),
-        reason: 'Keep Local should preserve local data');
-
-    final rebuiltManifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(rebuiltManifest);
-
-    await world.engine.pushEntities(onProgress: (_) {});
-
-    final cloudData = world.cloud.files[cloudPath('character', 'c1')];
-    expect(cloudData, isNotNull);
-    final pushed = jsonDecode(cloudData!) as Map<String, dynamic>;
-    expect(pushed['name'], equals('Local Version'),
-        reason: 'After Keep Local, push should upload local version to cloud');
-  });
-
-  test('applyPendingPull downloads remaining items after conflicts resolved', () async {
-    final world = SyncWorld();
-
-    final cloudChar1 = makeChar('c1', name: 'Alice');
-    final cloudHash1 = SyncSerialization.computeSyncHash(cloudChar1.toJson());
-    final cloudChar2 = makeChar('c2', name: 'Cloud Bob');
-    final cloudHash2 = SyncSerialization.computeSyncHash(cloudChar2.toJson());
-    final localChar2 = makeChar('c2', name: 'Local Bob');
-
-    await world.characters.put(localChar2);
-
-    final cloudManifest = SyncManifest(
-      deviceId: 'cloud',
-      createdAt: 1000,
-      entries: {
-        'character:c1': SyncManifestEntry(
-          type: 'character',
-          id: 'c1',
-          path: cloudPath('character', 'c1'),
-          updatedAt: 500,
-          hash: cloudHash1,
-        ),
-        'character:c2': SyncManifestEntry(
-          type: 'character',
-          id: 'c2',
-          path: cloudPath('character', 'c2'),
-          updatedAt: 500,
-          hash: cloudHash2,
-        ),
-      },
-    );
-
-    world.cloud.files[cloudPath('manifest', 'manifest')] =
-        jsonEncode(cloudManifest.toJson());
-    world.cloud.files[cloudPath('character', 'c1')] =
-        jsonEncode(cloudChar1.toJson());
-    world.cloud.files[cloudPath('character', 'c2')] =
-        jsonEncode(cloudChar2.toJson());
-
-    final localManifest = await world.manifestProvider.buildLocalManifest();
-    final patchedEntries = Map<String, SyncManifestEntry>.from(localManifest.entries);
-    final charEntry = patchedEntries['character:c2'];
-    if (charEntry != null) {
-      patchedEntries['character:c2'] = charEntry.copyWith(
-        updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
-      );
-    }
-    await world.manifestProvider.writeLocalManifest(
-      localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
-    );
-
-    final conflicts = <SyncConflict>[];
-    await world.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (c) => conflicts.add(c),
-    );
-
-    expect(world.characters.data['c1'], isNotNull,
-        reason: 'Non-conflicting character should be pulled immediately');
-
-    expect(conflicts.length, 1);
-    expect(conflicts.first.id, equals('c2'));
-
-    await world.engine.resolveConflict(conflicts.first, 'cloud');
-
-    expect(world.characters.data['c2']?.name, equals('Cloud Bob'),
-        reason: 'Cloud version should be applied after resolve');
   });
 
   test(
-      'chat with same session id but different messages surfaces conflict',
-      () async {
-    final deviceA = SyncWorld();
-    await deviceA.characters.put(makeChar('char1', name: 'Alice'));
-    await deviceA.chats.put(ChatSession(
-      id: 's1',
-      characterId: 'char1',
-      sessionIndex: 0,
-      updatedAt: 1000,
-      messages: [
-        const ChatMessage(
-          id: 'm1',
-          role: 'assistant',
-          content: 'Hello from cloud',
-          timestamp: 1000,
+    'needsConflict returns false when hashes match (same data, different timestamps)',
+    () async {
+      final world = SyncWorld();
+
+      await world.characters.put(makeChar('c1', name: 'Alice'));
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
+      await world.engine.pushEntities(onProgress: (_) {});
+
+      world.characters.data.clear();
+      world.personas.data.clear();
+      world.chats.data.clear();
+
+      final conflicts = <SyncConflict>[];
+      await world.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts.add(c),
+      );
+
+      expect(
+        conflicts,
+        isEmpty,
+        reason: 'Pull on empty device should produce no conflicts',
+      );
+
+      await world.characters.put(makeChar('c1', name: 'Alice'));
+      final manifest2 = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest2);
+
+      final conflicts2 = <SyncConflict>[];
+      await world.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts2.add(c),
+      );
+
+      expect(
+        conflicts2,
+        isEmpty,
+        reason:
+            'Same data (same hash) should not conflict even if timestamps differ',
+      );
+    },
+  );
+
+  test(
+    'resolveConflict("local") preserves local data — next push uploads it',
+    () async {
+      final world = SyncWorld();
+
+      final localChar = makeChar('c1', name: 'Local Version');
+      await world.characters.put(localChar);
+
+      final cloudChar = makeChar('c1', name: 'Cloud Version');
+      final cloudHash = SyncSerialization.computeSyncHash(cloudChar.toJson());
+      final cloudManifest = SyncManifest(
+        deviceId: 'cloud',
+        createdAt: 1000,
+        entries: {
+          'character:c1': SyncManifestEntry(
+            type: 'character',
+            id: 'c1',
+            path: cloudPath('character', 'c1'),
+            updatedAt: 500,
+            hash: cloudHash,
+          ),
+        },
+      );
+
+      world.cloud.files[cloudPath('manifest', 'manifest')] = jsonEncode(
+        cloudManifest.toJson(),
+      );
+      world.cloud.files[cloudPath('character', 'c1')] = jsonEncode(
+        cloudChar.toJson(),
+      );
+
+      final localManifest = await world.manifestProvider.buildLocalManifest();
+      final patchedEntries = Map<String, SyncManifestEntry>.from(
+        localManifest.entries,
+      );
+      final charEntry = patchedEntries['character:c1'];
+      if (charEntry != null) {
+        patchedEntries['character:c1'] = charEntry.copyWith(
+          updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+        );
+      }
+      await world.manifestProvider.writeLocalManifest(
+        localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
+      );
+
+      final conflicts = <SyncConflict>[];
+      await world.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts.add(c),
+      );
+
+      expect(conflicts.length, 1);
+
+      await world.engine.resolveConflict(conflicts.first, 'local');
+
+      expect(
+        world.characters.data['c1']?.name,
+        equals('Local Version'),
+        reason: 'Keep Local should preserve local data',
+      );
+
+      final rebuiltManifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(rebuiltManifest);
+
+      await world.engine.pushEntities(onProgress: (_) {});
+
+      final cloudData = world.cloud.files[cloudPath('character', 'c1')];
+      expect(cloudData, isNotNull);
+      final pushed = jsonDecode(cloudData!) as Map<String, dynamic>;
+      expect(
+        pushed['name'],
+        equals('Local Version'),
+        reason: 'After Keep Local, push should upload local version to cloud',
+      );
+    },
+  );
+
+  test(
+    'applyPendingPull downloads remaining items after conflicts resolved',
+    () async {
+      final world = SyncWorld();
+
+      final cloudChar1 = makeChar('c1', name: 'Alice');
+      final cloudHash1 = SyncSerialization.computeSyncHash(cloudChar1.toJson());
+      final cloudChar2 = makeChar('c2', name: 'Cloud Bob');
+      final cloudHash2 = SyncSerialization.computeSyncHash(cloudChar2.toJson());
+      final localChar2 = makeChar('c2', name: 'Local Bob');
+
+      await world.characters.put(localChar2);
+
+      final cloudManifest = SyncManifest(
+        deviceId: 'cloud',
+        createdAt: 1000,
+        entries: {
+          'character:c1': SyncManifestEntry(
+            type: 'character',
+            id: 'c1',
+            path: cloudPath('character', 'c1'),
+            updatedAt: 500,
+            hash: cloudHash1,
+          ),
+          'character:c2': SyncManifestEntry(
+            type: 'character',
+            id: 'c2',
+            path: cloudPath('character', 'c2'),
+            updatedAt: 500,
+            hash: cloudHash2,
+          ),
+        },
+      );
+
+      world.cloud.files[cloudPath('manifest', 'manifest')] = jsonEncode(
+        cloudManifest.toJson(),
+      );
+      world.cloud.files[cloudPath('character', 'c1')] = jsonEncode(
+        cloudChar1.toJson(),
+      );
+      world.cloud.files[cloudPath('character', 'c2')] = jsonEncode(
+        cloudChar2.toJson(),
+      );
+
+      final localManifest = await world.manifestProvider.buildLocalManifest();
+      final patchedEntries = Map<String, SyncManifestEntry>.from(
+        localManifest.entries,
+      );
+      final charEntry = patchedEntries['character:c2'];
+      if (charEntry != null) {
+        patchedEntries['character:c2'] = charEntry.copyWith(
+          updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+        );
+      }
+      await world.manifestProvider.writeLocalManifest(
+        localManifest.copyWith(lastSync: 5000, entries: patchedEntries),
+      );
+
+      final conflicts = <SyncConflict>[];
+      await world.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts.add(c),
+      );
+
+      expect(
+        world.characters.data['c1'],
+        isNotNull,
+        reason: 'Non-conflicting character should be pulled immediately',
+      );
+
+      expect(conflicts.length, 1);
+      expect(conflicts.first.id, equals('c2'));
+
+      await world.engine.resolveConflict(conflicts.first, 'cloud');
+
+      expect(
+        world.characters.data['c2']?.name,
+        equals('Cloud Bob'),
+        reason: 'Cloud version should be applied after resolve',
+      );
+    },
+  );
+
+  test(
+    'chat with same session id but different messages surfaces conflict',
+    () async {
+      final deviceA = SyncWorld();
+      await deviceA.characters.put(makeChar('char1', name: 'Alice'));
+      await deviceA.chats.put(
+        ChatSession(
+          id: 's1',
+          characterId: 'char1',
+          sessionIndex: 0,
+          updatedAt: 1000,
+          messages: [
+            const ChatMessage(
+              id: 'm1',
+              role: 'assistant',
+              content: 'Hello from cloud',
+              timestamp: 1000,
+            ),
+          ],
         ),
-      ],
-    ));
+      );
 
-    final aManifest = await deviceA.manifestProvider.buildLocalManifest();
-    await deviceA.manifestProvider.writeLocalManifest(
-      aManifest.copyWith(lastSync: 5000),
-    );
-    await deviceA.engine.pushEntities(onProgress: (_) {});
+      final aManifest = await deviceA.manifestProvider.buildLocalManifest();
+      await deviceA.manifestProvider.writeLocalManifest(
+        aManifest.copyWith(lastSync: 5000),
+      );
+      await deviceA.engine.pushEntities(onProgress: (_) {});
 
-    final deviceB = SyncWorld();
-    deviceB.cloud.files.addAll(deviceA.cloud.files);
-    await deviceB.characters.put(makeChar('char1', name: 'Alice'));
-    await deviceB.chats.put(ChatSession(
-      id: 's1',
-      characterId: 'char1',
-      sessionIndex: 0,
-      updatedAt: 9000,
-      messages: [
-        const ChatMessage(
-          id: 'm2',
-          role: 'assistant',
-          content: 'Hello from local device',
-          timestamp: 9000,
+      final deviceB = SyncWorld();
+      deviceB.cloud.files.addAll(deviceA.cloud.files);
+      await deviceB.characters.put(makeChar('char1', name: 'Alice'));
+      await deviceB.chats.put(
+        ChatSession(
+          id: 's1',
+          characterId: 'char1',
+          sessionIndex: 0,
+          updatedAt: 9000,
+          messages: [
+            const ChatMessage(
+              id: 'm2',
+              role: 'assistant',
+              content: 'Hello from local device',
+              timestamp: 9000,
+            ),
+          ],
         ),
-      ],
-    ));
+      );
 
-    final bManifest = await deviceB.manifestProvider.buildLocalManifest();
-    await deviceB.manifestProvider.writeLocalManifest(
-      bManifest.copyWith(lastSync: 8000),
-    );
+      final bManifest = await deviceB.manifestProvider.buildLocalManifest();
+      await deviceB.manifestProvider.writeLocalManifest(
+        bManifest.copyWith(lastSync: 8000),
+      );
 
-    final conflicts = <SyncConflict>[];
-    await deviceB.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (c) => conflicts.add(c),
-    );
+      final conflicts = <SyncConflict>[];
+      await deviceB.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts.add(c),
+      );
 
-    expect(
-      conflicts.any((c) => c.type == 'chat' && c.id == 's1'),
-      isTrue,
-      reason:
-          'Divergent chat content must not be skipped when session ids match',
-    );
-    expect(
-      deviceB.chats.data['s1']?.messages.first.content,
-      equals('Hello from local device'),
-      reason: 'Unresolved conflict must keep local chat',
-    );
-  });
+      expect(
+        conflicts.any((c) => c.type == 'chat' && c.id == 's1'),
+        isTrue,
+        reason:
+            'Divergent chat content must not be skipped when session ids match',
+      );
+      expect(
+        deviceB.chats.data['s1']?.messages.first.content,
+        equals('Hello from local device'),
+        reason: 'Unresolved conflict must keep local chat',
+      );
+    },
+  );
 
   test('chat metadata hash reflects message content, not only session id', () {
     const base = SessionMetadata(
@@ -1462,52 +1764,66 @@ void main() {
 
     final idOnlyHash = SyncSerialization.computeSyncHash('s1');
     final metadataHash = SyncSerialization.computeChatMetadataHash(base);
-    final divergentHash = SyncSerialization.computeChatMetadataHash(withMessages);
+    final divergentHash = SyncSerialization.computeChatMetadataHash(
+      withMessages,
+    );
 
-    expect(metadataHash, isNot(equals(idOnlyHash)),
-        reason: 'Manifest hash must not be session id alone');
-    expect(divergentHash, isNot(equals(metadataHash)),
-        reason: 'Message changes must change the manifest hash');
+    expect(
+      metadataHash,
+      isNot(equals(idOnlyHash)),
+      reason: 'Manifest hash must not be session id alone',
+    );
+    expect(
+      divergentHash,
+      isNot(equals(metadataHash)),
+      reason: 'Message changes must change the manifest hash',
+    );
   });
 
-  test('stale local manifest does not false-conflict characters matching cloud', () async {
-    final deviceA = SyncWorld();
-    await deviceA.characters.put(makeChar('c1', name: 'Alice'));
-    await deviceA.characters.put(makeChar('c2', name: 'Bob'));
-    final aManifest = await deviceA.manifestProvider.buildLocalManifest();
-    await deviceA.manifestProvider.writeLocalManifest(
-      aManifest.copyWith(lastSync: 5000),
-    );
-    await deviceA.engine.pushEntities(onProgress: (_) {});
-
-    final deviceB = SyncWorld();
-    deviceB.cloud.files.addAll(deviceA.cloud.files);
-    await deviceB.characters.put(makeChar('c1', name: 'Alice'));
-    await deviceB.characters.put(makeChar('c2', name: 'Bob'));
-
-    // Stale manifest: wrong hashes but same DB content as cloud.
-    final stale = await deviceB.manifestProvider.buildLocalManifest();
-    final staleEntries = Map<String, SyncManifestEntry>.from(stale.entries);
-    for (final key in ['character:c1', 'character:c2']) {
-      final e = staleEntries[key]!;
-      staleEntries[key] = e.copyWith(
-        hash: 'stale-hash-${e.id}',
-        updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+  test(
+    'stale local manifest does not false-conflict characters matching cloud',
+    () async {
+      final deviceA = SyncWorld();
+      await deviceA.characters.put(makeChar('c1', name: 'Alice'));
+      await deviceA.characters.put(makeChar('c2', name: 'Bob'));
+      final aManifest = await deviceA.manifestProvider.buildLocalManifest();
+      await deviceA.manifestProvider.writeLocalManifest(
+        aManifest.copyWith(lastSync: 5000),
       );
-    }
-    await deviceB.manifestProvider.writeLocalManifest(
-      stale.copyWith(lastSync: 9000, entries: staleEntries),
-    );
+      await deviceA.engine.pushEntities(onProgress: (_) {});
 
-    final conflicts = <SyncConflict>[];
-    await deviceB.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (c) => conflicts.add(c),
-    );
+      final deviceB = SyncWorld();
+      deviceB.cloud.files.addAll(deviceA.cloud.files);
+      await deviceB.characters.put(makeChar('c1', name: 'Alice'));
+      await deviceB.characters.put(makeChar('c2', name: 'Bob'));
 
-    expect(conflicts.where((c) => c.type == 'character'), isEmpty,
-        reason: 'Same character data as cloud must not conflict on stale hash');
-  });
+      // Stale manifest: wrong hashes but same DB content as cloud.
+      final stale = await deviceB.manifestProvider.buildLocalManifest();
+      final staleEntries = Map<String, SyncManifestEntry>.from(stale.entries);
+      for (final key in ['character:c1', 'character:c2']) {
+        final e = staleEntries[key]!;
+        staleEntries[key] = e.copyWith(
+          hash: 'stale-hash-${e.id}',
+          updatedAt: DateTime.now().millisecondsSinceEpoch + 100000,
+        );
+      }
+      await deviceB.manifestProvider.writeLocalManifest(
+        stale.copyWith(lastSync: 9000, entries: staleEntries),
+      );
+
+      final conflicts = <SyncConflict>[];
+      await deviceB.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts.add(c),
+      );
+
+      expect(
+        conflicts.where((c) => c.type == 'character'),
+        isEmpty,
+        reason: 'Same character data as cloud must not conflict on stale hash',
+      );
+    },
+  );
 
   test('resolve all cloud pulls data and rebuilds manifest', () async {
     final deviceA = SyncWorld();
@@ -1561,7 +1877,8 @@ void main() {
     expect(
       rebuilt.entries['character:c1']?.hash,
       manifest.entries['character:c1']?.hash,
-      reason: 'Finalize must persist hashes from local DB, not stale cloud manifest',
+      reason:
+          'Finalize must persist hashes from local DB, not stale cloud manifest',
     );
   });
 
@@ -1591,66 +1908,84 @@ void main() {
       onConflict: (c) => conflicts.add(c),
     );
 
-    expect(conflicts.where((c) => c.type == 'memory_book'), isEmpty,
-        reason: 'Empty device should have no memory_book conflicts on first pull');
-    expect(deviceB.memoryBooks.data['s1'], isNotNull,
-        reason: 'memory_book should be pulled to device B');
+    expect(
+      conflicts.where((c) => c.type == 'memory_book'),
+      isEmpty,
+      reason: 'Empty device should have no memory_book conflicts on first pull',
+    );
+    expect(
+      deviceB.memoryBooks.data['s1'],
+      isNotNull,
+      reason: 'memory_book should be pulled to device B',
+    );
     expect(deviceB.memoryBooks.data['s1']?.sessionId, equals('s1'));
   });
 
-  test('memory_book deletion tombstone propagates to cloud on next push',
-      () async {
-    final world = SyncWorld();
+  test(
+    'memory_book deletion tombstone propagates to cloud on next push',
+    () async {
+      final world = SyncWorld();
 
-    final mb = makeMemoryBook('s1', updatedAt: 1000);
-    await world.memoryBooks.put(mb);
-    await world.chats.put(makeChat('s1', charId: 'char1'));
+      final mb = makeMemoryBook('s1', updatedAt: 1000);
+      await world.memoryBooks.put(mb);
+      await world.chats.put(makeChat('s1', charId: 'char1'));
 
-    final manifest = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest);
-    await world.engine.pushEntities(onProgress: (_) {});
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
+      await world.engine.pushEntities(onProgress: (_) {});
 
-    expect(world.cloud.files.containsKey(cloudPath('memory_book', 's1')), isTrue);
+      expect(
+        world.cloud.files.containsKey(cloudPath('memory_book', 's1')),
+        isTrue,
+      );
 
-    // Simulate deletion: remove from local store + record tombstone
-    world.memoryBooks.data.remove('s1');
-    world.chats.data.remove('s1');
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('gz_sync_deleted_entries');
-    final deleted = raw != null
-        ? (jsonDecode(raw) as List).cast<Map<String, dynamic>>().toList()
-        : <Map<String, dynamic>>[];
-    deleted.add({'type': 'memory_book', 'id': 's1'});
-    deleted.add({'type': 'chat', 'id': 's1'});
-    await prefs.setString('gz_sync_deleted_entries', jsonEncode(deleted));
+      // Simulate deletion: remove from local store + record tombstone
+      world.memoryBooks.data.remove('s1');
+      world.chats.data.remove('s1');
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('gz_sync_deleted_entries');
+      final deleted = raw != null
+          ? (jsonDecode(raw) as List).cast<Map<String, dynamic>>().toList()
+          : <Map<String, dynamic>>[];
+      deleted.add({'type': 'memory_book', 'id': 's1'});
+      deleted.add({'type': 'chat', 'id': 's1'});
+      await prefs.setString('gz_sync_deleted_entries', jsonEncode(deleted));
 
-    final manifest2 = await world.manifestProvider.buildLocalManifest();
-    await world.manifestProvider.writeLocalManifest(manifest2);
+      final manifest2 = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest2);
 
-    final deletedEntry = manifest2.entries['memory_book:s1'];
-    expect(deletedEntry?.deleted, isTrue,
-        reason: 'Deleted memory_book should appear as tombstone in manifest');
-  });
+      final deletedEntry = manifest2.entries['memory_book:s1'];
+      expect(
+        deletedEntry?.deleted,
+        isTrue,
+        reason: 'Deleted memory_book should appear as tombstone in manifest',
+      );
+    },
+  );
 
   test('chat conflict detection uses metadata hash and updatedAt', () {
-    final localHash = SyncSerialization.computeChatMetadataHash(const SessionMetadata(
-      sessionId: 's1',
-      characterId: 'char1',
-      sessionIndex: 0,
-      updatedAt: 100,
-      messageCount: 0,
-      lastMessageContent: '',
-      lastMessageTimestamp: 0,
-    ));
-    final cloudHash = SyncSerialization.computeChatMetadataHash(const SessionMetadata(
-      sessionId: 's1',
-      characterId: 'char1',
-      sessionIndex: 0,
-      updatedAt: 5000,
-      messageCount: 2,
-      lastMessageContent: 'Cloud',
-      lastMessageTimestamp: 5000,
-    ));
+    final localHash = SyncSerialization.computeChatMetadataHash(
+      const SessionMetadata(
+        sessionId: 's1',
+        characterId: 'char1',
+        sessionIndex: 0,
+        updatedAt: 100,
+        messageCount: 0,
+        lastMessageContent: '',
+        lastMessageTimestamp: 0,
+      ),
+    );
+    final cloudHash = SyncSerialization.computeChatMetadataHash(
+      const SessionMetadata(
+        sessionId: 's1',
+        characterId: 'char1',
+        sessionIndex: 0,
+        updatedAt: 5000,
+        messageCount: 2,
+        lastMessageContent: 'Cloud',
+        lastMessageTimestamp: 5000,
+      ),
+    );
 
     final localEntry = SyncManifestEntry(
       type: 'chat',
@@ -1716,7 +2051,8 @@ void main() {
     'Pull character does not keep foreign avatarPath when cloud avatar missing',
     () async {
       final deviceA = SyncWorld();
-      const androidAvatarPath = '/data/user/0/com.glaze/files/avatars/tokyo.png';
+      const androidAvatarPath =
+          '/data/user/0/com.glaze/files/avatars/tokyo.png';
       await deviceA.characters.put(
         makeChar('tokyo', name: 'Project Tokyo', avatarPath: androidAvatarPath),
       );
@@ -1730,10 +2066,7 @@ void main() {
       final deviceB = SyncWorld();
       deviceB.cloud.files.addAll(deviceA.cloud.files);
 
-      await deviceB.engine.pullEntities(
-        onProgress: (_) {},
-        onConflict: (_) {},
-      );
+      await deviceB.engine.pullEntities(onProgress: (_) {}, onConflict: (_) {});
 
       final pulled = deviceB.characters.data['tokyo'];
       expect(pulled, isNotNull);
@@ -1747,35 +2080,36 @@ void main() {
     },
   );
 
-  test('Pull chat re-fetches character avatar when cloud binary exists', () async {
-    final deviceA = SyncWorld();
-    const androidAvatarPath = '/data/user/0/com.glaze/files/avatars/tokyo.png';
-    await deviceA.characters.put(
-      makeChar('tokyo', name: 'Project Tokyo', avatarPath: androidAvatarPath),
-    );
-    await deviceA.chats.put(makeChat('s1', charId: 'tokyo'));
+  test(
+    'Pull chat re-fetches character avatar when cloud binary exists',
+    () async {
+      final deviceA = SyncWorld();
+      const androidAvatarPath =
+          '/data/user/0/com.glaze/files/avatars/tokyo.png';
+      await deviceA.characters.put(
+        makeChar('tokyo', name: 'Project Tokyo', avatarPath: androidAvatarPath),
+      );
+      await deviceA.chats.put(makeChat('s1', charId: 'tokyo'));
 
-    final avatarBytes = Uint8List.fromList([10, 20, 30, 40]);
-    deviceA.cloud.files[galleryCloudPath('tokyo', 'avatar', 'png')] =
-        String.fromCharCodes(avatarBytes);
+      final avatarBytes = Uint8List.fromList([10, 20, 30, 40]);
+      deviceA.cloud.files[galleryCloudPath('tokyo', 'avatar', 'png')] =
+          String.fromCharCodes(avatarBytes);
 
-    final manifest = await deviceA.manifestProvider.buildLocalManifest();
-    await deviceA.manifestProvider.writeLocalManifest(manifest);
-    await deviceA.engine.pushEntities(onProgress: (_) {});
+      final manifest = await deviceA.manifestProvider.buildLocalManifest();
+      await deviceA.manifestProvider.writeLocalManifest(manifest);
+      await deviceA.engine.pushEntities(onProgress: (_) {});
 
-    final deviceB = SyncWorld();
-    deviceB.cloud.files.addAll(deviceA.cloud.files);
-    await deviceB.characters.put(makeChar('tokyo', name: 'Project Tokyo'));
+      final deviceB = SyncWorld();
+      deviceB.cloud.files.addAll(deviceA.cloud.files);
+      await deviceB.characters.put(makeChar('tokyo', name: 'Project Tokyo'));
 
-    await deviceB.engine.pullEntities(
-      onProgress: (_) {},
-      onConflict: (_) {},
-    );
+      await deviceB.engine.pullEntities(onProgress: (_) {}, onConflict: (_) {});
 
-    final pulled = deviceB.characters.data['tokyo'];
-    expect(pulled?.avatarPath, isNotNull);
-    expect(deviceB.images.saved.containsKey('avatars/tokyo.png'), isTrue);
-  });
+      final pulled = deviceB.characters.data['tokyo'];
+      expect(pulled?.avatarPath, isNotNull);
+      expect(deviceB.images.saved.containsKey('avatars/tokyo.png'), isTrue);
+    },
+  );
 
   test(
     'memory_book with local generationApiKey does not false-conflict on pull',
@@ -1794,7 +2128,9 @@ void main() {
       await deviceB.memoryBooks.put(
         cloudMb.copyWith(
           updatedAt: 999999,
-          settings: const MemoryBookSettings(generationApiKey: 'sk-local-secret'),
+          settings: const MemoryBookSettings(
+            generationApiKey: 'sk-local-secret',
+          ),
         ),
       );
       await deviceB.chats.put(makeChat('s1', charId: 'char1'));
@@ -1816,21 +2152,83 @@ void main() {
         onConflict: (c) => conflicts.add(c),
       );
 
-      expect(conflicts.where((c) => c.type == 'memory_book'), isEmpty,
-          reason:
-              'Semantic memory_book hash ignores generation settings and '
-              'lastProcessedMessageCount');
+      expect(
+        conflicts.where((c) => c.type == 'memory_book'),
+        isEmpty,
+        reason:
+            'Semantic memory_book hash ignores generation settings and '
+            'lastProcessedMessageCount',
+      );
     },
   );
 
-  test('push records apiKeysIncluded=false in cloud manifest by default', () async {
-    final world = SyncWorld();
-    await world.apiConfigs.put(makeApiConfig('api1', name: 'Test'));
-    await world.engine.pushEntities(onProgress: (_) {});
+  test(
+    'memory_book with local pending drafts does not false-conflict on pull',
+    () async {
+      final deviceA = SyncWorld();
+      final cloudMb = makeMemoryBook('s1', updatedAt: 1000);
+      await deviceA.memoryBooks.put(cloudMb);
+      await deviceA.chats.put(makeChat('s1', charId: 'char1'));
 
-    final raw = world.cloud.files[cloudPath('manifest', 'manifest')];
-    expect(raw, isNotNull);
-    final manifest = SyncManifest.fromJson(jsonDecode(raw!) as Map<String, dynamic>);
-    expect(manifest.apiKeysIncluded, isFalse);
-  });
+      final manifest = await deviceA.manifestProvider.buildLocalManifest();
+      await deviceA.manifestProvider.writeLocalManifest(manifest);
+      await deviceA.engine.pushEntities(onProgress: (_) {});
+
+      final deviceB = SyncWorld();
+      deviceB.cloud.files.addAll(deviceA.cloud.files);
+      await deviceB.memoryBooks.put(
+        cloudMb.copyWith(
+          updatedAt: 999999,
+          pendingDrafts: const [
+            MemoryDraft(
+              id: 'draft-local',
+              title: 'Local draft',
+              content: 'Still being reviewed',
+            ),
+          ],
+        ),
+      );
+      await deviceB.chats.put(makeChat('s1', charId: 'char1'));
+
+      final cloudManifest = SyncManifest.fromJson(
+        jsonDecode(deviceB.cloud.files[cloudPath('manifest', 'manifest')]!)
+            as Map<String, dynamic>,
+      );
+      final localManifest = await deviceB.manifestProvider.buildLocalManifest(
+        cloudManifest: cloudManifest,
+      );
+      await deviceB.manifestProvider.writeLocalManifest(
+        localManifest.copyWith(lastSync: 5000),
+      );
+
+      final conflicts = <SyncConflict>[];
+      await deviceB.engine.pullEntities(
+        onProgress: (_) {},
+        onConflict: (c) => conflicts.add(c),
+      );
+
+      expect(
+        conflicts.where((c) => c.type == 'memory_book'),
+        isEmpty,
+        reason:
+            'Local transient pending drafts should not conflict with cloud memory entries',
+      );
+    },
+  );
+
+  test(
+    'push records apiKeysIncluded=false in cloud manifest by default',
+    () async {
+      final world = SyncWorld();
+      await world.apiConfigs.put(makeApiConfig('api1', name: 'Test'));
+      await world.engine.pushEntities(onProgress: (_) {});
+
+      final raw = world.cloud.files[cloudPath('manifest', 'manifest')];
+      expect(raw, isNotNull);
+      final manifest = SyncManifest.fromJson(
+        jsonDecode(raw!) as Map<String, dynamic>,
+      );
+      expect(manifest.apiKeysIncluded, isFalse);
+    },
+  );
 }
