@@ -82,7 +82,8 @@ export class Bridge {
           img.alt = newName;
           avatar.appendChild(img);
         }
-      } else if (!existingImg) {
+      } else {
+        if (existingImg) existingImg.remove();
         avatar.textContent = (newName.charAt(0) || '?').toUpperCase();
       }
     });

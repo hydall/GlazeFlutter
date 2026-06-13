@@ -207,7 +207,7 @@ class SyncController {
             'pulled': itemsCount,
             'conflictsCount': service.conflicts.length,
           };
-          if (isMounted()) invalidateDataProviders();
+          invalidateDataProviders();
           statusNotifier.state = service.status;
           conflictsNotifier.state = service.conflicts;
           if (service.conflicts.isNotEmpty) {
@@ -224,7 +224,7 @@ class SyncController {
             },
           );
           _syncResult = {'type': 'full'};
-          if (isMounted()) invalidateDataProviders();
+          invalidateDataProviders();
           statusNotifier.state = service.status;
           conflictsNotifier.state = service.conflicts;
           return 'Full sync completed';

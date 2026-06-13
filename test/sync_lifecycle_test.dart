@@ -266,20 +266,36 @@ class FakeImageStore implements SyncImageStore {
 
 class FakeCloudAdapter implements CloudAdapter {
   final Map<String, String> files = {};
+  final List<String> listFolderCalls = [];
+  final Set<String> ensuredFolders = {};
 
   /// When true, [listFolder] returns paths without the `/Glaze` prefix (Dropbox-style).
   bool stripGlazePrefixInList = false;
   bool omitFilesFromList = false;
+  bool requireEnsuredParentForUpload = false;
   final uploadFailures = <String>{};
 
   @override
   Future<bool> isConnected() async => true;
 
   @override
-  Future<void> ensureFolder(String path) async {}
+  Future<void> ensureFolder(String path) async {
+    ensuredFolders.add(path);
+  }
+
+  void _checkUploadParent(String path) {
+    if (!requireEnsuredParentForUpload) return;
+    final slash = path.lastIndexOf('/');
+    if (slash <= 0) return;
+    final parent = path.substring(0, slash);
+    if (!ensuredFolders.contains(parent)) {
+      throw Exception('Parent folder not ensured: $parent');
+    }
+  }
 
   @override
   Future<void> upload(String path, String data) async {
+    _checkUploadParent(path);
     if (uploadFailures.contains(path)) {
       throw Exception('Upload failed: $path');
     }
@@ -288,6 +304,7 @@ class FakeCloudAdapter implements CloudAdapter {
 
   @override
   Future<void> uploadBinary(String path, Uint8List data) async {
+    _checkUploadParent(path);
     files[path] = String.fromCharCodes(data);
   }
 
@@ -317,6 +334,7 @@ class FakeCloudAdapter implements CloudAdapter {
 
   @override
   Future<List<CloudFileInfo>> listFolder(String path) async {
+    listFolderCalls.add(path);
     if (omitFilesFromList) return [];
     return files.keys.where((k) => k.startsWith(path) && !k.endsWith('/')).map((
       k,
@@ -1158,6 +1176,42 @@ void main() {
     },
   );
 
+  test(
+    'Push with full cloud checks manifest parent folders instead of recursive root scan',
+    () async {
+      final world = SyncWorld();
+
+      await world.characters.put(makeChar('c1', name: 'Alpha'));
+      await world.personas.put(makePersona('p1', name: 'Persona'));
+      await world.chats.put(makeChat('s1', charId: 'c1'));
+      final manifest = await world.manifestProvider.buildLocalManifest();
+      await world.manifestProvider.writeLocalManifest(manifest);
+      await world.engine.pushEntities(onProgress: (_) {});
+
+      world.cloud.files['$cloudBase/gallery/c1/deep/unused-1.png'] = 'x';
+      world.cloud.files['$cloudBase/gallery/c1/deep/unused-2.png'] = 'x';
+      world.cloud.listFolderCalls.clear();
+
+      final progressList = <SyncProgress>[];
+      await world.engine.pushEntities(onProgress: (p) => progressList.add(p));
+
+      expect(
+        world.cloud.listFolderCalls,
+        isNot(contains('$cloudBase/gallery')),
+      );
+      expect(
+        world.cloud.listFolderCalls.any(
+          (p) => p.startsWith('$cloudBase/gallery/'),
+        ),
+        isFalse,
+      );
+      expect(
+        progressList.any((p) => p.message == 'Checking cloud files...'),
+        isTrue,
+      );
+    },
+  );
+
   test('Wipe progress reports indeterminate (no total)', () async {
     final world = SyncWorld();
 
@@ -1336,6 +1390,7 @@ void main() {
 
   test('Persona avatar is pushed to cloud and pulled back', () async {
     final deviceA = SyncWorld();
+    deviceA.cloud.requireEnsuredParentForUpload = true;
 
     final avatarBytes = Uint8List.fromList([1, 2, 3, 4, 5]);
 
@@ -1356,6 +1411,11 @@ void main() {
     await deviceA.engine.pushEntities(onProgress: (_) {});
 
     final avatarCloudPath = personaAvatarCloudPath('p1', 'png');
+    expect(
+      deviceA.cloud.ensuredFolders,
+      contains('$cloudBase/persona_avatars/p1'),
+      reason: 'Dropbox upload requires the persona avatar parent folder',
+    );
     expect(
       deviceA.cloud.files.containsKey(avatarCloudPath),
       isTrue,

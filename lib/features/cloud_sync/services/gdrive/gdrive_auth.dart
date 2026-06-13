@@ -18,7 +18,12 @@ class GDriveAuth {
   static const _userInfoUrl = 'https://www.googleapis.com/oauth2/v2/userinfo';
   static const _scope = 'https://www.googleapis.com/auth/drive.file';
 
-  final Dio _dio = Dio();
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 60),
+    ),
+  );
 
   String? _accessToken;
   String? _refreshToken;
@@ -89,7 +94,8 @@ class GDriveAuth {
   Future<void> _handleCodeExchange(String code, String redirectUri) async {
     final clientId = SyncConfig.gdriveClientId!;
     final clientSecret = SyncConfig.gdriveClientSecret;
-    final data = 'code=$code&grant_type=authorization_code&client_id=$clientId'
+    final data =
+        'code=$code&grant_type=authorization_code&client_id=$clientId'
         '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
         '&code_verifier=$_codeVerifier'
         '${clientSecret != null && clientSecret.isNotEmpty ? '&client_secret=$clientSecret' : ''}';
@@ -133,7 +139,8 @@ class GDriveAuth {
     if (_refreshToken == null) throw StateError('No refresh token');
     final clientId = SyncConfig.gdriveClientId!;
     final clientSecret = SyncConfig.gdriveClientSecret;
-    final data = 'grant_type=refresh_token&refresh_token=$_refreshToken&client_id=$clientId'
+    final data =
+        'grant_type=refresh_token&refresh_token=$_refreshToken&client_id=$clientId'
         '${clientSecret != null && clientSecret.isNotEmpty ? '&client_secret=$clientSecret' : ''}';
     final response = await _dio.post<Map<String, dynamic>>(
       _tokenUrl,
@@ -180,8 +187,10 @@ class GDriveAuth {
     const chars =
         'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
     final rng = Random.secure();
-    return List.generate(length, (_) => chars[rng.nextInt(chars.length)])
-        .join();
+    return List.generate(
+      length,
+      (_) => chars[rng.nextInt(chars.length)],
+    ).join();
   }
 
   String _sha256Base64Url(String input) {

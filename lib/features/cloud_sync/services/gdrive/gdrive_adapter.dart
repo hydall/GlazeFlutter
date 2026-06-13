@@ -9,6 +9,12 @@ import 'gdrive_folders.dart';
 
 class GDriveAdapter implements CloudAdapter {
   final GDriveAuth _auth;
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 60),
+    ),
+  );
   late final GDriveFolders _folders;
   late final GDriveFiles _files;
 
@@ -68,7 +74,7 @@ class GDriveAdapter implements CloudAdapter {
       };
       if (pageToken != null) queryParams['pageToken'] = pageToken;
 
-      final response = await Dio().get<Map<String, dynamic>>(
+      final response = await _dio.get<Map<String, dynamic>>(
         'https://www.googleapis.com/drive/v3/files',
         queryParameters: queryParams,
         options: Options(headers: {'Authorization': 'Bearer $token'}),
@@ -76,11 +82,13 @@ class GDriveAdapter implements CloudAdapter {
 
       final files = response.data?['files'] as List? ?? [];
       for (final f in files.whereType<Map<String, dynamic>>()) {
-        result.add(CloudFileInfo(
-          path: '$path/${f['name']}',
-          name: f['name'] as String? ?? '',
-          isFolder: f['mimeType'] == 'application/vnd.google-apps.folder',
-        ));
+        result.add(
+          CloudFileInfo(
+            path: '$path/${f['name']}',
+            name: f['name'] as String? ?? '',
+            isFolder: f['mimeType'] == 'application/vnd.google-apps.folder',
+          ),
+        );
       }
       pageToken = response.data?['nextPageToken'] as String?;
     } while (pageToken != null);
