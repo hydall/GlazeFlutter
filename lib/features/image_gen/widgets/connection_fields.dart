@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../image_gen_models.dart';
@@ -14,7 +15,7 @@ List<Widget> buildNaisteraConnectionFields(
 ) {
   return [
     rows.ImageGenTextFieldItem(
-      label: 'API Key',
+        label: 'imggen_api_key'.tr(),
       value: s.naisteraApiKey,
       obscure: true,
       hint: 'sk-...',
@@ -30,14 +31,14 @@ List<Widget> buildNaisteraConnectionFields(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
         ),
-        child: const Row(
+        child: Row(
           children: [
-            Text('Learn about Naistera', style: TextStyle(fontSize: 13)),
-            SizedBox(width: 4),
-            Icon(Icons.public, size: 14, color: Colors.blue),
-            SizedBox(width: 4),
+            Text('imggen_naistera_hint'.tr(), style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 4),
+            const Icon(Icons.public, size: 14, color: Colors.blue),
+            const SizedBox(width: 4),
             Text(
-              'here',
+              'imggen_naistera_hint_here'.tr(),
               style: TextStyle(fontSize: 13, color: Colors.blue),
             ),
           ],
@@ -77,20 +78,20 @@ List<Widget> buildOpenaiConnectionFields(
 ) {
   return [
     rows.ImageGenCheckboxRow(
-      label: 'Use LLM API',
-      description: 'Use the same endpoint as LLM for image generation',
+      label: 'settings_use_llm_api'.tr(),
+      description: 'settings_use_llm_api_desc'.tr(),
       value: s.useSameEndpoint,
       onChanged: (v) => onUpdate(s.copyWith(useSameEndpoint: v)),
     ),
     if (!s.useSameEndpoint) ...[
       rows.ImageGenTextFieldItem(
-        label: 'Endpoint URL',
+        label: 'imggen_endpoint'.tr(),
         value: s.customEndpoint,
         hint: 'https://api.openai.com/v1',
         onChanged: (v) => onUpdate(s.copyWith(customEndpoint: v)),
       ),
       rows.ImageGenTextFieldItem(
-        label: 'API Key',
+      label: 'imggen_api_key'.tr(),
         value: s.customApiKey,
         obscure: true,
         hint: 'sk-...',

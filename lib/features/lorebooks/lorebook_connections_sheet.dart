@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -51,8 +52,8 @@ class _LorebookConnectionsSheetState
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'Connections: ${lb.name}',
-                    style: const TextStyle(
+                    '${'header_connections'.tr()}: ${lb.name}',
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                     ),
@@ -73,24 +74,24 @@ class _LorebookConnectionsSheetState
           child: Row(
             children: [
               Text(
-                'Scope:',
+                'lorebook_scope_label'.tr(),
                 style: TextStyle(color: context.cs.onSurfaceVariant),
               ),
               const SizedBox(width: 8),
               _ScopeChip(
-                label: 'global',
+                label: 'level_global'.tr(),
                 selected: lb.enabled,
                 color: Colors.green,
               ),
               const SizedBox(width: 6),
               _ScopeChip(
-                label: 'character',
+                label: 'level_character'.tr(),
                 selected: charIds.isNotEmpty,
                 color: Colors.purple,
               ),
               const SizedBox(width: 6),
               _ScopeChip(
-                label: 'chat',
+                label: 'level_chat'.tr(),
                 selected: chatIds.isNotEmpty,
                 color: Colors.orange,
               ),
@@ -101,9 +102,9 @@ class _LorebookConnectionsSheetState
 
         _Section(
           icon: Icons.public,
-          title: 'Global',
+          title: 'label_global'.tr(),
           child: _ToggleRow(
-            label: 'Enabled for all chats',
+            label: 'label_global_enabled'.tr(),
             value: lb.enabled,
             onChanged: (v) {
               final notifier = ref.read(lorebooksProvider.notifier);
@@ -114,10 +115,10 @@ class _LorebookConnectionsSheetState
 
         _Section(
           icon: Icons.person,
-          title: 'Characters',
+          title: 'lbc_section_characters'.tr(),
           onAdd: () => _addCharacterConnection(lb),
           child: charIds.isEmpty
-              ? const _EmptyHint('Not bound to any character')
+              ? _EmptyHint('no_char_connections'.tr())
               : Wrap(
                   spacing: 6,
                   runSpacing: 4,
@@ -136,10 +137,10 @@ class _LorebookConnectionsSheetState
 
         _Section(
           icon: Icons.chat,
-          title: 'Chats',
+          title: 'lbc_section_chats'.tr(),
           onAdd: () => _addChatConnection(lb),
           child: chatIds.isEmpty
-              ? const _EmptyHint('Not bound to any chat')
+              ? _EmptyHint('no_chat_connections'.tr())
               : Wrap(
                   spacing: 6,
                   runSpacing: 4,
@@ -241,13 +242,13 @@ class _LorebookConnectionsSheetState
 
     final available = chars.where((c) => !existingIds.contains(c.id)).toList();
     if (available.isEmpty) {
-      GlazeToast.show(context, 'All characters already connected');
+      GlazeToast.show(context, 'lorebook_all_chars_connected'.tr());
       return;
     }
 
     final selected = await GlazeBottomSheet.show<Character>(
       context,
-      title: 'Add Character',
+      title: 'lbc_add_character'.tr(),
       items: available
           .map(
             (c) => BottomSheetItem(
@@ -275,7 +276,7 @@ class _LorebookConnectionsSheetState
         .where((s) => !existingIds.contains(s.id))
         .toList();
     if (available.isEmpty) {
-      GlazeToast.show(context, 'No unbound chat sessions');
+      GlazeToast.show(context, 'lorebook_no_unbound_chats'.tr());
       return;
     }
 
@@ -283,7 +284,7 @@ class _LorebookConnectionsSheetState
 
     final selected = await GlazeBottomSheet.show<ChatSession>(
       context,
-      title: 'Add Chat',
+      title: 'lbc_add_chat'.tr(),
       items: available.map((s) {
         final char = chars.where((c) => c.id == s.characterId).firstOrNull;
         return BottomSheetItem(

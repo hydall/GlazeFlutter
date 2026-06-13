@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -174,7 +175,7 @@ class _PanelContent extends StatelessWidget {
               child: Row(
                 children: [
                   Text(
-                    'Инфоблоки',
+                    'infoblocks_title'.tr(),
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -195,7 +196,7 @@ class _PanelContent extends StatelessWidget {
               Expanded(
                 child: Center(
                   child: Text(
-                    'Нет инфоблоков',
+                    'infoblocks_empty'.tr(),
                     style: TextStyle(
                       color: context.cs.onSurfaceVariant.withValues(alpha: 0.5),
                       fontSize: 13,

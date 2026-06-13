@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/models/preset.dart';
@@ -42,11 +43,11 @@ class BlockTile extends StatelessWidget {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: block.role,
-                      decoration: const InputDecoration(labelText: 'Role'),
-                      items: const [
-                        DropdownMenuItem(value: 'system', child: Text('System')),
-                        DropdownMenuItem(value: 'user', child: Text('User')),
-                        DropdownMenuItem(value: 'assistant', child: Text('Assistant')),
+                      decoration: InputDecoration(labelText: 'label_role'.tr()),
+                      items: [
+                        DropdownMenuItem(value: 'system', child: Text('role_system'.tr())),
+                        DropdownMenuItem(value: 'user', child: Text('role_user'.tr())),
+                        DropdownMenuItem(value: 'assistant', child: Text('role_assistant'.tr())),
                       ],
                       onChanged: (v) {
                         if (v != null) onChanged(block.copyWith(role: v));
@@ -57,10 +58,10 @@ class BlockTile extends StatelessWidget {
                   Expanded(
                     child: DropdownButtonFormField<String>(
                       initialValue: block.insertionMode,
-                      decoration: const InputDecoration(labelText: 'Insertion'),
-                      items: const [
-                        DropdownMenuItem(value: 'relative', child: Text('Relative')),
-                        DropdownMenuItem(value: 'depth', child: Text('Depth')),
+                      decoration: InputDecoration(labelText: 'label_insertion_strategy'.tr()),
+                      items: [
+                        DropdownMenuItem(value: 'relative', child: Text('injection_relative'.tr())),
+                        DropdownMenuItem(value: 'depth', child: Text('label_depth'.tr())),
                       ],
                       onChanged: (v) {
                         if (v != null) {
@@ -77,7 +78,7 @@ class BlockTile extends StatelessWidget {
                     width: 80,
                     child: TextFormField(
                       initialValue: block.depth?.toString() ?? '',
-                      decoration: const InputDecoration(labelText: 'Depth'),
+                      decoration: InputDecoration(labelText: 'label_depth'.tr()),
                       keyboardType: TextInputType.number,
                       enabled: block.insertionMode == 'depth',
                       onChanged: (v) {
@@ -91,13 +92,13 @@ class BlockTile extends StatelessWidget {
               const SizedBox(height: 8),
               TextFormField(
                 initialValue: block.name,
-                decoration: const InputDecoration(labelText: 'Block Name'),
+                decoration: InputDecoration(labelText: 'label_block_name'.tr()),
                 onChanged: (v) => onChanged(block.copyWith(name: v)),
               ),
               const SizedBox(height: 8),
               TextFormField(
                 initialValue: block.content,
-                decoration: const InputDecoration(labelText: 'Content'),
+                decoration: InputDecoration(labelText: 'label_content'.tr()),
                 maxLines: 4,
                 minLines: 2,
                 keyboardType: TextInputType.multiline,
@@ -137,7 +138,7 @@ class BlockTile extends StatelessWidget {
 
   Widget _appendBadge(BuildContext context) {
     return Tooltip(
-      message: 'Appended to last user message',
+      message: 'block_append_to_last_user'.tr(),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
         decoration: BoxDecoration(
@@ -145,7 +146,7 @@ class BlockTile extends StatelessWidget {
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(
-          '↩ Last User',
+          'block_append_badge'.tr(),
           style: TextStyle(
             fontSize: 10,
             fontWeight: FontWeight.w700,

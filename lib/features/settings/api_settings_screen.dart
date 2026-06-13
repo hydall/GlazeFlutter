@@ -328,7 +328,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
       scrollController: _scrollController,
       body: asyncList.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text('${'title_error'.tr()}: $e')),
         data: (list) => list.isEmpty
             ? _buildEmptyState()
             : _tab == 0

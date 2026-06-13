@@ -78,7 +78,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     return ShellHeaderConfig(
       title: inSearch
           ? null
-          : (_tabIndex == 2 ? _picksTitle : 'Characters'),
+          : (_tabIndex == 2 ? _picksTitle : 'header_characters'.tr()),
       titleWidget: inSearch ? _buildSearchField(context) : null,
       showBack: _tabIndex == 2,
       onBack: _tabIndex == 2
@@ -328,7 +328,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           Center(child: CircularProgressIndicator(color: context.cs.primary)),
       error: (e, _) => Center(
         child: Text(
-          'Error: $e',
+          '${'title_error'.tr()}: $e',
           style: TextStyle(color: context.cs.onSurfaceVariant),
         ),
       ),
@@ -401,7 +401,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           Center(child: CircularProgressIndicator(color: context.cs.primary)),
       error: (e, _) => Center(
         child: Text(
-          'Error: $e',
+          '${'title_error'.tr()}: $e',
           style: TextStyle(color: context.cs.onSurfaceVariant),
         ),
       ),
@@ -425,7 +425,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
               SliverFillRemaining(
                 child: Center(
                   child: Text(
-                    'No characters found',
+                    'no_characters'.tr(),
                     style: TextStyle(color: context.cs.onSurfaceVariant),
                   ),
                 ),
@@ -462,7 +462,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
       decoration: InputDecoration(
         isDense: true,
         border: InputBorder.none,
-        hintText: _tabIndex == 1 ? 'Search catalog' : 'Search characters',
+        hintText: _tabIndex == 1 ? 'catalog_search_placeholder'.tr() : 'search_characters'.tr(),
         hintStyle: TextStyle(
           color: context.cs.onSurfaceVariant,
           fontSize: 16,
@@ -475,9 +475,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       child: GlazeTabBar(
-        tabs: const [
-          GlazeTabItem(label: 'My Characters', icon: Icons.person_rounded),
-          GlazeTabItem(label: 'Discover', icon: Icons.public_rounded),
+        tabs: [
+          GlazeTabItem(label: 'tab_my_characters'.tr(), icon: Icons.person_rounded),
+          GlazeTabItem(label: 'tab_catalog'.tr(), icon: Icons.public_rounded),
         ],
         activeIndex: _tabIndex == 2 ? 0 : _tabIndex,
         onChanged: (i) {
@@ -527,7 +527,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
       items: [
         BottomSheetItem(
           icon: Icons.add_rounded,
-          label: 'Add New',
+          label: 'action_create_new'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             context.push('/character/create');
@@ -535,7 +535,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
         ),
         BottomSheetItem(
           icon: Icons.file_open_outlined,
-          label: 'Import from File',
+          label: 'action_import'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _importCharacter(context, ref);
@@ -543,12 +543,12 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
         ),
         BottomSheetItem(
           icon: Icons.link_rounded,
-          label: 'Import from URL',
+          label: 'action_import_janitor'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             GlazeBottomSheet.show<void>(
               context,
-              title: 'Import by URL',
+              title: 'action_import_janitor'.tr(),
               child: const ImportUrlDialog(),
             );
           },
@@ -562,7 +562,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
       if (Platform.isIOS) {
         final source = await GlazeBottomSheet.show<_ImportSource>(
           context,
-          title: 'Import',
+          title: 'onboarding_action_import'.tr(),
           items: [
             BottomSheetItem(
               icon: Icons.photo_library,
@@ -649,7 +649,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     if (imported > 0) {
       GlazeToast.show(
         context,
-        'Imported $imported character${imported > 1 ? "s" : ""}',
+        '${'import_success'.tr()}: $imported ${'count_characters'.plural(imported)}',
       );
     } else if (lastError != null) {
       GlazeToast.show(context, lastError);
@@ -719,7 +719,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     if (imported > 0) {
       GlazeToast.show(
         context,
-        'Imported $imported character${imported > 1 ? "s" : ""}',
+        '${'import_success'.tr()}: $imported ${'count_characters'.plural(imported)}',
       );
     } else if (lastError != null) {
       GlazeToast.show(context, lastError);
@@ -749,13 +749,13 @@ class _AddButton extends StatelessWidget {
             ),
           ],
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.add_rounded, color: Colors.white, size: 24),
-            SizedBox(width: 8),
+            const Icon(Icons.add_rounded, color: Colors.white, size: 24),
+            const SizedBox(width: 8),
             Text(
-              'Add',
+              'btn_add'.tr(),
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,

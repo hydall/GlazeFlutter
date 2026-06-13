@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -64,7 +65,7 @@ Future<void> _pickCustomFont(
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['ttf', 'otf', 'woff', 'woff2'],
-      dialogTitle: 'Select Font File',
+      dialogTitle: 'theme_select_font'.tr(),
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;
@@ -88,7 +89,7 @@ Future<void> _pickCustomFont(
     }
   } catch (e) {
     if (context.mounted) {
-      GlazeErrorDialog.show(context, e, prefix: 'Failed to load font: ');
+        GlazeErrorDialog.show(context, e, prefix: 'theme_failed_load_font'.tr());
     }
   }
 }
@@ -185,9 +186,9 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
                               size: 16, color: context.cs.onSurfaceVariant),
                           const SizedBox(width: 8),
                           Expanded(
-                            child: Text(
-                              'Default theme cannot be edited. Import or create a new theme to customise.',
-                              style: TextStyle(
+                    child: Text(
+                      'theme_default_not_editable'.tr(),
+                      style: TextStyle(
                                   fontSize: 12, color: context.cs.onSurfaceVariant),
                             ),
                           ),
@@ -198,10 +199,10 @@ class _ThemeEditorScreenState extends ConsumerState<ThemeEditorScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                   child: GlazeTabBar(
-                    tabs: const [
-                      GlazeTabItem(label: 'General', icon: Icons.tune),
+                    tabs: [
+                      GlazeTabItem(label: 'tab_general'.tr(), icon: Icons.tune),
                       GlazeTabItem(
-                          label: 'Chat', icon: Icons.chat_bubble_outline),
+                          label: 'tab_chat'.tr(), icon: Icons.chat_bubble_outline),
                     ],
                     activeIndex: _activeTab,
                     onChanged: (i) => setState(() => _activeTab = i),
@@ -237,10 +238,10 @@ class _GeneralTab extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(0, topPadding + 8, 0, bottomPadding),
       children: [
         MenuGroup(
-          header: 'Accent Color',
+          header: 'theme_accent_color'.tr(),
           items: [
             _ColorRow(
-              label: 'Accent',
+              label: 'theme_accent_label'.tr(),
               value: preset.accentColor,
               palette: _presetColors,
               allowNull: false,
@@ -251,13 +252,13 @@ class _GeneralTab extends StatelessWidget {
           ],
         ),
         MenuGroup(
-          header: 'App Interface Font',
+          header: 'theme_app_font'.tr(),
           items: [
             _FontModeRow(
-              label: 'Font',
+              label: 'tab_font'.tr(),
               mode: preset.uiFontMode,
               modes: const ['glaze', 'system', 'custom', 'google'],
-              modeLabels: const ['Glaze (Inter)', 'System', 'Custom File', 'Google Fonts'],
+              modeLabels: ['theme_font_glaze'.tr(), 'theme_font_system'.tr(), 'theme_font_custom'.tr(), 'theme_font_google'.tr()],
               onChanged: (v) async {
                 if (v == 'custom') {
                   await _pickCustomFont(context, onUpdate, isUi: true, preset: preset);
@@ -275,21 +276,21 @@ class _GeneralTab extends StatelessWidget {
                 onClear: () => onUpdate((p) => p.copyWith(uiFontMode: 'glaze', googleFontName: null)),
               ),
             _ColorRow(
-              label: 'Text Color',
+              label: 'theme_ui_text_color'.tr(),
               value: preset.uiTextColor,
               palette: _presetUiColors,
               allowNull: true,
               showPreviewOverlay: false,
-              nullLabel: 'Auto',
+              nullLabel: 'theme_auto'.tr(),
               onChanged: (v) => onUpdate((p) => p.copyWith(uiTextColor: v)),
             ),
             _ColorRow(
-              label: 'Secondary Text',
+              label: 'theme_ui_text_gray_color'.tr(),
               value: preset.uiTextGrayColor,
               palette: _presetUiColors,
               allowNull: true,
               showPreviewOverlay: false,
-              nullLabel: 'Auto',
+              nullLabel: 'theme_auto'.tr(),
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(uiTextGrayColor: v)),
             ),
@@ -311,7 +312,7 @@ class _GeneralTab extends StatelessWidget {
                   onUpdate((p) => p.copyWith(uiLetterSpacing: v)),
             ),
             _SliderRow(
-              label: 'Font Weight',
+              label: 'theme_font_weight'.tr(),
               value: preset.uiFontWeight.toDouble(),
               min: 100,
               max: 900,
@@ -324,20 +325,20 @@ class _GeneralTab extends StatelessWidget {
           ],
         ),
         MenuGroup(
-          header: 'UI Elements',
+          header: 'theme_ui_effects'.tr(),
           items: [
-            const MenuSubHeader('Background'),
+            MenuSubHeader('theme_background_effects'.tr()),
             _ColorRow(
               label: 'Color',
               value: preset.uiColor,
               palette: _presetUiColors,
               allowNull: true,
               showPreviewOverlay: false,
-              nullLabel: 'Auto',
+              nullLabel: 'theme_auto'.tr(),
               onChanged: (v) => onUpdate((p) => p.copyWith(uiColor: v)),
             ),
             _SliderRow(
-              label: 'Opacity',
+              label: 'theme_opacity'.tr(),
               value: preset.elementOpacity,
               min: 0.1,
               max: 1.0,
@@ -348,7 +349,7 @@ class _GeneralTab extends StatelessWidget {
                   onUpdate((p) => p.copyWith(elementOpacity: v)),
             ),
             _SliderRow(
-              label: 'Blur',
+              label: 'theme_blur'.tr(),
               value: preset.elementBlur,
               min: 0,
               max: 40,
@@ -357,7 +358,7 @@ class _GeneralTab extends StatelessWidget {
               onChanged: (v) => onUpdate((p) => p.copyWith(elementBlur: v)),
             ),
             _SliderRow(
-              label: 'Noise Opacity',
+              label: 'theme_noise_opacity'.tr(),
               value: preset.noiseOpacity,
               min: 0,
               max: 0.15,
@@ -368,7 +369,7 @@ class _GeneralTab extends StatelessWidget {
                   onUpdate((p) => p.copyWith(noiseOpacity: v)),
             ),
             _SliderRow(
-              label: 'Noise Intensity',
+              label: 'theme_noise_intensity'.tr(),
               value: preset.noiseIntensity,
               min: 0.1,
               max: 2,
@@ -377,18 +378,18 @@ class _GeneralTab extends StatelessWidget {
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(noiseIntensity: v)),
             ),
-            const MenuSubHeader('Border'),
+            MenuSubHeader('theme_border'.tr()),
             _ColorRow(
-              label: 'Color',
+              label: 'theme_border_color'.tr(),
               value: preset.borderColor,
               palette: _presetUiColors,
               allowNull: true,
               showPreviewOverlay: false,
-              nullLabel: 'Auto',
+              nullLabel: 'theme_auto'.tr(),
               onChanged: (v) => onUpdate((p) => p.copyWith(borderColor: v)),
             ),
             _SliderRow(
-              label: 'Width',
+              label: 'theme_border_width'.tr(),
               value: preset.borderWidth,
               min: 0,
               max: 5,
@@ -397,7 +398,7 @@ class _GeneralTab extends StatelessWidget {
               onChanged: (v) => onUpdate((p) => p.copyWith(borderWidth: v)),
             ),
             _SliderRow(
-              label: 'Opacity',
+              label: 'theme_border_opacity'.tr(),
               value: preset.borderOpacity,
               min: 0,
               max: 1,
@@ -410,22 +411,22 @@ class _GeneralTab extends StatelessWidget {
           ],
         ),
         MenuGroup(
-          header: 'Background',
+          header: 'theme_background_effects'.tr(),
           items: [
             if (!preset.hasBgImage)
               _ColorRow(
-                label: 'Color',
+                label: 'theme_ui_color'.tr(),
                 value: preset.bgColor,
                 palette: _presetUiColors,
                 allowNull: true,
                 showPreviewOverlay: false,
-                nullLabel: 'Auto',
+                nullLabel: 'theme_auto'.tr(),
                 onChanged: (v) => onUpdate((p) => p.copyWith(bgColor: v)),
               ),
             _BgImageRow(preset: preset, onUpdate: onUpdate),
             if (preset.hasBgImage) ...[
               _SliderRow(
-                label: 'Background Dimming',
+                label: 'theme_dimming'.tr(),
                 // Slider reads as dimming amount (0 = no dim, 1 = full dim)
                 // but `bgOpacity` stores image visibility (1 - dimming).
                 value: 1.0 - preset.bgOpacity,
@@ -438,7 +439,7 @@ class _GeneralTab extends StatelessWidget {
                     onUpdate((p) => p.copyWith(bgOpacity: 1.0 - v)),
               ),
               _SliderRow(
-                label: 'Background Blur',
+                label: 'theme_bg_blur'.tr(),
                 value: preset.bgBlur,
                 min: 0,
                 max: 20,
@@ -446,19 +447,9 @@ class _GeneralTab extends StatelessWidget {
                 unit: 'px',
                 onChanged: (v) => onUpdate((p) => p.copyWith(bgBlur: v)),
               ),
-              _SliderRow(
-                label: 'Dark Overlay',
-                value: preset.bgDim,
-                min: 0,
-                max: 1,
-                divisions: 20,
-                unit: '%',
-                displayMultiplier: 100,
-                onChanged: (v) => onUpdate((p) => p.copyWith(bgDim: v)),
-              ),
             ],
             _SliderRow(
-              label: 'BG Noise Opacity',
+              label: 'theme_bg_noise_opacity'.tr(),
               value: preset.bgNoiseOpacity,
               min: 0,
               max: 0.2,
@@ -469,7 +460,7 @@ class _GeneralTab extends StatelessWidget {
                   onUpdate((p) => p.copyWith(bgNoiseOpacity: v)),
             ),
             _SliderRow(
-              label: 'BG Noise Intensity',
+              label: 'theme_bg_noise_intensity'.tr(),
               value: preset.bgNoiseIntensity,
               min: 0.1,
               max: 2,
@@ -562,9 +553,9 @@ class _ChatTabState extends State<_ChatTab> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                   child: GlazeTabBar(
-                    tabs: const [
-                      GlazeTabItem(label: 'Font', icon: Icons.text_fields),
-                      GlazeTabItem(label: 'Colors', icon: Icons.palette_outlined),
+                    tabs: [
+                      GlazeTabItem(label: 'tab_font'.tr(), icon: Icons.text_fields),
+                      GlazeTabItem(label: 'tab_colors'.tr(), icon: Icons.palette_outlined),
                     ],
                     activeIndex: _activeSubTab,
                     onChanged: (i) => setState(() => _activeSubTab = i),
@@ -611,13 +602,13 @@ class _ChatFontTab extends StatelessWidget {
     return Column(
       children: [
         MenuGroup(
-          header: 'Chat Messages Font',
+          header: 'theme_chat_font'.tr(),
           items: [
             _FontModeRow(
-              label: 'Font',
+              label: 'tab_font'.tr(),
               mode: preset.chatFontMode,
               modes: const ['ui', 'glaze', 'system', 'custom', 'google'],
-              modeLabels: const ['Same as UI', 'Glaze (Inter)', 'System', 'Custom File', 'Google Fonts'],
+              modeLabels: ['theme_font_same_as_ui'.tr(), 'theme_font_glaze'.tr(), 'theme_font_system'.tr(), 'theme_font_custom'.tr(), 'theme_font_google'.tr()],
               onChanged: (v) async {
                 if (v == 'custom') {
                   await _pickCustomFont(context, onUpdate, isUi: false, preset: preset);
@@ -635,14 +626,14 @@ class _ChatFontTab extends StatelessWidget {
                 onClear: () => onUpdate((p) => p.copyWith(chatFontMode: 'ui', chatGoogleFontName: null)),
               ),
             _FontSizeRow(
-              label: 'Font Size',
+              label: 'theme_chat_font_size'.tr(),
               value: preset.chatFontSize,
               min: 12,
               max: 24,
               onChanged: (v) => onUpdate((p) => p.copyWith(chatFontSize: v)),
             ),
             _SliderRow(
-              label: 'Letter Spacing',
+              label: 'theme_chat_letter_spacing'.tr(),
               value: preset.chatLetterSpacing,
               min: -1,
               max: 3,
@@ -652,7 +643,7 @@ class _ChatFontTab extends StatelessWidget {
                   onUpdate((p) => p.copyWith(chatLetterSpacing: v)),
             ),
             _SliderRow(
-              label: 'User Weight',
+              label: 'theme_user_font_weight'.tr(),
               value: preset.userMessageFontWeight.toDouble(),
               min: 100,
               max: 900,
@@ -663,7 +654,7 @@ class _ChatFontTab extends StatelessWidget {
               ),
             ),
             _SliderRow(
-              label: 'Char Weight',
+              label: 'theme_char_font_weight'.tr(),
               value: preset.charMessageFontWeight.toDouble(),
               min: 100,
               max: 900,
@@ -701,39 +692,39 @@ class _ChatColorsTab extends ConsumerWidget {
     return Column(
       children: [
         MenuGroup(
-          header: 'Bubble Colors',
+          header: 'theme_bubble_colors'.tr(),
           items: [
             if (!isBubble)
               Padding(
                 padding:
                     const EdgeInsets.fromLTRB(16, 4, 16, 10),
                 child: Text(
-                  'Switch to Bubble layout to configure bubble colors.',
+                  'theme_switch_to_bubble'.tr(),
                   style: TextStyle(
                       fontSize: 12, color: context.cs.onSurfaceVariant),
                 ),
               )
             else ...[
               _ColorRow(
-                label: 'User Bubble',
+                label: 'theme_user_bubble'.tr(),
                 value: preset.userBubbleColor,
                 palette: _presetColors,
                 allowNull: true,
-                nullLabel: 'Auto',
+                nullLabel: 'theme_auto'.tr(),
                 onChanged: (v) =>
                     onUpdate((p) => p.copyWith(userBubbleColor: v)),
               ),
               _ColorRow(
-                label: 'Char Bubble',
+                label: 'theme_char_bubble'.tr(),
                 value: preset.charBubbleColor,
                 palette: _presetColors,
                 allowNull: true,
-                nullLabel: 'Auto',
+                nullLabel: 'theme_auto'.tr(),
                 onChanged: (v) =>
                     onUpdate((p) => p.copyWith(charBubbleColor: v)),
               ),
               _SliderRow(
-                label: 'User Radius',
+                label: 'theme_user_bubble_radius'.tr(),
                 value: preset.userBubbleRadius,
                 min: 0,
                 max: 36,
@@ -743,7 +734,7 @@ class _ChatColorsTab extends ConsumerWidget {
                     onUpdate((p) => p.copyWith(userBubbleRadius: v)),
               ),
               _SliderRow(
-                label: 'Char Radius',
+                label: 'theme_char_bubble_radius'.tr(),
                 value: preset.charBubbleRadius,
                 min: 0,
                 max: 36,
@@ -756,28 +747,28 @@ class _ChatColorsTab extends ConsumerWidget {
           ],
         ),
         MenuGroup(
-          header: 'Identity',
+          header: 'theme_identity'.tr(),
           items: [
             _SwitchRow(
-              label: 'User Avatar',
+              label: 'theme_user_avatar'.tr(),
               value: preset.showUserAvatar,
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(showUserAvatar: v)),
             ),
             _SwitchRow(
-              label: 'Char Avatar',
+              label: 'theme_char_avatar'.tr(),
               value: preset.showCharAvatar,
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(showCharAvatar: v)),
             ),
             _SwitchRow(
-              label: 'User Name',
+              label: 'theme_user_name'.tr(),
               value: preset.showUserName,
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(showUserName: v)),
             ),
             _SwitchRow(
-              label: 'Char Name',
+              label: 'theme_char_name'.tr(),
               value: preset.showCharName,
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(showCharName: v)),
@@ -785,90 +776,90 @@ class _ChatColorsTab extends ConsumerWidget {
           ],
         ),
         MenuGroup(
-          header: 'Message Meta',
+          header: 'theme_message_meta'.tr(),
           items: [
             _SwitchRow(
-              label: 'Hide Message ID',
+              label: 'menu_hide_msg_id'.tr(),
               value: hideMessageId,
               onChanged: (v) => onUpdate((p) => p.copyWith(hideMessageId: v)),
             ),
             _SwitchRow(
-              label: 'Hide Generation Time',
+              label: 'menu_hide_gen_time'.tr(),
               value: hideGenerationTime,
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(hideGenerationTime: v)),
             ),
             _SwitchRow(
-              label: 'Hide Token Count',
+              label: 'menu_hide_token_count'.tr(),
               value: hideTokenCount,
               onChanged: (v) => onUpdate((p) => p.copyWith(hideTokenCount: v)),
             ),
           ],
         ),
         MenuGroup(
-          header: 'Reply Colors',
+          header: 'theme_reply_colors'.tr(),
           items: [
             _ColorRow(
-              label: 'User Quote',
+              label: 'theme_user_reply'.tr(),
               value: preset.userQuoteColor,
               palette: _presetColors,
               allowNull: true,
-              nullLabel: 'Auto',
+              nullLabel: 'theme_auto'.tr(),
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(userQuoteColor: v)),
             ),
             _ColorRow(
-              label: 'Char Quote',
+              label: 'theme_char_reply'.tr(),
               value: preset.charQuoteColor,
               palette: _presetColors,
               allowNull: true,
-              nullLabel: 'Auto',
+              nullLabel: 'theme_auto'.tr(),
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(charQuoteColor: v)),
             ),
           ],
         ),
         MenuGroup(
-          header: 'Text Colors',
+          header: 'theme_text_colors'.tr(),
           items: [
             _ColorRow(
-              label: 'User Text',
+              label: 'theme_user_text'.tr(),
               value: preset.userTextColor,
               palette: _presetColors,
               allowNull: true,
-              nullLabel: 'Auto',
+              nullLabel: 'theme_auto'.tr(),
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(userTextColor: v)),
             ),
             _ColorRow(
-              label: 'Char Text',
+              label: 'theme_char_text'.tr(),
               value: preset.charTextColor,
               palette: _presetColors,
               allowNull: true,
-              nullLabel: 'Auto',
+              nullLabel: 'theme_auto'.tr(),
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(charTextColor: v)),
             ),
           ],
         ),
         MenuGroup(
-          header: 'Italic (Action) Colors',
+          header: 'theme_italic_colors'.tr(),
           items: [
             _ColorRow(
-              label: 'User Italic',
+              label: 'theme_user_italic'.tr(),
               value: preset.userItalicColor,
               palette: _presetColors,
               allowNull: true,
-              nullLabel: 'Auto',
+              nullLabel: 'theme_auto'.tr(),
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(userItalicColor: v)),
             ),
             _ColorRow(
-              label: 'Char Italic',
+              label: 'theme_char_italic'.tr(),
               value: preset.charItalicColor,
               palette: _presetColors,
               allowNull: true,
-              nullLabel: 'Auto',
+              nullLabel: 'theme_auto'.tr(),
               onChanged: (v) =>
                   onUpdate((p) => p.copyWith(charItalicColor: v)),
             ),
@@ -1015,8 +1006,8 @@ class _LayoutPickerRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Chat Layout',
+                  Text(
+                    'menu_chat_layout'.tr(),
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
@@ -1025,7 +1016,7 @@ class _LayoutPickerRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      isBubble ? 'Bubble' : 'Default',
+                      isBubble ? 'layout_bubble'.tr() : 'layout_default'.tr(),
                       style: TextStyle(
                         fontSize: 12,
                         color: context.cs.onSurfaceVariant,
@@ -1079,7 +1070,7 @@ class _FontSizeRow extends StatelessWidget {
               TextButton(
                 onPressed: () => onChanged(_isSystem ? 14.0 : 'system'),
                 child: Text(
-                  _isSystem ? 'System' : '${_numVal.toInt()}px',
+                  _isSystem ? 'theme_system_font_size'.tr() : '${_numVal.toInt()}px',
                   style: TextStyle(color: context.cs.primary),
                 ),
               ),
@@ -1432,7 +1423,7 @@ class _BgImageRow extends StatelessWidget {
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.image,
-      dialogTitle: 'Select Background Image',
+      dialogTitle: 'theme_select_image'.tr(),
       withData: true,
     );
       if (result == null || result.files.isEmpty) return;
@@ -1451,7 +1442,7 @@ class _BgImageRow extends StatelessWidget {
       onUpdate((p) => p.copyWith(bgImage: dataUri));
     } catch (e) {
       if (context.mounted) {
-        GlazeErrorDialog.show(context, e, prefix: 'Failed to load image: ');
+        GlazeErrorDialog.show(context, e, prefix: 'theme_failed_load_image'.tr());
       }
     }
   }
@@ -1476,8 +1467,8 @@ class _BgImageRow extends StatelessWidget {
                 Expanded(
                   child: Text(
                     preset.hasBgImage
-                        ? 'Replace Background Image'
-                        : 'Select Background Image',
+                    ? 'theme_replace_background_image'.tr()
+                    : 'theme_select_image'.tr(),
                     style: TextStyle(
                       color: context.cs.onSurfaceVariant,
                       fontSize: 15,
@@ -1492,8 +1483,8 @@ class _BgImageRow extends StatelessWidget {
         if (preset.hasBgImage)
           InkWell(
             onTap: _reset,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Row(
                 children: [
                   Icon(Icons.delete_outline,
@@ -1501,7 +1492,7 @@ class _BgImageRow extends StatelessWidget {
                   SizedBox(width: 16),
                   Expanded(
                     child: Text(
-                      'Reset Background',
+                      'theme_reset_background'.tr(),
                       style: TextStyle(
                         color: Color(0xFFFF4444),
                         fontSize: 15,
@@ -1624,7 +1615,7 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
     final h = clean.startsWith('#') ? clean : '#$clean';
     final parsed = _parseHexSafe(h);
     if (parsed == null) {
-      setState(() => _error = clean.length >= 6 ? 'Invalid hex color' : null);
+      setState(() => _error = clean.length >= 6 ? 'theme_invalid_hex_label'.tr() : null);
       return;
     }
     setState(() => _error = null);
@@ -2020,7 +2011,7 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
                                     controller: _hexCtrl,
                                     decoration: InputDecoration(
                                       hintText: '#7996CE',
-                                      labelText: 'Hex Color',
+                                      labelText: 'theme_hex_color'.tr(),
                                       errorText: _error,
                                       prefixText:
                                           _hexCtrl.text.startsWith('#') ? null : '#',
@@ -2245,7 +2236,7 @@ class _GoogleFontPickerSheetState extends State<_GoogleFontPickerSheet> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    'Google Fonts',
+                    'theme_font_google'.tr(),
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: cs.onSurface),
                   ),
                 ),
@@ -2254,7 +2245,7 @@ class _GoogleFontPickerSheetState extends State<_GoogleFontPickerSheet> {
                   child: TextField(
                     controller: _controller,
                     decoration: InputDecoration(
-                      hintText: 'Search fonts...',
+                      hintText: 'theme_search_fonts'.tr(),
                       prefixIcon: Icon(Icons.search, color: cs.onSurfaceVariant),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                       isDense: true,

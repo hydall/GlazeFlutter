@@ -44,7 +44,7 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
       showBackground: false,
       body: settingsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text('${'title_error'.tr()}: $e')),
         data: (s) => AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
           child: _currentScreen == 'main'

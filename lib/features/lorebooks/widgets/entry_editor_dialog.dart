@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -107,7 +108,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
     if (config.endpoint.isEmpty) {
       GlazeToast.show(
         context,
-        'Set up embedding API in Embedding Settings first',
+        'vector_error_config_endpoint'.tr(),
       );
       return;
     }
@@ -125,7 +126,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
         });
         GlazeToast.show(
           context,
-          result.indexed > 0 ? 'Entry indexed' : 'Indexing failed',
+          result.indexed > 0 ? 'entry_indexed'.tr() : 'entry_index_error'.tr(),
         );
       }
     } catch (e) {
@@ -203,8 +204,8 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    widget.entry == null ? 'New Entry' : 'Edit Entry',
-                    style: const TextStyle(
+                    widget.entry == null ? 'lorebook_new_entry'.tr() : 'lorebook_edit_entry'.tr(),
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                     ),
@@ -220,57 +221,57 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  _field('Comment', _commentController),
+                  _field('label_comment'.tr(), _commentController),
                   const SizedBox(height: 12),
                   _field(
-                    'Keys (comma separated)',
+                    'label_primary_keys'.tr(),
                     _keysController,
-                    hint: 'dragon, castle',
+                    hint: 'placeholder_keys'.tr(),
                   ),
                   const SizedBox(height: 12),
                   _field(
-                    'Secondary Keys',
+                    'label_secondary_keys'.tr(),
                     _secondaryKeysController,
-                    hint: 'fire, knight',
+                    hint: 'placeholder_filters'.tr(),
                   ),
                   const SizedBox(height: 8),
                   _dropdown(
-                    'Secondary Logic',
+                    'label_logic_mode'.tr(),
                     _selectiveLogic,
                     {
-                      0: 'ANY secondary',
-                      1: 'ALL secondary',
-                      2: 'NOT ANY secondary',
-                      3: 'NOT ALL secondary',
-                      4: 'No secondary needed',
-                      5: 'Default (no secondary)',
+                      0: 'logic_and_any'.tr(),
+                      1: 'logic_and_all'.tr(),
+                      2: 'logic_not_any'.tr(),
+                      3: 'logic_not_all'.tr(),
+                      4: 'logic_no_secondary'.tr(),
+                      5: 'logic_primary_only'.tr(),
                     },
                     (v) => setState(() => _selectiveLogic = v),
                   ),
                   const SizedBox(height: 12),
-                  _field('Content', _contentController, maxLines: 5),
+                  _field('label_content'.tr(), _contentController, maxLines: 5),
                   const SizedBox(height: 8),
-                  _dropdown('Position', _position, {
-                    'matchGlobal': 'Match global setting',
-                    'worldInfoBefore': 'Before char card',
-                    'worldInfoAfter': 'After chat history',
-                    'lorebooksMacro': '{{lorebooks}} macro',
+                  _dropdown('label_injection_position'.tr(), _position, {
+                    'matchGlobal': 'match_global'.tr(),
+                    'worldInfoBefore': 'pos_before_char'.tr(),
+                    'worldInfoAfter': 'pos_after_char'.tr(),
+                    'lorebooksMacro': 'pos_lorebooks_macro'.tr(),
                     if (_constant) ...{
-                      'charScenario': '{{scenario}} field (prepend)',
-                      'charPersonality': '{{personality}} field (prepend)',
-                      'charDescription': '{{description}} field (prepend)',
+                      'charScenario': 'pos_char_scenario'.tr(),
+                      'charPersonality': 'pos_char_personality'.tr(),
+                      'charDescription': 'pos_char_description'.tr(),
                     },
                   }, (v) => setState(() => _position = v)),
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Expanded(child: _field('Order', _orderController)),
+                      Expanded(child: _field('label_order_priority'.tr(), _orderController)),
                       const SizedBox(width: 8),
                       Expanded(
                         child: _field(
-                          'Scan Depth',
+                          'label_scan_depth_lore'.tr(),
                           _scanDepthController,
-                          hint: 'global',
+                          hint: 'match_global'.tr(),
                         ),
                       ),
                     ],
@@ -279,28 +280,28 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                   Row(
                     children: [
                       Expanded(
-                        child: _field('Probability %', _probabilityController),
+                        child: _field('label_probability'.tr(), _probabilityController),
                       ),
                       const SizedBox(width: 8),
-                      Expanded(child: _field('Sticky', _stickyController)),
+                      Expanded(child: _field('label_sticky'.tr(), _stickyController)),
                       const SizedBox(width: 8),
-                      Expanded(child: _field('Cooldown', _cooldownController)),
+                      Expanded(child: _field('label_cooldown'.tr(), _cooldownController)),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  _field('Group', _groupController),
+                  _field('label_group_name'.tr(), _groupController),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
                     runSpacing: 4,
                     children: [
                       _chip(
-                        'Enabled',
+                        'label_enabled'.tr(),
                         _enabled,
                         (v) => setState(() => _enabled = v),
                       ),
                       _chip(
-                        'Constant',
+                        'label_constant'.tr(),
                         _constant,
                         (v) => setState(() {
                           _constant = v;
@@ -311,27 +312,27 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                         }),
                       ),
                       _chip(
-                        'Case Sensitive',
+                        'label_case_sensitive'.tr(),
                         _caseSensitive,
                         (v) => setState(() => _caseSensitive = v),
                       ),
                       _chip(
-                        'Prevent Recursion',
+                        'label_prevent_recursion'.tr(),
                         _preventRecursion,
                         (v) => setState(() => _preventRecursion = v),
                       ),
                       _chip(
-                        'Ignore Budget',
+                        'label_ignore_budget'.tr(),
                         _ignoreBudget,
                         (v) => setState(() => _ignoreBudget = v),
                       ),
-                      _chip('Vector Search', _vectorSearch, (v) {
+                      _chip('label_vector_search'.tr(), _vectorSearch, (v) {
                         setState(() => _vectorSearch = v);
                         if (v) _loadEmbeddingStatus();
                       }),
                       if (_vectorSearch)
                         _chip(
-                          'Keyword Search',
+                          'label_use_keyword_search'.tr(),
                           _useKeywordSearch,
                           (v) => setState(() => _useKeywordSearch = v),
                         ),
@@ -358,7 +359,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                               )
                             : const Icon(Icons.cloud_upload, size: 18),
                         label: Text(
-                          _isIndexing ? 'Indexing...' : 'Index Entry',
+                          _isIndexing ? 'btn_indexing'.tr() : 'btn_index_entry'.tr(),
                         ),
                       ),
                     ),
@@ -366,7 +367,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
-                          'Entry indexed',
+                          'entry_indexed'.tr(),
                           style: TextStyle(fontSize: 12, color: Colors.green),
                         ),
                       ),
@@ -374,7 +375,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
-                          'Not indexed yet',
+                          'entry_not_indexed'.tr(),
                           style: TextStyle(
                             fontSize: 12,
                             color: context.cs.onSurfaceVariant,
@@ -385,7 +386,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                       Padding(
                         padding: const EdgeInsets.only(top: 6),
                         child: Text(
-                          'Indexing error — retry?',
+                          'entry_index_error'.tr(),
                           style: TextStyle(fontSize: 12, color: Colors.orange),
                         ),
                       ),
@@ -400,7 +401,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel'),
+                    child: Text('btn_cancel'.tr()),
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
@@ -409,7 +410,7 @@ class _EntryEditorDialogState extends ConsumerState<EntryEditorDialog> {
                       foregroundColor: Colors.black,
                     ),
                     onPressed: () => Navigator.pop(context, _buildEntry()),
-                    child: const Text('Save'),
+                    child: Text('btn_save'.tr()),
                   ),
                 ],
               ),

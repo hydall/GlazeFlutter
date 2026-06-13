@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/models/chat_message.dart';
 import '../../core/services/onboarding_service.dart';
+import '../chat/widgets/triggered_items_sheet.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
 import '../../core/state/dev_mode_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
@@ -28,7 +30,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
 
   @override
   ShellHeaderConfig buildShellHeader() =>
-      const ShellHeaderConfig(title: 'Menu');
+      ShellHeaderConfig(title: 'menu_menu_title'.tr());
 
   @override
   Widget build(BuildContext context) {
@@ -45,7 +47,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
             ),
             children: [
                 MenuGroup(
-                  header: 'Settings',
+                  header: 'section_settings'.tr(),
                   items: [
                     MenuItem(
                       icon: Icons.settings_outlined,
@@ -105,10 +107,10 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                 ),
                 if (ref.watch(devModeProvider))
                   MenuGroup(
-                    header: 'Dev',
+                    header: 'menu_dev_header'.tr(),
                     items: [
                       MenuSwitchItem(
-                        label: 'Hide build date watermark',
+                        label: 'menu_hide_build_date_watermark'.tr(),
                         value: ref.watch(hideBuildWatermarkProvider),
                         onChanged: (v) => ref
                             .read(hideBuildWatermarkProvider.notifier)
@@ -116,14 +118,55 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                       ),
                       MenuItem(
                         icon: Icons.widgets_outlined,
-                        label: 'MenuGroup Demo',
+                        label: 'menu_menu_group_demo'.tr(),
                         onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
                           builder: (_) => const MenuGroupDemoScreen(),
                         )),
                       ),
                       MenuItem(
+                        icon: Icons.bookmarks_outlined,
+                        label: 'Triggered Items Sheet',
+                        onTap: () => showTriggeredItemsSheet(
+                          context,
+                          lorebooks: const [
+                            TriggeredEntry(
+                              id: 'lb1',
+                              name: 'Kingdom of Eldoria',
+                              lorebookName: 'World Lore',
+                              source: 'keyword',
+                            ),
+                            TriggeredEntry(
+                              id: 'lb2',
+                              name: 'Ancient Prophecy',
+                              lorebookName: 'World Lore',
+                              source: 'vector',
+                            ),
+                          ],
+                          memories: const [
+                            TriggeredEntry(
+                              id: 'mem1',
+                              name: 'First meeting at the tavern',
+                              source: 'memory',
+                            ),
+                          ],
+                          regexes: const [
+                            TriggeredEntry(
+                              id: 'rx1',
+                              name: 'Strip OOC blocks',
+                              source: 'regex',
+                              pattern: r'\(\(.*?\)\)',
+                            ),
+                            TriggeredEntry(
+                              id: 'rx2',
+                              name: 'Trim trailing whitespace',
+                              source: 'regex',
+                            ),
+                          ],
+                        ),
+                      ),
+                      MenuItem(
                         icon: Icons.warning_amber_rounded,
-                        label: 'Test Error Dialog',
+                        label: 'menu_test_error_dialog'.tr(),
                         onTap: () => GlazeErrorDialog.show(
                           context,
                           Exception(
@@ -148,7 +191,7 @@ class _MenuScreenState extends ConsumerState<MenuScreen> with ShellHeaderMixin {
                     ],
                   ),
                 MenuGroup(
-                  header: 'Info',
+                  header: 'section_info'.tr(),
                   items: [
                     MenuItem(
                       icon: Icons.menu_book_rounded,

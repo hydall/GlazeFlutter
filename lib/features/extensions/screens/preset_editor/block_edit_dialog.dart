@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -138,7 +139,7 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Настройки блока'),
+      title: Text('block_edit_title'.tr()),
       content: SizedBox(
         width: 500,
         child: SingleChildScrollView(
@@ -147,7 +148,7 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
             children: [
               TextField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: 'Название'),
+                decoration: InputDecoration(labelText: 'block_edit_name_label'.tr()),
               ),
               const SizedBox(height: 16),
               BlockTypePicker(selected: _type, onChanged: _onTypeChanged),
@@ -250,9 +251,9 @@ class _BlockEditDialogState extends ConsumerState<BlockEditDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Отмена'),
+          child: Text('btn_cancel'.tr()),
         ),
-        FilledButton(onPressed: _save, child: const Text('Сохранить')),
+        FilledButton(onPressed: _save, child: Text('btn_save'.tr())),
       ],
     );
   }
@@ -277,13 +278,13 @@ class _DependsOnPreviousSwitch extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SwitchListTile(
-      title: const Text('Ждать завершения предыдущего блока'),
+      title: Text('block_depends_on_prev'.tr()),
       subtitle: Text(
         type == BlockType.imageGen
-            ? 'Ledger/infoblock передаётся agent\'у как previousOutput'
+            ? 'block_depends_sub_image'.tr()
             : type == BlockType.jsRunner
-            ? 'Вывод предыдущего блока доступен в context.previousOutput'
-            : 'Получает вывод предыдущего блока как контекст',
+            ? 'block_depends_sub_js'.tr()
+            : 'block_depends_sub_default'.tr(),
       ),
       value: value,
       onChanged: onChanged,
@@ -312,10 +313,8 @@ class _InfoblockInjectFields extends StatelessWidget {
     return Column(
       children: [
         SwitchListTile(
-          title: const Text('Инжектировать в промпт'),
-          subtitle: const Text(
-            'Дописывать вывод блока к последним N assistant-сообщениям в истории чата',
-          ),
+          title: Text('block_inject_title'.tr()),
+          subtitle: Text('block_inject_desc'.tr()),
           value: inject,
           onChanged: onInjectChanged,
           contentPadding: EdgeInsets.zero,
@@ -324,10 +323,9 @@ class _InfoblockInjectFields extends StatelessWidget {
           const SizedBox(height: 8),
           TextField(
             controller: TextEditingController(text: initialLastN.toString()),
-            decoration: const InputDecoration(
-              labelText: 'Сколько последних assistant-сообщений',
-              helperText:
-                  '0 = не инжектировать. К каждому из N сообщений дописывается только его блок.',
+            decoration: InputDecoration(
+              labelText: 'block_inject_last_n_label'.tr(),
+              helperText: 'block_inject_last_n_helper'.tr(),
             ),
             keyboardType: TextInputType.number,
             onChanged: (v) => onLastNChanged(int.tryParse(v) ?? initialLastN),
@@ -335,10 +333,9 @@ class _InfoblockInjectFields extends StatelessWidget {
           const SizedBox(height: 8),
           TextField(
             controller: injectPrefixController,
-            decoration: const InputDecoration(
-              labelText: 'Текст перед блоком',
-              helperText:
-                  'Между ответом и блоком (после пустой строки). Пусто = сразу блок.',
+            decoration: InputDecoration(
+              labelText: 'block_inject_prefix_label'.tr(),
+              helperText: 'block_inject_prefix_helper'.tr(),
               alignLabelWithHint: true,
             ),
             minLines: 1,
@@ -361,30 +358,27 @@ class _PromptFields extends StatelessWidget {
     return Column(
       children: [
         SectionLabel(switch (type) {
-          BlockType.imageGen => 'Image agent (LLM)',
-          BlockType.jsRunner => 'JS agent (LLM)',
-          _ => 'Промпт и формат',
+          BlockType.imageGen => 'block_prompt_image_agent'.tr(),
+          BlockType.jsRunner => 'block_prompt_js_agent'.tr(),
+          _ => 'block_prompt_and_format'.tr(),
         }),
         TextField(
           controller: controller,
           decoration: InputDecoration(
             labelText: switch (type) {
-              BlockType.imageGen => 'Инструкции agent\'а (<image_prompt>…)',
-              BlockType.jsRunner => 'Инструкции: что должен сделать JS-скрипт',
-              _ => 'Инструкции для модели',
+              BlockType.imageGen => 'block_prompt_label_image'.tr(),
+              BlockType.jsRunner => 'block_prompt_label_js'.tr(),
+              _ => 'block_prompt_label_default'.tr(),
             },
             hintText: switch (type) {
-              BlockType.imageGen => 'Правила HTML-карточки, [IMG:GEN], JSON…',
-              BlockType.jsRunner =>
-                'Модель пишет ```js … ``` с return "…". context: messages, character, previousOutput',
-              _ => 'Что именно сгенерировать в этом блоке…',
+              BlockType.imageGen => 'block_prompt_hint_image'.tr(),
+              BlockType.jsRunner => 'block_prompt_hint_js'.tr(),
+              _ => 'block_prompt_hint_default'.tr(),
             },
             helperText: switch (type) {
-              BlockType.imageGen =>
-                'System prompt для LLM: HTML с data-iig-instruction',
-              BlockType.jsRunner =>
-                'Модель генерирует код; sandbox выполняет return строки/HTML',
-              _ => 'Уходит в system-сообщение к LLM (главные правила блока)',
+              BlockType.imageGen => 'block_prompt_helper_image'.tr(),
+              BlockType.jsRunner => 'block_prompt_helper_js'.tr(),
+              _ => 'block_prompt_helper_default'.tr(),
             },
             alignLabelWithHint: true,
           ),
@@ -405,12 +399,10 @@ class _TemplateField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      decoration: const InputDecoration(
-        labelText: 'Шаблон XML (необязательно)',
-        hintText: '<{{name}}>\n<details>…</details>\n</{{name}}>',
-        helperText:
-            'Если задан — модель должна заполнить содержимое между тегами. '
-            'Пустое поле = сохраняем весь ответ модели без парсинга XML.',
+      decoration: InputDecoration(
+        labelText: 'block_template_label'.tr(),
+        hintText: 'block_template_hint'.tr(),
+        helperText: 'block_template_helper'.tr(),
         alignLabelWithHint: true,
       ),
       maxLines: 5,
@@ -457,7 +449,7 @@ class _LlmOptionsFields extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const SectionLabel('История чата для блока'),
+        SectionLabel('block_chat_context_section'.tr()),
         _ContextMessageCountField(
           value: contextMessageCount,
           onChanged: onContextMessageCountChanged,
@@ -472,9 +464,9 @@ class _LlmOptionsFields extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         SectionLabel(switch (type) {
-          BlockType.imageGen => 'API agent\'а',
-          BlockType.jsRunner => 'API agent\'а',
-          _ => 'API',
+          BlockType.imageGen => 'block_api_agent_label'.tr(),
+          BlockType.jsRunner => 'block_api_agent_label'.tr(),
+          _ => 'block_api_section_label'.tr(),
         }),
         ApiConfigSelector(
           selectedId: apiConfigController.text,
@@ -490,13 +482,11 @@ class _LlmOptionsFields extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         SwitchListTile(
-          title: const Text('Стриминг в панель'),
+          title: Text('block_stream_title'.tr()),
           subtitle: Text(switch (type) {
-            BlockType.imageGen =>
-              'HTML agent\'а по мере генерации LLM (до Image Gen)',
-            BlockType.jsRunner =>
-              'Код от модели по мере генерации LLM (до sandbox)',
-            _ => 'Текст блока появляется по мере генерации LLM',
+            BlockType.imageGen => 'block_stream_sub_image'.tr(),
+            BlockType.jsRunner => 'block_stream_sub_js'.tr(),
+            _ => 'block_stream_sub_default'.tr(),
           }),
           value: streamToPanel,
           onChanged: onStreamToPanelChanged,
@@ -554,18 +544,18 @@ class _InteractiveFields extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const SectionLabel('Источник HTML'),
+        SectionLabel('block_html_source_label'.tr()),
         SegmentedButton<bool>(
-          segments: const [
+          segments: [
             ButtonSegment(
               value: false,
-              label: Text('LLM'),
-              icon: Icon(Icons.auto_awesome),
+              label: Text('block_html_llm'.tr()),
+              icon: const Icon(Icons.auto_awesome),
             ),
             ButtonSegment(
               value: true,
-              label: Text('Статический HTML'),
-              icon: Icon(Icons.code),
+              label: Text('block_html_static'.tr()),
+              icon: const Icon(Icons.code),
             ),
           ],
           selected: {useStaticHtml},
@@ -576,11 +566,9 @@ class _InteractiveFields extends StatelessWidget {
         if (useStaticHtml)
           TextField(
             controller: staticHtmlController,
-            decoration: const InputDecoration(
-              labelText: 'HTML-разметка панели',
-              helperText:
-                  'Голый HTML без <html>/<body>: рендерится в sandboxed iframe. '
-                  'JS внутри имеет доступ к window.glaze.* (setVariables, generateText, triggerGeneration и т.д.).',
+            decoration: InputDecoration(
+              labelText: 'block_static_html_label'.tr(),
+              helperText: 'block_static_html_helper'.tr(),
               alignLabelWithHint: true,
             ),
             style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
@@ -590,11 +578,9 @@ class _InteractiveFields extends StatelessWidget {
         else
           TextField(
             controller: promptController,
-            decoration: const InputDecoration(
-              labelText: 'Промпт для LLM (HTML для панели)',
-              helperText:
-                  'Модель должна вернуть HTML-разметку (можно в ```html```). '
-                  'Если обрамлять ```html``` — fence будет снят автоматически.',
+            decoration: InputDecoration(
+              labelText: 'block_llm_html_label'.tr(),
+              helperText: 'block_llm_html_helper'.tr(),
               alignLabelWithHint: true,
             ),
             minLines: 4,
@@ -603,9 +589,9 @@ class _InteractiveFields extends StatelessWidget {
         const SizedBox(height: 8),
         TextField(
           controller: minHeightController,
-          decoration: const InputDecoration(
-            labelText: 'Начальная высота (px)',
-            helperText: '60..2000. Iframe перерастёт iframe при resize.',
+          decoration: InputDecoration(
+            labelText: 'block_min_height_label'.tr(),
+            helperText: 'block_min_height_helper'.tr(),
           ),
           keyboardType: TextInputType.number,
           onChanged: (v) => onMinHeightChanged(int.tryParse(v) ?? 120),
@@ -613,16 +599,14 @@ class _InteractiveFields extends StatelessWidget {
         if (!useStaticHtml) ...[
           const SizedBox(height: 8),
           SwitchListTile(
-            title: const Text('Ждать завершения предыдущего блока'),
-            subtitle: const Text(
-              'Получает вывод предыдущего блока как контекст',
-            ),
+            title: Text('block_interactive_depends'.tr()),
+            subtitle: Text('block_interactive_depends_sub'.tr()),
             value: dependsOnPrevious,
             onChanged: onDependsOnPreviousChanged,
             contentPadding: EdgeInsets.zero,
           ),
           const SizedBox(height: 16),
-          const SectionLabel('История чата для блока'),
+          SectionLabel('block_chat_context_section'.tr()),
           _ContextMessageCountField(
             value: contextMessageCount,
             onChanged: onContextMessageCountChanged,
@@ -631,7 +615,7 @@ class _InteractiveFields extends StatelessWidget {
           const SizedBox(height: 8),
           _ContextSystemPromptField(controller: contextSystemPromptController),
           const SizedBox(height: 16),
-          const SectionLabel('API'),
+          SectionLabel('block_api_section_label'.tr()),
           ApiConfigSelector(
             selectedId: apiConfigController.text,
             onSelected: onApiChanged,
@@ -646,10 +630,8 @@ class _InteractiveFields extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           SwitchListTile(
-            title: const Text('Стриминг в панель'),
-            subtitle: const Text(
-              'HTML от модели появляется в панели по мере генерации',
-            ),
+            title: Text('block_interactive_stream_title'.tr()),
+            subtitle: Text('block_interactive_stream_sub'.tr()),
             value: streamToPanel,
             onChanged: onStreamToPanelChanged,
             contentPadding: EdgeInsets.zero,
@@ -676,14 +658,10 @@ class _ContextMessageCountField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       decoration: InputDecoration(
-        labelText: 'Сколько последних сообщений чата передать',
+        labelText: 'block_context_count_label'.tr(),
         helperText: fullHelper
-            ? 'Считается от сообщения, на котором висит блок (не от конца чата).\n'
-                  '1 — только это сообщение (ответ ассистента на панели).\n'
-                  '2 — user+assistant, заканчивая этим сообщением.\n'
-                  '4 — ~2 хода (2×U+A) перед ним.\n'
-                  '0 — без лога чата. -1 — вся история до этого сообщения.'
-            : 'Считается от сообщения, на котором висит блок (не от конца чата).',
+            ? 'block_context_count_helper_full'.tr()
+            : 'block_context_count_helper'.tr(),
       ),
       keyboardType: const TextInputType.numberWithOptions(signed: true),
       controller: TextEditingController(text: value.toString()),
@@ -704,13 +682,9 @@ class _PreviousBlocksCountField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return TextField(
-      decoration: const InputDecoration(
-        labelText: 'Сколько прошлых выводов этого блока подмешать',
-        helperText:
-            'Берёт последние N сохранённых выводов блока с тем же именем '
-            'из прошлых сообщений и даёт модели как контекст, чтобы продолжить/'
-            'обновить состояние, а не генерировать заново.\n'
-            '0 — выключено (по умолчанию).',
+      decoration: InputDecoration(
+        labelText: 'block_previous_blocks_label'.tr(),
+        helperText: 'block_previous_blocks_helper'.tr(),
       ),
       keyboardType: TextInputType.number,
       controller: TextEditingController(text: value.toString()),
@@ -728,12 +702,10 @@ class _ContextSystemPromptField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextField(
       controller: controller,
-      decoration: const InputDecoration(
-        labelText: 'Текст перед историей чата',
-        hintText: 'Стиль, напоминания, описание сцены…',
-        helperText:
-            'Добавляется в user-сообщение перед логом чата. '
-            'Макросы: {{char}}, {{user}}, {{description}}, {{personality}}',
+      decoration: InputDecoration(
+        labelText: 'block_context_prompt_label'.tr(),
+        hintText: 'block_context_prompt_hint'.tr(),
+        helperText: 'block_context_prompt_helper'.tr(),
         alignLabelWithHint: true,
       ),
       maxLines: 5,
@@ -747,12 +719,11 @@ class _ImageGenHelpText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(top: 12),
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
       child: Text(
-        'Провайдер и ключ Image Gen — в Settings → Image Gen. '
-        'Блок сначала вызывает LLM agent, затем рендерит картинку по [IMG:GEN].',
-        style: TextStyle(fontSize: 12, height: 1.4),
+        'block_image_gen_help'.tr(),
+        style: const TextStyle(fontSize: 12, height: 1.4),
       ),
     );
   }
@@ -763,13 +734,11 @@ class _JsRunnerHelpText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(top: 12),
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
       child: Text(
-        'LLM пишет JavaScript по промпту → код извлекается из ```js``` → '
-        'sandbox выполняет скрипт (context.messages, context.character, context.previousOutput). '
-        'Результат — return строки или HTML.',
-        style: TextStyle(fontSize: 12, height: 1.4),
+        'block_js_runner_help'.tr(),
+        style: const TextStyle(fontSize: 12, height: 1.4),
       ),
     );
   }
@@ -780,13 +749,11 @@ class _InteractiveHelpText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.only(top: 12),
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
       child: Text(
-        'Панель отрисуется под сообщением ассистента как persistent sandboxed iframe island. '
-        'JS-код внутри неё может вызывать glaze.setVariables, glaze.generateText, '
-        'glaze.injectPrompt и т.д. Вызовы идут через тот же bridge, что и в других блоках.',
-        style: TextStyle(fontSize: 12, height: 1.4),
+        'block_interactive_help'.tr(),
+        style: const TextStyle(fontSize: 12, height: 1.4),
       ),
     );
   }

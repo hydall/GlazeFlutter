@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -31,30 +32,30 @@ class _InfoBlock {
 }
 
 const _slides = <_SlideData>[
-  _SlideData(type: OnboardingSlideType.welcome, title: 'Welcome\nto Glaze'),
-  _SlideData(type: OnboardingSlideType.features, title: 'Glaze Features'),
+  _SlideData(type: OnboardingSlideType.welcome, title: 'onboarding_welcome_title'),
+  _SlideData(type: OnboardingSlideType.features, title: 'onboarding_features_title'),
   _SlideData(
     type: OnboardingSlideType.dataImport,
-    title: 'Data Import',
-    desc: 'If you have a backup from Tavo, SillyTavern or Glaze, you can restore it now.',
+    title: 'onboarding_import_title',
+    desc: 'onboarding_import_slide_desc',
     icon: Icons.download_rounded,
   ),
   _SlideData(
     type: OnboardingSlideType.api,
-    title: 'API Setup',
-    desc: 'Connect your AI now. Set up your endpoint and model.',
+    title: 'onboarding_api_title',
+    desc: 'onboarding_preset_slide_desc',
     icon: Icons.dns_outlined,
   ),
   _SlideData(
     type: OnboardingSlideType.persona,
-    title: 'Your Persona',
-    desc: 'Set up your profile. Characters will know you by this.',
+    title: 'onboarding_persona_title',
+    desc: 'onboarding_persona_slide_desc',
     icon: Icons.person_outline_rounded,
   ),
   _SlideData(
     type: OnboardingSlideType.allSet,
-    title: 'All Set!',
-    desc: 'You\'ve successfully configured Glaze. Press "Start" to dive into the world of roleplay!',
+    title: 'onboarding_allset_title',
+    desc: 'onboarding_allset_slide_desc',
     icon: Icons.check_circle_outline_rounded,
   ),
 ];
@@ -62,41 +63,41 @@ const _slides = <_SlideData>[
 const _introContent = <_InfoBlock>[
   _InfoBlock(
     icon: Icons.layers_outlined,
-    title: 'Roleplay',
-    desc: 'Your perfect companion for roleplay. Forget complex settings — just open the app and start your story.',
+    title: 'onboarding_feature_roleplay_title',
+    desc: 'onboarding_feature_roleplay_desc',
   ),
   _InfoBlock(
     icon: Icons.link_rounded,
-    title: 'Your AI, your rules',
-    desc: 'Connect to any OpenAI-compatible endpoint in a couple of clicks. Glaze never limits your API choice.',
+    title: 'onboarding_feature_rules_title',
+    desc: 'onboarding_feature_rules_desc',
   ),
   _InfoBlock(
     icon: Icons.verified_outlined,
-    title: 'Full privacy',
-    desc: 'Your secrets stay with you. All chats and characters are stored only on your device. No tracking.',
+    title: 'onboarding_feature_privacy_title',
+    desc: 'onboarding_feature_privacy_desc',
   ),
 ];
 
 const _featuresContent = <_InfoBlock>[
   _InfoBlock(
     icon: Icons.image_outlined,
-    title: 'Image Generation',
-    desc: 'Naistera integration: create visual character images with reference support right in chat.',
+    title: 'onboarding_feature_imggen_title',
+    desc: 'onboarding_feature_imggen_desc',
   ),
   _InfoBlock(
     icon: Icons.menu_book_outlined,
-    title: 'Glossary',
-    desc: 'Your technical jargon reference. Available in the menu and quick-access chat for instant lookup.',
+    title: 'onboarding_feature_glossary_title',
+    desc: 'onboarding_feature_glossary_desc',
   ),
   _InfoBlock(
     icon: Icons.palette_outlined,
-    title: 'Customization',
-    desc: 'Customize the look: dark and light themes, custom backgrounds and fonts.',
+    title: 'onboarding_feature_custom_title',
+    desc: 'onboarding_feature_custom_desc',
   ),
   _InfoBlock(
     icon: Icons.description_outlined,
-    title: 'SillyTavern Compatible',
-    desc: 'Full support for SillyTavern V2 character cards. Import PNG and JSON with one tap.',
+    title: 'onboarding_feature_st_title',
+    desc: 'onboarding_feature_st_desc',
   ),
 ];
 
@@ -118,14 +119,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   bool get _isLastSlide => _currentSlide == _slides.length - 1;
 
   String get _buttonLabel {
-    if (_isLastSlide) return 'Start';
+    if (_isLastSlide) return 'onboarding_btn_start'.tr();
     switch (_slides[_currentSlide].type) {
       case OnboardingSlideType.dataImport:
       case OnboardingSlideType.api:
       case OnboardingSlideType.persona:
-        return 'Skip';
+        return 'onboarding_btn_skip'.tr();
       default:
-        return 'Next';
+        return 'onboarding_btn_next'.tr();
     }
   }
 
@@ -291,24 +292,24 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         return _buildActionSlide(
           slide: slide,
           actionIcon: Icons.download_rounded,
-          actionTitle: 'Restore from Backup',
-          actionSub: 'Backups',
+          actionTitle: 'onboarding_action_restore'.tr(),
+          actionSub: 'onboarding_action_restore_sub'.tr(),
           onAction: () => _openSheet(const BackupScreen(fromOnboarding: true)),
         );
       case OnboardingSlideType.api:
         return _buildActionSlide(
           slide: slide,
           actionIcon: Icons.settings_outlined,
-          actionTitle: 'Configure API',
-          actionSub: 'Endpoint, model, key',
+          actionTitle: 'onboarding_action_configure_api'.tr(),
+          actionSub: 'onboarding_action_configure_sub'.tr(),
           onAction: () => _openSheet(const ApiSettingsScreen()),
         );
       case OnboardingSlideType.persona:
         return _buildActionSlide(
           slide: slide,
           actionIcon: Icons.person_add_outlined,
-          actionTitle: 'Set Up Persona',
-          actionSub: 'Name, avatar, description',
+          actionTitle: 'onboarding_action_setup_persona'.tr(),
+          actionSub: 'onboarding_action_setup_sub'.tr(),
           onAction: () => _openSheet(const PersonaListScreen()),
         );
       case OnboardingSlideType.allSet:
@@ -322,7 +323,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          title,
+          title.tr(),
           style: const TextStyle(
             fontSize: 32, fontWeight: FontWeight.w800,
             color: Colors.white, height: 1.2,
@@ -347,7 +348,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           _IconBubble(icon: slide.icon ?? Icons.check),
           const SizedBox(height: 24),
           Text(
-            slide.title,
+            slide.title.tr(),
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 28, fontWeight: FontWeight.w800,
@@ -359,7 +360,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
-                slide.desc!,
+                slide.desc!.tr(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16, color: context.cs.onSurfaceVariant, height: 1.5,
@@ -388,7 +389,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           _IconBubble(icon: slide.icon ?? Icons.settings),
           const SizedBox(height: 24),
           Text(
-            slide.title,
+            slide.title.tr(),
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 28, fontWeight: FontWeight.w800,
@@ -400,7 +401,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
-                slide.desc!,
+                slide.desc!.tr(),
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 16, color: context.cs.onSurfaceVariant, height: 1.5,
@@ -534,14 +535,14 @@ class _IntroBlockCard extends StatelessWidget {
           Icon(block.icon, size: 48, color: context.cs.primary),
           const SizedBox(height: 8),
           Text(
-            block.title,
+            block.title.tr(),
             style: const TextStyle(
               fontSize: 20, fontWeight: FontWeight.w700, color: Colors.white,
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            block.desc,
+            block.desc.tr(),
             style: TextStyle(
               fontSize: 15, color: context.cs.onSurfaceVariant, height: 1.5,
             ),

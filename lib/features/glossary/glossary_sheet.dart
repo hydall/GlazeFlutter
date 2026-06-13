@@ -211,7 +211,7 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
       ),
       error: (e, _) => SheetView(
         title: _safeTr('menu_glossary', fallback: 'Glossary'),
-        body: Center(child: Text('Error: $e')),
+        body: Center(child: Text('${'title_error'.tr()}: $e')),
       ),
       data: (categories) {
         // If first build & we want to land on a specific term, resolve it.

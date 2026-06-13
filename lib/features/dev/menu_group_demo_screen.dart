@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../shared/widgets/glaze_scaffold.dart';
@@ -43,7 +44,7 @@ class _MenuGroupDemoScreenState extends State<MenuGroupDemoScreen> {
   @override
   Widget build(BuildContext context) {
     return GlazeScaffold(
-      title: 'MenuGroup Demo',
+      title: 'menu_menu_group_demo'.tr(),
       onBack: () => Navigator.of(context).pop(),
       body: ListView(
         padding: const EdgeInsets.only(top: 16, bottom: 32),

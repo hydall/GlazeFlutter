@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../../core/models/preset.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -34,63 +35,63 @@ class RegexTile extends StatelessWidget {
           children: [
             TextFormField(
               initialValue: regex.name,
-              decoration: const InputDecoration(labelText: 'Name'),
+              decoration: InputDecoration(labelText: 'label_name'.tr()),
               onChanged: (v) => onChanged(regex.copyWith(name: v)),
             ),
             const SizedBox(height: 8),
             TextFormField(
               initialValue: regex.regex,
-              decoration: const InputDecoration(labelText: 'Find (regex)'),
+              decoration: InputDecoration(labelText: 'regex_find'.tr()),
               onChanged: (v) => onChanged(regex.copyWith(regex: v)),
             ),
             const SizedBox(height: 8),
             TextFormField(
               initialValue: regex.replacement,
-              decoration: const InputDecoration(labelText: 'Replace with'),
+              decoration: InputDecoration(labelText: 'regex_replace_with'.tr()),
               onChanged: (v) => onChanged(regex.copyWith(replacement: v)),
             ),
             const SizedBox(height: 8),
             TextFormField(
               initialValue: regex.trimOut,
-              decoration: const InputDecoration(labelText: 'Trim output'),
+              decoration: InputDecoration(labelText: 'regex_trim_out'.tr()),
               onChanged: (v) => onChanged(regex.copyWith(trimOut: v)),
             ),
             const SizedBox(height: 16),
 
-            _SubHeader('Affects (Placement)'),
+            _SubHeader('regex_affects'.tr()),
             _CheckboxRow(
-              options: const [
-                (1, 'User Input'),
-                (2, 'AI Output'),
-                (3, 'Slash Commands'),
-                (5, 'World Info'),
-                (6, 'Reasoning'),
+              options: [
+                (1, 'regex_user_input'.tr()),
+                (2, 'regex_ai_output'.tr()),
+                (3, 'regex_slash_commands'.tr()),
+                (5, 'regex_world_info'.tr()),
+                (6, 'regex_reasoning'.tr()),
               ],
               selected: regex.placement,
               onChanged: (v) => onChanged(regex.copyWith(placement: v)),
             ),
             const SizedBox(height: 12),
 
-            _SubHeader('Ephemerality'),
+            _SubHeader('regex_ephemerality'.tr()),
             _CheckboxRow(
-              options: const [
-                (1, 'Alter Chat Display'),
-                (2, 'Alter Outgoing Prompt'),
+              options: [
+                (1, 'regex_alter_display'.tr()),
+                (2, 'regex_alter_prompt'.tr()),
               ],
               selected: regex.ephemerality,
               onChanged: (v) => onChanged(regex.copyWith(ephemerality: v)),
             ),
             const SizedBox(height: 12),
 
-            _SubHeader('Depth Range'),
+            _SubHeader('regex_depth_range'.tr()),
             Row(
               children: [
                 Expanded(
                   child: TextFormField(
                     initialValue: regex.minDepth?.toString() ?? '',
-                    decoration: const InputDecoration(
-                      labelText: 'Min Depth',
-                      hintText: 'Unlimited',
+                    decoration: InputDecoration(
+                      labelText: 'regex_min_depth'.tr(),
+                      hintText: 'regex_unlimited_placeholder'.tr(),
                       isDense: true,
                     ),
                     keyboardType: TextInputType.number,
@@ -104,9 +105,9 @@ class RegexTile extends StatelessWidget {
                 Expanded(
                   child: TextFormField(
                     initialValue: regex.maxDepth?.toString() ?? '',
-                    decoration: const InputDecoration(
-                      labelText: 'Max Depth',
-                      hintText: 'Unlimited',
+                    decoration: InputDecoration(
+                      labelText: 'regex_max_depth'.tr(),
+                      hintText: 'regex_unlimited_placeholder'.tr(),
                       isDense: true,
                     ),
                     keyboardType: TextInputType.number,
@@ -120,30 +121,30 @@ class RegexTile extends StatelessWidget {
             ),
             const SizedBox(height: 12),
 
-            _SubHeader('Macro Substitution'),
+            _SubHeader('regex_macros_find'.tr()),
             _MacroRulesSelector(
               value: regex.macroRules,
               onChanged: (v) => onChanged(regex.copyWith(macroRules: v)),
             ),
             const SizedBox(height: 12),
-            _SubHeader('ST Flags'),
+            _SubHeader('regex_st_flags'.tr()),
             _FlagSwitch(
-              label: 'Only Format Display (markdownOnly)',
+              label: 'regex_only_format_display'.tr(),
               value: regex.markdownOnly,
               onChanged: (v) => onChanged(regex.copyWith(markdownOnly: v)),
             ),
             _FlagSwitch(
-              label: 'Only Format Prompt (promptOnly)',
+              label: 'regex_only_format_prompt'.tr(),
               value: regex.promptOnly,
               onChanged: (v) => onChanged(regex.copyWith(promptOnly: v)),
             ),
             _FlagSwitch(
-              label: 'Run on Edit',
+              label: 'regex_run_on_edit'.tr(),
               value: regex.runOnEdit,
               onChanged: (v) => onChanged(regex.copyWith(runOnEdit: v)),
             ),
             const SizedBox(height: 8),
-            _SubHeader('Substitute Regex (find pattern)'),
+            _SubHeader('regex_substitute_regex_header'.tr()),
             _SubstituteRegexSelector(
               value: regex.substituteRegex,
               onChanged: (v) => onChanged(regex.copyWith(substituteRegex: v)),
@@ -324,10 +325,10 @@ class _SubstituteRegexSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const options = [
-      (0, 'None'),
-      (1, 'Raw'),
-      (2, 'Escaped'),
+    final options = [
+      (0, 'regex_macro_none'.tr()),
+      (1, 'regex_macro_raw'.tr()),
+      (2, 'regex_macro_escaped'.tr()),
     ];
     return Wrap(
       spacing: 8,
@@ -352,10 +353,10 @@ class _MacroRulesSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const options = [
-      ('0', "Don't substitute"),
-      ('1', 'Raw'),
-      ('2', 'Escaped'),
+    final options = [
+      ('0', 'regex_macro_none'.tr()),
+      ('1', 'regex_macro_raw'.tr()),
+      ('2', 'regex_macro_escaped'.tr()),
     ];
     return Row(
       children: options.map((opt) {

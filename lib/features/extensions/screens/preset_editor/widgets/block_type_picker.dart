@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../../models/block_config.dart';
@@ -17,28 +18,28 @@ class BlockTypePicker extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const SectionLabel('Тип'),
+        SectionLabel('block_type_label'.tr()),
         SegmentedButton<BlockType>(
-          segments: const [
+          segments: [
             ButtonSegment(
               value: BlockType.infoblock,
-              label: Text('Инфоблок'),
-              icon: Icon(Icons.notes),
+              label: Text('block_type_infoblock'.tr()),
+              icon: const Icon(Icons.notes),
             ),
             ButtonSegment(
               value: BlockType.imageGen,
-              label: Text('Картинка'),
-              icon: Icon(Icons.image_outlined),
+              label: Text('block_type_image'.tr()),
+              icon: const Icon(Icons.image_outlined),
             ),
             ButtonSegment(
               value: BlockType.jsRunner,
-              label: Text('JS'),
-              icon: Icon(Icons.code),
+              label: Text('block_type_js'.tr()),
+              icon: const Icon(Icons.code),
             ),
             ButtonSegment(
               value: BlockType.interactive,
-              label: Text('Панель'),
-              icon: Icon(Icons.dashboard_customize_outlined),
+              label: Text('block_type_panel'.tr()),
+              icon: const Icon(Icons.dashboard_customize_outlined),
             ),
           ],
           selected: {selected},

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/llm/lorebook_providers.dart';
@@ -109,31 +110,31 @@ class MemoryBookController {
     if (_book == null) return '';
     final s = globalSettings;
     final mode = switch (s.memoryMode) {
-      'balanced' => 'Balanced',
-      'deep' => 'Deep',
-      'legacy' => 'Legacy',
-      _ => 'Fast',
+      'balanced' => 'memory_mode_balanced'.tr(),
+      'deep' => 'memory_mode_deep'.tr(),
+      'legacy' => 'memory_mode_legacy'.tr(),
+      _ => 'memory_mode_fast'.tr(),
     };
     final interval = s.autoCreateInterval;
-    final autoCreate = s.autoCreateEnabled ? 'Auto ON' : 'Auto OFF';
-    final autoGen = s.autoGenerateEnabled ? 'Auto-gen' : 'Manual';
-    final delayed = s.useDelayedAutomation ? 'Delayed' : 'Immediate';
-    final target = s.injectionTarget == 'macro' ? '{{memory}}' : 'Hard Block';
+    final autoCreate = s.autoCreateEnabled ? 'memory_books_summary_auto_on'.tr() : 'memory_books_summary_auto_off'.tr();
+    final autoGen = s.autoGenerateEnabled ? 'memory_books_summary_auto_text'.tr() : 'memory_books_summary_manual_text'.tr();
+    final delayed = s.useDelayedAutomation ? 'memory_books_summary_delayed'.tr() : 'memory_books_summary_immediate'.tr();
+    final target = s.injectionTarget == 'macro' ? 'memory_injection_macro'.tr() : 'memory_injection_hard_block'.tr();
     final vectorThreshold = s.vectorThreshold.toStringAsFixed(2);
     final maxEntries = s.maxInjectedEntries;
     final packing = switch (s.memoryPackingMode) {
-      'full' => 'Full',
-      'chunk_first' => 'Chunks',
-      _ => 'Hybrid',
+      'full' => 'memory_packing_full'.tr(),
+      'chunk_first' => 'memory_packing_chunk_first'.tr(),
+      _ => 'memory_packing_hybrid'.tr(),
     };
     final memoryBudget = s.maxInjectedTokens == null
-        ? 'Auto memory budget'
+        ? 'memory_books_summary_auto_out'.tr()
         : '${s.maxInjectedTokens} memory tokens';
     final batchSize = s.batchSize;
     final outTokens =
         (s.generationMaxTokens != null && s.generationMaxTokens! > 0)
         ? '${s.generationMaxTokens} out'
-        : 'Auto out';
+        : 'memory_books_summary_auto_out'.tr();
     return '$mode • $interval msgs • Batch $batchSize • $outTokens • $autoCreate • $autoGen • $delayed • $target • th=$vectorThreshold • $maxEntries entries • $memoryBudget • $packing • ${s.memoryExcerptChunksPerEntry}x${s.memoryExcerptTokensPerChunk} chunks';
   }
 
@@ -141,15 +142,15 @@ class MemoryBookController {
     final s = globalSettings;
     return s.generationModel.isNotEmpty
         ? s.generationModel
-        : 'Current LLM model';
+        : 'memory_books_current_llm_model'.tr();
   }
 
   String get searchTypeLabel {
     final s = _book?.settings;
-    if (s == null) return 'Vector';
-    if (!s.vectorSearchEnabled) return 'Keys';
-    if (s.keyMatchMode == 'both') return 'Vector + Keys';
-    return 'Vector';
+    if (s == null) return 'memory_books_search_vector'.tr();
+    if (!s.vectorSearchEnabled) return 'memory_books_search_keys'.tr();
+    if (s.keyMatchMode == 'both') return 'memory_books_vector_and_keys'.tr();
+    return 'memory_books_search_vector'.tr();
   }
 
   /// Scans chat messages and creates draft segments for uncovered messages.
@@ -169,23 +170,23 @@ class MemoryBookController {
       nowMillis: DateTime.now().millisecondsSinceEpoch,
     );
     if (plan.stableMessageCount == 0) {
-      return 'No stable messages to scan';
+      return 'memory_books_no_stable_messages'.tr();
     }
     if (plan.eligibleMessageCount == 0) {
-      return 'Waiting for ${globalSettings.autoCreateLagMessages} newer messages before creating a draft';
+      return 'memory_books_waiting_for_messages'.tr(args: ['${globalSettings.autoCreateLagMessages}']);
     }
     if (plan.uncoveredMessageCount == 0) {
-      return 'All messages are already covered';
+      return 'memory_books_all_covered'.tr();
     }
     if (plan.drafts.isEmpty) {
-      return 'Need more uncovered messages before creating a draft';
+      return 'memory_books_need_more_uncovered'.tr();
     }
 
     _book = _book!.copyWith(
       pendingDrafts: [..._book!.pendingDrafts, ...plan.drafts],
     );
     await save();
-    return '${plan.drafts.length} drafts created';
+    return 'memory_books_drafts_created'.tr(args: ['${plan.drafts.length}']);
   }
 
   void generateAllPending() {
@@ -221,7 +222,7 @@ class MemoryBookController {
     final chatState = _ref.read(chatProvider(_charId));
     if (chatState.value?.isGenerating == true) {
       onError(
-        'Chat generation is active — wait for it to finish before generating a memory draft',
+        'memory_books_chat_generation_active'.tr(),
       );
       return;
     }
@@ -236,7 +237,7 @@ class MemoryBookController {
         .where((m) => draft.messageIds.contains(m.id))
         .toList();
     if (draftMessages.isEmpty) {
-      onError('Messages not found for this draft');
+      onError('memory_books_messages_not_found'.tr());
       return;
     }
 
@@ -457,7 +458,7 @@ class MemoryBookController {
     await _ref.read(apiListProvider.future);
     final config = _ref.read(embeddingConfigProvider);
     if (config.endpoint.isEmpty) {
-      return 'Set up embedding API in Embedding Settings first';
+      return 'memory_books_setup_embedding_first'.tr();
     }
 
     _isReindexing = true;
@@ -472,9 +473,13 @@ class MemoryBookController {
             ? 'content'
             : 'content',
       );
-      return 'Indexed: ${result.indexed}, Skipped: ${result.skipped}, Failed: ${result.failed}';
+      return 'memory_books_reindex_result'.tr(namedArgs: {
+        'indexed': '${result.indexed}',
+        'skipped': '${result.skipped}',
+        'failed': '${result.failed}',
+      });
     } catch (e) {
-      return 'Reindex failed: $e';
+      return 'memory_books_reindex_failed'.tr(args: ['$e']);
     } finally {
       _isReindexing = false;
     }

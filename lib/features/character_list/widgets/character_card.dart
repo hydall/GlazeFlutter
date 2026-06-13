@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'dart:typed_data';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // Pinned via dependency_overrides to keep Windows builds green; see docs/BUILD_NOTES.md.
@@ -290,7 +291,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
       items: [
         BottomSheetItem(
           icon: Icons.share_rounded,
-          label: 'Export',
+          label: 'action_export'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _showExportOptions(context);
@@ -298,7 +299,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
         ),
         BottomSheetItem(
           icon: Icons.edit_rounded,
-          label: 'Edit',
+          label: 'action_edit'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             context.push('/character/${character.id}/edit');
@@ -306,7 +307,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
         ),
         BottomSheetItem(
           icon: Icons.favorite,
-          label: character.fav ? 'Remove from Favorites' : 'Add to Favorites',
+          label: character.fav ? 'action_remove_fav'.tr() : 'action_add_fav'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             ref
@@ -316,7 +317,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
         ),
         BottomSheetItem(
           icon: Icons.delete_rounded,
-          label: 'Remove',
+          label: 'action_delete'.tr(),
           isDestructive: true,
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
@@ -334,7 +335,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
       items: [
         BottomSheetItem(
           icon: Icons.image_outlined,
-          label: 'Export as PNG',
+          label: 'label_export_png'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _export(context, 'png');
@@ -342,7 +343,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
         ),
         BottomSheetItem(
           icon: Icons.code_rounded,
-          label: 'Export as JSON',
+          label: 'label_export_json'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _export(context, 'json');
@@ -350,7 +351,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
         ),
         BottomSheetItem(
           icon: Icons.folder_zip_rounded,
-          label: 'Export as ZIP',
+          label: 'label_export_zip'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _export(context, 'zip');
@@ -479,14 +480,14 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   void _confirmDelete(BuildContext context, WidgetRef ref) {
     GlazeBottomSheet.show<void>(
       context,
-      title: 'Delete Character',
+      title: 'action_delete_char'.tr(),
       bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
         description: 'Delete $_displayName? This cannot be undone.',
       ),
       items: [
         BottomSheetItem(
-          label: 'Delete',
+          label: 'btn_delete'.tr(),
           isDestructive: true,
           centered: true,
           onTap: () async {
@@ -495,7 +496,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
           },
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'btn_cancel'.tr(),
           centered: true,
           onTap: () => Navigator.pop(context),
         ),

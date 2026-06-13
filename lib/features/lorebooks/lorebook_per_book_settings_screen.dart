@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../../core/models/lorebook.dart';
 import '../../../shared/theme/app_colors.dart';
@@ -53,13 +54,13 @@ class _LorebookPerBookSettingsScreenState
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               child: GlazeAppBar(
-                title: 'Lorebook Settings',
+                title: 'title_lorebook_settings'.tr(),
                 leading: BackButton(onPressed: () => _pop(context)),
                 actions: [
                   TextButton(
                     onPressed: _hasCustom ? _resetToGlobal : null,
                     child: Text(
-                      'Reset to Global',
+                      'lorebook_reset_to_global'.tr(),
                       style: TextStyle(
                         fontSize: 12,
                         color: _hasCustom
@@ -89,7 +90,7 @@ class _LorebookPerBookSettingsScreenState
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Using global defaults. Change any setting to create per-book overrides.',
+                        'lorebook_using_global_defaults'.tr(),
                         style: TextStyle(
                             fontSize: 12, color: context.cs.onSurfaceVariant),
                       ),
@@ -103,51 +104,51 @@ class _LorebookPerBookSettingsScreenState
               padding: const EdgeInsets.all(16),
               children: [
                 // ── Scanning ──────────────────────────────────────────────
-                _SectionHeader('Scanning', helpTerm: 'lorebook-recursion'),
+                _SectionHeader('section_scan_recursion'.tr(), helpTerm: 'lorebook-recursion'),
                 _NumberField(
-                  label: 'Scan Depth',
+                  label: 'label_scan_depth_lore'.tr(),
                   value: _settings.scanDepth ?? 0,
                   min: 0,
                   max: 100,
-                  hint: '0 = global default',
+                  hint: 'lorebook_global_default_hint'.tr(),
                   onChanged: (v) =>
                       _update(_settings.copyWith(scanDepth: v == 0 ? null : v)),
                 ),
                 const SizedBox(height: 12),
                 _NumberField(
-                  label: 'Max Injected Entries',
+                  label: 'label_max_injected_entries'.tr(),
                   value: _settings.maxInjectedEntries ?? 0,
                   min: 0,
                   max: 100,
-                  hint: '0 = global default',
+                  hint: 'lorebook_global_default_hint'.tr(),
                   onChanged: (v) => _update(
                       _settings.copyWith(maxInjectedEntries: v == 0 ? null : v)),
                 ),
                 const SizedBox(height: 24),
 
                 // ── Matching ──────────────────────────────────────────────
-                _SectionHeader('Matching', helpTerm: 'lorebook-keys'),
+                _SectionHeader('lorebook_matching'.tr(), helpTerm: 'lorebook-keys'),
                 _SwitchField(
-                  label: 'Recursive Scan',
+                  label: 'label_recursive_scan'.tr(),
                   value: _settings.recursiveScan,
                   onChanged: (v) => _update(_settings.copyWith(recursiveScan: v)),
                 ),
                 const SizedBox(height: 4),
                 _SwitchField(
-                  label: 'Case Sensitive',
+                  label: 'label_case_sensitive'.tr(),
                   value: _settings.caseSensitive,
                   onChanged: (v) => _update(_settings.copyWith(caseSensitive: v)),
                 ),
                 const SizedBox(height: 8),
                 _DropdownField<String>(
-                  label: 'Match Whole Words',
+                  label: 'label_match_whole_words'.tr(),
                   value: _settings.matchWholeWords ?? '',
-                  items: const [
-                    DropdownMenuItem(value: '', child: Text('Global default')),
-                    DropdownMenuItem(value: 'false', child: Text('No')),
-                    DropdownMenuItem(value: 'true', child: Text('Yes')),
+                  items: [
+                    DropdownMenuItem(value: '', child: Text('match_global'.tr())),
+                    DropdownMenuItem(value: 'false', child: Text('off'.tr())),
+                    DropdownMenuItem(value: 'true', child: Text('on'.tr())),
                     DropdownMenuItem(
-                        value: 'glaze', child: Text('Glaze boundary')),
+                        value: 'glaze', child: Text('match_whole_words_glaze'.tr())),
                   ],
                   onChanged: (v) => _update(
                       _settings.copyWith(matchWholeWords: v.isEmpty ? null : v)),
@@ -155,9 +156,9 @@ class _LorebookPerBookSettingsScreenState
                 const SizedBox(height: 24),
 
                 // ── Vector Search ─────────────────────────────────────────
-                _SectionHeader('Vector Search'),
+                _SectionHeader('section_vector_search'.tr()),
                 _SwitchField(
-                  label: 'Vector Search Enabled',
+                  label: 'label_vector_search'.tr(),
                   value: _settings.vectorSearchEnabled,
                   onChanged: (v) =>
                       _update(_settings.copyWith(vectorSearchEnabled: v)),
@@ -165,19 +166,19 @@ class _LorebookPerBookSettingsScreenState
                 if (_settings.vectorSearchEnabled) ...[
                   const SizedBox(height: 8),
                   _DropdownField<String>(
-                    label: 'Embedding Target',
+                    label: 'label_embedding_target'.tr(),
                     value: _settings.embeddingTarget,
-                    items: const [
-                      DropdownMenuItem(value: 'content', child: Text('Content')),
-                      DropdownMenuItem(value: 'comment', child: Text('Comment')),
-                      DropdownMenuItem(value: 'both', child: Text('Both')),
+                    items: [
+                      DropdownMenuItem(value: 'content', child: Text('target_content'.tr())),
+                      DropdownMenuItem(value: 'comment', child: Text('target_comment'.tr())),
+                      DropdownMenuItem(value: 'both', child: Text('search_type_both'.tr())),
                     ],
                     onChanged: (v) =>
                         _update(_settings.copyWith(embeddingTarget: v)),
                   ),
                   const SizedBox(height: 12),
                   _SliderField(
-                    label: 'Similarity Threshold',
+                    label: 'label_similarity_threshold'.tr(),
                     value: _settings.vectorThreshold,
                     min: 0.0,
                     max: 1.0,
@@ -188,7 +189,7 @@ class _LorebookPerBookSettingsScreenState
                   ),
                   const SizedBox(height: 12),
                   _NumberField(
-                    label: 'Vector Top K',
+                    label: 'label_top_k'.tr(),
                     value: _settings.vectorTopK,
                     min: 1,
                     max: 50,

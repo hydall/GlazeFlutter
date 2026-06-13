@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -114,17 +115,16 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
           fields: [
             GenericEditorField(
               key: 'content',
-              label: 'Note Content',
+              label: 'label_content'.tr(),
               type: 'textarea',
-              placeholder: 'Enter author\'s note...',
+              placeholder: 'authors_note_placeholder'.tr(),
               rows: 6,
             ),
-            const GenericEditorField(
+            GenericEditorField(
               key: '__roleHint',
               label: '',
               type: 'info',
-              text: 'Role, depth and insertion mode are set per preset, '
-                  'in the preset editor.',
+              text: 'authors_note_role_hint'.tr(),
             ),
           ],
         ),
@@ -133,7 +133,7 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
   @override
   Widget build(BuildContext context) {
     return SheetView(
-      title: "Author's Note",
+      title: 'magic_authors_notes'.tr(),
       showBack: true,
       actions: _hasSession
           ? [

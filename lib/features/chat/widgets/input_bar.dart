@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../../shared/theme/app_colors.dart';
 
@@ -61,8 +62,8 @@ class _InputBarState extends State<InputBar> {
         textInputAction: TextInputAction.send,
         onSubmitted: (_) => _handleSend(),
         style: const TextStyle(fontSize: 16),
-        decoration: const InputDecoration(
-          hintText: 'Type a message...',
+        decoration: InputDecoration(
+          hintText: 'chat_placeholder'.tr(),
           border: InputBorder.none,
           enabledBorder: InputBorder.none,
           focusedBorder: InputBorder.none,
@@ -119,7 +120,7 @@ class _InputBarState extends State<InputBar> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          widget.isGenerating ? 'Stop' : 'Send',
+                          widget.isGenerating ? 'btn_stop'.tr() : 'btn_send'.tr(),
                           style: const TextStyle(
                             color: Colors.black,
                             fontWeight: FontWeight.w600,

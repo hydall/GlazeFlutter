@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,7 +42,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
     final bottomPad = ref.watch(navHeightProvider) + 20;
 
     return GlazeScaffold(
-      title: 'Themes',
+      title: 'theme_presets'.tr(),
       useShellHeader: true,
       headerBranchIndex: 3,
       onBack: () => Navigator.pop(context),
@@ -54,7 +55,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
-                  'All Themes',
+                  'theme_all_themes'.tr(),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
@@ -95,11 +96,11 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
         onChanged: (v) =>
             ref.read(themeProvider.notifier).setIgnoreCustomFont(!v),
         title: Text(
-          'Custom Font',
+          'theme_custom_font'.tr(),
           style: TextStyle(color: context.cs.onSurface),
         ),
         subtitle: Text(
-          'Use theme\'s custom font',
+          'theme_custom_font_subtitle'.tr(),
           style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
         ),
         contentPadding: EdgeInsets.zero,
@@ -110,11 +111,11 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
   void _showAddSheet(BuildContext context) {
     GlazeBottomSheet.show<void>(
       context,
-      title: 'Add Theme',
+      title: 'theme_add_theme'.tr(),
       items: [
         BottomSheetItem(
           icon: Icons.add_rounded,
-          label: 'New Theme',
+          label: 'theme_new_theme'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _createNewTheme();
@@ -122,7 +123,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
         ),
         BottomSheetItem(
           icon: Icons.file_download_outlined,
-          label: 'Import from File',
+          label: 'hint_import_file'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _importTheme();
@@ -164,7 +165,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
 
     final sublabelParts = <String>[];
     if (preset.author.isNotEmpty) sublabelParts.add('by ${preset.author}');
-    if (isActive) sublabelParts.add('Active');
+    if (isActive) sublabelParts.add('label_active'.tr());
     final sublabel = sublabelParts.join(' • ');
 
     final borderBase = activePreset.borderParsed ?? cs.onSurface;
@@ -357,7 +358,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       items: [
         BottomSheetItem(
           icon: Icons.tune,
-          label: 'Edit Theme',
+          label: 'theme_edit_theme'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _openThemeEditor(preset, isActive: isActive);
@@ -365,7 +366,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
         ),
         BottomSheetItem(
           icon: Icons.drive_file_rename_outline,
-          label: 'Rename',
+          label: 'action_rename'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _renamePreset(preset);
@@ -373,7 +374,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
         ),
         BottomSheetItem(
           icon: Icons.upload_file,
-          label: 'Export',
+          label: 'action_export'.tr(),
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
             _exportPreset(preset);
@@ -382,7 +383,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
         if (preset.id != 'default')
           BottomSheetItem(
             icon: Icons.delete_outline,
-            label: 'Delete Theme',
+            label: 'theme_confirm_delete_preset'.tr(),
             isDestructive: true,
             onTap: () {
               Navigator.of(context, rootNavigator: true).pop();
@@ -396,11 +397,11 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
   void _renamePreset(ThemePreset preset) {
     GlazeBottomSheet.show<void>(
       context,
-      title: 'Rename Theme',
+      title: 'theme_rename_theme'.tr(),
       input: BottomSheetInput(
-        placeholder: 'Theme name',
+        placeholder: 'theme_name_placeholder'.tr(),
         value: preset.name,
-        confirmLabel: 'Rename',
+        confirmLabel: 'action_rename'.tr(),
         onConfirm: (val) async {
           Navigator.of(context, rootNavigator: true).pop();
           if (val.trim().isNotEmpty) {
@@ -443,7 +444,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
   Future<void> _createNewTheme() async {
     final preset = ThemePreset(
       id: 'custom_${DateTime.now().millisecondsSinceEpoch}',
-      name: 'New Theme',
+      name: 'theme_new_theme'.tr(),
     );
     await ref.read(themeProvider.notifier).importPreset(preset);
     await ref.read(themeProvider.notifier).applyPreset(preset);
@@ -458,7 +459,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       final result = await FilePicker.pickFiles(
         type: Platform.isIOS ? FileType.any : FileType.custom,
         allowedExtensions: Platform.isIOS ? null : ['json', 'thm'],
-        dialogTitle: 'Import Theme',
+        dialogTitle: 'theme_import_theme'.tr(),
         withData: true,
       );
       if (result == null || result.files.isEmpty) return;
@@ -471,7 +472,7 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
           lowerPath.endsWith('.json') || lowerPath.endsWith('.thm');
       if (!isSupported) {
         if (mounted) {
-          GlazeErrorDialog.show(context, 'Unsupported file type. Pick a .json or .thm theme file.');
+          GlazeErrorDialog.show(context, 'theme_unsupported_file_type'.tr());
         }
         return;
       }
@@ -482,11 +483,11 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
       if (preset == null) return;
 
       if (mounted) {
-        GlazeToast.show(context, 'Theme "${preset.name}" imported');
+        GlazeToast.show(context, 'theme_imported_message'.tr(namedArgs: {'name': preset.name}));
       }
     } on FormatException catch (e) {
       if (mounted) {
-        GlazeErrorDialog.show(context, 'Invalid theme file: ${e.message}');
+        GlazeErrorDialog.show(context, 'theme_invalid_theme_file'.tr(namedArgs: {'message': e.message}));
       }
     } catch (e) {
       if (mounted) {
@@ -502,20 +503,20 @@ class _ThemePresetScreenState extends ConsumerState<ThemePresetScreen> {
   Future<void> _deletePreset(String id) async {
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
-      title: 'Delete Theme',
-      bigInfo: const BottomSheetBigInfo(
+      title: 'theme_confirm_delete_preset'.tr(),
+      bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
-        description: 'Are you sure you want to delete this theme?',
+        description: 'theme_confirm_delete_message'.tr(),
       ),
       items: [
         BottomSheetItem(
-          label: 'Delete',
+          label: 'btn_delete'.tr(),
           isDestructive: true,
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'action_cancel'.tr(),
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
         ),
@@ -549,13 +550,13 @@ class _ThemeFab extends StatelessWidget {
             ),
           ],
         ),
-        child: const Row(
+        child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.add_rounded, color: Colors.white, size: 24),
-            SizedBox(width: 8),
+            const Icon(Icons.add_rounded, color: Colors.white, size: 24),
+            const SizedBox(width: 8),
             Text(
-              'Add',
+              'action_add'.tr(),
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -19,7 +20,7 @@ class BlocksSection extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         MenuGroup(
-          header: 'Блоки',
+          header: 'blocks_section_header'.tr(),
           items: [
             if (preset.blocks.isEmpty)
               Padding(
@@ -28,7 +29,7 @@ class BlocksSection extends ConsumerWidget {
                   vertical: 8,
                 ),
                 child: Text(
-                  'Пока нет блоков',
+                  'blocks_no_blocks'.tr(),
                   style: TextStyle(
                     fontSize: 13,
                     color: context.cs.onSurfaceVariant.withValues(alpha: 0.6),
@@ -58,7 +59,7 @@ class BlocksSection extends ConsumerWidget {
           child: OutlinedButton.icon(
             onPressed: () => _addBlock(context, ref, preset),
             icon: const Icon(Icons.add),
-            label: const Text('Добавить блок'),
+            label: Text('add_block'.tr()),
           ),
         ),
       ],
@@ -90,7 +91,7 @@ class BlocksSection extends ConsumerWidget {
     final id = 'block_${DateTime.now().millisecondsSinceEpoch}';
     final block = BlockConfig(
       id: id,
-      name: 'Новый блок',
+      name: 'new_block'.tr(),
       type: BlockType.infoblock,
       enabled: true,
     );
@@ -117,7 +118,7 @@ class _BlockTile extends ConsumerWidget {
     return Stack(
       children: [
         MenuScriptItem(
-          name: block.name.isEmpty ? 'Без имени' : block.name,
+          name: block.name.isEmpty ? 'blocks_unnamed'.tr() : block.name,
           subtitle: blockSubtitle(block),
           enabled: block.enabled,
           onToggle: (v) => _toggleBlock(ref, preset, block, v),
@@ -173,7 +174,7 @@ class _BlockTile extends ConsumerWidget {
           children: [
             ListTile(
               leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('Удалить блок'),
+              title: Text('blocks_delete_block'.tr()),
               onTap: () {
                 Navigator.pop(ctx);
                 _deleteBlock(ref, preset, block);
@@ -195,15 +196,15 @@ class _BlockTile extends ConsumerWidget {
 
 String blockSubtitle(BlockConfig block) {
   final type = switch (block.type) {
-    BlockType.infoblock => 'Инфоблок',
-    BlockType.imageGen => 'Картинка',
-    BlockType.jsRunner => 'JS',
-    BlockType.interactive => 'Интерактивная панель',
+    BlockType.infoblock => 'block_type_infoblock'.tr(),
+    BlockType.imageGen => 'block_type_image'.tr(),
+    BlockType.jsRunner => 'block_type_js'.tr(),
+    BlockType.interactive => 'block_type_interactive'.tr(),
   };
   final trigger = switch (block.trigger) {
-    BlockTrigger.afterUser => 'После user',
-    BlockTrigger.afterAssistant => 'После assistant',
-    BlockTrigger.periodic => 'Периодический',
+    BlockTrigger.afterUser => 'block_trigger_after_user'.tr(),
+    BlockTrigger.afterAssistant => 'block_trigger_after_assistant'.tr(),
+    BlockTrigger.periodic => 'block_trigger_periodic'.tr(),
   };
   return '$type • $trigger';
 }

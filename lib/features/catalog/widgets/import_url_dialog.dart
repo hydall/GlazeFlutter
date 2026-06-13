@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -37,7 +38,7 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
           Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 12),
             child: Text(
-              'Paste a JanitorAI, Saucepan.ai, or Chub.ai character URL',
+              'placeholder_janitor_url'.tr(),
               style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14),
             ),
           ),
@@ -82,7 +83,7 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
                   child: Text(
                     _phase != null
                         ? 'Phase: $_phase'
-                        : 'Extracting character...',
+                        : 'catalog_extracting'.tr(),
                     style: TextStyle(
                       color: context.cs.onSurfaceVariant,
                       fontSize: 13,
@@ -110,7 +111,7 @@ class _ImportUrlDialogState extends ConsumerState<ImportUrlDialog> {
                 foregroundColor: context.cs.onPrimary,
               ),
               child: Text(
-                _loading ? 'Importing...' : 'Import',
+                _loading ? 'catalog_importing'.tr() : 'action_import'.tr(),
                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
             ),

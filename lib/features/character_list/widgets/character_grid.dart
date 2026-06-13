@@ -71,7 +71,7 @@ class CharacterGrid extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
             child: Text(
-              '$totalCount character${totalCount == 1 ? '' : 's'}',
+              '$totalCount ${'count_characters'.plural(totalCount)}',
               style: TextStyle(
                 fontSize: 11,
                 color: context.cs.onSurfaceVariant,
@@ -427,8 +427,8 @@ class _SortTypePill extends StatelessWidget {
   const _SortTypePill({required this.sortBy, required this.onChanged});
 
   String get _label => switch (sortBy) {
-        SortType.name => 'Name',
-        SortType.date => 'Date added',
+        SortType.name => 'sort_name'.tr(),
+        SortType.date => 'sort_date'.tr(),
         SortType.lastChat => 'Last chat',
       };
 
@@ -492,10 +492,10 @@ class _SortTypePill extends StatelessWidget {
 
     GlazeBottomSheet.show<void>(
       context,
-      title: 'Sort by',
+      title: 'sort_by'.tr(),
       items: [
-        build('Name', SortType.name),
-        build('Date added', SortType.date),
+        build('sort_name'.tr(), SortType.name),
+        build('sort_date'.tr(), SortType.date),
         build('Last chat', SortType.lastChat),
       ],
     );

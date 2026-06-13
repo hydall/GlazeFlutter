@@ -212,7 +212,8 @@ if (messageData.isEditing) classes.push('editing');
 
     const hasTriggers =
       (m.triggeredLorebooks && m.triggeredLorebooks.length) ||
-      (m.triggeredMemories && m.triggeredMemories.length);
+      (m.triggeredMemories && m.triggeredMemories.length) ||
+      (m.triggeredRegexes && m.triggeredRegexes.length);
     if (hasTriggers) {
       const trig = document.createElement('div');
       trig.className = 'msg-lb-trigger-menu';
@@ -709,7 +710,8 @@ if (messageData.isEditing) classes.push('editing');
     const hasGen = msg.genTime && msg.genTime !== '0s';
     const hasTokens = msg.tokens && msg.tokens > 0 && !msg.isTyping;
     const hasTrigger = (msg.triggeredLorebooks && msg.triggeredLorebooks.length) ||
-                       (msg.triggeredMemories && msg.triggeredMemories.length);
+                       (msg.triggeredMemories && msg.triggeredMemories.length) ||
+                       (msg.triggeredRegexes && msg.triggeredRegexes.length);
     const hasMemoryStatus = !!msg.memoryStatus;
 
     let bubbleMeta = sectionEl.querySelector('.bubble-meta');

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../../models/block_config.dart';
@@ -17,20 +18,20 @@ class BlockTriggerPicker extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const SectionLabel('Триггер'),
+        SectionLabel('block_trigger_label'.tr()),
         SegmentedButton<BlockTrigger>(
-          segments: const [
+          segments: [
             ButtonSegment(
               value: BlockTrigger.afterUser,
-              label: Text('После user'),
+              label: Text('block_trigger_after_user'.tr()),
             ),
             ButtonSegment(
               value: BlockTrigger.afterAssistant,
-              label: Text('После assistant'),
+              label: Text('block_trigger_after_assistant'.tr()),
             ),
             ButtonSegment(
               value: BlockTrigger.periodic,
-              label: Text('Периодический'),
+              label: Text('block_trigger_periodic'.tr()),
             ),
           ],
           selected: {selected},

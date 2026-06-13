@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,7 +27,7 @@ class _EmbeddingSettingsScreenState
 
   @override
   ShellHeaderConfig buildShellHeader() => ShellHeaderConfig(
-    title: 'Embedding Settings',
+    title: 'title_embedding_settings'.tr(),
     showBack: true,
     onBack: () => context.go('/tools'),
   );
@@ -98,7 +99,7 @@ class _EmbeddingSettingsScreenState
       scanDepth: int.tryParse(_scanDepthCtrl.text) ?? 10,
     );
 
-    if (mounted) GlazeToast.show(context, 'Saved');
+    if (mounted) GlazeToast.show(context, 'settings_saved'.tr());
   }
 
   Future<void> _testConnection() async {
@@ -136,7 +137,7 @@ class _EmbeddingSettingsScreenState
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
               children: [
                 Text(
-                  'Search Mode',
+                  'label_search_type'.tr(),
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -147,19 +148,19 @@ class _EmbeddingSettingsScreenState
                 Row(
                   children: [
                     _SearchModeChip(
-                      label: 'Keyword',
+                      label: 'search_type_keys'.tr(),
                       selected: _searchType == 'keyword',
                       onTap: () => setState(() => _searchType = 'keyword'),
                     ),
                     const SizedBox(width: 8),
                     _SearchModeChip(
-                      label: 'Vector',
+                      label: 'search_type_vector'.tr(),
                       selected: _searchType == 'vector',
                       onTap: () => setState(() => _searchType = 'vector'),
                     ),
                     const SizedBox(width: 8),
                     _SearchModeChip(
-                      label: 'Both',
+                      label: 'search_type_both'.tr(),
                       selected: _searchType == 'both',
                       onTap: () => setState(() => _searchType = 'both'),
                     ),
@@ -167,7 +168,7 @@ class _EmbeddingSettingsScreenState
                 ),
                 const SizedBox(height: 20),
                 Text(
-                  'Embedding API',
+                  'section_embeddings'.tr(),
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -176,16 +177,16 @@ class _EmbeddingSettingsScreenState
                 ),
                 const SizedBox(height: 8),
                 _field(
-                  'Endpoint',
+                  'label_embedding_endpoint'.tr(),
                   _endpointCtrl,
                   hint: 'http://127.0.0.1:11434/v1',
                 ),
                 const SizedBox(height: 8),
-                _field('API Key', _apiKeyCtrl, hint: 'Optional', obscure: true),
+                _field('label_embedding_key'.tr(), _apiKeyCtrl, hint: 'Optional', obscure: true),
                 const SizedBox(height: 8),
-                _field('Model', _modelCtrl, hint: 'text-embedding-3-small'),
+                _field('label_embedding_model'.tr(), _modelCtrl, hint: 'text-embedding-3-small'),
                 const SizedBox(height: 8),
-                _field('Max Chunk Tokens', _maxChunkTokensCtrl, hint: '8192'),
+                _field('label_max_chunk_tokens'.tr(), _maxChunkTokensCtrl, hint: '8192'),
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
@@ -198,12 +199,12 @@ class _EmbeddingSettingsScreenState
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.wifi_tethering, size: 18),
-                    label: Text(_isTesting ? 'Testing...' : 'Test Connection'),
+                    label: Text(_isTesting ? 'btn_testing'.tr() : 'btn_test_connection'.tr()),
                   ),
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Vector Search Parameters',
+                  'vector_search_params'.tr(),
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -211,11 +212,11 @@ class _EmbeddingSettingsScreenState
                   ),
                 ),
                 const SizedBox(height: 8),
-                _field('Similarity Threshold', _thresholdCtrl, hint: '0.45'),
+                _field('label_similarity_threshold'.tr(), _thresholdCtrl, hint: '0.45'),
                 const SizedBox(height: 8),
-                _field('Top K Results', _topKCtrl, hint: '10'),
+                _field('label_top_k'.tr(), _topKCtrl, hint: '10'),
                 const SizedBox(height: 8),
-                _field('Scan Depth (messages)', _scanDepthCtrl, hint: '10'),
+                _field('label_vector_scan_depth'.tr(), _scanDepthCtrl, hint: '10'),
                 const SizedBox(height: 32),
                 SizedBox(
                   width: double.infinity,
@@ -225,7 +226,7 @@ class _EmbeddingSettingsScreenState
                       foregroundColor: Colors.black,
                     ),
                     onPressed: _save,
-                    child: const Text('Save Settings'),
+                    child: Text('btn_save'.tr()),
                   ),
                 ),
               ],

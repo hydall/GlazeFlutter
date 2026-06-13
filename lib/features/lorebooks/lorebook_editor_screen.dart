@@ -1040,7 +1040,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
       },
       loading: () =>
           const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (e, _) => Scaffold(body: Center(child: Text('Error: $e'))),
+      error: (e, _) => Scaffold(body: Center(child: Text('${'title_error'.tr()}: $e'))),
     );
   }
 }

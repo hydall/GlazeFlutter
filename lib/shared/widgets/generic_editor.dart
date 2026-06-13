@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import '../../core/utils/platform_paths.dart';
 import '../theme/app_colors.dart';
@@ -208,10 +209,10 @@ class _GenericEditorState extends State<GenericEditor> {
   void _confirmDeleteGreeting(int index) {
     GlazeBottomSheet.show<void>(
       context,
-      title: 'Delete?',
+      title: 'confirm_delete_greeting'.tr(),
       items: [
         BottomSheetItem(
-          label: 'Yes',
+          label: 'btn_yes'.tr(),
           icon: Icons.check,
           iconColor: const Color(0xFFFF4444),
           isDestructive: true,
@@ -221,7 +222,7 @@ class _GenericEditorState extends State<GenericEditor> {
           },
         ),
         BottomSheetItem(
-          label: 'No',
+          label: 'btn_no'.tr(),
           icon: Icons.close,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(),
         ),
@@ -321,9 +322,9 @@ class _GenericEditorState extends State<GenericEditor> {
 
     await FullscreenEditorScreen.show(
       context,
-      title: 'Greeting #${index + 1}',
+      title: 'generic_editor_greeting_title'.tr(args: ['${index + 1}']),
       controller: ctrl,
-      hintText: 'Enter greeting text',
+      hintText: 'generic_editor_greeting_hint'.tr(),
       onChanged: applyGreeting,
     );
     ctrl.dispose();
@@ -472,7 +473,7 @@ class _GenericEditorState extends State<GenericEditor> {
                     GestureDetector(
                       onTap: () => _openGreetingEditor(i),
                       child: Text(
-                        greets[i].isEmpty ? 'Empty' : greets[i],
+                        greets[i].isEmpty ? 'action_add_greeting'.tr() : greets[i],
                         style: TextStyle(
                           fontSize: 14,
                           color: context.cs.onSurface.withValues(alpha: 0.9),
@@ -503,7 +504,7 @@ class _GenericEditorState extends State<GenericEditor> {
                   Icon(Icons.add, size: 20, color: context.cs.primary),
                   const SizedBox(width: 8),
                   Text(
-                    'Add Message',
+                    'action_add_greeting'.tr(),
                     style: TextStyle(color: context.cs.primary, fontWeight: FontWeight.w500),
                   ),
                 ],
@@ -562,8 +563,8 @@ class _GenericEditorState extends State<GenericEditor> {
                     colors: [Colors.black54, Colors.transparent],
                   ),
                 ),
-                child: const Text(
-                  'AVATAR',
+                child: Text(
+                  'avatar'.tr(),
                   style: TextStyle(
                     color: Color(0xE6FFFFFF),
                     fontSize: 14,

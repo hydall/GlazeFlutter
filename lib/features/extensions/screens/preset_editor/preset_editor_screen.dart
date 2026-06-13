@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -21,9 +22,9 @@ class PresetEditorScreen extends ConsumerWidget {
 
     if (preset == null) {
       return GlazeScaffold(
-        title: 'Пресет',
+        title: 'preset_options'.tr(),
         onBack: () => context.pop(),
-        body: const Center(child: Text('Пресет не найден')),
+        body: Center(child: Text('preset_not_found'.tr())),
       );
     }
 

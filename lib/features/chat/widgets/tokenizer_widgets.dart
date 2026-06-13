@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -6,22 +7,22 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../chat_provider.dart';
 
-const kSourceMeta = <String, SourceMeta>{
-  'preset':          SourceMeta(label: 'Preset',           color: Color(0xFF4ECDC4)),
-  'description':     SourceMeta(label: 'Description',      color: Color(0xFFFF6B6B)),
-  'personality':     SourceMeta(label: 'Personality',      color: Color(0xFFD4A5E5)),
-  'scenario':        SourceMeta(label: 'Scenario',         color: Color(0xFFB8D4E3)),
-  'mesExamples':     SourceMeta(label: 'Mes Examples',     color: Color(0xFFC9B1FF)),
-  'depthPrompt':     SourceMeta(label: 'Depth Prompt',     color: Color(0xFFE8A0BF)),
-  'persona':         SourceMeta(label: 'Persona',          color: Color(0xFF81ECEC)),
-  'authorsNote':     SourceMeta(label: "Author's Note",    color: Color(0xFFFFD93D)),
-  'summary':         SourceMeta(label: 'Summary',          color: Color(0xFF95E1D3)),
-  'memory':          SourceMeta(label: 'Memory',           color: Color(0xFFA8E6CF)),
-  'lorebook':        SourceMeta(label: 'Keyword Lorebook', color: Color(0xFFF4A261)),
-  'lorebooks':       SourceMeta(label: 'Lorebooks (macro)',color: Color(0xFFE8985E)),
-  'vectorLore':      SourceMeta(label: 'Vector Lorebook',  color: Color(0xFFE76F51)),
-  'lorebookReserve': SourceMeta(label: 'Lorebook Reserve', color: Color(0xFFA8DADC)),
-  'history':         SourceMeta(label: 'History',          color: Color(0xFF6C5CE7)),
+final kSourceMeta = <String, SourceMeta>{
+  'preset':          SourceMeta(label: 'subtab_preset'.tr(),           color: const Color(0xFF4ECDC4)),
+  'description':     SourceMeta(label: 'label_description'.tr(),      color: const Color(0xFFFF6B6B)),
+  'personality':     SourceMeta(label: 'label_personality'.tr(),      color: const Color(0xFFD4A5E5)),
+  'scenario':        SourceMeta(label: 'label_scenario'.tr(),         color: const Color(0xFFB8D4E3)),
+  'mesExamples':     SourceMeta(label: 'token_source_mes_examples'.tr(), color: const Color(0xFFC9B1FF)),
+  'depthPrompt':     SourceMeta(label: 'token_source_depth_prompt'.tr(), color: const Color(0xFFE8A0BF)),
+  'persona':         SourceMeta(label: 'tab_personas'.tr(),          color: const Color(0xFF81ECEC)),
+  'authorsNote':     SourceMeta(label: 'magic_authors_notes'.tr(),    color: const Color(0xFFFFD93D)),
+  'summary':         SourceMeta(label: 'token_source_summary'.tr(),          color: const Color(0xFF95E1D3)),
+  'memory':          SourceMeta(label: 'token_source_memory'.tr(),           color: const Color(0xFFA8E6CF)),
+  'lorebook':        SourceMeta(label: 'token_source_keyword_lorebook'.tr(), color: const Color(0xFFF4A261)),
+  'lorebooks':       SourceMeta(label: 'token_source_lorebooks_macro'.tr(),color: const Color(0xFFE8985E)),
+  'vectorLore':      SourceMeta(label: 'token_source_vector_lorebook'.tr(),  color: const Color(0xFFE76F51)),
+  'lorebookReserve': SourceMeta(label: 'token_source_lorebook_reserve'.tr(), color: const Color(0xFFA8DADC)),
+  'history':         SourceMeta(label: 'token_source_history'.tr(),          color: const Color(0xFF6C5CE7)),
 };
 
 class SourceMeta {
@@ -169,7 +170,7 @@ class TokenizerLayout extends StatelessWidget {
     final List<BarRow> combinedBreakdownItems = [...mainItems, ...reserveItems];
     final hasKeywordLore = (breakdown.sourceTokens['lorebook'] ?? 0) > 0 || (breakdown.macroTokens['lorebooks'] ?? 0) > 0;
     if (breakdown.lorebookTotal > 0 && hasKeywordLore && breakdown.vectorLoreTokens > 0) {
-      combinedBreakdownItems.add(BarRow(key: 'lorebookTotal', label: 'Lorebook Total', tokens: breakdown.lorebookTotal, color: Colors.transparent));
+      combinedBreakdownItems.add(BarRow(key: 'lorebookTotal', label: 'token_source_lorebook_total'.tr(), tokens: breakdown.lorebookTotal, color: Colors.transparent));
     }
 
     final totalMain = mainItems.fold<int>(0, (s, r) => s + r.tokens);
@@ -274,7 +275,7 @@ class TokenizerActionButtons extends ConsumerWidget {
           child: FilledButton.icon(
             onPressed: hideCount > 0 ? () => _confirmHide(context, ref, hideCount) : null,
             icon: const Icon(Icons.visibility_off, size: 16),
-            label: Text('Hide top $hideCount'),
+            label: Text('${'label_hide_top_messages'.tr()} $hideCount'),
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF2980b9),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -290,7 +291,7 @@ class TokenizerActionButtons extends ConsumerWidget {
                 if (context.mounted) onRefresh();
               },
               icon: const Icon(Icons.visibility, size: 16),
-              label: Text('Unhide all ($hiddenCount)'),
+              label: Text('${'action_unhide_msg'.tr()} all ($hiddenCount)'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: context.cs.primary,
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -305,19 +306,19 @@ class TokenizerActionButtons extends ConsumerWidget {
   void _confirmHide(BuildContext context, WidgetRef ref, int count) async {
     final confirmed = await GlazeBottomSheet.show<bool>(
       context,
-      title: 'Hide Messages',
+      title: 'action_hide_msg'.tr(),
       bigInfo: BottomSheetBigInfo(
         icon: Icons.visibility_off_outlined,
-        description: 'Hide the top $count visible message${count > 1 ? 's' : ''} from prompt? They will still be visible in chat (dimmed) but excluded from generation.',
+        description: 'tokenizer_hide_confirm_desc'.tr(args: ['$count']),
       ),
       items: [
         BottomSheetItem(
-          label: 'Hide $count',
+          label: '${'action_hide_msg'.tr()} $count',
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(true),
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'btn_cancel'.tr(),
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(false),
         ),
@@ -347,7 +348,7 @@ class CutoffWarning extends StatelessWidget {
         children: [
           const Icon(Icons.warning_amber, size: 18, color: Colors.orange),
           const SizedBox(width: 8),
-          Expanded(child: Text('$cutoffCount message${cutoffCount > 1 ? 's' : ''} cut from history', style: const TextStyle(fontSize: 13, color: Colors.orange))),
+          Expanded(child: Text('count_message_cut'.plural(cutoffCount), style: const TextStyle(fontSize: 13, color: Colors.orange))),
         ],
       ),
     );
@@ -371,7 +372,7 @@ class NearLimitWarning extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('History is near its limit', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFFFFB84D))),
+          Text('tokenizer_history_limit_warning'.tr(), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFFFFB84D))),
           const SizedBox(height: 4),
           Text(
             'Hide about $hideCount top message${hideCount == 1 ? '' : 's'} to free about $hideTokens tokens.',

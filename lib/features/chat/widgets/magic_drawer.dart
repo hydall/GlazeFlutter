@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -72,53 +73,53 @@ class MagicDrawerPanel extends ConsumerStatefulWidget {
 }
 
 class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
-  static const _allItems = <MagicDrawerItemDef>[
-    MagicDrawerItemDef(id: 'context', label: 'Tokenizer', icon: Icons.segment),
-    MagicDrawerItemDef(id: 'summary', label: 'Summary', icon: Icons.subject),
-    MagicDrawerItemDef(id: 'sessions', label: 'Sessions', icon: Icons.history),
+  static final _allItems = <MagicDrawerItemDef>[
+    MagicDrawerItemDef(id: 'context', label: 'label_tokenizer'.tr(), icon: Icons.segment),
+    MagicDrawerItemDef(id: 'summary', label: 'summary_title'.tr(), icon: Icons.subject),
+    MagicDrawerItemDef(id: 'sessions', label: 'history_title'.tr(), icon: Icons.history),
     MagicDrawerItemDef(id: 'stats', label: 'Stats', icon: Icons.insert_chart),
     MagicDrawerItemDef(
       id: 'char-card',
-      label: 'Character',
+      label: 'menu_characters'.tr(),
       icon: Icons.account_box,
     ),
     MagicDrawerItemDef(
       id: 'lorebooks',
-      label: 'Lorebooks',
+      label: 'label_lorebooks'.tr(),
       icon: Icons.library_books,
     ),
     MagicDrawerItemDef(
       id: 'memory-books',
-      label: 'Memory Books',
+      label: 'magic_memory_books'.tr(),
       icon: Icons.add_box,
     ),
-    MagicDrawerItemDef(id: 'regex', label: 'Regex', icon: Icons.code),
-    MagicDrawerItemDef(id: 'api', label: 'API', icon: Icons.cloud),
+    MagicDrawerItemDef(id: 'regex', label: 'menu_regex'.tr(), icon: Icons.code),
+    MagicDrawerItemDef(id: 'api', label: 'tab_api'.tr(), icon: Icons.cloud),
     MagicDrawerItemDef(
       id: 'presets',
-      label: 'Presets',
+      label: 'tab_presets'.tr(),
       icon: Icons.description,
     ),
     MagicDrawerItemDef(
       id: 'preview',
-      label: 'Request Preview',
+      label: 'magic_request_preview'.tr(),
       icon: Icons.visibility,
     ),
     MagicDrawerItemDef(id: 'coverage', label: 'Coverage', icon: Icons.search),
     MagicDrawerItemDef(
       id: 'personas',
-      label: 'Personas',
+      label: 'menu_personas'.tr(),
       icon: Icons.manage_accounts,
     ),
-    MagicDrawerItemDef(id: 'image-gen', label: 'Image Gen', icon: Icons.image),
+    MagicDrawerItemDef(id: 'image-gen', label: 'imggen_title'.tr(), icon: Icons.image),
     MagicDrawerItemDef(
       id: 'authors-note',
-      label: "Author's Note",
+      label: 'magic_authors_notes'.tr(),
       icon: Icons.edit_note,
     ),
     MagicDrawerItemDef(
       id: 'glossary',
-      label: 'Glossary',
+      label: 'menu_glossary'.tr(),
       icon: Icons.menu_book,
     ),
     MagicDrawerItemDef(
@@ -241,8 +242,8 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         .toList();
     if (_editing && _canAddMore) {
       list.add(
-        const MagicDrawerCardItem(
-          def: MagicDrawerItemDef(id: 'add-btn', label: 'Add', icon: Icons.add),
+        MagicDrawerCardItem(
+          def: MagicDrawerItemDef(id: 'add-btn', label: 'btn_add'.tr(), icon: Icons.add),
           isAddButton: true,
         ),
       );
@@ -285,7 +286,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
             : _stats.apiConfig?.model,
       'presets' =>
         _stats.activePreset == null
-            ? 'Default'
+            ? 'label_default'.tr()
             : _stats.presetTokens > 0
             ? '${_stats.activePreset!.name} • ${_stats.presetTokens} tokens'
             : _stats.activePreset!.name,
@@ -301,16 +302,16 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         _stats.lorebookEntryCount > 0
             ? '${_stats.lorebookEntryCount} entries'
             : null,
-      'personas' => _stats.activePersona?.name ?? 'Default',
-      'image-gen' => _stats.imageGenEnabled ? 'On' : 'Off',
+      'personas' => _stats.activePersona?.name ?? 'label_default'.tr(),
+      'image-gen' => _stats.imageGenEnabled ? 'on'.tr() : 'off'.tr(),
       'authors-note' =>
         _stats.session?.authorsNote != null &&
                 _stats.session!.authorsNote!.content.isNotEmpty
             ? '${_stats.session!.authorsNote!.content.length} chars'
-            : 'Empty',
+            : 'placeholder_empty'.tr(),
       'ext-blocks' =>
         !extSettings.enabled
-            ? 'Off'
+            ? 'off'.tr()
             : extSettings.activePresetId == null
             ? 'No preset'
             : extPresets
@@ -536,7 +537,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
     if (!mounted) return;
     await GlazeBottomSheet.show<void>(
       context,
-      title: 'Sessions',
+      title: 'history_title'.tr(),
       headerAction: IconButton(
         icon: Icon(Icons.add, color: context.cs.primary),
         onPressed: _showSessionAddMenu,
@@ -551,11 +552,11 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
   void _showSessionAddMenu() {
     GlazeBottomSheet.show<String>(
       context,
-      title: 'Add Session',
+      title: 'action_new_session'.tr(),
       items: [
         BottomSheetItem(
           icon: Icons.add_circle_outline,
-          label: 'New Session',
+          label: 'action_new_session'.tr(),
           onTap: () => Navigator.of(context).pop('new'),
         ),
         BottomSheetItem(
@@ -582,17 +583,17 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       items: [
         BottomSheetItem(
           icon: Icons.upload_file,
-          label: 'Export (JSONL)',
+          label: 'action_export_chat'.tr(),
           onTap: () => Navigator.of(context).pop('export'),
         ),
         BottomSheetItem(
           icon: Icons.drive_file_rename_outline,
-          label: 'Rename',
+          label: 'action_rename'.tr(),
           onTap: () => Navigator.of(context).pop('rename'),
         ),
         BottomSheetItem(
           icon: Icons.delete_outline,
-          label: 'Delete',
+          label: 'action_delete'.tr(),
           isDestructive: true,
           onTap: () => Navigator.of(context).pop('delete'),
         ),
@@ -631,7 +632,7 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
       input: BottomSheetInput(
         placeholder: 'Session name',
         value: currentName,
-        confirmLabel: 'Rename',
+        confirmLabel: 'action_rename'.tr(),
         onConfirm: (val) async {
           Navigator.of(context, rootNavigator: true).pop();
           if (val.trim().isNotEmpty) {
@@ -918,7 +919,7 @@ class _SessionsSheetContentState extends ConsumerState<_SessionsSheetContent> {
             (session) => BottomSheetSessionItem(
               title: session.sessionVars['sessionName']?.isNotEmpty == true
                   ? session.sessionVars['sessionName']!
-                  : 'Session #${session.sessionIndex + 1}',
+                  : 'session_name'.tr(namedArgs: {'id': (session.sessionIndex + 1).toString()}),
               count: session.messages.length,
               time: session.updatedAt == 0
                   ? ''

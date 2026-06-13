@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -99,7 +100,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
         children: [
           Expanded(
             child: Text(
-              'Request Preview',
+              'magic_request_preview'.tr(),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -114,7 +115,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
               color: Colors.white.withValues(alpha: 0.06),
               shape: const CircleBorder(),
               child: Tooltip(
-                message: 'Copy',
+                message: 'action_copy'.tr(),
                 child: InkWell(
                   customBorder: const CircleBorder(),
                   onTap: _copyContent,
@@ -144,9 +145,9 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
       showBack: true,
       onBack: () => Navigator.of(context).maybePop(),
       headerBottom: GlazeTabBar(
-        tabs: const [
-          GlazeTabItem(label: 'Request', icon: Icons.upload_rounded),
-          GlazeTabItem(label: 'Response', icon: Icons.download_rounded),
+        tabs: [
+          GlazeTabItem(label: 'tab_request'.tr(), icon: Icons.upload_rounded),
+          GlazeTabItem(label: 'tab_response'.tr(), icon: Icons.download_rounded),
         ],
         activeIndex: _dataTabIndex,
         onChanged: (i) => setState(() => _dataTabIndex = i),
@@ -167,7 +168,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
           if (_result == null) {
             return Center(
               child: Text(
-                'No data',
+                'no_preview_available'.tr(),
                 style: TextStyle(color: context.cs.onSurfaceVariant),
               ),
             );
@@ -228,7 +229,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
           if (raw == null || raw.isEmpty) {
             return Center(
               child: Text(
-                'No response data',
+                'no_preview_available'.tr(),
                 style: TextStyle(color: context.cs.onSurfaceVariant),
               ),
             );
@@ -410,7 +411,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
 
     if (textToCopy.isEmpty) return;
     Clipboard.setData(ClipboardData(text: textToCopy));
-    GlazeToast.show(context, 'Copied to clipboard');
+    GlazeToast.show(context, 'chat_copied'.tr());
   }
 
   /// Builds the actual on-the-wire request body for the configured protocol by
@@ -477,7 +478,7 @@ class _PromptPreviewScreenState extends ConsumerState<PromptPreviewScreen> {
   /// section header.
   String get _protocolLabel {
     final protocol = _apiConfig?.protocol;
-    if (protocol == null) return 'Parameters';
+    if (protocol == null) return 'label_generation_params'.tr();
     return LlmProtocol.labels[protocol] ?? protocol;
   }
 }
@@ -559,11 +560,11 @@ class _SummaryBar extends StatelessWidget {
 enum _SectionFilter { all, system, lorebook, history, depth }
 
 String _labelForFilter(_SectionFilter f) => switch (f) {
-  _SectionFilter.all => 'All',
-  _SectionFilter.system => 'System',
-  _SectionFilter.lorebook => 'Lorebook',
-  _SectionFilter.history => 'History',
-  _SectionFilter.depth => 'Depth',
+  _SectionFilter.all => 'filter_all'.tr(),
+  _SectionFilter.system => 'role_system'.tr(),
+  _SectionFilter.lorebook => 'filter_lorebook'.tr(),
+  _SectionFilter.history => 'filter_history'.tr(),
+  _SectionFilter.depth => 'label_depth'.tr(),
 };
 
 class _SectionTitle extends StatelessWidget {

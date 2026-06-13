@@ -10,12 +10,17 @@ class TriggeredEntry {
   final String lorebookId;
   final String source;
 
+  /// Raw regex pattern for `source == 'regex'` entries. Empty for a
+  /// trim-out-only script (rendered as "Trim Out" in the triggered sheet).
+  final String pattern;
+
   const TriggeredEntry({
     required this.id,
     required this.name,
     this.lorebookName = '',
     this.lorebookId = '',
     this.source = 'keyword',
+    this.pattern = '',
   });
 
   factory TriggeredEntry.fromJson(Map<String, dynamic> json) => TriggeredEntry(
@@ -24,6 +29,7 @@ class TriggeredEntry {
         lorebookName: json['lorebookName'] as String? ?? '',
         lorebookId: json['lorebookId'] as String? ?? '',
         source: json['source'] as String? ?? 'keyword',
+        pattern: json['pattern'] as String? ?? '',
       );
 
   Map<String, dynamic> toJson() => {
@@ -32,6 +38,7 @@ class TriggeredEntry {
         'lorebookName': lorebookName,
         'lorebookId': lorebookId,
         'source': source,
+        'pattern': pattern,
       };
 }
 

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -52,7 +53,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen>
 
   @override
   ShellHeaderConfig buildShellHeader() => ShellHeaderConfig(
-    title: _searchExpanded ? null : 'Chats',
+    title: _searchExpanded ? null : 'tab_dialogs'.tr(),
     titleWidget: _searchExpanded ? _buildSearchField(context) : null,
     actions: [
       SizedBox(
@@ -103,7 +104,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen>
       decoration: InputDecoration(
         isDense: true,
         border: InputBorder.none,
-        hintText: 'Search chats',
+        hintText: 'search_dialogs'.tr(),
         hintStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 16),
       ),
     );
@@ -122,7 +123,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen>
               loading: () => Center(
                 child: CircularProgressIndicator(color: context.cs.primary),
               ),
-              error: (e, _) => Center(child: Text('Error: $e')),
+              error: (e, _) => Center(child: Text('${'title_error'.tr()}: $e')),
               data: (list) {
                 final settings = settingsAsync.value ?? const AppSettings();
                 var filtered = list;
@@ -192,7 +193,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen>
           ),
           const SizedBox(height: 16),
           Text(
-            'No chats yet',
+            'no_dialogs'.tr(),
             style: TextStyle(color: context.cs.onSurfaceVariant),
           ),
           const SizedBox(height: 20),
@@ -254,7 +255,7 @@ class _ChatHistoryScreenState extends ConsumerState<ChatHistoryScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 6, 16, 6),
       child: Text(
-        '$count chat${count == 1 ? '' : 's'}',
+        '$count ${'count_chats'.plural(count)}',
         style: TextStyle(
           fontSize: 11,
           color: context.cs.onSurfaceVariant,
@@ -446,7 +447,7 @@ class _SessionTile extends ConsumerWidget {
                   Text(
                     info.sessionName?.isNotEmpty == true
                         ? info.sessionName!
-                        : 'Session #${info.sessionIndex + 1}',
+                        : 'session_name'.tr(namedArgs: {'id': (info.sessionIndex + 1).toString()}),
                     style: TextStyle(
                       fontSize: 12,
                       color: context.cs.onSurfaceVariant,
@@ -493,7 +494,7 @@ class _SessionTile extends ConsumerWidget {
                   child: Text(
                     info.sessionName?.isNotEmpty == true
                         ? info.sessionName!
-                        : 'Session #${info.sessionIndex + 1}',
+                        : 'session_name'.tr(namedArgs: {'id': (info.sessionIndex + 1).toString()}),
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
@@ -531,14 +532,14 @@ class _SessionTile extends ConsumerWidget {
   void _showRenameDialog(BuildContext context, WidgetRef ref) {
     final currentName = info.sessionName?.isNotEmpty == true
         ? info.sessionName!
-        : 'Session #${info.sessionIndex + 1}';
+        : 'session_name'.tr(namedArgs: {'id': (info.sessionIndex + 1).toString()});
     GlazeBottomSheet.show<void>(
       context,
       title: 'Rename Session',
       input: BottomSheetInput(
         placeholder: 'Session name',
         value: currentName,
-        confirmLabel: 'Rename',
+        confirmLabel: 'action_rename'.tr(),
         onConfirm: (val) {
           Navigator.of(context, rootNavigator: true).pop();
           if (val.trim().isNotEmpty) {
@@ -555,15 +556,15 @@ class _SessionTile extends ConsumerWidget {
   void _confirmDelete(BuildContext context, WidgetRef ref) {
     GlazeBottomSheet.show<void>(
       context,
-      title: 'Delete Chat',
+      title: 'action_delete_session'.tr(),
       bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
         description:
-            'Delete chat with ${info.characterName}? This cannot be undone.',
+            '${'action_delete_session'.tr()} \u2014 ${info.characterName}? ${'chat_clear_confirm'.tr()}',
       ),
       items: [
         BottomSheetItem(
-          label: 'Delete',
+          label: 'btn_delete'.tr(),
           isDestructive: true,
           centered: true,
           onTap: () {
@@ -574,7 +575,7 @@ class _SessionTile extends ConsumerWidget {
           },
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'btn_cancel'.tr(),
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(),
         ),
@@ -589,17 +590,17 @@ class _SessionTile extends ConsumerWidget {
       items: [
         BottomSheetItem(
           icon: Icons.upload_file,
-          label: 'Export (JSONL)',
+          label: 'action_export_chat'.tr(),
           onTap: () => Navigator.of(context, rootNavigator: true).pop('export'),
         ),
         BottomSheetItem(
           icon: Icons.drive_file_rename_outline,
-          label: 'Rename',
+          label: 'action_rename'.tr(),
           onTap: () => Navigator.of(context, rootNavigator: true).pop('rename'),
         ),
         BottomSheetItem(
           icon: Icons.delete_outline,
-          label: 'Delete',
+          label: 'action_delete'.tr(),
           isDestructive: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop('delete'),
         ),
@@ -666,7 +667,7 @@ class _SessionTile extends ConsumerWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            '${info.messageCount} messages${info.lastMessageTime > 0 ? ' · ${_formatTime()}' : ''}',
+            '${info.messageCount} ${'count_messages'.plural(info.messageCount)}${info.lastMessageTime > 0 ? ' · ${_formatTime()}' : ''}',
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w700,
@@ -734,7 +735,7 @@ class _GroupHeader extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        '${sessions.length} sessions',
+                        '${sessions.length} ${'count_sessions'.plural(sessions.length)}',
                         style: TextStyle(
                           fontSize: 12,
                           color: context.cs.onSurfaceVariant,
@@ -841,7 +842,7 @@ class _GroupHeader extends ConsumerWidget {
       items: [
         BottomSheetItem(
           icon: Icons.add_comment_outlined,
-          label: 'New Session',
+          label: 'action_new_session'.tr(),
           onTap: () => Navigator.of(context, rootNavigator: true).pop('new'),
         ),
         BottomSheetItem(

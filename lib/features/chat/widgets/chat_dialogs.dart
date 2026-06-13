@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -52,12 +53,12 @@ void showRawPromptDialog(
 
   await GlazeBottomSheet.show<void>(
     context,
-    title: 'Raw Prompt',
+    title: 'chat_raw_prompt'.tr(),
     headerAction: IconButton(
       icon: const Icon(Icons.copy),
       onPressed: () {
         Clipboard.setData(ClipboardData(text: rawJson));
-        GlazeToast.show(context, 'Copied to clipboard');
+        GlazeToast.show(context, 'chat_copied'.tr());
       },
     ),
     child: Padding(
@@ -69,7 +70,7 @@ void showRawPromptDialog(
     ),
   );
   } catch (e) {
-    if (context.mounted) GlazeErrorDialog.show(context, e, prefix: 'Failed to build prompt: ');
+    if (context.mounted) GlazeErrorDialog.show(context, e, prefix: 'chat_failed_build_prompt'.tr());
   }
 }
 
@@ -77,18 +78,18 @@ void showRawResponseDialog(BuildContext context, WidgetRef ref, String charId) {
   final chatState = ref.read(chatProvider(charId)).value;
   final raw = chatState?.lastRawResponse;
   if (raw == null || raw.isEmpty) {
-    GlazeToast.show(context, 'No response yet — generate something first');
+    GlazeToast.show(context, 'chat_no_response_yet'.tr());
     return;
   }
 
   unawaited(GlazeBottomSheet.show<void>(
     context,
-    title: 'Raw Response',
+    title: 'chat_raw_response'.tr(),
     headerAction: IconButton(
       icon: const Icon(Icons.copy),
       onPressed: () {
         Clipboard.setData(ClipboardData(text: raw));
-        GlazeToast.show(context, 'Copied to clipboard');
+        GlazeToast.show(context, 'chat_copied'.tr());
       },
     ),
     child: Padding(
@@ -108,10 +109,10 @@ void showPresetPickerDialog(BuildContext context, WidgetRef ref) async {
 
   await GlazeBottomSheet.show<void>(
     context,
-    title: 'Select Preset',
+    title: 'chat_select_preset'.tr(),
     items: [
       BottomSheetItem(
-        label: 'Default (first)',
+        label: 'chat_default_first'.tr(),
         icon: activeId == null ? Icons.check : null,
         iconColor: activeId == null ? context.cs.primary : null,
         onTap: () {
@@ -141,10 +142,10 @@ void showPersonaPickerDialog(BuildContext context, WidgetRef ref) async {
 
   await GlazeBottomSheet.show<void>(
     context,
-    title: 'Select Persona',
+    title: 'chat_select_persona'.tr(),
     items: [
       BottomSheetItem(
-        label: 'Default (first)',
+        label: 'chat_default_first'.tr(),
         icon: activeId == null ? Icons.check : null,
         iconColor: activeId == null ? context.cs.primary : null,
         onTap: () {
@@ -174,14 +175,14 @@ void confirmClearChatDialog(
 ) {
   unawaited(GlazeBottomSheet.show<void>(
     context,
-    title: 'Clear Chat',
-    bigInfo: const BottomSheetBigInfo(
+    title: 'chat_clear_chat'.tr(),
+    bigInfo: BottomSheetBigInfo(
       icon: Icons.delete_outline,
-      description: 'Delete all messages? This cannot be undone.',
+      description: 'chat_clear_confirm'.tr(),
     ),
     items: [
       BottomSheetItem(
-        label: 'Clear',
+        label: 'chat_clear_btn'.tr(),
         isDestructive: true,
         centered: true,
         onTap: () {
@@ -190,7 +191,7 @@ void confirmClearChatDialog(
         },
       ),
       BottomSheetItem(
-        label: 'Cancel',
+        label: 'chat_cancel_btn'.tr(),
         centered: true,
         onTap: () => Navigator.pop(context),
       ),

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 /// Modal dialog helpers for editing / deleting an ext-block from the
@@ -20,7 +21,7 @@ class ExtBlockDialogs {
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          title: Text('Редактировать «$blockName»'),
+          title: Text('${'action_edit'.tr()} "$blockName"'),
           content: SizedBox(
             width: 500,
             child: TextField(
@@ -29,20 +30,20 @@ class ExtBlockDialogs {
               maxLines: 12,
               minLines: 6,
               style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                hintText: 'Содержимое блока…',
+              decoration: InputDecoration(
+                border: const OutlineInputBorder(),
+                hintText: 'placeholder_empty'.tr(),
               ),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Отмена'),
+              child: Text('btn_cancel'.tr()),
             ),
             FilledButton(
               onPressed: () => Navigator.pop(ctx, controller.text),
-              child: const Text('Сохранить'),
+              child: Text('btn_save'.tr()),
             ),
           ],
         );
@@ -60,21 +61,19 @@ class ExtBlockDialogs {
       context: context,
       builder: (ctx) {
         return AlertDialog(
-          title: Text('Удалить «$blockName»?'),
-          content: const Text(
-            'Блок будет удалён из базы данных. Это нельзя отменить.',
-          ),
+          title: Text('${'blocks_delete_block'.tr()} "$blockName"?'),
+          content: Text('ext_block_delete_confirm'.tr()),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Отмена'),
+              child: Text('btn_cancel'.tr()),
             ),
             FilledButton(
               style: FilledButton.styleFrom(
                 backgroundColor: Theme.of(ctx).colorScheme.error,
               ),
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Удалить'),
+              child: Text('btn_delete'.tr()),
             ),
           ],
         );

@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -39,7 +40,7 @@ class _LorebookGlobalSettingsScreenState
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
               child: GlazeAppBar(
-                title: 'Lorebook Settings',
+                title: 'title_lorebook_settings'.tr(),
                 leading: BackButton(
                   onPressed: () {
                     if (context.canPop()) {
@@ -56,18 +57,18 @@ class _LorebookGlobalSettingsScreenState
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                _SectionHeader('Search', helpTerm: 'lorebook-keys'),
+                _SectionHeader('search'.tr(), helpTerm: 'lorebook-keys'),
                 _DropdownField<String>(
-                  label: 'Key Search Mode',
+                  label: 'label_key_search_mode'.tr(),
                   value: settings.keySearchMode,
-                  items: const [
+                  items: [
                     DropdownMenuItem(
                       value: 'tavern',
-                      child: Text('Tavern (substring)'),
+                      child: Text('match_whole_words_st'.tr()),
                     ),
                     DropdownMenuItem(
                       value: 'glaze',
-                      child: Text('Glaze (word boundary)'),
+                      child: Text('match_whole_words_glaze'.tr()),
                     ),
                   ],
                   onChanged: (v) =>
@@ -75,14 +76,14 @@ class _LorebookGlobalSettingsScreenState
                 ),
                 const SizedBox(height: 12),
                 _DropdownField<String>(
-                  label: 'Search Type',
+                  label: 'label_search_type'.tr(),
                   value: settings.searchType,
-                  items: const [
-                    DropdownMenuItem(value: 'keyword', child: Text('Keyword')),
-                    DropdownMenuItem(value: 'vector', child: Text('Vector')),
+                  items: [
+                    DropdownMenuItem(value: 'keyword', child: Text('search_type_keys'.tr())),
+                    DropdownMenuItem(value: 'vector', child: Text('search_type_vector'.tr())),
                     DropdownMenuItem(
                       value: 'both',
-                      child: Text('Both (Hybrid)'),
+                      child: Text('search_type_both'.tr()),
                     ),
                   ],
                   onChanged: (v) => _update(settings.copyWith(searchType: v)),
@@ -90,8 +91,8 @@ class _LorebookGlobalSettingsScreenState
                 const SizedBox(height: 12),
                 _NumberField(
                   label: settings.searchType == 'vector'
-                      ? 'Vector Scan Depth'
-                      : 'Keyword Scan Depth',
+                      ? 'label_vector_scan_depth'.tr()
+                      : 'label_scan_depth_lore'.tr(),
                   value: settings.scanDepth,
                   min: 1,
                   max: 100,
@@ -99,9 +100,9 @@ class _LorebookGlobalSettingsScreenState
                 ),
                 const SizedBox(height: 24),
 
-                _SectionHeader('Injection'),
+                _SectionHeader('section_injection_rules'.tr()),
                 _NumberField(
-                  label: 'Max Injected Entries',
+                  label: 'label_max_injected_entries'.tr(),
                   value: settings.maxInjectedEntries,
                   min: 1,
                   max: 100,
@@ -110,20 +111,20 @@ class _LorebookGlobalSettingsScreenState
                 ),
                 const SizedBox(height: 12),
                 _DropdownField<String>(
-                  label: 'Injection Position',
+                  label: 'label_injection_position'.tr(),
                   value: settings.injectionPosition,
-                  items: const [
+                  items: [
                     DropdownMenuItem(
                       value: 'worldInfoBefore',
-                      child: Text('Before Chat History'),
+                      child: Text('pos_before_char'.tr()),
                     ),
                     DropdownMenuItem(
                       value: 'worldInfoAfter',
-                      child: Text('After Chat History'),
+                      child: Text('pos_after_char'.tr()),
                     ),
                     DropdownMenuItem(
                       value: 'lorebooksMacro',
-                      child: Text('At {{lorebooks}} Macro'),
+                      child: Text('pos_lorebooks_macro'.tr()),
                     ),
                   ],
                   onChanged: (v) =>
@@ -131,18 +132,18 @@ class _LorebookGlobalSettingsScreenState
                 ),
                 const SizedBox(height: 24),
 
-                _SectionHeader('Token Budget', helpTerm: 'lorebook-budget'),
+                _SectionHeader('lorebook_token_budget'.tr(), helpTerm: 'lorebook-budget'),
                 _DropdownField<String>(
-                  label: 'Reserve Mode',
+                  label: 'label_lorebook_reserve_mode'.tr(),
                   value: settings.reserveMode,
-                  items: const [
+                  items: [
                     DropdownMenuItem(
                       value: 'percent',
-                      child: Text('Percentage'),
+                      child: Text('lorebook_reserve_percent'.tr()),
                     ),
                     DropdownMenuItem(
                       value: 'tokens',
-                      child: Text('Absolute Tokens'),
+                      child: Text('lorebook_reserve_absolute'.tr()),
                     ),
                   ],
                   onChanged: (v) => _update(settings.copyWith(reserveMode: v)),
@@ -150,8 +151,8 @@ class _LorebookGlobalSettingsScreenState
                 const SizedBox(height: 12),
                 _NumberField(
                   label: settings.reserveMode == 'percent'
-                      ? 'Reserve %'
-                      : 'Reserve Tokens',
+                      ? 'label_lorebook_reserve_percent'.tr()
+                      : 'label_lorebook_reserve_tokens'.tr(),
                   value: settings.reserveValue,
                   min: 0,
                   max: settings.reserveMode == 'percent' ? 100 : 2147483647,
@@ -160,9 +161,9 @@ class _LorebookGlobalSettingsScreenState
                 const SizedBox(height: 24),
 
                 if (settings.searchType != 'keyword') ...[
-                  _SectionHeader('Vector Search'),
+                  _SectionHeader('section_vector_search'.tr()),
                   _SliderField(
-                    label: 'Similarity Threshold',
+                    label: 'label_similarity_threshold'.tr(),
                     value: settings.vectorThreshold,
                     min: 0.0,
                     max: 1.0,
@@ -173,7 +174,7 @@ class _LorebookGlobalSettingsScreenState
                   ),
                   const SizedBox(height: 12),
                   _NumberField(
-                    label: 'Vector Top K',
+                    label: 'label_top_k'.tr(),
                     value: settings.vectorTopK,
                     min: 1,
                     max: 50,
@@ -182,7 +183,7 @@ class _LorebookGlobalSettingsScreenState
                   if (settings.searchType == 'both') ...[
                     const SizedBox(height: 12),
                     _SliderField(
-                      label: 'Keyword / Vector Split',
+                      label: 'label_kw_vector_split'.tr(),
                       value: settings.keywordVectorSplit.toDouble(),
                       min: 0,
                       max: 100,
@@ -197,21 +198,21 @@ class _LorebookGlobalSettingsScreenState
                   const SizedBox(height: 24),
                 ],
 
-                _SectionHeader('Matching'),
+                _SectionHeader('lorebook_matching'.tr()),
                 _SwitchField(
-                  label: 'Case Sensitive',
+                  label: 'label_case_sensitive'.tr(),
                   value: settings.caseSensitive,
                   onChanged: (v) =>
                       _update(settings.copyWith(caseSensitive: v)),
                 ),
                 _SwitchField(
-                  label: 'Recursive Scan',
+                  label: 'label_recursive_scan'.tr(),
                   value: settings.recursiveScan,
                   onChanged: (v) =>
                       _update(settings.copyWith(recursiveScan: v)),
                 ),
                 _SwitchField(
-                  label: 'Match Whole Words',
+                  label: 'label_match_whole_words'.tr(),
                   value: settings.matchWholeWords,
                   onChanged: (v) =>
                       _update(settings.copyWith(matchWholeWords: v)),

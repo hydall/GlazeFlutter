@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -49,11 +50,11 @@ final _resolvedPersonaAvatarPathProvider = FutureProvider<String?>((ref) async {
 
 final _activePresetNameProvider = FutureProvider<String>((ref) async {
   final activeId = ref.watch(activePresetIdProvider);
-  if (activeId == null) return 'Default';
+  if (activeId == null) return 'label_default'.tr();
   final preset = await ref
       .read(presetListProvider.notifier)
       .getPresetById(activeId);
-  return preset?.name ?? 'Default';
+  return preset?.name ?? 'label_default'.tr();
 });
 
 // SVG paths matching ToolsView.vue
@@ -93,14 +94,14 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
 
   @override
   ShellHeaderConfig buildShellHeader() =>
-      const ShellHeaderConfig(title: 'Tools');
+      ShellHeaderConfig(title: 'tab_tools'.tr());
 
   @override
   Widget build(BuildContext context) {
     final bottomPad = ref.watch(navHeightProvider) + 20;
     final personaInfo = ref.watch(_activePersonaInfoProvider);
     final resolvedAvatar = ref.watch(_resolvedPersonaAvatarPathProvider).value;
-    final presetName = ref.watch(_activePresetNameProvider).value ?? 'Default';
+    final presetName = ref.watch(_activePresetNameProvider).value ?? 'label_default'.tr();
     final topPad = MediaQuery.of(context).padding.top + 66.0;
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -111,7 +112,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
             children: [
               _HeroCard(
                 iconPath: _kIconPersonas,
-                title: 'Personas',
+                title: 'menu_personas'.tr(),
                 subtitle: personaInfo?.name ?? 'user',
                 avatarPath: resolvedAvatar,
                 isAvatar: true,
@@ -120,7 +121,7 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
               const SizedBox(height: 16),
               _HeroCard(
                 iconPath: _kIconPresets,
-                title: 'Presets',
+                title: 'tab_presets'.tr(),
                 subtitle: presetName,
                 onTap: () => context.push('/tools/presets'),
               ),
@@ -132,8 +133,8 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                     Expanded(
                       child: _GridTile(
                         iconPath: _kIconApi,
-                        title: 'API',
-                        subtitle: 'Endpoints & models',
+                        title: 'tab_api'.tr(),
+                        subtitle: 'tools_api_subtitle'.tr(),
                         showStatusDot: true,
                         onTap: () => context.push('/tools/api'),
                       ),
@@ -142,8 +143,8 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                     Expanded(
                       child: _GridTile(
                         iconPath: _kIconLorebook,
-                        title: 'Lorebooks',
-                        subtitle: 'World info',
+                        title: 'menu_lorebooks'.tr(),
+                        subtitle: 'tools_lorebooks_subtitle'.tr(),
                         onTap: () => context.push('/tools/lorebooks'),
                       ),
                     ),
@@ -156,8 +157,8 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                   Expanded(
                     child: _GridTile(
                       iconPath: _kIconRegex,
-                      title: 'Regex Scripts',
-                      subtitle: 'Find & replace scripts',
+                      title: 'menu_regex'.tr(),
+                      subtitle: 'tools_regex_subtitle'.tr(),
                       onTap: () => context.push('/tools/regex'),
                     ),
                   ),

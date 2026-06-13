@@ -42,6 +42,7 @@ class ChatMessageMapper {
     final isUser = m.role == 'user';
 
     String content = m.content;
+    final List<TriggeredEntry> triggeredRegexes = [];
     if (displayRegexes != null && displayRegexes.isNotEmpty) {
       final placement = isUser ? 1 : 2;
       final regexCtx = RegexApplyContext(char: character, persona: persona);
@@ -52,6 +53,7 @@ class ChatMessageMapper {
         displayRegexes,
         regexCtx,
         isMarkdown: true,
+        triggered: triggeredRegexes,
       );
     }
 
@@ -121,6 +123,8 @@ class ChatMessageMapper {
         'triggeredLorebooks': _triggeredToJson(m.triggeredLorebooks),
       if (m.triggeredMemories.isNotEmpty)
         'triggeredMemories': _triggeredToJson(m.triggeredMemories),
+      if (triggeredRegexes.isNotEmpty)
+        'triggeredRegexes': _triggeredToJson(triggeredRegexes),
       'isGenerating': ctx.isGenerating,
     };
   }
@@ -136,6 +140,7 @@ class ChatMessageMapper {
             'lorebookName': e.lorebookName,
             'lorebookId': e.lorebookId,
             'source': e.source,
+            'pattern': e.pattern,
           },
         )
         .toList();

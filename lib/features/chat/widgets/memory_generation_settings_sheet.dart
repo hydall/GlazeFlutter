@@ -311,9 +311,9 @@ class _MemoryGenerationSettingsSheetState
             const SizedBox(height: 12),
             _sectionLabel('label_embedding_target'.tr()),
             SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'hard_block', label: Text('Hard Block')),
-                ButtonSegment(value: 'macro', label: Text('{{memory}}')),
+              segments: [
+                ButtonSegment(value: 'hard_block', label: Text('memory_injection_hard_block'.tr())),
+                ButtonSegment(value: 'macro', label: Text('memory_injection_macro'.tr())),
               ],
               selected: {_injectionTarget},
               onSelectionChanged: (s) =>
@@ -337,26 +337,26 @@ class _MemoryGenerationSettingsSheetState
               _labeledField(
                 'settings_embedding_endpoint'.tr(),
                 _generationEndpointCtrl,
-                hint: 'https://...',
+                hint: 'memory_classifier_hint'.tr(),
               ),
               const SizedBox(height: 8),
               _modelField(
                 _generationModelCtrl,
-                hint: 'gpt-4o-mini',
+                hint: 'memory_model_hint'.tr(),
                 isCustom: true,
               ),
               const SizedBox(height: 8),
               _labeledField(
                 'label_embedding_key'.tr(),
                 _generationApiKeyCtrl,
-                hint: 'sk-...',
+                hint: 'memory_key_hint'.tr(),
                 obscure: true,
               ),
             ] else ...[
               const SizedBox(height: 8),
               _modelField(
                 _generationModelCtrl,
-                hint: 'Leave blank for current LLM model',
+                hint: 'memory_leave_blank_hint'.tr(),
                 isCustom: false,
               ),
             ],
@@ -364,13 +364,13 @@ class _MemoryGenerationSettingsSheetState
             _labeledField(
               'label_temperature'.tr(),
               _temperatureCtrl,
-              hint: '0 = use API default',
+              hint: 'memory_default_hint'.tr(),
               inputType: TextInputType.number,
             ),
             _labeledField(
               'label_max_tokens'.tr(),
               _maxTokensCtrl,
-              hint: '0 = auto (recommended 2000-4000)',
+              hint: 'memory_auto_hint'.tr(),
               inputType: TextInputType.number,
             ),
             const SizedBox(height: 12),
@@ -393,10 +393,10 @@ class _MemoryGenerationSettingsSheetState
               ),
               const SizedBox(height: 8),
               SegmentedButton<String>(
-                segments: const [
-                  ButtonSegment(value: 'plain', label: Text('Plain')),
-                  ButtonSegment(value: 'glaze', label: Text('Glaze')),
-                  ButtonSegment(value: 'both', label: Text('Both')),
+                segments: [
+                  ButtonSegment(value: 'plain', label: Text('memory_packing_plain'.tr())),
+                  ButtonSegment(value: 'glaze', label: Text('memory_packing_glaze'.tr())),
+                  ButtonSegment(value: 'both', label: Text('memory_packing_both'.tr())),
                 ],
                 selected: {_keyMatchMode},
                 onSelectionChanged: (s) =>
@@ -617,25 +617,25 @@ class _MemoryGenerationSettingsSheetState
       children: [
         _sectionLabel('memory_mode'.tr()),
         SegmentedButton<String>(
-          segments: const [
+          segments: [
             ButtonSegment(
               value: 'legacy',
-              label: Text('Legacy'),
+              label: Text('memory_mode_legacy'.tr()),
               icon: Icon(Icons.restore_rounded),
             ),
             ButtonSegment(
               value: 'fast',
-              label: Text('Fast'),
+              label: Text('memory_mode_fast'.tr()),
               icon: Icon(Icons.bolt_rounded),
             ),
             ButtonSegment(
               value: 'balanced',
-              label: Text('Balanced'),
+              label: Text('memory_mode_balanced'.tr()),
               icon: Icon(Icons.tune_rounded),
             ),
             ButtonSegment(
               value: 'deep',
-              label: Text('Deep'),
+              label: Text('memory_mode_deep'.tr()),
               icon: Icon(Icons.manage_search_rounded),
             ),
           ],
@@ -713,9 +713,9 @@ class _MemoryGenerationSettingsSheetState
           ),
           const SizedBox(height: 8),
           SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'current', label: Text('Current API')),
-              ButtonSegment(value: 'custom', label: Text('Custom')),
+            segments: [
+              ButtonSegment(value: 'current', label: Text('memory_select_current_api'.tr())),
+              ButtonSegment(value: 'custom', label: Text('memory_select_custom'.tr())),
             ],
             selected: {_classifierSource},
             onSelectionChanged: (s) =>
@@ -727,7 +727,7 @@ class _MemoryGenerationSettingsSheetState
             _labeledField(
               'settings_embedding_endpoint'.tr(),
               _classifierEndpointCtrl,
-              hint: 'https://...',
+              hint: 'memory_classifier_hint'.tr(),
             ),
             const SizedBox(height: 8),
           ],
@@ -735,7 +735,7 @@ class _MemoryGenerationSettingsSheetState
             'memory_selector_classifier_model'.tr(),
             _classifierModelCtrl,
             hint: _classifierSource == 'custom'
-                ? 'gpt-4o-mini'
+                ? 'memory_model_hint'.tr()
                 : 'memory_selector_current_model_hint'.tr(),
           ),
           if (_classifierSource == 'custom') ...[
@@ -743,7 +743,7 @@ class _MemoryGenerationSettingsSheetState
             _labeledField(
               'label_embedding_key'.tr(),
               _classifierApiKeyCtrl,
-              hint: 'sk-...',
+              hint: 'memory_key_hint'.tr(),
               obscure: true,
             ),
           ],
@@ -777,9 +777,9 @@ class _MemoryGenerationSettingsSheetState
           ),
           const SizedBox(height: 8),
           SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'current', label: Text('Current API')),
-              ButtonSegment(value: 'custom', label: Text('Custom')),
+            segments: [
+              ButtonSegment(value: 'current', label: Text('memory_select_current_api'.tr())),
+              ButtonSegment(value: 'custom', label: Text('memory_select_custom'.tr())),
             ],
             selected: {_sidecarSource},
             onSelectionChanged: (s) => setState(() => _sidecarSource = s.first),
@@ -790,7 +790,7 @@ class _MemoryGenerationSettingsSheetState
             _labeledField(
               'settings_embedding_endpoint'.tr(),
               _sidecarEndpointCtrl,
-              hint: 'https://...',
+              hint: 'memory_classifier_hint'.tr(),
             ),
             const SizedBox(height: 8),
           ],
@@ -798,7 +798,7 @@ class _MemoryGenerationSettingsSheetState
             'memory_selector_sidecar_model'.tr(),
             _sidecarModelCtrl,
             hint: _sidecarSource == 'custom'
-                ? 'gpt-4o-mini'
+                ? 'memory_model_hint'.tr()
                 : 'memory_selector_current_model_hint'.tr(),
           ),
           if (_sidecarSource == 'custom') ...[
@@ -806,7 +806,7 @@ class _MemoryGenerationSettingsSheetState
             _labeledField(
               'label_embedding_key'.tr(),
               _sidecarApiKeyCtrl,
-              hint: 'sk-...',
+              hint: 'memory_key_hint'.tr(),
               obscure: true,
             ),
           ],
@@ -934,12 +934,12 @@ class _MemoryGenerationSettingsSheetState
 
   Widget _memoryBudgetSelector() {
     return SegmentedButton<String>(
-      segments: const [
-        ButtonSegment(value: 'auto', label: Text('Auto')),
-        ButtonSegment(value: 'small', label: Text('Small')),
-        ButtonSegment(value: 'medium', label: Text('Medium')),
-        ButtonSegment(value: 'large', label: Text('Large')),
-        ButtonSegment(value: 'custom', label: Text('Custom')),
+      segments: [
+        ButtonSegment(value: 'auto', label: Text('memory_size_auto'.tr())),
+        ButtonSegment(value: 'small', label: Text('memory_size_small'.tr())),
+        ButtonSegment(value: 'medium', label: Text('memory_size_medium'.tr())),
+        ButtonSegment(value: 'large', label: Text('memory_size_large'.tr())),
+        ButtonSegment(value: 'custom', label: Text('memory_size_custom'.tr())),
       ],
       selected: {_memoryBudgetPreset},
       onSelectionChanged: (selected) {
@@ -990,8 +990,8 @@ class _MemoryGenerationSettingsSheetState
             },
             style: TextStyle(color: context.cs.onSurface, fontSize: 14),
             decoration: InputDecoration(
-              labelText: 'Max injected memory tokens',
-              hintText: '6000',
+              labelText: 'memory_max_tokens_label'.tr(),
+              hintText: 'memory_max_tokens_hint'.tr(),
               labelStyle: TextStyle(
                 color: context.cs.onSurfaceVariant,
                 fontSize: 12,
@@ -1044,8 +1044,8 @@ class _MemoryGenerationSettingsSheetState
   }
 
   String _formatTokens(int? tokens) {
-    if (tokens == null) return 'unlimited';
-    return '$tokens tokens';
+    if (tokens == null) return 'memory_unlimited'.tr();
+    return '$tokens ${'memory_tokens'.tr()}';
   }
 
   Widget _modelField(
@@ -1179,7 +1179,7 @@ class _MemoryGenerationSettingsSheetState
                 ),
                 if (custom.isNotEmpty)
                   BottomSheetItem(
-                    label: '── Custom ──',
+                    label: 'memory_custom_label'.tr(),
                     centered: true,
                     onTap: () {},
                   ),

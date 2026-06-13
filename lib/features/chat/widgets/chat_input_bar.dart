@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -260,11 +261,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
 
     await FullscreenEditorScreen.show(
       context,
-      title: _guidanceMode ? 'Compose message' : 'Message',
+      title: _guidanceMode ? 'chat_compose_message'.tr() : 'chat_message_title'.tr(),
       controller: _controller,
       hintText: _guidanceMode
-          ? 'Write a long message here...'
-          : 'Type a message...',
+          ? 'chat_long_message_hint'.tr()
+          : 'chat_placeholder'.tr(),
       onChanged: (_) {
         if (mounted) setState(() {});
       },
@@ -298,7 +299,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               child: Text(
                 widget.searchMatchCount > 0
                     ? '${widget.searchCurrentIndex + 1} of ${widget.searchMatchCount} matches'
-                    : 'No matches found',
+                    : 'search_no_results'.tr(),
                 style: TextStyle(
                   color: textColor,
                   fontSize: 16 * scale,
@@ -361,7 +362,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                '${widget.selectedCount} Selected',
+                '${widget.selectedCount} ${'selected_count'.tr()}',
                 style: TextStyle(
                   color: textColor,
                   fontSize: 16 * scale,
@@ -457,7 +458,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     letterSpacing: letterSpacing,
                   ),
                   decoration: InputDecoration(
-                    hintText: 'Guidance instructions...',
+                    hintText: 'guidance_placeholder'.tr(),
                     hintStyle: TextStyle(
                       color: Colors.orange.withValues(alpha: 0.5),
                       fontSize: 14 * scale,
@@ -519,8 +520,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     ),
                     decoration: InputDecoration(
                       hintText: _guidanceMode
-                          ? 'Message with guidance...'
-                          : 'Type a message...',
+                          ? 'chat_guidance_message_hint'.tr()
+                          : 'chat_placeholder'.tr(),
                       hintStyle: TextStyle(
                         color: secondaryColor,
                         fontSize: 16 * scale,

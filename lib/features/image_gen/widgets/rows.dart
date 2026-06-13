@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../../shared/theme/app_colors.dart';
@@ -300,8 +301,8 @@ class _ImageGenReferenceRowState extends State<ImageGenReferenceRow> {
             child: TextField(
               controller: _controller,
               onChanged: widget.onNameChanged,
-              decoration: const InputDecoration(
-                hintText: 'keyword',
+              decoration: InputDecoration(
+                hintText: 'imggen_ref_keyword'.tr(),
                 isDense: true,
                 contentPadding: EdgeInsets.symmetric(
                   horizontal: 8,
@@ -326,10 +327,10 @@ class _ImageGenReferenceRowState extends State<ImageGenReferenceRow> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Padding(
-                        padding: EdgeInsets.all(16),
+                      Padding(
+                        padding: const EdgeInsets.all(16),
                         child: Text(
-                          'Match Mode',
+                          'imggen_match_mode'.tr(),
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -337,10 +338,10 @@ class _ImageGenReferenceRowState extends State<ImageGenReferenceRow> {
                         ),
                       ),
                       ListTile(
-                        title: const Text('match'),
+                        title: Text('imggen_match_mode_match'.tr()),
                         trailing: widget.refItem.matchMode == 'match'
                             ? Text(
-                                'Active',
+                                'label_active'.tr(),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: context.cs.primary,
@@ -353,10 +354,10 @@ class _ImageGenReferenceRowState extends State<ImageGenReferenceRow> {
                         },
                       ),
                       ListTile(
-                        title: const Text('always'),
+                        title: Text('imggen_match_mode_always'.tr()),
                         trailing: widget.refItem.matchMode == 'always'
                             ? Text(
-                                'Active',
+                                'label_active'.tr(),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: context.cs.primary,
@@ -377,7 +378,7 @@ class _ImageGenReferenceRowState extends State<ImageGenReferenceRow> {
               children: [
                 Text(
                   widget.refItem.matchMode.isEmpty
-                      ? 'match'
+                      ? 'imggen_match_mode_match'.tr()
                       : widget.refItem.matchMode,
                   style: TextStyle(
                     fontSize: 13,

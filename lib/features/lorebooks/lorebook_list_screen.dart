@@ -27,7 +27,7 @@ class LorebookListScreen extends ConsumerWidget {
 
     return SheetView(
       showRouteBackground: false,
-      title: 'Lorebooks',
+      title: 'menu_lorebooks'.tr(),
       showBack: true,
       onBack: () => context.go('/tools'),
       floatingActionButton: FloatingActionButton(
@@ -38,17 +38,17 @@ class LorebookListScreen extends ConsumerWidget {
       actions: [
         SheetViewAction(
           icon: const Icon(Icons.settings_outlined, size: 20),
-          tooltip: 'Global Settings',
+          tooltip: 'lorebook_global_settings_tooltip'.tr(),
           onPressed: () => context.push('/tools/lorebooks/settings'),
         ),
         SheetViewAction(
           icon: const Icon(Icons.upload_file, size: 20),
-          tooltip: 'Import ST Lorebook',
+          tooltip: 'lorebook_import_st_tooltip'.tr(),
           onPressed: () => _importSTLorebook(context, ref),
         ),
         SheetViewAction(
           icon: const Icon(Icons.search, size: 20),
-          tooltip: 'Embedding Settings',
+          tooltip: 'lorebook_embedding_settings_tooltip'.tr(),
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute<void>(builder: (_) => const EmbeddingSettingsScreen()),
           ),
@@ -68,7 +68,7 @@ class LorebookListScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'No lorebooks yet',
+                    'no_lorebooks'.tr(),
                     style: TextStyle(
                       fontSize: 16,
                       color: context.cs.onSurfaceVariant,
@@ -76,7 +76,7 @@ class LorebookListScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Tap + to create one',
+                    'empty_lorebooks_desc'.tr(),
                     style: TextStyle(
                       fontSize: 13,
                       color: context.cs.onSurfaceVariant,
@@ -117,7 +117,7 @@ class LorebookListScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Error: $e')),
+        error: (e, _) => Center(child: Text('${'title_error'.tr()}: $e')),
       ),
     );
   }
@@ -126,7 +126,7 @@ class LorebookListScreen extends ConsumerWidget {
     final id = generateId();
     final lorebook = Lorebook(
       id: id,
-      name: 'New Lorebook',
+      name: 'new_lorebook'.tr(),
       entries: [],
       updatedAt: currentTimestampSeconds(),
     );
@@ -142,7 +142,7 @@ class LorebookListScreen extends ConsumerWidget {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['json'],
-      dialogTitle: 'Import SillyTavern Lorebook',
+      dialogTitle: 'lorebook_import_st_dialog_title'.tr(),
       withData: true,
     );
     if (result == null || result.files.isEmpty) return;
@@ -157,7 +157,7 @@ class LorebookListScreen extends ConsumerWidget {
       if (context.mounted) {
         GlazeToast.show(
           context,
-          'Imported "${importResult.lorebook.name}" (${importResult.entryCount} entries)',
+          'lorebook_imported'.tr(args: [importResult.lorebook.name, importResult.entryCount.toString()]),
         );
         await Navigator.of(context).push(
           MaterialPageRoute<void>(
@@ -176,14 +176,14 @@ class LorebookListScreen extends ConsumerWidget {
   void _deleteLorebook(BuildContext context, WidgetRef ref, Lorebook lb) {
     GlazeBottomSheet.show<void>(
       context,
-      title: 'Delete Lorebook',
+      title: 'confirm_delete_lorebook'.tr(),
       bigInfo: BottomSheetBigInfo(
         icon: Icons.delete_outline,
-        description: 'Delete "${lb.name}"? This cannot be undone.',
+        description: 'lorebook_confirm_delete_desc'.tr(args: [lb.name]),
       ),
       items: [
         BottomSheetItem(
-          label: 'Delete',
+          label: 'btn_delete'.tr(),
           isDestructive: true,
           centered: true,
           onTap: () {
@@ -192,7 +192,7 @@ class LorebookListScreen extends ConsumerWidget {
           },
         ),
         BottomSheetItem(
-          label: 'Cancel',
+          label: 'btn_cancel'.tr(),
           centered: true,
           onTap: () => Navigator.of(context, rootNavigator: true).pop(),
         ),
@@ -233,12 +233,12 @@ class _LorebookTile extends ConsumerWidget {
         : Colors.grey;
 
     final scopeLabel = lorebook.enabled
-        ? 'global'
+        ? 'level_global'.tr()
         : hasCharBinding
-        ? 'character'
+        ? 'level_character'.tr()
         : hasChatBinding
-        ? 'chat'
-        : 'none';
+        ? 'level_chat'.tr()
+        : 'label_none'.tr();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -272,7 +272,7 @@ class _LorebookTile extends ConsumerWidget {
             ),
             const SizedBox(width: 8),
             Text(
-              '${lorebook.entries.length} entries',
+              '${lorebook.entries.length} ${'label_entries'.tr()}',
               style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
             ),
           ],

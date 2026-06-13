@@ -1,6 +1,7 @@
 import '../models/preset.dart';
 import '../models/character.dart';
 import '../models/persona.dart';
+import '../models/chat_message.dart' show TriggeredEntry;
 import 'macro_engine.dart';
 
 class RegexApplyContext {
@@ -29,6 +30,7 @@ String applyRegexes(
   RegexApplyContext ctx, {
   bool isMarkdown = false,
   bool isPrompt = false,
+  List<TriggeredEntry>? triggered,
 }) {
   var result = text;
 
@@ -52,7 +54,22 @@ String applyRegexes(
       if (maxD != null && ctx.depth! > maxD) continue;
     }
 
+    final before = result;
     result = _applySingleScript(result, script, ctx);
+
+    // Mirror Glaze's tracking: a script counts as "triggered" only when it
+    // actually changed the text. Used to surface which regex fired on a
+    // message in the triggered-items sheet.
+    if (triggered != null && result != before) {
+      if (!triggered.any((t) => t.id == script.id)) {
+        triggered.add(TriggeredEntry(
+          id: script.id,
+          name: script.name,
+          source: 'regex',
+          pattern: script.regex,
+        ));
+      }
+    }
   }
 
   return result;

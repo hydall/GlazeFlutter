@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
@@ -203,7 +204,7 @@ class ImageContentRenderer extends StatelessWidget {
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       Icon(Icons.refresh, size: 14, color: textColor.withValues(alpha: 0.7)),
                       const SizedBox(width: 4),
-                      Text('Regenerate', style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.7), fontWeight: FontWeight.w500)),
+                      Text('action_regenerate'.tr(), style: TextStyle(fontSize: 12, color: textColor.withValues(alpha: 0.7), fontWeight: FontWeight.w500)),
                     ]),
                   ),
                 ),
@@ -232,7 +233,7 @@ class ImageContentRenderer extends StatelessWidget {
                     children: [
                       SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.5, color: context.cs.primary)),
                       const SizedBox(height: 10),
-                      Text('Generating image...', style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 12, fontStyle: FontStyle.italic)),
+                      Text('image_gen_generating'.tr(), style: TextStyle(color: textColor.withValues(alpha: 0.6), fontSize: 12, fontStyle: FontStyle.italic)),
                       if (onAbort != null) ...[
                         const SizedBox(height: 8),
                         InkWell(
@@ -248,7 +249,7 @@ class ImageContentRenderer extends StatelessWidget {
                             child: Row(mainAxisSize: MainAxisSize.min, children: [
                               Icon(Icons.stop, size: 12, color: textColor.withValues(alpha: 0.7)),
                               const SizedBox(width: 4),
-                              Text('Stop', style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.7), fontWeight: FontWeight.w500)),
+                              Text('btn_stop'.tr(), style: TextStyle(fontSize: 11, color: textColor.withValues(alpha: 0.7), fontWeight: FontWeight.w500)),
                             ]),
                           ),
                         ),
@@ -288,10 +289,10 @@ class ImageContentRenderer extends StatelessWidget {
                     color: Colors.red.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
                     Icon(Icons.refresh, size: 12, color: Colors.red),
                     SizedBox(width: 4),
-                    Text('Retry', style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w600)),
+                    Text('btn_retry'.tr(), style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w600)),
                   ]),
                 ),
               ),

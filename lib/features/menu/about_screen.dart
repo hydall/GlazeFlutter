@@ -18,8 +18,7 @@ import '../settings/app_settings_provider.dart';
 class AboutScreen extends ConsumerWidget {
   const AboutScreen({super.key});
 
-  static const _tagline =
-      'AI roleplay chat client.\nLocal, novice-friendly, open-source.';
+  static final _tagline = 'about_description'.tr();
 
   Future<void> _openLink(String url) async {
     final uri = Uri.parse(url);
@@ -34,7 +33,7 @@ class AboutScreen extends ConsumerWidget {
     final topPad = MediaQuery.of(context).padding.top + 74.0;
 
     return GlazeScaffold(
-      title: 'About',
+      title: 'menu_about'.tr(),
       useShellHeader: true,
       headerBranchIndex: 3,
       extendBodyBehindHeader: true,
@@ -153,13 +152,13 @@ class _CommunitySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MenuGroup(
-      header: 'Community',
+      header: 'about_community_header'.tr(),
       headerIcon: Icons.people_outline_rounded,
       items: [
         if (lang == 'en')
           _LinkTile(
             svgAsset: 'assets/logos/discord.svg',
-            label: 'Discord',
+            label: 'about_discord'.tr(),
             subtitle: 'about_join_community'.tr(),
             brandColor: const Color(0xFF5865F2),
             onTap: () => onLink('https://discord.gg/jnGhd7p6Ht'),
@@ -167,14 +166,14 @@ class _CommunitySection extends StatelessWidget {
         else
           _LinkTile(
             svgAsset: 'assets/logos/telegram.svg',
-            label: 'Telegram',
+            label: 'about_telegram'.tr(),
             subtitle: 'about_join_community'.tr(),
             brandColor: const Color(0xFF2AABEE),
             onTap: () => onLink('https://t.me/glazeapp'),
           ),
         _LinkTile(
           svgAsset: 'assets/logos/github.svg',
-          label: 'GitHub',
+          label: 'btn_github'.tr(),
           subtitle: 'about_source_code'.tr(),
           brandColor: context.cs.onSurface,
           onTap: () => onLink('https://github.com/hydall/Glaze'),
@@ -182,7 +181,7 @@ class _CommunitySection extends StatelessWidget {
         if (lang == 'ru')
           _LinkTile(
             svgAsset: 'assets/logos/boosty.svg',
-            label: 'Boosty',
+            label: 'about_boosty'.tr(),
             subtitle: 'about_support_project'.tr(),
             brandColor: const Color(0xFFF15F2C),
             onTap: () => onLink('https://boosty.to/hydall'),
@@ -190,7 +189,7 @@ class _CommunitySection extends StatelessWidget {
         else
           _LinkTile(
             svgAsset: 'assets/logos/bmc-logo.svg',
-            label: 'Buy Me a Coffee',
+            label: 'about_bmc'.tr(),
             subtitle: 'about_support_project'.tr(),
             brandColor: const Color(0xFFFFDD00),
             useIconColor: false,
@@ -207,19 +206,19 @@ class _AuthorsSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MenuGroup(
-      header: 'Authors',
+      header: 'about_authors_header'.tr(),
       headerIcon: Icons.code_rounded,
-      items: const [
+      items: [
         _AuthorTile(
           name: 'hydall',
-          role: 'Project Lead, UX/UI Designer, Programmer',
+          role: 'about_role_hydall'.tr(),
           initial: 'H',
           accentColor: Color(0xFF7996CE),
           imageAsset: 'assets/hydall.jpg',
         ),
         _AuthorTile(
           name: 'danvitv',
-          role: 'Backend Architect, Programmer',
+          role: 'about_role_danvitv'.tr(),
           initial: 'D',
           accentColor: Color(0xFF79CE96),
           imageAsset: 'assets/danvitv.png',
@@ -257,7 +256,7 @@ class _VersionBadgeState extends ConsumerState<_VersionBadge> {
       ref.read(devModeProvider.notifier).set(enabled);
       GlazeToast.show(
         context,
-        enabled ? 'Режим разработчика включён' : 'Режим разработчика выключен',
+        enabled ? 'dev_mode_enabled'.tr() : 'dev_mode_disabled'.tr(),
       );
     } else {
       _resetTimer = Timer(const Duration(seconds: 3), () => _taps = 0);
@@ -297,7 +296,7 @@ class _LicenseSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = context.cs;
     return MenuGroup(
-      header: 'License',
+      header: 'about_license_header'.tr(),
       headerIcon: Icons.gavel_rounded,
       items: [
         Padding(
@@ -323,9 +322,7 @@ class _LicenseSection extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                'GNU Affero General Public License v3.0\n\n'
-                'You are free to use, modify, and distribute this software under the terms of the AGPL-3.0 license. '
-                'Any modifications must also be made available under the same license.',
+                'about_license_text'.tr(),
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.55,

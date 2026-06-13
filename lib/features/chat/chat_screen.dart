@@ -18,6 +18,7 @@ import '../../core/utils/platform_paths.dart';
 import 'editing_message_provider.dart';
 
 import '../../core/state/character_provider.dart';
+import '../../core/llm/regex_service.dart';
 import '../../core/state/active_selection_provider.dart';
 import '../../core/state/memory_settings_provider.dart';
 import '../../core/state/shared_prefs_provider.dart';
@@ -45,6 +46,7 @@ import 'widgets/magic_drawer.dart';
 import 'widgets/memory_activity_card.dart';
 import 'widgets/quick_replies_panel.dart';
 import 'widgets/chat_webview_widget.dart';
+import 'widgets/triggered_items_sheet.dart';
 import 'widgets/webview_callbacks.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/state/db_provider.dart';
@@ -317,7 +319,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen>
                 ],
           body: chatStateAsync.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Error: $e')),
+            error: (e, _) => Center(child: Text('${'title_error'.tr()}: $e')),
             data: (state) {
               // The index comparison only gates the INITIAL navigation to a
               // requested session (deep link / history open). Once that initial
@@ -573,126 +575,45 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
     }
   }
 
+  /// Recomputes which display regex scripts fire on [msg]'s raw content,
+  /// mirroring the tracking done by [ChatMessageMapper] when rendering. Used
+  /// so the triggered-items sheet can show the firing regexes alongside the
+  /// lorebook / memory entries (parity with Glaze/Vue).
+  List<TriggeredEntry> _computeTriggeredRegexes(ChatMessage msg) {
+    final scripts = ref.read(displayRegexesProvider).value ?? const [];
+    if (scripts.isEmpty) return const [];
+    final character = ref.read(characterByIdProvider(widget.charId));
+    final persona = ref.read(
+      effectivePersonaForChatProvider((
+        charId: widget.charId,
+        sessionId: widget.state.session?.id,
+      )),
+    );
+    final isUser = msg.role == 'user';
+    final triggered = <TriggeredEntry>[];
+    applyRegexes(
+      msg.content,
+      isUser ? 1 : 2,
+      1,
+      scripts,
+      RegexApplyContext(char: character, persona: persona),
+      isMarkdown: true,
+      triggered: triggered,
+    );
+    return triggered;
+  }
+
   void _showTriggeredItemsSheet(
-    BuildContext context,
-    List<TriggeredEntry> entries,
-    String title,
-  ) {
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: context.cs.surfaceContainerHigh,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (_) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 32,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.cs.outlineVariant.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: context.cs.onSurface,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Flexible(
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: entries
-                      .map(
-                        (e) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  e.name,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: context.cs.onSurface,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (e.lorebookName.isNotEmpty) ...[
-                                const SizedBox(width: 6),
-                                Text(
-                                  e.lorebookName,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: context.cs.onSurfaceVariant
-                                        .withValues(alpha: 0.6),
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
-                              const SizedBox(width: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 1,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: e.source == 'vector'
-                                      ? Colors.purple.withValues(alpha: 0.15)
-                                      : e.source == 'memory'
-                                      ? Colors.teal.withValues(alpha: 0.15)
-                                      : e.source == 'constant'
-                                      ? Colors.deepPurple.withValues(
-                                          alpha: 0.18,
-                                        )
-                                      : context.cs.primaryContainer,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  e.source == 'vector'
-                                      ? 'vector'
-                                      : e.source == 'memory'
-                                      ? 'memory'
-                                      : e.source == 'constant'
-                                      ? 'const'
-                                      : 'keyword',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
-                                    color: e.source == 'vector'
-                                        ? Colors.purple
-                                        : e.source == 'memory'
-                                        ? Colors.teal
-                                        : e.source == 'constant'
-                                        ? Colors.deepPurple.shade200
-                                        : context.cs.onPrimaryContainer,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    BuildContext context, {
+    List<TriggeredEntry> lorebooks = const [],
+    List<TriggeredEntry> memories = const [],
+    List<TriggeredEntry> regexes = const [],
+  }) {
+    showTriggeredItemsSheet(
+      context,
+      lorebooks: lorebooks,
+      memories: memories,
+      regexes: regexes,
     );
   }
 
@@ -1019,8 +940,7 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                         if (msg.triggeredMemories.isNotEmpty) {
                           _showTriggeredItemsSheet(
                             context,
-                            msg.triggeredMemories,
-                            'chat_memories'.tr(),
+                            memories: msg.triggeredMemories,
                           );
                         }
                       },
@@ -1047,17 +967,12 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
                         );
                         if (idx < 0) return;
                         final msg = widget.state.messages[idx];
-                        final all = [
-                          ...msg.triggeredLorebooks,
-                          ...msg.triggeredMemories,
-                        ];
-                        if (all.isNotEmpty) {
-                          _showTriggeredItemsSheet(
-                            context,
-                            all,
-                            'chat_triggered_entries'.tr(),
-                          );
-                        }
+                        _showTriggeredItemsSheet(
+                          context,
+                          lorebooks: msg.triggeredLorebooks,
+                          memories: msg.triggeredMemories,
+                          regexes: _computeTriggeredRegexes(msg),
+                        );
                       },
                     ),
                     editActions: EditActionsCallbacks(
