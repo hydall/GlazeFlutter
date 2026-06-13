@@ -29,13 +29,14 @@ List<LorebookEntry> mergeKeywordVector({
   final unusedKeywordSlots = keywordSlots - usedKeyword.length;
   final adjustedVectorSlots = vectorSlots + unusedKeywordSlots;
 
-  final usedKeywordIds = usedKeyword.map((e) => e.id).toSet();
-  final keywordById = {for (final e in keywordEntries) e.id: e};
+  // Keyword match wins over vector for the same entry globally, not only for
+  // keyword entries that fit into the current split. Otherwise an entry that
+  // matched by key but overflowed keywordSlots can come back as a vector hit,
+  // making the badge claim it was vector-injected while coverage reports a key
+  // trigger/cutoff.
+  final keywordIds = keywordEntries.map((e) => e.id).toSet();
   final dedupedVector = vectorEntries
-      .where((e) => !usedKeywordIds.contains(e.id))
-      .map(
-        (e) => keywordById[e.id] != null ? _fromScanned(keywordById[e.id]!) : e,
-      )
+      .where((e) => !keywordIds.contains(e.id))
       .toList();
 
   // If dedup removed some entries, compensate by taking more from the vector

@@ -46,11 +46,7 @@ void main() {
     });
 
     test('should not include persona avatarUrl in message payload', () {
-      final message = ChatMessage(
-        id: 'msg1',
-        role: 'user',
-        content: 'Hello',
-      );
+      final message = ChatMessage(id: 'msg1', role: 'user', content: 'Hello');
 
       final map = ChatMessageMapper.toMap(
         message,
@@ -61,21 +57,20 @@ void main() {
       expect(map.containsKey('avatarUrl'), isFalse);
     });
 
-    test('should NOT include persona avatarUrl for user messages when streaming', () {
-      final message = ChatMessage(
-        id: 'msg1',
-        role: 'user',
-        content: 'Hello',
-      );
+    test(
+      'should NOT include persona avatarUrl for user messages when streaming',
+      () {
+        final message = ChatMessage(id: 'msg1', role: 'user', content: 'Hello');
 
-      final map = ChatMessageMapper.toMap(
-        message,
-        context,
-        isStreamingUpdate: true,
-      );
+        final map = ChatMessageMapper.toMap(
+          message,
+          context,
+          isStreamingUpdate: true,
+        );
 
-      expect(map.containsKey('avatarUrl'), isFalse);
-    });
+        expect(map.containsKey('avatarUrl'), isFalse);
+      },
+    );
   });
 
   group('ChatMessageMapper - Avatar Optimization', () {
@@ -122,11 +117,7 @@ void main() {
         isGenerating: false,
       );
 
-      final message = ChatMessage(
-        id: 'msg1',
-        role: 'user',
-        content: 'Hello',
-      );
+      final message = ChatMessage(id: 'msg1', role: 'user', content: 'Hello');
 
       final map = ChatMessageMapper.toMap(message, context);
 
@@ -160,11 +151,7 @@ void main() {
     });
 
     test('should set isUser=true for user messages', () {
-      final message = ChatMessage(
-        id: 'msg1',
-        role: 'user',
-        content: 'Hello',
-      );
+      final message = ChatMessage(id: 'msg1', role: 'user', content: 'Hello');
 
       final map = ChatMessageMapper.toMap(message, context);
 
@@ -185,11 +172,7 @@ void main() {
     });
 
     test('should use currentPersonaName for user displayName', () {
-      final message = ChatMessage(
-        id: 'msg1',
-        role: 'user',
-        content: 'Hello',
-      );
+      final message = ChatMessage(id: 'msg1', role: 'user', content: 'Hello');
 
       final map = ChatMessageMapper.toMap(message, context);
 
@@ -198,9 +181,7 @@ void main() {
   });
 
   group('ChatMessageMapper - Optional Fields', () {
-    final context = ChatMessageMapperContext(
-      isGenerating: false,
-    );
+    final context = ChatMessageMapperContext(isGenerating: false);
 
     test('should include swipes when present', () {
       final message = ChatMessage(
@@ -310,9 +291,7 @@ void main() {
   });
 
   group('ChatMessageMapper - Special Flags', () {
-    final context = ChatMessageMapperContext(
-      isGenerating: false,
-    );
+    final context = ChatMessageMapperContext(isGenerating: false);
 
     test('should include isLast when true', () {
       final message = ChatMessage(
@@ -321,11 +300,7 @@ void main() {
         content: 'Hello',
       );
 
-      final map = ChatMessageMapper.toMap(
-        message,
-        context,
-        isLast: true,
-      );
+      final map = ChatMessageMapper.toMap(message, context, isLast: true);
 
       expect(map['isLast'], isTrue);
     });
@@ -337,11 +312,7 @@ void main() {
         content: 'Hello',
       );
 
-      final map = ChatMessageMapper.toMap(
-        message,
-        context,
-        isLast: false,
-      );
+      final map = ChatMessageMapper.toMap(message, context, isLast: false);
 
       expect(map['isLast'], isNull);
     });
@@ -353,11 +324,7 @@ void main() {
         content: 'Hello',
       );
 
-      final map = ChatMessageMapper.toMap(
-        message,
-        context,
-        messageIndex: 5,
-      );
+      final map = ChatMessageMapper.toMap(message, context, messageIndex: 5);
 
       expect(map['messageIndex'], equals(5));
     });
@@ -369,19 +336,13 @@ void main() {
         content: 'Hello',
       );
 
-      final map = ChatMessageMapper.toMap(
-        message,
-        context,
-        messageIndex: null,
-      );
+      final map = ChatMessageMapper.toMap(message, context, messageIndex: null);
 
       expect(map['messageIndex'], isNull);
     });
 
     test('should include isGenerating from context', () {
-      final contextGenerating = ChatMessageMapperContext(
-        isGenerating: true,
-      );
+      final contextGenerating = ChatMessageMapperContext(isGenerating: true);
 
       final message = ChatMessage(
         id: 'msg1',
@@ -415,9 +376,7 @@ void main() {
     });
 
     test('should NOT include memoryStatus when empty', () {
-      final context = ChatMessageMapperContext(
-        isGenerating: false,
-      );
+      final context = ChatMessageMapperContext(isGenerating: false);
 
       final message = ChatMessage(
         id: 'msg1',
@@ -433,9 +392,7 @@ void main() {
   });
 
   group('ChatMessageMapper - Triggered Content', () {
-    final context = ChatMessageMapperContext(
-      isGenerating: false,
-    );
+    final context = ChatMessageMapperContext(isGenerating: false);
 
     test('should include triggeredLorebooks when present', () {
       final message = ChatMessage(
@@ -459,9 +416,7 @@ void main() {
         id: 'msg1',
         role: 'assistant',
         content: 'Hello',
-        triggeredMemories: [
-          TriggeredEntry(id: 'mem1', name: 'Memory 1'),
-        ],
+        triggeredMemories: [TriggeredEntry(id: 'mem1', name: 'Memory 1')],
       );
 
       final map = ChatMessageMapper.toMap(message, context);
@@ -472,9 +427,7 @@ void main() {
   });
 
   group('ChatMessageMapper - Typing Indicator Fix', () {
-    final context = ChatMessageMapperContext(
-      isGenerating: true,
-    );
+    final context = ChatMessageMapperContext(isGenerating: true);
 
     test('isTyping should be properly preserved in output', () {
       final messageTyping = ChatMessage(
@@ -523,40 +476,54 @@ void main() {
       isGenerating: false,
     );
 
-    test('final update includes all badge fields: genTime, tokens, triggeredLorebooks, triggeredMemories', () {
-      final message = ChatMessage(
-        id: 'msg1',
-        role: 'assistant',
-        content: 'Generated response',
-        isTyping: false,
-        genTime: '2.5s',
-        tokens: 150,
-        triggeredLorebooks: [
-          TriggeredEntry(id: 'lb1', name: 'Character Lore', lorebookName: 'World Book', lorebookId: 'wb1'),
-        ],
-        triggeredMemories: [
-          TriggeredEntry(id: 'mem1', name: 'Past Event', source: 'keyword'),
-        ],
-      );
+    test(
+      'final update includes all badge fields: genTime, tokens, triggeredLorebooks, triggeredMemories',
+      () {
+        final message = ChatMessage(
+          id: 'msg1',
+          role: 'assistant',
+          content: 'Generated response',
+          isTyping: false,
+          genTime: '2.5s',
+          tokens: 150,
+          triggeredLorebooks: [
+            TriggeredEntry(
+              id: 'lb1',
+              name: 'Character Lore',
+              lorebookName: 'World Book',
+              lorebookId: 'wb1',
+              source: 'keyword',
+            ),
+          ],
+          triggeredMemories: [
+            TriggeredEntry(id: 'mem1', name: 'Past Event', source: 'keyword'),
+          ],
+        );
 
-      final map = ChatMessageMapper.toMap(message, context);
+        final map = ChatMessageMapper.toMap(message, context);
 
-      expect(map['genTime'], equals('2.5s'));
-      expect(map['tokens'], equals(150));
-      expect(map['isTyping'], isNull);
+        expect(map['genTime'], equals('2.5s'));
+        expect(map['tokens'], equals(150));
+        expect(map['isTyping'], isNull);
 
-      final lbList = map['triggeredLorebooks'] as List;
-      expect(lbList.length, equals(1));
-      final lbJson = lbList.first as Map<String, dynamic>;
-      expect(lbJson['name'], equals('Character Lore'));
-      expect(lbJson['lorebookName'], equals('World Book'));
+        final lbList = map['triggeredLorebooks'] as List;
+        expect(lbList.length, equals(1));
+        final lbJson = lbList.first as Map<String, dynamic>;
+        expect(lbJson['id'], equals('lb1'));
+        expect(lbJson['name'], equals('Character Lore'));
+        expect(lbJson['lorebookName'], equals('World Book'));
+        expect(lbJson['lorebookId'], equals('wb1'));
+        expect(lbJson['source'], equals('keyword'));
 
-      final memList = map['triggeredMemories'] as List;
-      expect(memList.length, equals(1));
-      final memJson = memList.first as Map<String, dynamic>;
-      expect(memJson['name'], equals('Past Event'));
-      expect(memJson['lorebookName'], equals(''));
-    });
+        final memList = map['triggeredMemories'] as List;
+        expect(memList.length, equals(1));
+        final memJson = memList.first as Map<String, dynamic>;
+        expect(memJson['id'], equals('mem1'));
+        expect(memJson['name'], equals('Past Event'));
+        expect(memJson['lorebookName'], equals(''));
+        expect(memJson['source'], equals('keyword'));
+      },
+    );
 
     test('streaming update includes badge data but excludes avatarUrl', () {
       final message = ChatMessage(
@@ -566,13 +533,15 @@ void main() {
         isTyping: true,
         genTime: null,
         tokens: null,
-        triggeredLorebooks: [
-          TriggeredEntry(id: 'lb1', name: 'Lore Entry'),
-        ],
+        triggeredLorebooks: [TriggeredEntry(id: 'lb1', name: 'Lore Entry')],
         triggeredMemories: [],
       );
 
-      final map = ChatMessageMapper.toMap(message, context, isStreamingUpdate: true);
+      final map = ChatMessageMapper.toMap(
+        message,
+        context,
+        isStreamingUpdate: true,
+      );
 
       expect(map.containsKey('avatarUrl'), isFalse);
       expect(map['genTime'], isNull);
@@ -583,35 +552,38 @@ void main() {
       expect(map.containsKey('triggeredMemories'), isFalse);
     });
 
-    test('genTime and tokens reflect current generation, not stale swipe data', () {
-      final previousSwipeMessage = ChatMessage(
-        id: 'msg1',
-        role: 'assistant',
-        content: 'Old swipe text',
-        genTime: '10.0s',
-        tokens: 500,
-        swipes: ['Old swipe text'],
-        swipeId: 0,
-      );
+    test(
+      'genTime and tokens reflect current generation, not stale swipe data',
+      () {
+        final previousSwipeMessage = ChatMessage(
+          id: 'msg1',
+          role: 'assistant',
+          content: 'Old swipe text',
+          genTime: '10.0s',
+          tokens: 500,
+          swipes: ['Old swipe text'],
+          swipeId: 0,
+        );
 
-      final newGeneration = previousSwipeMessage.copyWith(
-        content: 'New generation',
-        genTime: '1.2s',
-        tokens: 42,
-        isTyping: false,
-        swipeId: 1,
-      );
+        final newGeneration = previousSwipeMessage.copyWith(
+          content: 'New generation',
+          genTime: '1.2s',
+          tokens: 42,
+          isTyping: false,
+          swipeId: 1,
+        );
 
-      final oldMap = ChatMessageMapper.toMap(previousSwipeMessage, context);
-      expect(oldMap['genTime'], equals('10.0s'));
-      expect(oldMap['tokens'], equals(500));
-      expect(oldMap['swipeIndex'], equals(0));
+        final oldMap = ChatMessageMapper.toMap(previousSwipeMessage, context);
+        expect(oldMap['genTime'], equals('10.0s'));
+        expect(oldMap['tokens'], equals(500));
+        expect(oldMap['swipeIndex'], equals(0));
 
-      final newMap = ChatMessageMapper.toMap(newGeneration, context);
-      expect(newMap['genTime'], equals('1.2s'));
-      expect(newMap['tokens'], equals(42));
-      expect(newMap['swipeIndex'], equals(1));
-    });
+        final newMap = ChatMessageMapper.toMap(newGeneration, context);
+        expect(newMap['genTime'], equals('1.2s'));
+        expect(newMap['tokens'], equals(42));
+        expect(newMap['swipeIndex'], equals(1));
+      },
+    );
 
     test('TriggeredEntry toJson roundtrip', () {
       const entry = TriggeredEntry(

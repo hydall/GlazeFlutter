@@ -21,13 +21,13 @@ abstract class ChatMessageMapperContext with _$ChatMessageMapperContext {
     @Default({}) Set<String> pendingMemoryIds,
     @Default({}) Set<String> draftMemoryIds,
     @Default(0) int greetingTotal,
+
     /// messageId → aggregated block status ('running'|'done'|'error')
     @Default({}) Map<String, String> blockStatusByMessageId,
   }) = _ChatMessageMapperContext;
 }
 
 class ChatMessageMapper {
-
   static Map<String, dynamic> toMap(
     ChatMessage m,
     ChatMessageMapperContext ctx, {
@@ -44,11 +44,15 @@ class ChatMessageMapper {
     String content = m.content;
     if (displayRegexes != null && displayRegexes.isNotEmpty) {
       final placement = isUser ? 1 : 2;
-      final regexCtx = RegexApplyContext(
-        char: character,
-        persona: persona,
+      final regexCtx = RegexApplyContext(char: character, persona: persona);
+      content = applyRegexes(
+        content,
+        placement,
+        1,
+        displayRegexes,
+        regexCtx,
+        isMarkdown: true,
       );
-      content = applyRegexes(content, placement, 1, displayRegexes, regexCtx, isMarkdown: true);
     }
 
     String? displayName;
@@ -100,24 +104,40 @@ class ChatMessageMapper {
       if (m.tokens != null) 'tokens': m.tokens,
       'isError': m.isError,
       if (m.isTyping) 'isTyping': true,
-      if (m.reasoning != null && m.reasoning!.isNotEmpty) 'reasoning': m.reasoning,
+      if (m.reasoning != null && m.reasoning!.isNotEmpty)
+        'reasoning': m.reasoning,
       'isHidden': m.isHidden,
       if (isLast) 'isLast': true,
       'messageIndex': ?messageIndex,
-      if (m.guidanceText != null && m.guidanceText!.isNotEmpty) 'guidanceText': m.guidanceText,
+      if (m.guidanceText != null && m.guidanceText!.isNotEmpty)
+        'guidanceText': m.guidanceText,
       if (m.guidanceType != 'GENERATION') 'guidanceType': m.guidanceType,
       if (m.greetingIndex != null) 'greetingIndex': m.greetingIndex,
       if (m.greetingIndex != null && ctx.greetingTotal > 1)
         'greetingTotal': ctx.greetingTotal,
       'memoryStatus': ?memoryStatus,
       'blockStatus': ?ctx.blockStatusByMessageId[m.id],
-      if (m.triggeredLorebooks.isNotEmpty) 'triggeredLorebooks': _triggeredToJson(m.triggeredLorebooks),
-      if (m.triggeredMemories.isNotEmpty) 'triggeredMemories': _triggeredToJson(m.triggeredMemories),
+      if (m.triggeredLorebooks.isNotEmpty)
+        'triggeredLorebooks': _triggeredToJson(m.triggeredLorebooks),
+      if (m.triggeredMemories.isNotEmpty)
+        'triggeredMemories': _triggeredToJson(m.triggeredMemories),
       'isGenerating': ctx.isGenerating,
     };
   }
 
-  static List<Map<String, String>> _triggeredToJson(List<TriggeredEntry> entries) {
-    return entries.map((e) => {'name': e.name, 'lorebookName': e.lorebookName}).toList();
+  static List<Map<String, String>> _triggeredToJson(
+    List<TriggeredEntry> entries,
+  ) {
+    return entries
+        .map(
+          (e) => {
+            'id': e.id,
+            'name': e.name,
+            'lorebookName': e.lorebookName,
+            'lorebookId': e.lorebookId,
+            'source': e.source,
+          },
+        )
+        .toList();
   }
 }
