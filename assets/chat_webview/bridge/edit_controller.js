@@ -48,16 +48,35 @@ export class EditController {
     body.appendChild(textarea);
 
     textarea.addEventListener('wheel', (e) => {
+      const delta = this._scaledWheelDelta(e, textarea);
+      const maxScrollTop = textarea.scrollHeight - textarea.clientHeight;
+      const canScrollSelf = maxScrollTop > 1 && (
+        (delta < 0 && textarea.scrollTop > 0) ||
+        (delta > 0 && textarea.scrollTop < maxScrollTop - 1)
+      );
+
+      if (!canScrollSelf) {
+        // Let the event bubble to #chat-container. The container's own wheel
+        // handler applies the same WebView scale factor and scrolls the chat.
+        return;
+      }
+
       e.preventDefault();
       e.stopPropagation();
-      if (e.deltaMode === 0) {
-        textarea.scrollTop += e.deltaY * 0.3;
-      } else if (e.deltaMode === 1) {
-        textarea.scrollTop += e.deltaY * 16;
-      } else {
-        textarea.scrollTop += e.deltaY * textarea.clientHeight;
-      }
+      textarea.scrollTop += delta;
     }, { passive: false });
+
+    const stopEditEventPropagation = (e) => e.stopPropagation();
+    textarea.addEventListener('pointerdown', stopEditEventPropagation);
+    textarea.addEventListener('mousedown', stopEditEventPropagation);
+    textarea.addEventListener('click', stopEditEventPropagation);
+    textarea.addEventListener('dblclick', stopEditEventPropagation);
+    textarea.addEventListener('focus', () => {
+      this._sendToFlutter('onEditFocusChange', [messageId, true]);
+    });
+    textarea.addEventListener('blur', () => {
+      this._sendToFlutter('onEditFocusChange', [messageId, false]);
+    });
 
     // Modern Chromium (123+) sizes textareas to content via `field-sizing: content`.
     // Old WebViews don't — fall back to JS-driven auto-grow on input.
@@ -147,5 +166,11 @@ export class EditController {
 
   isEditing(section) {
     return section && section.classList.contains('editing');
+  }
+
+  _scaledWheelDelta(e, textarea) {
+    if (e.deltaMode === 0) return e.deltaY * 0.3;
+    if (e.deltaMode === 1) return e.deltaY * 16;
+    return e.deltaY * textarea.clientHeight;
   }
 }

@@ -406,13 +406,10 @@ void main() {
       );
     });
 
-    test(
-      'fixDetailsSummaryArrows injects .glaze-arrow into every summary',
-      () {
-        expect(rendererJs, contains('fixDetailsSummaryArrows'));
-        expect(rendererJs, contains("arrow.className = 'glaze-arrow'"));
-      },
-    );
+    test('fixDetailsSummaryArrows injects .glaze-arrow into every summary', () {
+      expect(rendererJs, contains('fixDetailsSummaryArrows'));
+      expect(rendererJs, contains("arrow.className = 'glaze-arrow'"));
+    });
 
     test('writeShadowContent calls fixDetailsSummaryArrows after innerHTML', () {
       // Must be called AFTER root.innerHTML so it sees the inserted <details>.
@@ -455,37 +452,25 @@ void main() {
       );
     });
 
-    test(
-      'wheel listener applies 0.3 multiplier for pixel-mode scroll (deltaMode 0)',
-      () {
-        final wheelSection = _extractTextareaWheelListener(editControllerJs);
-        expect(
-          wheelSection,
-          contains('deltaMode === 0'),
-          reason: 'must handle deltaMode 0 (pixel scroll from trackpad/mouse)',
-        );
-        expect(
-          wheelSection,
-          contains('deltaY * 0.3'),
-          reason:
-              '0.3 multiplier slows down fast trackpad/mouse scroll in the textarea',
-        );
-      },
-    );
+    test('wheel listener delegates scaling to shared helper', () {
+      final wheelSection = _extractTextareaWheelListener(editControllerJs);
+      expect(wheelSection, contains('_scaledWheelDelta(e, textarea)'));
+      expect(
+        editControllerJs,
+        contains('if (e.deltaMode === 0) return e.deltaY * 0.3'),
+      );
+      expect(
+        editControllerJs,
+        contains('if (e.deltaMode === 1) return e.deltaY * 16'),
+      );
+    });
 
-    test(
-      'wheel listener applies line multiplier for line-mode scroll (deltaMode 1)',
-      () {
-        final wheelSection = _extractTextareaWheelListener(editControllerJs);
-        expect(wheelSection, contains('deltaMode === 1'));
-        expect(
-          wheelSection,
-          contains('deltaY * 16'),
-          reason:
-              '16px per line is the correct line-mode multiplier for the textarea',
-        );
-      },
-    );
+    test('wheel bubbles to chat when textarea cannot scroll itself', () {
+      final wheelSection = _extractTextareaWheelListener(editControllerJs);
+      expect(wheelSection, contains('canScrollSelf'));
+      expect(wheelSection, contains('if (!canScrollSelf)'));
+      expect(wheelSection, contains('return;'));
+    });
 
     test(
       'wheel listener calls stopPropagation to prevent chat container from also scrolling',
@@ -494,6 +479,32 @@ void main() {
         expect(wheelSection, contains('stopPropagation'));
       },
     );
+
+    test('textarea pointer/click events do not reach document dispatcher', () {
+      expect(
+        editControllerJs,
+        contains("textarea.addEventListener('pointerdown'"),
+      );
+      expect(
+        editControllerJs,
+        contains("textarea.addEventListener('mousedown'"),
+      );
+      expect(editControllerJs, contains("textarea.addEventListener('click'"));
+      expect(
+        editControllerJs,
+        contains("textarea.addEventListener('dblclick'"),
+      );
+      expect(editControllerJs, contains('stopEditEventPropagation'));
+    });
+
+    test('textarea reports focus to Dart edit focus handler', () {
+      expect(editControllerJs, contains("textarea.addEventListener('focus'"));
+      expect(editControllerJs, contains("textarea.addEventListener('blur'"));
+      expect(
+        editControllerJs,
+        contains("this._sendToFlutter('onEditFocusChange'"),
+      );
+    });
   });
 
   // ─── main chat container scroll speed ────────────────────────────────────
