@@ -76,8 +76,42 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 29);
+      expect(version, 30);
     });
+
+    test(
+      'upgrade from v15 with macro_name already present does not crash',
+      () async {
+        final file = File(
+          '${Directory.systemTemp.path}/glaze_mig_test_${DateTime.now().microsecondsSinceEpoch}.db',
+        );
+        addTearDown(() {
+          if (file.existsSync()) file.deleteSync();
+        });
+
+        final seeded = AppDatabase.forTesting(
+          NativeDatabase.createInBackground(file),
+        );
+        await seeded.customSelect('SELECT 1').get();
+        await seeded.customStatement('PRAGMA user_version = 15');
+        await seeded.close();
+
+        final upgraded = AppDatabase.forTesting(
+          NativeDatabase.createInBackground(file),
+        );
+        await upgraded.customSelect('SELECT 1').get();
+
+        final cols = await upgraded
+            .customSelect("PRAGMA table_info('characters')")
+            .get();
+        final names = cols.map((c) => c.read<String>('name')).toSet();
+        expect(names, contains('macro_name'));
+
+        final version = await upgraded.customSelect('PRAGMA user_version').get();
+        expect(version.first.read<int>('user_version'), 30);
+        await upgraded.close();
+      },
+    );
 
     test('memory catalog table exists in current schema', () async {
       final rows = await db
