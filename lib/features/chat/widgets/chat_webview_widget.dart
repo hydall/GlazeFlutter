@@ -350,6 +350,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     }
 
     if (!mounted) return;
+    // Init captures widget fields before async setup completes. On cold start,
+    // the active persona can resolve during that window, so push the latest
+    // identity once the bridge is ready instead of leaving rendered user
+    // messages as the default "You" until a later chat/persona switch.
+    await _bridgeOp(applyIdentity(), label: 'setIdentity');
     final deferred = _deferredSwitchFrom;
     _deferredSwitchFrom = null;
     if (deferred != null) {
