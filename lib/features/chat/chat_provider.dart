@@ -52,6 +52,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     ref.keepAlive();
     _buildComplete = false;
     final existing = await _sessionSvc.findExistingSession(arg);
+    if (!ref.mounted) return const ChatState();
     if (_buildComplete) {
       return state.value ?? ChatState(session: existing);
     }
@@ -59,6 +60,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       final fixed = _fixupSwipesWithImageResults(existing);
       if (!identical(fixed, existing)) {
         await ref.read(chatRepoProvider).put(fixed);
+        if (!ref.mounted) return const ChatState();
       }
       final start = fixed.messages.length > ChatState.initialPageSize
           ? fixed.messages.length - ChatState.initialPageSize
@@ -68,6 +70,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       return result;
     }
     final session = await _sessionSvc.createInitialSession(arg);
+    if (!ref.mounted) return const ChatState();
     _buildComplete = true;
     return ChatState(session: session);
   }
