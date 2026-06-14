@@ -361,7 +361,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     // the active persona can resolve during that window, so push the latest
     // identity once the bridge is ready instead of leaving rendered user
     // messages as the default "You" until a later chat/persona switch.
-    await _bridgeOp(applyIdentity(), label: 'setIdentity');
+    await _bridgeOp(_applyResolvedIdentity(), label: 'setIdentity');
     final deferred = _deferredSwitchFrom;
     _deferredSwitchFrom = null;
     if (deferred != null) {
@@ -446,6 +446,31 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       greetingTotal: greetingTotal == _identityUnset
           ? widget.greetingTotal
           : greetingTotal as int?,
+    );
+  }
+
+  Future<void> _applyResolvedIdentity() {
+    final bridge = _bridge;
+    if (bridge == null || !_ready || !mounted) return Future.value();
+    final character = ref.read(characterByIdProvider(widget.charId));
+    final effectivePersona = ref.read(
+      effectivePersonaForChatProvider((
+        charId: widget.charId,
+        sessionId: widget.sessionId,
+      )),
+    );
+    return bridge.setIdentity(
+      charName: character?.name ?? widget.charName,
+      charColor: character?.color ?? widget.charColor,
+      personaName: effectivePersona?.name ?? widget.personaName,
+      layout: widget.chatLayout,
+      charAvatarPath: character?.avatarPath ?? widget.charAvatarPath,
+      personaAvatarPath:
+          effectivePersona?.avatarPath ?? widget.personaAvatarPath,
+      greetingTotal: character == null
+          ? widget.greetingTotal
+          : ((character.firstMes?.isNotEmpty == true ? 1 : 0) +
+                character.alternateGreetings.where((g) => g.isNotEmpty).length),
     );
   }
 
@@ -654,12 +679,20 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     super.build(context);
 
     final character = ref.watch(characterByIdProvider(widget.charId));
-    final effectivePersona = ref.watch(
-      effectivePersonaForChatProvider((
-        charId: widget.charId,
-        sessionId: widget.sessionId,
-      )),
-    );
+    final effectivePersonaProvider = effectivePersonaForChatProvider((
+      charId: widget.charId,
+      sessionId: widget.sessionId,
+    ));
+    final effectivePersona = ref.watch(effectivePersonaProvider);
+    ref.listen(effectivePersonaProvider, (prev, next) {
+      if (prev?.id == next?.id &&
+          prev?.name == next?.name &&
+          prev?.avatarPath == next?.avatarPath) {
+        return;
+      }
+      if (_bridge == null || !_ready) return;
+      unawaited(_bridgeOp(_applyResolvedIdentity(), label: 'setIdentity'));
+    });
     final displayRegexes = ref.watch(displayRegexesProvider).value ?? [];
 
     if (_bridge != null) {
