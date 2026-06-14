@@ -762,7 +762,7 @@ void main() {
     );
   });
 
-  test('keyword-matched overflow entries are not reintroduced as vector', () {
+  test('keyword-matched overflow vector entries keep keyword badge source', () {
     final firstKeyword = LorebookEntry(
       id: 'kw1',
       comment: 'First Keyword',
@@ -841,15 +841,15 @@ void main() {
 
     final lastUser = result.messages.lastWhere((m) => m.role == 'user');
     expect(lastUser.content, contains('First keyword payload.'));
-    expect(lastUser.content, isNot(contains('Duplicate payload.')));
-    expect(lastUser.content, contains('Vector-only payload.'));
+    expect(lastUser.content, contains('Duplicate payload.'));
+    expect(lastUser.content, isNot(contains('Vector-only payload.')));
     expect(result.triggeredLorebooks.map((e) => e.name), [
       'First Keyword',
-      'Vector Only',
+      'Duplicate Keyword Vector',
     ]);
     expect(result.triggeredLorebooks.map((e) => e.source), [
       'keyword',
-      'vector',
+      'keyword',
     ]);
   });
 

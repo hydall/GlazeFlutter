@@ -300,6 +300,7 @@ PromptResult buildPrompt(PromptPayload payload) {
         lorebooks: payload.lorebooks,
         globalSettings: payload.lorebookSettings,
         activations: payload.lorebookActivations,
+        applyPerBookLimits: false,
       );
 
   final mergedEntries = mergeKeywordVector(
@@ -948,7 +949,9 @@ PromptResult _assembleMessages({
       if (replacedMacro) {
         memoryContent = rebuilt.macroContent;
         memoryMacroContent = rebuilt.macroContent;
-        historyOnly = messages.where((m) => m.isHistory).toList(growable: false);
+        historyOnly = messages
+            .where((m) => m.isHistory)
+            .toList(growable: false);
         macroTokens['memory'] = estimateTokens(memoryMacroContent);
       } else if (payload.memoryInjectionTarget == 'hard_block') {
         memoryContent = rebuilt.content;
