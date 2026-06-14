@@ -61,7 +61,10 @@ class GlazeBackground extends ConsumerWidget {
                 ),
               ),
             ),
-          child,
+          // Shares a single backdrop blur pass across every grouped
+          // BackdropFilter below (nav bar, header, glass surfaces) instead of
+          // each re-blurring the backdrop independently every frame.
+          BackdropGroup(child: child),
         ],
       ),
     );

@@ -28,6 +28,7 @@ abstract class AppSettings with _$AppSettings {
     @Default(30) double tokenizerHidePercent,
     @Default(85) double tokenizerHistoryFillThreshold,
     @Default(true) bool showOurPicks,
+    @Default(true) bool forceMobileLayout,
   }) = _AppSettings;
 }
 
@@ -54,6 +55,8 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
       tokenizerHistoryFillThreshold:
           prefs.getDouble('tokenizerHistoryFillThreshold') ?? 85,
       showOurPicks: prefs.getBool('showOurPicks') ?? true,
+      forceMobileLayout:
+          prefs.getBool('gz_force_mobile_layout') ?? true,
     );
   }
 
@@ -84,6 +87,10 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
       normalized.tokenizerHistoryFillThreshold,
     );
     await prefs.setBool('showOurPicks', normalized.showOurPicks);
+    await prefs.setBool(
+      'gz_force_mobile_layout',
+      normalized.forceMobileLayout,
+    );
     state = AsyncData(normalized);
   }
 }

@@ -126,30 +126,28 @@ class _ToolsScreenState extends ConsumerState<ToolsScreen>
                 onTap: () => context.push('/tools/presets'),
               ),
               const SizedBox(height: 16),
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: _GridTile(
-                        iconPath: _kIconApi,
-                        title: 'tab_api'.tr(),
-                        subtitle: 'tools_api_subtitle'.tr(),
-                        showStatusDot: true,
-                        onTap: () => context.push('/tools/api'),
-                      ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _GridTile(
+                      iconPath: _kIconApi,
+                      title: 'tab_api'.tr(),
+                      subtitle: 'tools_api_subtitle'.tr(),
+                      showStatusDot: true,
+                      onTap: () => context.push('/tools/api'),
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _GridTile(
-                        iconPath: _kIconLorebook,
-                        title: 'menu_lorebooks'.tr(),
-                        subtitle: 'tools_lorebooks_subtitle'.tr(),
-                        onTap: () => context.push('/tools/lorebooks'),
-                      ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _GridTile(
+                      iconPath: _kIconLorebook,
+                      title: 'menu_lorebooks'.tr(),
+                      subtitle: 'tools_lorebooks_subtitle'.tr(),
+                      onTap: () => context.push('/tools/lorebooks'),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               Row(

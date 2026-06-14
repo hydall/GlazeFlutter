@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -28,6 +27,7 @@ import '../../features/glossary/glossary_sheet.dart';
 import '../../features/extensions/screens/extensions_screen.dart';
 import '../../features/extensions/screens/preset_editor_screen.dart';
 import '../../shared/shell/shell_screen.dart';
+import '../../shared/shell/desktop/desktop_shell.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -65,6 +65,13 @@ Page<void> _adaptivePage({
 /// tests causes GoRouter to silently skip navigation after the first test.
 GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
   navigatorKey: navigatorKey,
+  redirect: (context, state) {
+    if (state.matchedLocation == '/' &&
+        MediaQuery.sizeOf(context).width >= 768) {
+      return '/characters';
+    }
+    return null;
+  },
   onException: (_, state, router) {
     final uri = state.uri;
     if (uri.scheme.isNotEmpty &&
@@ -75,6 +82,9 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
     router.go('/');
   },
   routes: [
+    ShellRoute(
+      builder: (_, state, child) => DesktopShell(child: child),
+      routes: [
     StatefulShellRoute(
       builder: (_, _, navigationShell) =>
           ShellScreen(navigationShell: navigationShell),
@@ -272,6 +282,8 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
             ),
           ),
         ),
+      ],
+    ),
       ],
     ),
   ],

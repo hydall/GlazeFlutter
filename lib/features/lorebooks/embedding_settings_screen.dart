@@ -145,20 +145,20 @@ class _EmbeddingSettingsScreenState
                   ),
                 ),
                 const SizedBox(height: 8),
-                Row(
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
                   children: [
                     _SearchModeChip(
                       label: 'search_type_keys'.tr(),
                       selected: _searchType == 'keyword',
                       onTap: () => setState(() => _searchType = 'keyword'),
                     ),
-                    const SizedBox(width: 8),
                     _SearchModeChip(
                       label: 'search_type_vector'.tr(),
                       selected: _searchType == 'vector',
                       onTap: () => setState(() => _searchType = 'vector'),
                     ),
-                    const SizedBox(width: 8),
                     _SearchModeChip(
                       label: 'search_type_both'.tr(),
                       selected: _searchType == 'both',

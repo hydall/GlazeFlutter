@@ -1254,6 +1254,8 @@
     "desc_virtual_keyboard_send": "Показывать кнопку отправки вместо Enter на виртуальных клавиатурах",
     "menu_show_our_picks": "Показывать Our Picks",
     "desc_show_our_picks": "Показывать карточку \"Our Picks\" в начале списка моих персонажей",
+    "menu_force_mobile_layout": "Принудительный мобильный режим",
+    "desc_force_mobile_layout": "Всегда использовать мобильный интерфейс, даже на широких экранах",
     "settings_notifications_not_implemented": "Настройки уведомлений не реализованы",
     "chat_memories": "Воспоминания",
     "chat_triggered_entries": "Сработавшие элементы",

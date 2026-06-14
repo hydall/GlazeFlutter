@@ -183,6 +183,14 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(showOurPicks: v)),
             ),
+            MenuSwitchItem(
+              label: 'menu_force_mobile_layout'.tr(),
+              description: 'desc_force_mobile_layout'.tr(),
+              value: s.forceMobileLayout,
+              onChanged: (v) => ref
+                  .read(appSettingsProvider.notifier)
+                  .save(s.copyWith(forceMobileLayout: v)),
+            ),
           ],
         ),
         MenuGroup(

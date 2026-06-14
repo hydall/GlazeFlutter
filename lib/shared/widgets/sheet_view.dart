@@ -116,6 +116,13 @@ class _SheetViewState extends ConsumerState<SheetView>
   bool _keyboardOpen = false;
   bool _wasExpandedBeforeKeyboard = false;
 
+  /// True while the user is dragging the sheet. Combined with an active snap
+  /// animation, this drops the expensive backdrop + soft-edge blur passes for
+  /// the duration of the motion so the drag stays at framerate. The blur is
+  /// restored the moment the sheet settles.
+  bool _dragging = false;
+  bool get _interacting => _dragging || _ctrl.isAnimating;
+
   late AnimationController _ctrl;
   Animation<double>? _anim;
 
@@ -144,6 +151,9 @@ class _SheetViewState extends ConsumerState<SheetView>
       vsync: this,
       duration: const Duration(milliseconds: 350),
     );
+    // Restore the blur once a snap animation finishes (the per-tick setState in
+    // _onTick handles the frames during the animation itself).
+    _ctrl.addStatusListener(_onAnimStatus);
     _headerH = _estimateHeaderHeight();
   }
 
@@ -232,6 +242,7 @@ class _SheetViewState extends ConsumerState<SheetView>
       WidgetsBinding.instance.addPostFrameCallback((_) => registry.remove(this));
     }
     _anim?.removeListener(_onTick);
+    _ctrl.removeStatusListener(_onAnimStatus);
     _ctrl.dispose();
     _fallbackScrollController.dispose();
     super.dispose();
@@ -255,11 +266,21 @@ class _SheetViewState extends ConsumerState<SheetView>
 
   void _onTick() => setState(() => _currentHeight = _anim!.value);
 
+  void _onAnimStatus(AnimationStatus status) {
+    if (!mounted) return;
+    if (status == AnimationStatus.completed ||
+        status == AnimationStatus.dismissed) {
+      // Force a rebuild so _interacting flips back to false and the blur paints.
+      setState(() {});
+    }
+  }
+
   void _onDragStart(DragStartDetails d) {
     _ctrl.stop();
     _anim?.removeListener(_onTick);
     _dragStartY = d.globalPosition.dy;
     _dragStartH = _currentHeight;
+    setState(() => _dragging = true);
   }
 
   void _onDragUpdate(DragUpdateDetails d) {
@@ -273,6 +294,7 @@ class _SheetViewState extends ConsumerState<SheetView>
   }
 
   void _onDragEnd(DragEndDetails d) {
+    _dragging = false;
     final vy = d.velocity.pixelsPerSecond.dy;
     final collapsed = _collapsed(context);
     final full = _full(context);
@@ -510,6 +532,10 @@ class _SheetViewState extends ConsumerState<SheetView>
         height: widget.fitContent ? null : _currentHeight,
         child: ClipRRect(
           borderRadius: BorderRadius.vertical(top: Radius.circular(radius)),
+          // The primary backdrop blur stays live even during the drag (CSS
+          // backdrop-filter parity). The frame cost is kept affordable by
+          // dropping the *second* blur pass (SoftEdgeBlur) and isolating the
+          // body repaint while interacting — see _buildBodyChild / _interacting.
           child: batterySaver
               ? _sheetContent(
                   context,
@@ -598,6 +624,7 @@ class _SheetViewState extends ConsumerState<SheetView>
     bool isKeyboardOpen,
   ) {
     return (_hasHeader &&
+            !_interacting &&
             !(ref.watch(appSettingsProvider).value?.batterySaver ?? false))
         ? SoftEdgeBlur(
             edges: [
@@ -651,7 +678,9 @@ class _SheetViewState extends ConsumerState<SheetView>
               child: Align(
                 alignment: Alignment.topCenter,
                 heightFactor: widget.fitContent ? 1.0 : null,
-                child: SizedBox(width: double.infinity, child: widget.body),
+                child: RepaintBoundary(
+                  child: SizedBox(width: double.infinity, child: widget.body),
+                ),
               ),
             ),
           );

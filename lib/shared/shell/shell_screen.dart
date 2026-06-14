@@ -10,6 +10,7 @@ import '../widgets/glaze_background.dart';
 import '../widgets/glaze_scaffold.dart' show GlazeAppBar;
 import '../widgets/glaze_toast.dart';
 import 'shell_header_provider.dart';
+import 'desktop/desktop_layout_provider.dart';
 
 class ShellScreen extends StatefulWidget {
   final StatefulNavigationShell navigationShell;
@@ -57,6 +58,15 @@ class _ShellScreenState extends State<ShellScreen>
   Widget build(BuildContext context) {
     final currentIndex = widget.navigationShell.currentIndex;
     final location = GoRouterState.of(context).uri.toString();
+    final isDesktop = isDesktopLayout(context);
+
+    if (isDesktop) {
+      return FadeTransition(
+        opacity: _fade,
+        child: widget.navigationShell,
+      );
+    }
+
     final isIosLikeTargetPlatform =
         !kIsWeb &&
         (defaultTargetPlatform == TargetPlatform.iOS ||
@@ -65,7 +75,8 @@ class _ShellScreenState extends State<ShellScreen>
       '/menu/about',
     };
     final showNavBar =
-        !location.startsWith('/chat/') && !hideNavBarRoutes.contains(location);
+        !location.startsWith('/chat/') &&
+        !hideNavBarRoutes.contains(location);
     return GlazeBackground(
       child: PopScope(
         canPop: false,

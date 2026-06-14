@@ -98,10 +98,15 @@ class GlassSurface extends ConsumerWidget {
 
     final surface = ClipRRect(
       borderRadius: borderRadius,
+      // `.grouped` shares one backdrop blur pass with every other grouped
+      // filter under the nearest BackdropGroup (see GlazeBackground). If no
+      // group is in scope it degrades to a normal standalone BackdropFilter.
       child: blur > 0
-          ? BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
-              child: withNoise,
+          ? RepaintBoundary(
+              child: BackdropFilter.grouped(
+                filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+                child: withNoise,
+              ),
             )
           : withNoise,
     );

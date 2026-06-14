@@ -23,6 +23,7 @@ import '../../core/state/active_selection_provider.dart';
 import '../../core/state/memory_settings_provider.dart';
 import '../../core/state/shared_prefs_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/shell/desktop/desktop_layout_provider.dart' show isDesktopLayout;
 import 'widgets/message_actions.dart';
 import '../../shared/theme/theme_font_provider.dart';
 import '../../shared/theme/theme_preset.dart';
@@ -807,7 +808,8 @@ class _ChatBodyState extends ConsumerState<_ChatBody> {
 
         final animatedBottomPanelInset =
             panelHeight + (safeBottom * (1 - factor));
-        final renderDrawer = widget.drawerCtrl.drawerOpen || progress > 0.001;
+        final renderDrawer = !isDesktopLayout(context) &&
+            (widget.drawerCtrl.drawerOpen || progress > 0.001);
 
         return Stack(
           children: [

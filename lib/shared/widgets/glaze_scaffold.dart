@@ -214,6 +214,7 @@ class GlazeAppBar extends ConsumerWidget {
   final bool showBack;
   final VoidCallback? onBack;
   final Widget? leading;
+  final BorderRadius borderRadius;
 
   const GlazeAppBar({
     super.key,
@@ -223,12 +224,13 @@ class GlazeAppBar extends ConsumerWidget {
     this.showBack = false,
     this.onBack,
     this.leading,
+    this.borderRadius = const BorderRadius.all(Radius.circular(20)),
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return GlassSurface(
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: borderRadius,
       border: Border.all(color: context.cs.outlineVariant),
       child: SizedBox(
         height: 56,
