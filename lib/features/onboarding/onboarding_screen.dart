@@ -5,16 +5,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../shared/theme/app_colors.dart';
+import '../../shared/theme/theme_provider.dart';
+import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../core/services/onboarding_service.dart';
 import '../backup/backup_screen.dart';
 import '../settings/api_settings_screen.dart';
+import '../settings/widgets/chat_layout_picker.dart';
 import '../personas/persona_list_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Slide data
 // ---------------------------------------------------------------------------
 
-enum OnboardingSlideType { welcome, features, dataImport, api, persona, allSet }
+enum OnboardingSlideType { welcome, features, dataImport, api, persona, layout, allSet }
 
 class _SlideData {
   final OnboardingSlideType type;
@@ -51,6 +54,12 @@ const _slides = <_SlideData>[
     title: 'onboarding_persona_title',
     desc: 'onboarding_persona_slide_desc',
     icon: Icons.person_outline_rounded,
+  ),
+  _SlideData(
+    type: OnboardingSlideType.layout,
+    title: 'onboarding_layout_title',
+    desc: 'onboarding_layout_slide_desc',
+    icon: Icons.view_quilt_outlined,
   ),
   _SlideData(
     type: OnboardingSlideType.allSet,
@@ -125,6 +134,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       case OnboardingSlideType.api:
       case OnboardingSlideType.persona:
         return 'onboarding_btn_skip'.tr();
+      case OnboardingSlideType.layout:
+        return 'onboarding_btn_next'.tr();
       default:
         return 'onboarding_btn_next'.tr();
     }
@@ -147,6 +158,21 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Future<void> _finish() async {
     await markOnboardingComplete();
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Confirmation bottom sheet for skipping the whole onboarding flow.
+  void _confirmSkipOnboarding() {
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'onboarding_skip_confirm_title'.tr(),
+      child: _SkipConfirmSheet(
+        onCancel: () => Navigator.of(context, rootNavigator: true).pop(),
+        onConfirm: () {
+          Navigator.of(context, rootNavigator: true).pop();
+          _finish();
+        },
+      ),
+    );
   }
 
   void _openSheet(Widget sheet) {
@@ -244,6 +270,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               child: _GlassBackButton(onTap: _prev),
             ),
 
+          // ── Skip onboarding (top-right) ──
+          if (!_isLastSlide)
+            Positioned(
+              top: topPad + 36, right: 12,
+              child: _SkipOnboardingButton(onTap: _confirmSkipOnboarding),
+            ),
+
           // ── Footer gradient ──
           Positioned(
             bottom: 0, left: 0, right: 0,
@@ -312,6 +345,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           actionSub: 'onboarding_action_setup_sub'.tr(),
           onAction: () => _openSheet(const PersonaListScreen()),
         );
+      case OnboardingSlideType.layout:
+        return _buildLayoutSlide(slide);
       case OnboardingSlideType.allSet:
         return _buildStandardSlide(slide);
     }
@@ -420,6 +455,77 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       ),
     );
   }
+
+  /// Chat layout picker slide — inline `default` / `bubble` thumbnails reused
+  /// from the theme editor's layout picker.
+  Widget _buildLayoutSlide(_SlideData slide) {
+    final currentLayout =
+        ref.watch(themeProvider.select((s) => s.activePreset.chatLayout));
+    return SizedBox(
+      width: double.infinity,
+      child: Column(
+        children: [
+          const SizedBox(height: 40),
+          _IconBubble(icon: slide.icon ?? Icons.view_quilt_outlined),
+          const SizedBox(height: 24),
+          Text(
+            slide.title.tr(),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 28, fontWeight: FontWeight.w800,
+              color: Colors.white, height: 1.3,
+            ),
+          ),
+          if (slide.desc != null) ...[
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(
+                slide.desc!.tr(),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16, color: context.cs.onSurfaceVariant, height: 1.5,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: LayoutPreviewCard(
+                  title: 'layout_default'.tr(),
+                  subtitle: 'layout_default_desc'.tr(),
+                  isActive: currentLayout == 'default',
+                  onTap: () => _setChatLayout('default'),
+                  child: const LayoutMiniPreview(layout: 'default'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: LayoutPreviewCard(
+                  title: 'layout_bubble'.tr(),
+                  subtitle: 'layout_bubble_desc'.tr(),
+                  isActive: currentLayout == 'bubble',
+                  onTap: () => _setChatLayout('bubble'),
+                  child: const LayoutMiniPreview(layout: 'bubble'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _setChatLayout(String layout) {
+    final preset = ref.read(themeProvider).activePreset;
+    if (preset.chatLayout == layout) return;
+    ref.read(themeProvider.notifier).updatePreset(
+          preset.copyWith(chatLayout: layout),
+        );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -462,6 +568,117 @@ class _StoriesBar extends StatelessWidget {
           ),
         );
       }),
+    );
+  }
+}
+
+/// Glass-morphism pill button to skip the entire onboarding (top-right)
+class _SkipOnboardingButton extends StatelessWidget {
+  final VoidCallback onTap;
+  const _SkipOnboardingButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+          child: Container(
+            height: 40,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: context.cs.surface.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              boxShadow: const [
+                BoxShadow(color: Color(0x4D000000), blurRadius: 15, offset: Offset(0, 4)),
+              ],
+            ),
+            child: Text(
+              'onboarding_btn_skip_onboarding'.tr(),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Confirmation body shown inside the "Skip Onboarding?" bottom sheet.
+class _SkipConfirmSheet extends StatelessWidget {
+  final VoidCallback onCancel;
+  final VoidCallback onConfirm;
+  const _SkipConfirmSheet({required this.onCancel, required this.onConfirm});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'onboarding_skip_confirm_desc'.tr(),
+            style: TextStyle(
+              fontSize: 15,
+              height: 1.5,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 20),
+          GestureDetector(
+            onTap: onConfirm,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xFFFF4444).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: const Color(0xFFFF4444).withValues(alpha: 0.4),
+                ),
+              ),
+              child: Text(
+                'onboarding_skip_confirm_confirm'.tr(),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFFFF6B6B),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: onCancel,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              ),
+              child: Text(
+                'onboarding_skip_confirm_cancel'.tr(),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: context.cs.onSurface,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

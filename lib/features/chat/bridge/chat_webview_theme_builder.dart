@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../shared/theme/app_colors.dart';
+import '../../../../shared/theme/theme_preset.dart';
 
 /// Snapshot of the WebView theme inputs collected from the parent
 /// [ChatWebViewWidget]. Pure data — the builder does not reach into
@@ -22,6 +23,8 @@ class ChatWebViewThemeInput {
     required this.showCharAvatar,
     required this.showUserName,
     required this.showCharName,
+    this.userBubbleGradient,
+    this.charBubbleGradient,
   });
 
   final double elementOpacity;
@@ -38,6 +41,11 @@ class ChatWebViewThemeInput {
   final bool showCharAvatar;
   final bool showUserName;
   final bool showCharName;
+
+  /// When non-null, the bubble is painted with this 2-stop gradient instead
+  /// of the solid `*Bubble` color.
+  final BubbleGradient? userBubbleGradient;
+  final BubbleGradient? charBubbleGradient;
 }
 
 /// Builds the `Map<String, String>` that [ChatBridgeController.applyTheme]
@@ -56,6 +64,7 @@ class ChatWebViewThemeBuilder {
     final glaze = context.colors;
     final cs = context.cs;
     final primary = cs.primary;
+    final opacity = input.elementOpacity.clamp(0.0, 1.0);
     return {
       'bg-color': _colorHex(cs.surface),
       'text-color': _colorHex(cs.onSurface),
@@ -64,6 +73,13 @@ class ChatWebViewThemeBuilder {
       'primary-rgb': _colorRgb(primary),
       'user-bubble-color-rgb': _colorRgb(glaze.userBubble),
       'char-bubble-color-rgb': _colorRgb(glaze.charBubble),
+      // Full bubble background: either a solid rgba (element-opacity applied) or
+      // a 2-stop linear gradient. Always emitted so toggling gradient → solid
+      // overwrites the previously-set CSS variable.
+      'user-bubble-bg':
+          _bubbleBg(input.userBubbleGradient, glaze.userBubble, opacity),
+      'char-bubble-bg':
+          _bubbleBg(input.charBubbleGradient, glaze.charBubble, opacity),
       'user-text-color': _colorHex(glaze.userText ?? cs.onSurface),
       'char-text-color': _colorHex(glaze.charText ?? cs.onSurface),
       'user-quote-color': _colorHex(glaze.userQuote ?? cs.primary),
@@ -90,6 +106,19 @@ class ChatWebViewThemeBuilder {
       'show-user-name': input.showUserName ? '1' : '0',
       'show-char-name': input.showCharName ? '1' : '0',
     };
+  }
+
+  /// Build the CSS background value for a bubble. Solid → `rgba(r,g,b,op)`;
+  /// gradient → `linear-gradient(<angle>deg, rgba(...), rgba(...))`, with the
+  /// element opacity baked into every stop.
+  static String _bubbleBg(BubbleGradient? g, Color solid, double op) {
+    final opStr = op.toStringAsFixed(2);
+    if (g == null) {
+      return 'rgba(${_colorRgb(solid)}, $opStr)';
+    }
+    final c1 = 'rgba(${_colorRgb(g.color1)}, $opStr)';
+    final c2 = 'rgba(${_colorRgb(g.color2)}, $opStr)';
+    return 'linear-gradient(${g.angle.round()}deg, $c1, $c2)';
   }
 
   static String _colorRgb(Color c) {

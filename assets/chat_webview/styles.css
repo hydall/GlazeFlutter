@@ -1136,7 +1136,7 @@
 }
 
 .message-section.layout-bubble .msg-body {
-  background-color: rgba(var(--char-bubble-color-rgb, var(--vk-blue-rgb)), var(--element-opacity, 0.8));
+  background: var(--char-bubble-bg, rgba(var(--char-bubble-color-rgb, var(--vk-blue-rgb)), var(--element-opacity, 0.8)));
   backdrop-filter: blur(var(--element-blur, 12px));
   -webkit-backdrop-filter: blur(var(--element-blur, 12px));
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1150,7 +1150,7 @@
   flex-direction: column;
 }
 .message-section.layout-bubble.user .msg-body {
-  background-color: rgba(var(--user-bubble-color-rgb, var(--ui-bg-rgb)), var(--element-opacity, 0.8));
+  background: var(--user-bubble-bg, rgba(var(--user-bubble-color-rgb, var(--ui-bg-rgb)), var(--element-opacity, 0.8)));
   border-radius: var(--user-bubble-radius, 18px);
   border-top-left-radius: var(--user-bubble-radius, 18px);
   border-top-right-radius: 4px;

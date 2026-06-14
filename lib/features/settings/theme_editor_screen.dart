@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:easy_localization/easy_localization.dart';
@@ -711,6 +712,10 @@ class _ChatColorsTab extends ConsumerWidget {
                 palette: _presetColors,
                 allowNull: true,
                 nullLabel: 'theme_auto'.tr(),
+                allowGradient: true,
+                gradient: preset.userBubbleGradient,
+                onGradientChanged: (v) =>
+                    onUpdate((p) => p.copyWith(userBubbleGradient: v)),
                 onChanged: (v) =>
                     onUpdate((p) => p.copyWith(userBubbleColor: v)),
               ),
@@ -720,6 +725,10 @@ class _ChatColorsTab extends ConsumerWidget {
                 palette: _presetColors,
                 allowNull: true,
                 nullLabel: 'theme_auto'.tr(),
+                allowGradient: true,
+                gradient: preset.charBubbleGradient,
+                onGradientChanged: (v) =>
+                    onUpdate((p) => p.copyWith(charBubbleGradient: v)),
                 onChanged: (v) =>
                     onUpdate((p) => p.copyWith(charBubbleColor: v)),
               ),
@@ -1185,6 +1194,12 @@ class _ColorRow extends ConsumerWidget {
   final String nullLabel;
   final bool showPreviewOverlay;
   final ValueChanged<String?> onChanged;
+  // Gradient support (bubble rows). When [allowGradient] is true the picker
+  // exposes a Solid/Gradient mode toggle. [gradient] is the encoded
+  // "angle|#hex1|#hex2" string (null = solid mode).
+  final bool allowGradient;
+  final String? gradient;
+  final ValueChanged<String?>? onGradientChanged;
 
   const _ColorRow({
     required this.label,
@@ -1194,10 +1209,15 @@ class _ColorRow extends ConsumerWidget {
     required this.onChanged,
     this.nullLabel = 'Auto',
     this.showPreviewOverlay = true,
+    this.allowGradient = false,
+    this.gradient,
+    this.onGradientChanged,
   });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final gradientValue =
+        allowGradient ? _decodeGradient(gradient) : null;
     final current = value != null && value!.isNotEmpty ? _hex(value!) : null;
     final textOnCurrent = current != null
         ? (current.computeLuminance() > 0.5 ? Colors.black : Colors.white)
@@ -1224,15 +1244,20 @@ class _ColorRow extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(horizontal: 8),
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: current ?? Colors.transparent,
+                color: gradientValue == null
+                    ? (current ?? Colors.transparent)
+                    : null,
+                gradient: gradientValue,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: context.cs.outlineVariant
-                      .withValues(alpha: current == null ? 0.6 : 0.3),
+                  color: context.cs.outlineVariant.withValues(
+                      alpha: (current == null && gradientValue == null)
+                          ? 0.6
+                          : 0.3),
                   width: 1,
                 ),
               ),
-              child: current == null
+              child: (current == null && gradientValue == null)
                   ? Text(
                       nullLabel,
                       style: TextStyle(
@@ -1246,6 +1271,24 @@ class _ColorRow extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// Decode the stored "angle|#hex1|#hex2" string into a [LinearGradient]
+  /// for the row swatch. Returns null when absent/invalid.
+  static LinearGradient? _decodeGradient(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    final parts = raw.split('|');
+    if (parts.length != 3) return null;
+    final angle = double.tryParse(parts[0]);
+    if (angle == null) return null;
+    final rad = angle * 3.141592653589793 / 180.0;
+    final dx = math.sin(rad);
+    final dy = -math.cos(rad);
+    return LinearGradient(
+      begin: Alignment(-dx, -dy),
+      end: Alignment(dx, dy),
+      colors: [_hex(parts[1]), _hex(parts[2])],
     );
   }
 
@@ -1266,6 +1309,9 @@ class _ColorRow extends ConsumerWidget {
             allowNull: allowNull,
             nullLabel: nullLabel,
             onChanged: onChanged,
+            allowGradient: allowGradient,
+            gradient: gradient,
+            onGradientChanged: onGradientChanged,
           );
         },
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -1287,6 +1333,9 @@ class _ColorPickerOverlay extends StatefulWidget {
   final bool allowNull;
   final String nullLabel;
   final ValueChanged<String?> onChanged;
+  final bool allowGradient;
+  final String? gradient;
+  final ValueChanged<String?>? onGradientChanged;
 
   const _ColorPickerOverlay({
     required this.showPreviewOverlay,
@@ -1296,6 +1345,9 @@ class _ColorPickerOverlay extends StatefulWidget {
     required this.allowNull,
     required this.nullLabel,
     required this.onChanged,
+    this.allowGradient = false,
+    this.gradient,
+    this.onGradientChanged,
   });
 
   @override
@@ -1399,6 +1451,9 @@ class _ColorPickerOverlayState extends State<_ColorPickerOverlay>
                       nullLabel: widget.nullLabel,
                       onChanged: widget.onChanged,
                       onClose: _close,
+                      allowGradient: widget.allowGradient,
+                      gradient: widget.gradient,
+                      onGradientChanged: widget.onGradientChanged,
                     ),
                   ),
                 ),
@@ -1518,6 +1573,9 @@ class _ColorPickerSheet extends ConsumerStatefulWidget {
   final String nullLabel;
   final ValueChanged<String?> onChanged;
   final Future<void> Function() onClose;
+  final bool allowGradient;
+  final String? gradient;
+  final ValueChanged<String?>? onGradientChanged;
 
   const _ColorPickerSheet({
     required this.current,
@@ -1526,6 +1584,9 @@ class _ColorPickerSheet extends ConsumerStatefulWidget {
     required this.nullLabel,
     required this.onChanged,
     required this.onClose,
+    this.allowGradient = false,
+    this.gradient,
+    this.onGradientChanged,
   });
 
   @override
@@ -1544,6 +1605,13 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
   late int _r, _g, _b;
   bool _suppressSliderSync = false;
 
+  // ── Gradient mode state ──
+  bool _gradientMode = false;
+  int _activeStop = 0; // 0 = first color, 1 = second color
+  late Color _gColor1;
+  late Color _gColor2;
+  double _gAngle = 135;
+
   @override
   void initState() {
     super.initState();
@@ -1558,7 +1626,49 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
     _r = (currentColor.r * 255).round();
     _g = (currentColor.g * 255).round();
     _b = (currentColor.b * 255).round();
+    _initGradientState(currentColor);
     _loadCustomColorHistory();
+  }
+
+  void _initGradientState(Color fallback) {
+    _gColor1 = fallback;
+    _gColor2 = _defaultSecondStop(fallback);
+    final raw = widget.gradient;
+    if (widget.allowGradient && raw != null && raw.isNotEmpty) {
+      final parts = raw.split('|');
+      if (parts.length == 3) {
+        _gAngle = double.tryParse(parts[0]) ?? 135;
+        _gColor1 = _parseHexSafe(parts[1]) ?? fallback;
+        _gColor2 = _parseHexSafe(parts[2]) ?? _defaultSecondStop(fallback);
+        _gradientMode = true;
+        _showAdvancedEditor = true;
+        _loadEditorFromColor(_gColor1);
+      }
+    }
+  }
+
+  /// A visibly-distinct second stop seeded from the first color so enabling
+  /// gradient mode doesn't look like a flat color.
+  static Color _defaultSecondStop(Color base) {
+    final hsl = HSLColor.fromColor(base);
+    final shift = hsl.lightness > 0.5 ? -0.22 : 0.22;
+    return hsl
+        .withLightness((hsl.lightness + shift).clamp(0.0, 1.0))
+        .toColor();
+  }
+
+  /// Load the HSL/RGB/hex editor fields from [c] without emitting a change.
+  void _loadEditorFromColor(Color c) {
+    final hsl = HSLColor.fromColor(c);
+    _h = hsl.hue;
+    _s = hsl.saturation;
+    _l = hsl.lightness;
+    _r = (c.r * 255).round();
+    _g = (c.g * 255).round();
+    _b = (c.b * 255).round();
+    _committedHex = _toHex(c);
+    _setHexText(_committedHex);
+    _error = null;
   }
 
   @override
@@ -1593,8 +1703,55 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
     }
     _setHexText(hex);
     setState(() => _error = null);
-    widget.onChanged(hex);
+    _sink(hex);
     _suppressSliderSync = false;
+  }
+
+  /// Route an applied color to either the solid callback or the active
+  /// gradient stop, depending on the current mode.
+  void _sink(String hex) {
+    if (_gradientMode) {
+      final c = _parseHexSafe(hex) ?? const Color(0xFF7996CE);
+      if (_activeStop == 0) {
+        _gColor1 = c;
+      } else {
+        _gColor2 = c;
+      }
+      _emitGradient();
+    } else {
+      widget.onChanged(hex);
+    }
+  }
+
+  void _emitGradient() {
+    final g = BubbleGradient(_gAngle, _gColor1, _gColor2);
+    widget.onGradientChanged?.call(g.encode());
+  }
+
+  void _setGradientMode(bool on) {
+    if (on == _gradientMode) return;
+    setState(() {
+      _gradientMode = on;
+      if (on) {
+        _activeStop = 0;
+        _showAdvancedEditor = true;
+        _loadEditorFromColor(_gColor1);
+        _emitGradient();
+      } else {
+        widget.onGradientChanged?.call(null);
+        // Re-assert the solid color so the bubble falls back correctly.
+        widget.onChanged(_committedHex.isEmpty ? null : _committedHex);
+      }
+    });
+  }
+
+  void _selectStop(int i) {
+    if (i == _activeStop) return;
+    setState(() {
+      _activeStop = i;
+      _showAdvancedEditor = true;
+      _loadEditorFromColor(i == 0 ? _gColor1 : _gColor2);
+    });
   }
 
   void _applyExternalColor(Color color) {
@@ -1728,7 +1885,14 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
                             child: Container(
                               height: 56,
                               decoration: BoxDecoration(
-                                color: currentColor,
+                                color: _gradientMode ? null : currentColor,
+                                gradient: _gradientMode
+                                    ? LinearGradient(
+                                        begin: Alignment.centerLeft,
+                                        end: Alignment.centerRight,
+                                        colors: [_gColor1, _gColor2],
+                                      )
+                                    : null,
                                 borderRadius: BorderRadius.circular(28),
                                 border: Border.all(
                                   color: cs.onSurfaceVariant.withValues(alpha: 0.45),
@@ -1740,6 +1904,37 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
                         ],
                       ),
                       const SizedBox(height: 12),
+                      if (widget.allowGradient) ...[
+                        _ModeToggle(
+                          isGradient: _gradientMode,
+                          onSolid: () => _setGradientMode(false),
+                          onGradient: () => _setGradientMode(true),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                      if (_gradientMode) ...[
+                        _GradientStopToggle(
+                          activeStop: _activeStop,
+                          color1: _gColor1,
+                          color2: _gColor2,
+                          onSelect: _selectStop,
+                        ),
+                        const SizedBox(height: 4),
+                        _PickerSlider(
+                          label: 'theme_gradient_angle'.tr(),
+                          value: _gAngle,
+                          min: 0,
+                          max: 360,
+                          divisions: 360,
+                          display: '${_gAngle.round()}°',
+                          onChanged: (v) {
+                            _gAngle = v;
+                            _emitGradient();
+                            setState(() {});
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                      ],
                       Align(
                         alignment: Alignment.center,
                         child: SizedBox(
@@ -1754,7 +1949,7 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
                                 spacing: 10,
                                 runSpacing: 10,
                                 children: [
-                                if (widget.allowNull)
+                                if (widget.allowNull && !_gradientMode)
                                   GestureDetector(
                                     onTap: () {
                                       setState(() {
@@ -1788,7 +1983,9 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
                                   return GestureDetector(
                                     onTap: () {
                                       _applyExternalColor(color);
-                                      setState(() => _showAdvancedEditor = false);
+                                      if (!_gradientMode) {
+                                        setState(() => _showAdvancedEditor = false);
+                                      }
                                     },
                                     child: Container(
                                       width: 44,
@@ -2029,6 +2226,162 @@ class _ColorPickerSheetState extends ConsumerState<_ColorPickerSheet> {
                   ),
           ),
         ),
+    );
+  }
+}
+
+/// Segmented Solid | Gradient toggle shown atop the bubble color picker.
+class _ModeToggle extends StatelessWidget {
+  final bool isGradient;
+  final VoidCallback onSolid;
+  final VoidCallback onGradient;
+
+  const _ModeToggle({
+    required this.isGradient,
+    required this.onSolid,
+    required this.onGradient,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: onSolid,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              decoration: BoxDecoration(
+                color: !isGradient
+                    ? cs.primary.withValues(alpha: 0.15)
+                    : Colors.transparent,
+                borderRadius:
+                    const BorderRadius.horizontal(left: Radius.circular(8)),
+                border: Border.all(color: cs.outlineVariant),
+              ),
+              child: Text(
+                'theme_mode_solid'.tr(),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: !isGradient ? cs.primary : cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: GestureDetector(
+            onTap: onGradient,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              decoration: BoxDecoration(
+                color: isGradient
+                    ? cs.primary.withValues(alpha: 0.15)
+                    : Colors.transparent,
+                borderRadius:
+                    const BorderRadius.horizontal(right: Radius.circular(8)),
+                border: Border(
+                  top: BorderSide(color: cs.outlineVariant),
+                  right: BorderSide(color: cs.outlineVariant),
+                  bottom: BorderSide(color: cs.outlineVariant),
+                ),
+              ),
+              child: Text(
+                'theme_mode_gradient'.tr(),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: isGradient ? cs.primary : cs.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Two-swatch selector for which gradient stop the editor below is editing.
+class _GradientStopToggle extends StatelessWidget {
+  final int activeStop;
+  final Color color1;
+  final Color color2;
+  final ValueChanged<int> onSelect;
+
+  const _GradientStopToggle({
+    required this.activeStop,
+    required this.color1,
+    required this.color2,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _stop(context,
+              index: 0, color: color1, label: 'theme_gradient_color_1'.tr()),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _stop(context,
+              index: 1, color: color2, label: 'theme_gradient_color_2'.tr()),
+        ),
+      ],
+    );
+  }
+
+  Widget _stop(BuildContext context,
+      {required int index, required Color color, required String label}) {
+    final cs = Theme.of(context).colorScheme;
+    final selected = activeStop == index;
+    return GestureDetector(
+      onTap: () => onSelect(index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected
+                ? cs.primary
+                : cs.outlineVariant.withValues(alpha: 0.6),
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: color,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: cs.onSurfaceVariant.withValues(alpha: 0.35),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: selected ? cs.primary : cs.onSurfaceVariant,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

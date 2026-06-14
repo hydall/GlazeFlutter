@@ -29,6 +29,7 @@ abstract class AppSettings with _$AppSettings {
     @Default(85) double tokenizerHistoryFillThreshold,
     @Default(true) bool showOurPicks,
     @Default(true) bool forceMobileLayout,
+    @Default(false) bool addBlockAtTop,
   }) = _AppSettings;
 }
 
@@ -57,6 +58,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
       showOurPicks: prefs.getBool('showOurPicks') ?? true,
       forceMobileLayout:
           prefs.getBool('gz_force_mobile_layout') ?? true,
+      addBlockAtTop: prefs.getBool('addBlockAtTop') ?? false,
     );
   }
 
@@ -91,6 +93,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
       'gz_force_mobile_layout',
       normalized.forceMobileLayout,
     );
+    await prefs.setBool('addBlockAtTop', normalized.addBlockAtTop);
     state = AsyncData(normalized);
   }
 }

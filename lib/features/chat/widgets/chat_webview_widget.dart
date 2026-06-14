@@ -7,6 +7,7 @@ import '../../../core/state/active_regex_provider.dart';
 import '../../../core/state/character_provider.dart';
 import '../../../core/state/persona_resolution.dart';
 import '../../../../shared/theme/theme_font_provider.dart';
+import '../../../../shared/theme/theme_preset.dart';
 import '../bridge/chat_bridge_controller.dart';
 import '../bridge/chat_webview_bridge_host.dart';
 import '../bridge/chat_webview_theme_builder.dart';
@@ -60,6 +61,8 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
   final int charMessageFontWeight;
   final double userBubbleRadius;
   final double charBubbleRadius;
+  final BubbleGradient? userBubbleGradient;
+  final BubbleGradient? charBubbleGradient;
   final bool showUserAvatar;
   final bool showCharAvatar;
   final bool showUserName;
@@ -119,6 +122,8 @@ class ChatWebViewWidget extends ConsumerStatefulWidget {
     this.charMessageFontWeight = 400,
     this.userBubbleRadius = 18,
     this.charBubbleRadius = 18,
+    this.userBubbleGradient,
+    this.charBubbleGradient,
     this.showUserAvatar = true,
     this.showCharAvatar = true,
     this.showUserName = true,
@@ -703,6 +708,8 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
         charMessageFontWeight: widget.charMessageFontWeight,
         userBubbleRadius: widget.userBubbleRadius,
         charBubbleRadius: widget.charBubbleRadius,
+        userBubbleGradient: widget.userBubbleGradient,
+        charBubbleGradient: widget.charBubbleGradient,
         showUserAvatar: widget.showUserAvatar,
         showCharAvatar: widget.showCharAvatar,
         showUserName: widget.showUserName,

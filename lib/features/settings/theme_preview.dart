@@ -151,6 +151,7 @@ class _PreviewChatScene extends StatelessWidget {
               child: _PreviewBubble(
                 alignment: Alignment.centerLeft,
                 color: colors.charBubble,
+                gradient: preset.charBubbleGradientValue,
                 textColor: charText,
                 italicColor: colors.charItalic,
                 quoteColor: colors.charQuote ?? cs.primary,
@@ -165,6 +166,7 @@ class _PreviewChatScene extends StatelessWidget {
               child: _PreviewBubble(
                 alignment: Alignment.centerRight,
                 color: colors.userBubble,
+                gradient: preset.userBubbleGradientValue,
                 textColor: userText,
                 italicColor: colors.userItalic,
                 quoteColor: colors.userQuote ?? cs.primary,
@@ -335,6 +337,7 @@ class _PreviewStandardMessage extends StatelessWidget {
 class _PreviewBubble extends StatelessWidget {
   final Alignment alignment;
   final Color color;
+  final Gradient? gradient;
   final Color textColor;
   final Color? italicColor;
   final Color quoteColor;
@@ -346,6 +349,7 @@ class _PreviewBubble extends StatelessWidget {
   const _PreviewBubble({
     required this.alignment,
     required this.color,
+    this.gradient,
     required this.textColor,
     required this.italicColor,
     required this.quoteColor,
@@ -363,7 +367,8 @@ class _PreviewBubble extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 260),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color,
+          color: gradient == null ? color : null,
+          gradient: gradient,
           borderRadius: BorderRadius.circular(radius),
           border: Border.all(
             color: context.cs.outline.withValues(alpha: 0.35),

@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 
@@ -21,6 +23,11 @@ abstract class ThemePreset with _$ThemePreset {
     @Default('default') String chatLayout,
     String? userBubbleColor,
     String? charBubbleColor,
+    // Optional bubble gradients. When non-empty, the bubble is painted with a
+    // 2-stop linear gradient instead of the solid `*BubbleColor`. Encoded as
+    // "angle|#hex1|#hex2" (angle in CSS degrees, 0 = upward, clockwise).
+    String? userBubbleGradient,
+    String? charBubbleGradient,
     String? userQuoteColor,
     String? charQuoteColor,
     String? userTextColor,
@@ -68,12 +75,40 @@ abstract class ThemePreset with _$ThemePreset {
       _$ThemePresetFromJson(json);
 }
 
+/// A parsed 2-stop bubble gradient. [angle] is in CSS degrees
+/// (0 = upward, increasing clockwise).
+class BubbleGradient {
+  final double angle;
+  final Color color1;
+  final Color color2;
+
+  const BubbleGradient(this.angle, this.color1, this.color2);
+
+  /// Encode back to the "angle|#hex1|#hex2" storage string.
+  String encode() => '${angle.round()}|${_hexOf(color1)}|${_hexOf(color2)}';
+
+  static String _hexOf(Color c) {
+    final r = (c.r * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
+    final g = (c.g * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
+    final b = (c.b * 255).round().clamp(0, 255).toRadixString(16).padLeft(2, '0');
+    return '#$r$g$b'.toUpperCase();
+  }
+}
+
 extension ThemePresetX on ThemePreset {
   Color get accent => _parseHex(accentColor);
   Color? get uiColorParsed => _parseNullableHex(uiColor);
   Color? get bgColorParsed => _parseNullableHex(bgColor);
   Color? get userBubbleParsed => _parseNullableHex(userBubbleColor);
   Color? get charBubbleParsed => _parseNullableHex(charBubbleColor);
+  BubbleGradient? get userBubbleGradientParsed =>
+      _parseBubbleGradient(userBubbleGradient);
+  BubbleGradient? get charBubbleGradientParsed =>
+      _parseBubbleGradient(charBubbleGradient);
+  LinearGradient? get userBubbleGradientValue =>
+      _toLinearGradient(userBubbleGradientParsed);
+  LinearGradient? get charBubbleGradientValue =>
+      _toLinearGradient(charBubbleGradientParsed);
   Color? get userQuoteParsed => _parseNullableHex(userQuoteColor);
   Color? get charQuoteParsed => _parseNullableHex(charQuoteColor);
   Color? get userTextParsed => _parseNullableHex(userTextColor);
@@ -120,6 +155,34 @@ Color _parseHex(String hex) {
 Color? _parseNullableHex(String? hex) {
   if (hex == null || hex.isEmpty) return null;
   return _parseHex(hex);
+}
+
+BubbleGradient? _parseBubbleGradient(String? raw) {
+  if (raw == null || raw.isEmpty) return null;
+  final parts = raw.split('|');
+  if (parts.length != 3) return null;
+  final angle = double.tryParse(parts[0]);
+  final c1 = _parseNullableHex(parts[1]);
+  final c2 = _parseNullableHex(parts[2]);
+  if (angle == null || c1 == null || c2 == null) return null;
+  return BubbleGradient(angle, c1, c2);
+}
+
+/// Convert a [BubbleGradient] into a Flutter [LinearGradient] whose direction
+/// mirrors the CSS `linear-gradient(<angle>deg, …)` convention so the in-app
+/// preview matches the WebView rendering.
+LinearGradient? _toLinearGradient(BubbleGradient? g) {
+  if (g == null) return null;
+  final rad = g.angle * math.pi / 180.0;
+  // CSS angle: 0deg points up (gradient line toward the last stop), clockwise.
+  // Screen y grows downward, so the direction vector is (sin, -cos).
+  final dx = math.sin(rad);
+  final dy = -math.cos(rad);
+  return LinearGradient(
+    begin: Alignment(-dx, -dy),
+    end: Alignment(dx, dy),
+    colors: [g.color1, g.color2],
+  );
 }
 
 FontWeight _fontWeightFromInt(int value) {

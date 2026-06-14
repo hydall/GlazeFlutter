@@ -19,6 +19,7 @@ import 'preset_export.dart';
 import 'widgets/preset_block_row.dart';
 import '../../core/llm/summary_service.dart';
 import '../chat/chat_provider.dart';
+import '../settings/app_settings_provider.dart';
 import '../chat/widgets/authors_note_sheet.dart';
 import '../chat/widgets/summary_sheet.dart';
 import '../regex/regex_sheet.dart';
@@ -275,6 +276,8 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   Widget _buildDashboard() {
     final displayName =
         _nameCtrl.text.trim().isEmpty ? 'New Preset' : _nameCtrl.text.trim();
+    final addBlockAtTop =
+        ref.watch(appSettingsProvider).value?.addBlockAtTop ?? false;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -345,10 +348,11 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
               ),
             ),
             const SizedBox(height: 12),
+            // Add block row position follows the app setting (top or bottom).
+            if (addBlockAtTop) _AddBlockRow(onTap: _addBlock, atTop: true),
             // Reorderable block list
             if (_blocks.isNotEmpty) _buildBlockList(),
-            // Add block row
-            _AddBlockRow(onTap: _addBlock),
+            if (!addBlockAtTop) _AddBlockRow(onTap: _addBlock),
           ],
         ),
       ),
@@ -573,13 +577,19 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
   }
 
   void _addCustomBlock() {
+    final atTop = ref.read(appSettingsProvider).value?.addBlockAtTop ?? false;
     setState(() {
-      _blocks.add(PresetBlock(
+      final block = PresetBlock(
         id: generateId(),
         name: 'Block ${_blocks.length + 1}',
         role: 'system',
         content: '',
-      ));
+      );
+      if (atTop) {
+        _blocks.insert(0, block);
+      } else {
+        _blocks.add(block);
+      }
     });
     _scheduleSave();
   }
@@ -761,27 +771,36 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
 
 class _AddBlockRow extends StatelessWidget {
   final VoidCallback onTap;
-  const _AddBlockRow({required this.onTap});
+
+  /// When true the row sits above the block list: drop the bottom-rounded
+  /// corners and use a bottom divider instead of a top one.
+  final bool atTop;
+  const _AddBlockRow({required this.onTap, this.atTop = false});
 
   @override
   Widget build(BuildContext context) {
+    final radius = atTop
+        ? BorderRadius.zero
+        : const BorderRadius.only(
+            bottomLeft: Radius.circular(14),
+            bottomRight: Radius.circular(14),
+          );
     return Material(
       color: Colors.transparent,
-      borderRadius: const BorderRadius.only(
-        bottomLeft: Radius.circular(14),
-        bottomRight: Radius.circular(14),
-      ),
+      borderRadius: radius,
       child: InkWell(
         onTap: onTap,
-        borderRadius: const BorderRadius.only(
-          bottomLeft: Radius.circular(14),
-          bottomRight: Radius.circular(14),
-        ),
+        borderRadius: radius,
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             border: Border(
-              top: BorderSide(color: Color(0x33808080), width: 1),
+              top: atTop
+                  ? BorderSide.none
+                  : const BorderSide(color: Color(0x33808080), width: 1),
+              bottom: atTop
+                  ? const BorderSide(color: Color(0x33808080), width: 1)
+                  : BorderSide.none,
             ),
           ),
           child: Row(

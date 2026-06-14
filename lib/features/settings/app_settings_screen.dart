@@ -235,6 +235,14 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(hideTokenCount: v)),
             ),
+            MenuSwitchItem(
+              label: 'menu_add_block_at_top'.tr(),
+              description: 'desc_add_block_at_top'.tr(),
+              value: s.addBlockAtTop,
+              onChanged: (v) => ref
+                  .read(appSettingsProvider.notifier)
+                  .save(s.copyWith(addBlockAtTop: v)),
+            ),
           ],
         ),
       ],

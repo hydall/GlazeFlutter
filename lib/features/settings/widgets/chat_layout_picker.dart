@@ -137,7 +137,15 @@ class LayoutMiniPreview extends StatelessWidget {
     final user = context.cs.primary.withValues(alpha: 0.85);
     final char = context.cs.surface.withValues(alpha: 0.95);
 
-    return Container(
+    // Render at a fixed design size (ratio ≈ 0.88) and scale to fit the
+    // available box. Keeps the schematic from overflowing when the host card
+    // is narrower than the content's intrinsic height (e.g. narrow windows).
+    return FittedBox(
+      fit: BoxFit.contain,
+      child: SizedBox(
+        width: 140,
+        height: 159,
+        child: Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         color: surface,
@@ -187,6 +195,8 @@ class LayoutMiniPreview extends StatelessWidget {
             ),
           ],
         ],
+      ),
+        ),
       ),
     );
   }
