@@ -57,13 +57,18 @@ class ChatMessageMapper {
       );
     }
 
+    final messagePersonaName = m.personaName?.trim();
+    final userMessagePersonaName = messagePersonaName == 'You'
+        ? null
+        : m.personaName;
+
     String? displayName;
     String? avatarColor;
     if (isAssistant) {
       displayName = ctx.currentCharName ?? m.personaName ?? 'Character';
       avatarColor = ctx.currentCharColor;
     } else if (isUser) {
-      displayName = m.personaName ?? ctx.currentPersonaName ?? 'You';
+      displayName = userMessagePersonaName ?? ctx.currentPersonaName ?? 'You';
     } else {
       displayName = m.personaName ?? 'System';
     }
@@ -99,7 +104,8 @@ class ChatMessageMapper {
       'displayName': displayName,
       'avatarColor': ?avatarColor,
       if (m.imagePath != null) 'imagePath': m.imagePath,
-      if (m.personaName != null) 'personaName': m.personaName,
+      if (m.personaName != null && (!isUser || userMessagePersonaName != null))
+        'personaName': m.personaName,
       if (m.swipes.isNotEmpty) 'swipeIndex': m.swipeId,
       if (m.swipes.isNotEmpty) 'swipeTotal': m.swipes.length,
       if (m.genTime != null) 'genTime': m.genTime,

@@ -857,9 +857,10 @@ class Bridge {
     sections.forEach(section => {
       const isUser = section.classList.contains('user');
       const stored = section.dataset.personaName || '';
+      const storedPersonaName = stored === 'You' ? '' : stored;
       // Per-message stored persona wins; otherwise use the active identity.
       const newName = isUser
-        ? (stored || this._personaName || 'You')
+        ? (storedPersonaName || this._personaName || 'You')
         : (this._charName || stored || 'Character');
       const newAvatarUrl = isUser ? this._personaAvatarUrl : this._charAvatarUrl;
 

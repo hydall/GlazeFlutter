@@ -144,6 +144,17 @@ void main() {
       expect(legacyJs, contains('class Bridge'));
       expect(_asset('bridge.js'), contains('bridge.legacy.js'));
     });
+
+    test('identity refresh can override legacy default user name', () {
+      expect(
+        bridgeControllerJs,
+        contains("const storedPersonaName = stored === 'You' ? '' : stored"),
+      );
+      expect(
+        _asset('bridge.legacy.js'),
+        contains("const storedPersonaName = stored === 'You' ? '' : stored"),
+      );
+    });
   });
 
   group('renderer ES module layout', () {
