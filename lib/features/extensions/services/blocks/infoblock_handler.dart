@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/db/repositories/info_blocks_repository.dart';
@@ -16,12 +15,13 @@ typedef BlockErrorMarker =
       required String errorMessage,
     });
 
-typedef PanelRefresher = void Function(
-  String charId,
-  String sessionId,
-  String messageId,
-  int swipeId,
-);
+typedef PanelRefresher =
+    void Function(
+      String charId,
+      String sessionId,
+      String messageId,
+      int swipeId,
+    );
 
 typedef StreamHandlerFactory =
     void Function(String)? Function({
@@ -50,9 +50,6 @@ class InfoblockHandler implements BlockHandler {
   @override
   Future<InfoBlock?> handle(BlockContext context) async {
     final blockConfig = context.blockConfig;
-    debugPrint(
-      '[ExtPostGen] _runInfoblock START: name="${blockConfig.name}" promptLen=${blockConfig.prompt.length} apiConfigId="${blockConfig.apiConfigId}" model="${blockConfig.model}"',
-    );
     final infoBlockService = ref.read(infoBlockServiceProvider);
     final generated = await infoBlockService.generateSingleBlockContent(
       sessionId: context.sessionId,
@@ -72,10 +69,6 @@ class InfoblockHandler implements BlockHandler {
         placeholder: context.placeholder,
       ),
     );
-    debugPrint(
-      '[ExtPostGen] _runInfoblock DONE: name="${blockConfig.name}" contentLen=${generated.content?.length ?? 0} error=${generated.error}',
-    );
-
     if (context.cancelToken.isCancelled) {
       await repo.updateStatus(context.placeholderId, BlockRunStatus.stopped);
       final stopped = InfoBlock(

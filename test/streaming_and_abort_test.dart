@@ -178,6 +178,20 @@ void main() {
 
       expect(map['displayName'], equals('User'));
     });
+
+    test('should ignore legacy default You personaName for user messages', () {
+      final message = ChatMessage(
+        id: 'msg1',
+        role: 'user',
+        content: 'Hello',
+        personaName: 'You',
+      );
+
+      final map = ChatMessageMapper.toMap(message, context);
+
+      expect(map['displayName'], equals('User'));
+      expect(map.containsKey('personaName'), isFalse);
+    });
   });
 
   group('ChatMessageMapper - Optional Fields', () {

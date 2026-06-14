@@ -74,17 +74,19 @@ class _Entry {
 }
 
 class EmbeddingService {
-  final Dio _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 60),
-  ));
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 60),
+    ),
+  );
   final _EmbeddingCache _cache = _EmbeddingCache();
 
   Future<List<List<double>>> getEmbeddings(
     List<String> texts,
-    EmbeddingConfig config,
-    {CancelToken? cancelToken}
-  ) async {
+    EmbeddingConfig config, {
+    CancelToken? cancelToken,
+  }) async {
     final allChunks = <List<String>>[];
     final chunkMap = <int, int>{};
 
@@ -111,7 +113,9 @@ class EmbeddingService {
       if (chunks.length == 1) {
         result.add(allVectors[offset]);
       } else {
-        result.add(_averageVectors(allVectors.sublist(offset, offset + chunks.length)));
+        result.add(
+          _averageVectors(allVectors.sublist(offset, offset + chunks.length)),
+        );
       }
       offset += chunks.length;
     }
@@ -121,9 +125,9 @@ class EmbeddingService {
 
   Future<List<EmbeddingChunk>> getEmbeddingsWithChunks(
     List<String> texts,
-    EmbeddingConfig config,
-    {CancelToken? cancelToken}
-  ) async {
+    EmbeddingConfig config, {
+    CancelToken? cancelToken,
+  }) async {
     final allChunks = <String>[];
     final textChunkRanges = <_ChunkRange>[];
 
@@ -145,7 +149,10 @@ class EmbeddingService {
     for (int i = 0; i < texts.length; i++) {
       final range = textChunkRanges[i];
       final chunks = allChunks.sublist(range.start, range.end);
-      final vectors = allVectors.sublist(range.start - offset + offset, range.end - offset + offset);
+      final vectors = allVectors.sublist(
+        range.start - offset + offset,
+        range.end - offset + offset,
+      );
 
       for (int j = 0; j < chunks.length; j++) {
         result.add(EmbeddingChunk(text: chunks[j], vector: vectors[j]));
@@ -158,9 +165,9 @@ class EmbeddingService {
 
   Future<List<List<double>>> _batchEmbed(
     List<String> chunks,
-    EmbeddingConfig config,
-    {CancelToken? cancelToken}
-  ) async {
+    EmbeddingConfig config, {
+    CancelToken? cancelToken,
+  }) async {
     const batchSize = 32;
     final allVectors = <List<double>>[];
 
@@ -194,11 +201,18 @@ class EmbeddingService {
         config,
         cancelToken: cancelToken,
       );
+      final batchVectors = List<List<double>?>.filled(batch.length, null);
+      for (final entry in cached.entries) {
+        batchVectors[entry.key] = entry.value;
+      }
       for (int k = 0; k < missingIndices.length; k++) {
         final originalIdx = missingIndices[k];
         final vector = vectors[k];
         _cache.put(batch[originalIdx], config, vector);
-        allVectors.add(vector);
+        batchVectors[originalIdx] = vector;
+      }
+      for (final vector in batchVectors) {
+        if (vector != null) allVectors.add(vector);
       }
 
       if (i + batchSize < chunks.length) {
@@ -214,16 +228,14 @@ class EmbeddingService {
 
   Future<List<List<double>>> _callEmbeddingApi(
     List<String> texts,
-    EmbeddingConfig config,
-    {CancelToken? cancelToken}
-  ) async {
+    EmbeddingConfig config, {
+    CancelToken? cancelToken,
+  }) async {
     if (texts.isEmpty) return [];
 
     final url = _resolveEndpoint(config.endpoint);
 
-    final headers = <String, String>{
-      'Content-Type': 'application/json',
-    };
+    final headers = <String, String>{'Content-Type': 'application/json'};
     if (config.apiKey.isNotEmpty) {
       headers['Authorization'] = 'Bearer ${config.apiKey}';
     }
@@ -231,10 +243,7 @@ class EmbeddingService {
     try {
       final response = await _dio.post<Map<String, dynamic>>(
         url,
-        data: {
-          'model': config.model,
-          'input': texts,
-        },
+        data: {'model': config.model, 'input': texts},
         options: Options(headers: headers),
         cancelToken: cancelToken,
       );
@@ -248,10 +257,15 @@ class EmbeddingService {
       }
 
       final dataList = data['data'] as List<dynamic>?;
-      if (dataList == null) throw 'Invalid embedding response: missing data array';
+      if (dataList == null) {
+        throw 'Invalid embedding response: missing data array';
+      }
 
-      dataList.sort((a, b) =>
-          ((a as Map)['index'] as int? ?? 0).compareTo((b as Map)['index'] as int? ?? 0));
+      dataList.sort(
+        (a, b) => ((a as Map)['index'] as int? ?? 0).compareTo(
+          (b as Map)['index'] as int? ?? 0,
+        ),
+      );
 
       return dataList.map((item) {
         final embedding = (item as Map)['embedding'] as List<dynamic>;
@@ -259,10 +273,8 @@ class EmbeddingService {
       }).toList();
     } on DioException catch (e) {
       if (e.response?.statusCode == 429) {
-        final retryAfter = int.tryParse(
-              e.response?.headers.value('retry-after') ?? '',
-            ) ??
-            60;
+        final retryAfter =
+            int.tryParse(e.response?.headers.value('retry-after') ?? '') ?? 60;
         throw RateLimitException(retryAfter);
       }
       throw 'Network error: ${e.message}';

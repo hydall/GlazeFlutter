@@ -16,6 +16,7 @@ class PromptInputs {
   final Persona? persona;
   final Preset? preset;
   final List<ChatMessage> history;
+  final String? sessionId;
   final ApiConfig apiConfig;
   final Map<String, String> sessionVars;
   final Map<String, String> globalVars;
@@ -65,6 +66,7 @@ class PromptInputs {
     this.persona,
     this.preset,
     required this.history,
+    this.sessionId,
     required this.apiConfig,
     this.sessionVars = const {},
     this.globalVars = const {},
@@ -112,6 +114,7 @@ class PromptInputs {
     'persona': persona?.toJson(),
     'preset': preset?.toJson(),
     'history': history.map((m) => m.toJson()).toList(),
+    'sessionId': sessionId,
     'apiConfig': apiConfig.toJson(),
     'sessionVars': sessionVars,
     'globalVars': globalVars,
@@ -167,6 +170,7 @@ class PromptInputs {
     history: (json['history'] as List)
         .map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
         .toList(),
+    sessionId: json['sessionId'] as String?,
     apiConfig: ApiConfig.fromJson(json['apiConfig'] as Map<String, dynamic>),
     sessionVars: Map<String, String>.from(json['sessionVars'] as Map? ?? {}),
     globalVars: Map<String, String>.from(json['globalVars'] as Map? ?? {}),

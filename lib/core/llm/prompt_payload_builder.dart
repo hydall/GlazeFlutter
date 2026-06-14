@@ -63,7 +63,6 @@ class PromptPayloadBuilder {
     }
 
     throwIfAborted();
-    debugPrint('[payload] reading character...');
     final charRepo = _ref.read(characterRepoProvider);
     final presetRepo = _ref.read(presetRepoProvider);
     final personaRepo = _ref.read(personaRepoProvider);
@@ -73,7 +72,6 @@ class PromptPayloadBuilder {
     throwIfAborted();
     if (character == null) throw StateError('Character not found: $charId');
 
-    debugPrint('[payload] reading API config...');
     await _ref.read(apiListProvider.future);
     throwIfAborted();
     final chatApi = _ref.read(activeApiConfigProvider);
@@ -81,7 +79,6 @@ class PromptPayloadBuilder {
       throw StateError('No chat API config available');
     }
 
-    debugPrint('[payload] reading preset...');
     final activePresetId = _ref.read(activePresetIdProvider);
     final presets = await presetRepo.getAll();
     throwIfAborted();
@@ -89,7 +86,6 @@ class PromptPayloadBuilder {
         ? presets.where((p) => p.id == activePresetId).firstOrNull
         : (presets.isNotEmpty ? presets.first : null);
 
-    debugPrint('[payload] reading persona...');
     final personas = await personaRepo.getAll();
     throwIfAborted();
     final connections = _ref.read(personaConnectionsProvider);
@@ -104,7 +100,6 @@ class PromptPayloadBuilder {
       connections,
     );
 
-    debugPrint('[payload] reading lorebooks...');
     final lorebooks = await lorebookRepo.getAll();
     throwIfAborted();
     final lorebookSettings = _ref.read(lorebookSettingsProvider);
@@ -130,7 +125,6 @@ class PromptPayloadBuilder {
     );
 
     if (session != null) {
-      debugPrint('[payload] injecting ext blocks into history...');
       history = await _ref
           .read(extBlocksPromptInjectionProvider)
           .injectIntoHistory(sessionId: session.id, messages: history);
@@ -148,12 +142,10 @@ class PromptPayloadBuilder {
           )
           .toList(growable: false);
 
-      debugPrint('[payload] getting summary...');
       final summaryService = _ref.read(summaryServiceProvider);
       summaryContent = await summaryService.getSummary(session.id);
       throwIfAborted();
 
-      debugPrint('[payload] building memory injection...');
       final memoryService = _ref.read(memoryInjectionServiceProvider);
       final embeddingConfig = _ref.read(embeddingConfigProvider);
       final currentText = session.messages.lastOrNull?.content ?? '';
@@ -196,10 +188,6 @@ class PromptPayloadBuilder {
           : 'hard_block';
       vectorEntries = results[1] as List<LorebookEntry>;
       throwIfAborted();
-      debugPrint(
-        '[payload] memory candidates done, picked=${memorySelection.entries.length}, total=${memorySelection.allScores.length}, excludedByWindow=${memorySelection.excludedBySourceWindow}',
-      );
-
       memoryCoverage = {
         'entryIds': memorySelection.entries.map((e) => e.id).toList(),
         'needsRebuild': false,
@@ -228,22 +216,14 @@ class PromptPayloadBuilder {
             )
             .toList();
       }
-
-      if (!skipVectorSearch) {
-        debugPrint(
-          '[payload] vector search complete, entries=${vectorEntries.length}',
-        );
-      }
     }
 
-    debugPrint(
-      '[payload] building final payload... memorySelection=${memorySelection == null ? 'null' : '${memorySelection!.allScores.length} candidates'}',
-    );
     return PromptPayload(
       character: character,
       persona: persona,
       preset: preset,
       history: history,
+      sessionId: sessionId,
       apiConfig: chatApi,
       sessionVars: sessionVars,
       globalVars: _ref.read(globalVarsProvider),
@@ -316,6 +296,7 @@ class PromptPayloadBuilder {
       persona: persona,
       preset: preset,
       history: history,
+      sessionId: session?.id,
       apiConfig: chatApi,
       sessionVars: session?.sessionVars ?? {},
       globalVars: _ref.read(globalVarsProvider),
@@ -411,6 +392,10 @@ class PromptPayloadBuilder {
           .map((r) => entryMap['${r.lorebookId}_${r.entryId}']!.copyWith())
           .toList();
     } catch (e, st) {
+      if (cancelToken?.isCancelled == true ||
+          (e is DioException && CancelToken.isCancel(e))) {
+        return [];
+      }
       debugPrint('VECTOR SEARCH: failed: $e\n$st');
       GlazeToast.showWithoutContext(
         'Vector search failed — try reindexing embeddings',

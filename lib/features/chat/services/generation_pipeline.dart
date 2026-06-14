@@ -29,10 +29,7 @@ class GenerationOutcome {
   /// for the next abort. If null, restoration has been consumed.
   final ChatMessage? clearRestorationMessage;
 
-  const GenerationOutcome({
-    required this.state,
-    this.clearRestorationMessage,
-  });
+  const GenerationOutcome({required this.state, this.clearRestorationMessage});
 }
 
 /// Runs the post-SSE side of a chat generation:
@@ -62,6 +59,7 @@ class GenerationPipeline {
     required this.setState,
     required this.getState,
   });
+
   /// Run the full post-SSE pipeline. Returns the final [GenerationOutcome]
   /// describing the state to apply, or null if the genId was invalidated
   /// (caller should drop the result).
@@ -120,18 +118,14 @@ class GenerationPipeline {
       // Regen vs normal-result dispatch.
       final regenMsg = regenTargetId != null && result.session != null
           ? result.session!.messages
-              .where((m) => m.id == regenTargetId)
-              .firstOrNull
+                .where((m) => m.id == regenTargetId)
+                .firstOrNull
           : null;
-      final regenSucceeded = regenTargetId != null &&
+      final regenSucceeded =
+          regenTargetId != null &&
           regenMsg != null &&
           !regenMsg.isError &&
           !regenMsg.isTyping;
-      debugPrint(
-        '[GenerationPipeline] regen check: target=$regenTargetId '
-        'resultRegenId=${result.regenTargetId} succeeded=$regenSucceeded '
-        'msgError=${regenMsg?.isError}',
-      );
       final regenOutcome = _resolveRegenResult(
         result: result,
         regenTargetId: regenTargetId,
@@ -141,10 +135,6 @@ class GenerationPipeline {
       if (regenOutcome != null) {
         // INV-EG1: extensions + image tags must run after successful regen too.
         if (regenSucceeded && result.session != null) {
-          debugPrint(
-            '[GenerationPipeline] regen succeeded — running post-text side '
-            'for msg=$regenTargetId',
-          );
           await _runPostTextSide(
             result: result.copyWith(isGenerating: false, regenTargetId: null),
             genId: genId,
@@ -155,11 +145,6 @@ class GenerationPipeline {
           if (!abortHandler.isCurrentGen(genId)) {
             return null;
           }
-        } else {
-          debugPrint(
-            '[GenerationPipeline] regen post-text SKIPPED: succeeded=$regenSucceeded '
-            'sessionNull=${result.session == null}',
-          );
         }
         return regenOutcome;
       }
@@ -180,11 +165,15 @@ class GenerationPipeline {
         ChatSessionService.updateCache(restoredSession);
         ref.invalidate(chatHistoryProvider);
         abortHandler.restorationMessage = null;
-        setState(AsyncData(ChatState(
-          session: restoredSession,
-          isGenerating: false,
-          error: result.error,
-        )));
+        setState(
+          AsyncData(
+            ChatState(
+              session: restoredSession,
+              isGenerating: false,
+              error: result.error,
+            ),
+          ),
+        );
       } else {
         setState(AsyncData(result));
         abortHandler.restorationMessage = null;
@@ -228,10 +217,9 @@ class GenerationPipeline {
     if (regenTargetId == null) return null;
 
     if (result.regenTargetId == regenTargetId) {
-      setState(AsyncData(result.copyWith(
-        isGenerating: false,
-        regenTargetId: null,
-      )));
+      setState(
+        AsyncData(result.copyWith(isGenerating: false, regenTargetId: null)),
+      );
       abortHandler.restorationMessage = null;
       return GenerationOutcome(
         state: getState().value ?? result,
@@ -241,10 +229,9 @@ class GenerationPipeline {
 
     final original = abortHandler.restorationMessage;
     if (original == null) {
-      setState(AsyncData(result.copyWith(
-        isGenerating: false,
-        regenTargetId: null,
-      )));
+      setState(
+        AsyncData(result.copyWith(isGenerating: false, regenTargetId: null)),
+      );
       return GenerationOutcome(
         state: getState().value ?? result,
         clearRestorationMessage: null,
@@ -252,12 +239,13 @@ class GenerationPipeline {
     }
 
     final restoreSession = saveSession ?? session;
-    final idx = restoreSession.messages.indexWhere((m) => m.id == regenTargetId);
+    final idx = restoreSession.messages.indexWhere(
+      (m) => m.id == regenTargetId,
+    );
     if (idx < 0) {
-      setState(AsyncData(result.copyWith(
-        isGenerating: false,
-        regenTargetId: null,
-      )));
+      setState(
+        AsyncData(result.copyWith(isGenerating: false, regenTargetId: null)),
+      );
       abortHandler.restorationMessage = null;
       return GenerationOutcome(
         state: getState().value ?? result,
@@ -304,12 +292,16 @@ class GenerationPipeline {
     ChatSessionService.updateCache(restoredSession);
     ref.invalidate(chatHistoryProvider);
     abortHandler.restorationMessage = null;
-    setState(AsyncData(ChatState(
-      session: restoredSession,
-      isGenerating: false,
-      error: result.error,
-      regenTargetId: null,
-    )));
+    setState(
+      AsyncData(
+        ChatState(
+          session: restoredSession,
+          isGenerating: false,
+          error: result.error,
+          regenTargetId: null,
+        ),
+      ),
+    );
     return GenerationOutcome(
       state: getState().value ?? result,
       clearRestorationMessage: null,
@@ -336,23 +328,16 @@ class GenerationPipeline {
         },
       );
     } catch (e) {
-      debugPrint('[GenerationPipeline] processImageTags failed (continuing): $e');
+      debugPrint(
+        '[GenerationPipeline] processImageTags failed (continuing): $e',
+      );
     }
 
     if (character != null && result.session != null) {
-      debugPrint(
-        '[GenerationPipeline] processExtensions: session=${result.session!.id} '
-        'msgs=${result.session!.messages.length}',
-      );
       await service.processExtensions(
         charId: charId,
         session: result.session!,
         character: character,
-      );
-    } else {
-      debugPrint(
-        '[GenerationPipeline] processExtensions SKIPPED: '
-        'character=${character != null} session=${result.session != null}',
       );
     }
 
@@ -403,16 +388,19 @@ class GenerationPipeline {
           });
           ChatSessionService.updateCache(restored);
         }
-        setState(AsyncData(current.copyWith(
-          session: restored ?? current.session,
-          isGenerating: false,
-          error: e.toString(),
-        )));
+        setState(
+          AsyncData(
+            current.copyWith(
+              session: restored ?? current.session,
+              isGenerating: false,
+              error: e.toString(),
+            ),
+          ),
+        );
       } else {
-        setState(AsyncData(current.copyWith(
-          isGenerating: false,
-          error: e.toString(),
-        )));
+        setState(
+          AsyncData(current.copyWith(isGenerating: false, error: e.toString())),
+        );
       }
       abortHandler.restorationMessage = null;
     }
@@ -439,10 +427,6 @@ class GenerationPipeline {
 
       await repo.put(
         book.copyWith(pendingDrafts: [...book.pendingDrafts, ...plan.drafts]),
-      );
-      debugPrint(
-        '[GenerationPipeline] auto-created ${plan.drafts.length} memory drafts '
-        'with lag=${settings.autoCreateLagMessages}',
       );
     } catch (e) {
       debugPrint('[GenerationPipeline] auto-create memory drafts failed: $e');
