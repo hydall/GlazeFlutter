@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -48,7 +47,6 @@ class StreamGenerationService {
     String? regenTargetId,
     required ChatState currentState,
   }) async {
-    debugPrint('[gen] generate() START charId=$_charId genId=$_genId');
     final vsi = currentState.visibleStartIndex;
     final cancelToken = CancelToken();
     _ref
@@ -62,7 +60,6 @@ class StreamGenerationService {
       );
     }
     try {
-      debugPrint('[gen] building payload...');
       final builder = _ref.read(promptPayloadBuilderProvider);
       final payload = await builder.buildFromSession(
         charId: _charId,
@@ -78,8 +75,6 @@ class StreamGenerationService {
           visibleStartIndex: vsi,
         );
       }
-      debugPrint('[gen] payload built, building prompt in isolate...');
-
       final apiConfig = payload.apiConfig;
 
       final promptResult = await buildPromptInIsolate(payload);
@@ -90,10 +85,6 @@ class StreamGenerationService {
           visibleStartIndex: vsi,
         );
       }
-      debugPrint(
-        '[gen] prompt built, messages=${promptResult.messages.length}, totalTokens=${promptResult.breakdown.totalTokens}',
-      );
-
       _ref.read(cachedTokenBreakdownProvider(_charId).notifier).state =
           promptResult.breakdown;
 
@@ -155,10 +146,6 @@ class StreamGenerationService {
       final memoryDiagnostics = coverage['diagnostics'];
       final triggeredLorebooks = promptResult.triggeredLorebooks;
       final triggeredMemories = promptResult.triggeredMemories;
-
-      debugPrint(
-        '[gen] starting SSE stream to ${apiConfig.endpoint} model=${apiConfig.model}',
-      );
 
       bool frameScheduled = false;
 

@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/db/repositories/info_blocks_repository.dart';
@@ -123,12 +122,10 @@ class ExtensionPostGenService {
   ExtensionPreset? _resolveActivePreset() {
     final settings = _ref.read(extensionsSettingsProvider);
     if (!settings.enabled) {
-      debugPrint('[ExtPostGen] SKIP: settings.enabled=false');
       return null;
     }
     final presetId = settings.activePresetId;
     if (presetId == null || presetId.isEmpty) {
-      debugPrint('[ExtPostGen] SKIP: presetId is null/empty');
       return null;
     }
     final preset = _ref
@@ -136,7 +133,6 @@ class ExtensionPostGenService {
         .where((pr) => pr.id == presetId)
         .firstOrNull;
     if (preset == null) {
-      debugPrint('[ExtPostGen] SKIP: preset not found');
       return null;
     }
     return preset;
@@ -149,12 +145,10 @@ class ExtensionPostGenService {
     required Character character,
     required Persona? persona,
   }) async {
-    debugPrint('[ExtPostGen] processAfterGeneration: session=${session.id}');
     if (session.id.isEmpty || session.messages.isEmpty) return;
 
     final lastMessage = session.messages.last;
     if (lastMessage.role == 'user') {
-      debugPrint('[ExtPostGen] SKIP: last message is user');
       return;
     }
 
@@ -182,12 +176,8 @@ class ExtensionPostGenService {
     if (session.id.isEmpty || session.messages.isEmpty) return;
     final lastMessage = session.messages.last;
     if (lastMessage.role != 'user') {
-      debugPrint(
-        '[ExtPostGen] runAfterUserBlocks: last message is not user, skipping',
-      );
       return;
     }
-    debugPrint('[ExtPostGen] runAfterUserBlocks: msg=${lastMessage.id}');
     _blocksCancelToken = CancelToken();
     await _runChain(
       charId: charId,
@@ -201,7 +191,12 @@ class ExtensionPostGenService {
       cancelToken: _blocksCancelToken!,
       trigger: BlockTrigger.afterUser,
     );
-    _refreshPanelForMessage(charId, session.id, lastMessage.id, lastMessage.swipeId);
+    _refreshPanelForMessage(
+      charId,
+      session.id,
+      lastMessage.id,
+      lastMessage.swipeId,
+    );
   }
 
   /// Re-runs a single block for an already-existing message.

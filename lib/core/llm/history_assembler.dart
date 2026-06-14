@@ -1,5 +1,3 @@
-import 'package:flutter/foundation.dart';
-
 import '../models/chat_message.dart';
 import 'macro_engine.dart';
 
@@ -18,12 +16,14 @@ class HistoryAssembler {
       if (msg.isHidden || msg.isTyping) continue;
       final macroResult = replaceMacros(msg.content, macroCtx);
       final normalized = _normalizeUnderscoreEmphasis(macroResult.text);
-      messages.add(PromptMessage(
-        role: msg.role,
-        content: normalized,
-        isHistory: true,
-        sourceMessageId: msg.id,
-      ));
+      messages.add(
+        PromptMessage(
+          role: msg.role,
+          content: normalized,
+          isHistory: true,
+          sourceMessageId: msg.id,
+        ),
+      );
     }
 
     return messages;
@@ -38,14 +38,16 @@ List<PromptMessage> interleaveDepthWithHistory(
 
   final result = <PromptMessage>[];
 
-  final deepBlocks = depthBlocks.where((b) => (b.depth ?? 0) > historyMsgs.length);
-  debugPrint('INTERLEAVE: historyCount=${historyMsgs.length}, depthBlocksCount=${depthBlocks.length}, deepBlocksCount=${deepBlocks.length}');
+  final deepBlocks = depthBlocks.where(
+    (b) => (b.depth ?? 0) > historyMsgs.length,
+  );
   result.addAll(deepBlocks);
 
   for (int i = 0; i <= historyMsgs.length; i++) {
     final currentDepth = historyMsgs.length - i;
-    final blocksAtDepth = depthBlocks.where((b) => (b.depth ?? 0) == currentDepth);
-    debugPrint('INTERLEAVE: i=$i, currentDepth=$currentDepth, blocksAtDepth=${blocksAtDepth.length}');
+    final blocksAtDepth = depthBlocks.where(
+      (b) => (b.depth ?? 0) == currentDepth,
+    );
     result.addAll(blocksAtDepth);
 
     if (i < historyMsgs.length) {
@@ -53,7 +55,6 @@ List<PromptMessage> interleaveDepthWithHistory(
     }
   }
 
-  debugPrint('INTERLEAVE: result count=${result.length} (history=${result.where((m) => m.isHistory).length}, depth=${result.where((m) => m.isDepth).length})');
   return result;
 }
 

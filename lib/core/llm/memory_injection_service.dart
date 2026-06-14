@@ -147,27 +147,22 @@ class MemoryInjectionService {
     if (shouldAbort?.call() == true) {
       return finish(const MemorySelection());
     }
-    debugPrint('[mem] buildCandidates: reading memory book...');
     final book = await _repo.getBySessionId(sessionId);
     if (shouldAbort?.call() == true) {
       return finish(const MemorySelection());
     }
     if (book == null) {
-      debugPrint('[mem] no memory book found');
       return finish(const MemorySelection());
     }
-    debugPrint('[mem] memory book loaded, entries=${book.entries.length}');
 
     final gs = _ref.read(memoryGlobalSettingsProvider);
     if (!gs.enabled || !book.settings.enabled) {
-      debugPrint('[mem] memory disabled');
       return finish(const MemorySelection());
     }
 
     final activeEntries = book.entries
         .where((e) => e.status == 'active' && e.content.trim().isNotEmpty)
         .toList();
-    debugPrint('[mem] active entries: ${activeEntries.length}');
     if (activeEntries.isEmpty) return finish(const MemorySelection());
 
     var vectorMatches = const _MemoryVectorMatchResult();
@@ -186,7 +181,6 @@ class MemoryInjectionService {
         embeddingConfig != null &&
         embeddingConfig.endpoint.isNotEmpty &&
         history.isNotEmpty) {
-      debugPrint('[mem] starting vector search...');
       vectorMatches = await _vectorSearchMemory(
         activeEntries,
         history,
@@ -195,13 +189,6 @@ class MemoryInjectionService {
         gs,
         shouldAbort: shouldAbort,
         cancelToken: cancelToken,
-      );
-      debugPrint(
-        '[mem] vector search done, scores=${vectorMatches.scores.length}',
-      );
-    } else {
-      debugPrint(
-        '[mem] vector search skipped (enabled=${gs.vectorSearchEnabled}, endpoint=${embeddingConfig?.endpoint.isNotEmpty ?? false}, history=${history.isNotEmpty})',
       );
     }
 

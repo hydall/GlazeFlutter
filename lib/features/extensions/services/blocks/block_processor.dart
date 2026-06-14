@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 
 import '../../models/block_config.dart';
 import '../../models/extension_preset.dart';
@@ -34,11 +33,7 @@ class BlockProcessor {
   }) async {
     final blocks = selectBlocks(preset, trigger);
 
-    debugPrint(
-      '[ExtPostGen] _runChain: enabledBlocks=${blocks.length} (of ${preset.blocks.length})',
-    );
     if (blocks.isEmpty) {
-      debugPrint('[ExtPostGen] SKIP: no enabled blocks in preset');
       return;
     }
 
