@@ -16,6 +16,7 @@ class ScannedEntry {
   final String lorebookName;
   final String lorebookId;
   final bool constant;
+  final int? maxInjectedEntries;
 
   const ScannedEntry({
     required this.id,
@@ -26,6 +27,7 @@ class ScannedEntry {
     required this.lorebookName,
     required this.lorebookId,
     required this.constant,
+    this.maxInjectedEntries,
   });
 
   Map<String, dynamic> toJson() => {
@@ -37,6 +39,7 @@ class ScannedEntry {
     'lorebookName': lorebookName,
     'lorebookId': lorebookId,
     'constant': constant,
+    'maxInjectedEntries': maxInjectedEntries,
   };
 
   factory ScannedEntry.fromJson(Map<String, dynamic> json) => ScannedEntry(
@@ -48,6 +51,7 @@ class ScannedEntry {
     lorebookName: json['lorebookName'] as String,
     lorebookId: json['lorebookId'] as String,
     constant: json['constant'] as bool,
+    maxInjectedEntries: json['maxInjectedEntries'] as int?,
   );
 }
 
@@ -59,6 +63,7 @@ List<ScannedEntry> scanLorebooks({
   required List<Lorebook> lorebooks,
   required LorebookGlobalSettings globalSettings,
   required LorebookActivations activations,
+  bool applyPerBookLimits = true,
 }) {
   if (globalSettings.searchType == 'vector') return [];
 
@@ -67,17 +72,31 @@ List<ScannedEntry> scanLorebooks({
 
   final activeLorebooks = lorebooks.where((lb) {
     if (lb.enabled) return true;
-    if (charId != null && activations.character[charId]?.contains(lb.id) == true) return true;
-    if (chatId != null && activations.chat[chatId]?.contains(lb.id) == true) return true;
-    if (charId != null && lb.activationScope == 'character' && lb.activationTargetId == charId) return true;
-    if (chatId != null && lb.activationScope == 'chat' && lb.activationTargetId == chatId) return true;
-    if (charWorld != null && charWorld.isNotEmpty && lb.name == charWorld) return true;
+    if (charId != null &&
+        activations.character[charId]?.contains(lb.id) == true) {
+      return true;
+    }
+    if (chatId != null && activations.chat[chatId]?.contains(lb.id) == true) {
+      return true;
+    }
+    if (charId != null &&
+        lb.activationScope == 'character' &&
+        lb.activationTargetId == charId) {
+      return true;
+    }
+    if (chatId != null &&
+        lb.activationScope == 'chat' &&
+        lb.activationTargetId == chatId) {
+      return true;
+    }
+    if (charWorld != null && charWorld.isNotEmpty && lb.name == charWorld) {
+      return true;
+    }
     return false;
   }).toList();
 
   if (activeLorebooks.isEmpty) return [];
 
-  final globalMaxInjected = (globalSettings.maxInjectedEntries).clamp(1, 100);
   final allRelevantEntries = <ScannedEntry>[];
   final candidateEntries = <_CandidateEntry>[];
 
@@ -96,22 +115,26 @@ List<ScannedEntry> scanLorebooks({
         final filter = entry.characterFilter!;
         if (filter.names.isNotEmpty) {
           final charName = char.name.toLowerCase();
-          final isInCategory = filter.names.any((n) => charName.contains(n.toLowerCase()));
+          final isInCategory = filter.names.any(
+            (n) => charName.contains(n.toLowerCase()),
+          );
           if (filter.isExclude && isInCategory) continue;
           if (!filter.isExclude && !isInCategory) continue;
         }
       }
 
-      candidateEntries.add(_CandidateEntry(
-        entry: entry,
-        lorebookName: lb.name,
-        lorebookId: lb.id,
-        scanDepth: lbScanDepth,
-        recursiveScan: lbRecursiveScan,
-        caseSensitive: lbCaseSensitive,
-        matchWholeWords: lbMatchWholeWords,
-        maxInjectedEntries: lbSettings?.maxInjectedEntries,
-      ));
+      candidateEntries.add(
+        _CandidateEntry(
+          entry: entry,
+          lorebookName: lb.name,
+          lorebookId: lb.id,
+          scanDepth: lbScanDepth,
+          recursiveScan: lbRecursiveScan,
+          caseSensitive: lbCaseSensitive,
+          matchWholeWords: lbMatchWholeWords,
+          maxInjectedEntries: lbSettings?.maxInjectedEntries,
+        ),
+      );
     }
   }
 
@@ -125,7 +148,11 @@ List<ScannedEntry> scanLorebooks({
 
   var changed = true;
   var iteration = 0;
-  final maxIterations = (candidateEntries.firstOrNull?.recursiveScan ?? globalSettings.recursiveScan) ? 5 : 1;
+  final maxIterations =
+      (candidateEntries.firstOrNull?.recursiveScan ??
+          globalSettings.recursiveScan)
+      ? 5
+      : 1;
   var scanText = textToScan;
 
   while (changed && iteration < maxIterations) {
@@ -141,23 +168,39 @@ List<ScannedEntry> scanLorebooks({
       final secondaryKeys = entry.secondaryKeys;
       final logic = entry.selectiveLogic;
 
-      final caseSensitive = entry.caseSensitive ?? c.caseSensitive ?? globalSettings.caseSensitive;
+      final caseSensitive =
+          entry.caseSensitive ??
+          c.caseSensitive ??
+          globalSettings.caseSensitive;
       final wholeWords = resolveWholeWords(
         entry.matchWholeWords,
-        c.matchWholeWords != null ? (c.matchWholeWords == 'true') : globalSettings.matchWholeWords,
+        c.matchWholeWords != null
+            ? (c.matchWholeWords == 'true')
+            : globalSettings.matchWholeWords,
         globalSettings.keySearchMode,
       );
 
-      final scanDepth = entry.scanDepth ?? c.scanDepth ?? globalSettings.scanDepth;
-      final temporalDepth = entry.sticky > entry.cooldown ? entry.sticky : entry.cooldown;
+      final scanDepth =
+          entry.scanDepth ?? c.scanDepth ?? globalSettings.scanDepth;
+      final temporalDepth = entry.sticky > entry.cooldown
+          ? entry.sticky
+          : entry.cooldown;
       final effectiveScanDepth = temporalDepth > 0
-          ? scanDepth < temporalDepth ? scanDepth : temporalDepth
+          ? scanDepth < temporalDepth
+                ? scanDepth
+                : temporalDepth
           : scanDepth;
 
-      final visibleHistory = history.where((m) => !m.isHidden && !m.isTyping).toList();
+      final visibleHistory = history
+          .where((m) => !m.isHidden && !m.isTyping)
+          .toList();
 
       final messagesToScan = visibleHistory
-          .skip(visibleHistory.length > effectiveScanDepth ? visibleHistory.length - effectiveScanDepth : 0)
+          .skip(
+            visibleHistory.length > effectiveScanDepth
+                ? visibleHistory.length - effectiveScanDepth
+                : 0,
+          )
           .map((m) => m.content)
           .join('\n');
 
@@ -169,14 +212,19 @@ List<ScannedEntry> scanLorebooks({
       bool isOnCooldown = false;
 
       if (entry.sticky > 0 || entry.cooldown > 0) {
-        final temporalMax = entry.sticky > entry.cooldown ? entry.sticky : entry.cooldown;
+        final temporalMax = entry.sticky > entry.cooldown
+            ? entry.sticky
+            : entry.cooldown;
         for (var i = 1; i <= temporalMax; i++) {
           final idx = visibleHistory.length - i;
           if (idx < 0) break;
           final histSource = caseSensitive
               ? visibleHistory[idx].content
               : visibleHistory[idx].content.toLowerCase();
-          final wasMatched = primaryKeys.any((key) => glazeCheckMatch(key, histSource, caseSensitive, wholeWords));
+          final wasMatched = primaryKeys.any(
+            (key) =>
+                glazeCheckMatch(key, histSource, caseSensitive, wholeWords),
+          );
           if (wasMatched) {
             if (i <= entry.sticky) isStickyActive = true;
             if (i <= entry.cooldown) isOnCooldown = true;
@@ -187,7 +235,12 @@ List<ScannedEntry> scanLorebooks({
 
       if (isOnCooldown) continue;
 
-      final matchedPrimary = isStickyActive || primaryKeys.any((key) => glazeCheckMatch(key, scanSource, caseSensitive, wholeWords));
+      final matchedPrimary =
+          isStickyActive ||
+          primaryKeys.any(
+            (key) =>
+                glazeCheckMatch(key, scanSource, caseSensitive, wholeWords),
+          );
 
       if (matchedPrimary) {
         bool secondaryMatches = true;
@@ -195,15 +248,22 @@ List<ScannedEntry> scanLorebooks({
         if (logic == 4 || secondaryKeys.isEmpty) {
           secondaryMatches = true;
         } else if (secondaryKeys.isNotEmpty) {
-          final matches = secondaryKeys.map((key) => glazeCheckMatch(key, scanSource, caseSensitive, wholeWords));
+          final matches = secondaryKeys.map(
+            (key) =>
+                glazeCheckMatch(key, scanSource, caseSensitive, wholeWords),
+          );
           final anyMatch = matches.any((m) => m);
           final allMatch = matches.every((m) => m);
 
           switch (logic) {
-            case 0: secondaryMatches = anyMatch;
-            case 1: secondaryMatches = allMatch;
-            case 2: secondaryMatches = !anyMatch;
-            case 3: secondaryMatches = !allMatch;
+            case 0:
+              secondaryMatches = anyMatch;
+            case 1:
+              secondaryMatches = allMatch;
+            case 2:
+              secondaryMatches = !anyMatch;
+            case 3:
+              secondaryMatches = !allMatch;
           }
         }
 
@@ -237,36 +297,44 @@ List<ScannedEntry> scanLorebooks({
     }
   }
 
-  if (perBookLimits.isNotEmpty) {
-    final lorebookCounts = <String, int>{};
-    final filtered = <ScannedEntry>[];
-    for (final entry in triggeredEntries) {
-      final limit = perBookLimits[entry.lorebookId];
-      if (limit != null) {
-        final count = lorebookCounts[entry.lorebookId] ?? 0;
-        if (count >= limit) continue;
-        lorebookCounts[entry.lorebookId] = count + 1;
-      }
-      filtered.add(entry);
-    }
-    triggeredEntries = filtered;
+  if (applyPerBookLimits) {
+    triggeredEntries = applyLorebookPerBookLimits(triggeredEntries);
   }
 
-  return [...constantEntries, ...triggeredEntries.take(globalMaxInjected)];
+  // Do not apply the global entry cap here. Hybrid keyword/vector merge needs
+  // the full keyword-activated set so keyword hits can dedupe matching vector
+  // hits even when they overflow the final keyword slot budget.
+  return [...constantEntries, ...triggeredEntries];
+}
+
+List<ScannedEntry> applyLorebookPerBookLimits(List<ScannedEntry> entries) {
+  final lorebookCounts = <String, int>{};
+  final filtered = <ScannedEntry>[];
+  for (final entry in entries) {
+    final limit = entry.maxInjectedEntries;
+    if (limit != null) {
+      final count = lorebookCounts[entry.lorebookId] ?? 0;
+      if (count >= limit) continue;
+      lorebookCounts[entry.lorebookId] = count + 1;
+    }
+    filtered.add(entry);
+  }
+  return filtered;
 }
 
 int _randomPercent() => _rng.nextInt(100);
 
 ScannedEntry _toScanned(_CandidateEntry c) => ScannedEntry(
-      id: c.entry.id,
-      comment: c.entry.comment,
-      content: c.entry.content,
-      position: c.entry.position,
-      order: c.entry.order,
-      lorebookName: c.lorebookName,
-      lorebookId: c.lorebookId,
-      constant: c.entry.constant,
-    );
+  id: c.entry.id,
+  comment: c.entry.comment,
+  content: c.entry.content,
+  position: c.entry.position,
+  order: c.entry.order,
+  lorebookName: c.lorebookName,
+  lorebookId: c.lorebookId,
+  constant: c.entry.constant,
+  maxInjectedEntries: c.maxInjectedEntries,
+);
 
 class _CandidateEntry {
   final LorebookEntry entry;

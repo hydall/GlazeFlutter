@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/db/repositories/info_blocks_repository.dart';
@@ -9,12 +8,13 @@ import '../../models/info_block.dart';
 import '../../providers/info_blocks_provider.dart';
 import 'block_context.dart';
 
-typedef BlockPanelRefresh = void Function(
-  String charId,
-  String sessionId,
-  String messageId,
-  int swipeId,
-);
+typedef BlockPanelRefresh =
+    void Function(
+      String charId,
+      String sessionId,
+      String messageId,
+      int swipeId,
+    );
 
 class PreparedBlockRun {
   const PreparedBlockRun({
@@ -153,9 +153,6 @@ class BlockStatusTracker {
     await repo.updateStatus(reuseBlockId, BlockRunStatus.running);
     ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(placeholder);
     refreshPanelForMessage(charId, sessionId, messageId, placeholder.swipeId);
-    debugPrint(
-      '[ExtPostGen] reused block id=$reuseBlockId messageId=$messageId status=running',
-    );
     return PreparedBlockRun(
       placeholderId: reuseBlockId,
       placeholder: placeholder,
@@ -184,9 +181,6 @@ class BlockStatusTracker {
     );
     await repo.insert(placeholder);
     ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(placeholder);
-    debugPrint(
-      '[ExtPostGen] placeholder inserted: id=$placeholderId messageId=$messageId status=running',
-    );
     return PreparedBlockRun(
       placeholderId: placeholderId,
       placeholder: placeholder,

@@ -163,6 +163,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   Future<void>? _initFuture;
   ChatWebViewWidget? _deferredSwitchFrom;
   bool _bridgeFailureNotified = false;
+  VoidCallback? _clearBridgeRegistry;
   final ChatWebViewSyncState _syncState = ChatWebViewSyncState();
   late final ChatWebViewSyncDispatcher _syncDispatcher =
       ChatWebViewSyncDispatcher(state: _syncState);
@@ -173,6 +174,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   @override
   void initState() {
     super.initState();
+    _bindBridgeRegistry(widget.charId);
     // Keep-alive re-attach safety net: when the chat body is rebuilt (e.g. a
     // full-screen spinner during an import-driven session switch destroys and
     // recreates this widget), the underlying native WebView is reused by the
@@ -182,6 +184,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     // kick once the bridge is wired; `_initWebView()` is idempotent
     // (`_initFuture ??=`), so it is a no-op if the surface already started it.
     WidgetsBinding.instance.addPostFrameCallback((_) => _kickInitWhenReady());
+  }
+
+  void _bindBridgeRegistry(String charId) {
+    final registry = ref.read(chatBridgeRegistryProvider(charId).notifier);
+    _clearBridgeRegistry = () => registry.state = null;
   }
 
   /// Polls for the bridge (set by the surface's `onWebViewCreated`) and runs
@@ -231,7 +238,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   @override
   void dispose() {
     // Unregister bridge so the service doesn't hold a stale reference.
-    ref.read(chatBridgeRegistryProvider(widget.charId).notifier).state = null;
+    _clearBridgeRegistry?.call();
     // Drop interactive panel state for this character so the singleton
     // registry doesn't keep references to disposed bridge callbacks.
     PanelHostService.instance.disposeAll(charId: widget.charId);
@@ -355,6 +362,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     }
 
     if (!mounted) return;
+    // Init captures widget fields before async setup completes. On cold start,
+    // the active persona can resolve during that window, so push the latest
+    // identity once the bridge is ready instead of leaving rendered user
+    // messages as the default "You" until a later chat/persona switch.
+    await _bridgeOp(_applyResolvedIdentity(), label: 'setIdentity');
     final deferred = _deferredSwitchFrom;
     _deferredSwitchFrom = null;
     if (deferred != null) {
@@ -439,6 +451,31 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
       greetingTotal: greetingTotal == _identityUnset
           ? widget.greetingTotal
           : greetingTotal as int?,
+    );
+  }
+
+  Future<void> _applyResolvedIdentity() {
+    final bridge = _bridge;
+    if (bridge == null || !_ready || !mounted) return Future.value();
+    final character = ref.read(characterByIdProvider(widget.charId));
+    final effectivePersona = ref.read(
+      effectivePersonaForChatProvider((
+        charId: widget.charId,
+        sessionId: widget.sessionId,
+      )),
+    );
+    return bridge.setIdentity(
+      charName: character?.name ?? widget.charName,
+      charColor: character?.color ?? widget.charColor,
+      personaName: effectivePersona?.name ?? widget.personaName,
+      layout: widget.chatLayout,
+      charAvatarPath: character?.avatarPath ?? widget.charAvatarPath,
+      personaAvatarPath:
+          effectivePersona?.avatarPath ?? widget.personaAvatarPath,
+      greetingTotal: character == null
+          ? widget.greetingTotal
+          : ((character.firstMes?.isNotEmpty == true ? 1 : 0) +
+                character.alternateGreetings.where((g) => g.isNotEmpty).length),
     );
   }
 
@@ -576,6 +613,10 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   @override
   void didUpdateWidget(ChatWebViewWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.charId != oldWidget.charId) {
+      _clearBridgeRegistry?.call();
+      _bindBridgeRegistry(widget.charId);
+    }
     if (!_ready &&
         (widget.charId != oldWidget.charId ||
             widget.sessionId != oldWidget.sessionId)) {
@@ -643,12 +684,20 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     super.build(context);
 
     final character = ref.watch(characterByIdProvider(widget.charId));
-    final effectivePersona = ref.watch(
-      effectivePersonaForChatProvider((
-        charId: widget.charId,
-        sessionId: widget.sessionId,
-      )),
-    );
+    final effectivePersonaProvider = effectivePersonaForChatProvider((
+      charId: widget.charId,
+      sessionId: widget.sessionId,
+    ));
+    final effectivePersona = ref.watch(effectivePersonaProvider);
+    ref.listen(effectivePersonaProvider, (prev, next) {
+      if (prev?.id == next?.id &&
+          prev?.name == next?.name &&
+          prev?.avatarPath == next?.avatarPath) {
+        return;
+      }
+      if (_bridge == null || !_ready) return;
+      unawaited(_bridgeOp(_applyResolvedIdentity(), label: 'setIdentity'));
+    });
     final displayRegexes = ref.watch(displayRegexesProvider).value ?? [];
 
     if (_bridge != null) {

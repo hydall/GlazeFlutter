@@ -38,10 +38,6 @@ class SingleBlockRunner {
   }) async {
     if (cancelToken.isCancelled) return null;
 
-    debugPrint(
-      '[ExtPostGen] _runSingleBlock START: name="${blockConfig.name}" type=${blockConfig.type.name} order=${blockConfig.order} reuse=${reuseBlockId ?? "new"}',
-    );
-
     final prepared = await statusTracker.prepare(
       charId: charId,
       sessionId: sessionId,

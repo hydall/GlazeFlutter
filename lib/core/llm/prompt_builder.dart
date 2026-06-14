@@ -10,6 +10,7 @@ import '../models/memory_book.dart';
 import 'macro_engine.dart';
 import 'history_assembler.dart';
 import 'context_calculator.dart';
+import 'lorebook_coverage.dart';
 import 'lorebook_scanner.dart';
 import 'lorebook_merger.dart';
 import 'prompt_block_resolver.dart';
@@ -69,6 +70,7 @@ class PromptPayload {
   final Persona? persona;
   final Preset? preset;
   final List<ChatMessage> history;
+  final String? sessionId;
   final ApiConfig apiConfig;
   final Map<String, String> sessionVars;
   final Map<String, String> globalVars;
@@ -108,6 +110,7 @@ class PromptPayload {
     this.persona,
     this.preset,
     required this.history,
+    this.sessionId,
     required this.apiConfig,
     this.sessionVars = const {},
     this.globalVars = const {},
@@ -294,10 +297,11 @@ PromptResult buildPrompt(PromptPayload payload) {
         textToScan:
             visibleHistory.where((m) => m.role == 'user').lastOrNull?.content ??
             '',
-        chatId: null,
+        chatId: payload.sessionId,
         lorebooks: payload.lorebooks,
         globalSettings: payload.lorebookSettings,
         activations: payload.lorebookActivations,
+        applyPerBookLimits: false,
       );
 
   final mergedEntries = mergeKeywordVector(
@@ -309,6 +313,28 @@ PromptResult buildPrompt(PromptPayload payload) {
   final keywordIdToEntry = <String, ScannedEntry>{};
   for (final e in loreEntries) {
     keywordIdToEntry[e.id] = e;
+  }
+  final coverageKeywordIdToEntry = <String, CoverageEntry>{};
+  if (payload.lorebookSettings.searchType != 'vector') {
+    final coverage = computeLorebookCoverage(
+      history: visibleHistory,
+      char: char,
+      textToScan:
+          visibleHistory.where((m) => m.role == 'user').lastOrNull?.content ??
+          '',
+      chatId: payload.sessionId,
+      lorebooks: payload.lorebooks,
+      globalSettings: payload.lorebookSettings,
+      activations: payload.lorebookActivations,
+    );
+    for (final e in coverage.entries) {
+      final isKeywordLike =
+          e.constant ||
+          (e.activated &&
+              e.matchedKeys.isNotEmpty &&
+              !e.matchedKeys.contains('[vector]'));
+      if (isKeywordLike) coverageKeywordIdToEntry[e.id] = e;
+    }
   }
   final vectorIdToEntry = <String, LorebookEntry>{};
   for (final e in payload.vectorEntries) {
@@ -326,6 +352,21 @@ PromptResult buildPrompt(PromptPayload payload) {
           lorebookName: kw.lorebookName,
           lorebookId: kw.lorebookId,
           source: kw.constant ? 'constant' : 'keyword',
+        ),
+      );
+      continue;
+    }
+    final coverageKw = coverageKeywordIdToEntry[merged.id];
+    if (coverageKw != null) {
+      triggeredLorebooks.add(
+        TriggeredEntry(
+          id: coverageKw.id,
+          name: coverageKw.comment.isNotEmpty
+              ? coverageKw.comment
+              : coverageKw.id,
+          lorebookName: coverageKw.lorebookName,
+          lorebookId: coverageKw.lorebookId,
+          source: coverageKw.constant ? 'constant' : 'keyword',
         ),
       );
       continue;
@@ -946,7 +987,9 @@ PromptResult _assembleMessages({
       if (replacedMacro) {
         memoryContent = rebuilt.macroContent;
         memoryMacroContent = rebuilt.macroContent;
-        historyOnly = messages.where((m) => m.isHistory).toList(growable: false);
+        historyOnly = messages
+            .where((m) => m.isHistory)
+            .toList(growable: false);
         macroTokens['memory'] = estimateTokens(memoryMacroContent);
       } else if (payload.memoryInjectionTarget == 'hard_block') {
         memoryContent = rebuilt.content;

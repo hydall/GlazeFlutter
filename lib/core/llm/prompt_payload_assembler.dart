@@ -18,6 +18,7 @@ class PromptPayloadAssembler {
       persona: inputs.persona,
       preset: inputs.preset,
       history: inputs.history,
+      sessionId: inputs.sessionId,
       apiConfig: inputs.apiConfig,
       sessionVars: inputs.sessionVars,
       globalVars: inputs.globalVars,
