@@ -5,15 +5,12 @@ import '../providers/extension_presets_provider.dart';
 import '../providers/extensions_settings_provider.dart';
 import '../providers/info_blocks_provider.dart';
 
-typedef ExtBlocksPanelKey = ({
-  String sessionId,
-  String messageId,
-  int swipeId,
-});
+typedef ExtBlocksPanelKey = ({String sessionId, String messageId, int swipeId});
 
 typedef ExtBlocksPanelVisibilityKey = ({
   String sessionId,
   String messageId,
+  bool isAssistant,
   bool isLastAssistant,
   bool isGreeting,
   int swipeId,
@@ -106,42 +103,36 @@ class ExtBlocksPanelBuilder {
 }
 
 final extBlocksPanelBlocksProvider =
-    Provider.family<List<Map<String, dynamic>>, ExtBlocksPanelKey>(
-  (ref, key) {
-    ref.watch(infoBlocksProvider(key.sessionId));
-    ref.watch(extensionsSettingsProvider);
-    ref.watch(extensionPresetsProvider);
-    return ExtBlocksPanelBuilder.build(
-      ref,
-      sessionId: key.sessionId,
-      messageId: key.messageId,
-      swipeId: key.swipeId,
-    );
-  },
-);
+    Provider.family<List<Map<String, dynamic>>, ExtBlocksPanelKey>((ref, key) {
+      ref.watch(infoBlocksProvider(key.sessionId));
+      ref.watch(extensionsSettingsProvider);
+      ref.watch(extensionPresetsProvider);
+      return ExtBlocksPanelBuilder.build(
+        ref,
+        sessionId: key.sessionId,
+        messageId: key.messageId,
+        swipeId: key.swipeId,
+      );
+    });
 
 final extBlocksPanelVisibleProvider =
-    Provider.family<bool, ExtBlocksPanelVisibilityKey>(
-  (ref, key) {
-    ref.watch(infoBlocksProvider(key.sessionId));
-    ref.watch(extensionsSettingsProvider);
-    ref.watch(extensionPresetsProvider);
-    return ExtBlocksPanelBuilder.shouldShowPanel(
-      ref,
-      sessionId: key.sessionId,
-      messageId: key.messageId,
-      swipeId: key.swipeId,
-      isAssistant: true,
-      isLastAssistant: key.isLastAssistant,
-      isGreeting: key.isGreeting,
-    );
-  },
-);
+    Provider.family<bool, ExtBlocksPanelVisibilityKey>((ref, key) {
+      ref.watch(infoBlocksProvider(key.sessionId));
+      ref.watch(extensionsSettingsProvider);
+      ref.watch(extensionPresetsProvider);
+      return ExtBlocksPanelBuilder.shouldShowPanel(
+        ref,
+        sessionId: key.sessionId,
+        messageId: key.messageId,
+        swipeId: key.swipeId,
+        isAssistant: key.isAssistant,
+        isLastAssistant: key.isLastAssistant,
+        isGreeting: key.isGreeting,
+      );
+    });
 
 final extBlocksPanelCanRunAllProvider =
-    Provider.family<bool, ExtBlocksPanelKey>(
-  (ref, key) {
-    final blocks = ref.watch(extBlocksPanelBlocksProvider(key));
-    return ExtBlocksPanelBuilder.canRunAll(blocks);
-  },
-);
+    Provider.family<bool, ExtBlocksPanelKey>((ref, key) {
+      final blocks = ref.watch(extBlocksPanelBlocksProvider(key));
+      return ExtBlocksPanelBuilder.canRunAll(blocks);
+    });

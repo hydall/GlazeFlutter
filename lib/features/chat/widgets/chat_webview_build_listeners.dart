@@ -168,12 +168,18 @@ class ChatWebViewBuildListeners {
     if (sid == null || sid.isEmpty) return;
     ref.listen<List<InfoBlock>>(infoBlocksProvider(sid), (prev, next) {
       if (bridge == null || !ready()) return;
-      final allIds = <String>{
-        for (final b in prev ?? const <InfoBlock>[]) b.messageId,
-        for (final b in next) b.messageId,
+      // Only assistant/character messages can show ext-block panels.
+      // Build a set of their IDs so block messageIds from afterUser
+      // (which are stored under the user message id) are filtered out.
+      final assistantIds = {
         for (final m in messages)
           if (m.role == 'assistant' || m.role == 'character') m.id,
       };
+      final blockIds = <String>{
+        for (final b in prev ?? const <InfoBlock>[]) b.messageId,
+        for (final b in next) b.messageId,
+      };
+      final allIds = assistantIds.union(blockIds.intersection(assistantIds));
       for (final msgId in allIds) {
         unawaited(onRefreshExtBlocksPanel(sid, msgId));
       }
