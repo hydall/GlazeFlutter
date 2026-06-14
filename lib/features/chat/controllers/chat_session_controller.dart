@@ -27,15 +27,19 @@ class ChatSessionController {
   Future<void> switchSession(int sessionIndex) async {
     try {
       final raw = await _sessionSvc.switchToSession(_charId, sessionIndex);
+      if (!_ref.mounted) return;
       final session = _fixupSwipesWithImageResults(raw);
       if (!identical(session, raw)) {
         await _ref.read(chatRepoProvider).put(session);
+        if (!_ref.mounted) return;
         ChatSessionService.updateCache(session);
       }
       final start = session.messages.length > ChatState.initialPageSize
           ? session.messages.length - ChatState.initialPageSize
           : 0;
-      _setState(AsyncData(ChatState(session: session, visibleStartIndex: start)));
+      _setState(
+        AsyncData(ChatState(session: session, visibleStartIndex: start)),
+      );
     } catch (_) {
       final current = _getState().value;
       if (current != null) {
@@ -46,6 +50,7 @@ class ChatSessionController {
 
   Future<void> createNewSession() async {
     final session = await _sessionSvc.createNewSession(_charId);
+    if (!_ref.mounted) return;
     _invalidateHistory();
     _setState(AsyncData(ChatState(session: session)));
   }
@@ -56,7 +61,12 @@ class ChatSessionController {
     final current = _getState().value;
     if (current == null || current.session == null) return;
     if (index < 0 || index >= current.messages.length) return;
-    final session = await _sessionSvc.branchSession(_charId, current.session!, index);
+    final session = await _sessionSvc.branchSession(
+      _charId,
+      current.session!,
+      index,
+    );
+    if (!_ref.mounted) return;
     _invalidateHistory();
     final start = session.messages.length > ChatState.initialPageSize
         ? session.messages.length - ChatState.initialPageSize
