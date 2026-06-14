@@ -48,6 +48,7 @@ class ChatWebViewPanelRefresher {
     final isLastAssistant = messageId == _lastAssistantMessageId();
     final swipeId = _swipeIdForMessage(messageId);
     final isGreeting = _isGreetingMessage(messageId);
+    final isAssistant = _isAssistantMessage(messageId);
     final panelKey = (
       sessionId: sessionId,
       messageId: messageId,
@@ -56,6 +57,7 @@ class ChatWebViewPanelRefresher {
     final visibilityKey = (
       sessionId: sessionId,
       messageId: messageId,
+      isAssistant: isAssistant,
       isLastAssistant: isLastAssistant,
       isGreeting: isGreeting,
       swipeId: swipeId,
@@ -117,6 +119,11 @@ class ChatWebViewPanelRefresher {
   bool _isGreetingMessage(String messageId) {
     final msg = messages().where((m) => m.id == messageId).firstOrNull;
     return msg?.greetingIndex != null;
+  }
+
+  bool _isAssistantMessage(String messageId) {
+    final msg = messages().where((m) => m.id == messageId).firstOrNull;
+    return msg?.role == 'assistant' || msg?.role == 'character';
   }
 
   String? _lastAssistantMessageId() {
