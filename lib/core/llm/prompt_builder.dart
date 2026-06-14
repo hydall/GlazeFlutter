@@ -69,6 +69,7 @@ class PromptPayload {
   final Persona? persona;
   final Preset? preset;
   final List<ChatMessage> history;
+  final String? sessionId;
   final ApiConfig apiConfig;
   final Map<String, String> sessionVars;
   final Map<String, String> globalVars;
@@ -108,6 +109,7 @@ class PromptPayload {
     this.persona,
     this.preset,
     required this.history,
+    this.sessionId,
     required this.apiConfig,
     this.sessionVars = const {},
     this.globalVars = const {},
@@ -294,7 +296,7 @@ PromptResult buildPrompt(PromptPayload payload) {
         textToScan:
             visibleHistory.where((m) => m.role == 'user').lastOrNull?.content ??
             '',
-        chatId: null,
+        chatId: payload.sessionId,
         lorebooks: payload.lorebooks,
         globalSettings: payload.lorebookSettings,
         activations: payload.lorebookActivations,

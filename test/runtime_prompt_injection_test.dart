@@ -852,4 +852,73 @@ void main() {
       'vector',
     ]);
   });
+
+  test('chat-bound lorebook keyword source wins over vector badge', () {
+    final entry = LorebookEntry(
+      id: 'bound1',
+      comment: 'Chat Bound Keyword',
+      keys: const ['artifact'],
+      content: 'Chat-bound keyword payload.',
+      position: 'lorebooksMacro',
+      vectorSearch: true,
+      useKeywordSearch: true,
+    );
+
+    final result = buildPrompt(
+      PromptPayload(
+        character: Character(id: 'c1', name: 'Alice'),
+        preset: const Preset(
+          id: 'p1',
+          name: 'Prompt',
+          blocks: [
+            PresetBlock(
+              id: 'lore_slot',
+              name: 'Lore Slot',
+              role: 'user',
+              content: '<lorebooks>\n{{lorebooks}}\n</lorebooks>',
+              appendToLastMessage: true,
+            ),
+            PresetBlock(
+              id: 'chat_history',
+              name: 'History',
+              role: 'system',
+              content: '',
+            ),
+          ],
+        ),
+        history: const [
+          ChatMessage(id: 'u1', role: 'user', content: 'Find the artifact.'),
+        ],
+        sessionId: 's1',
+        apiConfig: const ApiConfig(
+          id: 'api',
+          name: 'API',
+          contextSize: 10000,
+          maxTokens: 100,
+        ),
+        lorebooks: [
+          Lorebook(
+            id: 'lb1',
+            name: 'Chat Book',
+            enabled: false,
+            activationScope: 'chat',
+            activationTargetId: 's1',
+            entries: [entry],
+          ),
+        ],
+        lorebookSettings: const LorebookGlobalSettings(
+          searchType: 'both',
+          injectionPosition: 'lorebooksMacro',
+          maxInjectedEntries: 4,
+        ),
+        vectorEntries: [entry],
+      ),
+    );
+
+    expect(result.triggeredLorebooks, hasLength(1));
+    expect(result.triggeredLorebooks.single.name, 'Chat Bound Keyword');
+    expect(result.triggeredLorebooks.single.lorebookName, 'Chat Book');
+    expect(result.triggeredLorebooks.single.lorebookId, 'lb1');
+    expect(result.triggeredLorebooks.single.source, 'keyword');
+  });
 }

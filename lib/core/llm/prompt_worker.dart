@@ -132,6 +132,7 @@ Map<String, dynamic> _serializePayload(PromptPayload p) => {
   'persona': p.persona?.toJson(),
   'preset': p.preset?.toJson(),
   'history': p.history.map((m) => m.toJson()).toList(),
+  'sessionId': p.sessionId,
   'apiConfig': p.apiConfig.toJson(),
   'sessionVars': p.sessionVars,
   'globalVars': p.globalVars,
@@ -201,6 +202,7 @@ PromptPayload _deserializePayload(Map<String, dynamic> json) {
     history: (json['history'] as List)
         .map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
         .toList(),
+    sessionId: json['sessionId'] as String?,
     apiConfig: ApiConfig.fromJson(json['apiConfig'] as Map<String, dynamic>),
     sessionVars: Map<String, String>.from(json['sessionVars'] as Map? ?? {}),
     globalVars: Map<String, String>.from(json['globalVars'] as Map? ?? {}),
@@ -509,6 +511,7 @@ PromptResult _buildFromInputs(PromptInputs inputs) {
     persona: inputs.persona,
     preset: inputs.preset,
     history: inputs.history,
+    sessionId: inputs.sessionId,
     apiConfig: inputs.apiConfig,
     sessionVars: inputs.sessionVars,
     globalVars: inputs.globalVars,

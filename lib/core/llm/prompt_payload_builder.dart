@@ -237,13 +237,14 @@ class PromptPayloadBuilder {
     }
 
     debugPrint(
-      '[payload] building final payload... memorySelection=${memorySelection == null ? 'null' : '${memorySelection!.allScores.length} candidates'}',
+      '[payload] building final payload... memorySelection=${memorySelection == null ? 'null' : '${memorySelection.allScores.length} candidates'}',
     );
     return PromptPayload(
       character: character,
       persona: persona,
       preset: preset,
       history: history,
+      sessionId: sessionId,
       apiConfig: chatApi,
       sessionVars: sessionVars,
       globalVars: _ref.read(globalVarsProvider),
@@ -316,6 +317,7 @@ class PromptPayloadBuilder {
       persona: persona,
       preset: preset,
       history: history,
+      sessionId: session?.id,
       apiConfig: chatApi,
       sessionVars: session?.sessionVars ?? {},
       globalVars: _ref.read(globalVarsProvider),
