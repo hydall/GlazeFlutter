@@ -413,6 +413,10 @@ class PromptPayloadBuilder {
           .map((r) => entryMap['${r.lorebookId}_${r.entryId}']!.copyWith())
           .toList();
     } catch (e, st) {
+      if (cancelToken?.isCancelled == true ||
+          (e is DioException && CancelToken.isCancel(e))) {
+        return [];
+      }
       debugPrint('VECTOR SEARCH: failed: $e\n$st');
       GlazeToast.showWithoutContext(
         'Vector search failed — try reindexing embeddings',

@@ -158,6 +158,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   Future<void>? _initFuture;
   ChatWebViewWidget? _deferredSwitchFrom;
   bool _bridgeFailureNotified = false;
+  VoidCallback? _clearBridgeRegistry;
   final ChatWebViewSyncState _syncState = ChatWebViewSyncState();
   late final ChatWebViewSyncDispatcher _syncDispatcher =
       ChatWebViewSyncDispatcher(state: _syncState);
@@ -168,6 +169,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   @override
   void initState() {
     super.initState();
+    _bindBridgeRegistry(widget.charId);
     // Keep-alive re-attach safety net: when the chat body is rebuilt (e.g. a
     // full-screen spinner during an import-driven session switch destroys and
     // recreates this widget), the underlying native WebView is reused by the
@@ -177,6 +179,11 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     // kick once the bridge is wired; `_initWebView()` is idempotent
     // (`_initFuture ??=`), so it is a no-op if the surface already started it.
     WidgetsBinding.instance.addPostFrameCallback((_) => _kickInitWhenReady());
+  }
+
+  void _bindBridgeRegistry(String charId) {
+    final registry = ref.read(chatBridgeRegistryProvider(charId).notifier);
+    _clearBridgeRegistry = () => registry.state = null;
   }
 
   /// Polls for the bridge (set by the surface's `onWebViewCreated`) and runs
@@ -226,7 +233,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   @override
   void dispose() {
     // Unregister bridge so the service doesn't hold a stale reference.
-    ref.read(chatBridgeRegistryProvider(widget.charId).notifier).state = null;
+    _clearBridgeRegistry?.call();
     // Drop interactive panel state for this character so the singleton
     // registry doesn't keep references to disposed bridge callbacks.
     PanelHostService.instance.disposeAll(charId: widget.charId);
@@ -576,6 +583,10 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
   @override
   void didUpdateWidget(ChatWebViewWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.charId != oldWidget.charId) {
+      _clearBridgeRegistry?.call();
+      _bindBridgeRegistry(widget.charId);
+    }
     if (!_ready &&
         (widget.charId != oldWidget.charId ||
             widget.sessionId != oldWidget.sessionId)) {
