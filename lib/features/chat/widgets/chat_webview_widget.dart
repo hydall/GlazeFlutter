@@ -367,6 +367,10 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     // identity once the bridge is ready instead of leaving rendered user
     // messages as the default "You" until a later chat/persona switch.
     await _bridgeOp(_applyResolvedIdentity(), label: 'setIdentity');
+    // The provider listener for info_blocks can fire before the WebView DOM is
+    // ready. Do an awaited sync immediately after init so existing blocks from
+    // the DB are painted on the first chat open, not only after re-entering.
+    await _bridgeOp(_syncExtBlockPanels(), label: 'syncExtBlockPanels');
     final deferred = _deferredSwitchFrom;
     _deferredSwitchFrom = null;
     if (deferred != null) {
