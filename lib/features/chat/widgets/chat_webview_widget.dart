@@ -188,7 +188,13 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
 
   void _bindBridgeRegistry(String charId) {
     final registry = ref.read(chatBridgeRegistryProvider(charId).notifier);
-    _clearBridgeRegistry = () => registry.state = null;
+    // dispose() runs synchronously inside BuildOwner.lockState (finalizeTree
+    // during drawFrame). Riverpod forbids mutating providers there and asserts
+    // on schedulerPhase == persistentCallbacks / midFrameMicrotasks. Defer the
+    // registry reset to the next event-loop task (schedulerPhase == idle) so it
+    // lands after the build phase. `Future.microtask` would still run during
+    // midFrameMicrotasks and assert, so the event queue is required here.
+    _clearBridgeRegistry = () => Future(() => registry.state = null);
   }
 
   /// Polls for the bridge (set by the surface's `onWebViewCreated`) and runs

@@ -10,6 +10,7 @@ import '../../../shared/widgets/generic_editor.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../presets/preset_list_provider.dart';
 import '../chat_provider.dart';
+import '../chat_session_service.dart';
 
 /// Keeps the Author's Note enable state in sync across its homes. The note is
 /// one entity for the chat: its `enabled` (and content) live on the session and
@@ -25,12 +26,15 @@ Future<void> syncAuthorsNoteEnabled(
     final session = ref.read(chatProvider(charId)).value?.session;
     final note = session?.authorsNote;
     if (session != null && note != null && note.enabled != enabled) {
-      await ref.read(chatSessionOpsProvider.notifier).saveSession(
-            session.copyWith(
-              authorsNote: note.copyWith(enabled: enabled),
-              updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-            ),
-          );
+      final updated = session.copyWith(
+        authorsNote: note.copyWith(enabled: enabled),
+        updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      );
+      await ref.read(chatSessionOpsProvider.notifier).saveSession(updated);
+      // Keep the session cache in sync — switchToSession returns the cached
+      // ChatSession without re-reading the DB, so a stale entry would mask the
+      // new enabled state (and the note content) until the cache is evicted.
+      ChatSessionService.updateCache(updated);
       ref.invalidate(chatProvider(charId));
     }
   }
@@ -62,6 +66,16 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
   late Map<String, dynamic> _localItem;
   late bool _enabled;
   late final bool _hasSession;
+  // Captured while the element is active so _performSave can still read
+  // providers when invoked from GenericEditor.dispose() — by then ref.read
+  // throws "Looking up a deactivated widget's ancestor is unsafe".
+  late final ProviderContainer _container;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _container = ProviderScope.containerOf(context);
+  }
 
   @override
   void initState() {
@@ -85,7 +99,9 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
 
   Future<void> _performSave(Map<String, dynamic> item) async {
     if (widget.charId == null) return;
-    final session = ref.read(chatProvider(widget.charId!)).value?.session;
+    // Use the captured container, not ref — this method can be called from
+    // GenericEditor.dispose() when the element is already deactivated.
+    final session = _container.read(chatProvider(widget.charId!)).value?.session;
     if (session == null) return;
 
     final content = (item['content'] as String?)?.trim() ?? '';
@@ -101,13 +117,17 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
             enabled: _enabled,
           )
         : null;
-        
+
     final updated = session.copyWith(
       authorsNote: note,
       updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
-    await ref.read(chatSessionOpsProvider.notifier).saveSession(updated);
-    ref.invalidate(chatProvider(widget.charId!));
+    await _container.read(chatSessionOpsProvider.notifier).saveSession(updated);
+    // Keep the session cache in sync — switchToSession returns the cached
+    // ChatSession without re-reading the DB, so a stale entry would mask the
+    // edited note content until the cache is evicted.
+    ChatSessionService.updateCache(updated);
+    _container.invalidate(chatProvider(widget.charId!));
   }
 
   List<GenericEditorSection> get _config => [
