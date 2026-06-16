@@ -31,6 +31,8 @@ class MagicDrawerStatsService {
   Future<MagicDrawerStats> computeStats(String charId) async {
     final chatState = _ref.read(chatProvider(charId)).value;
     final session = chatState?.session;
+    // DEBUG: trace authorsNote availability
+    debugPrint('[MagicDrawer] session=${session?.id} authorsNote=${session?.authorsNote?.content.length ?? 'NULL'}');
     final charRepo = _ref.read(characterRepoProvider);
     final presetRepo = _ref.read(presetRepoProvider);
     final personaRepo = _ref.read(personaRepoProvider);
