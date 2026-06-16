@@ -1,11 +1,39 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/state/shared_prefs_provider.dart';
 
 part 'app_settings_provider.freezed.dart';
 
 const supportedAppLanguages = {'en', 'ru'};
+
+bool _readBoolPref(
+  SharedPreferences prefs,
+  String key, {
+  required bool defaultValue,
+}) {
+  final value = prefs.get(key);
+  if (value is bool) return value;
+  if (value is int) return value != 0;
+  if (value is String) {
+    final normalized = value.toLowerCase();
+    return normalized == '1' || normalized == 'true';
+  }
+  return defaultValue;
+}
+
+double _readDoublePref(
+  SharedPreferences prefs,
+  String key, {
+  required double defaultValue,
+}) {
+  final value = prefs.get(key);
+  if (value is int) return value.toDouble();
+  if (value is double) return value;
+  if (value is String) return double.tryParse(value) ?? defaultValue;
+  return defaultValue;
+}
 
 final appSettingsProvider =
     AsyncNotifierProvider<AppSettingsNotifier, AppSettings>(
@@ -39,26 +67,51 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     final prefs = await ref.read(sharedPreferencesProvider.future);
     final savedLanguage = prefs.getString('language');
     return AppSettings(
-      enterToSend: prefs.getBool('enterToSend') ?? true,
-      hideMessageId: prefs.getBool('hideMessageId') ?? false,
-      hideGenerationTime: prefs.getBool('hideGenerationTime') ?? false,
-      hideTokenCount: prefs.getBool('hideTokenCount') ?? false,
-      groupDialogs: prefs.getBool('dialogGrouping') ?? false,
-      batterySaver: prefs.getBool('batterySaver') ?? false,
-      hideTooltips: prefs.getBool('hideTooltips') ?? false,
-      disableSwipeRegeneration:
-          prefs.getBool('disableSwipeRegeneration') ?? false,
+      enterToSend: _readBoolPref(prefs, 'enterToSend', defaultValue: true),
+      hideMessageId: _readBoolPref(prefs, 'hideMessageId', defaultValue: false),
+      hideGenerationTime: _readBoolPref(
+        prefs,
+        'hideGenerationTime',
+        defaultValue: false,
+      ),
+      hideTokenCount: _readBoolPref(
+        prefs,
+        'hideTokenCount',
+        defaultValue: false,
+      ),
+      groupDialogs: _readBoolPref(prefs, 'dialogGrouping', defaultValue: false),
+      batterySaver: _readBoolPref(prefs, 'batterySaver', defaultValue: false),
+      hideTooltips: _readBoolPref(prefs, 'hideTooltips', defaultValue: false),
+      disableSwipeRegeneration: _readBoolPref(
+        prefs,
+        'disableSwipeRegeneration',
+        defaultValue: false,
+      ),
       language: supportedAppLanguages.contains(savedLanguage)
           ? savedLanguage!
           : 'en',
-      virtualKeyboardSend: prefs.getBool('virtualKeyboardSend') ?? false,
-      tokenizerHidePercent: prefs.getDouble('tokenizerHidePercent') ?? 30,
-      tokenizerHistoryFillThreshold:
-          prefs.getDouble('tokenizerHistoryFillThreshold') ?? 85,
-      showOurPicks: prefs.getBool('showOurPicks') ?? true,
-      forceMobileLayout:
-          prefs.getBool('gz_force_mobile_layout') ?? true,
-      addBlockAtTop: prefs.getBool('addBlockAtTop') ?? false,
+      virtualKeyboardSend: _readBoolPref(
+        prefs,
+        'virtualKeyboardSend',
+        defaultValue: false,
+      ),
+      tokenizerHidePercent: _readDoublePref(
+        prefs,
+        'tokenizerHidePercent',
+        defaultValue: 30,
+      ),
+      tokenizerHistoryFillThreshold: _readDoublePref(
+        prefs,
+        'tokenizerHistoryFillThreshold',
+        defaultValue: 85,
+      ),
+      showOurPicks: _readBoolPref(prefs, 'showOurPicks', defaultValue: true),
+      forceMobileLayout: _readBoolPref(
+        prefs,
+        'gz_force_mobile_layout',
+        defaultValue: true,
+      ),
+      addBlockAtTop: _readBoolPref(prefs, 'addBlockAtTop', defaultValue: false),
     );
   }
 
@@ -89,10 +142,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
       normalized.tokenizerHistoryFillThreshold,
     );
     await prefs.setBool('showOurPicks', normalized.showOurPicks);
-    await prefs.setBool(
-      'gz_force_mobile_layout',
-      normalized.forceMobileLayout,
-    );
+    await prefs.setBool('gz_force_mobile_layout', normalized.forceMobileLayout);
     await prefs.setBool('addBlockAtTop', normalized.addBlockAtTop);
     state = AsyncData(normalized);
   }

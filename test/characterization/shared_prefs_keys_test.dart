@@ -21,6 +21,8 @@ void main() {
       'tokenizerHidePercent': double,
       'tokenizerHistoryFillThreshold': double,
       'showOurPicks': bool,
+      'gz_force_mobile_layout': bool,
+      'addBlockAtTop': bool,
     };
 
     test('AppSettings defaults match SharedPrefs fallbacks', () {
@@ -32,7 +34,9 @@ void main() {
         switch (entry.value) {
           // ignore: type_literal_in_constant_pattern
           case bool:
-            if (entry.key == 'enterToSend' || entry.key == 'showOurPicks') {
+            if (entry.key == 'enterToSend' ||
+                entry.key == 'showOurPicks' ||
+                entry.key == 'gz_force_mobile_layout') {
               expect(
                 _getBoolDefault(defaults, entry.key),
                 isTrue,
@@ -76,7 +80,29 @@ void main() {
     });
 
     test('all expected SharedPrefs keys are covered', () {
-      expect(expectedKeys.length, 13);
+      expect(expectedKeys.length, 15);
+    });
+
+    test('legacy string values are accepted', () async {
+      SharedPreferences.setMockInitialValues({
+        'enterToSend': 'false',
+        'hideMessageId': '1',
+        'tokenizerHidePercent': '45.5',
+        'tokenizerHistoryFillThreshold': '90',
+        'gz_force_mobile_layout': '0',
+        'addBlockAtTop': 'true',
+      });
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final settings = await container.read(appSettingsProvider.future);
+
+      expect(settings.enterToSend, isFalse);
+      expect(settings.hideMessageId, isTrue);
+      expect(settings.tokenizerHidePercent, 45.5);
+      expect(settings.tokenizerHistoryFillThreshold, 90);
+      expect(settings.forceMobileLayout, isFalse);
+      expect(settings.addBlockAtTop, isTrue);
     });
 
     test('unsupported saved language falls back to English', () async {
@@ -162,6 +188,8 @@ void main() {
         'tokenizerHidePercent',
         'tokenizerHistoryFillThreshold',
         'showOurPicks',
+        'gz_force_mobile_layout',
+        'addBlockAtTop',
         'activeApiConfigId',
         'activePresetId',
         'activePersonaId',
@@ -229,6 +257,10 @@ bool _getBoolDefault(AppSettings s, String key) {
       return s.virtualKeyboardSend;
     case 'showOurPicks':
       return s.showOurPicks;
+    case 'gz_force_mobile_layout':
+      return s.forceMobileLayout;
+    case 'addBlockAtTop':
+      return s.addBlockAtTop;
     default:
       return false;
   }
