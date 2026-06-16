@@ -10,6 +10,7 @@ import '../../../shared/widgets/generic_editor.dart';
 import '../../../shared/widgets/sheet_view.dart';
 import '../../presets/preset_list_provider.dart';
 import '../chat_provider.dart';
+import '../chat_session_service.dart';
 
 /// Keeps the Author's Note enable state in sync across its homes. The note is
 /// one entity for the chat: its `enabled` (and content) live on the session and
@@ -25,12 +26,15 @@ Future<void> syncAuthorsNoteEnabled(
     final session = ref.read(chatProvider(charId)).value?.session;
     final note = session?.authorsNote;
     if (session != null && note != null && note.enabled != enabled) {
-      await ref.read(chatSessionOpsProvider.notifier).saveSession(
-            session.copyWith(
-              authorsNote: note.copyWith(enabled: enabled),
-              updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-            ),
-          );
+      final updated = session.copyWith(
+        authorsNote: note.copyWith(enabled: enabled),
+        updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      );
+      await ref.read(chatSessionOpsProvider.notifier).saveSession(updated);
+      // Keep the session cache in sync — switchToSession returns the cached
+      // ChatSession without re-reading the DB, so a stale entry would mask the
+      // new enabled state (and the note content) until the cache is evicted.
+      ChatSessionService.updateCache(updated);
       ref.invalidate(chatProvider(charId));
     }
   }
@@ -107,6 +111,10 @@ class _AuthorsNoteSheetState extends ConsumerState<AuthorsNoteSheet> {
       updatedAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
     );
     await ref.read(chatSessionOpsProvider.notifier).saveSession(updated);
+    // Keep the session cache in sync — switchToSession returns the cached
+    // ChatSession without re-reading the DB, so a stale entry would mask the
+    // edited note content until the cache is evicted.
+    ChatSessionService.updateCache(updated);
     ref.invalidate(chatProvider(widget.charId!));
   }
 
