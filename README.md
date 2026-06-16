@@ -54,8 +54,7 @@ Download the latest build from the [Releases](../../releases) page when availabl
 
 - **Windows** - Download the Windows build or installer and run it directly.
 - **Android** - Install the APK directly on your device.
-- **Linux** - Download the Linux build for your distribution when published.
-- **iOS/macOS** - Not the primary target yet; platform support depends on Flutter build availability and signing setup.
+- **iOS/macOS/Linux** - Not published as Flutter builds yet; platform support depends on Flutter build availability, packaging, and signing setup.
 
 ## Development
 
