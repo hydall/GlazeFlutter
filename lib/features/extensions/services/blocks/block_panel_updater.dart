@@ -9,6 +9,7 @@ import '../../models/info_block.dart';
 import '../../../../core/state/character_provider.dart';
 import '../../../../core/state/persona_resolution.dart';
 import '../../providers/info_blocks_provider.dart';
+import '../../../chat/chat_provider.dart';
 import '../ext_blocks_panel_builder.dart';
 import '../macro_expander.dart';
 import '../../../../features/chat/bridge/chat_bridge_registry.dart';
@@ -40,6 +41,14 @@ class BlockPanelUpdater {
     _enqueuePanelJs(() async {
       final bridge = _ref.read(chatBridgeRegistryProvider(charId));
       if (bridge == null) return;
+      // Panels render only under assistant/character messages. afterUser
+      // blocks are stored under the user message id (for prompt injection)
+      // but must never paint a visible panel there — hide defensively so a
+      // stale panel from a prior run can't linger under a user message.
+      if (!_isAssistantMessage(charId, messageId)) {
+        await bridge.hideExtBlocksPanel(messageId);
+        return;
+      }
       final blocks = ExtBlocksPanelBuilder.build(
         _ref,
         sessionId: sessionId,
@@ -100,6 +109,9 @@ class BlockPanelUpdater {
       status: BlockRunStatus.running,
     );
     _ref.read(infoBlocksProvider(sessionId).notifier).addOrReplace(updated);
+    // afterUser blocks target a user message: keep the streamed InfoBlock
+    // state (used for prompt injection) but never render a panel under it.
+    if (!_isAssistantMessage(charId, messageId)) return;
     _enqueuePanelJs(
       () => patchOrRefresh(
         charId: charId,
@@ -141,6 +153,23 @@ class BlockPanelUpdater {
       content,
       MacroContext(character: character, persona: persona?.name),
     );
+  }
+
+  /// Whether [messageId] belongs to an assistant/character message in the
+  /// currently active chat session. Resolved per-call from `chatProvider` so
+  /// overlapping afterUser / afterAssistant chains (which target different
+  /// message ids) are gated independently without shared mutable state. If the
+  /// message isn't found (e.g. the user switched sessions mid-run) the panel is
+  /// suppressed — the WebView DOM won't contain that message's section anyway.
+  bool _isAssistantMessage(String charId, String messageId) {
+    final messages =
+        _ref.read(chatProvider(charId)).value?.messages ?? const [];
+    for (final m in messages) {
+      if (m.id == messageId) {
+        return m.role == 'assistant' || m.role == 'character';
+      }
+    }
+    return false;
   }
 
 
