@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:easy_localization/easy_localization.dart';
 import 'package:file_picker/file_picker.dart';
@@ -1373,12 +1372,6 @@ class _ColorPickerOverlayState extends State<_ColorPickerOverlay>
 
   @override
   Widget build(BuildContext context) {
-    final isDefault = widget.previewPreset.id == 'default';
-    final topPad = MediaQuery.of(context).padding.top + 74.0;
-    final warningHeight = isDefault ? 62.0 : 0.0;
-    final tabHeight = 68.0;
-    final totalTopPadding = topPad + warningHeight + tabHeight;
-
     return SafeArea(
       bottom: false,
       child: Stack(

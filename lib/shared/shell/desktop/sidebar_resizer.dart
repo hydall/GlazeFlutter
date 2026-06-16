@@ -5,6 +5,29 @@ import 'package:shared_preferences/shared_preferences.dart';
 const _collapseThreshold = 120.0;
 const _collapsedWidth = 64.0;
 
+double? _readDoublePref(SharedPreferences prefs, String key) {
+  final value = prefs.get(key);
+  if (value is int) return value.toDouble();
+  if (value is double) return value;
+  if (value is String) return double.tryParse(value);
+  return null;
+}
+
+bool _readBoolPref(
+  SharedPreferences prefs,
+  String key, {
+  required bool defaultValue,
+}) {
+  final value = prefs.get(key);
+  if (value is bool) return value;
+  if (value is int) return value != 0;
+  if (value is String) {
+    final normalized = value.toLowerCase();
+    return normalized == '1' || normalized == 'true';
+  }
+  return defaultValue;
+}
+
 // ---------------------------------------------------------------------------
 // Left sidebar controller
 // ---------------------------------------------------------------------------
@@ -43,30 +66,21 @@ class LeftSidebarController extends ChangeNotifier {
 
   void _persist(SharedPreferences prefs) {
     prefs.setInt('gz_left_sidebar_width', _width.round());
-    prefs.setString(
-      'gz_left_sidebar_width_collapsed',
-      collapsed ? '1' : '0',
-    );
+    prefs.setString('gz_left_sidebar_width_collapsed', collapsed ? '1' : '0');
   }
 
   static LeftSidebarController fromPrefs(SharedPreferences prefs) {
-    bool collapsedFlag;
-    try {
-      collapsedFlag =
-          prefs.getString('gz_left_sidebar_width_collapsed') == '1';
-    } catch (_) {
-      try {
-        collapsedFlag = prefs.getBool('gz_left_sidebar_width_collapsed') ?? false;
-      } catch (_) {
-        collapsedFlag = false;
-      }
-    }
-    final saved = prefs.getInt('gz_left_sidebar_width');
+    final collapsedFlag = _readBoolPref(
+      prefs,
+      'gz_left_sidebar_width_collapsed',
+      defaultValue: false,
+    );
+    final saved = _readDoublePref(prefs, 'gz_left_sidebar_width');
     double initial;
     if (collapsedFlag) {
       initial = _collapsedWidth;
     } else if (saved != null) {
-      initial = saved.toDouble().clamp(minWidth, maxWidth);
+      initial = saved.clamp(minWidth, maxWidth);
     } else {
       initial = defaultWidth;
     }
@@ -79,10 +93,10 @@ class LeftSidebarController extends ChangeNotifier {
 
 final leftSidebarControllerProvider =
     Provider.autoDispose<LeftSidebarController>((ref) {
-  throw UnimplementedError(
-    'Must be overridden by a parent that creates the controller',
-  );
-});
+      throw UnimplementedError(
+        'Must be overridden by a parent that creates the controller',
+      );
+    });
 
 // ---------------------------------------------------------------------------
 // Right sidebar controller — 1:1 port of DesktopRightSidebar.vue resizer
@@ -154,26 +168,25 @@ class RightSidebarController extends ChangeNotifier {
   }
 
   static RightSidebarController fromPrefs(SharedPreferences prefs) {
-    bool collapsedFlag;
-    try {
-      collapsedFlag =
-          (prefs.getString('gz_right_sidebar_width_collapsed') ?? '1') == '1';
-    } catch (_) {
-      try {
-        collapsedFlag = prefs.getBool('gz_right_sidebar_width_collapsed') ?? true;
-      } catch (_) {
-        collapsedFlag = true;
-      }
-    }
-    final savedExpanded = prefs.getDouble('gz_right_sidebar_width');
-    final savedCollapsed =
-        prefs.getDouble('gz_right_sidebar_collapsed_width');
+    final collapsedFlag = _readBoolPref(
+      prefs,
+      'gz_right_sidebar_width_collapsed',
+      defaultValue: true,
+    );
+    final savedExpanded = _readDoublePref(prefs, 'gz_right_sidebar_width');
+    final savedCollapsed = _readDoublePref(
+      prefs,
+      'gz_right_sidebar_collapsed_width',
+    );
     return RightSidebarController(
-      initialExpandedWidth:
-          (savedExpanded ?? expandedDefault).clamp(expandedMin, expandedMax),
-      initialCollapsedWidth:
-          (savedCollapsed ?? collapsedDefaultWidth)
-              .clamp(collapsedMin, expandedMin),
+      initialExpandedWidth: (savedExpanded ?? expandedDefault).clamp(
+        expandedMin,
+        expandedMax,
+      ),
+      initialCollapsedWidth: (savedCollapsed ?? collapsedDefaultWidth).clamp(
+        collapsedMin,
+        expandedMin,
+      ),
       initialCollapsed: collapsedFlag,
     );
   }
@@ -209,7 +222,7 @@ class RightSidebarController extends ChangeNotifier {
 
 final rightSidebarControllerProvider =
     Provider.autoDispose<RightSidebarController>((ref) {
-  throw UnimplementedError(
-    'Must be overridden by a parent that creates the controller',
-  );
-});
+      throw UnimplementedError(
+        'Must be overridden by a parent that creates the controller',
+      );
+    });
