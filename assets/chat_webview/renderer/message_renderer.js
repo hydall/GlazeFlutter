@@ -801,23 +801,24 @@ if (messageData.isEditing) classes.push('editing');
     }
 
     if (msg.isHidden !== undefined) {
-      const nameEl = sectionEl.querySelector('.msg-name');
-      if (nameEl) {
-        let hi = nameEl.querySelector('.msg-name-badge[data-action="toggle-hidden"]');
+      // Place the crossed-out-eye badge to the left of the time, matching the
+      // initial render (_createHeader / _createBubbleMeta).
+      sectionEl.querySelectorAll('.msg-time, .bubble-time').forEach((timeEl) => {
+        let hi = timeEl.querySelector('.msg-hidden-badge');
         if (msg.isHidden) {
           if (!hi) {
-            hi = document.createElement('div');
-            hi.className = 'msg-name-badge';
-            hi.innerHTML = ICON.hidden;
-            hi.firstChild.classList.add('msg-hidden-badge');
+            const eye = document.createElement('span');
+            eye.innerHTML = ICON.hidden;
+            hi = eye.firstChild;
+            hi.classList.add('msg-hidden-badge');
             hi.dataset.action = 'toggle-hidden';
             hi.dataset.messageId = msg.id;
-            nameEl.appendChild(hi);
+            timeEl.insertBefore(hi, timeEl.firstChild);
           }
-        } else {
-          if (hi) hi.remove();
+        } else if (hi) {
+          hi.remove();
         }
-      }
+      });
     }
   }
 

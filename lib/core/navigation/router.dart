@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../utils/id_generator.dart';
+import '../../shared/shell/desktop/desktop_layout_provider.dart';
 import '../../features/character_list/character_detail_screen.dart';
 import '../../features/character_list/character_editor_screen.dart';
 import '../../features/character_list/character_list_screen.dart';
@@ -63,12 +64,17 @@ Page<void> _adaptivePage({
 /// Extracted so tests can call `buildRouter(GlobalKey())` to get a fresh
 /// router with a fresh key per test — sharing [rootNavigatorKey] across
 /// tests causes GoRouter to silently skip navigation after the first test.
-GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
+GoRouter buildRouter(
+  GlobalKey<NavigatorState> navigatorKey, {
+  bool Function()? isForceMobile,
+}) => GoRouter(
   navigatorKey: navigatorKey,
   redirect: (context, state) {
-    if (state.matchedLocation == '/' &&
-        MediaQuery.sizeOf(context).width >= 768) {
-      return '/characters';
+    if (state.matchedLocation == '/') {
+      final forceMobile = isForceMobile?.call() ?? false;
+      if (!forceMobile && MediaQuery.sizeOf(context).width >= 768) {
+        return '/characters';
+      }
     }
     return null;
   },
@@ -290,5 +296,8 @@ GoRouter buildRouter(GlobalKey<NavigatorState> navigatorKey) => GoRouter(
 );
 
 final routerProvider = Provider<GoRouter>(
-  (ref) => buildRouter(rootNavigatorKey),
+  (ref) => buildRouter(
+    rootNavigatorKey,
+    isForceMobile: () => ref.read(forceMobileLayoutProvider),
+  ),
 );

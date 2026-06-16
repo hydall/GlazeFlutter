@@ -121,9 +121,33 @@ class _CatalogDetailLauncherState
       charId: char.id,
       previewCharacter: char,
       previewAvatarUrl: avatarUrl,
+      previewSourceUrl: _sourceUrl(),
+      previewAuthorUrl: _authorUrl(),
       onImport: _doImport,
       importing: _importing,
     );
+  }
+
+  /// External URL of the character's page on its source site. Only Janitor
+  /// exposes a stable per-character web URL today; other providers return null
+  /// (the "open in browser" button is then hidden).
+  String? _sourceUrl() {
+    if (widget.provider != CatalogProvider.janitor) return null;
+    final id = widget.item.id;
+    if (id.isEmpty) return null;
+    final slug = widget.item.slug;
+    if (slug != null && slug.isNotEmpty && slug != id) {
+      return 'https://janitorai.com/characters/${id}_$slug';
+    }
+    return 'https://janitorai.com/characters/$id';
+  }
+
+  /// External URL of the creator's profile page on its source site.
+  String? _authorUrl() {
+    if (widget.provider != CatalogProvider.janitor) return null;
+    final creatorId = widget.item.creatorId;
+    if (creatorId == null || creatorId.isEmpty) return null;
+    return 'https://janitorai.com/profiles/$creatorId';
   }
 }
 

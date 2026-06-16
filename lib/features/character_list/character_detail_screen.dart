@@ -131,6 +131,15 @@ class CharacterDetailScreen extends ConsumerStatefulWidget {
   /// actions like edit/delete/gallery.
   final Character? previewCharacter;
   final String? previewAvatarUrl;
+
+  /// External URL of the character's source page (e.g. its Janitor page).
+  /// When set in preview mode, an "open in browser" button replaces the
+  /// three-dots actions menu in the floating header.
+  final String? previewSourceUrl;
+
+  /// External URL of the creator's profile page. When set, tapping the
+  /// `@creator` label in the hero opens it in the browser.
+  final String? previewAuthorUrl;
   final Future<void> Function()? onImport;
   final bool importing;
 
@@ -139,6 +148,8 @@ class CharacterDetailScreen extends ConsumerStatefulWidget {
     required this.charId,
     this.previewCharacter,
     this.previewAvatarUrl,
+    this.previewSourceUrl,
+    this.previewAuthorUrl,
     this.onImport,
     this.importing = false,
   });
@@ -163,6 +174,12 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
         nav.pop<String>(route); // pop CharacterDetailScreen modal
       }
     });
+  }
+
+  Future<void> _openExternal(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   void _openActionsMenu() {
@@ -386,6 +403,8 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
             _HeroSection(
               character: char,
               previewAvatarUrl: widget.previewAvatarUrl,
+              authorUrl: widget.previewAuthorUrl,
+              onOpenAuthor: _openExternal,
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -438,6 +457,13 @@ class _CharacterDetailScreenState extends ConsumerState<CharacterDetailScreen> {
                 _DetailHeaderButton(
                   icon: Icons.more_vert_rounded,
                   onTap: _openActionsMenu,
+                )
+              else if (widget.isPreview &&
+                  char != null &&
+                  widget.previewSourceUrl != null)
+                _DetailHeaderButton(
+                  icon: Icons.open_in_new_rounded,
+                  onTap: () => _openExternal(widget.previewSourceUrl!),
                 ),
             ],
           ),
@@ -605,7 +631,14 @@ class _DetailHeaderButtonState extends ConsumerState<_DetailHeaderButton>
 class _HeroSection extends StatelessWidget {
   final Character character;
   final String? previewAvatarUrl;
-  const _HeroSection({required this.character, this.previewAvatarUrl});
+  final String? authorUrl;
+  final void Function(String url)? onOpenAuthor;
+  const _HeroSection({
+    required this.character,
+    this.previewAvatarUrl,
+    this.authorUrl,
+    this.onOpenAuthor,
+  });
 
   String get _displayName {
     final displayName = character.displayName?.trim();
@@ -671,22 +704,34 @@ class _HeroSection extends StatelessWidget {
                   ),
                 ),
                 if (character.creator != null && character.creator!.isNotEmpty)
-                  Text(
-                    '@${character.creator}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      color: _kText50,
-                      shadows: [
-                        Shadow(blurRadius: 3, color: Color(0xCC000000)),
-                      ],
-                    ),
-                  ),
+                  _buildAuthorLabel(context),
               ],
             ),
           ),
         ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAuthorLabel(BuildContext context) {
+    final hasLink = authorUrl != null &&
+        authorUrl!.isNotEmpty &&
+        onOpenAuthor != null;
+    final label = Text(
+      '@${character.creator}',
+      style: TextStyle(
+        fontSize: 13,
+        color: hasLink ? context.cs.primary : _kText50,
+        fontWeight: hasLink ? FontWeight.w600 : FontWeight.w400,
+        shadows: const [Shadow(blurRadius: 3, color: Color(0xCC000000))],
+      ),
+    );
+    if (!hasLink) return label;
+    return GestureDetector(
+      onTap: () => onOpenAuthor!(authorUrl!),
+      behavior: HitTestBehavior.opaque,
+      child: label,
     );
   }
 

@@ -572,8 +572,102 @@ class PresetEditorBodyState extends ConsumerState<PresetEditorBody> {
             _addCustomBlock();
           },
         ),
+        BottomSheetItem(
+          icon: Icons.content_copy_outlined,
+          label: 'Copy from Preset',
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _openCopyBlockPresetPicker();
+          },
+        ),
       ],
     );
+  }
+
+  /// Step 1 of "Copy from Preset": pick which preset to copy a block from.
+  void _openCopyBlockPresetPicker() {
+    final presets = ref.read(presetListProvider).value ?? const <Preset>[];
+    if (presets.isEmpty) return;
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'Select Preset',
+      cardItems: [
+        for (final preset in presets)
+          BottomSheetCardItem(
+            label: preset.name.isEmpty ? 'Default' : preset.name,
+            sublabel: (preset.author?.isNotEmpty ?? false)
+                ? 'by ${preset.author}'
+                : null,
+            icon: Icons.description_outlined,
+            badge: '${_copyableBlocks(preset).length}',
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _openCopyBlockPicker(preset);
+            },
+          ),
+      ],
+    );
+  }
+
+  /// Step 2 of "Copy from Preset": pick which block from the chosen preset.
+  void _openCopyBlockPicker(Preset preset) {
+    final blocks = _copyableBlocks(preset);
+    if (blocks.isEmpty) {
+      GlazeBottomSheet.show<void>(
+        context,
+        title: preset.name,
+        items: [
+          BottomSheetItem(
+            label: 'No blocks available',
+            centered: true,
+            onTap: () => Navigator.of(context, rootNavigator: true).pop(),
+          ),
+        ],
+      );
+      return;
+    }
+    GlazeBottomSheet.show<void>(
+      context,
+      title: '${preset.name} — Blocks',
+      items: [
+        for (final block in blocks)
+          BottomSheetItem(
+            icon: presetBlockRoleIcon(block.role),
+            label: block.name,
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _copyBlockFromPreset(block);
+            },
+          ),
+      ],
+    );
+  }
+
+  /// Non-stashed blocks available to copy. For the preset currently being
+  /// edited, use the live in-memory blocks so unsaved edits are reflected.
+  List<PresetBlock> _copyableBlocks(Preset preset) {
+    final source = preset.id == _currentId ? _blocks : preset.blocks;
+    return source.where((b) => !b.isStashed).toList();
+  }
+
+  void _copyBlockFromPreset(PresetBlock block) {
+    final atTop = ref.read(appSettingsProvider).value?.addBlockAtTop ?? false;
+    // Deep-clone via copyWith with a fresh id; demote to a regular custom block
+    // and append " (copy)" — matching Glaze's copy-from-preset behaviour.
+    final clone = block.copyWith(
+      id: generateId(),
+      name: '${block.name} (copy)',
+      isStatic: false,
+      isStashed: false,
+    );
+    setState(() {
+      if (atTop) {
+        _blocks.insert(0, clone);
+      } else {
+        _blocks.add(clone);
+      }
+    });
+    _scheduleSave();
   }
 
   void _addCustomBlock() {
