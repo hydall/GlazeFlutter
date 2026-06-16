@@ -193,8 +193,16 @@ class _DesktopRightSidebarState extends ConsumerState<DesktopRightSidebar> {
   }
 
   String? _extractCharId(String location) {
-    final match = RegExp(r'/chat/([^/]+)').firstMatch(location);
-    return match?.group(1);
+    // Parse the URI so query parameters (e.g. ?session=1) are NOT included
+    // in the charId. The previous regex `/chat/([^/]+)` captured the query
+    // string too, producing a polluted charId like "mq9ua9qr?session=1" that
+    // created phantom chatProvider instances and phantom DB sessions.
+    final uri = Uri.parse(location);
+    final segments = uri.pathSegments;
+    if (segments.length >= 2 && segments[0] == 'chat') {
+      return segments[1];
+    }
+    return null;
   }
 }
 

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
-import 'package:flutter/foundation.dart';
 
 import '../app_db.dart';
 import '../../models/chat_message.dart';
@@ -271,25 +270,16 @@ class ChatRepo implements SyncChatStore {
   );
 
   AuthorsNote? _parseAuthorsNote(String? json) {
-    if (json == null || json.isEmpty) {
-      debugPrint('[AuthorsNote] parse: NULL/EMPTY json');
-      return null;
-    }
+    if (json == null || json.isEmpty) return null;
     try {
       final decoded = jsonDecode(json);
       if (decoded is String) {
-        debugPrint('[AuthorsNote] parse: string form, len=${decoded.length}');
         return AuthorsNote(content: decoded);
       }
       if (decoded is Map<String, dynamic>) {
-        final note = AuthorsNote.fromJson(decoded);
-        debugPrint('[AuthorsNote] parse: map form, content.len=${note.content.length}');
-        return note;
+        return AuthorsNote.fromJson(decoded);
       }
-      debugPrint('[AuthorsNote] parse: unexpected type ${decoded.runtimeType}');
-    } catch (e, st) {
-      debugPrint('[AuthorsNote] parse FAILED: $e\n$st');
-    }
+    } catch (_) {}
     return null;
   }
 
