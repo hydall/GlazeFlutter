@@ -15,7 +15,7 @@ class GlazeErrorDialog {
       barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
       barrierColor: Colors.black.withValues(alpha: 0.55),
       transitionDuration: const Duration(milliseconds: 240),
-      pageBuilder: (_, __, ___) =>
+      pageBuilder: (_, _, _) =>
           _ErrorDialogContent(message: '$prefix${formatError(error)}'),
       transitionBuilder: (context, animation, secondaryAnimation, child) {
         final curved = CurvedAnimation(

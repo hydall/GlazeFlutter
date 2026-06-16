@@ -259,7 +259,7 @@ void main() {
       await pumpNavigation(tester);
       expect(find.byType(LorebookListScreen, skipOffstage: false), findsWidgets);
 
-      router().push('/tools/lorebooks/settings');
+      await router().push('/tools/lorebooks/settings');
       await pumpNavigation(tester);
 
       expect(
