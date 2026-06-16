@@ -54,7 +54,8 @@ Download the latest build from the [Releases](../../releases) page when availabl
 
 - **Windows** - Download the Windows build or installer and run it directly.
 - **Android** - Install the APK directly on your device.
-- **iOS/macOS/Linux** - Not published as Flutter builds yet; platform support depends on Flutter build availability, packaging, and signing setup.
+- **iOS** - Sideload the IPA using [AltStore](https://altstore.io/) or a similar tool. App Store distribution is not yet available.
+- **macOS/Linux** - Not published as Flutter builds yet; platform support depends on Flutter build availability, packaging, and signing setup.
 
 ## Development
 
