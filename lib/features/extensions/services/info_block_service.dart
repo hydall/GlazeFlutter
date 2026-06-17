@@ -62,6 +62,7 @@ class InfoBlockService {
       sessionId: sessionId,
       currentMessageId: messageId,
       currentSwipeId: swipeId,
+      messages: messages,
       blockConfig: blockConfig,
     );
 
@@ -176,6 +177,7 @@ class InfoBlockService {
     required String sessionId,
     required String currentMessageId,
     required int currentSwipeId,
+    required List<ChatMessage> messages,
     required BlockConfig blockConfig,
   }) async {
     final count = blockConfig.previousBlocksCount;
@@ -183,25 +185,54 @@ class InfoBlockService {
       return const [];
     }
 
-    final repo = _ref.read(infoBlocksRepoProvider);
-    // Over-fetch a little so excluding the current message's block(s) still
-    // leaves [count] historical entries.
-    final recent = await repo.getRecentBlocks(
-      sessionId,
-      blockConfig.name,
-      count + 4,
-    );
-
-    final filtered = recent
-        .where((b) =>
-            b.content.trim().isNotEmpty &&
-            !(b.messageId == currentMessageId && b.swipeId == currentSwipeId))
-        .take(count)
+    final anchorIndex = messages.indexWhere((m) => m.id == currentMessageId);
+    if (anchorIndex <= 0) return const [];
+    final previousMessages = messages
+        .take(anchorIndex)
+        .where((m) => !m.isHidden && !m.isTyping)
         .toList();
+    final previousMessageIds = previousMessages.map((m) => m.id).toList();
+    if (previousMessageIds.isEmpty) return const [];
+    final messageOrder = {
+      for (var i = 0; i < previousMessageIds.length; i++) previousMessageIds[i]: i,
+    };
+    final swipeByMessageId = {
+      for (final message in previousMessages) message.id: message.swipeId,
+    };
 
-    // getRecentBlocks is newest-first; present oldest-first so the model reads
-    // the history in chronological order.
-    return filtered.reversed.toList();
+    final repo = _ref.read(infoBlocksRepoProvider);
+    final blocks = await repo.getBySessionId(sessionId);
+
+    final filtered = blocks
+        .where((b) =>
+            b.blockName == blockConfig.name &&
+            b.content.trim().isNotEmpty &&
+            messageOrder.containsKey(b.messageId) &&
+            b.swipeId == swipeByMessageId[b.messageId] &&
+            !(b.messageId == currentMessageId && b.swipeId == currentSwipeId))
+        .toList()
+      ..sort((a, b) {
+        final byMessage = messageOrder[a.messageId]!.compareTo(
+          messageOrder[b.messageId]!,
+        );
+        if (byMessage != 0) return byMessage;
+        final bySwipe = a.swipeId.compareTo(b.swipeId);
+        if (bySwipe != 0) return bySwipe;
+        return a.createdAt.compareTo(b.createdAt);
+      });
+
+    final latestPerMessage = <String, InfoBlock>{};
+    for (final block in filtered) {
+      latestPerMessage[block.messageId] = block;
+    }
+
+    return latestPerMessage.values
+        .toList()
+        .reversed
+        .take(count)
+        .toList()
+        .reversed
+        .toList();
   }
 
   /// Returns the template sent to the LLM. Empty [blockConfig.template] means
