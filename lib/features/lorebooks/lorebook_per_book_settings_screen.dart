@@ -380,11 +380,13 @@ class _DropdownField<T> extends StatelessWidget {
               style:
                   TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14)),
         ),
-        SizedBox(
-          width: 180,
+        const SizedBox(width: 8),
+        Flexible(
+          flex: 2,
           child: DropdownButtonFormField<T>(
             initialValue: value,
             items: items,
+            isExpanded: true,
             onChanged: (v) {
               if (v != null) onChanged(v);
             },
