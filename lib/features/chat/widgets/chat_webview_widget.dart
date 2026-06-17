@@ -17,6 +17,7 @@ import '../../extensions/services/panel_host_service.dart';
 import '../bridge/chat_bridge_registry.dart';
 import 'chat_message_sync.dart';
 import 'chat_webview_build_listeners.dart';
+import 'chat_webview_callbacks.dart';
 import 'chat_webview_initializer.dart';
 import 'chat_webview_panel_refresher.dart';
 import 'chat_webview_surface.dart';
@@ -431,6 +432,45 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     }
   }
 
+  void _bindBridgeCallbacks() {
+    final bridge = _bridge;
+    if (bridge == null || !mounted) return;
+    final callbacks = ChatWebViewCallbacks(
+      ref: ref,
+      charId: widget.charId,
+      messageActions: widget.messageActions,
+      editActions: widget.editActions,
+      imageGenActions: widget.imageGenActions,
+      scrollActions: widget.scrollActions,
+      miscActions: widget.miscActions,
+    );
+    bridge.onMessageContext = callbacks.onMessageContext;
+    bridge.onSwipe = callbacks.onSwipe;
+    bridge.onChangeGreeting = callbacks.onChangeGreeting;
+    bridge.onHeaderScroll = callbacks.onHeaderScroll;
+    bridge.onScrollToBottomVisibility = callbacks.onScrollToBottomVisibility;
+    bridge.onRegenerate = callbacks.onRegenerate;
+    bridge.onSelectionAction = callbacks.onSelectionAction;
+    bridge.onSelectionChange = callbacks.onSelectionChange;
+    bridge.onEditSave = callbacks.onEditSave;
+    bridge.onEditCancel = callbacks.onEditCancel;
+    bridge.onEditFocusChange = callbacks.onEditFocusChange;
+    bridge.onImageClick = callbacks.onImageClick;
+    bridge.onImgDownload = callbacks.onImgDownload;
+    bridge.onGuidedSwipe = callbacks.onGuidedSwipe;
+    bridge.onMemoryClick = callbacks.onMemoryClick;
+    bridge.onToggleHidden = callbacks.onToggleHidden;
+    bridge.onInjectClick = callbacks.onInjectClick;
+    bridge.onImgRetry = callbacks.onImgRetry;
+    bridge.onImgFind = callbacks.onImgFind;
+    bridge.onImgRegen = callbacks.onImgRegen;
+    bridge.onImgOptions = callbacks.onImgOptions;
+    bridge.onImgCancel = callbacks.onImgCancel;
+    bridge.onStop = callbacks.onStop;
+    bridge.onLinkClick = callbacks.onLinkClick;
+    bridge.onLoadMore = callbacks.onLoadMore;
+  }
+
   Future<void> applyIdentity({
     Object? charName = _identityUnset,
     Object? charColor = _identityUnset,
@@ -711,6 +751,7 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     final displayRegexes = ref.watch(displayRegexesProvider).value ?? [];
 
     if (_bridge != null) {
+      _bindBridgeCallbacks();
       _bridge!.setRegexContext(displayRegexes, character, effectivePersona);
     }
 

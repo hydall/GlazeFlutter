@@ -140,6 +140,7 @@ class ChatWebViewSurface extends ConsumerWidget {
               initialSettings: chatWebViewInAppSettings(),
               onWebViewCreated: (controller) async {
                 final jsBridgeService = await bridgeHost.buildJsBridgeService();
+                if (!isMounted()) return;
                 final bridge = ChatBridgeController(
                   controller,
                   jsBridgeService: jsBridgeService,
@@ -199,6 +200,7 @@ class ChatWebViewSurface extends ConsumerWidget {
                 bridge.onStop = callbacks.onStop;
                 bridge.onLinkClick = callbacks.onLinkClick;
                 bridge.onLoadMore = callbacks.onLoadMore;
+                if (!isMounted()) return;
 
                 // The ext-block callbacks run after `await` paths. The
                 // controller is created once per WebView lifetime so

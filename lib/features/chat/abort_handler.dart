@@ -53,6 +53,7 @@ class AbortHandler {
   }
 
   void abortImageGeneration() {
+    if (!_ref.mounted) return;
     _imgGenCancelToken?.cancel();
     _imgGenCancelToken = null;
     final current = _getState().value;
@@ -62,6 +63,7 @@ class AbortHandler {
   }
 
   void cancelImageGeneration() {
+    if (!_ref.mounted) return;
     _imgGenCancelToken?.cancel();
     _imgGenCancelToken = null;
     final current = _getState().value;
@@ -71,11 +73,13 @@ class AbortHandler {
   }
 
   void clearStreaming() {
+    if (!_ref.mounted) return;
     _ref.read(streamingStateProvider(_charId).notifier).state =
         const StreamingState();
   }
 
   void abortGeneration() {
+    if (!_ref.mounted) return;
     _activeGenId++;
     final StreamingState partialStreaming = _ref.read(streamingStateProvider(_charId));
     _cancelToken?.cancel();
@@ -95,6 +99,7 @@ class AbortHandler {
       // Guard: if a new generation started (genId bumped again), skip restoration
       // to avoid overwriting the active regen state and duplicating messages.
       scheduleMicrotask(() {
+        if (!_ref.mounted) return;
         if (_activeGenId != abortGenId) return;
         _finalizeAbortWithPartial(current, partialStreaming, restorationSnapshot);
       });
@@ -111,6 +116,7 @@ class AbortHandler {
     StreamingState partialStreaming,
     ChatMessage? restoration,
   ) {
+    if (!_ref.mounted) return;
     if (!current.isGenerating) {
       // Current is the pre-abort snapshot; continue restoration logic below.
     }
