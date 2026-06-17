@@ -18,6 +18,7 @@ import '../bridge/chat_bridge_registry.dart';
 import 'chat_message_sync.dart';
 import 'chat_webview_build_listeners.dart';
 import 'chat_webview_callbacks.dart';
+import 'chat_webview_ext_block_callbacks.dart';
 import 'chat_webview_initializer.dart';
 import 'chat_webview_panel_refresher.dart';
 import 'chat_webview_surface.dart';
@@ -469,6 +470,21 @@ class ChatWebViewWidgetState extends ConsumerState<ChatWebViewWidget>
     bridge.onStop = callbacks.onStop;
     bridge.onLinkClick = callbacks.onLinkClick;
     bridge.onLoadMore = callbacks.onLoadMore;
+
+    final extBlocks = ChatWebViewExtBlockCallbacks(
+      ref: ref,
+      charId: widget.charId,
+      sessionId: widget.sessionId,
+      context: context,
+      isMounted: () => mounted,
+      refreshPanel: _refreshExtBlocksPanel,
+    );
+    bridge.onExtBlocksRunAll = extBlocks.onRunAll();
+    bridge.onExtBlockStop = extBlocks.onStop();
+    bridge.onExtBlockRegen = extBlocks.onRegen();
+    bridge.onExtBlockRegenImage = extBlocks.onRegenImage();
+    bridge.onExtBlockEdit = extBlocks.onEdit();
+    bridge.onExtBlockDelete = extBlocks.onDelete();
   }
 
   Future<void> applyIdentity({

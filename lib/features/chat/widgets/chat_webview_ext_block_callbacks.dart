@@ -44,6 +44,7 @@ class ChatWebViewExtBlockCallbacks {
   /// from the current widget state).
   Future<void> Function(String messageId) onRunAll() {
     return (String messageId) async {
+      if (!isMounted()) return;
       final sessionId = this.sessionId;
       if (sessionId == null || sessionId.isEmpty) return;
       final chatState = ref.read(chatProvider(charId)).value;
@@ -67,6 +68,7 @@ class ChatWebViewExtBlockCallbacks {
   /// generation for the current session.
   void Function(String blockId, String messageId) onStop() {
     return (_, _) {
+      if (!isMounted()) return;
       ref.read(extensionPostGenServiceProvider).cancelBlocks();
     };
   }
@@ -75,6 +77,7 @@ class ChatWebViewExtBlockCallbacks {
   /// for an already-existing message.
   Future<void> Function(String blockId, String messageId) onRegen() {
     return (String blockId, String messageId) async {
+      if (!isMounted()) return;
       final sessionId = this.sessionId;
       if (sessionId == null || sessionId.isEmpty) return;
       final chatState = ref.read(chatProvider(charId)).value;
@@ -92,6 +95,7 @@ class ChatWebViewExtBlockCallbacks {
             character: character,
             persona: persona,
           );
+      if (!isMounted()) return;
       await refreshPanel(sessionId, messageId);
     };
   }
@@ -100,6 +104,7 @@ class ChatWebViewExtBlockCallbacks {
   /// image generation step of an existing ext-block (keeps agent HTML).
   Future<void> Function(String blockId, String messageId) onRegenImage() {
     return (String blockId, String messageId) async {
+      if (!isMounted()) return;
       final sessionId = this.sessionId;
       if (sessionId == null || sessionId.isEmpty) return;
       final chatState = ref.read(chatProvider(charId)).value;
@@ -116,6 +121,7 @@ class ChatWebViewExtBlockCallbacks {
             character: character,
             persona: persona,
           );
+      if (!isMounted()) return;
       await refreshPanel(sessionId, messageId);
     };
   }
@@ -124,6 +130,7 @@ class ChatWebViewExtBlockCallbacks {
   /// the block's content and persist the change.
   Future<void> Function(String blockId, String messageId) onEdit() {
     return (String blockId, String messageId) async {
+      if (!isMounted()) return;
       final sessionId = this.sessionId;
       if (sessionId == null || sessionId.isEmpty) return;
       final blocks = ref
@@ -144,10 +151,12 @@ class ChatWebViewExtBlockCallbacks {
         blockName: block.blockName,
         initialContent: block.content,
       );
+      if (!isMounted()) return;
       if (newContent == null) return;
       await ref
           .read(infoBlocksProvider(sessionId).notifier)
           .updateContent(block.id, newContent);
+      if (!isMounted()) return;
       await refreshPanel(sessionId, messageId);
     };
   }
@@ -156,6 +165,7 @@ class ChatWebViewExtBlockCallbacks {
   /// and delete the block from the database.
   Future<void> Function(String blockId, String messageId) onDelete() {
     return (String blockId, String messageId) async {
+      if (!isMounted()) return;
       final sessionId = this.sessionId;
       if (sessionId == null || sessionId.isEmpty) return;
       final blocks = ref
@@ -175,10 +185,12 @@ class ChatWebViewExtBlockCallbacks {
         context: context,
         blockName: block.blockName,
       );
+      if (!isMounted()) return;
       if (!confirmed) return;
       await ref
           .read(infoBlocksProvider(sessionId).notifier)
           .delete(block.id);
+      if (!isMounted()) return;
       await refreshPanel(sessionId, messageId);
     };
   }
