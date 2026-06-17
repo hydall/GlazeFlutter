@@ -230,6 +230,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     String? guidanceText,
     String? imageDataUrl,
   }) async {
+    if (!ref.mounted) return;
     final current = state.value;
     if (current == null || current.isGenerating) return;
     if (_isMemoryDraftActive(current)) return;
@@ -251,6 +252,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     );
 
     await ref.read(chatRepoProvider).put(updatedSession);
+    if (!ref.mounted) return;
     ChatSessionService.updateCache(updatedSession);
     _invalidateHistory();
     state = AsyncData(
@@ -268,6 +270,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
     final charRepo = ref.read(characterRepoProvider);
     final character = await charRepo.getById(arg);
+    if (!ref.mounted) return;
     if (character != null) {
       final talkativeness = character.extensions['talkativeness'];
       if (talkativeness is num && talkativeness < 1.0) {
@@ -287,8 +290,10 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
 
   Future<void> _dispatchAfterUserBlocks(ChatSession session) async {
     try {
+      if (!ref.mounted) return;
       final charRepo = ref.read(characterRepoProvider);
       final character = await charRepo.getById(arg);
+      if (!ref.mounted) return;
       if (character == null) return;
       final post = ref.read(extensionPostGenServiceProvider);
       await post.runAfterUserBlocks(
@@ -303,6 +308,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
   }
 
   Future<void> regenerateLastAssistant({String? guidanceText}) async {
+    if (!ref.mounted) return;
     if (state.value?.isGenerating == true) {
       abortGeneration();
     }
@@ -393,6 +399,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
   }
 
   Future<void> continueMessage() async {
+    if (!ref.mounted) return;
     final current = state.value;
     if (current == null || current.session == null || current.isGenerating) {
       return;
@@ -412,7 +419,9 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
     final notifService = GenerationNotificationService.instance;
     final charRepo = ref.read(characterRepoProvider);
     final character = await charRepo.getById(arg);
+    if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
     await notifService.onGenerationStarted(character?.name ?? 'Unknown');
+    if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
 
     final service = ref.read(chatGenerationServiceProvider);
     final result = await service.generate(
@@ -426,7 +435,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
       isAborted: () => !_abortHandler.isCurrentGen(genId),
     );
 
-    if (!_abortHandler.isCurrentGen(genId)) return;
+    if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
 
     final generatedMsg = result.messages.isNotEmpty
         ? result.messages.last
@@ -443,6 +452,7 @@ class ChatNotifier extends AsyncNotifier<ChatState> {
         updatedAt: currentTimestampSeconds(),
       );
       await ref.read(chatRepoProvider).put(finalSession);
+      if (!ref.mounted || !_abortHandler.isCurrentGen(genId)) return;
       ChatSessionService.updateCache(finalSession);
       _invalidateHistory();
       state = AsyncData(current.copyWith(session: finalSession));

@@ -76,12 +76,15 @@ class GenerationPipeline {
     List<Map<String, dynamic>>? previousSwipesMeta,
     String? regenTargetId,
   }) async {
+    if (!ref.mounted) return null;
     abortHandler.clearStreaming();
 
     final notifService = GenerationNotificationService.instance;
     final charRepo = ref.read(characterRepoProvider);
     final character = await charRepo.getById(charId);
+    if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return null;
     await notifService.onGenerationStarted(character?.name ?? 'Unknown');
+    if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return null;
 
     try {
       final service = ref.read(chatGenerationServiceProvider);
@@ -105,12 +108,13 @@ class GenerationPipeline {
         regenTargetId: regenTargetId,
       );
 
-      if (!abortHandler.isCurrentGen(genId)) {
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
         return null;
       }
 
       if (result.session != null) {
         await ref.read(chatRepoProvider).put(result.session!);
+        if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return null;
         ChatSessionService.updateCache(result.session!);
         ref.invalidate(chatHistoryProvider);
       }
@@ -142,7 +146,7 @@ class GenerationPipeline {
             service: service,
             notifService: notifService,
           );
-          if (!abortHandler.isCurrentGen(genId)) {
+          if (!ref.mounted || !abortHandler.isCurrentGen(genId)) {
             return null;
           }
         }
@@ -327,6 +331,7 @@ class GenerationPipeline {
           if (abortHandler.isCurrentGen(genId)) setState(AsyncData(s));
         },
       );
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
     } catch (e) {
       debugPrint(
         '[GenerationPipeline] processImageTags failed (continuing): $e',
@@ -339,11 +344,12 @@ class GenerationPipeline {
         session: result.session!,
         character: character,
       );
+      if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
     }
 
     abortHandler.imgGenCancelToken = null;
 
-    if (!abortHandler.isCurrentGen(genId)) return;
+    if (!ref.mounted || !abortHandler.isCurrentGen(genId)) return;
 
     notifySyncMessageGenerated(ref);
 
@@ -365,6 +371,7 @@ class GenerationPipeline {
     int genId,
     GenerationNotificationService notifService,
   ) async {
+    if (!ref.mounted) return;
     if (!abortHandler.isCurrentGen(genId)) {
       await notifService.onGenerationAborted();
       return;
@@ -408,6 +415,7 @@ class GenerationPipeline {
   }
 
   Future<void> _autoCreateMemoryDrafts(ChatSession? session) async {
+    if (!ref.mounted) return;
     if (session == null) return;
     final settings = ref.read(memoryGlobalSettingsProvider);
     if (!settings.enabled || !settings.autoCreateEnabled) return;
@@ -415,6 +423,7 @@ class GenerationPipeline {
     try {
       final repo = ref.read(memoryBookRepoProvider);
       final book = await repo.ensureForSession(session.id);
+      if (!ref.mounted) return;
       final plan = MemoryDraftPlanner.plan(
         book: book,
         messages: session.messages,

@@ -34,6 +34,21 @@ class InfoBlocksRepository extends DatabaseAccessor<AppDatabase>
         .write(InfoBlocksCompanion(status: Value(status.name)));
   }
 
+  Future<void> updateRunningBefore(
+    String sessionId,
+    int createdBefore,
+    BlockRunStatus status,
+  ) async {
+    await (update(infoBlocks)
+          ..where(
+            (t) =>
+                t.sessionId.equals(sessionId) &
+                t.status.equals(BlockRunStatus.running.name) &
+                t.createdAt.isSmallerThanValue(createdBefore),
+          ))
+        .write(InfoBlocksCompanion(status: Value(status.name)));
+  }
+
   Future<void> updateContent(String id, String content) async {
     await (update(infoBlocks)..where((t) => t.id.equals(id)))
         .write(InfoBlocksCompanion(content: Value(content)));
