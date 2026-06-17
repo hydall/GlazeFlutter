@@ -6,6 +6,8 @@ import '../../../core/state/db_provider.dart';
 import '../models/block_run_status.dart';
 import '../models/info_block.dart';
 
+final _providerBootMillis = DateTime.now().millisecondsSinceEpoch;
+
 extension InfoBlockBridgeMap on InfoBlock {
   /// Converts an InfoBlock to a plain map suitable for sending to the WebView
   /// bridge (showExtBlocksPanel / updateExtBlocksPanel).
@@ -29,7 +31,7 @@ final infoBlocksProvider =
 
 class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
   InfoBlocksNotifier(this._ref, this.sessionId) : super([]) {
-    _load();
+    _load(stopStaleRunning: true);
   }
 
   final Ref _ref;
@@ -38,8 +40,33 @@ class InfoBlocksNotifier extends StateNotifier<List<InfoBlock>> {
   InfoBlocksRepository get _repo =>
       InfoBlocksRepository(_ref.read(appDbProvider));
 
-  Future<void> _load() async {
-    state = await _repo.getBySessionId(sessionId);
+  Future<void> _load({bool stopStaleRunning = false}) async {
+    var blocks = await _repo.getBySessionId(sessionId);
+    if (!mounted) return;
+    if (stopStaleRunning) {
+      final hasStaleRunning = blocks.any(
+        (b) =>
+            b.status == BlockRunStatus.running &&
+            b.createdAt < _providerBootMillis,
+      );
+      if (hasStaleRunning) {
+        await _repo.updateRunningBefore(
+          sessionId,
+          _providerBootMillis,
+          BlockRunStatus.stopped,
+        );
+        if (!mounted) return;
+        blocks = blocks
+            .map(
+              (b) => b.status == BlockRunStatus.running &&
+                      b.createdAt < _providerBootMillis
+                  ? b.copyWith(status: BlockRunStatus.stopped)
+                  : b,
+            )
+            .toList();
+      }
+    }
+    state = blocks;
   }
 
   /// Inserts or replaces a block in state (matched by id).

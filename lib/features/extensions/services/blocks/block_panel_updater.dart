@@ -14,6 +14,8 @@ import '../ext_blocks_panel_builder.dart';
 import '../macro_expander.dart';
 import '../../../../features/chat/bridge/chat_bridge_registry.dart';
 
+const _panelJsTimeout = Duration(seconds: 2);
+
 class BlockPanelUpdater {
   BlockPanelUpdater(this._ref);
 
@@ -25,7 +27,9 @@ class BlockPanelUpdater {
   void _enqueuePanelJs(Future<void> Function() work) {
     _panelJsChain = (_panelJsChain ?? Future.value()).then((_) async {
       try {
-        await work();
+        await work().timeout(_panelJsTimeout);
+      } on TimeoutException {
+        debugPrint('[ExtPostGen] panel JS update timed out');
       } catch (e, st) {
         debugPrint('[ExtPostGen] panel JS update failed: $e\n$st');
       }
