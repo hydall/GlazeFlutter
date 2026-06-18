@@ -28,6 +28,16 @@ class InfiniteCharactersKey {
   int get hashCode => Object.hash(sort, dir);
 }
 
+/// Default key for the My Characters grid: newest first.
+///
+/// Must match the initial sort/dir of [CharacterListScreen] (`SortType.date` /
+/// `SortDir.desc`). Used to warm [infiniteCharactersProvider] at startup so the
+/// grid renders populated instead of flashing a spinner — keep the two in sync.
+const kDefaultInfiniteCharactersKey = InfiniteCharactersKey(
+  sort: CharacterSortField.date,
+  dir: CharacterSortDir.desc,
+);
+
 class InfiniteCharactersState {
   final List<Character> items;
   final int totalCount;

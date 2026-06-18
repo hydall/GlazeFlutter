@@ -13,8 +13,10 @@ import 'core/services/deep_link_service.dart';
 import 'core/services/generation_notification_service.dart';
 import 'features/chat/bridge/chat_webview_environment.dart';
 import 'core/state/active_selection_provider.dart';
+import 'core/state/character_provider.dart';
 import 'core/state/lorebook_provider.dart';
 import 'core/services/preset_seeder.dart';
+import 'features/chat_history/chat_history_provider.dart';
 import 'features/settings/app_settings_provider.dart';
 import 'shared/theme/theme_font_provider.dart';
 import 'core/services/onboarding_service.dart';
@@ -51,6 +53,7 @@ class GlazeApp extends ConsumerStatefulWidget {
 class _GlazeAppState extends ConsumerState<GlazeApp>
     with WidgetsBindingObserver {
   StreamSubscription<NotificationNavigationData>? _navSub;
+  final List<ProviderSubscription> _warmSubs = [];
   late bool _startupReady;
   bool _startupHooksAttached = false;
 
@@ -65,14 +68,33 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
     loadLorebookActivations(ref);
     loadLorebookSettings(ref);
     seedDefaultPresets(ref);
+    _warmInitialListProviders();
     if (_startupReady) return;
     unawaited(_initializeStartup());
+  }
+
+  /// Starts the DB-backed providers behind the initial routes now, concurrently
+  /// with the splash, so their async `build()` finishes before the route tree
+  /// mounts — the list renders populated instead of flashing a spinner. Holding
+  /// the subscriptions keeps the providers alive (neither is `keepAlive`); they
+  /// are closed in [dispose].
+  void _warmInitialListProviders() {
+    _warmSubs.add(ref.listenManual(chatHistoryProvider, (_, _) {}));
+    _warmSubs.add(
+      ref.listenManual(
+        infiniteCharactersProvider(kDefaultInfiniteCharactersKey),
+        (_, _) {},
+      ),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _navSub?.cancel();
+    for (final sub in _warmSubs) {
+      sub.close();
+    }
     super.dispose();
   }
 
