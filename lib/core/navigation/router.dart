@@ -154,7 +154,7 @@ GoRouter buildRouter(
                   path: 'lorebooks',
                   pageBuilder: (_, state) => _adaptivePage(
                     state: state,
-                    child: const LorebookListScreen(),
+                    child: const LorebookListScreen(startExpanded: true),
                   ),
                   routes: [
                     GoRoute(

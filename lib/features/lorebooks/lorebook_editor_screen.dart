@@ -1190,7 +1190,10 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     return Builder(
       builder: (context) => ListView(
         padding: const EdgeInsets.fromLTRB(0, 0, 0, 100).add(
-          EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+          EdgeInsets.only(
+            top: MediaQuery.paddingOf(context).top + 16,
+            bottom: MediaQuery.paddingOf(context).bottom,
+          ),
         ),
         children: [
           if (_needsReindex) _reindexBanner(),
@@ -1422,9 +1425,13 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
   // ── Edit-entry body ────────────────────────────────────────────────────────
 
   Widget _editBody() {
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 40),
-      children: [
+    return Builder(
+      builder: (context) => ListView(
+        padding: EdgeInsets.only(
+          top: MediaQuery.paddingOf(context).top + 16,
+          bottom: MediaQuery.paddingOf(context).bottom + 40,
+        ),
+        children: [
         // Activation & Logic
         MenuGroup(
           header: 'section_activation_logic'.tr(),
@@ -1721,7 +1728,8 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
             ),
           ],
         ),
-      ],
+        ],
+      ),
     );
   }
 

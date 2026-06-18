@@ -27,13 +27,19 @@ import 'lorebook_editor_screen.dart';
 import 'widgets/lorebook_option_sheet.dart';
 
 class LorebookListScreen extends ConsumerWidget {
-  const LorebookListScreen({super.key});
+  /// True when presented as a fullscreen route (`/tools/lorebooks`); false when
+  /// hosted inside a modal bottom sheet (e.g. from the chat MagicDrawer). Drives
+  /// both the [SheetView] expansion and the back behaviour.
+  final bool startExpanded;
+
+  const LorebookListScreen({super.key, this.startExpanded = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final lorebooksAsync = ref.watch(lorebooksProvider);
 
     return SheetView(
+      startExpanded: startExpanded,
       showRouteBackground: false,
       titleWidget: Row(
         children: [
@@ -53,7 +59,13 @@ class LorebookListScreen extends ConsumerWidget {
         ],
       ),
       showBack: true,
-      onBack: () => context.go('/tools'),
+      onBack: () {
+        if (startExpanded) {
+          context.go('/tools');
+        } else {
+          Navigator.of(context).maybePop();
+        }
+      },
       floatingActionButton: FloatingActionButton(
         backgroundColor: context.cs.primary,
         child: const Icon(Icons.add, color: Colors.black),
@@ -75,7 +87,7 @@ class LorebookListScreen extends ConsumerWidget {
           builder: (context) => ListView(
             padding: const EdgeInsets.fromLTRB(0, 0, 0, 16).add(
               EdgeInsets.only(
-                top: MediaQuery.paddingOf(context).top,
+                top: MediaQuery.paddingOf(context).top + 16,
                 bottom: MediaQuery.paddingOf(context).bottom,
               ),
             ),

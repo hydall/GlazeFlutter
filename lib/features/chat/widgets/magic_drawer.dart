@@ -27,6 +27,7 @@ import '../../image_gen/widgets/image_gen_sheet.dart';
 import '../chat_actions_service.dart';
 import '../chat_provider.dart';
 import '../../character_list/character_detail_screen.dart';
+import '../../lorebooks/lorebook_list_screen.dart';
 import '../../personas/persona_list_screen.dart';
 import '../../presets/preset_list_screen.dart';
 import '../../regex/regex_sheet.dart';
@@ -35,7 +36,6 @@ import 'authors_note_sheet.dart';
 import 'chat_stats_sheet.dart';
 import 'drawer_panel_scaffold.dart';
 import 'lorebook_coverage_sheet.dart';
-import 'lorebook_quick_sheet.dart';
 import 'magic_drawer_models.dart';
 import '../services/magic_drawer_layout_service.dart';
 import '../services/magic_drawer_stats_service.dart';
@@ -411,7 +411,17 @@ class _MagicDrawerPanelState extends ConsumerState<MagicDrawerPanel> {
         }
         return;
       case 'lorebooks':
-        if (mounted) showLorebookQuickSheet(context, ref, widget.charId);
+        widget.onClose?.call();
+        if (mounted) {
+          await showModalBottomSheet<void>(
+            context: context,
+            useRootNavigator: true,
+            backgroundColor: Colors.transparent,
+            barrierColor: Colors.black54,
+            isScrollControlled: true,
+            builder: (_) => const LorebookListScreen(),
+          );
+        }
         return;
       case 'memory-books':
         await _showMemoryBooks();
