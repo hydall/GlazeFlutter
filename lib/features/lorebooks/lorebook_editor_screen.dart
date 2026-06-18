@@ -231,9 +231,118 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
         .deleteByEntryId('${widget.lorebookId}_${entry.id}');
   }
 
+  void _addEntryMenu() {
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'btn_add'.tr(),
+      items: [
+        BottomSheetItem(
+          label: 'lorebook_new_entry'.tr(),
+          icon: Icons.add,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _addEntry();
+          },
+        ),
+        BottomSheetItem(
+          label: 'action_copy_from_lorebook'.tr(),
+          icon: Icons.content_copy_outlined,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _openCopyEntryLorebookPicker();
+          },
+        ),
+      ],
+    );
+  }
+
   void _addEntry() {
     final entry = LorebookEntry(id: generateId(), selectiveLogic: 4);
     setState(() => _entries.add(entry));
+    _save();
+    _openEntry(_entries.length - 1);
+  }
+
+  /// Live entries for [lb] — use the in-memory list for the lorebook currently
+  /// being edited so unsaved edits are reflected.
+  List<LorebookEntry> _entriesOf(Lorebook lb) =>
+      lb.id == widget.lorebookId ? _entries : lb.entries;
+
+  /// Step 1 of "Copy from Lorebook": pick which lorebook to copy an entry from.
+  void _openCopyEntryLorebookPicker() {
+    final lorebooks =
+        ref.read(lorebooksProvider).value ?? const <Lorebook>[];
+    if (lorebooks.isEmpty) return;
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'lorebook_select'.tr(),
+      cardItems: [
+        for (final lb in lorebooks)
+          BottomSheetCardItem(
+            label: lb.name.isEmpty ? 'new_lorebook'.tr() : lb.name,
+            icon: Icons.menu_book_outlined,
+            badge: '${_entriesOf(lb).length}',
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _openCopyEntryPicker(lb);
+            },
+          ),
+      ],
+    );
+  }
+
+  /// Step 2 of "Copy from Lorebook": pick which entry from the chosen lorebook.
+  void _openCopyEntryPicker(Lorebook lb) {
+    final entries = _entriesOf(lb);
+    if (entries.isEmpty) {
+      GlazeBottomSheet.show<void>(
+        context,
+        title: lb.name,
+        items: [
+          BottomSheetItem(
+            label: 'no_entries_found'.tr(),
+            centered: true,
+            onTap: () => Navigator.of(context, rootNavigator: true).pop(),
+          ),
+        ],
+      );
+      return;
+    }
+    GlazeBottomSheet.show<void>(
+      context,
+      title: '${lb.name} — ${'label_entries'.tr()}',
+      items: [
+        for (final entry in entries)
+          BottomSheetItem(
+            icon: entry.vectorSearch
+                ? Icons.hub_outlined
+                : Icons.article_outlined,
+            label: _entryLabel(entry),
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _copyEntryFromLorebook(entry);
+            },
+          ),
+      ],
+    );
+  }
+
+  String _entryLabel(LorebookEntry e) {
+    if (e.comment.isNotEmpty) return e.comment;
+    if (e.keys.isNotEmpty) return e.keys.join(', ');
+    return 'unnamed_entry'.tr();
+  }
+
+  void _copyEntryFromLorebook(LorebookEntry source) {
+    // Deep-clone with a fresh id and a " (copy)" suffix on the comment, so the
+    // copy is independent of its origin (incl. across lorebooks).
+    final clone = source.copyWith(
+      id: generateId(),
+      comment: source.comment.isEmpty
+          ? '${_entryLabel(source)} (copy)'
+          : '${source.comment} (copy)',
+    );
+    setState(() => _entries.add(clone));
     _save();
     _openEntry(_entries.length - 1);
   }
@@ -1023,7 +1132,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
       floatingActionButton: isEntries
           ? FloatingActionButton(
               backgroundColor: context.cs.primary,
-              onPressed: _addEntry,
+              onPressed: _addEntryMenu,
               child: const Icon(Icons.add, color: Colors.black),
             )
           : null,
