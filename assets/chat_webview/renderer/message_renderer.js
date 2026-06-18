@@ -780,6 +780,10 @@ if (messageData.isEditing) classes.push('editing');
           nameEl.appendChild(trig);
         }
       }
+    } else {
+      // The current swipe triggered no entries — drop any stale button left
+      // over from a sibling variation that did (per-swipe triggered entries).
+      sectionEl.querySelector('.msg-lb-trigger-menu')?.remove();
     }
 
     if (hasMemoryStatus) {

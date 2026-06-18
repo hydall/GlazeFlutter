@@ -58,6 +58,12 @@ class SavedMessageWriter {
       'genTime': genTime,
       'reasoning': reasoning,
       'tokens': tokens,
+      // Persist triggered entries per swipe so each variation shows its own
+      // lorebook/memory activations (restored on swipe in ChatMessageService).
+      if (triggeredLorebooks.isNotEmpty)
+        'triggeredLorebooks': triggeredLorebooks.map((e) => e.toJson()).toList(),
+      if (triggeredMemories.isNotEmpty)
+        'triggeredMemories': triggeredMemories.map((e) => e.toJson()).toList(),
     };
     if (guidanceText != null && guidanceText.isNotEmpty) {
       currentSwipeMeta['guidanceText'] = guidanceText;

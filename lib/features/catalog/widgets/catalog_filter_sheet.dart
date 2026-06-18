@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../shared/theme/app_colors.dart';
-import '../../../shared/widgets/sheet_view.dart';
+import '../../../shared/widgets/filter_sheet.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../catalog_models.dart';
 import '../services/chub_provider.dart';
@@ -34,7 +33,6 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
   Set<String> _selectedTagNames = {};
 
   List<CatalogTag> _allTags = [];
-  String _tagSearch = '';
 
   @override
   void initState() {
@@ -100,25 +98,12 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
     super.dispose();
   }
 
-  bool _isTagSelected(CatalogTag tag) {
-    if (tag.id != null) return _selectedTagIds.contains(tag.id);
-    return _selectedTagNames.contains(tag.name);
-  }
-
-  void _cycleTag(CatalogTag tag) {
+  void _toggleTag(FilterTag tag) {
     setState(() {
       if (tag.id != null) {
-        if (_selectedTagIds.contains(tag.id)) {
-          _selectedTagIds.remove(tag.id);
-        } else {
-          _selectedTagIds.add(tag.id!);
-        }
+        if (!_selectedTagIds.remove(tag.id)) _selectedTagIds.add(tag.id!);
       } else {
-        if (_selectedTagNames.contains(tag.name)) {
-          _selectedTagNames.remove(tag.name);
-        } else {
-          _selectedTagNames.add(tag.name);
-        }
+        if (!_selectedTagNames.remove(tag.name)) _selectedTagNames.add(tag.name);
       }
     });
   }
@@ -163,235 +148,42 @@ class _CatalogFilterSheetState extends State<CatalogFilterSheet> {
     }
   }
 
-  List<CatalogTag> get _filteredTags {
-    if (_tagSearch.isEmpty) return _allTags;
-    final q = _tagSearch.toLowerCase();
-    return _allTags.where((t) => t.name.toLowerCase().contains(q)).toList();
-  }
-
-  List<CatalogTag> get _selectedTagsList {
-    return _allTags.where((t) => _isTagSelected(t)).toList();
-  }
-
-  int get _totalSelectedCount => _selectedTagIds.length + _selectedTagNames.length;
-
   @override
   Widget build(BuildContext context) {
-    return SheetView(
+    return FilterSheet(
       title: 'catalog_filters'.tr(),
-      showHandle: true,
-      bodyPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      body: ListView(
-        children: [
-          const SizedBox(height: 16),
-          // NSFW
-          _toggleTile('catalog_filter_nsfw'.tr(), _nsfw, (v) => setState(() => _nsfw = v)),
-
-          // NSFL
-          if (widget.provider == CatalogProvider.chub)
-            _toggleTile('catalog_filter_nsfl'.tr(), _nsfl, _onNsflToggle, isDanger: true),
-
-          const SizedBox(height: 20),
-
-          // Tokens
-          Text(
-            'catalog_token_range'.tr().toUpperCase(),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: context.cs.onSurfaceVariant,
-              letterSpacing: 0.6,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: _tokenField('catalog_min'.tr(), _minTokens, (v) => setState(() => _minTokens = v)),
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Text('—', style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 18)),
-              ),
-              Expanded(
-                child: _tokenField('catalog_max'.tr(), _maxTokens, (v) => setState(() => _maxTokens = v)),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 20),
-
-          // Tags Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'catalog_tags'.tr().toUpperCase(),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: context.cs.onSurfaceVariant,
-                  letterSpacing: 0.6,
-                ),
-              ),
-              if (_totalSelectedCount > 0)
-                GestureDetector(
-                  onTap: _clearTags,
-                  child: Text(
-                    'catalog_clear_tags'.tr(namedArgs: {'count': '$_totalSelectedCount'}),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: context.cs.primary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Selected tags preview
-          if (_selectedTagsList.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Container(
-                padding: const EdgeInsets.only(bottom: 12),
-                decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
-                ),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: _selectedTagsList.map((t) => _buildTagChip(t, active: true)).toList(),
-                ),
-              ),
-            ),
-
-          // Tag Search
-          Container(
-            height: 40,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.07),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-            ),
-            child: TextField(
-              style: const TextStyle(fontSize: 14, color: Colors.white),
-              decoration: InputDecoration(
-                hintText: 'catalog_search_tags'.tr(),
-                hintStyle: TextStyle(color: context.cs.onSurfaceVariant),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                isDense: true,
-              ),
-              onChanged: (v) => setState(() => _tagSearch = v),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Tags grid
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _filteredTags.map((t) => _buildTagChip(t, active: _isTagSelected(t))).toList(),
-          ),
-          const SizedBox(height: 40),
-        ],
-      ),
-    );
-  }
-
-  Widget _toggleTile(String label, bool value, ValueChanged<bool> onChanged, {bool isDanger = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(color: context.cs.onSurface, fontSize: 15),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            activeTrackColor: isDanger ? Colors.redAccent : context.cs.primary,
-            activeThumbColor: Colors.white,
-            inactiveTrackColor: Colors.white.withValues(alpha: 0.15),
-            inactiveThumbColor: Colors.white,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _tokenField(String label, int value, ValueChanged<int> onChanged) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label.toUpperCase(),
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.4),
-            fontSize: 11,
-            letterSpacing: 0.5,
-          ),
+      sections: [
+        FilterToggleSection(
+          label: 'catalog_filter_nsfw'.tr(),
+          value: _nsfw,
+          onChanged: (v) => setState(() => _nsfw = v),
         ),
-        const SizedBox(height: 4),
-        Container(
-          height: 38,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.07),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        if (widget.provider == CatalogProvider.chub)
+          FilterToggleSection(
+            label: 'catalog_filter_nsfl'.tr(),
+            value: _nsfl,
+            onChanged: _onNsflToggle,
+            isDanger: true,
           ),
-          child: TextField(
-            controller: TextEditingController(text: '$value'),
-            keyboardType: TextInputType.number,
-            style: const TextStyle(fontSize: 14, color: Colors.white),
-            decoration: const InputDecoration(
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              isDense: true,
-            ),
-            onSubmitted: (v) {
-              final p = int.tryParse(v);
-              if (p != null) onChanged(p);
-            },
-          ),
+        FilterRangeSection(
+          title: 'catalog_token_range'.tr(),
+          minLabel: 'catalog_min'.tr(),
+          maxLabel: 'catalog_max'.tr(),
+          min: _minTokens,
+          max: _maxTokens,
+          onMinChanged: (v) => setState(() => _minTokens = v),
+          onMaxChanged: (v) => setState(() => _maxTokens = v),
+        ),
+        FilterTagsSection(
+          title: 'catalog_tags'.tr(),
+          searchHint: 'catalog_search_tags'.tr(),
+          tags: [for (final t in _allTags) FilterTag(id: t.id, name: t.name)],
+          selectedIds: _selectedTagIds,
+          selectedNames: _selectedTagNames,
+          onToggle: _toggleTag,
+          onClear: _clearTags,
         ),
       ],
-    );
-  }
-
-  Widget _buildTagChip(CatalogTag tag, {required bool active}) {
-    return GestureDetector(
-      onTap: () => _cycleTag(tag),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: active ? context.cs.primary : Colors.white.withValues(alpha: 0.12),
-          ),
-          color: active ? context.cs.primary.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.05),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              tag.name,
-              style: TextStyle(
-                fontSize: 12,
-                color: active ? Colors.white : Colors.white.withValues(alpha: 0.65),
-              ),
-            ),
-            if (active) ...[
-              const SizedBox(width: 5),
-              const Icon(Icons.close, size: 10, color: Colors.white),
-            ],
-          ],
-        ),
-      ),
     );
   }
 }

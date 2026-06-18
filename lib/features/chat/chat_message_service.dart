@@ -129,10 +129,28 @@ class ChatMessageService {
       reasoning: meta?['reasoning'] as String?,
       genTime: meta?['genTime'] as String?,
       tokens: meta?['tokens'] as int?,
+      triggeredLorebooks: _triggeredFromMeta(meta, 'triggeredLorebooks'),
+      triggeredMemories: _triggeredFromMeta(meta, 'triggeredMemories'),
     );
     final newMessages = List<ChatMessage>.from(session.messages);
     newMessages[messageIndex] = updated;
     return _persist(session, newMessages);
+  }
+
+  /// Parse the per-swipe triggered entries stored in [swipesMeta]. Each
+  /// variation persists its own lorebook/memory activations so the chat UI
+  /// (native sheet + webview) shows them per swipe instead of leaking the
+  /// last-generated swipe's entries onto every variation.
+  static List<TriggeredEntry> _triggeredFromMeta(
+    Map<String, dynamic>? meta,
+    String key,
+  ) {
+    final raw = meta?[key];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map<dynamic, dynamic>>()
+        .map((m) => TriggeredEntry.fromJson(Map<String, dynamic>.from(m)))
+        .toList();
   }
 
   /// Mirrors Glaze/src/composables/chat/useSwipeNavigation.js → `changeSwipe`.
@@ -176,6 +194,8 @@ class ChatMessageService {
         reasoning: meta?['reasoning'] as String?,
         genTime: meta?['genTime'] as String?,
         tokens: meta?['tokens'] as int?,
+        triggeredLorebooks: _triggeredFromMeta(meta, 'triggeredLorebooks'),
+        triggeredMemories: _triggeredFromMeta(meta, 'triggeredMemories'),
       );
       final newMessages = List<ChatMessage>.from(session.messages)..[messageIndex] = updated;
       return ChangeSwipeResult.updated(_persist(session, newMessages));
@@ -202,6 +222,8 @@ class ChatMessageService {
       reasoning: meta?['reasoning'] as String?,
       genTime: meta?['genTime'] as String?,
       tokens: meta?['tokens'] as int?,
+      triggeredLorebooks: _triggeredFromMeta(meta, 'triggeredLorebooks'),
+      triggeredMemories: _triggeredFromMeta(meta, 'triggeredMemories'),
     );
     final newMessages = List<ChatMessage>.from(session.messages)..[messageIndex] = updated;
     return ChangeSwipeResult.updated(_persist(session, newMessages));

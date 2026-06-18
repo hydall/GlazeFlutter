@@ -47,6 +47,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   SortDir _sortDir = SortDir.desc;
   int _tabIndex = 0;
   String _searchQuery = '';
+  CharacterListFilters _filters = const CharacterListFilters();
   String _picksTitle = 'Our Picks';
   bool _picksCanGoBack = false;
   VoidCallback? _picksGoBackFn;
@@ -314,10 +315,11 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   ) {
     final showOurPicks =
         _searchQuery.isEmpty &&
+        !_filters.isActive &&
         (ref.watch(appSettingsProvider).value?.showOurPicks ?? true);
 
-    if (_searchQuery.isNotEmpty) {
-      return _buildSearchResults(context, topPad, navHeight);
+    if (_searchQuery.isNotEmpty || _filters.isActive) {
+      return _buildFilteredResults(context, topPad, navHeight);
     }
 
     final key = InfiniteCharactersKey(sort: _sortField, dir: _sortDirEnum);
@@ -364,6 +366,8 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
             topPadding: topPad,
             bottomPadding: navHeight + 20,
             tabBar: _buildTabBar(),
+            filterCount: _filters.activeCount,
+            onFilterTap: () => _showCharacterFilterSheet(context),
             showOurPicksCard: showOurPicks,
             onOurPicksTap: () {
               setState(() => _tabIndex = 2);
@@ -390,7 +394,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
     );
   }
 
-  Widget _buildSearchResults(
+  Widget _buildFilteredResults(
     BuildContext context,
     double topPad,
     double navHeight,
@@ -409,10 +413,22 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
         final q = _searchQuery.toLowerCase();
         final filtered = all
             .where((c) {
-              final displayName = c.displayName?.toLowerCase() ?? '';
-              return c.fav ||
-                  c.name.toLowerCase().contains(q) ||
-                  displayName.contains(q);
+              // Search: favorites always surface, otherwise match by name.
+              if (_searchQuery.isNotEmpty) {
+                final displayName = c.displayName?.toLowerCase() ?? '';
+                final matchesSearch = c.fav ||
+                    c.name.toLowerCase().contains(q) ||
+                    displayName.contains(q);
+                if (!matchesSearch) return false;
+              }
+              // Favorites filter.
+              if (_filters.favOnly && !c.fav) return false;
+              // Tags filter (character must carry every selected tag).
+              if (_filters.tagNames.isNotEmpty) {
+                final charTags = c.tags.toSet();
+                if (!_filters.tagNames.every(charTags.contains)) return false;
+              }
+              return true;
             })
             .toList();
         final sorted = _sortChars(filtered);
@@ -424,9 +440,23 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
               SliverToBoxAdapter(child: _buildTabBar()),
               SliverFillRemaining(
                 child: Center(
-                  child: Text(
-                    'no_characters'.tr(),
-                    style: TextStyle(color: context.cs.onSurfaceVariant),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'no_characters'.tr(),
+                        style: TextStyle(color: context.cs.onSurfaceVariant),
+                      ),
+                      if (_filters.isActive)
+                        TextButton(
+                          onPressed: () => setState(
+                            () => _filters = const CharacterListFilters(),
+                          ),
+                          child: Text('catalog_clear_tags'.tr(
+                            namedArgs: {'count': '${_filters.activeCount}'},
+                          )),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -441,12 +471,36 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           topPadding: topPad,
           bottomPadding: navHeight + 20,
           tabBar: _buildTabBar(),
+          filterCount: _filters.activeCount,
+          onFilterTap: () => _showCharacterFilterSheet(context),
           onSortDirToggle: () => setState(() {
             _sortDir = _sortDir == SortDir.asc ? SortDir.desc : SortDir.asc;
           }),
           onSortTypeChanged: (t) => setState(() => _sortBy = t),
         );
       },
+    );
+  }
+
+  void _showCharacterFilterSheet(BuildContext context) {
+    final all = ref.read(charactersProvider).value ?? const [];
+    final tagSet = <String>{};
+    for (final c in all) {
+      tagSet.addAll(c.tags);
+    }
+    final allTags = tagSet.toList()..sort();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => CharacterFilterSheet(
+        filters: _filters,
+        allTags: allTags,
+        onApply: (f) => setState(() => _filters = f),
+      ),
     );
   }
 
