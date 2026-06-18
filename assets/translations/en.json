@@ -1279,6 +1279,8 @@
     "desc_show_our_picks": "Shows \"Our Picks\" card at the beginning of My Characters list",
     "menu_force_mobile_layout": "Force Mobile Layout",
     "desc_force_mobile_layout": "Always use the mobile layout, even on wide screens",
+    "menu_open_card_after_import": "Open Card After Import",
+    "desc_open_card_after_import": "After importing a character from the catalog, open the imported card in My Characters. When off, stay in the catalog.",
     "menu_add_block_at_top": "Add Prompt Block at Top",
     "desc_add_block_at_top": "New prompt blocks are created at the top of the list instead of the bottom",
     "settings_notifications_not_implemented": "Notification settings not implemented",

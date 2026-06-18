@@ -58,6 +58,7 @@ abstract class AppSettings with _$AppSettings {
     @Default(true) bool showOurPicks,
     @Default(true) bool forceMobileLayout,
     @Default(false) bool addBlockAtTop,
+    @Default(true) bool openCardAfterImport,
   }) = _AppSettings;
 }
 
@@ -112,6 +113,11 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
         defaultValue: true,
       ),
       addBlockAtTop: _readBoolPref(prefs, 'addBlockAtTop', defaultValue: false),
+      openCardAfterImport: _readBoolPref(
+        prefs,
+        'openCardAfterImport',
+        defaultValue: true,
+      ),
     );
   }
 
@@ -144,6 +150,7 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     await prefs.setBool('showOurPicks', normalized.showOurPicks);
     await prefs.setBool('gz_force_mobile_layout', normalized.forceMobileLayout);
     await prefs.setBool('addBlockAtTop', normalized.addBlockAtTop);
+    await prefs.setBool('openCardAfterImport', normalized.openCardAfterImport);
     state = AsyncData(normalized);
   }
 }

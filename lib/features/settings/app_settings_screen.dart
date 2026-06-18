@@ -191,6 +191,14 @@ class _AppSettingsScreenState extends ConsumerState<AppSettingsScreen> {
                   .read(appSettingsProvider.notifier)
                   .save(s.copyWith(forceMobileLayout: v)),
             ),
+            MenuSwitchItem(
+              label: 'menu_open_card_after_import'.tr(),
+              description: 'desc_open_card_after_import'.tr(),
+              value: s.openCardAfterImport,
+              onChanged: (v) => ref
+                  .read(appSettingsProvider.notifier)
+                  .save(s.copyWith(openCardAfterImport: v)),
+            ),
           ],
         ),
         MenuGroup(

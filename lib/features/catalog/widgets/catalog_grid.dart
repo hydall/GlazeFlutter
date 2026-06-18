@@ -12,6 +12,7 @@ import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../../chat/bridge/chat_webview_environment.dart';
+import '../../settings/app_settings_provider.dart';
 import '../catalog_models.dart';
 import '../catalog_provider.dart';
 import '../services/cf_challenge_service.dart';
@@ -265,7 +266,7 @@ class CatalogGrid extends ConsumerWidget {
               items: state.results,
               padding: EdgeInsets.fromLTRB(16, 0, 16, bottomPadding),
               onTap: (item) =>
-                  _openDetail(context, item, state.activeProvider),
+                  _openDetail(context, ref, item, state.activeProvider),
             ),
           if (state.loading)
             SliverToBoxAdapter(
@@ -306,6 +307,7 @@ class CatalogGrid extends ConsumerWidget {
 
   Future<void> _openDetail(
     BuildContext context,
+    WidgetRef ref,
     CatalogItem item,
     CatalogProvider provider,
   ) async {
@@ -321,6 +323,13 @@ class CatalogGrid extends ConsumerWidget {
     }
 
     GlazeToast.show(context, 'Imported ${item.name}');
+
+    // Only navigate to the freshly imported character card when the user has
+    // opted in (default on). Otherwise stay on the catalog so they can keep
+    // browsing/importing.
+    final openCard =
+        ref.read(appSettingsProvider).value?.openCardAfterImport ?? true;
+    if (!openCard) return;
     context.go('/characters?open=${Uri.encodeQueryComponent(importedCharId)}');
   }
 }
