@@ -2,22 +2,46 @@ import 'package:flutter/material.dart';
 import 'package:easy_localization/easy_localization.dart';
 import '../../../shared/widgets/filter_sheet.dart';
 
-/// Filter state for the My Characters grid. Local characters carry no token
-/// count or NSFW flags, so only favorites + tags are filterable.
+/// Filter state for the My Characters grid. Local characters carry no NSFW
+/// flags, so favorites + tags + an estimated-token range are filterable.
 class CharacterListFilters {
+  static const int defaultMinTokens = 0;
+  static const int defaultMaxTokens = 100000;
+
   final bool favOnly;
   final Set<String> tagNames;
+  final int minTokens;
+  final int maxTokens;
 
-  const CharacterListFilters({this.favOnly = false, this.tagNames = const {}});
+  const CharacterListFilters({
+    this.favOnly = false,
+    this.tagNames = const {},
+    this.minTokens = defaultMinTokens,
+    this.maxTokens = defaultMaxTokens,
+  });
 
-  bool get isActive => favOnly || tagNames.isNotEmpty;
+  bool get hasTokenFilter =>
+      minTokens != defaultMinTokens || maxTokens != defaultMaxTokens;
 
-  int get activeCount => (favOnly ? 1 : 0) + tagNames.length;
+  bool get isActive => favOnly || tagNames.isNotEmpty || hasTokenFilter;
 
-  CharacterListFilters copyWith({bool? favOnly, Set<String>? tagNames}) =>
+  int get activeCount =>
+      (favOnly ? 1 : 0) +
+      tagNames.length +
+      (minTokens != defaultMinTokens ? 1 : 0) +
+      (maxTokens != defaultMaxTokens ? 1 : 0);
+
+  CharacterListFilters copyWith({
+    bool? favOnly,
+    Set<String>? tagNames,
+    int? minTokens,
+    int? maxTokens,
+  }) =>
       CharacterListFilters(
         favOnly: favOnly ?? this.favOnly,
         tagNames: tagNames ?? this.tagNames,
+        minTokens: minTokens ?? this.minTokens,
+        maxTokens: maxTokens ?? this.maxTokens,
       );
 }
 
@@ -42,17 +66,23 @@ class CharacterFilterSheet extends StatefulWidget {
 class _CharacterFilterSheetState extends State<CharacterFilterSheet> {
   late bool _favOnly;
   late Set<String> _selectedTagNames;
+  late int _minTokens;
+  late int _maxTokens;
 
   @override
   void initState() {
     super.initState();
     _favOnly = widget.filters.favOnly;
     _selectedTagNames = Set.from(widget.filters.tagNames);
+    _minTokens = widget.filters.minTokens;
+    _maxTokens = widget.filters.maxTokens;
   }
 
   @override
   void dispose() {
     final changed = _favOnly != widget.filters.favOnly ||
+        _minTokens != widget.filters.minTokens ||
+        _maxTokens != widget.filters.maxTokens ||
         _selectedTagNames.length != widget.filters.tagNames.length ||
         !_selectedTagNames.containsAll(widget.filters.tagNames);
 
@@ -61,6 +91,8 @@ class _CharacterFilterSheetState extends State<CharacterFilterSheet> {
       final result = CharacterListFilters(
         favOnly: _favOnly,
         tagNames: Set.from(_selectedTagNames),
+        minTokens: _minTokens,
+        maxTokens: _maxTokens,
       );
       Future.microtask(() => apply(result));
     }
@@ -84,6 +116,15 @@ class _CharacterFilterSheetState extends State<CharacterFilterSheet> {
           label: 'section_favorites'.tr(),
           value: _favOnly,
           onChanged: (v) => setState(() => _favOnly = v),
+        ),
+        FilterRangeSection(
+          title: 'catalog_token_range'.tr(),
+          minLabel: 'catalog_min'.tr(),
+          maxLabel: 'catalog_max'.tr(),
+          min: _minTokens,
+          max: _maxTokens,
+          onMinChanged: (v) => setState(() => _minTokens = v),
+          onMaxChanged: (v) => setState(() => _maxTokens = v),
         ),
         FilterTagsSection(
           title: 'catalog_tags'.tr(),

@@ -428,6 +428,13 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                 final charTags = c.tags.toSet();
                 if (!_filters.tagNames.every(charTags.contains)) return false;
               }
+              // Token range filter (estimated, cached per character).
+              if (_filters.hasTokenFilter) {
+                final tokens = estimateCharacterTokens(c);
+                if (tokens < _filters.minTokens || tokens > _filters.maxTokens) {
+                  return false;
+                }
+              }
               return true;
             })
             .toList();

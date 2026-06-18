@@ -1131,6 +1131,9 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
             ],
       floatingActionButton: isEntries
           ? FloatingActionButton(
+              // Disable the Hero so this FAB doesn't collide with the list
+              // screen's FAB (default tags clash during the push transition).
+              heroTag: null,
               backgroundColor: context.cs.primary,
               onPressed: _addEntryMenu,
               child: const Icon(Icons.add, color: Colors.black),

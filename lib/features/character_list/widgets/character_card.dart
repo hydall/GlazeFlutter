@@ -18,11 +18,25 @@ import '../../../core/state/character_provider.dart';
 import '../../../core/state/lorebook_provider.dart';
 import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
+import '../../../shared/widgets/card_tag_chips.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../character_detail_screen.dart';
 import '../../../core/llm/tokenizer.dart' as tok;
+
+/// Heuristic token count for a local character, mirroring what the prompt
+/// builder concatenates. Shared by [CharacterCard] and the My Characters token
+/// filter so both hit the same tokenizer cache entry.
+int estimateCharacterTokens(Character char) {
+  var text = char.name;
+  if (char.description != null) text += '\n${char.description}';
+  if (char.personality != null) text += '\n${char.personality}';
+  if (char.scenario != null) text += '\n${char.scenario}';
+  if (char.firstMes != null) text += '\n${char.firstMes}';
+  if (char.mesExample != null) text += '\n${char.mesExample}';
+  return tok.estimateTokens(text);
+}
 
 class CharacterCard extends ConsumerStatefulWidget {
   final Character character;
@@ -53,7 +67,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   @override
   void initState() {
     super.initState();
-    _tokenCount = _getCharTokens(widget.character);
+    _tokenCount = estimateCharacterTokens(widget.character);
     _entryCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 250),
@@ -74,7 +88,7 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   void didUpdateWidget(CharacterCard oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.character != widget.character) {
-      _tokenCount = _getCharTokens(widget.character);
+      _tokenCount = estimateCharacterTokens(widget.character);
     }
   }
 
@@ -82,16 +96,6 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
   void dispose() {
     _entryCtrl.dispose();
     super.dispose();
-  }
-
-  int _getCharTokens(Character char) {
-    var text = char.name;
-    if (char.description != null) text += '\n${char.description}';
-    if (char.personality != null) text += '\n${char.personality}';
-    if (char.scenario != null) text += '\n${char.scenario}';
-    if (char.firstMes != null) text += '\n${char.firstMes}';
-    if (char.mesExample != null) text += '\n${char.mesExample}';
-    return tok.estimateTokens(text);
   }
 
   @override
@@ -158,7 +162,10 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
                     bottom: 0,
                     left: 0,
                     right: 0,
-                    child: _CardInfo(character: character),
+                    child: _CardInfo(
+                      character: character,
+                      tokenCount: _tokenCount,
+                    ),
                   ),
                   Positioned(
                     top: 8,
@@ -166,43 +173,6 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
                     child: _CardMenuButton(
                       character: character,
                       onTap: () => _showActions(context, ref),
-                    ),
-                  ),
-                  Positioned(
-                    top: 8,
-                    left: 8,
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.6),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.white.withValues(
-                            alpha: _hovered ? 0.4 : 0.15,
-                          ),
-                          width: 1,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.description_rounded,
-                            size: 12,
-                            color: Colors.white.withValues(alpha: 0.9),
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '$_tokenCount',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
                   Positioned.fill(
@@ -525,8 +495,9 @@ class _BottomGradient extends StatelessWidget {
 
 class _CardInfo extends StatelessWidget {
   final Character character;
+  final int tokenCount;
 
-  const _CardInfo({required this.character});
+  const _CardInfo({required this.character, required this.tokenCount});
 
   String get _displayName {
     final displayName = character.displayName?.trim();
@@ -537,9 +508,6 @@ class _CardInfo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final desc = character.scenario?.isNotEmpty == true
-        ? character.scenario!
-        : character.description;
     final isFav = character.fav;
     const favColor = Color(0xFFFF6B6B);
 
@@ -581,23 +549,31 @@ class _CardInfo extends StatelessWidget {
               ),
             ],
           ),
-          if (desc != null && desc.isNotEmpty) ...[
-            const SizedBox(height: 3),
+          if (tokenCount > 0) ...[
+            const SizedBox(height: 2),
             Text(
-              desc,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
+              '${_formatTokens(tokenCount)} tokens',
               style: TextStyle(
                 fontSize: 11,
-                color: Colors.white.withValues(alpha: 0.75),
-                height: 1.3,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withValues(alpha: 0.6),
                 shadows: const [Shadow(blurRadius: 4, color: Colors.black87)],
               ),
             ),
           ],
+          if (character.tags.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            CardTagChips(tags: character.tags, max: 4),
+          ],
         ],
       ),
     );
+  }
+
+  String _formatTokens(int n) {
+    if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}kk';
+    if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}k';
+    return '$n';
   }
 }
 

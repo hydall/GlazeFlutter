@@ -67,6 +67,9 @@ class LorebookListScreen extends ConsumerWidget {
         }
       },
       floatingActionButton: FloatingActionButton(
+        // Disable the Hero so this FAB doesn't collide with the editor's FAB
+        // (default tags clash during the push transition → frozen route).
+        heroTag: null,
         backgroundColor: context.cs.primary,
         child: const Icon(Icons.add, color: Colors.black),
         onPressed: () => _openLorebookMenu(context, ref),
