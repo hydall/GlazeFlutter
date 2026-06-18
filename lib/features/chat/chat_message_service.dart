@@ -264,6 +264,7 @@ class ChatMessageService {
       messages: newMessages,
       updatedAt: currentTimestampSeconds(),
     );
+    if (!_ref.mounted) return updated;
     _ref.read(chatRepoProvider).put(updated).catchError((Object e) {
       debugPrint('[ChatMessageService] failed to persist session: $e');
       GlazeToast.showWithoutContext(

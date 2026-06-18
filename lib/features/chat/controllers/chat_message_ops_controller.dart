@@ -35,6 +35,7 @@ class ChatMessageOpsController {
     String? tagStart,
     String? tagEnd,
   }) async {
+    if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
     var updated = _messageSvc.editMessage(
@@ -45,6 +46,7 @@ class ChatMessageOpsController {
       tagEnd: tagEnd,
     );
     updated = await _applyRunOnEditRegexes(updated, index);
+    if (!_ref.mounted) return;
     _invalidateHistory();
     TokenBreakdownCache.invalidate();
     _ref.read(cachedTokenBreakdownProvider(_charId).notifier).state = null;
@@ -96,6 +98,7 @@ class ChatMessageOpsController {
   }
 
   Future<void> moveMessage(int fromIndex, int toIndex) async {
+    if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
     final updated = _messageSvc.moveMessage(current.session!, fromIndex, toIndex);
@@ -104,6 +107,7 @@ class ChatMessageOpsController {
   }
 
   Future<void> deleteMessage(int index) async {
+    if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
     final updated = _messageSvc.deleteMessage(current.session!, index);
@@ -112,6 +116,7 @@ class ChatMessageOpsController {
   }
 
   Future<void> toggleMessageHidden(int index) async {
+    if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
     final updated = _messageSvc.toggleMessageHidden(current.session!, index);
@@ -120,6 +125,7 @@ class ChatMessageOpsController {
   }
 
   Future<void> unhideAllMessages() async {
+    if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
     final updated = _messageSvc.unhideAllMessages(current.session!);
@@ -128,6 +134,7 @@ class ChatMessageOpsController {
   }
 
   Future<void> hideTopMessages(int count) async {
+    if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
     final updated = _messageSvc.hideTopMessages(current.session!, count);
@@ -136,9 +143,11 @@ class ChatMessageOpsController {
   }
 
   Future<void> clearChat() async {
+    if (!_ref.mounted) return;
     final current = _getState().value;
     if (current == null || current.session == null) return;
     final cleared = await ChatSessionService(_ref).clearChat(_charId, current.session!);
+    if (!_ref.mounted) return;
     _invalidateHistory();
     _setState(AsyncData(ChatState(session: cleared)));
   }
