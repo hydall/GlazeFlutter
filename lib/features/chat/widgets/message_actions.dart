@@ -20,12 +20,10 @@ void showMessageContextMenu({
   required bool isGenerating,
   required bool isHidden,
 }) {
-  final notifier = ref.read(chatProvider(charId).notifier);
-
-  // User messages are never the "active generation target" — the streaming
-  // placeholder is a separate assistant section in the webview that does not
-  // appear in `widget.state.messages`. Without this, sending a new message
-  // would replace the user message's menu with only "Stop Generating".
+  // Notifier is read fresh inside each onTap callback instead of captured
+  // here. If the provider is invalidated while the menu is open (e.g. by a
+  // background session switch), a captured reference would be disposed and
+  // every callback would throw "Cannot use Ref after disposed".
   final isActivelyGenerating = isGenerating && isLast && !isUser;
   final isTypingTarget = isTyping && !isUser;
 
@@ -37,7 +35,7 @@ void showMessageContextMenu({
         label: 'Stop Generating',
         onTap: () {
           Navigator.of(context, rootNavigator: true).pop();
-          notifier.abortGeneration();
+          ref.read(chatProvider(charId).notifier).abortGeneration();
         },
       )
     else ...[
@@ -65,7 +63,7 @@ void showMessageContextMenu({
           label: 'Regenerate',
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
-            notifier.regenerateLastAssistant();
+            ref.read(chatProvider(charId).notifier).regenerateLastAssistant();
           },
         ),
       if (isActivelyGenerating)
@@ -75,7 +73,7 @@ void showMessageContextMenu({
           label: 'Stop Generating',
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
-            notifier.abortGeneration();
+            ref.read(chatProvider(charId).notifier).abortGeneration();
           },
         ),
       if (!isError && !isActivelyGenerating)
@@ -84,7 +82,7 @@ void showMessageContextMenu({
           label: 'Branch',
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
-            notifier.branchSession(messageIndex);
+            ref.read(chatProvider(charId).notifier).branchSession(messageIndex);
           },
         ),
       BottomSheetItem(
@@ -92,7 +90,7 @@ void showMessageContextMenu({
         label: isHidden ? 'Unhide' : 'Hide',
         onTap: () {
           Navigator.of(context, rootNavigator: true).pop();
-          notifier.toggleMessageHidden(messageIndex);
+          ref.read(chatProvider(charId).notifier).toggleMessageHidden(messageIndex);
         },
       ),
       if (isLast && !isGenerating)
@@ -102,7 +100,7 @@ void showMessageContextMenu({
           isDestructive: true,
           onTap: () {
             Navigator.of(context, rootNavigator: true).pop();
-            notifier.deleteMessage(messageIndex);
+            ref.read(chatProvider(charId).notifier).deleteMessage(messageIndex);
           },
         ),
     ],
