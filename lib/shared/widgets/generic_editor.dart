@@ -13,12 +13,14 @@ import 'menu_group.dart';
 class GenericEditorField {
   final String key;
   final String label;
-  final String type; // 'text', 'number', 'tags', 'textarea', 'greeting_list', 'select', 'info'
+  final String
+  type; // 'text', 'number', 'tags', 'textarea', 'greeting_list', 'select', 'info'
   final bool expandable;
   final String? helpTerm;
   final String? placeholder;
   final int? rows;
-  final List<Map<String, dynamic>>? options; // [{'label': 'System', 'value': 'system'}]
+  final List<Map<String, dynamic>>?
+  options; // [{'label': 'System', 'value': 'system'}]
   final String? text;
   final bool Function(Map<String, dynamic> item)? showIf;
 
@@ -40,10 +42,7 @@ class GenericEditorSection {
   final String? title;
   final List<GenericEditorField> fields;
 
-  const GenericEditorSection({
-    this.title,
-    required this.fields,
-  });
+  const GenericEditorSection({this.title, required this.fields});
 }
 
 class GenericEditor extends StatefulWidget {
@@ -112,7 +111,9 @@ class _GenericEditorState extends State<GenericEditor> {
     if (changed) {
       for (final section in widget.config) {
         for (final field in section.fields) {
-          if (field.type == 'text' || field.type == 'textarea' || field.type == 'number') {
+          if (field.type == 'text' ||
+              field.type == 'textarea' ||
+              field.type == 'number') {
             final val = _localItem[field.key]?.toString() ?? '';
             if (_controllers[field.key]?.text != val) {
               _controllers[field.key]?.text = val;
@@ -154,7 +155,11 @@ class _GenericEditorState extends State<GenericEditor> {
     if (type == 'number') {
       _localItem[key] = num.tryParse(text) ?? _localItem[key];
     } else if (type == 'tags') {
-      _localItem[key] = text.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      _localItem[key] = text
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
     } else {
       _localItem[key] = text;
     }
@@ -252,26 +257,31 @@ class _GenericEditorState extends State<GenericEditor> {
 
   void _openSelectSelector(GenericEditorField field) {
     final currentVal = _localItem[field.key];
-    final items = field.options?.map((opt) {
-      final isSelected = currentVal == opt['value'];
-      return BottomSheetItem(
-        label: opt['label'] as String? ?? opt['value'].toString(),
-        icon: isSelected ? Icons.check : null,
-        onTap: () {
-          Navigator.of(context, rootNavigator: true).pop();
-          _localItem[field.key] = opt['value'];
-          widget.onChanged(_localItem);
-          _scheduleSave();
-          setState(() {});
-        },
-      );
-    }).toList() ?? [];
+    final items =
+        field.options?.map((opt) {
+          final isSelected = currentVal == opt['value'];
+          return BottomSheetItem(
+            label: opt['label'] as String? ?? opt['value'].toString(),
+            icon: isSelected ? Icons.check : null,
+            onTap: () {
+              Navigator.of(context, rootNavigator: true).pop();
+              _localItem[field.key] = opt['value'];
+              widget.onChanged(_localItem);
+              _scheduleSave();
+              setState(() {});
+            },
+          );
+        }).toList() ??
+        [];
     GlazeBottomSheet.show<void>(context, title: field.label, items: items);
   }
 
   String _getSelectedLabel(GenericEditorField field) {
     final val = _localItem[field.key];
-    final opt = field.options?.firstWhere((o) => o['value'] == val, orElse: () => {});
+    final opt = field.options?.firstWhere(
+      (o) => o['value'] == val,
+      orElse: () => {},
+    );
     return (opt?['label'] as String?) ?? val?.toString() ?? '';
   }
 
@@ -287,9 +297,13 @@ class _GenericEditorState extends State<GenericEditor> {
     await FullscreenEditorScreen.show(
       context,
       title: field.label,
-      controller: ctrl,
+      initialValue: ctrl.text,
       hintText: field.placeholder,
-      onChanged: (_) => setState(() {}),
+      onChanged: (value) {
+        if (!mounted) return;
+        ctrl.text = value;
+        setState(() {});
+      },
     );
   }
 
@@ -302,15 +316,15 @@ class _GenericEditorState extends State<GenericEditor> {
     final greetings = _allGreetings;
     if (index < 0 || index >= greetings.length) return;
 
-    final ctrl = TextEditingController(text: greetings[index]);
-
     void applyGreeting(String value) {
+      if (!mounted) return;
       if (index == 0) {
         _localItem['first_mes'] = value;
       } else {
-        final alt = ((_localItem['alternate_greetings'] as List?) ?? <dynamic>[])
-            .cast<String>()
-            .toList();
+        final alt =
+            ((_localItem['alternate_greetings'] as List?) ?? <dynamic>[])
+                .cast<String>()
+                .toList();
         if (index - 1 >= alt.length) return;
         alt[index - 1] = value;
         _localItem['alternate_greetings'] = alt;
@@ -323,11 +337,10 @@ class _GenericEditorState extends State<GenericEditor> {
     await FullscreenEditorScreen.show(
       context,
       title: 'generic_editor_greeting_title'.tr(args: ['${index + 1}']),
-      controller: ctrl,
+      initialValue: greetings[index],
       hintText: 'generic_editor_greeting_hint'.tr(),
       onChanged: applyGreeting,
     );
-    ctrl.dispose();
   }
 
   // ── Build ──────────────────────────────────────────────────────────────────────
@@ -343,10 +356,12 @@ class _GenericEditorState extends State<GenericEditor> {
       return Material(
         type: MaterialType.transparency,
         child: ListView(
-          padding: widget.padding ?? EdgeInsets.only(
-            top: MediaQuery.of(context).padding.top + 16,
-            bottom: MediaQuery.of(context).padding.bottom + 60,
-          ),
+          padding:
+              widget.padding ??
+              EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 16,
+                bottom: MediaQuery.of(context).padding.bottom + 60,
+              ),
           children: children,
         ),
       );
@@ -394,8 +409,8 @@ class _GenericEditorState extends State<GenericEditor> {
           keyboardType: field.type == 'number'
               ? TextInputType.number
               : field.type == 'textarea'
-                  ? TextInputType.multiline
-                  : TextInputType.text,
+              ? TextInputType.multiline
+              : TextInputType.text,
           maxLines: field.type == 'textarea' ? (field.rows ?? 3) : 1,
           onExpand: field.expandable ? () => _openFieldEditor(field) : null,
         );
@@ -458,12 +473,20 @@ class _GenericEditorState extends State<GenericEditor> {
                           children: [
                             GestureDetector(
                               onTap: () => _openGreetingEditor(i),
-                              child: Icon(Icons.edit_outlined, size: 18, color: context.cs.primary),
+                              child: Icon(
+                                Icons.edit_outlined,
+                                size: 18,
+                                color: context.cs.primary,
+                              ),
                             ),
                             const SizedBox(width: 12),
                             GestureDetector(
                               onTap: () => _confirmDeleteGreeting(i),
-                              child: const Icon(Icons.delete_outline, size: 18, color: Color(0xFFFF4444)),
+                              child: const Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: Color(0xFFFF4444),
+                              ),
                             ),
                           ],
                         ),
@@ -473,7 +496,9 @@ class _GenericEditorState extends State<GenericEditor> {
                     GestureDetector(
                       onTap: () => _openGreetingEditor(i),
                       child: Text(
-                        greets[i].isEmpty ? 'action_add_greeting'.tr() : greets[i],
+                        greets[i].isEmpty
+                            ? 'action_add_greeting'.tr()
+                            : greets[i],
                         style: TextStyle(
                           fontSize: 14,
                           color: context.cs.onSurface.withValues(alpha: 0.9),
@@ -505,7 +530,10 @@ class _GenericEditorState extends State<GenericEditor> {
                   const SizedBox(width: 8),
                   Text(
                     'action_add_greeting'.tr(),
-                    style: TextStyle(color: context.cs.primary, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      color: context.cs.primary,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ],
               ),
@@ -531,13 +559,19 @@ class _GenericEditorState extends State<GenericEditor> {
               child: Container(
                 color: context.cs.surfaceContainerHighest,
                 child: avatarPath != null && avatarPath.isNotEmpty
-                    ? Image.file(File(resolveGlazeFilePath(avatarPath)!), fit: BoxFit.cover)
+                    ? Image.file(
+                        File(resolveGlazeFilePath(avatarPath)!),
+                        fit: BoxFit.cover,
+                      )
                     : Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [const Color(0xFF66CCFF), context.cs.primary],
+                            colors: [
+                              const Color(0xFF66CCFF),
+                              context.cs.primary,
+                            ],
                           ),
                         ),
                         alignment: Alignment.center,
@@ -553,7 +587,9 @@ class _GenericEditorState extends State<GenericEditor> {
               ),
             ),
             Positioned(
-              top: 0, left: 0, right: 0,
+              top: 0,
+              left: 0,
+              right: 0,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(16, 14, 16, 30),
                 decoration: const BoxDecoration(
@@ -575,7 +611,9 @@ class _GenericEditorState extends State<GenericEditor> {
               ),
             ),
             Positioned(
-              bottom: 0, left: 0, right: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(16, 30, 16, 20),
                 decoration: const BoxDecoration(
@@ -588,7 +626,10 @@ class _GenericEditorState extends State<GenericEditor> {
                 alignment: Alignment.center,
                 child: Text(
                   widget.avatarHint,
-                  style: const TextStyle(color: Color(0xE6FFFFFF), fontSize: 14),
+                  style: const TextStyle(
+                    color: Color(0xE6FFFFFF),
+                    fontSize: 14,
+                  ),
                 ),
               ),
             ),

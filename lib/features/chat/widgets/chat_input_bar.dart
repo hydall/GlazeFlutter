@@ -29,7 +29,8 @@ class ChatInputBar extends ConsumerStatefulWidget {
   final bool isGeneratingImage;
   final VoidCallback? onStop;
   final VoidCallback? onMagicDrawer;
-  final void Function(String text, String? guidanceText, String imageDataUrl)? onSendWithImage;
+  final void Function(String text, String? guidanceText, String imageDataUrl)?
+  onSendWithImage;
   final VoidCallback? onFullScreen;
   final VoidCallback? onQuickReplies;
   final VoidCallback? onImpersonate;
@@ -235,7 +236,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     if (text.trim().isEmpty && !hasImage) return;
     final imageDataUrl = _attachedImageDataUrl;
     if (imageDataUrl != null) {
-      final guidance = _guidanceMode && _guidanceController.text.trim().isNotEmpty
+      final guidance =
+          _guidanceMode && _guidanceController.text.trim().isNotEmpty
           ? _guidanceController.text.trim()
           : null;
       widget.onSendWithImage?.call(text, guidance, imageDataUrl);
@@ -261,13 +263,17 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
 
     await FullscreenEditorScreen.show(
       context,
-      title: _guidanceMode ? 'chat_compose_message'.tr() : 'chat_message_title'.tr(),
-      controller: _controller,
+      title: _guidanceMode
+          ? 'chat_compose_message'.tr()
+          : 'chat_message_title'.tr(),
+      initialValue: _controller.text,
       hintText: _guidanceMode
           ? 'chat_long_message_hint'.tr()
           : 'chat_placeholder'.tr(),
-      onChanged: (_) {
-        if (mounted) setState(() {});
+      onChanged: (value) {
+        if (!mounted) return;
+        _controller.text = value;
+        setState(() {});
       },
     );
   }
@@ -275,8 +281,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   @override
   Widget build(BuildContext context) {
     final preset = ref.watch(themeProvider.select((s) => s.activePreset));
-    final scale =
-        preset.uiFontSize is num ? preset.uiFontSizeValue / 15.0 : 1.0;
+    final scale = preset.uiFontSize is num
+        ? preset.uiFontSizeValue / 15.0
+        : 1.0;
     final letterSpacing = preset.uiLetterSpacing;
     final textColor = preset.uiTextParsed ?? context.cs.onSurface;
     final secondaryColor =
@@ -291,50 +298,46 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 56),
           child: Row(
-          children: [
-            const SizedBox(width: 18),
-            Icon(Icons.search, size: 20, color: context.cs.primary),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                widget.searchMatchCount > 0
-                    ? '${widget.searchCurrentIndex + 1} of ${widget.searchMatchCount} matches'
-                    : 'search_no_results'.tr(),
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 16 * scale,
-                  letterSpacing: letterSpacing,
+            children: [
+              const SizedBox(width: 18),
+              Icon(Icons.search, size: 20, color: context.cs.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  widget.searchMatchCount > 0
+                      ? '${widget.searchCurrentIndex + 1} of ${widget.searchMatchCount} matches'
+                      : 'search_no_results'.tr(),
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 16 * scale,
+                    letterSpacing: letterSpacing,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            IconButton(
-              icon: Icon(
-                Icons.keyboard_arrow_up,
-                size: 24,
-                color: textColor,
+              IconButton(
+                icon: Icon(Icons.keyboard_arrow_up, size: 24, color: textColor),
+                onPressed: widget.onSearchPrev,
               ),
-              onPressed: widget.onSearchPrev,
-            ),
-            IconButton(
-              icon: Icon(
-                Icons.keyboard_arrow_down,
-                size: 24,
-                color: textColor,
+              IconButton(
+                icon: Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 24,
+                  color: textColor,
+                ),
+                onPressed: widget.onSearchNext,
               ),
-              onPressed: widget.onSearchNext,
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
+              const SizedBox(width: 8),
+            ],
+          ),
         ),
       );
       return SafeArea(
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child:           Material(
+          child: Material(
             color: Colors.transparent,
             elevation: 0,
             borderRadius: BorderRadius.circular(28),
@@ -352,43 +355,51 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 56),
           child: Row(
-          children: [
-            const SizedBox(width: 8),
-            _CircleBtn(
-              icon: Icons.close,
-              onTap: widget.onCancelSelection,
-              batterySaver: widget.batterySaver,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                '${widget.selectedCount} ${'selected_count'.tr()}',
-                style: TextStyle(
-                  color: textColor,
-                  fontSize: 16 * scale,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: letterSpacing,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            children: [
+              const SizedBox(width: 8),
+              _CircleBtn(
+                icon: Icons.close,
+                onTap: widget.onCancelSelection,
+                batterySaver: widget.batterySaver,
               ),
-            ),
-            _CircleBtn(
-              icon: widget.allSelectedHidden ? Icons.visibility : Icons.visibility_off,
-              onTap: widget.selectedCount > 0 ? widget.onHideSelected : null,
-              color: widget.selectedCount > 0 ? context.cs.primary : secondaryColor.withValues(alpha: 0.5),
-              batterySaver: widget.batterySaver,
-            ),
-            const SizedBox(width: 8),
-            _CircleBtn(
-              icon: Icons.delete,
-              onTap: widget.selectedCount > 0 ? widget.onDeleteSelected : null,
-              color: widget.selectedCount > 0 ? Colors.redAccent : secondaryColor.withValues(alpha: 0.5),
-              batterySaver: widget.batterySaver,
-            ),
-            const SizedBox(width: 8),
-          ],
-        ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '${widget.selectedCount} ${'selected_count'.tr()}',
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: 16 * scale,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: letterSpacing,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              _CircleBtn(
+                icon: widget.allSelectedHidden
+                    ? Icons.visibility
+                    : Icons.visibility_off,
+                onTap: widget.selectedCount > 0 ? widget.onHideSelected : null,
+                color: widget.selectedCount > 0
+                    ? context.cs.primary
+                    : secondaryColor.withValues(alpha: 0.5),
+                batterySaver: widget.batterySaver,
+              ),
+              const SizedBox(width: 8),
+              _CircleBtn(
+                icon: Icons.delete,
+                onTap: widget.selectedCount > 0
+                    ? widget.onDeleteSelected
+                    : null,
+                color: widget.selectedCount > 0
+                    ? Colors.redAccent
+                    : secondaryColor.withValues(alpha: 0.5),
+                batterySaver: widget.batterySaver,
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
         ),
       );
       return SafeArea(
@@ -405,7 +416,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       );
     }
 
-    final hasContent = _controller.text.trim().isNotEmpty ||
+    final hasContent =
+        _controller.text.trim().isNotEmpty ||
         (_guidanceMode && _guidanceController.text.trim().isNotEmpty) ||
         _attachedImageDataUrl != null;
     final isGenerating = widget.isGenerating || widget.isGeneratingImage;
@@ -588,11 +600,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   icon: isGenerating
                       ? Icons.stop_rounded
                       : hasContent
-                            ? (_guidanceMode &&
-                                      _controller.text.trim().isEmpty
-                                  ? Icons.check_rounded
-                                  : Icons.send_rounded)
-                            : Icons.account_circle_rounded,
+                      ? (_guidanceMode && _controller.text.trim().isEmpty
+                            ? Icons.check_rounded
+                            : Icons.send_rounded)
+                      : Icons.account_circle_rounded,
                   batterySaver: widget.batterySaver,
                   onTap: () {
                     if (isGenerating) {
@@ -632,17 +643,14 @@ class _AttachedImagePreview extends StatelessWidget {
         constraints: const BoxConstraints(maxWidth: 150, maxHeight: 150),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: border ??
-              Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border:
+              border ?? Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
         child: Stack(
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: Image.memory(
-                imageBytes,
-                fit: BoxFit.contain,
-              ),
+              child: Image.memory(imageBytes, fit: BoxFit.contain),
             ),
             Positioned(
               top: 4,
@@ -673,13 +681,19 @@ class _CircleBtn extends ConsumerStatefulWidget {
   final Color? color;
   final bool batterySaver;
 
-  const _CircleBtn({required this.icon, this.onTap, this.color, this.batterySaver = false});
+  const _CircleBtn({
+    required this.icon,
+    this.onTap,
+    this.color,
+    this.batterySaver = false,
+  });
 
   @override
   ConsumerState<_CircleBtn> createState() => _CircleBtnState();
 }
 
-class _CircleBtnState extends ConsumerState<_CircleBtn> with SingleTickerProviderStateMixin {
+class _CircleBtnState extends ConsumerState<_CircleBtn>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _press;
   late final Animation<double> _scale;
 
@@ -691,9 +705,10 @@ class _CircleBtnState extends ConsumerState<_CircleBtn> with SingleTickerProvide
       duration: const Duration(milliseconds: 80),
       reverseDuration: const Duration(milliseconds: 150),
     );
-    _scale = Tween<double>(begin: 1.0, end: 0.82).animate(
-      CurvedAnimation(parent: _press, curve: Curves.easeOut),
-    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 0.82,
+    ).animate(CurvedAnimation(parent: _press, curve: Curves.easeOut));
   }
 
   @override
@@ -707,9 +722,15 @@ class _CircleBtnState extends ConsumerState<_CircleBtn> with SingleTickerProvide
     final preset = ref.watch(themeProvider.select((s) => s.activePreset));
     return GestureDetector(
       onTap: widget.onTap,
-      onTapDown: (widget.onTap != null && !widget.batterySaver) ? (_) => _press.forward() : null,
-      onTapUp: (widget.onTap != null && !widget.batterySaver) ? (_) => _press.reverse() : null,
-      onTapCancel: (widget.onTap != null && !widget.batterySaver) ? () => _press.reverse() : null,
+      onTapDown: (widget.onTap != null && !widget.batterySaver)
+          ? (_) => _press.forward()
+          : null,
+      onTapUp: (widget.onTap != null && !widget.batterySaver)
+          ? (_) => _press.reverse()
+          : null,
+      onTapCancel: (widget.onTap != null && !widget.batterySaver)
+          ? () => _press.reverse()
+          : null,
       child: ScaleTransition(
         scale: _scale,
         child: SizedBox(
@@ -720,7 +741,11 @@ class _CircleBtnState extends ConsumerState<_CircleBtn> with SingleTickerProvide
             tint: context.cs.surface,
             border: _uiBorder(context, preset),
             child: Center(
-              child: Icon(widget.icon, color: widget.color ?? context.cs.primary, size: 20),
+              child: Icon(
+                widget.icon,
+                color: widget.color ?? context.cs.primary,
+                size: 20,
+              ),
             ),
           ),
         ),
@@ -740,7 +765,8 @@ class _SendBtn extends StatefulWidget {
   State<_SendBtn> createState() => _SendBtnState();
 }
 
-class _SendBtnState extends State<_SendBtn> with SingleTickerProviderStateMixin {
+class _SendBtnState extends State<_SendBtn>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _press;
   late final Animation<double> _scale;
 
@@ -752,9 +778,10 @@ class _SendBtnState extends State<_SendBtn> with SingleTickerProviderStateMixin 
       duration: const Duration(milliseconds: 80),
       reverseDuration: const Duration(milliseconds: 150),
     );
-    _scale = Tween<double>(begin: 1.0, end: 0.82).animate(
-      CurvedAnimation(parent: _press, curve: Curves.easeOut),
-    );
+    _scale = Tween<double>(
+      begin: 1.0,
+      end: 0.82,
+    ).animate(CurvedAnimation(parent: _press, curve: Curves.easeOut));
   }
 
   @override

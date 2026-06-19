@@ -68,7 +68,9 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
     loadLorebookActivations(ref);
     loadLorebookSettings(ref);
     seedDefaultPresets(ref);
-    _warmInitialListProviders();
+    if (!widget.skipStartup) {
+      _warmInitialListProviders();
+    }
     if (_startupReady) return;
     unawaited(_initializeStartup());
   }
@@ -190,7 +192,9 @@ class _GlazeAppState extends ConsumerState<GlazeApp>
     final msgId = data.msgId;
     final uri = Uri(
       path: '/chat/${data.charId}',
-      queryParameters: (msgId != null && msgId.isNotEmpty) ? {'msg': msgId} : null,
+      queryParameters: (msgId != null && msgId.isNotEmpty)
+          ? {'msg': msgId}
+          : null,
     );
     context.push(uri.toString());
   }

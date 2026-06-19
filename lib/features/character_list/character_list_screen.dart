@@ -28,6 +28,7 @@ import '../catalog/widgets/widgets.dart';
 import '../character_gallery/gallery_provider.dart';
 import '../picks/widgets/picks_grid.dart';
 import '../settings/app_settings_provider.dart';
+import 'character_sort.dart';
 import 'character_detail_screen.dart';
 import 'filtered_characters_provider.dart';
 import 'widgets/widgets.dart';
@@ -238,7 +239,8 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
       _openingInitialCharacter = false;
 
       final uri = GoRouterState.of(context).uri;
-      if (uri.path == '/characters' && uri.queryParameters.containsKey('open')) {
+      if (uri.path == '/characters' &&
+          uri.queryParameters.containsKey('open')) {
         context.go('/characters');
       }
 
@@ -424,16 +426,16 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
 
   /// Builds the query for [filteredCharactersProvider] from current UI state.
   CharacterQuery _query({String? folderId}) => CharacterQuery(
-        search: _searchQuery,
-        favOnly: _filters.favOnly,
-        tags: _filters.tagNames.toList()..sort(),
-        minTokens: _filters.minTokens,
-        maxTokens: _filters.maxTokens,
-        hasTokenFilter: _filters.hasTokenFilter,
-        sortBy: _sortBy,
-        sortDir: _sortDir,
-        folderId: folderId,
-      );
+    search: _searchQuery,
+    favOnly: _filters.favOnly,
+    tags: _filters.tagNames.toList()..sort(),
+    minTokens: _filters.minTokens,
+    maxTokens: _filters.maxTokens,
+    hasTokenFilter: _filters.hasTokenFilter,
+    sortBy: _sortBy,
+    sortDir: _sortDir,
+    folderId: folderId,
+  );
 
   Widget _buildFilteredResults(
     BuildContext context,
@@ -473,9 +475,11 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                           onPressed: () => setState(
                             () => _filters = const CharacterListFilters(),
                           ),
-                          child: Text('catalog_clear_tags'.tr(
-                            namedArgs: {'count': '${_filters.activeCount}'},
-                          )),
+                          child: Text(
+                            'catalog_clear_tags'.tr(
+                              namedArgs: {'count': '${_filters.activeCount}'},
+                            ),
+                          ),
                         ),
                     ],
                   ),
@@ -520,8 +524,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
         ),
       ),
       data: (_) {
-        final sorted =
-            ref.watch(filteredCharactersProvider(_query(folderId: folderId)));
+        final sorted = ref.watch(
+          filteredCharactersProvider(_query(folderId: folderId)),
+        );
 
         if (sorted.isEmpty) {
           return CustomScrollView(
@@ -593,11 +598,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
       decoration: InputDecoration(
         isDense: true,
         border: InputBorder.none,
-        hintText: _tabIndex == 1 ? 'catalog_search_placeholder'.tr() : 'search_characters'.tr(),
-        hintStyle: TextStyle(
-          color: context.cs.onSurfaceVariant,
-          fontSize: 16,
-        ),
+        hintText: _tabIndex == 1
+            ? 'catalog_search_placeholder'.tr()
+            : 'search_characters'.tr(),
+        hintStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 16),
       ),
     );
   }
@@ -607,7 +611,10 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       child: GlazeTabBar(
         tabs: [
-          GlazeTabItem(label: 'tab_my_characters'.tr(), icon: Icons.person_rounded),
+          GlazeTabItem(
+            label: 'tab_my_characters'.tr(),
+            icon: Icons.person_rounded,
+          ),
           GlazeTabItem(label: 'tab_catalog'.tr(), icon: Icons.public_rounded),
         ],
         activeIndex: _tabIndex == 2 ? 0 : _tabIndex,
@@ -729,7 +736,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           );
           await ref.read(lorebooksProvider.notifier).put(lorebook);
         } else {
-          debugPrint('[character_import] gallery no_lorebook character=${r.character.id}');
+          debugPrint(
+            '[character_import] gallery no_lorebook character=${r.character.id}',
+          );
         }
         if (r.galleryImages != null) {
           for (final img in r.galleryImages!) {
@@ -799,7 +808,9 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
           );
           await ref.read(lorebooksProvider.notifier).put(lorebook);
         } else {
-          debugPrint('[character_import] files no_lorebook character=${r.character.id}');
+          debugPrint(
+            '[character_import] files no_lorebook character=${r.character.id}',
+          );
         }
         if (r.galleryImages != null) {
           for (final img in r.galleryImages!) {

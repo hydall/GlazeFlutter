@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -150,8 +152,9 @@ void main() {
 
   group('Screen navigation coverage', () {
     for (final entry in screenRegistry) {
-      testWidgets('Navigate to ${entry.description} (${entry.path})',
-          (tester) async {
+      testWidgets('Navigate to ${entry.description} (${entry.path})', (
+        tester,
+      ) async {
         await pumpGlazeApp(tester, container: container);
 
         router().go(entry.path);
@@ -195,11 +198,24 @@ void main() {
   // These navigate within the shell (branch → branch), which GoRouter handles
   // without touching StatefulShellRoute's LabeledGlobalKey.
   final shellSubScreens = [
-    ('/tools/api', '/tools', ApiSettingsScreen, ToolsScreen, 'API settings → Tools'),
-    ('/tools/personas', '/tools', PersonaListScreen, ToolsScreen, 'Persona list → Tools'),
+    (
+      '/tools/api',
+      '/tools',
+      ApiSettingsScreen,
+      ToolsScreen,
+      'API settings → Tools',
+    ),
+    (
+      '/tools/personas',
+      '/tools',
+      PersonaListScreen,
+      ToolsScreen,
+      'Persona list → Tools',
+    ),
   ];
 
-  for (final (subPath, parentPath, subType, parentType, label) in shellSubScreens) {
+  for (final (subPath, parentPath, subType, parentType, label)
+      in shellSubScreens) {
     testWidgets('Back navigation: $label', (tester) async {
       await pumpGlazeApp(tester, container: container);
 
@@ -218,7 +234,8 @@ void main() {
       expect(
         find.byType(parentType, skipOffstage: false),
         findsWidgets,
-        reason: 'Back navigation for "$label" failed: '
+        reason:
+            'Back navigation for "$label" failed: '
             'expected $parentType at $parentPath after going back',
       );
     });
@@ -233,16 +250,22 @@ void main() {
     await pumpGlazeApp(tester, container: container);
     router().go('/menu/settings');
     await pumpNavigation(tester);
-    expect(find.byType(AppSettingsScreen, skipOffstage: false), findsWidgets,
-        reason: 'AppSettingsScreen at /menu/settings not found');
+    expect(
+      find.byType(AppSettingsScreen, skipOffstage: false),
+      findsWidgets,
+      reason: 'AppSettingsScreen at /menu/settings not found',
+    );
   });
 
   testWidgets('Back navigation: About screen renders', (tester) async {
     await pumpGlazeApp(tester, container: container);
     router().go('/menu/about');
     await pumpNavigation(tester);
-    expect(find.byType(AboutScreen, skipOffstage: false), findsWidgets,
-        reason: 'AboutScreen at /menu/about not found');
+    expect(
+      find.byType(AboutScreen, skipOffstage: false),
+      findsWidgets,
+      reason: 'AboutScreen at /menu/about not found',
+    );
   });
 
   // Regression: pushing the lorebook global settings on top of the lorebook
@@ -250,24 +273,23 @@ void main() {
   // crash during Scaffold layout — an OverlayPortal child reactivated mid
   // `_RenderLayoutBuilder.performLayout`. Presenting the screen as a
   // zero-transition GoRouter page avoids the animated reactivation path.
-  testWidgets(
-    'Lorebook list → global settings pushes without layout crash',
-    (tester) async {
-      await pumpGlazeApp(tester, container: container);
+  testWidgets('Lorebook list → global settings pushes without layout crash', (
+    tester,
+  ) async {
+    await pumpGlazeApp(tester, container: container);
 
-      router().go('/tools/lorebooks');
-      await pumpNavigation(tester);
-      expect(find.byType(LorebookListScreen, skipOffstage: false), findsWidgets);
+    router().go('/tools/lorebooks');
+    await pumpNavigation(tester);
+    expect(find.byType(LorebookListScreen, skipOffstage: false), findsWidgets);
 
-      await router().push('/tools/lorebooks/settings');
-      await pumpNavigation(tester);
+    unawaited(router().push('/tools/lorebooks/settings'));
+    await pumpNavigation(tester);
 
-      expect(
-        find.byType(LorebookGlobalSettingsScreen, skipOffstage: false),
-        findsWidgets,
-        reason: 'Lorebook global settings did not render after push',
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
+    expect(
+      find.byType(LorebookGlobalSettingsScreen, skipOffstage: false),
+      findsWidgets,
+      reason: 'Lorebook global settings did not render after push',
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

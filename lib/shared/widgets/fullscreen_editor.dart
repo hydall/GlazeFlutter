@@ -6,7 +6,7 @@ import 'menu_group.dart';
 
 class FullscreenEditorScreen extends StatefulWidget {
   final String title;
-  final TextEditingController controller;
+  final String initialValue;
   final String? hintText;
   final bool autofocus;
   final ValueChanged<String>? onChanged;
@@ -14,7 +14,7 @@ class FullscreenEditorScreen extends StatefulWidget {
   const FullscreenEditorScreen({
     super.key,
     required this.title,
-    required this.controller,
+    required this.initialValue,
     this.hintText,
     this.autofocus = true,
     this.onChanged,
@@ -23,7 +23,7 @@ class FullscreenEditorScreen extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     required String title,
-    required TextEditingController controller,
+    required String initialValue,
     String? hintText,
     bool autofocus = true,
     ValueChanged<String>? onChanged,
@@ -33,7 +33,7 @@ class FullscreenEditorScreen extends StatefulWidget {
         fullscreenDialog: true,
         builder: (_) => FullscreenEditorScreen(
           title: title,
-          controller: controller,
+          initialValue: initialValue,
           hintText: hintText,
           autofocus: autofocus,
           onChanged: onChanged,
@@ -47,6 +47,20 @@ class FullscreenEditorScreen extends StatefulWidget {
 }
 
 class _FullscreenEditorScreenState extends State<FullscreenEditorScreen> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialValue);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     return GlazeScaffold(
@@ -62,7 +76,7 @@ class _FullscreenEditorScreenState extends State<FullscreenEditorScreen> {
             return MenuGroup(
               items: [
                 _FullscreenEditorField(
-                  controller: widget.controller,
+                  controller: _controller,
                   hintText: widget.hintText,
                   autofocus: widget.autofocus,
                   height: constraints.maxHeight - 30,

@@ -16,7 +16,7 @@ import 'package:glaze_flutter/core/state/db_provider.dart';
 /// with a fresh router (and a fresh key) per test.
 ProviderContainer makeContainer(AppDatabase db) {
   final navKey = GlobalKey<NavigatorState>();
-  final router = buildRouter(navKey);
+  final router = buildRouter(navKey, isForceMobile: () => true);
   return ProviderContainer(
     overrides: [
       appDbProvider.overrideWithValue(db),

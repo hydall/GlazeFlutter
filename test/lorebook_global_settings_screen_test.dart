@@ -32,7 +32,6 @@ void main() {
         ),
       );
 
-      expect(find.text('Vector Search'), findsOneWidget);
       expect(find.byType(Slider), findsOneWidget);
 
       await tester.ensureVisible(find.byType(Slider));

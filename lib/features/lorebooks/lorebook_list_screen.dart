@@ -41,6 +41,7 @@ class LorebookListScreen extends ConsumerWidget {
     return SheetView(
       startExpanded: startExpanded,
       showRouteBackground: false,
+      shellBranchIndex: 2,
       titleWidget: Row(
         children: [
           Flexible(
@@ -111,7 +112,8 @@ class LorebookListScreen extends ConsumerWidget {
                       ),
                     ),
                     onMore: () => _lorebookMenu(context, ref, lb),
-                    onConnections: () => showLorebookConnections(context, lb.id),
+                    onConnections: () =>
+                        showLorebookConnections(context, lb.id),
                   ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -607,7 +609,9 @@ class _GlobalSettingsSectionState
     super.initState();
     final s = ref.read(lorebookSettingsProvider);
     _scanDepthCtrl = TextEditingController(text: s.scanDepth.toString());
-    _maxEntriesCtrl = TextEditingController(text: s.maxInjectedEntries.toString());
+    _maxEntriesCtrl = TextEditingController(
+      text: s.maxInjectedEntries.toString(),
+    );
     _reserveCtrl = TextEditingController(text: s.reserveValue.toString());
     _topKCtrl = TextEditingController(text: s.vectorTopK.toString());
   }
@@ -799,8 +803,9 @@ class _GlobalSettingsSectionState
           min: 0,
           max: 1,
           divisions: 100,
-          onChanged: (v) =>
-              _update(s.copyWith(vectorThreshold: double.parse(v.toStringAsFixed(2)))),
+          onChanged: (v) => _update(
+            s.copyWith(vectorThreshold: double.parse(v.toStringAsFixed(2))),
+          ),
         ),
         _NumberItem(
           label: 'label_top_k'.tr(),

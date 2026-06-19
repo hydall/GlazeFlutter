@@ -128,7 +128,9 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     final errorLabels = <String, String>{};
     for (final entry in _entries) {
       if (!entry.vectorSearch || !entry.enabled || entry.constant) continue;
-      final record = await repo.getByEntryId('${widget.lorebookId}_${entry.id}');
+      final record = await repo.getByEntryId(
+        '${widget.lorebookId}_${entry.id}',
+      );
       if (record == null) {
         statuses[entry.id] = 'none';
       } else if (record.errorJson != null) {
@@ -270,8 +272,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
 
   /// Step 1 of "Copy from Lorebook": pick which lorebook to copy an entry from.
   void _openCopyEntryLorebookPicker() {
-    final lorebooks =
-        ref.read(lorebooksProvider).value ?? const <Lorebook>[];
+    final lorebooks = ref.read(lorebooksProvider).value ?? const <Lorebook>[];
     if (lorebooks.isEmpty) return;
     GlazeBottomSheet.show<void>(
       context,
@@ -479,7 +480,10 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
       position: _ePosition,
       characterFilter: names.isEmpty
           ? null
-          : LorebookCharacterFilter(names: names, isExclude: _eCharFilterExclude),
+          : LorebookCharacterFilter(
+              names: names,
+              isExclude: _eCharFilterExclude,
+            ),
     );
   }
 
@@ -495,11 +499,8 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
     }
   }
 
-  List<String> _parseList(String text) => text
-      .split(',')
-      .map((s) => s.trim())
-      .where((s) => s.isNotEmpty)
-      .toList();
+  List<String> _parseList(String text) =>
+      text.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
 
   void _onConstantChanged(bool v) {
     setState(() {
@@ -1095,6 +1096,7 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
 
     return SheetView(
       showRouteBackground: false,
+      shellBranchIndex: 2,
       showBack: true,
       onBack: () {
         if (_view == _View.editEntry) {
@@ -1119,9 +1121,13 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
             ]
           : [
               SheetViewAction(
-                icon: Icon(_eEnabled ? Icons.toggle_on : Icons.toggle_off,
-                    size: 28),
-                color: _eEnabled ? context.cs.primary : context.cs.onSurfaceVariant,
+                icon: Icon(
+                  _eEnabled ? Icons.toggle_on : Icons.toggle_off,
+                  size: 28,
+                ),
+                color: _eEnabled
+                    ? context.cs.primary
+                    : context.cs.onSurfaceVariant,
                 tooltip: 'label_enabled'.tr(),
                 onPressed: () {
                   setState(() => _eEnabled = !_eEnabled);
@@ -1322,7 +1328,9 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
                 : _isIndexing
                 ? (_indexStatus.isNotEmpty ? _indexStatus : 'btn_indexing'.tr())
                 : 'btn_index_all'.tr(),
-            onTap: (_isIndexing || _rateLimitCooldown > 0) ? null : _indexEntries,
+            onTap: (_isIndexing || _rateLimitCooldown > 0)
+                ? null
+                : _indexEntries,
           ),
           if (_failedEntries.isNotEmpty) ...[
             const SizedBox(width: 8),
@@ -1330,7 +1338,9 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
               icon: Icons.refresh,
               label: 'btn_retry_failed'.tr(),
               secondary: true,
-              onTap: (_isIndexing || _rateLimitCooldown > 0) ? null : _retryFailed,
+              onTap: (_isIndexing || _rateLimitCooldown > 0)
+                  ? null
+                  : _retryFailed,
             ),
           ],
           const SizedBox(width: 8),
@@ -1435,302 +1445,307 @@ class _LorebookEditorScreenState extends ConsumerState<LorebookEditorScreen> {
           bottom: MediaQuery.paddingOf(context).bottom + 40,
         ),
         children: [
-        // Activation & Logic
-        MenuGroup(
-          header: 'section_activation_logic'.tr(),
-          helpTerm: 'lorebook-keys',
-          items: [
-            if (_eVectorSearch)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-                child: Text(
-                  'desc_vector_search_supplements_keys'.tr(),
-                  style: const TextStyle(fontSize: 12, color: Colors.green),
+          // Activation & Logic
+          MenuGroup(
+            header: 'section_activation_logic'.tr(),
+            helpTerm: 'lorebook-keys',
+            items: [
+              if (_eVectorSearch)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                  child: Text(
+                    'desc_vector_search_supplements_keys'.tr(),
+                    style: const TextStyle(fontSize: 12, color: Colors.green),
+                  ),
                 ),
-              ),
-            if (!_eConstant) ...[
-              MenuFieldItem(
-                label: 'label_primary_keys'.tr(),
-                controller: _eKeys!,
-                placeholder: 'placeholder_keys'.tr(),
-                onChanged: (_) => _commitEdit(),
-              ),
-              MenuSelectorItem(
-                label: 'label_logic_mode'.tr(),
-                currentValue: _logicLabel(_eSelectiveLogic),
-                onTap: () => showLorebookOptionSheet<int>(
-                  context,
-                  title: 'label_logic_mode'.tr(),
-                  current: _eSelectiveLogic,
-                  options: [
-                    LorebookOption(4, 'logic_primary_only'.tr()),
-                    LorebookOption(0, 'logic_and_any'.tr()),
-                    LorebookOption(1, 'logic_and_all'.tr()),
-                    LorebookOption(2, 'logic_not_any'.tr()),
-                    LorebookOption(3, 'logic_not_all'.tr()),
-                  ],
-                  onSelect: (v) {
-                    setState(() => _eSelectiveLogic = v);
-                    _commitEdit(immediate: true);
-                  },
-                ),
-              ),
-              MenuSelectorItem(
-                label: 'label_case_sensitive'.tr(),
-                currentValue: _triLabel(_eCaseSensitive),
-                onTap: () => showLorebookOptionSheet<String>(
-                  context,
-                  title: 'label_case_sensitive'.tr(),
-                  current: _triKey(_eCaseSensitive),
-                  options: [
-                    LorebookOption('null', 'match_global'.tr()),
-                    LorebookOption('true', 'on'.tr()),
-                    LorebookOption('false', 'off'.tr()),
-                  ],
-                  onSelect: (v) {
-                    setState(() => _eCaseSensitive = _triValue(v));
-                    _commitEdit(immediate: true);
-                  },
-                ),
-              ),
-              MenuSelectorItem(
-                label: 'label_match_whole_words'.tr(),
-                currentValue: _triLabel(_eMatchWholeWords),
-                onTap: () => showLorebookOptionSheet<String>(
-                  context,
-                  title: 'label_match_whole_words'.tr(),
-                  current: _triKey(_eMatchWholeWords),
-                  options: [
-                    LorebookOption('null', 'match_global'.tr()),
-                    LorebookOption('true', 'match_whole_words_st'.tr()),
-                    LorebookOption('false', 'off'.tr()),
-                  ],
-                  onSelect: (v) {
-                    setState(() => _eMatchWholeWords = _triValue(v));
-                    _commitEdit(immediate: true);
-                  },
-                ),
-              ),
-              MenuSwitchItem(
-                label: 'label_group_scoring'.tr(),
-                value: _eUseGroupScoring,
-                onChanged: (v) {
-                  setState(() => _eUseGroupScoring = v);
-                  _commitEdit(immediate: true);
-                },
-              ),
-              if (_eSelectiveLogic != 4)
+              if (!_eConstant) ...[
                 MenuFieldItem(
-                  label: 'label_secondary_keys'.tr(),
-                  controller: _eSecondary!,
-                  placeholder: 'placeholder_filters'.tr(),
+                  label: 'label_primary_keys'.tr(),
+                  controller: _eKeys!,
+                  placeholder: 'placeholder_keys'.tr(),
                   onChanged: (_) => _commitEdit(),
                 ),
-            ],
-          ],
-        ),
-
-        // Content & Properties
-        MenuGroup(
-          header: 'section_content_properties'.tr(),
-          items: [
-            MenuFieldItem(
-              label: 'label_content'.tr(),
-              controller: _eContent!,
-              placeholder: 'placeholder_lore_content'.tr(),
-              maxLines: 10,
-              onChanged: (_) => _commitEdit(),
-            ),
-            MenuFieldItem(
-              label: 'label_comment'.tr(),
-              controller: _eComment!,
-              placeholder: 'placeholder_comment'.tr(),
-              onChanged: (_) => _commitEdit(),
-            ),
-          ],
-        ),
-
-        // Injection Rules
-        MenuGroup(
-          header: 'section_injection_rules'.tr(),
-          helpTerm: 'lorebook-budget',
-          items: [
-            MenuSelectorItem(
-              label: 'label_injection_position'.tr(),
-              currentValue: _positionLabel(_ePosition),
-              onTap: () => showLorebookOptionSheet<String>(
-                context,
-                title: 'label_injection_position'.tr(),
-                current: _ePosition,
-                options: [
-                  LorebookOption('matchGlobal', 'match_global'.tr()),
-                  LorebookOption('worldInfoBefore', 'pos_before_char'.tr()),
-                  LorebookOption('worldInfoAfter', 'pos_after_char'.tr()),
-                  LorebookOption('lorebooksMacro', 'pos_lorebooks_macro'.tr()),
-                ],
-                onSelect: (v) {
-                  setState(() => _ePosition = v);
-                  _commitEdit(immediate: true);
-                },
-              ),
-            ),
-            _numberField('label_order_priority'.tr(), _eOrder!),
-          ],
-        ),
-
-        // Scan & Recursion
-        MenuGroup(
-          header: 'section_scan_recursion'.tr(),
-          helpTerm: 'lorebook-recursion',
-          items: [
-            _numberField('label_scan_depth_lore'.tr(), _eScanDepth!),
-            MenuSwitchItem(
-              label: 'label_prevent_recursion'.tr(),
-              value: _ePreventRecursion,
-              onChanged: (v) {
-                setState(() => _ePreventRecursion = v);
-                _commitEdit(immediate: true);
-              },
-            ),
-            MenuSwitchItem(
-              label: 'label_delay_until_recursion'.tr(),
-              value: _eDelayUntilRecursion,
-              onChanged: (v) {
-                setState(() => _eDelayUntilRecursion = v);
-                _commitEdit(immediate: true);
-              },
-            ),
-            _numberField('label_probability'.tr(), _eProbability!),
-          ],
-        ),
-
-        // Vector Search
-        MenuGroup(
-          header: 'section_vector_search'.tr(),
-          items: [
-            MenuSwitchItem(
-              label: 'label_constant'.tr(),
-              description: 'desc_constant_disables_vector'.tr(),
-              value: _eConstant,
-              onChanged: _onConstantChanged,
-            ),
-            MenuSwitchItem(
-              label: 'label_vector_search'.tr(),
-              description: _eConstant
-                  ? 'desc_vector_disabled_for_constant'.tr()
-                  : 'desc_vector_search_entry'.tr(),
-              value: _eVectorSearch,
-              onChanged: _eConstant
-                  ? (_) {}
-                  : (v) {
-                      setState(() => _eVectorSearch = v);
+                MenuSelectorItem(
+                  label: 'label_logic_mode'.tr(),
+                  currentValue: _logicLabel(_eSelectiveLogic),
+                  onTap: () => showLorebookOptionSheet<int>(
+                    context,
+                    title: 'label_logic_mode'.tr(),
+                    current: _eSelectiveLogic,
+                    options: [
+                      LorebookOption(4, 'logic_primary_only'.tr()),
+                      LorebookOption(0, 'logic_and_any'.tr()),
+                      LorebookOption(1, 'logic_and_all'.tr()),
+                      LorebookOption(2, 'logic_not_any'.tr()),
+                      LorebookOption(3, 'logic_not_all'.tr()),
+                    ],
+                    onSelect: (v) {
+                      setState(() => _eSelectiveLogic = v);
                       _commitEdit(immediate: true);
                     },
-            ),
-            if (_eVectorSearch && !_eConstant)
+                  ),
+                ),
+                MenuSelectorItem(
+                  label: 'label_case_sensitive'.tr(),
+                  currentValue: _triLabel(_eCaseSensitive),
+                  onTap: () => showLorebookOptionSheet<String>(
+                    context,
+                    title: 'label_case_sensitive'.tr(),
+                    current: _triKey(_eCaseSensitive),
+                    options: [
+                      LorebookOption('null', 'match_global'.tr()),
+                      LorebookOption('true', 'on'.tr()),
+                      LorebookOption('false', 'off'.tr()),
+                    ],
+                    onSelect: (v) {
+                      setState(() => _eCaseSensitive = _triValue(v));
+                      _commitEdit(immediate: true);
+                    },
+                  ),
+                ),
+                MenuSelectorItem(
+                  label: 'label_match_whole_words'.tr(),
+                  currentValue: _triLabel(_eMatchWholeWords),
+                  onTap: () => showLorebookOptionSheet<String>(
+                    context,
+                    title: 'label_match_whole_words'.tr(),
+                    current: _triKey(_eMatchWholeWords),
+                    options: [
+                      LorebookOption('null', 'match_global'.tr()),
+                      LorebookOption('true', 'match_whole_words_st'.tr()),
+                      LorebookOption('false', 'off'.tr()),
+                    ],
+                    onSelect: (v) {
+                      setState(() => _eMatchWholeWords = _triValue(v));
+                      _commitEdit(immediate: true);
+                    },
+                  ),
+                ),
+                MenuSwitchItem(
+                  label: 'label_group_scoring'.tr(),
+                  value: _eUseGroupScoring,
+                  onChanged: (v) {
+                    setState(() => _eUseGroupScoring = v);
+                    _commitEdit(immediate: true);
+                  },
+                ),
+                if (_eSelectiveLogic != 4)
+                  MenuFieldItem(
+                    label: 'label_secondary_keys'.tr(),
+                    controller: _eSecondary!,
+                    placeholder: 'placeholder_filters'.tr(),
+                    onChanged: (_) => _commitEdit(),
+                  ),
+              ],
+            ],
+          ),
+
+          // Content & Properties
+          MenuGroup(
+            header: 'section_content_properties'.tr(),
+            items: [
+              MenuFieldItem(
+                label: 'label_content'.tr(),
+                controller: _eContent!,
+                placeholder: 'placeholder_lore_content'.tr(),
+                maxLines: 10,
+                onChanged: (_) => _commitEdit(),
+              ),
+              MenuFieldItem(
+                label: 'label_comment'.tr(),
+                controller: _eComment!,
+                placeholder: 'placeholder_comment'.tr(),
+                onChanged: (_) => _commitEdit(),
+              ),
+            ],
+          ),
+
+          // Injection Rules
+          MenuGroup(
+            header: 'section_injection_rules'.tr(),
+            helpTerm: 'lorebook-budget',
+            items: [
+              MenuSelectorItem(
+                label: 'label_injection_position'.tr(),
+                currentValue: _positionLabel(_ePosition),
+                onTap: () => showLorebookOptionSheet<String>(
+                  context,
+                  title: 'label_injection_position'.tr(),
+                  current: _ePosition,
+                  options: [
+                    LorebookOption('matchGlobal', 'match_global'.tr()),
+                    LorebookOption('worldInfoBefore', 'pos_before_char'.tr()),
+                    LorebookOption('worldInfoAfter', 'pos_after_char'.tr()),
+                    LorebookOption(
+                      'lorebooksMacro',
+                      'pos_lorebooks_macro'.tr(),
+                    ),
+                  ],
+                  onSelect: (v) {
+                    setState(() => _ePosition = v);
+                    _commitEdit(immediate: true);
+                  },
+                ),
+              ),
+              _numberField('label_order_priority'.tr(), _eOrder!),
+            ],
+          ),
+
+          // Scan & Recursion
+          MenuGroup(
+            header: 'section_scan_recursion'.tr(),
+            helpTerm: 'lorebook-recursion',
+            items: [
+              _numberField('label_scan_depth_lore'.tr(), _eScanDepth!),
               MenuSwitchItem(
-                label: 'label_use_keyword_search'.tr(),
-                description: 'desc_use_keyword_search'.tr(),
-                value: _eUseKeywordSearch,
+                label: 'label_prevent_recursion'.tr(),
+                value: _ePreventRecursion,
                 onChanged: (v) {
-                  setState(() => _eUseKeywordSearch = v);
+                  setState(() => _ePreventRecursion = v);
                   _commitEdit(immediate: true);
                 },
               ),
-            if (_eVectorSearch && !_eConstant)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: context.cs.primary,
-                          foregroundColor: Colors.black,
-                        ),
-                        onPressed: _eIndexing ? null : _indexSingleEntry,
-                        child: Text(
-                          _eIndexing
-                              ? 'btn_indexing'.tr()
-                              : 'btn_index_entry'.tr(),
-                        ),
-                      ),
-                    ),
-                    if (_embeddingStatuses[_entries[_editIndex].id] != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8),
-                        child: Text(
-                          switch (_embeddingStatuses[_entries[_editIndex].id]) {
-                            'indexed' => 'entry_indexed'.tr(),
-                            'error' => 'entry_index_error'.tr(),
-                            _ => 'entry_not_indexed'.tr(),
-                          },
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: switch (_embeddingStatuses[_entries[_editIndex]
-                                .id]) {
-                              'indexed' => Colors.green,
-                              'error' => Colors.orange,
-                              _ => context.cs.onSurfaceVariant,
-                            },
+              MenuSwitchItem(
+                label: 'label_delay_until_recursion'.tr(),
+                value: _eDelayUntilRecursion,
+                onChanged: (v) {
+                  setState(() => _eDelayUntilRecursion = v);
+                  _commitEdit(immediate: true);
+                },
+              ),
+              _numberField('label_probability'.tr(), _eProbability!),
+            ],
+          ),
+
+          // Vector Search
+          MenuGroup(
+            header: 'section_vector_search'.tr(),
+            items: [
+              MenuSwitchItem(
+                label: 'label_constant'.tr(),
+                description: 'desc_constant_disables_vector'.tr(),
+                value: _eConstant,
+                onChanged: _onConstantChanged,
+              ),
+              MenuSwitchItem(
+                label: 'label_vector_search'.tr(),
+                description: _eConstant
+                    ? 'desc_vector_disabled_for_constant'.tr()
+                    : 'desc_vector_search_entry'.tr(),
+                value: _eVectorSearch,
+                onChanged: _eConstant
+                    ? (_) {}
+                    : (v) {
+                        setState(() => _eVectorSearch = v);
+                        _commitEdit(immediate: true);
+                      },
+              ),
+              if (_eVectorSearch && !_eConstant)
+                MenuSwitchItem(
+                  label: 'label_use_keyword_search'.tr(),
+                  description: 'desc_use_keyword_search'.tr(),
+                  value: _eUseKeywordSearch,
+                  onChanged: (v) {
+                    setState(() => _eUseKeywordSearch = v);
+                    _commitEdit(immediate: true);
+                  },
+                ),
+              if (_eVectorSearch && !_eConstant)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: context.cs.primary,
+                            foregroundColor: Colors.black,
+                          ),
+                          onPressed: _eIndexing ? null : _indexSingleEntry,
+                          child: Text(
+                            _eIndexing
+                                ? 'btn_indexing'.tr()
+                                : 'btn_index_entry'.tr(),
                           ),
                         ),
                       ),
-                  ],
+                      if (_embeddingStatuses[_entries[_editIndex].id] != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            switch (_embeddingStatuses[_entries[_editIndex]
+                                .id]) {
+                              'indexed' => 'entry_indexed'.tr(),
+                              'error' => 'entry_index_error'.tr(),
+                              _ => 'entry_not_indexed'.tr(),
+                            },
+                            style: TextStyle(
+                              fontSize: 12,
+                              color:
+                                  switch (_embeddingStatuses[_entries[_editIndex]
+                                      .id]) {
+                                    'indexed' => Colors.green,
+                                    'error' => Colors.orange,
+                                    _ => context.cs.onSurfaceVariant,
+                                  },
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
+            ],
+          ),
+
+          // Temporal Logic
+          MenuGroup(
+            header: 'section_temporal_logic'.tr(),
+            helpTerm: 'lorebook-temporal',
+            items: [
+              _numberField('label_sticky'.tr(), _eSticky!),
+              _numberField('label_cooldown'.tr(), _eCooldown!),
+              _numberField('label_delay_turns'.tr(), _eDelay!),
+            ],
+          ),
+
+          // Grouping & Filter
+          MenuGroup(
+            header: 'section_grouping_filter'.tr(),
+            helpTerm: 'lorebook-group',
+            items: [
+              MenuFieldItem(
+                label: 'label_group_name'.tr(),
+                controller: _eGroup!,
+                placeholder: 'placeholder_faction'.tr(),
+                onChanged: (_) => _commitEdit(),
               ),
-          ],
-        ),
-
-        // Temporal Logic
-        MenuGroup(
-          header: 'section_temporal_logic'.tr(),
-          helpTerm: 'lorebook-temporal',
-          items: [
-            _numberField('label_sticky'.tr(), _eSticky!),
-            _numberField('label_cooldown'.tr(), _eCooldown!),
-            _numberField('label_delay_turns'.tr(), _eDelay!),
-          ],
-        ),
-
-        // Grouping & Filter
-        MenuGroup(
-          header: 'section_grouping_filter'.tr(),
-          helpTerm: 'lorebook-group',
-          items: [
-            MenuFieldItem(
-              label: 'label_group_name'.tr(),
-              controller: _eGroup!,
-              placeholder: 'placeholder_faction'.tr(),
-              onChanged: (_) => _commitEdit(),
-            ),
-            _numberField('label_group_weight'.tr(), _eGroupWeight!),
-            MenuFieldItem(
-              label: 'label_character_filter'.tr(),
-              controller: _eCharFilter!,
-              placeholder: 'placeholder_char_names'.tr(),
-              onChanged: (_) => _commitEdit(),
-            ),
-            MenuSwitchItem(
-              label: 'label_exclude_characters'.tr(),
-              value: _eCharFilterExclude,
-              onChanged: (v) {
-                setState(() => _eCharFilterExclude = v);
-                _commitEdit(immediate: true);
-              },
-            ),
-            MenuSwitchItem(
-              label: 'label_ignore_budget'.tr(),
-              value: _eIgnoreBudget,
-              onChanged: (v) {
-                setState(() => _eIgnoreBudget = v);
-                _commitEdit(immediate: true);
-              },
-            ),
-          ],
-        ),
+              _numberField('label_group_weight'.tr(), _eGroupWeight!),
+              MenuFieldItem(
+                label: 'label_character_filter'.tr(),
+                controller: _eCharFilter!,
+                placeholder: 'placeholder_char_names'.tr(),
+                onChanged: (_) => _commitEdit(),
+              ),
+              MenuSwitchItem(
+                label: 'label_exclude_characters'.tr(),
+                value: _eCharFilterExclude,
+                onChanged: (v) {
+                  setState(() => _eCharFilterExclude = v);
+                  _commitEdit(immediate: true);
+                },
+              ),
+              MenuSwitchItem(
+                label: 'label_ignore_budget'.tr(),
+                value: _eIgnoreBudget,
+                onChanged: (v) {
+                  setState(() => _eIgnoreBudget = v);
+                  _commitEdit(immediate: true);
+                },
+              ),
+            ],
+          ),
         ],
       ),
     );

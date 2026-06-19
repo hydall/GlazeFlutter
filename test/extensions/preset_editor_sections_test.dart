@@ -41,9 +41,9 @@ void main() {
   ) async {
     await pumpSection(tester, const BlocksSection(preset: preset));
 
-    expect(find.text('Блоки'), findsOneWidget);
+    expect(find.text('blocks_section_header'), findsOneWidget);
     expect(find.text('Ledger'), findsOneWidget);
-    expect(find.text('Добавить блок'), findsOneWidget);
+    expect(find.text('add_block'), findsOneWidget);
   });
 
   testWidgets('PermissionsSection renders capability switches', (tester) async {
@@ -73,9 +73,9 @@ void main() {
       BlockEditDialog(block: preset.blocks.first, onSave: (_) {}),
     );
 
-    expect(find.text('Настройки блока'), findsOneWidget);
-    expect(find.text('Название'), findsOneWidget);
-    expect(find.text('Инфоблок'), findsOneWidget);
-    expect(find.text('Сохранить'), findsOneWidget);
+    expect(find.text('block_edit_title'), findsOneWidget);
+    expect(find.text('block_edit_name_label'), findsOneWidget);
+    expect(find.text('block_type_infoblock'), findsOneWidget);
+    expect(find.text('btn_save'), findsOneWidget);
   });
 }

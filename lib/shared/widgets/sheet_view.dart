@@ -62,6 +62,7 @@ class SheetView extends ConsumerStatefulWidget {
   final double? collapsedFraction;
   final bool fitContent;
   final bool showRouteBackground;
+  final int? shellBranchIndex;
 
   const SheetView({
     super.key,
@@ -84,6 +85,7 @@ class SheetView extends ConsumerStatefulWidget {
     this.collapsedFraction,
     this.fitContent = false,
     this.showRouteBackground = true,
+    this.shellBranchIndex,
   });
 
   @override
@@ -217,9 +219,8 @@ class _SheetViewState extends ConsumerState<SheetView>
   void _syncHeaderSuppression() {
     final branch = _inModalSheet
         ? null
-        : shellBranchForLocation(
-            GoRouterState.of(context).uri.toString(),
-          );
+        : widget.shellBranchIndex ??
+              shellBranchForLocation(GoRouterState.of(context).uri.toString());
     if (branch == _suppressedBranch) return;
     _headerRegistry ??= ref.read(shellHeaderProvider.notifier);
     final notifier = _headerRegistry!;
@@ -239,7 +240,9 @@ class _SheetViewState extends ConsumerState<SheetView>
   void dispose() {
     final registry = _headerRegistry;
     if (registry != null && _suppressedBranch != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => registry.remove(this));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => registry.remove(this),
+      );
     }
     _anim?.removeListener(_onTick);
     _ctrl.removeStatusListener(_onAnimStatus);
