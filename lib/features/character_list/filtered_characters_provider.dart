@@ -5,7 +5,7 @@ import '../../core/llm/character_tokens.dart';
 import '../../core/models/character.dart';
 import '../../core/state/character_folder_provider.dart';
 import '../../core/state/character_provider.dart';
-import 'widgets/character_grid.dart' show SortType, SortDir;
+import 'character_sort.dart';
 
 /// Immutable description of a My-Characters query: which characters to keep
 /// (search + filters + optional folder) and how to order them. Value equality
@@ -51,44 +51,46 @@ class CharacterQuery {
 
   @override
   int get hashCode => Object.hash(
-        search,
-        favOnly,
-        minTokens,
-        maxTokens,
-        hasTokenFilter,
-        sortBy,
-        sortDir,
-        folderId,
-        Object.hashAll(tags),
-      );
+    search,
+    favOnly,
+    minTokens,
+    maxTokens,
+    hasTokenFilter,
+    sortBy,
+    sortDir,
+    folderId,
+    Object.hashAll(tags),
+  );
 }
 
 /// Filtered + sorted characters for a [CharacterQuery]. Depends on
 /// [charactersProvider] (and [folderMembershipsProvider] when scoped to a
 /// folder), so it re-runs reactively when the library changes, and is cached
 /// per distinct query otherwise.
-final filteredCharactersProvider =
-    Provider.autoDispose.family<List<Character>, CharacterQuery>((ref, q) {
-  final all = ref.watch(charactersProvider).value ?? const <Character>[];
+final filteredCharactersProvider = Provider.autoDispose
+    .family<List<Character>, CharacterQuery>((ref, q) {
+      final all = ref.watch(charactersProvider).value ?? const <Character>[];
 
-  Iterable<Character> list = all;
-  if (q.folderId != null) {
-    final memberships =
-        ref.watch(folderMembershipsProvider).value ?? FolderMemberships.empty;
-    final ids = memberships.charsIn(q.folderId!);
-    list = list.where((c) => ids.contains(c.id));
-  }
+      Iterable<Character> list = all;
+      if (q.folderId != null) {
+        final memberships =
+            ref.watch(folderMembershipsProvider).value ??
+            FolderMemberships.empty;
+        final ids = memberships.charsIn(q.folderId!);
+        list = list.where((c) => ids.contains(c.id));
+      }
 
-  final result = list.where((c) => _passes(q, c)).toList();
-  _sort(result, q);
-  return result;
-});
+      final result = list.where((c) => _passes(q, c)).toList();
+      _sort(result, q);
+      return result;
+    });
 
 bool _passes(CharacterQuery q, Character c) {
   if (q.search.isNotEmpty) {
     final query = q.search.toLowerCase();
     final displayName = c.displayName?.toLowerCase() ?? '';
-    final matchesSearch = c.fav ||
+    final matchesSearch =
+        c.fav ||
         c.name.toLowerCase().contains(query) ||
         displayName.contains(query);
     if (!matchesSearch) return false;
@@ -107,24 +109,24 @@ bool _passes(CharacterQuery q, Character c) {
 
 String _displayNameOf(Character c) {
   final displayName = c.displayName?.trim();
-  return (displayName != null && displayName.isNotEmpty)
-      ? displayName
-      : c.name;
+  return (displayName != null && displayName.isNotEmpty) ? displayName : c.name;
 }
 
 void _sort(List<Character> list, CharacterQuery q) {
   // lastChat ordering isn't available client-side here; fall back to name.
-  final effectiveSort = q.sortBy == SortType.lastChat ? SortType.name : q.sortBy;
+  final effectiveSort = q.sortBy == SortType.lastChat
+      ? SortType.name
+      : q.sortBy;
   list.sort((a, b) {
     if (a.fav != b.fav) return a.fav ? -1 : 1;
     final cmp = switch (effectiveSort) {
-      SortType.name => _displayNameOf(a)
-          .toLowerCase()
-          .compareTo(_displayNameOf(b).toLowerCase()),
+      SortType.name => _displayNameOf(
+        a,
+      ).toLowerCase().compareTo(_displayNameOf(b).toLowerCase()),
       SortType.date => a.createdAt.compareTo(b.createdAt),
-      SortType.lastChat => _displayNameOf(a)
-          .toLowerCase()
-          .compareTo(_displayNameOf(b).toLowerCase()),
+      SortType.lastChat => _displayNameOf(
+        a,
+      ).toLowerCase().compareTo(_displayNameOf(b).toLowerCase()),
     };
     if (cmp != 0) return q.sortDir == SortDir.desc ? -cmp : cmp;
     return a.id.compareTo(b.id);

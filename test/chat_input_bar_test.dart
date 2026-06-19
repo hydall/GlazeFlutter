@@ -36,13 +36,13 @@ void main() {
 
     testWidgets('TextField has textCapitalization.sentences', (tester) async {
       await tester.pumpWidget(buildChatInputBar());
-      final textField = tester.widget<TextField>(
-        find.widgetWithText(TextField, 'Type a message...'),
-      );
+      final textField = tester.widget<TextField>(find.byType(TextField));
       expect(textField.textCapitalization, TextCapitalization.sentences);
     });
 
-    testWidgets('onTap unfocuses then refocuses when already focused', (tester) async {
+    testWidgets('onTap unfocuses then refocuses when already focused', (
+      tester,
+    ) async {
       final focusNode = FocusNode();
       await tester.pumpWidget(buildChatInputBar(focusNode: focusNode));
       addTearDown(() => focusNode.dispose());
@@ -52,8 +52,8 @@ void main() {
 
       expect(focusNode.hasFocus, isTrue);
 
-      await tester.tap(find.widgetWithText(TextField, 'Type a message...'));
-      await tester.pumpAndSettle();
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
 
       expect(focusNode.hasFocus, isTrue);
     });
@@ -65,25 +65,25 @@ void main() {
 
       expect(focusNode.hasFocus, isFalse);
 
-      await tester.tap(find.widgetWithText(TextField, 'Type a message...'));
-      await tester.pumpAndSettle();
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
 
       expect(focusNode.hasFocus, isTrue);
     });
 
-    testWidgets('virtualKeyboardSend uses TextInputAction.send', (tester) async {
+    testWidgets('virtualKeyboardSend uses TextInputAction.send', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildChatInputBar(virtualKeyboardSend: true));
-      final textField = tester.widget<TextField>(
-        find.widgetWithText(TextField, 'Type a message...'),
-      );
+      final textField = tester.widget<TextField>(find.byType(TextField));
       expect(textField.textInputAction, TextInputAction.send);
     });
 
-    testWidgets('non-virtualKeyboardSend uses TextInputAction.newline', (tester) async {
+    testWidgets('non-virtualKeyboardSend uses TextInputAction.newline', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildChatInputBar(virtualKeyboardSend: false));
-      final textField = tester.widget<TextField>(
-        find.widgetWithText(TextField, 'Type a message...'),
-      );
+      final textField = tester.widget<TextField>(find.byType(TextField));
       expect(textField.textInputAction, TextInputAction.newline);
     });
   });
@@ -107,26 +107,24 @@ void main() {
 
     testWidgets('TextField has textCapitalization.sentences', (tester) async {
       await tester.pumpWidget(buildInputBar());
-      final textField = tester.widget<TextField>(
-        find.widgetWithText(TextField, 'Type a message...'),
-      );
+      final textField = tester.widget<TextField>(find.byType(TextField));
       expect(textField.textCapitalization, TextCapitalization.sentences);
     });
 
-    testWidgets('onTap unfocuses then refocuses when already focused', (tester) async {
+    testWidgets('onTap unfocuses then refocuses when already focused', (
+      tester,
+    ) async {
       await tester.pumpWidget(buildInputBar());
 
-      final textField = tester.widget<TextField>(
-        find.widgetWithText(TextField, 'Type a message...'),
-      );
+      final textField = tester.widget<TextField>(find.byType(TextField));
       final focusNode = textField.focusNode!;
 
       focusNode.requestFocus();
       await tester.pump();
       expect(focusNode.hasFocus, isTrue);
 
-      await tester.tap(find.widgetWithText(TextField, 'Type a message...'));
-      await tester.pumpAndSettle();
+      await tester.tap(find.byType(TextField));
+      await tester.pump();
       expect(focusNode.hasFocus, isTrue);
     });
   });

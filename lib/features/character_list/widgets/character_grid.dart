@@ -4,11 +4,8 @@ import '../../../core/models/character.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../../shared/widgets/glass_surface.dart';
+import '../character_sort.dart';
 import 'character_card.dart';
-
-enum SortType { name, date, lastChat }
-
-enum SortDir { asc, desc }
 
 class CharacterGrid extends StatelessWidget {
   final List<Character> characters;
@@ -220,7 +217,10 @@ class _FilterButton extends StatelessWidget {
                 top: -2,
                 right: -2,
                 child: Container(
-                  constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   decoration: BoxDecoration(
                     color: context.cs.primary,
@@ -333,10 +333,7 @@ class _OurPicksCardState extends State<_OurPicksCard>
                           gradient: LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [
-                              context.cs.primary,
-                              context.cs.secondary,
-                            ],
+                            colors: [context.cs.primary, context.cs.secondary],
                           ),
                         ),
                         child: Center(
@@ -375,7 +372,10 @@ class _OurPicksCardState extends State<_OurPicksCard>
                                 label: 'action_hide_msg'.tr(),
                                 hint: 'our_picks_restore_hint'.tr(),
                                 onTap: () {
-                                  Navigator.of(context, rootNavigator: true).pop();
+                                  Navigator.of(
+                                    context,
+                                    rootNavigator: true,
+                                  ).pop();
                                   widget.onHide?.call();
                                 },
                               ),
@@ -450,9 +450,7 @@ class _OurPicksCardInfo extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
                     color: Colors.white,
-                    shadows: [
-                      Shadow(blurRadius: 4, color: Colors.black54),
-                    ],
+                    shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
                   ),
                 ),
               ),
@@ -508,10 +506,10 @@ class _SortTypePill extends StatelessWidget {
   const _SortTypePill({required this.sortBy, required this.onChanged});
 
   String get _label => switch (sortBy) {
-        SortType.name => 'sort_name'.tr(),
-        SortType.date => 'sort_date'.tr(),
-        SortType.lastChat => 'Last chat',
-      };
+    SortType.name => 'sort_name'.tr(),
+    SortType.date => 'sort_date'.tr(),
+    SortType.lastChat => 'Last chat',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -552,24 +550,24 @@ class _SortTypePill extends StatelessWidget {
 
   void _showPicker(BuildContext context) {
     BottomSheetItem build(String label, SortType type) => BottomSheetItem(
-          label: label,
-          actions: sortBy == type
-              ? [
-                  BottomSheetAction(
-                    icon: Icons.check_rounded,
-                    color: context.cs.primary,
-                    onTap: () {
-                      Navigator.of(context, rootNavigator: true).pop();
-                      onChanged(type);
-                    },
-                  ),
-                ]
-              : const [],
-          onTap: () {
-            Navigator.of(context, rootNavigator: true).pop();
-            onChanged(type);
-          },
-        );
+      label: label,
+      actions: sortBy == type
+          ? [
+              BottomSheetAction(
+                icon: Icons.check_rounded,
+                color: context.cs.primary,
+                onTap: () {
+                  Navigator.of(context, rootNavigator: true).pop();
+                  onChanged(type);
+                },
+              ),
+            ]
+          : const [],
+      onTap: () {
+        Navigator.of(context, rootNavigator: true).pop();
+        onChanged(type);
+      },
+    );
 
     GlazeBottomSheet.show<void>(
       context,

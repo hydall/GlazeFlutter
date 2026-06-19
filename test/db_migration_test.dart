@@ -76,7 +76,7 @@ void main() {
 
       // user_version matches the Drift schema version (app_db.dart schemaVersion).
       // Update this constant whenever a new migration step is added.
-      expect(version, 30);
+      expect(version, 32);
     });
 
     test(
@@ -85,8 +85,8 @@ void main() {
         final file = File(
           '${Directory.systemTemp.path}/glaze_mig_test_${DateTime.now().microsecondsSinceEpoch}.db',
         );
-        addTearDown(() {
-          if (file.existsSync()) file.deleteSync();
+        addTearDown(() async {
+          if (file.existsSync()) await file.delete();
         });
 
         final seeded = AppDatabase.forTesting(
@@ -107,8 +107,10 @@ void main() {
         final names = cols.map((c) => c.read<String>('name')).toSet();
         expect(names, contains('macro_name'));
 
-        final version = await upgraded.customSelect('PRAGMA user_version').get();
-        expect(version.first.read<int>('user_version'), 30);
+        final version = await upgraded
+            .customSelect('PRAGMA user_version')
+            .get();
+        expect(version.first.read<int>('user_version'), 32);
         await upgraded.close();
       },
     );
