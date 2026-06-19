@@ -219,8 +219,7 @@ class _SheetViewState extends ConsumerState<SheetView>
   void _syncHeaderSuppression() {
     final branch = _inModalSheet
         ? null
-        : widget.shellBranchIndex ??
-              shellBranchForLocation(GoRouterState.of(context).uri.toString());
+        : widget.shellBranchIndex ?? _branchForCurrentRoute();
     if (branch == _suppressedBranch) return;
     _headerRegistry ??= ref.read(shellHeaderProvider.notifier);
     final notifier = _headerRegistry!;
@@ -234,6 +233,24 @@ class _SheetViewState extends ConsumerState<SheetView>
         notifier.publish(this, branch, const ShellHeaderConfig(hidden: true));
       }
     });
+  }
+
+  /// Branch index of the shell this sheet currently lives in, or null when the
+  /// sheet is hosted outside GoRouter.
+  ///
+  /// A [SheetView] can be presented three ways: a GoRouter page (has a
+  /// [GoRouterState]), a modal bottom sheet (handled by the caller), or a plain
+  /// [MaterialPageRoute] pushed with `Navigator.push` — e.g. the lorebook
+  /// editor opened from the lorebook list. In that last case there is no
+  /// [GoRouterState] above the context and [GoRouterState.of] throws a
+  /// [GoError] (this version of go_router has no `maybeOf`). There's no shell
+  /// header to suppress there, so treat it as no branch instead of crashing.
+  int? _branchForCurrentRoute() {
+    try {
+      return shellBranchForLocation(GoRouterState.of(context).uri.toString());
+    } on GoError {
+      return null;
+    }
   }
 
   @override
@@ -369,8 +386,10 @@ class _SheetViewState extends ConsumerState<SheetView>
         _measureHeader();
       }
 
-      final backHandler =
-          widget.onBack ?? () => Navigator.of(context).maybePop();
+      // pop(), not maybePop(): this runs inside the PopScope below whose
+      // canPop is false whenever showBack is true. maybePop() would re-enter
+      // onPopInvokedWithResult and spin an unbounded microtask loop (freeze).
+      final backHandler = widget.onBack ?? () => Navigator.of(context).pop();
       // When the sheet is rendered as a page route inside the Shell, the
       // GlassNavBar overlaps the body (Shell uses extendBody: true). Inject
       // its measured height into MediaQuery.padding.bottom so the body's

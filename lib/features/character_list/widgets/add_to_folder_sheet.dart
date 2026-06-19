@@ -73,6 +73,81 @@ class AddToFolderSheet extends ConsumerWidget {
   }
 }
 
+/// Bulk variant of [AddToFolderSheet]: tapping a folder adds every character in
+/// [characterIds] to it at once, then closes the sheet and runs [onDone].
+class AddCharactersToFolderSheet extends ConsumerWidget {
+  final Set<String> characterIds;
+  final VoidCallback? onDone;
+
+  const AddCharactersToFolderSheet({
+    super.key,
+    required this.characterIds,
+    this.onDone,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final folders = ref.watch(characterFoldersProvider).value ?? const [];
+    final memberships =
+        ref.watch(folderMembershipsProvider).value ?? FolderMemberships.empty;
+    final repo = ref.read(characterFolderRepoProvider);
+
+    Future<void> addAllTo(String folderId) async {
+      for (final id in characterIds) {
+        await repo.addMember(folderId, id);
+      }
+    }
+
+    return SheetView(
+      title: 'action_add_to_folder'.tr(),
+      showHandle: true,
+      bodyPadding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+      body: ListView(
+        children: [
+          const SizedBox(height: 8),
+          _NewFolderTile(
+            onTap: () => GlazeBottomSheet.show<void>(
+              context,
+              title: 'folder_create_title'.tr(),
+              child: FolderNameDialog(
+                confirmLabel: 'btn_create'.tr(),
+                onSubmit: (name) async {
+                  final folder = await repo.create(name: name);
+                  await addAllTo(folder.id);
+                  onDone?.call();
+                },
+              ),
+            ),
+          ),
+          if (folders.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  'folder_empty'.tr(),
+                  style: TextStyle(color: context.cs.onSurfaceVariant),
+                ),
+              ),
+            ),
+          for (final folder in folders)
+            _FolderToggleTile(
+              name: folder.name,
+              count: memberships.countFor(folder.id),
+              selected: false,
+              onTap: () async {
+                await addAllTo(folder.id);
+                if (context.mounted) {
+                  Navigator.of(context, rootNavigator: true).pop();
+                }
+                onDone?.call();
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _NewFolderTile extends StatelessWidget {
   final VoidCallback onTap;
   const _NewFolderTile({required this.onTap});

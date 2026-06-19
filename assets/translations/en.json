@@ -723,7 +723,7 @@
     "label_no_blocks": "No blocks available",
     "no_active_connections": "No active connections",
     "confirm_remove_connections": "Remove all connections?",
-    "action_delete": "Remove",
+    "action_delete": "Delete",
     "action_cancel": "Cancel",
     "action_add": "Add",
     "hint_override_hierarchy": "Chat overrides Character, which overrides Global",

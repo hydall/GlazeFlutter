@@ -1,22 +1,14 @@
 import 'dart:io';
 
-import 'dart:typed_data';
-
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-// Pinned via dependency_overrides to keep Windows builds green; see docs/BUILD_NOTES.md.
-// ignore: depend_on_referenced_packages
-import 'package:path_provider/path_provider.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/models/character.dart';
-import '../../../core/services/character_book_converter.dart';
-import '../../../core/services/character_exporter.dart';
-import '../../../core/services/file_export_service.dart';
+import '../../../core/services/character_export_helper.dart';
 import '../../../core/state/character_folder_provider.dart';
 import '../../../core/state/character_provider.dart';
-import '../../../core/state/lorebook_provider.dart';
 import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/card_tag_chips.dart';
@@ -25,6 +17,7 @@ import '../../../shared/widgets/glaze_error_dialog.dart';
 import '../../../shared/widgets/glaze_toast.dart';
 import '../character_detail_screen.dart';
 import '../../../core/llm/character_tokens.dart';
+import '../character_selection_provider.dart';
 import 'add_to_folder_sheet.dart';
 
 class CharacterCard extends ConsumerStatefulWidget {
@@ -104,6 +97,11 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
 
   @override
   Widget build(BuildContext context) {
+    final selectionActive =
+        ref.watch(characterSelectionProvider.select((s) => s.active));
+    final selected = ref.watch(
+      characterSelectionProvider.select((s) => s.contains(character.id)),
+    );
     final scale = _pressed ? 0.96 : (_hovered ? 1.01 : 1.0);
     final dy = _hovered && !_pressed ? -4.0 : 0.0;
     final isFav = character.fav;
@@ -122,11 +120,24 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
         onEnter: (_) => setState(() => _hovered = true),
         onExit: (_) => setState(() => _hovered = false),
         child: GestureDetector(
-          onTap: () => _showDetailSheet(context),
+          onTap: () {
+            if (selectionActive) {
+              ref.read(characterSelectionProvider.notifier).toggle(character.id);
+            } else {
+              _showDetailSheet(context);
+            }
+          },
           onTapDown: (_) => setState(() => _pressed = true),
           onTapUp: (_) => setState(() => _pressed = false),
           onTapCancel: () => setState(() => _pressed = false),
-          onLongPress: () => _showActions(context, ref),
+          onLongPress: () {
+            final notifier = ref.read(characterSelectionProvider.notifier);
+            if (selectionActive) {
+              notifier.toggle(character.id);
+            } else {
+              notifier.start(character.id);
+            }
+          },
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutBack,
@@ -174,10 +185,12 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
                   Positioned(
                     top: 8,
                     right: 8,
-                    child: _CardMenuButton(
-                      character: character,
-                      onTap: () => _showActions(context, ref),
-                    ),
+                    child: selectionActive
+                        ? _SelectionCheck(selected: selected)
+                        : _CardMenuButton(
+                            character: character,
+                            onTap: () => _showActions(context, ref),
+                          ),
                   ),
                   Positioned.fill(
                     child: IgnorePointer(
@@ -186,10 +199,12 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
-                            color: isFav
-                                ? const Color(0xFFFF6B6B)
-                                : Colors.white.withValues(alpha: 0.15),
-                            width: 2,
+                            color: selected
+                                ? context.cs.primary
+                                : isFav
+                                    ? const Color(0xFFFF6B6B)
+                                    : Colors.white.withValues(alpha: 0.15),
+                            width: selected ? 3 : 2,
                           ),
                         ),
                       ),
@@ -363,111 +378,16 @@ class _CharacterCardState extends ConsumerState<CharacterCard>
 
   Future<void> _export(BuildContext context, String format) async {
     try {
-      final tmpDir = await getTemporaryDirectory();
-      final outputDir = tmpDir.path;
-
-      final lorebooks = ref.read(lorebooksProvider).value ?? [];
-      final charLorebooks = lorebooks.where((lb) =>
-          lb.activationScope == 'character' && lb.activationTargetId == character.id);
-      Map<String, dynamic>? characterBookData;
-      if (charLorebooks.isNotEmpty) {
-        final merged = <String, dynamic>{'name': charLorebooks.first.name, 'entries': <Map<String, dynamic>>[]};
-        for (final lb in charLorebooks) {
-          final bookJson = lorebookToCharacterBookJson(lb);
-          (merged['entries'] as List<dynamic>).addAll(bookJson['entries'] as Iterable<dynamic>);
-          if (lb != charLorebooks.first) merged['name'] = '${merged['name']}, ${lb.name}';
-        }
-        characterBookData = merged;
-      }
-
-      final safeName = (character.name.isEmpty ? 'character' : character.name)
-          .replaceAll(RegExp(r'[/\\?%*:|"<>\.]'), '-')
-          .trim();
-
-      if (format == 'png') {
-        Uint8List? avatarBytes;
-        if (character.avatarPath != null &&
-            File(resolveGlazeFilePath(character.avatarPath!)!).existsSync()) {
-          avatarBytes = await File(resolveGlazeFilePath(character.avatarPath!)!).readAsBytes();
-        } else {
-          avatarBytes = generatePlaceholderAvatar(character.name);
-        }
-
-        final result = await exportCharacterAsPng(
-          character: character,
-          avatarBytes: avatarBytes,
-          outputDir: outputDir,
-          includeCharacterBook: true,
-          characterBookData: characterBookData,
+      final savedPath = await exportCharacterToFile(
+        ref: ref,
+        character: character,
+        format: format,
+      );
+      if (context.mounted) {
+        GlazeToast.show(
+          context,
+          'Exported ${format.toUpperCase()} to $savedPath',
         );
-        final bytes = await File(result.filePath).readAsBytes();
-        final savedPath = await FileExportService.exportBytes(
-          bytes: bytes,
-          filename: '$safeName.png',
-          subfolder: 'characters',
-        );
-        if (context.mounted) {
-          GlazeToast.show(context, 'Exported PNG to $savedPath');
-        }
-      } else if (format == 'zip') {
-        Uint8List avatarBytes;
-        if (character.avatarPath != null &&
-            File(resolveGlazeFilePath(character.avatarPath!)!).existsSync()) {
-          avatarBytes = await File(resolveGlazeFilePath(character.avatarPath!)!).readAsBytes();
-        } else {
-          avatarBytes = generatePlaceholderAvatar(character.name);
-        }
-
-        final galleryEntries = character.gallery;
-        final galleryBytesList = <Uint8List>[];
-        for (final entry in galleryEntries) {
-          final file = File(entry.imagePath);
-          if (await file.exists()) {
-            galleryBytesList.add(await file.readAsBytes());
-          } else {
-            galleryBytesList.add(Uint8List(0));
-          }
-        }
-        final validGallery = <int>[];
-        for (int i = 0; i < galleryEntries.length; i++) {
-          if (galleryBytesList[i].isNotEmpty) validGallery.add(i);
-        }
-        final filteredEntries = validGallery.map((i) => galleryEntries[i]).toList();
-        final filteredBytes = validGallery.map((i) => galleryBytesList[i]).toList();
-
-        final result = await exportCharacterAsZip(
-          character: character,
-          avatarBytes: avatarBytes,
-          outputDir: outputDir,
-          characterBookData: characterBookData,
-          gallery: filteredEntries,
-          galleryBytes: filteredBytes,
-        );
-        final bytes = await File(result.filePath).readAsBytes();
-        final savedPath = await FileExportService.exportBytes(
-          bytes: bytes,
-          filename: '$safeName.zip',
-          subfolder: 'characters',
-        );
-        if (context.mounted) {
-          GlazeToast.show(context, 'Exported ZIP to $savedPath');
-        }
-      } else {
-        final result = await exportCharacterAsJson(
-          character: character,
-          outputDir: outputDir,
-          includeCharacterBook: true,
-          characterBookData: characterBookData,
-        );
-        final jsonStr = await File(result.filePath).readAsString();
-        final savedPath = await FileExportService.export(
-          data: jsonStr,
-          filename: '$safeName.json',
-          subfolder: 'characters',
-        );
-        if (context.mounted) {
-          GlazeToast.show(context, 'Exported JSON to $savedPath');
-        }
       }
     } catch (e) {
       if (context.mounted) {
@@ -608,6 +528,33 @@ class _CardInfo extends StatelessWidget {
 }
 
 
+
+class _SelectionCheck extends StatelessWidget {
+  final bool selected;
+
+  const _SelectionCheck({required this.selected});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 28,
+      height: 28,
+      decoration: BoxDecoration(
+        color: selected
+            ? context.cs.primary
+            : Colors.black.withValues(alpha: 0.45),
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: selected ? 0.9 : 0.6),
+          width: 2,
+        ),
+      ),
+      child: selected
+          ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+          : null,
+    );
+  }
+}
 
 class _CardMenuButton extends StatelessWidget {
   final Character character;

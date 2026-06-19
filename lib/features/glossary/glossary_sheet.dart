@@ -130,11 +130,15 @@ class _GlossarySheetState extends ConsumerState<GlossarySheet> {
       return;
     }
     if (_openedViaHelptip) {
-      Navigator.of(context).maybePop();
+      // Use pop(), not maybePop(): when presented as a fullscreen route the
+      // host SheetView wraps us in a PopScope with canPop:false, so maybePop()
+      // re-invokes this same handler and spins an unbounded microtask loop
+      // (hard UI freeze). pop() bypasses PopScope and dismisses the route.
+      Navigator.of(context).pop();
       return;
     }
     if (_view == _View.categories) {
-      Navigator.of(context).maybePop();
+      Navigator.of(context).pop();
       return;
     }
     setState(() {

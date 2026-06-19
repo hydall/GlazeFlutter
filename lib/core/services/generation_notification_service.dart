@@ -66,8 +66,12 @@ class GenerationNotificationService {
   Future<void> init() async {
     if (!_isMobile) return;
 
+    // Resource name only — flutter_local_notifications resolves it via
+    // Resources.getIdentifier(name, "drawable", pkg), which rejects the
+    // "@drawable/" XML-reference prefix (returns 0 → init throws and aborts
+    // channel setup, leaving _initialized=false).
     const androidSettings = AndroidInitializationSettings(
-      '@drawable/ic_stat_icon_config_sample',
+      'ic_stat_icon_config_sample',
     );
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
@@ -86,8 +90,10 @@ class GenerationNotificationService {
       );
       _initialized = true;
     } catch (e, st) {
+      // Local notifications (message alerts) failed to init, but keep going:
+      // the foreground generation channel is owned by flutter_foreground_task
+      // and must still be configured below regardless.
       debugPrint('NOTIF: initialize failed: $e\n$st');
-      return;
     }
 
     try {
@@ -262,7 +268,7 @@ class GenerationNotificationService {
             importance: Importance.high,
             priority: Priority.high,
             styleInformation: messagingStyle,
-            icon: '@drawable/new_message',
+            icon: 'new_message',
             autoCancel: true,
             groupKey: charId,
             // Mirror Vue: messaging content type + public lock-screen

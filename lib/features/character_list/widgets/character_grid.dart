@@ -17,9 +17,6 @@ class CharacterGrid extends StatelessWidget {
   final double topPadding;
   final double bottomPadding;
   final Widget? tabBar;
-  final bool showOurPicksCard;
-  final VoidCallback? onOurPicksTap;
-  final VoidCallback? onOurPicksHide;
   final bool isLoadingMore;
   final bool hasMore;
   final int filterCount;
@@ -43,9 +40,6 @@ class CharacterGrid extends StatelessWidget {
     this.topPadding = 0,
     this.bottomPadding = 16,
     this.tabBar,
-    this.showOurPicksCard = false,
-    this.onOurPicksTap,
-    this.onOurPicksHide,
     this.isLoadingMore = false,
     this.hasMore = false,
     this.filterCount = 0,
@@ -106,20 +100,11 @@ class CharacterGrid extends StatelessWidget {
             delegate: SliverChildBuilderDelegate(
               // No explicit RepaintBoundary: SliverChildBuilderDelegate already
               // wraps each child in one (addRepaintBoundaries: true by default).
-              (ctx, i) {
-                if (showOurPicksCard && i == 0) {
-                  return _OurPicksCard(
-                    onTap: onOurPicksTap,
-                    onHide: onOurPicksHide,
-                  );
-                }
-                final charIndex = showOurPicksCard ? i - 1 : i;
-                return CharacterCard(
-                  character: characters[charIndex],
-                  folderId: folderId,
-                );
-              },
-              childCount: characters.length + (showOurPicksCard ? 1 : 0),
+              (ctx, i) => CharacterCard(
+                character: characters[i],
+                folderId: folderId,
+              ),
+              childCount: characters.length,
             ),
           ),
         ),
@@ -240,259 +225,6 @@ class _FilterButton extends StatelessWidget {
                 ),
               ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _OurPicksCard extends StatefulWidget {
-  final VoidCallback? onTap;
-  final VoidCallback? onHide;
-
-  const _OurPicksCard({this.onTap, this.onHide});
-
-  @override
-  State<_OurPicksCard> createState() => _OurPicksCardState();
-}
-
-class _OurPicksCardState extends State<_OurPicksCard>
-    with SingleTickerProviderStateMixin {
-  bool _pressed = false;
-  bool _hovered = false;
-  late final AnimationController _entryCtrl;
-  late final Animation<double> _fadeAnim;
-  late final Animation<double> _scaleAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _entryCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    final curve = CurvedAnimation(parent: _entryCtrl, curve: Curves.easeOut);
-    _fadeAnim = curve;
-    _scaleAnim = Tween<double>(begin: 0.9, end: 1.0).animate(curve);
-    _entryCtrl.forward();
-  }
-
-  @override
-  void dispose() {
-    _entryCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scale = _pressed ? 0.96 : (_hovered ? 1.01 : 1.0);
-    final dy = _hovered && !_pressed ? -4.0 : 0.0;
-    final shadowAlpha = _hovered ? 0.3 : 0.1;
-    final shadowColor = Colors.black.withValues(alpha: shadowAlpha);
-
-    return FadeTransition(
-      opacity: _fadeAnim,
-      child: ScaleTransition(
-        scale: _scaleAnim,
-        child: MouseRegion(
-          onEnter: (_) => setState(() => _hovered = true),
-          onExit: (_) => setState(() => _hovered = false),
-          child: GestureDetector(
-            onTap: widget.onTap,
-            onTapDown: (_) => setState(() => _pressed = true),
-            onTapUp: (_) => setState(() => _pressed = false),
-            onTapCancel: () => setState(() => _pressed = false),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
-              curve: Curves.easeOutBack,
-              transform: Matrix4.identity()
-                ..translateByDouble(0.0, dy, 0.0, 1.0)
-                ..scaleByDouble(scale, scale, 1.0, 1.0),
-              transformAlignment: Alignment.center,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: shadowColor,
-                    blurRadius: _hovered ? 24 : 6,
-                    offset: Offset(0, _hovered ? 12 : 4),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    AnimatedScale(
-                      scale: _hovered ? 1.05 : 1.0,
-                      duration: const Duration(milliseconds: 500),
-                      curve: Curves.easeOut,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [context.cs.primary, context.cs.secondary],
-                          ),
-                        ),
-                        child: Center(
-                          child: Icon(
-                            Icons.star_rounded,
-                            size: 72,
-                            color: Colors.white.withValues(alpha: 0.25),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      height: 150,
-                      child: _OurPicksBottomGradient(),
-                    ),
-                    const Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: _OurPicksCardInfo(),
-                    ),
-                    Positioned(
-                      top: 8,
-                      right: 8,
-                      child: _OurPicksCardMenuButton(
-                        onTap: () {
-                          GlazeBottomSheet.show<void>(
-                            context,
-                            title: 'Our Picks',
-                            items: [
-                              BottomSheetItem(
-                                icon: Icons.visibility_off_rounded,
-                                label: 'action_hide_msg'.tr(),
-                                hint: 'our_picks_restore_hint'.tr(),
-                                onTap: () {
-                                  Navigator.of(
-                                    context,
-                                    rootNavigator: true,
-                                  ).pop();
-                                  widget.onHide?.call();
-                                },
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.15),
-                              width: 2,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _OurPicksBottomGradient extends StatelessWidget {
-  const _OurPicksBottomGradient();
-
-  @override
-  Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [Color(0xF2000000), Color(0x99000000), Colors.transparent],
-          stops: [0.0, 0.5, 1.0],
-        ),
-      ),
-    );
-  }
-}
-
-class _OurPicksCardInfo extends StatelessWidget {
-  const _OurPicksCardInfo();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  'Our Picks',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
-                    color: Colors.white,
-                    shadows: [Shadow(blurRadius: 4, color: Colors.black54)],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Text(
-            'Hand-picked featured characters from the Glaze team!',
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.white.withValues(alpha: 0.75),
-              height: 1.3,
-              shadows: [Shadow(blurRadius: 4, color: Colors.black87)],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OurPicksCardMenuButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _OurPicksCardMenuButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 32,
-        height: 32,
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.5),
-          shape: BoxShape.circle,
-        ),
-        child: const Icon(
-          Icons.more_vert_rounded,
-          size: 18,
-          color: Colors.white,
         ),
       ),
     );

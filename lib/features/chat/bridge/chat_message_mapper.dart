@@ -1,4 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'package:glaze_flutter/core/llm/macro_engine.dart';
 import 'package:glaze_flutter/core/llm/regex_service.dart';
 import 'package:glaze_flutter/core/models/character.dart';
 import 'package:glaze_flutter/core/models/chat_message.dart';
@@ -42,6 +43,27 @@ class ChatMessageMapper {
     final isUser = m.role == 'user';
 
     String content = m.content;
+    // Expand macros for display (mirrors reference Glaze ChatMessage.vue,
+    // where replaceMacros runs on the rendered text before regexes). Without
+    // this, macros typed manually into a sent/edited message stay literal in
+    // the chat even though they resolve in the prompt sent to the LLM.
+    if (character != null) {
+      content = replaceMacros(
+        content,
+        MacroContext(
+          charName: character.name,
+          charDescription: character.description,
+          charScenario: character.scenario,
+          charPersonality: character.personality,
+          charMesExample: character.mesExample,
+          userName: persona?.name ?? 'User',
+          personaPrompt: persona?.prompt,
+          charId: character.id,
+          sessionId: '',
+          macroName: character.macroName,
+        ),
+      ).text;
+    }
     final List<TriggeredEntry> triggeredRegexes = [];
     if (displayRegexes != null && displayRegexes.isNotEmpty) {
       final placement = isUser ? 1 : 2;

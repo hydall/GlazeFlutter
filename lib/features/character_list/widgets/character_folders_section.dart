@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,21 +8,37 @@ import '../../../core/models/character.dart';
 import '../../../core/models/character_folder.dart';
 import '../../../core/state/character_folder_provider.dart';
 import '../../../core/state/character_provider.dart';
+import '../../../core/utils/platform_paths.dart';
 import '../../../shared/theme/app_colors.dart';
 import '../../../shared/widgets/glaze_bottom_sheet.dart';
-import 'character_folder_card.dart';
 import 'folder_name_dialog.dart';
 
-/// Folders grid for the My Characters root view: a "+ New folder" tile followed
-/// by one cover card per folder. Reactive on [characterFoldersProvider].
+/// Folders strip for the My Characters root view: a horizontal row of circular
+/// folder covers. Tapping opens a folder; long-pressing exposes rename/delete.
+/// New folders are created from the screen's add (FAB) menu, not here.
+///
+/// When [showOurPicks] is set, a special "Our Picks" circle leads the row. It
+/// is not a real folder — it cannot be renamed, deleted, or have characters
+/// added/removed; long-pressing only offers to hide it.
 class CharacterFoldersSection extends ConsumerWidget {
   final ValueChanged<String> onOpenFolder;
+  final bool showOurPicks;
+  final VoidCallback? onOpenPicks;
+  final VoidCallback? onHidePicks;
 
-  const CharacterFoldersSection({super.key, required this.onOpenFolder});
+  const CharacterFoldersSection({
+    super.key,
+    required this.onOpenFolder,
+    this.showOurPicks = false,
+    this.onOpenPicks,
+    this.onHidePicks,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final folders = ref.watch(characterFoldersProvider).value ?? const [];
+    if (folders.isEmpty && !showOurPicks) return const SizedBox.shrink();
+
     final memberships =
         ref.watch(folderMembershipsProvider).value ?? FolderMemberships.empty;
     final allChars = ref.watch(charactersProvider).value ?? const [];
@@ -32,53 +50,48 @@ class CharacterFoldersSection extends ConsumerWidget {
         .whereType<Character>()
         .toList();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'folders_section_title'.tr().toUpperCase(),
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: context.cs.onSurfaceVariant,
-              letterSpacing: 0.6,
-            ),
-          ),
-          const SizedBox(height: 10),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 2 / 3.2,
-            children: [
-              NewFolderCard(onTap: () => _createFolder(context, ref)),
-              for (final folder in folders)
-                CharacterFolderCard(
-                  folder: folder,
-                  members: membersOf(folder.id),
-                  onTap: () => onOpenFolder(folder.id),
-                  onLongPress: () => _folderActions(context, ref, folder),
-                ),
-            ],
-          ),
-        ],
+    final tiles = <Widget>[
+      if (showOurPicks)
+        _OurPicksCircle(
+          onTap: () => onOpenPicks?.call(),
+          onLongPress: () => _picksActions(context),
+        ),
+      for (final folder in folders)
+        _FolderCircle(
+          folder: folder,
+          members: membersOf(folder.id),
+          onTap: () => onOpenFolder(folder.id),
+          onLongPress: () => _folderActions(context, ref, folder),
+        ),
+    ];
+
+    return SizedBox(
+      height: 104,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        itemCount: tiles.length,
+        separatorBuilder: (_, _) => const SizedBox(width: 16),
+        itemBuilder: (ctx, i) => tiles[i],
       ),
     );
   }
 
-  void _createFolder(BuildContext context, WidgetRef ref) {
+  void _picksActions(BuildContext context) {
     GlazeBottomSheet.show<void>(
       context,
-      title: 'folder_create_title'.tr(),
-      child: FolderNameDialog(
-        confirmLabel: 'btn_create'.tr(),
-        onSubmit: (name) =>
-            ref.read(characterFolderRepoProvider).create(name: name),
-      ),
+      title: 'Our Picks',
+      items: [
+        BottomSheetItem(
+          icon: Icons.visibility_off_rounded,
+          label: 'action_hide_msg'.tr(),
+          hint: 'our_picks_restore_hint'.tr(),
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            onHidePicks?.call();
+          },
+        ),
+      ],
     );
   }
 
@@ -157,6 +170,178 @@ class CharacterFoldersSection extends ConsumerWidget {
           onTap: () => Navigator.of(context, rootNavigator: true).pop(),
         ),
       ],
+    );
+  }
+}
+
+/// A single circular folder cover with its name beneath it.
+class _FolderCircle extends StatelessWidget {
+  static const double _diameter = 64;
+
+  final CharacterFolder folder;
+  final List<Character> members;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  const _FolderCircle({
+    required this.folder,
+    required this.members,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: _diameter,
+              height: _diameter,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: context.cs.primary.withValues(alpha: 0.25),
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ClipOval(child: _cover(context)),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              folder.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cover(BuildContext context) {
+    final avatar = members
+        .map((c) => c.avatarPath)
+        .where((p) => p != null && p.isNotEmpty)
+        .map((p) => resolveGlazeFilePath(p!))
+        .whereType<String>()
+        .firstOrNull;
+
+    if (avatar == null) return _placeholder(context);
+    return Image.file(
+      File(avatar),
+      fit: BoxFit.cover,
+      errorBuilder: (_, _, _) => _placeholder(context),
+    );
+  }
+
+  Widget _placeholder(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            context.cs.primary.withValues(alpha: 0.35),
+            context.cs.surfaceContainerHighest,
+          ],
+        ),
+      ),
+      child: Center(
+        child: Icon(
+          Icons.folder_rounded,
+          size: 26,
+          color: Colors.white.withValues(alpha: 0.85),
+        ),
+      ),
+    );
+  }
+}
+
+/// Special leading circle for the curated "Our Picks" collection. Shaped like a
+/// folder circle but visually distinct (star + brand gradient) and not backed
+/// by a real folder.
+class _OurPicksCircle extends StatelessWidget {
+  static const double _diameter = 64;
+
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  const _OurPicksCircle({required this.onTap, required this.onLongPress});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: SizedBox(
+        width: 72,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: _diameter,
+              height: _diameter,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [context.cs.primary, context.cs.secondary],
+                ),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.star_rounded,
+                  size: 30,
+                  color: Colors.white.withValues(alpha: 0.95),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Our Picks',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurface,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -362,6 +362,42 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
     },
   );
 
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{isotime\}\}', caseSensitive: false),
+    (_) {
+      final now = DateTime.now();
+      return '${_pad2(now.hour)}:${_pad2(now.minute)}';
+    },
+  );
+
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{isodate\}\}', caseSensitive: false),
+    (_) {
+      final now = DateTime.now();
+      return '${now.year.toString().padLeft(4, '0')}-${_pad2(now.month)}-${_pad2(now.day)}';
+    },
+  );
+
+  // {{time::UTC±offset}} — current time shifted to the given UTC offset (in
+  // hours, optionally fractional, e.g. {{time::UTC+2}} / {{time::UTC-5.5}}).
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{time::UTC([+-]?\d+(?:\.\d+)?)\}\}', caseSensitive: false),
+    (m) {
+      final offsetHours = double.tryParse(m.group(1)!) ?? 0;
+      final shifted = DateTime.now().toUtc().add(
+            Duration(milliseconds: (offsetHours * 3600 * 1000).round()),
+          );
+      return '${_pad2(shifted.hour)}:${_pad2(shifted.minute)}:${_pad2(shifted.second)}';
+    },
+  );
+
+  // {{datetimeformat::FORMAT}} — custom date/time using moment.js-style tokens
+  // (e.g. {{datetimeformat::YYYY-MM-DD HH:mm:ss}}).
+  result = result.replaceAllMapped(
+    RegExp(r'\{\{datetimeformat::([\s\S]*?)\}\}', caseSensitive: false),
+    (m) => _formatDateTime(DateTime.now(), m.group(1)!),
+  );
+
   result = result.replaceAll('\\{', '{').replaceAll('\\}', '}');
 
   return MacroResult(
@@ -370,6 +406,77 @@ MacroResult replaceMacros(String text, MacroContext ctx) {
     globalVars: globalVars,
     varsChanged: varsChanged,
   );
+}
+
+String _pad2(int n) => n.toString().padLeft(2, '0');
+
+const _monthNames = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+const _monthNamesShort = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+const _weekdayNames = [
+  'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday',
+];
+const _weekdayNamesShort = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/// Formats [dt] using a subset of moment.js tokens (YYYY/YY, MMMM/MMM/MM/M,
+/// DD/D, dddd/ddd, HH/H, hh/h, mm/m, ss/s, A/a). Unknown text is passed
+/// through unchanged. Used by the `{{datetimeformat::…}}` macro.
+String _formatDateTime(DateTime dt, String pattern) {
+  final h12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+  final tokens = RegExp(
+    r'YYYY|YY|MMMM|MMM|MM|M|DD|D|dddd|ddd|HH|H|hh|h|mm|m|ss|s|A|a',
+  );
+  return pattern.replaceAllMapped(tokens, (m) {
+    switch (m.group(0)) {
+      case 'YYYY':
+        return dt.year.toString().padLeft(4, '0');
+      case 'YY':
+        return (dt.year % 100).toString().padLeft(2, '0');
+      case 'MMMM':
+        return _monthNames[dt.month - 1];
+      case 'MMM':
+        return _monthNamesShort[dt.month - 1];
+      case 'MM':
+        return _pad2(dt.month);
+      case 'M':
+        return dt.month.toString();
+      case 'DD':
+        return _pad2(dt.day);
+      case 'D':
+        return dt.day.toString();
+      case 'dddd':
+        return _weekdayNames[dt.weekday - 1];
+      case 'ddd':
+        return _weekdayNamesShort[dt.weekday - 1];
+      case 'HH':
+        return _pad2(dt.hour);
+      case 'H':
+        return dt.hour.toString();
+      case 'hh':
+        return _pad2(h12);
+      case 'h':
+        return h12.toString();
+      case 'mm':
+        return _pad2(dt.minute);
+      case 'm':
+        return dt.minute.toString();
+      case 'ss':
+        return _pad2(dt.second);
+      case 's':
+        return dt.second.toString();
+      case 'A':
+        return dt.hour < 12 ? 'AM' : 'PM';
+      case 'a':
+        return dt.hour < 12 ? 'am' : 'pm';
+      default:
+        return m.group(0)!;
+    }
+  });
 }
 
 int _simpleHash(String input) {

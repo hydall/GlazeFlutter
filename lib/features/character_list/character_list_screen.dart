@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/db/repositories/character_repo.dart';
 import '../../core/services/character_book_converter.dart';
+import '../../core/services/character_export_helper.dart';
 import '../../core/services/character_importer.dart';
 import '../../core/state/character_folder_provider.dart';
 import '../../core/state/character_provider.dart';
@@ -19,6 +20,7 @@ import '../../core/state/lorebook_provider.dart';
 import '../../shared/shell/nav_height_provider.dart';
 import '../../shared/shell/shell_header_provider.dart';
 import '../../shared/theme/app_colors.dart';
+import '../../shared/widgets/glass_surface.dart';
 import '../../shared/widgets/glaze_bottom_sheet.dart';
 import '../../shared/widgets/glaze_tab_bar.dart';
 import '../../shared/widgets/glaze_error_dialog.dart';
@@ -30,6 +32,7 @@ import '../picks/widgets/picks_grid.dart';
 import '../settings/app_settings_provider.dart';
 import 'character_sort.dart';
 import 'character_detail_screen.dart';
+import 'character_selection_provider.dart';
 import 'filtered_characters_provider.dart';
 import 'widgets/widgets.dart';
 
@@ -253,6 +256,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
   @override
   Widget build(BuildContext context) {
     final navHeight = ref.watch(navHeightProvider);
+    final selection = ref.watch(characterSelectionProvider);
 
     final topPad = MediaQuery.of(context).padding.top + 74.0;
 
@@ -311,11 +315,24 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
             ),
           ),
           if (_tabIndex == 0)
-            Positioned(
-              right: 16,
-              bottom: navHeight + 16,
-              child: _AddButton(onTap: () => _showAddSheet(context, ref)),
-            ),
+            selection.active
+                ? Positioned(
+                    left: 16,
+                    right: 16,
+                    bottom: navHeight + 16,
+                    child: _SelectionBar(
+                      count: selection.count,
+                      onCancel: () => ref
+                          .read(characterSelectionProvider.notifier)
+                          .clear(),
+                      onMore: () => _showSelectionActions(context, selection),
+                    ),
+                  )
+                : Positioned(
+                    right: 16,
+                    bottom: navHeight + 16,
+                    child: _AddButton(onTap: () => _showAddSheet(context, ref)),
+                  ),
         ],
       ),
     );
@@ -396,22 +413,22 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
                   setState(() => _currentFolderId = id);
                   refreshShellHeader();
                 },
+                showOurPicks: showOurPicks,
+                onOpenPicks: () {
+                  setState(() => _tabIndex = 2);
+                  refreshShellHeader();
+                },
+                onHidePicks: () {
+                  final s = ref.read(appSettingsProvider).value;
+                  if (s != null) {
+                    ref
+                        .read(appSettingsProvider.notifier)
+                        .save(s.copyWith(showOurPicks: false));
+                    GlazeToast.show(context, 'our_picks_hidden_toast'.tr());
+                  }
+                },
               ),
             ),
-            showOurPicksCard: showOurPicks,
-            onOurPicksTap: () {
-              setState(() => _tabIndex = 2);
-              refreshShellHeader();
-            },
-            onOurPicksHide: () {
-              final s = ref.read(appSettingsProvider).value;
-              if (s != null) {
-                ref
-                    .read(appSettingsProvider.notifier)
-                    .save(s.copyWith(showOurPicks: false));
-                GlazeToast.show(context, 'our_picks_hidden_toast'.tr());
-              }
-            },
             onSortDirToggle: () => setState(() {
               _sortDir = _sortDir == SortDir.asc ? SortDir.desc : SortDir.asc;
             }),
@@ -619,6 +636,7 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
         ],
         activeIndex: _tabIndex == 2 ? 0 : _tabIndex,
         onChanged: (i) {
+          ref.read(characterSelectionProvider.notifier).clear();
           setState(() {
             _tabIndex = i;
             if (_searchExpanded) _applySearchForActiveTab();
@@ -661,6 +679,206 @@ class _CharacterListScreenState extends ConsumerState<CharacterListScreen>
               child: const ImportUrlDialog(),
             );
           },
+        ),
+        BottomSheetItem(
+          icon: Icons.create_new_folder_rounded,
+          label: 'folder_new'.tr(),
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _createFolder(context, ref);
+          },
+        ),
+      ],
+    );
+  }
+
+  void _createFolder(BuildContext context, WidgetRef ref) {
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'folder_create_title'.tr(),
+      child: FolderNameDialog(
+        confirmLabel: 'btn_create'.tr(),
+        onSubmit: (name) =>
+            ref.read(characterFolderRepoProvider).create(name: name),
+      ),
+    );
+  }
+
+  // ── Multi-select bulk actions ────────────────────────────────────────────
+
+  void _showSelectionActions(
+    BuildContext context,
+    CharacterSelectionState selection,
+  ) {
+    GlazeBottomSheet.show<void>(
+      context,
+      title: '${selection.count} ${'selected_count'.tr()}',
+      items: [
+        BottomSheetItem(
+          icon: Icons.share_rounded,
+          label: 'action_export'.tr(),
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _massExport(context, selection);
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.favorite,
+          label: 'action_add_fav'.tr(),
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _addSelectedToFavorites(context, selection);
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.create_new_folder_outlined,
+          label: 'action_add_to_folder'.tr(),
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _addSelectedToFolder(context, selection);
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.delete_rounded,
+          label: 'action_delete'.tr(),
+          isDestructive: true,
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _confirmDeleteSelected(context, selection);
+          },
+        ),
+      ],
+    );
+  }
+
+  void _massExport(BuildContext context, CharacterSelectionState selection) {
+    final ids = {...selection.ids};
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'action_export'.tr(),
+      items: [
+        BottomSheetItem(
+          icon: Icons.image_outlined,
+          label: 'label_export_png'.tr(),
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _runMassExport(context, ids, 'png');
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.code_rounded,
+          label: 'label_export_json'.tr(),
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _runMassExport(context, ids, 'json');
+          },
+        ),
+        BottomSheetItem(
+          icon: Icons.folder_zip_rounded,
+          label: 'label_export_zip'.tr(),
+          onTap: () {
+            Navigator.of(context, rootNavigator: true).pop();
+            _runMassExport(context, ids, 'zip');
+          },
+        ),
+      ],
+    );
+  }
+
+  Future<void> _runMassExport(
+    BuildContext context,
+    Set<String> ids,
+    String format,
+  ) async {
+    final all = ref.read(charactersProvider).value ?? const [];
+    final chars = all.where((c) => ids.contains(c.id)).toList();
+    int exported = 0;
+    String? lastError;
+    for (final c in chars) {
+      try {
+        await exportCharacterToFile(ref: ref, character: c, format: format);
+        exported++;
+      } catch (e) {
+        lastError = '$e';
+      }
+    }
+    if (!context.mounted) return;
+    ref.read(characterSelectionProvider.notifier).clear();
+    if (exported > 0) {
+      GlazeToast.show(
+        context,
+        'Exported $exported ${'count_characters'.plural(exported)}',
+      );
+    } else if (lastError != null) {
+      GlazeToast.show(context, lastError);
+    }
+  }
+
+  Future<void> _addSelectedToFavorites(
+    BuildContext context,
+    CharacterSelectionState selection,
+  ) async {
+    final all = ref.read(charactersProvider).value ?? const [];
+    final notifier = ref.read(charactersProvider.notifier);
+    for (final c in all.where((c) => selection.contains(c.id))) {
+      if (!c.fav) await notifier.save(c.copyWith(fav: true));
+    }
+    if (!context.mounted) return;
+    ref.read(characterSelectionProvider.notifier).clear();
+    GlazeToast.show(context, 'action_add_fav'.tr());
+  }
+
+  void _addSelectedToFolder(
+    BuildContext context,
+    CharacterSelectionState selection,
+  ) {
+    final ids = {...selection.ids};
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useRootNavigator: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => AddCharactersToFolderSheet(
+        characterIds: ids,
+        onDone: () =>
+            ref.read(characterSelectionProvider.notifier).clear(),
+      ),
+    );
+  }
+
+  void _confirmDeleteSelected(
+    BuildContext context,
+    CharacterSelectionState selection,
+  ) {
+    final ids = {...selection.ids};
+    final count = ids.length;
+    GlazeBottomSheet.show<void>(
+      context,
+      title: 'action_delete'.tr(),
+      bigInfo: BottomSheetBigInfo(
+        icon: Icons.delete_outline,
+        description:
+            'Delete $count ${'count_characters'.plural(count)}? This cannot be undone.',
+      ),
+      items: [
+        BottomSheetItem(
+          label: 'btn_delete'.tr(),
+          isDestructive: true,
+          centered: true,
+          onTap: () async {
+            Navigator.of(context, rootNavigator: true).pop();
+            final notifier = ref.read(charactersProvider.notifier);
+            for (final id in ids) {
+              await notifier.remove(id);
+            }
+            ref.read(characterSelectionProvider.notifier).clear();
+          },
+        ),
+        BottomSheetItem(
+          label: 'btn_cancel'.tr(),
+          centered: true,
+          onTap: () => Navigator.of(context, rootNavigator: true).pop(),
         ),
       ],
     );
@@ -876,6 +1094,96 @@ class _AddButton extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom selection bar shown while multi-selecting characters. Mirrors the
+/// chat input bar's selection mode: a glass pill with a cancel button, the
+/// selected count, and a "more" button that opens the bulk-actions sheet.
+class _SelectionBar extends StatelessWidget {
+  final int count;
+  final VoidCallback onCancel;
+  final VoidCallback onMore;
+
+  const _SelectionBar({
+    required this.count,
+    required this.onCancel,
+    required this.onMore,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      elevation: 0,
+      borderRadius: BorderRadius.circular(28),
+      child: GlassSurface(
+        borderRadius: BorderRadius.circular(28),
+        tint: context.cs.surface,
+        border: Border.all(color: context.cs.primary.withValues(alpha: 0.18)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Row(
+            children: [
+              const SizedBox(width: 8),
+              _CircleIconBtn(icon: Icons.close_rounded, onTap: onCancel),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '$count ${'selected_count'.tr()}',
+                  style: TextStyle(
+                    color: context.cs.onSurface,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              _CircleIconBtn(
+                icon: Icons.more_horiz_rounded,
+                onTap: count > 0 ? onMore : null,
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CircleIconBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _CircleIconBtn({required this.icon, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: SizedBox(
+        width: 40,
+        height: 40,
+        child: GlassSurface(
+          borderRadius: BorderRadius.circular(20),
+          tint: context.cs.surface,
+          border: Border.all(
+            color: context.cs.primary.withValues(alpha: 0.18),
+          ),
+          child: Center(
+            child: Icon(
+              icon,
+              size: 20,
+              color: onTap != null
+                  ? context.cs.primary
+                  : context.cs.onSurfaceVariant.withValues(alpha: 0.5),
+            ),
+          ),
         ),
       ),
     );
